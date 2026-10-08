@@ -248,7 +248,7 @@ model ImportedCiEvidence {
   @@index([repositoryGithubId, sourceSha, observedAt])
 }
 
-// Administrator-associated original bytes; never treated as verified provider artifacts.
+// Administrator-associated original bytes. Separate immutable attestations can verify provenance.
 model CiArtifactImport {
   id            String @id @default(cuid())
   deliveryId    String
@@ -260,6 +260,7 @@ model CiArtifactImport {
   content       Bytes
   summary       Json
   uploadedById  String
+  attestations CiArtifactAttestation[]
   createdAt     DateTime @default(now())
   @@unique([deliveryId, format, sha256])
 }
@@ -337,4 +338,19 @@ model RepositoryPullRequest {
  lastSyncAttemptAt DateTime?
  @@unique([repositoryId,number])
  @@index([lastSyncAttemptAt])
+}
+
+// Append-only cryptographic verification receipts. Original uploads/labels stay unchanged.
+model CiArtifactAttestation {
+  id String @id @default(cuid())
+  artifactId String
+  artifact CiArtifactImport @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+  bundle Bytes
+  bundleSha256 String
+  policyDigest String
+  receiptHash String
+  claims Json
+  verifiedById String
+  createdAt DateTime @default(now())
+  @@unique([artifactId, policyDigest])
 }

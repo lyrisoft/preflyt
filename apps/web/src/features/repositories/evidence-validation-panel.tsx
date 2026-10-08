@@ -12,6 +12,13 @@ export type EvidenceValidation = {
     format: string
     integrity: string
     reportedResult: string
+    provenance?: null | {
+      status: string
+      signerWorkflow: string
+      runId: string
+      runAttempt: number
+      receiptHash: string
+    }
     executedTests: number | null
   }[]
   reasons: string[]
@@ -37,6 +44,8 @@ export function EvidenceValidationPanel({
           <p key={report.artifactId}>
             {report.format.toUpperCase()} · report integrity:{' '}
             {sentence(report.integrity)} · {sentence(report.reportedResult)}
+            {report.provenance &&
+              ` · signed provenance verified: ${report.provenance.signerWorkflow}, run ${report.provenance.runId}, attempt ${report.provenance.runAttempt}`}
             {report.executedTests !== null &&
               ` · ${report.executedTests} reported executed tests`}
           </p>

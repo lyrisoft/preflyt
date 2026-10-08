@@ -47,9 +47,13 @@ function providerDetail(item: CiObservation) {
 }
 
 function DeliveryDialog({
+  repositoryId,
+  canVerify,
   item,
   onClose,
 }: {
+  repositoryId: string
+  canVerify: boolean
   item: CiObservation | null
   onClose: () => void
 }) {
@@ -91,7 +95,12 @@ function DeliveryDialog({
               <dd className='font-mono break-all'>{item.sourcePayloadHash}</dd>
             </dl>
             <h3 className='text-sm font-medium'>Reports</h3>
-            <ReportList artifacts={item.artifacts} />
+            <ReportList
+              artifacts={item.artifacts}
+              repositoryId={repositoryId}
+              deliveryId={item.deliveryId}
+              canVerify={canVerify}
+            />
           </>
         )}
       </DialogContent>
@@ -298,7 +307,12 @@ export function RepositoryCiEvidence({
           </Table>
         )}
         <input {...reports.inputProps} />
-        <DeliveryDialog item={detailItem} onClose={() => setDetails(null)} />
+        <DeliveryDialog
+          repositoryId={repositoryId}
+          canVerify={canImport}
+          item={detailItem}
+          onClose={() => setDetails(null)}
+        />
       </CardContent>
     </Card>
   )

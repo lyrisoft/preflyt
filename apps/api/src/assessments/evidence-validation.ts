@@ -1,3 +1,4 @@
+import type { validatedProvenance } from '../github-events/ci-attestation-policy.js'
 import { createHash } from 'node:crypto'
 import { digest } from './assessment-digest.js'
 import {
@@ -7,7 +8,7 @@ import {
 } from '../github-events/ci-artifact-parser.js'
 import { importCiEvidence } from '../github-events/ci-evidence.js'
 import type { GitHubWebhookDelivery } from '../generated/prisma/client.js'
-export const VALIDATOR_VERSION = 1
+export const VALIDATOR_VERSION = 2
 export const MAX_VALIDATION_ARTIFACTS = 32
 export type ReportValidation = {
   artifactId: string
@@ -15,6 +16,7 @@ export type ReportValidation = {
   integrity: 'VALID' | 'INVALID'
   reasons: string[]
   reportedResult: string
+  provenance?: ReturnType<typeof validatedProvenance>
   executedTests: number | null
 }
 export type ObservationValidation = {
@@ -61,6 +63,7 @@ export function validateReport(artifact: {
   verification: string
   content: Uint8Array
   summary: unknown
+  provenance?: ReturnType<typeof validatedProvenance>
 }): ReportValidation {
   const result: ReportValidation = {
     artifactId: artifact.id,
@@ -104,6 +107,7 @@ export function validateReport(artifact: {
     return result
   }
   result.integrity = 'VALID'
+  result.provenance = artifact.provenance ?? null
   const summary = parsed.summary as Record<string, any>
   if (artifact.format === 'junit') {
     result.executedTests = summary.passed + summary.failures + summary.errors
@@ -116,7 +120,7 @@ export function validateReport(artifact: {
   } else result.reportedResult = summary.execution
   // Hashes, schema validity and mutable labels cannot establish CI provenance.
   result.reasons.push(
-    'REPORT_PROVENANCE_UNVERIFIED',
+    ...(result.provenance ? [] : ['REPORT_PROVENANCE_UNVERIFIED']),
     'TOOL_IDENTITY_UNVERIFIED',
     'EXECUTION_ENVIRONMENT_UNVERIFIED',
     'RULE_COVERAGE_UNVERIFIED',
@@ -163,7 +167,8 @@ export function validateRuleEvidence(
     if (report.reportedResult === 'UNKNOWN')
       reasons.add('REPORT_EXECUTION_UNKNOWN')
   }
-  reasons.add('REPORT_PROVENANCE_UNVERIFIED')
+  if (reports.length !== 1 || !reports[0].provenance)
+    reasons.add('REPORT_PROVENANCE_UNVERIFIED')
   reasons.add('TOOL_IDENTITY_UNVERIFIED')
   reasons.add('EXECUTION_ENVIRONMENT_UNVERIFIED')
   reasons.add('RULE_COVERAGE_UNVERIFIED')

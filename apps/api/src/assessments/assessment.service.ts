@@ -1,4 +1,9 @@
 import {
+  attestationPolicy,
+  validatedProvenance,
+} from '../github-events/ci-attestation-policy.js'
+import { runAttempt } from './ci-binding.js'
+import {
   validateObservation,
   validateReport,
   MAX_VALIDATION_ARTIFACTS,
@@ -362,6 +367,16 @@ export class AssessmentService {
     })
     const validationCollectionTruncated =
       artifacts.length > MAX_VALIDATION_ARTIFACTS
+    const receipts = await tx.ciArtifactAttestation.findMany({
+      where: {
+        artifactId: {
+          in: artifacts.slice(0, MAX_VALIDATION_ARTIFACTS).map((a) => a.id),
+        },
+        policyDigest: attestationPolicy()?.digest ?? '',
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: MAX_VALIDATION_ARTIFACTS,
+    })
     const validations = new Map<string, ObservationValidation>()
     for (const row of observations.filter((o) =>
       mappedIds.includes(o.deliveryId),
@@ -374,7 +389,23 @@ export class AssessmentService {
         reports: artifacts
           .slice(0, MAX_VALIDATION_ARTIFACTS)
           .filter((a) => a.deliveryId === row.deliveryId)
-          .map(validateReport),
+          .map((a) =>
+            validateReport({
+              ...a,
+              provenance: validatedProvenance(
+                receipts.find((r) => r.artifactId === a.id),
+                {
+                  artifactId: a.id,
+                  artifactSha256: a.sha256,
+                  repositoryId: repo.githubId.toString(),
+                  repositoryName: repo.fullName,
+                  sourceSha: row.sourceSha,
+                  runId: row.sourceObjectId,
+                  runAttempt: runAttempt(row.sourceIdentity),
+                },
+              ),
+            }),
+          ),
       })
     const at = new Date()
     let result

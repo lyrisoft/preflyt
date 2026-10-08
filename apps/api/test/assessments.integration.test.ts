@@ -1,3 +1,7 @@
+import { CiAttestationController } from '../src/github-events/ci-attestation.controller.js'
+import { CiAttestationService } from '../src/github-events/ci-attestation.service.js'
+import { CiAttestationVerifier } from '../src/github-events/ci-attestation-verifier.js'
+import { attestationPolicy } from '../src/github-events/ci-attestation-policy.js'
 import { createHash } from 'node:crypto'
 import { parseArtifact } from '../src/github-events/ci-artifact-parser.js'
 import { PullRequestController } from '../src/assessments/pull-request.controller.js'
@@ -17,12 +21,21 @@ import { NestFactory } from '@nestjs/core'
 import type { INestApplication } from '@nestjs/common'
 import cookieParser from 'cookie-parser'
 import request from 'supertest'
-import { beforeAll, afterAll, beforeEach, describe, expect, it } from 'vitest'
+import {
+  beforeAll,
+  afterAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest'
 import { PrismaService } from '../src/prisma/prisma.service.js'
 import { AuthService } from '../src/auth/auth.service.js'
 import { SessionGuard, OwnerAdminGuard } from '../src/auth/session.guard.js'
 import { StandardsController } from '../src/standards/standards.controller.js'
 import { StandardsService } from '../src/standards/standards.service.js'
+const verifyProof = vi.fn()
 let app: INestApplication, prisma: PrismaService, actorId: string
 const body = (
   expectedSelectionId: string | null = null,
@@ -54,12 +67,15 @@ beforeAll(async () => {
     {
       module: class TestModule {},
       controllers: [
+        CiAttestationController,
         PullRequestController,
         StandardsController,
         AssessmentController,
         CiBindingController,
       ],
       providers: [
+        CiAttestationService,
+        { provide: CiAttestationVerifier, useValue: { verify: verifyProof } },
         PullRequestService,
         CiBindingService,
         StandardsService,
@@ -96,10 +112,13 @@ beforeAll(async () => {
   await app.init()
 })
 afterAll(async () => {
+  vi.unstubAllEnvs()
   await app?.close()
   await prisma?.$disconnect()
 })
 beforeEach(async () => {
+  vi.unstubAllEnvs()
+  verifyProof.mockReset()
   await prisma.gitHubWebhookDelivery.deleteMany()
   await prisma.gitHubRepository.deleteMany()
   await prisma.gitHubInstallation.deleteMany()
@@ -1586,4 +1605,260 @@ it('bounds original artifact validation and freezes truncation without trusted o
     trustedExecutedChecks: 0,
     qualityGate: null,
   })
+})
+
+async function provenanceFixture() {
+  const { selection, delivery } = await ready()
+  await prisma.gitHubWebhookDelivery.update({
+    where: { id: delivery.id },
+    data: { event: 'workflow_run' },
+  })
+  await identify(delivery.id, {
+    kind: 'workflow_run',
+    workflowId: '7',
+    runAttempt: 1,
+  })
+  await bind(selection.id, [
+    { ruleId: 'tests.required', kind: 'workflow_run', workflowId: '7' },
+  ])
+  const content = '<testsuite><testcase name="test"/></testsuite>'
+  const sha256 = createHash('sha256').update(content).digest('hex')
+  const artifact = await prisma.ciArtifactImport.create({
+    data: {
+      deliveryId: delivery.id,
+      format: 'junit',
+      sha256,
+      content: Buffer.from(content),
+      summary: parseArtifact('junit', content, sha256).summary,
+      uploadedById: actorId,
+    },
+  })
+  for (const [key, value] of Object.entries({
+    CI_ATTESTATION_GH_PATH: '/tmp/gh',
+    CI_ATTESTATION_GH_SHA256: 'e'.repeat(64),
+    CI_ATTESTATION_ROOT_PATH: '/tmp/root',
+    CI_ATTESTATION_ROOT_SHA256: 'f'.repeat(64),
+    CI_ATTESTATION_WORKFLOWS: '["fixture/app/.github/workflows/ci.yml"]',
+  }))
+    vi.stubEnv(key, value)
+  verifyProof.mockImplementation(async (_content, _bundle, context) => ({
+    claims: {
+      ...context,
+      issuer: 'https://token.actions.githubusercontent.com',
+      signerUri:
+        'https://github.com/fixture/app/.github/workflows/ci.yml@refs/heads/main',
+      signerDigest: 'c'.repeat(40),
+      runnerEnvironment: 'github-hosted',
+      predicateType: 'https://slsa.dev/provenance/v1',
+    },
+    policyDigest: attestationPolicy()!.digest,
+  }))
+  const path = `/github/repositories/501/ci-evidence/${delivery.id}/artifacts/${artifact.id}/provenance`
+  const proof = (
+    role = 'OWNER',
+    origin = 'http://localhost:5173',
+    value: object = {
+      bundle: '{}',
+      signerWorkflow: 'fixture/app/.github/workflows/ci.yml',
+    },
+  ) =>
+    request(app.getHttpServer())
+      .post(path)
+      .set('Cookie', 'test.sid=' + role)
+      .set('Origin', origin)
+      .send(value)
+  return { selection, artifact, delivery, proof, path }
+}
+it('verifies provenance separately, freezes it in new assessments and preserves older reports', async () => {
+  const f = await provenanceFixture()
+  const old = await boundAssessment(f.selection.id)
+  const response = await f.proof()
+  expect(response.status).toBe(201)
+  expect(response.body).toMatchObject({
+    duplicate: false,
+    executionTrusted: false,
+    provenance: { status: 'VERIFIED_ATTESTATION', runId: '44', runAttempt: 1 },
+  })
+  expect((await f.proof()).body.duplicate).toBe(true)
+  expect(await prisma.ciArtifactAttestation.count()).toBe(1)
+  expect(
+    await prisma.auditEvent.count({
+      where: { event: 'ci.artifact.provenance.verified' },
+    }),
+  ).toBe(1)
+  expect(
+    (
+      await prisma.ciArtifactImport.findUniqueOrThrow({
+        where: { id: f.artifact.id },
+      })
+    ).verification,
+  ).toBe('ADMIN_ASSOCIATED_UNVERIFIED')
+  const later = await boundAssessment(f.selection.id)
+  const validation = testRule(later).evidenceValidation
+  expect(validation).toMatchObject({
+    trustedExecuted: false,
+    status: 'INCOMPLETE',
+    reports: [{ provenance: { status: 'VERIFIED_ATTESTATION' } }],
+  })
+  expect(validation.reasons).not.toContain('REPORT_PROVENANCE_UNVERIFIED')
+  expect(validation.reasons).toContain('RULE_COVERAGE_UNVERIFIED')
+  expect(
+    (await readAssessment(old.body.assessment.id)).body.assessmentHash,
+  ).toBe(old.body.assessment.assessmentHash)
+  const read = await request(app.getHttpServer())
+    .get(f.path)
+    .set('Cookie', 'test.sid=VIEWER')
+  expect(read.status).toBe(200)
+  expect(read.body.provenance.status).toBe('VERIFIED_ATTESTATION')
+  expect(read.body).not.toHaveProperty('bundle')
+  vi.stubEnv(
+    'CI_ATTESTATION_WORKFLOWS',
+    '["fixture/app/.github/workflows/other.yml"]',
+  )
+  expect(
+    testRule(await boundAssessment(f.selection.id)).evidenceValidation.reasons,
+  ).toContain('REPORT_PROVENANCE_UNVERIFIED')
+})
+it('enforces proof roles, origin, body limits, source binding and repository revocation', async () => {
+  const f = await provenanceFixture()
+  expect((await f.proof('VIEWER')).status).toBe(403)
+  expect((await f.proof('OWNER', 'https://evil.example')).status).toBe(403)
+  expect(
+    (
+      await f.proof('OWNER', undefined, {
+        bundle: 'bad',
+        signerWorkflow: 'fixture/app/.github/workflows/ci.yml',
+      })
+    ).status,
+  ).toBe(400)
+  expect(
+    (
+      await f.proof('OWNER', undefined, {
+        bundle: '{}',
+        signerWorkflow: 'fork/app/.github/workflows/ci.yml',
+      })
+    ).status,
+  ).toBe(400)
+  await bind(
+    f.selection.id,
+    [],
+    (
+      await prisma.repositoryCiBindings.findFirstOrThrow({
+        orderBy: { revision: 'desc' },
+      })
+    ).id,
+  )
+  expect((await f.proof()).status).toBe(409)
+  expect(verifyProof).not.toHaveBeenCalled()
+  await prisma.gitHubRepository.updateMany({ data: { selected: false } })
+  expect((await f.proof()).status).toBe(403)
+})
+it('rechecks access after cryptographic verification and leaves no partial receipt', async () => {
+  const f = await provenanceFixture()
+  const original = verifyProof.getMockImplementation()!
+  verifyProof.mockImplementation(async (...args) => {
+    const proof = await original(...args)
+    await prisma.gitHubInstallation.updateMany({ data: { active: false } })
+    return proof
+  })
+  expect((await f.proof()).status).toBe(403)
+  expect(await prisma.ciArtifactAttestation.count()).toBe(0)
+})
+it('rejects corrupt stored proof bytes and returns unverified provenance in new reports', async () => {
+  const f = await provenanceFixture()
+  expect((await f.proof()).status).toBe(201)
+  await prisma.ciArtifactAttestation.updateMany({
+    data: { bundle: Buffer.from('changed') },
+  })
+  expect(
+    (
+      await request(app.getHttpServer())
+        .get(f.path)
+        .set('Cookie', 'test.sid=VIEWER')
+    ).body.provenance,
+  ).toBeNull()
+  expect(
+    testRule(await boundAssessment(f.selection.id)).evidenceValidation.reasons,
+  ).toContain('REPORT_PROVENANCE_UNVERIFIED')
+})
+it('rolls back receipt insertion when its audit fails', async () => {
+  const f = await provenanceFixture()
+  const wrapper = new Proxy(prisma, {
+    get(target, key) {
+      if (key === '$transaction')
+        return (fn: any) =>
+          target.$transaction((tx: any) =>
+            fn(
+              new Proxy(tx, {
+                get(t, k) {
+                  if (k === 'auditEvent')
+                    return {
+                      create: async () => {
+                        throw Error('audit failed')
+                      },
+                    }
+                  return Reflect.get(t, k)
+                },
+              }),
+            ),
+          )
+      return Reflect.get(target, key)
+    },
+  })
+  await expect(
+    new CiAttestationService(wrapper, { verify: verifyProof } as any).verify(
+      '501',
+      f.delivery.id,
+      f.artifact.id,
+      { bundle: '{}', signerWorkflow: 'fixture/app/.github/workflows/ci.yml' },
+      actorId,
+    ),
+  ).rejects.toThrow('audit failed')
+  expect(await prisma.ciArtifactAttestation.count()).toBe(0)
+})
+it('caps historical proof policies per report without changing the upload', async () => {
+  const f = await provenanceFixture()
+  for (let i = 0; i < 5; i++) {
+    vi.stubEnv('CI_ATTESTATION_ROOT_SHA256', String(i).repeat(64))
+    expect((await f.proof()).status).toBe(201)
+  }
+  vi.stubEnv('CI_ATTESTATION_ROOT_SHA256', '9'.repeat(64))
+  expect((await f.proof()).status).toBe(429)
+  expect(await prisma.ciArtifactAttestation.count()).toBe(5)
+})
+it('fails before verification for unsupported check sources, absent attempts and oversized bundles', async () => {
+  const f = await provenanceFixture()
+  expect(
+    (
+      await f.proof('OWNER', undefined, {
+        signerWorkflow: 'fixture/app/.github/workflows/ci.yml',
+        bundle: 'x'.repeat(524289),
+      })
+    ).status,
+  ).toBeGreaterThanOrEqual(400)
+  const d = await prisma.gitHubWebhookDelivery.update({
+    where: { id: f.delivery.id },
+    data: {
+      event: 'check_run',
+      sourceIdentity: { kind: 'check_run', appId: '1', checkName: 'test' },
+    },
+  })
+  await prisma.importedCiEvidence.update({
+    where: { deliveryId: d.id },
+    data: importCiEvidence(d)!,
+  })
+  expect((await f.proof()).status).toBe(400)
+  const w = await prisma.gitHubWebhookDelivery.update({
+    where: { id: d.id },
+    data: {
+      event: 'workflow_run',
+      sourceIdentity: { kind: 'workflow_run', workflowId: '7' },
+    },
+  })
+  await prisma.importedCiEvidence.update({
+    where: { deliveryId: d.id },
+    data: importCiEvidence(w)!,
+  })
+  expect((await f.proof()).status).toBe(400)
+  expect(verifyProof).not.toHaveBeenCalled()
 })

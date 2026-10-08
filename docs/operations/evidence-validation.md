@@ -1,6 +1,6 @@
 # Evidence validation (P1 prerequisite slice)
 
-New assessment snapshots freeze validator version 1 and per-rule evidence validation. Open an assessment and expand **Evidence validation** to inspect integrity, reported execution, and missing prerequisites. Historical snapshots stay unchanged; snapshots without this field predate the validator.
+New assessment snapshots freeze a versioned validator (v1 integrity checks; v2 signed provenance support) and per-rule evidence validation. Open an assessment and expand **Evidence validation** to inspect integrity, reported execution, and missing prerequisites. Historical snapshots stay unchanged; snapshots without this field predate the validator.
 
 ## Verified checks
 
@@ -14,7 +14,7 @@ The validator also records approved source matching, freshness, superseded or am
 
 **VALID report integrity** means bytes and parsing agree. **INVALID evidence** means observation or report integrity failed. **INCOMPLETE validation** means execution trust remains unestablished. Neither valid hashes, approved job names, administrator associations nor mutable verification labels establish trusted CI execution.
 
-Every current administrator upload remains blocked by unverified report provenance, tool identity, execution environment and rule coverage. `trustedExecutedChecks` stays zero, rule outcomes and quality gates stay null. No repository code is executed and no GitHub status or remediation is published.
+Administrator uploads without a current verified signed attestation remain blocked by unverified report provenance. Even with [verified provenance](ci-provenance.md), tool identity, execution environment and rule coverage remain unverified. `trustedExecutedChecks` stays zero, rule outcomes and quality gates stay null. No repository code is executed and no GitHub status or remediation is published.
 
 Next prerequisite: obtain independently verifiable CI report provenance bound to the exact source revision, producer/tool and environment, with complete rule-specific coverage. Do not enable trusted outcomes merely by changing an upload label.
 

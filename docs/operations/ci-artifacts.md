@@ -37,3 +37,5 @@ Apply additive migration `20261008230000_ci_artifacts` and regenerate the Prisma
 Focused verification covers parser rejection/redaction/integrity bounds and actual PostgreSQL API transactions: role/origin checks, selected/revoked/wrong repository access, immutable original bytes, exact revision derivation, concurrent replay, quota and audit rollback. Frontend verification uses type/lint/format checks; browser tests remain skipped. Automatic provider artifact retrieval/provenance verification, normalized finding occurrences and assessment planning remain subsequent slices.
 
 [Evidence validation](evidence-validation.md) now freezes report integrity and missing execution-trust prerequisites in new snapshots. Invalid evidence is explicitly marked INVALID; administrator uploads remain unverified.
+
+[Signed CI provenance](ci-provenance.md) adds opt-in offline attestation verification and report controls. New validator v2 snapshots may establish report provenance while execution trust remains incomplete.

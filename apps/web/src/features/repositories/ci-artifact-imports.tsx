@@ -1,9 +1,20 @@
+import { CiProvenance } from './ci-provenance'
 import { RelativeTime } from './relative-time'
 import type { ArtifactSummary } from './repository-queries'
 import { sentence } from './repository-vocabulary'
 
 /** Reports an administrator attached to one CI result. */
-export function ReportList({ artifacts }: { artifacts: ArtifactSummary[] }) {
+export function ReportList({
+  artifacts,
+  repositoryId,
+  deliveryId,
+  canVerify = false,
+}: {
+  artifacts: ArtifactSummary[]
+  repositoryId?: string
+  deliveryId?: string
+  canVerify?: boolean
+}) {
   if (artifacts.length === 0)
     return <p className='text-sm text-muted-foreground'>No reports imported.</p>
   return (
@@ -20,7 +31,7 @@ export function ReportList({ artifacts }: { artifacts: ArtifactSummary[] }) {
             </span>
           </p>
           <p className='text-xs text-muted-foreground'>
-            Uploaded by an administrator; CI origin is unverified.
+            Administrator upload. Signed CI provenance is evaluated separately.
           </p>
           <p className='flex flex-wrap gap-x-3 gap-y-1 text-xs'>
             {Object.entries(artifact.summary).map(([key, value]) => (
@@ -35,6 +46,14 @@ export function ReportList({ artifacts }: { artifacts: ArtifactSummary[] }) {
           <p className='font-mono text-xs break-all text-muted-foreground'>
             SHA-256 {artifact.sha256}
           </p>
+          {repositoryId && deliveryId && (
+            <CiProvenance
+              repositoryId={repositoryId}
+              deliveryId={deliveryId}
+              artifactId={artifact.id}
+              canVerify={canVerify}
+            />
+          )}
         </li>
       ))}
     </ul>

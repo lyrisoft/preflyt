@@ -54,3 +54,5 @@ Scoped verification covers frozen plans, unverified associations, expired/future
 Next slices: trusted rule coverage and normalized finding occurrences, deterministic P2 policy gates and exact-SHA GitHub feedback. Those must not upgrade manual associations or raw administrator uploads silently.
 
 [Evidence validation](evidence-validation.md) now freezes report integrity and missing execution-trust prerequisites in new snapshots. Invalid evidence is explicitly marked INVALID; administrator uploads remain unverified.
+
+[Signed CI provenance](ci-provenance.md) adds opt-in offline attestation verification and report controls. New validator v2 snapshots may establish report provenance while execution trust remains incomplete.
