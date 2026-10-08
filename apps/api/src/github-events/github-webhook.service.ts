@@ -1,6 +1,7 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
 import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service.js'
+import { currentTraceParent } from '../telemetry.js'
 import { normalizeGitHubEvent } from './github-event.js'
 
 @Injectable()
@@ -35,7 +36,7 @@ export class GitHubWebhookService {
     if (!repository) return { accepted: false, reason: 'repository_not_selected' }
     // PostgreSQL is the acceptance boundary. A worker reconciles this inbox into Redis.
     const created = await this.prisma.gitHubWebhookDelivery.createMany({
-      data: [{ id, payloadHash, ...normalized }], skipDuplicates: true,
+      data: [{ id, payloadHash, traceParent: currentTraceParent(), ...normalized }], skipDuplicates: true,
     })
     if (created.count === 0) {
       const duplicate = await this.prisma.gitHubWebhookDelivery.findUniqueOrThrow({ where: { id } })

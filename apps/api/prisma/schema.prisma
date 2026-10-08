@@ -183,6 +183,7 @@ enum GitHubDeliveryState {
 
 model GitHubWebhookDelivery {
   id                 String @id
+  traceParent        String?
   payloadHash        String
   event              String
   action             String

@@ -1,67 +1,41 @@
-# OpenTelemetry environment configuration for Preflyt
+# OpenTelemetry configuration
 
-**Status:** Required deployment contract; implementation pending
+**Status:** Implemented for the current API and GitHub event worker. Future intelligence/execution services remain planned. Published release images depend on a successful publishing workflow; local Compose source builds are available now.
 
-Preflyt must expose **standard OpenTelemetry SDK environment variables** through the root `.env.example` and Docker Compose services. Operators can export traces, metrics and logs to any compatible OTLP collector/APM without changing source code. SigNoz is an optional destination, **not a required hard-coded backend**.
+The canonical root `.env.example` includes the complete application and deployment configuration. Compose passes shared OTEL settings to API/worker with distinct `preflyt-api` and `preflyt-worker` service names. Telemetry defaults to disabled until an endpoint is configured. SigNoz is one optional OTLP destination; no backend is hard-coded.
 
-## Root `.env.example` section
+## Direct OTLP destination
 
-~~~dotenv
-# OpenTelemetry / APM
+```dotenv
 OTEL_SDK_DISABLED=false
-
-# Shared application resource metadata.
-# Each service has its own OTEL_SERVICE_NAME set by docker-compose.yml.
-OTEL_RESOURCE_ATTRIBUTES=service.namespace=preflyt,deployment.environment.name=production
-
-# Choose http/protobuf (OTLP HTTP usually port 4318) or grpc (usually 4317).
+OTEL_EXPORTER_OTLP_ENDPOINT=https://your-collector.example.com
 OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
-
-# Your OTLP collector or vendor endpoint; no application code changes required.
-OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
-
-# Provider-specific authorization headers when needed.
-# Format follows OTel environment-variable header encoding; check vendor docs.
-OTEL_EXPORTER_OTLP_HEADERS=
-
+OTEL_EXPORTER_OTLP_HEADERS=Authorization=Bearer%20<token>
+OTEL_RESOURCE_ATTRIBUTES=service.namespace=preflyt,deployment.environment.name=production
 OTEL_TRACES_EXPORTER=otlp
 OTEL_METRICS_EXPORTER=otlp
 OTEL_LOGS_EXPORTER=otlp
-
 OTEL_TRACES_SAMPLER=parentbased_traceidratio
 OTEL_TRACES_SAMPLER_ARG=0.1
 OTEL_METRIC_EXPORT_INTERVAL=60000
+OTEL_EXPORTER_OTLP_TIMEOUT=3000
 OTEL_PROPAGATORS=tracecontext,baggage
+```
 
-# Optional signal-specific overrides. When set, use the complete signal endpoint
-# URL required by the destination (for OTLP/HTTP, often ending in /v1/traces etc.).
-# OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=
-# OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=
-# OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=
-~~~
+Use `grpc` with the destination's gRPC endpoint when required (commonly 4317; HTTP commonly 4318). HTTP shared endpoint is a base URL; exporters append `/v1/traces`, `/v1/metrics`, `/v1/logs`. Optional `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`, `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` and `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` override complete per-signal URLs. Exporters support `otlp` or `none`; configure the shared protocol consistently. Header values follow the SDK's percent-encoded comma-separated format. Do not put credentials in resource attributes or endpoint URLs.
 
-**Example endpoint only:** `otel-collector` resolves inside Compose **only when the optional collector profile is enabled**. For the normal deployment, the operator must set `OTEL_EXPORTER_OTLP_ENDPOINT` to a reachable external collector/APM endpoint, or explicitly set `OTEL_SDK_DISABLED=true`. Do not default to a non-existent service and then claim observability is healthy.
+API/worker entry modules initialize the Node SDK before dynamically importing NestJS, HTTP, database or BullMQ. HTTP, outgoing fetch and PostgreSQL calls produce redacted spans; application request/operation counters and duration metrics are exported alongside structured lifecycle/operation logs. Arbitrary NestJS errors and console output are not forwarded as OTLP logs. Worker spans resume the accepted webhook's W3C trace parent persisted in PostgreSQL, preserving context when Redis is unavailable at receipt. Sampling may omit traces; use `always_on` during a controlled verification.
 
-## Container wiring
+Only allowlisted attributes leave the service: method/status, database system/operation, fixed component/outcome, and delivery identifier. Query strings, headers, request/response bodies, SQL statements, exception text, span events and links are removed from exported spans/metric attributes. Environment/process-argument auto-detection is disabled. OTEL headers stay in first-party server containers; they are absent from the browser image and must never be passed to future repository sandboxes.
 
-Use a shared Compose environment anchor or equivalent to pass the standard OTEL variables into `api`, `worker`, `intelligence-worker`, `execution-controller` and other first-party services. **Override `OTEL_SERVICE_NAME` per service** (`preflyt-api`, `preflyt-worker`, `preflyt-intelligence-worker`, `preflyt-execution-controller`). Set environment/resource attributes by deployment. Never pass arbitrary OTEL authentication headers or model-provider API keys into untrusted repository sandboxes.
+SDK-disabled mode uses no exporters. Missing/invalid configuration produces a static warning and leaves core functionality available. Exporter outages are bounded by timeouts (maximum 10 seconds per export), batching and bounded queues; they do not fail application requests. Trace/metric export failures emit throttled static diagnostics without endpoint/header/error content. Graceful shutdown flushes pending telemetry; forced termination can lose buffered telemetry.
 
-For HTTP/protobuf, `OTEL_EXPORTER_OTLP_ENDPOINT` is the base URL (the SDK appends signal paths); for grpc it is the gRPC endpoint. If using per-signal `OTEL_EXPORTER_OTLP_*_ENDPOINT`, supply the destination-specific full signal URL for OTLP/HTTP. Respect upstream SDK conventions and test both protocols.
+## Optional bundled collector
 
-OpenTelemetry Node.js SDK initialization must occur **before** NestJS, HTTP, DB and BullMQ worker instrumentation is loaded. Wire supported traces, metrics, and logs exporters; do not claim the app exports all three until verified in integration tests. Instrument outgoing model gateway and Git operations with secret-redacted spans and stable correlation identifiers.
+The `observability` profile contains a pinned collector with HTTP/gRPC receivers and all three pipelines. Configure `COLLECTOR_UPSTREAM_ENDPOINT` as the external OTLP HTTP base URL and `COLLECTOR_UPSTREAM_HEADERS` as a JSON object. Applications use `http://otel-collector:4318` or gRPC `http://otel-collector:4317`. The name resolves only with that profile enabled. Direct export does not require it. See the [Compose runbook](../operations/docker-compose.md).
 
-## Optional included collector
+## Verification
 
-Provide an **opt-in** OpenTelemetry Collector Compose profile with configurable pipelines/exporters and sane defaults. A direct APM endpoint must not require running the collector. Avoid bundling a complete SigNoz stack into the mandatory core Compose deployment. If local collector is enabled, choose compatible `4318` HTTP or `4317` gRPC URL and include a tested collector configuration.
+Focused integration tests use real HTTP/protobuf and gRPC receivers to confirm all three signals, configured headers, worker identity, parent trace ID, and redaction. Separate child-process tests verify disabled, unreachable and invalid configuration modes. Deployment tests verify server-only secrets, service identities and queue/cache separation. The collector configuration is validated against its pinned binary; Compose startup and migrations are rehearsed in a disposable project. Vendor dashboards and live external APM delivery remain operator checks.
 
-## Deployment acceptance
-
-- [ ] Root `.env.example` documents standard OTEL variables, endpoint/protocol, auth headers, sampling and resource metadata.
-- [ ] Every first-party service can export to one configured OTLP-compatible backend without code changes.
-- [ ] Per-service resource identity is distinct; traces across API, queue/worker and integration calls correlate when context is propagated.
-- [ ] A test receiver/collector confirms trace, metric and log signal delivery (or documents missing signal support explicitly).
-- [ ] SDK-disabled mode runs application normally without exporter errors.
-- [ ] Invalid/unreachable APM endpoint produces diagnostics without taking down core service functionality.
-- [ ] Auth headers and sensitive span/log attributes do not leak to browser, CLI or untrusted sandbox processes.
-- [ ] Compose supports both optional bundled collector and externally managed OTLP destination.
-- [ ] The complete supported release starts from versioned images using root `.env` and `docker compose up -d`, without installing Node.js/Postgres/Redis on host.
+References: [OpenTelemetry Node SDK](https://opentelemetry.io/docs/languages/js/getting-started/nodejs/) and [OTLP exporters](https://opentelemetry.io/docs/languages/js/exporters/).

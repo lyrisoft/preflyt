@@ -1,5 +1,23 @@
 name: preflyt
 
+x-otel: &otel
+  OTEL_SDK_DISABLED: ${OTEL_SDK_DISABLED:-true}
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+  OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL:-http/protobuf}
+  OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
+  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:-}
+  OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: ${OTEL_EXPORTER_OTLP_METRICS_ENDPOINT:-}
+  OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: ${OTEL_EXPORTER_OTLP_LOGS_ENDPOINT:-}
+  OTEL_TRACES_EXPORTER: ${OTEL_TRACES_EXPORTER:-otlp}
+  OTEL_METRICS_EXPORTER: ${OTEL_METRICS_EXPORTER:-otlp}
+  OTEL_LOGS_EXPORTER: ${OTEL_LOGS_EXPORTER:-otlp}
+  OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES:-service.namespace=preflyt}
+  OTEL_TRACES_SAMPLER: ${OTEL_TRACES_SAMPLER:-parentbased_traceidratio}
+  OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-0.1}
+  OTEL_METRIC_EXPORT_INTERVAL: ${OTEL_METRIC_EXPORT_INTERVAL:-60000}
+  OTEL_EXPORTER_OTLP_TIMEOUT: ${OTEL_EXPORTER_OTLP_TIMEOUT:-3000}
+  OTEL_PROPAGATORS: ${OTEL_PROPAGATORS:-tracecontext,baggage}
+
 services:
   db:
     image: postgres:16-bookworm@sha256:0ea6700a3b4f0ae6ce746519073558aed4d88a79d8d07622a9a644946c7319c4
@@ -7,8 +25,8 @@ services:
     environment:
       POSTGRES_USER: preflyt_owner
       POSTGRES_DB: preflyt
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in deploy/.env}
-      DATABASE_APP_PASSWORD: ${DATABASE_APP_PASSWORD:?Set DATABASE_APP_PASSWORD in deploy/.env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in root .env}
+      DATABASE_APP_PASSWORD: ${DATABASE_APP_PASSWORD:?Set DATABASE_APP_PASSWORD in root .env}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./deploy/postgres/01-runtime-role.sh:/docker-entrypoint-initdb.d/01-runtime-role.sh:ro
@@ -22,7 +40,7 @@ services:
     networks: [backend]
 
   migrate:
-    image: preflyt-api-migration:${PREFLYT_VERSION:-development}
+    image: ${PREFLYT_IMAGE_REGISTRY:-preflyt-local}/preflyt-api-migration:${PREFLYT_VERSION:-development}
     build:
       context: .
       dockerfile: deploy/api.Dockerfile
@@ -42,7 +60,7 @@ services:
     networks: [backend]
 
   api:
-    image: preflyt-api:${PREFLYT_VERSION:-development}
+    image: ${PREFLYT_IMAGE_REGISTRY:-preflyt-local}/preflyt-api:${PREFLYT_VERSION:-development}
     build:
       context: .
       dockerfile: deploy/api.Dockerfile
@@ -50,10 +68,12 @@ services:
     init: true
     restart: unless-stopped
     environment:
+      <<: *otel
       NODE_ENV: production
+      OTEL_SERVICE_NAME: preflyt-api
       API_HOST: 0.0.0.0
       API_PORT: '3000'
-      REDIS_URL: ${REDIS_URL:-}
+      REDIS_URL: ${REDIS_URL:-redis://cache:6379/0}
       REDIS_CACHE_PREFIX: ${REDIS_CACHE_PREFIX:-preflyt:production:cache}
       DATABASE_URL: postgresql://preflyt_app:${DATABASE_APP_PASSWORD:?Set DATABASE_APP_PASSWORD}@db:5432/${PREFLYT_DATABASE:-preflyt}
       WEB_ORIGIN: ${WEB_ORIGIN:?Set WEB_ORIGIN}
@@ -90,8 +110,7 @@ services:
     networks: [backend, egress]
 
   worker:
-    profiles: [events]
-    image: preflyt-api:${PREFLYT_VERSION:-development}
+    image: ${PREFLYT_IMAGE_REGISTRY:-preflyt-local}/preflyt-api:${PREFLYT_VERSION:-development}
     build:
       context: .
       dockerfile: deploy/api.Dockerfile
@@ -100,12 +119,16 @@ services:
     init: true
     restart: unless-stopped
     environment:
+      <<: *otel
       NODE_ENV: production
       DATABASE_URL: postgresql://preflyt_app:${DATABASE_APP_PASSWORD:?Set DATABASE_APP_PASSWORD}@db:5432/${PREFLYT_DATABASE:-preflyt}
       GITHUB_EVENTS_ENABLED: ${GITHUB_EVENTS_ENABLED:-false}
-      QUEUE_REDIS_URL: ${QUEUE_REDIS_URL:-}
+      OTEL_SERVICE_NAME: preflyt-worker
+      QUEUE_REDIS_URL: ${QUEUE_REDIS_URL:-redis://queue:6379/0}
       QUEUE_PREFIX: ${QUEUE_PREFIX:-preflyt:production:queue}
     depends_on:
+      queue:
+        condition: service_healthy
       migrate:
         condition: service_completed_successfully
     healthcheck:
@@ -122,8 +145,63 @@ services:
     cpus: 1.0
     networks: [backend, egress]
 
+  cache:
+    image: valkey/valkey:7.2-alpine@sha256:c6c2f0020be34bbf684a53a0ef716ab16ff70295186d4d9f2518435beb7afbff
+    command: [valkey-server, --maxmemory, 128mb, --maxmemory-policy, allkeys-lru, --save, '']
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, valkey-cli, ping]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    mem_limit: 256m
+    cpus: 0.5
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    tmpfs: [/tmp]
+    user: valkey
+    networks: [backend]
+
+  queue:
+    image: valkey/valkey:7.2-alpine@sha256:c6c2f0020be34bbf684a53a0ef716ab16ff70295186d4d9f2518435beb7afbff
+    command: [valkey-server, --appendonly, 'yes', --appendfsync, everysec, --maxmemory, 256mb, --maxmemory-policy, noeviction]
+    restart: unless-stopped
+    volumes: [queue_data:/data]
+    healthcheck:
+      test: [CMD, valkey-cli, ping]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    mem_limit: 512m
+    cpus: 0.5
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    user: valkey
+    read_only: true
+    tmpfs: [/tmp]
+    networks: [backend]
+
+  otel-collector:
+    profiles: [observability]
+    image: otel/opentelemetry-collector-contrib:0.162.0@sha256:39923a8e431bd1f57be82411999d389fcfe40857492e4365456d97a4c1f74be6
+    command: [--config=/etc/otelcol/config.yaml]
+    environment:
+      COLLECTOR_UPSTREAM_ENDPOINT: ${COLLECTOR_UPSTREAM_ENDPOINT:-}
+      COLLECTOR_UPSTREAM_HEADERS: ${COLLECTOR_UPSTREAM_HEADERS:-{}}
+    volumes:
+      - ./deploy/otel-collector.yaml:/etc/otelcol/config.yaml:ro
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
+    cpus: 0.5
+    networks: [backend, egress]
+
   web:
-    image: preflyt-web:${PREFLYT_VERSION:-development}
+    image: ${PREFLYT_IMAGE_REGISTRY:-preflyt-local}/preflyt-web:${PREFLYT_VERSION:-development}
     build:
       context: .
       dockerfile: deploy/web.Dockerfile
@@ -149,6 +227,7 @@ services:
 
 volumes:
   postgres_data:
+  queue_data:
 
 networks:
   backend:

@@ -13,7 +13,8 @@ case "$database" in *[!a-z0-9_]*) echo 'Invalid database name' >&2; exit 2 ;; es
 if [ "${#database}" -gt 63 ]; then echo 'Database name exceeds 63 characters' >&2; exit 2; fi
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 cd "$root"
-env_file=${PREFLYT_ENV_FILE:-deploy/.env}
+env_file=${PREFLYT_ENV_FILE:-.env}
+if [ -z "${PREFLYT_ENV_FILE:-}" ] && [ ! -f "$env_file" ] && [ -f deploy/.env ]; then env_file=deploy/.env; fi
 dc() { docker compose --env-file "$env_file" -f compose.yaml "$@"; }
 # createdb fails if the destination exists: an existing database is never replaced.
 dc exec -T db createdb -U preflyt_owner --maintenance-db=postgres "$database"

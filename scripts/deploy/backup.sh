@@ -11,7 +11,8 @@ case "$output" in /*) ;; *) output="$PWD/$output" ;; esac
 case "$database" in ''|*[!a-z0-9_]*) echo 'Invalid database name' >&2; exit 2 ;; esac
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 cd "$root"
-env_file=${PREFLYT_ENV_FILE:-deploy/.env}
+env_file=${PREFLYT_ENV_FILE:-.env}
+if [ -z "${PREFLYT_ENV_FILE:-}" ] && [ ! -f "$env_file" ] && [ -f deploy/.env ]; then env_file=deploy/.env; fi
 dc() { docker compose --env-file "$env_file" -f compose.yaml "$@"; }
 if [ -e "$output" ]; then echo 'Backup path already exists' >&2; exit 2; fi
 mkdir -p -- "$(dirname -- "$output")"

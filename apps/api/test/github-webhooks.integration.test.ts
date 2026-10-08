@@ -4,11 +4,12 @@ import { NestFactory } from '@nestjs/core'
 import type { NestExpressApplication } from '@nestjs/platform-express'
 import cookieParser from 'cookie-parser'
 import request from 'supertest'
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { PrismaService } from '../src/prisma/prisma.service.js'
 import { AuthService } from '../src/auth/auth.service.js'
 import { SessionGuard } from '../src/auth/session.guard.js'
 import { GitHubWebhookController } from '../src/github-events/github-webhook.controller.js'
+import * as telemetry from '../src/telemetry.js'
 import { GitHubWebhookService } from '../src/github-events/github-webhook.service.js'
 import { GitHubEventProcessor } from '../src/github-events/github-event-processor.js'
 
@@ -73,11 +74,15 @@ describe('signed webhook durable inbox and repository history', () => {
   it('verifies original JSON bytes, persists only normalized metadata, and needs no Redis for acknowledgement', async () => {
     const id = randomUUID()
     const raw = JSON.stringify(payload(), null, 2)
-    const result = await send(raw, id)
+    const parent = '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01'
+    const capture = vi.spyOn(telemetry, 'currentTraceParent').mockReturnValue(parent)
+    let result
+    try { result = await send(raw, id) } finally { capture.mockRestore() }
     expect(result.status).toBe(202)
     expect(result.body).toMatchObject({ accepted: true, duplicate: false, deliveryId: id })
     const record = await prisma.gitHubWebhookDelivery.findUniqueOrThrow({ where: { id } })
     expect(record).toMatchObject({ state: 'RECEIVED', sourceSha: 'a'.repeat(40), repositoryGithubId: 501n, installationId: 77n, sourceNumber: 3 })
+    expect(record.traceParent).toBe(parent)
     expect(record.payloadHash).toMatch(/^[a-f0-9]{64}$/)
     expect(JSON.stringify(record, (_, value) => typeof value === 'bigint' ? value.toString() : value)).not.toContain('super-secret')
   })

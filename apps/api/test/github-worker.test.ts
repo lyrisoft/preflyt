@@ -1,5 +1,4 @@
 import { spawn } from 'node:child_process'
-import { fileURLToPath } from 'node:url'
 import { readFile, unlink } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
 import { setTimeout as delay } from 'node:timers/promises'
@@ -22,7 +21,7 @@ it('runs the actual separate worker, reconciles an accepted delivery, reports he
   const queue = new Queue(queueName, { ...config, connection })
   queue.on('error', () => undefined)
   await prisma.gitHubWebhookDelivery.create({ data: { id, payloadHash: 'a'.repeat(64), event: 'workflow_run', action: 'completed', installationId: 99999n, repositoryGithubId: 99999n, sourceSha: 'd'.repeat(40), sourceObjectId: '1' } })
-  const child = spawn(process.execPath, [fileURLToPath(import.meta.resolve('tsx/cli')), 'src/worker.ts'], {
+  const child = spawn(process.execPath, ['--import', 'tsx', 'src/worker.ts'], {
     cwd: process.cwd(), env: { ...process.env, GITHUB_EVENTS_ENABLED: 'true', QUEUE_REDIS_URL: url, QUEUE_PREFIX: prefix, WORKER_HEARTBEAT_FILE: heartbeat },
     stdio: 'ignore',
   })
@@ -57,7 +56,7 @@ it('runs the actual separate worker, reconciles an accepted delivery, reports he
 it('stays unhealthy and can stop while Redis is unavailable', async () => {
   const id = randomUUID()
   const heartbeat = `/tmp/preflyt-worker-test-${id}`
-  const child = spawn(process.execPath, [fileURLToPath(import.meta.resolve('tsx/cli')), 'src/worker.ts'], {
+  const child = spawn(process.execPath, ['--import', 'tsx', 'src/worker.ts'], {
     cwd: process.cwd(), env: { ...process.env, GITHUB_EVENTS_ENABLED: 'true', QUEUE_REDIS_URL: 'redis://127.0.0.1:1/1', QUEUE_PREFIX: `preflyt-test-${id}`, WORKER_HEARTBEAT_FILE: heartbeat },
     stdio: ['ignore', 'pipe', 'ignore'],
   })

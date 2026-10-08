@@ -1,0 +1,78 @@
+name: Publish versioned images
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+concurrency:
+  group: preflyt-images-${{ github.sha }}
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24.4.1
+      - name: Verify changed telemetry contract
+        run: |
+          npm install --global pnpm@10.15.1
+          pnpm install --frozen-lockfile --ignore-scripts
+          pnpm --filter @preflyt/api typecheck
+          pnpm --filter @preflyt/api test test/telemetry.test.ts test/deployment-config.test.ts
+        env:
+          DATABASE_URL: postgresql://build:build@localhost:5432/build
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - image: preflyt-api
+            file: deploy/api.Dockerfile
+            target: runtime
+          - image: preflyt-api-migration
+            file: deploy/api.Dockerfile
+            target: migration
+          - image: preflyt-web
+            file: deploy/web.Dockerfile
+            target: runtime
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Preserve existing commit image
+        id: existing
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:sha-${{ github.sha }}
+        run: |
+          if docker buildx imagetools inspect "$IMAGE" >/dev/null 2>/tmp/manifest-error; then
+            echo 'exists=true' >> "$GITHUB_OUTPUT"
+          elif rg -qi '(manifest unknown|not found)' /tmp/manifest-error; then
+            echo 'exists=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'Unable to verify image availability; refusing to overwrite a release.' >&2
+            exit 1
+          fi
+      - if: steps.existing.outputs.exists != 'true'
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: ${{ matrix.file }}
+          target: ${{ matrix.target }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:sha-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}

@@ -4,7 +4,7 @@
 **Positioning:** AI-native Shift Left engineering platform  
 **Tagline:** Engineering confidence before production  
 **Owner:** Lyrisoft Technologies  
-**Status:** Draft for engineering and product review; features are not yet implemented  
+**Status:** Product roadmap for engineering and product review; implemented capabilities and remaining scope are tracked in README and the incremental delivery plan
 **Version:** 0.4 — SDLC lifecycle capabilities and deployable vertical slices  
 **Date:** 2026-10-08  
 **Source of architectural decisions:** [ADR-0001](architecture/ADR-0001-typescript-first-stack.md) · [ADR-0002](architecture/ADR-0002-safe-execution-fixtures-remediation-contract.md) · [ADR-0003](architecture/ADR-0003-oidc-user-authentication.md) · [ADR-0004](architecture/ADR-0004-shift-left-assessment-governance.md)
@@ -27,7 +27,7 @@ The **primary entity is an Assessment**: evaluation of a design artifact, change
 
 **Automated code editing and remediation PRs are not the core product and are not required for MVP or V1.** A separately authorized future remediation module may use the previously designed evidence/reproduction contract in ADR-0002.
 
-The planned application stack is **Node.js + TypeScript, React + Vite, NestJS, PostgreSQL/Prisma, Redis/BullMQ**, and optionally LiteLLM for frontier or self-hosted models. Docker Compose is the local/evaluation packaging goal; Kubernetes with an approved hardened sandbox is the production execution target.
+The planned application stack is **Node.js + TypeScript, React + Vite, NestJS, PostgreSQL/Prisma, Redis/BullMQ**, and optionally LiteLLM for frontier or self-hosted models. Docker Compose packages the current release; Kubernetes with an approved hardened sandbox is the production execution target.
 
 ## 2. Problem and opportunity
 
@@ -439,7 +439,7 @@ flowchart TD
   INTEL --> REPORT
   REPORT --> API
   API --> CHECK["GitHub revision-bound check/status"]
-  API --> AUDIT["Object storage + OTel / SigNoz"]
+  API --> AUDIT["Object storage + OTel / optional APM"]
 ~~~
 
 ### Technology decisions (unchanged)
@@ -451,7 +451,7 @@ flowchart TD
 - **Database:** PostgreSQL + Prisma; large evidence/artifacts in scoped object storage.
 - **Model plane:** LiteLLM as an independently deployed gateway; external provider API keys and/or local inference, with redaction and provider policy.
 - **Execution:** TypeScript Docker/Kubernetes controller; approved stronger sandbox runtime for real repository code execution.
-- **Packaging:** planned Docker Compose evaluation and Helm/Kubernetes deployments.
+- **Packaging:** Docker Compose evaluation deployment is implemented for current services; Helm/Kubernetes deployment remains planned.
 - **Observability:** OpenTelemetry and optional SigNoz.
 
 Open-source component/rule/model license checks are mandatory before redistribution or commercialization.
@@ -460,7 +460,7 @@ Open-source component/rule/model license checks are mandatory before redistribut
 
 Every release must publish images and a **complete single-command Docker Compose install** for its current services (frontend, NestJS API, PostgreSQL, Redis, workers, LiteLLM and object store where needed), with versioned `.env.example`, startup/health checks, safe migrations, durable volumes, upgrade and rollback instructions. Configured users should start all required services via `docker compose up -d` with no host application dependency installation. Optional OTEL Collector and local model services may be separate Compose profiles.
 
-**OpenTelemetry must be vendor-neutral.** The root example environment declares standard OTEL exporter endpoint, protocol, header, traces/metrics/logs exporters, resource metadata, propagation and sampling; Compose injects shared settings and distinct `OTEL_SERVICE_NAME` values into first-party services. Users can configure any compatible OTLP endpoint without editing code. Failures of telemetry exporters must not make core application requests fail. See [OTel contract](deployment/opentelemetry-env.md). **The current `.env.example` is a configuration draft, not evidence of existing running services or Compose manifests.**
+**OpenTelemetry must be vendor-neutral.** The root example environment declares standard OTEL exporter endpoint, protocol, header, traces/metrics/logs exporters, resource metadata, propagation and sampling; Compose injects shared settings and distinct `OTEL_SERVICE_NAME` values into first-party services. Users can configure any compatible OTLP endpoint without editing code. Failures of telemetry exporters must not make core application requests fail. See [OTel contract](deployment/opentelemetry-env.md). **Current implementation:** root `.env.example`, complete Compose services, optional collector and API/worker OTLP traces, metrics and structured logs are implemented. Published images require the release workflow to succeed; future model gateway/evidence storage and Kubernetes execution remain planned.
 
 ### Execution trust boundary: mandatory in MVP
 
