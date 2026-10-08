@@ -33,6 +33,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { StatusBadge } from '@/components/status-badge'
+import { CiActivityCharts, CiActivityEmpty } from './ci-activity-charts'
 import { ReportList } from './ci-artifact-imports'
 import { RelativeTime } from './relative-time'
 import { useCiEvidence, type CiObservation } from './repository-queries'
@@ -134,7 +135,7 @@ export function RepositoryCiEvidence({
           <h2>CI results</h2>
         </CardTitle>
         <CardDescription>
-          Latest 50 GitHub check and workflow results at exact commits.
+          Delivery trends, provider outcomes and imported reports.
         </CardDescription>
         <CardAction>
           <Button
@@ -149,7 +150,10 @@ export function RepositoryCiEvidence({
           </Button>
         </CardAction>
       </CardHeader>
-      <CardContent className='space-y-4 px-0'>
+      <CardContent className='space-y-5 px-0'>
+        {!query.isPending && !query.isError && observations.length > 0 && (
+          <CiActivityCharts observations={observations} />
+        )}
         <form
           className='flex max-w-xl flex-wrap items-center gap-2 px-6'
           onSubmit={(event) => {
@@ -198,13 +202,11 @@ export function RepositoryCiEvidence({
             {query.error.message}
           </p>
         ) : observations.length === 0 ? (
-          <p className='px-6 text-sm text-muted-foreground'>
-            {!query.data.enabled
-              ? 'GitHub event collection is not configured.'
-              : sha
-                ? 'No CI results for this commit.'
-                : 'No CI results yet. They appear after the worker processes check or workflow events.'}
-          </p>
+          <CiActivityEmpty
+            enabled={query.data.enabled}
+            filtered={!!sha}
+            canConfigure={canImport}
+          />
         ) : (
           <Table>
             <TableHeader>

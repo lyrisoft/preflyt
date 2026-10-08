@@ -1,6 +1,14 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { RefreshCw } from 'lucide-react'
+import {
+  ChevronDown,
+  GitBranch,
+  Link2,
+  ListChecks,
+  RefreshCw,
+  ShieldCheck,
+  Workflow,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -35,6 +43,7 @@ import {
   type BindingResult,
   type SourceIdentity,
 } from './engineering-queries'
+import { RelativeTime } from './relative-time'
 import {
   useStandards,
   useCiEvidence,
@@ -292,17 +301,33 @@ export function RepositoryBindings({
     standards = useStandards(repositoryId)
   const [editing, setEditing] = useState(false)
   const saved = query.data
+  const mappings = saved?.binding?.bindings ?? []
+  const importRules =
+    standards.data?.controls.filter(
+      (rule) => rule.capability === 'import_only'
+    ) ?? []
+  const mappedRules = mappings.filter((mapping) =>
+    importRules.some((rule) => rule.id === mapping.ruleId)
+  ).length
+  const workflowCount = mappings.filter(
+    (mapping) => mapping.kind === 'workflow_run'
+  ).length
+  const checkCount = mappings.length - workflowCount
   return (
-    <Card>
+    <Card className='gap-4'>
       <CardHeader>
-        <CardTitle>CI source bindings</CardTitle>
+        <CardTitle className='flex items-center gap-2'>
+          <Link2 className='size-4 text-chart-2' />
+          CI source bindings
+        </CardTitle>
         <CardDescription>
-          Map approved GitHub sources to adopted imported-evidence rules.
+          Approved sources associated with imported-evidence rules.
         </CardDescription>
         <CardAction>
           <Button
             size='icon'
             variant='outline'
+            className='size-8'
             aria-label='Reload CI bindings'
             disabled={query.isFetching}
             onClick={() => {
@@ -311,21 +336,23 @@ export function RepositoryBindings({
               void standards.refetch()
             }}
           >
-            <RefreshCw />
+            <RefreshCw className={query.isFetching ? 'animate-spin' : ''} />
           </Button>
         </CardAction>
       </CardHeader>
       <CardContent className='space-y-4'>
         {query.isPending ? (
-          <p role='status'>Loading bindings…</p>
+          <p role='status' className='text-sm text-muted-foreground'>
+            Loading bindings…
+          </p>
         ) : query.isError ? (
-          <p role='alert' className='text-destructive'>
+          <p role='alert' className='text-sm text-destructive'>
             {query.error.message}
           </p>
         ) : (
           <>
             <div className='flex flex-wrap items-center justify-between gap-3'>
-              <StatusBadge tone={saved?.active ? 'info' : 'warning'}>
+              <StatusBadge tone={saved?.active ? 'success' : 'warning'}>
                 {saved?.active
                   ? `Active · revision ${saved.binding?.revision}`
                   : saved?.binding
@@ -343,47 +370,164 @@ export function RepositoryBindings({
                   }
                   onClick={() => setEditing(true)}
                 >
+                  <ShieldCheck className='size-3.5' />
                   {saved?.binding ? 'Review bindings' : 'Configure bindings'}
                 </Button>
               )}
             </div>
-            {!standards.data?.selection && (
-              <p className='text-sm text-muted-foreground'>
-                Adopt standards before approving CI sources.
+            <div className='grid overflow-hidden rounded-lg border bg-muted/10 sm:grid-cols-3'>
+              <div className='flex items-center gap-3 p-4'>
+                <span className='flex size-9 shrink-0 items-center justify-center rounded-lg bg-chart-2/10 text-chart-2'>
+                  <Link2 className='size-4' />
+                </span>
+                <div>
+                  <p className='text-xl leading-none font-semibold tabular-nums'>
+                    {mappings.length}
+                  </p>
+                  <p className='mt-1.5 text-xs text-muted-foreground'>
+                    Source mappings
+                  </p>
+                </div>
+              </div>
+              <div className='flex items-center gap-3 border-t p-4 sm:border-s sm:border-t-0'>
+                <span className='flex size-9 shrink-0 items-center justify-center rounded-lg bg-chart-1/10 text-chart-1'>
+                  <ListChecks className='size-4' />
+                </span>
+                <div>
+                  <p className='text-xl leading-none font-semibold tabular-nums'>
+                    {standards.isPending ||
+                    standards.isError ||
+                    standards.data?.selectionIntegrity === false
+                      ? '—'
+                      : `${saved?.active ? mappedRules : 0} / ${importRules.length}`}
+                  </p>
+                  <p className='mt-1.5 text-xs text-muted-foreground'>
+                    Current rules associated
+                  </p>
+                </div>
+              </div>
+              <div className='flex items-center gap-3 border-t p-4 sm:border-s sm:border-t-0'>
+                <span className='flex size-9 shrink-0 items-center justify-center rounded-lg bg-chart-4/10 text-chart-4'>
+                  <Workflow className='size-4' />
+                </span>
+                <div>
+                  <p className='text-xl leading-none font-semibold tabular-nums'>
+                    {workflowCount}
+                    <span className='mx-1 text-sm text-muted-foreground'>
+                      /
+                    </span>
+                    {checkCount}
+                  </p>
+                  <p className='mt-1.5 text-xs text-muted-foreground'>
+                    Workflows / checks
+                  </p>
+                </div>
+              </div>
+            </div>
+            {standards.data?.selectionIntegrity === false && (
+              <p
+                role='alert'
+                className='rounded-lg border border-warning/20 bg-warning/5 p-3 text-xs text-warning-text'
+              >
+                Saved standards need review before current rule associations can
+                be interpreted.
               </p>
+            )}
+            {standards.isError ? (
+              <p
+                role='alert'
+                className='rounded-lg border border-danger/20 bg-danger/5 p-3 text-xs text-danger-text'
+              >
+                {standards.error.message}
+              </p>
+            ) : (
+              !standards.isPending &&
+              !standards.data?.selection && (
+                <p className='rounded-lg border border-info/20 bg-info/5 px-3 py-2.5 text-xs text-info-text'>
+                  Adopt standards to configure and approve source mappings.
+                </p>
+              )
             )}
             {saved?.binding && !saved.active && (
-              <p role='status' className='text-sm text-muted-foreground'>
-                The adopted standards changed. These mappings remain historical
-                until you review and approve them for the current selection.
+              <p
+                role='status'
+                className='rounded-lg border border-warning/20 bg-warning/5 px-3 py-2.5 text-xs text-warning-text'
+              >
+                Standards changed. Review and approve these historical mappings
+                for the current selection.
               </p>
             )}
-            {saved?.binding?.bindings.length ? (
-              <ul className='divide-y rounded-md border'>
-                {saved.binding.bindings.map((b) => (
-                  <li
-                    key={b.ruleId}
-                    className='flex flex-wrap justify-between gap-2 p-3 text-sm'
-                  >
-                    <span className='font-medium'>
-                      {standards.data?.controls.find((r) => r.id === b.ruleId)
-                        ?.title ?? b.ruleId}
-                    </span>
-                    <span className='break-all text-muted-foreground'>
-                      {identityLabel(b)}
-                    </span>
-                  </li>
-                ))}
+            {mappings.length ? (
+              <ul className='divide-y rounded-lg border'>
+                {mappings.map((mapping) => {
+                  const Icon =
+                    mapping.kind === 'workflow_run' ? Workflow : GitBranch
+                  return (
+                    <li
+                      key={mapping.ruleId}
+                      className='flex items-start gap-3 px-4 py-3'
+                    >
+                      <span className='flex size-7 shrink-0 items-center justify-center rounded-md bg-chart-2/10 text-chart-2'>
+                        <Icon className='size-3.5' />
+                      </span>
+                      <div className='min-w-0 flex-1'>
+                        <p className='text-sm font-medium'>
+                          {standards.data?.controls.find(
+                            (rule) => rule.id === mapping.ruleId
+                          )?.title ?? mapping.ruleId}
+                        </p>
+                        <p className='mt-0.5 text-xs break-all text-muted-foreground'>
+                          {identityLabel(mapping)}
+                        </p>
+                      </div>
+                      <span className='rounded-md border px-2 py-0.5 text-[10px] whitespace-nowrap text-muted-foreground'>
+                        {mapping.kind === 'workflow_run' ? 'Workflow' : 'Check'}
+                      </span>
+                    </li>
+                  )
+                })}
               </ul>
             ) : (
-              <p className='text-sm text-muted-foreground'>
-                CI observations have no automatic rule associations.
-              </p>
+              <div className='flex items-center gap-3 rounded-lg border border-dashed px-4 py-5'>
+                <Link2 className='size-5 shrink-0 text-muted-foreground' />
+                <div>
+                  <p className='text-sm font-medium'>No rule associations</p>
+                  <p className='mt-1 text-xs text-muted-foreground'>
+                    CI results remain available without an automatic
+                    source-to-rule mapping.
+                  </p>
+                </div>
+              </div>
             )}
-            <p className='text-xs text-muted-foreground'>
-              Matching sources remain unverified execution evidence. Changing
-              mappings does not rewrite existing assessments.
-            </p>
+            <details className='group border-t pt-3'>
+              <summary className='inline-flex cursor-pointer list-none items-center gap-1 text-xs text-muted-foreground hover:text-foreground [&::-webkit-details-marker]:hidden'>
+                Approval scope and history
+                <ChevronDown className='size-3 transition-transform group-open:rotate-180' />
+              </summary>
+              <div className='mt-3 space-y-3 text-xs text-muted-foreground'>
+                {saved?.binding && (
+                  <dl className='grid gap-x-4 gap-y-2 sm:grid-cols-[max-content_1fr]'>
+                    <dt>Binding revision</dt>
+                    <dd className='font-medium text-foreground'>
+                      {saved.binding.revision}
+                    </dd>
+                    <dt>Approved</dt>
+                    <dd className='text-foreground'>
+                      <RelativeTime value={saved.binding.createdAt} />
+                    </dd>
+                    <dt>Selection ID</dt>
+                    <dd className='font-mono break-all'>
+                      {saved.binding.selectionId}
+                    </dd>
+                  </dl>
+                )}
+                <p>
+                  Matching sources identify where evidence originated; execution
+                  remains unverified. New revisions preserve existing assessment
+                  snapshots.
+                </p>
+              </div>
+            </details>
           </>
         )}
       </CardContent>

@@ -1,6 +1,14 @@
 import { useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, Plus, RefreshCw } from 'lucide-react'
+import {
+  AlertTriangle,
+  ClipboardList,
+  GitCommitHorizontal,
+  Layers,
+  Plus,
+  RefreshCw,
+  ShieldCheck,
+} from 'lucide-react'
 import { API_BASE_URL } from '@/lib/api'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -39,6 +47,7 @@ import {
 } from '@/components/ui/table'
 import { StatusBadge } from '@/components/status-badge'
 import { AssessmentContext } from './assessment-context'
+import { AssessmentCoverageChart } from './assessment-coverage-chart'
 import type { ContextRequest } from './engineering-queries'
 import {
   EvidenceValidationPanel,
@@ -273,6 +282,7 @@ export function RepositoryAssessments({
   const client = useQueryClient()
   const [selected, setSelected] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
+  const [inputFilter, setInputFilter] = useState('all')
   const history = useAssessmentList(repositoryId)
   const current = selected ?? history.data?.assessments[0]?.id
   const detail = useQuery({
@@ -303,6 +313,23 @@ export function RepositoryAssessments({
       .length ?? 0
   const withCi = data?.report.checks.filter((c) => c.deliveryId).length ?? 0
   const coverage = data ? coverageStatus(data.report.coverage) : null
+  const configurationOnly =
+    data?.report.checks.filter(
+      (check) =>
+        !check.deliveryId && check.coverage === 'CONFIGURATION_OBSERVED'
+    ).length ?? 0
+  const noInputs =
+    (data?.report.checks.length ?? 0) - withCi - configurationOnly
+  const checks =
+    data?.report.checks.filter((check) =>
+      inputFilter === 'linked'
+        ? !!check.deliveryId
+        : inputFilter === 'configuration'
+          ? !check.deliveryId && check.coverage === 'CONFIGURATION_OBSERVED'
+          : inputFilter === 'missing'
+            ? !check.deliveryId && check.coverage !== 'CONFIGURATION_OBSERVED'
+            : true
+    ) ?? []
   return (
     <Card className='gap-4'>
       <CardHeader>
@@ -347,6 +374,7 @@ export function RepositoryAssessments({
                   initialSha={initialSha}
                   onCreated={(id) => {
                     setSelected(id)
+                    setInputFilter('all')
                     setCreating(false)
                     void client.invalidateQueries({
                       queryKey: ['assessments', repositoryId],
@@ -368,18 +396,104 @@ export function RepositoryAssessments({
             {history.error.message}
           </p>
         ) : history.data.assessments.length === 0 ? (
-          <div className='rounded-md border border-dashed p-8 text-center text-sm'>
-            <p className='font-medium'>No snapshots yet</p>
-            <p className='mt-1 text-muted-foreground'>
-              {canCreate
-                ? 'Create one to compare this repository across commits.'
-                : 'An Owner or Admin can create one for an exact commit.'}
-            </p>
+          <div className='rounded-lg border bg-muted/15 p-5'>
+            <div className='flex items-start gap-3'>
+              <span className='rounded-lg border bg-background p-2.5 text-info'>
+                <ClipboardList className='size-5' aria-hidden='true' />
+              </span>
+              <div>
+                <p className='text-sm font-semibold'>
+                  Create your first assessment
+                </p>
+                <p className='mt-1 text-xs text-muted-foreground'>
+                  {canCreate
+                    ? 'Save standards, then use New assessment to freeze the evidence at a commit.'
+                    : 'An Owner or Admin can freeze the evidence at a commit.'}
+                </p>
+              </div>
+            </div>
+            <div className='mt-5 grid gap-3 border-t pt-4 text-xs sm:grid-cols-3'>
+              {[
+                {
+                  icon: Layers,
+                  label: 'Adopt standards',
+                  detail: 'Select the applicable packs',
+                },
+                {
+                  icon: GitCommitHorizontal,
+                  label: 'Pin a revision',
+                  detail: 'Use a full commit SHA',
+                },
+                {
+                  icon: ShieldCheck,
+                  label: 'Review evidence',
+                  detail: 'Inspect the immutable snapshot',
+                },
+              ].map(({ icon: Icon, label, detail }, index) => (
+                <div key={label} className='flex items-center gap-2.5'>
+                  <span className='flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground'>
+                    <Icon className='size-3.5' aria-hidden='true' />
+                  </span>
+                  <div>
+                    <p className='font-medium'>
+                      {index + 1}. {label}
+                    </p>
+                    <p className='mt-0.5 text-muted-foreground'>{detail}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         ) : (
           <>
+            <div className='rounded-lg border bg-muted/10 p-3'>
+              <div className='mb-3 flex items-center justify-between gap-3'>
+                <p className='text-xs font-medium text-muted-foreground'>
+                  Revision history
+                </p>
+                <span className='text-xs text-muted-foreground'>
+                  {history.data.assessments.length} saved snapshots
+                </span>
+              </div>
+              <div className='flex flex-wrap gap-2'>
+                {history.data.assessments.slice(0, 6).map((item) => (
+                  <button
+                    key={item.id}
+                    type='button'
+                    aria-pressed={current === item.id}
+                    onClick={() => {
+                      setSelected(item.id)
+                      setInputFilter('all')
+                    }}
+                    className='flex items-center gap-2 rounded-md border bg-background px-3 py-2 text-xs transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring aria-pressed:border-info/50 aria-pressed:bg-info/10'
+                  >
+                    <GitCommitHorizontal
+                      className='size-3.5 text-muted-foreground'
+                      aria-hidden='true'
+                    />
+                    <span>
+                      <code className='block font-medium'>
+                        {item.sourceSha.slice(0, 7)}
+                      </code>
+                      <span className='text-[10px] text-muted-foreground'>
+                        {new Date(item.createdAt).toLocaleDateString(
+                          undefined,
+                          { month: 'short', day: 'numeric' }
+                        )}
+                      </span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className='flex flex-wrap items-center gap-3'>
-              <Select value={current} onValueChange={setSelected}>
+              <Select
+                value={current}
+                onValueChange={(id) => {
+                  setSelected(id)
+                  setInputFilter('all')
+                }}
+              >
                 <SelectTrigger
                   aria-label='Assessment snapshot'
                   className='w-full sm:w-80'
@@ -414,30 +528,61 @@ export function RepositoryAssessments({
               data &&
               coverage && (
                 <>
-                  <dl className='grid gap-px overflow-hidden rounded-md border bg-border text-sm sm:grid-cols-4'>
-                    <div className='bg-card px-4 py-3'>
-                      <dt className='text-xs text-muted-foreground'>
-                        Coverage
-                      </dt>
-                      <dd className='mt-1.5'>
-                        <StatusBadge tone={coverage.tone}>
-                          {coverage.label}
-                        </StatusBadge>
-                      </dd>
-                    </div>
-                    {[
-                      ['Required controls', data.report.requiredChecks],
-                      ['Config found', configFound],
-                      ['With CI result', withCi],
-                    ].map(([label, value]) => (
-                      <div key={label} className='bg-card px-4 py-3'>
-                        <dt className='text-xs text-muted-foreground'>
-                          {label}
-                        </dt>
-                        <dd className='mt-1 text-xl font-semibold'>{value}</dd>
+                  <div className='grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]'>
+                    <AssessmentCoverageChart
+                      total={data.report.checks.length}
+                      linked={withCi}
+                      configuration={configurationOnly}
+                      missing={noInputs}
+                      selected={inputFilter}
+                      onSelect={setInputFilter}
+                    />
+                    <div className='grid grid-cols-2 gap-3'>
+                      <div className='rounded-lg border border-info/20 bg-info/5 p-4'>
+                        <p className='text-xs text-muted-foreground'>
+                          Required controls
+                        </p>
+                        <p className='mt-2 text-2xl font-semibold tabular-nums'>
+                          {data.report.requiredChecks}
+                        </p>
+                        <p className='mt-1 text-xs text-muted-foreground'>
+                          {data.report.checks.length} controls in this snapshot
+                        </p>
                       </div>
-                    ))}
-                  </dl>
+                      <div className='rounded-lg border border-chart-2/20 bg-chart-2/5 p-4'>
+                        <p className='text-xs text-muted-foreground'>
+                          Configuration found
+                        </p>
+                        <p className='mt-2 text-2xl font-semibold tabular-nums'>
+                          {configFound}
+                        </p>
+                        <p className='mt-1 text-xs text-muted-foreground'>
+                          Observed repository configuration
+                        </p>
+                      </div>
+                      <div className='rounded-lg border p-4'>
+                        <p className='text-xs text-muted-foreground'>
+                          Coverage status
+                        </p>
+                        <div className='mt-3'>
+                          <StatusBadge tone={coverage.tone}>
+                            {coverage.label}
+                          </StatusBadge>
+                        </div>
+                      </div>
+                      <div className='rounded-lg border p-4'>
+                        <p className='text-xs text-muted-foreground'>
+                          Verified execution
+                        </p>
+                        <p className='mt-2 text-2xl font-semibold tabular-nums'>
+                          {data.report.trustedExecutedChecks}
+                        </p>
+                        <p className='mt-1 text-xs text-muted-foreground'>
+                          Quality gate not evaluated
+                        </p>
+                      </div>
+                    </div>
+                  </div>
                   <p className='text-xs text-muted-foreground'>
                     Commit{' '}
                     <code className='text-foreground' title={data.sourceSha}>
@@ -462,6 +607,23 @@ export function RepositoryAssessments({
                     </p>
                   )}
                   <div className='overflow-hidden rounded-md border'>
+                    <div className='flex items-center justify-between gap-3 border-b bg-muted/15 px-4 py-3'>
+                      <p className='text-sm font-medium'>
+                        Control evidence{' '}
+                        <span className='ml-1 text-xs font-normal text-muted-foreground'>
+                          {checks.length} of {data.report.checks.length}
+                        </span>
+                      </p>
+                      {inputFilter !== 'all' && (
+                        <Button
+                          size='sm'
+                          variant='ghost'
+                          onClick={() => setInputFilter('all')}
+                        >
+                          Show all
+                        </Button>
+                      )}
+                    </div>
                     <Table>
                       <TableHeader>
                         <TableRow>
@@ -472,7 +634,7 @@ export function RepositoryAssessments({
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {data.report.checks.map((check) => {
+                        {checks.map((check) => {
                           const status =
                             check.coverage === 'INVALID'
                               ? {
@@ -484,12 +646,19 @@ export function RepositoryAssessments({
                             <TableRow key={check.ruleId}>
                               <TableCell className='max-w-md min-w-64 whitespace-normal'>
                                 <p className='font-medium'>{check.title}</p>
-                                <p className='mt-0.5 text-xs text-muted-foreground'>
-                                  {check.reason}
-                                </p>
-                                <EvidenceValidationPanel
-                                  validation={check.evidenceValidation}
-                                />
+                                <details className='mt-1.5 text-xs'>
+                                  <summary className='cursor-pointer text-muted-foreground hover:text-foreground'>
+                                    Review evidence
+                                  </summary>
+                                  <div className='mt-2 space-y-2'>
+                                    <p className='text-muted-foreground'>
+                                      {check.reason}
+                                    </p>
+                                    <EvidenceValidationPanel
+                                      validation={check.evidenceValidation}
+                                    />
+                                  </div>
+                                </details>
                               </TableCell>
                               <TableCell>
                                 <Badge variant='neutral'>
@@ -518,8 +687,8 @@ export function RepositoryAssessments({
                                     <p className='text-muted-foreground'>
                                       {check.mappingTrust ===
                                       'APPROVED_SOURCE_BINDING'
-                                        ? 'Approved source · execution unverified'
-                                        : 'Manual association · execution unverified'}
+                                        ? 'Approved source'
+                                        : 'Manual association'}
                                     </p>
                                   </>
                                 ) : (
@@ -531,6 +700,16 @@ export function RepositoryAssessments({
                             </TableRow>
                           )
                         })}
+                        {checks.length === 0 && (
+                          <TableRow>
+                            <TableCell
+                              colSpan={4}
+                              className='py-6 text-center text-sm text-muted-foreground'
+                            >
+                              No controls in this input category.
+                            </TableCell>
+                          </TableRow>
+                        )}
                       </TableBody>
                     </Table>
                   </div>

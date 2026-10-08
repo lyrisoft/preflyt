@@ -42,6 +42,7 @@ import {
   type RepositoryTab,
 } from './posture-summary'
 import { RelativeTime } from './relative-time'
+import { RepositoryActivityPanel } from './repository-activity-panel'
 import { RepositoryAssessments } from './repository-assessments'
 import { RepositoryBindings } from './repository-bindings'
 import { RepositoryCiEvidence } from './repository-ci-evidence'
@@ -404,10 +405,7 @@ export function RepositoryProfilePage() {
               )}
               {result && (
                 <p className='flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground'>
-                  <span>
-                    Observe mode: Preflyt reads configuration and imported CI
-                    results. It does not run checks or block merges.
-                  </span>
+                  <StatusBadge tone='info'>Observe mode</StatusBadge>
                   <ReadingGuide
                     limitations={profile?.report.limitations ?? []}
                   />
@@ -483,7 +481,8 @@ export function RepositoryProfilePage() {
                   onFilter={filterControls}
                   onOpenTab={openTab}
                 />
-                <div className='grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]'>
+                <RepositoryActivityPanel repositoryId={repositoryId} />
+                <div className='grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_19rem]'>
                   <div id='repository-controls' className='min-w-0 scroll-mt-4'>
                     <RepositoryControls
                       repositoryId={repositoryId}
@@ -527,6 +526,7 @@ export function RepositoryProfilePage() {
                 />
               </TabsContent>
               <TabsContent value='assessments' className='space-y-5'>
+                <RepositoryActivityPanel repositoryId={repositoryId} />
                 <RepositoryPullRequests repositoryId={repositoryId} />
                 <RepositoryAssessments
                   key={repositoryId}

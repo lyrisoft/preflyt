@@ -1,6 +1,18 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link, useNavigate, useSearch } from '@tanstack/react-router'
+import {
+  ArrowUpRight,
+  ClipboardCheck,
+  GitBranch,
+  Layers,
+  Link2,
+  PlugZap,
+  SlidersHorizontal,
+} from 'lucide-react'
+import { IconGithub } from '@/assets/brand-icons'
 import { API_BASE_URL } from '@/lib/api'
+import { cn } from '@/lib/utils'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -10,13 +22,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Skeleton } from '@/components/ui/skeleton'
 import { ConfigDrawer } from '@/components/config-drawer'
 import { AppBreadcrumbs } from '@/components/layout/app-breadcrumbs'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
+import { StatusBadge } from '@/components/status-badge'
 import { ThemeSwitch } from '@/components/theme-switch'
+import { RepositoryActivityPanel } from '@/features/repositories/repository-activity-panel'
 import { RepositoryAssessments } from '@/features/repositories/repository-assessments'
 import { RepositoryBindings } from '@/features/repositories/repository-bindings'
 import { RepositoryCiEvidence } from '@/features/repositories/repository-ci-evidence'
@@ -28,23 +43,39 @@ type Module = 'assessments' | 'standards' | 'policies' | 'integrations'
 const modules = {
   assessments: {
     title: 'Assessments',
+    section: 'Workspace',
+    icon: ClipboardCheck,
     description:
-      'Review pull requests, exact-commit assessment history, and validation evidence.',
+      'Review activity, tracked revisions and frozen assessment evidence.',
+    accent: 'border-chart-1/20 bg-chart-1/5',
+    iconAccent: 'bg-chart-1/15 text-chart-1',
   },
   standards: {
     title: 'Engineering Standards',
+    section: 'Governance',
+    icon: Layers,
     description:
-      'Browse versioned engineering standards and recommendations for a repository.',
+      'Explore the versioned standards that apply to your repositories.',
+    accent: 'border-chart-2/20 bg-chart-2/5',
+    iconAccent: 'bg-chart-2/15 text-chart-2',
   },
   policies: {
     title: 'Policies',
+    section: 'Governance',
+    icon: SlidersHorizontal,
     description:
-      'Review repository policy selections and approved CI source bindings.',
+      'Manage adopted standards and the CI sources approved for each control.',
+    accent: 'border-chart-1/20 bg-chart-1/5',
+    iconAccent: 'bg-chart-1/15 text-chart-1',
   },
   integrations: {
     title: 'Integrations',
+    section: 'Administration',
+    icon: PlugZap,
     description:
-      'Review GitHub installations and repository CI evidence. Manage repository access from Repositories.',
+      'Review GitHub access and the CI evidence available to Preflyt.',
+    accent: 'border-chart-2/20 bg-chart-2/5',
+    iconAccent: 'bg-chart-2/15 text-chart-2',
   },
 }
 type Repository = { githubId: string; fullName: string; selected: boolean }
@@ -65,6 +96,7 @@ async function read<T>(path: string, signal: AbortSignal): Promise<T> {
 
 export function WorkspaceModule({ module }: { module: Module }) {
   const config = modules[module]
+  const ModuleIcon = config.icon
   const search = useSearch({ strict: false }) as { repository?: string }
   const navigate = useNavigate()
   const inventory = useQuery({
@@ -94,115 +126,263 @@ export function WorkspaceModule({ module }: { module: Module }) {
         <ProfileDropdown />
       </Header>
       <Main>
-        <div className='mb-6 flex flex-wrap items-start justify-between gap-4'>
-          <div>
-            <h1 className='text-2xl font-bold tracking-tight'>
-              {config.title}
-            </h1>
-            <p className='mt-1 text-muted-foreground'>{config.description}</p>
+        <div
+          className={cn(
+            'mb-5 flex flex-wrap items-center justify-between gap-4 rounded-xl border px-5 py-4',
+            config.accent
+          )}
+        >
+          <div className='flex min-w-0 items-center gap-3.5'>
+            <span
+              className={cn(
+                'flex size-11 shrink-0 items-center justify-center rounded-xl',
+                config.iconAccent
+              )}
+            >
+              <ModuleIcon className='size-5' aria-hidden='true' />
+            </span>
+            <div className='min-w-0'>
+              <p className='mb-1 text-[10px] font-semibold tracking-widest text-muted-foreground uppercase'>
+                {config.section}
+              </p>
+              <h1 className='text-xl font-semibold tracking-tight sm:text-2xl'>
+                {config.title}
+              </h1>
+              <p className='mt-1 text-sm text-muted-foreground'>
+                {config.description}
+              </p>
+            </div>
           </div>
-          <Button variant='outline' asChild>
-            <Link to='/apps'>Manage repositories</Link>
+          <Button variant='outline' size='sm' asChild>
+            <Link to='/apps'>
+              <GitBranch className='size-3.5' aria-hidden='true' />
+              Manage repositories
+            </Link>
           </Button>
         </div>
         {inventory.isPending ? (
-          <p role='status'>Loading repositories…</p>
+          <div
+            role='status'
+            aria-label='Loading workspace repositories'
+            className='space-y-4'
+          >
+            <Skeleton className='h-16 rounded-xl' />
+            <div className='grid gap-4 md:grid-cols-2'>
+              <Skeleton className='h-56 rounded-xl' />
+              <Skeleton className='h-56 rounded-xl' />
+            </div>
+          </div>
         ) : inventory.isError ? (
-          <div role='alert' className='space-y-3'>
-            <p>{inventory.error.message}</p>
-            <Button variant='outline' onClick={() => void inventory.refetch()}>
+          <div
+            role='alert'
+            className='flex flex-wrap items-center justify-between gap-3 rounded-xl border border-warning/20 bg-warning/5 p-4'
+          >
+            <p className='text-sm'>{inventory.error.message}</p>
+            <Button
+              size='sm'
+              variant='outline'
+              onClick={() => void inventory.refetch()}
+            >
               Try again
             </Button>
           </div>
         ) : (
           <div className='space-y-6'>
             {module === 'integrations' && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>GitHub installations</CardTitle>
-                </CardHeader>
-                <CardContent className='space-y-3'>
-                  {inventory.data.installations.length === 0 ? (
-                    <p className='text-sm text-muted-foreground'>
-                      No GitHub installation connected.
-                    </p>
-                  ) : (
-                    inventory.data.installations.map((installation) => (
-                      <div
-                        key={installation.id}
-                        className='flex justify-between gap-4 text-sm'
-                      >
-                        <span>{installation.accountLogin}</span>
-                        <span>
-                          {installation.active ? 'Active' : 'Unavailable'}
-                        </span>
-                      </div>
-                    ))
-                  )}
+              <Card className='gap-4 overflow-hidden border-chart-2/20'>
+                <CardHeader className='flex flex-wrap items-center justify-between gap-3'>
+                  <div className='flex items-center gap-3'>
+                    <span className='flex size-10 items-center justify-center rounded-lg bg-chart-2/10 text-chart-2'>
+                      <IconGithub className='size-5' aria-hidden='true' />
+                    </span>
+                    <div>
+                      <CardTitle asChild>
+                        <h2>GitHub installations</h2>
+                      </CardTitle>
+                      <p className='mt-1 text-xs text-muted-foreground'>
+                        Repository access through your GitHub App.
+                      </p>
+                    </div>
+                  </div>
                   {canManage && (
-                    <Button asChild>
+                    <Button size='sm' asChild>
                       <a href={`${API_BASE_URL}/github/install`}>
+                        <Link2 className='size-3.5' aria-hidden='true' />
                         Connect GitHub App
                       </a>
                     </Button>
+                  )}
+                </CardHeader>
+                <CardContent className='space-y-4'>
+                  <div className='grid grid-cols-2 gap-3'>
+                    <div className='rounded-lg border border-chart-2/15 bg-chart-2/5 px-4 py-3'>
+                      <p className='text-xs text-muted-foreground'>
+                        Active installations
+                      </p>
+                      <p className='mt-1 text-2xl font-semibold tabular-nums'>
+                        {
+                          inventory.data.installations.filter(
+                            (installation) => installation.active
+                          ).length
+                        }
+                        <span className='ml-2 text-xs font-normal text-muted-foreground'>
+                          of {inventory.data.installations.length}
+                        </span>
+                      </p>
+                    </div>
+                    <div className='rounded-lg border border-chart-1/15 bg-chart-1/5 px-4 py-3'>
+                      <p className='text-xs text-muted-foreground'>
+                        Selected repositories
+                      </p>
+                      <p className='mt-1 text-2xl font-semibold tabular-nums'>
+                        {repositories.length}
+                      </p>
+                    </div>
+                  </div>
+                  {inventory.data.installations.length === 0 ? (
+                    <div className='flex items-start gap-3 rounded-lg border bg-muted/10 px-4 py-4'>
+                      <IconGithub
+                        className='mt-0.5 size-5 shrink-0 text-muted-foreground'
+                        aria-hidden='true'
+                      />
+                      <div>
+                        <p className='text-sm font-medium'>
+                          Connect your first installation
+                        </p>
+                        <p className='mt-1 text-xs text-muted-foreground'>
+                          {canManage
+                            ? 'Connect the GitHub App, then select the repositories Preflyt can access.'
+                            : 'An Owner or Admin can connect the GitHub App and select repositories.'}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className='grid gap-3 xl:grid-cols-2'>
+                      {inventory.data.installations.map((installation) => (
+                        <div
+                          key={installation.id}
+                          className='flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-background/50 p-4'
+                        >
+                          <div className='flex min-w-0 items-center gap-3'>
+                            <span className='flex size-9 shrink-0 items-center justify-center rounded-lg border bg-muted text-sm font-semibold'>
+                              {installation.accountLogin
+                                .slice(0, 2)
+                                .toUpperCase()}
+                            </span>
+                            <div className='min-w-0'>
+                              <p
+                                className='truncate text-sm font-semibold'
+                                title={installation.accountLogin}
+                              >
+                                {installation.accountLogin}
+                              </p>
+                              <p className='mt-1 text-xs text-muted-foreground'>
+                                Installation{' '}
+                                <span className='font-mono'>
+                                  {installation.id}
+                                </span>
+                              </p>
+                            </div>
+                          </div>
+                          <StatusBadge
+                            tone={installation.active ? 'success' : 'warning'}
+                          >
+                            {installation.active ? 'Active' : 'Unavailable'}
+                          </StatusBadge>
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </CardContent>
               </Card>
             )}
             {repositories.length === 0 ? (
               <Card>
-                <CardHeader>
-                  <CardTitle>Select a repository to get started</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className='text-sm text-muted-foreground'>
-                    Connect GitHub and select repositories before reviewing{' '}
-                    {config.title.toLowerCase()}.
-                  </p>
+                <CardContent className='flex flex-wrap items-center justify-between gap-4 pt-1'>
+                  <div className='flex items-start gap-3'>
+                    <span className={cn('rounded-lg p-2.5', config.iconAccent)}>
+                      <GitBranch className='size-5' aria-hidden='true' />
+                    </span>
+                    <div>
+                      <h2 className='text-sm font-semibold'>
+                        Select a repository to get started
+                      </h2>
+                      <p className='mt-1 text-xs text-muted-foreground'>
+                        Connect GitHub and select repositories to review{' '}
+                        {config.title.toLowerCase()}.
+                      </p>
+                    </div>
+                  </div>
+                  <Button variant='outline' size='sm' asChild>
+                    <Link to='/apps'>
+                      View repositories{' '}
+                      <ArrowUpRight className='size-3.5' aria-hidden='true' />
+                    </Link>
+                  </Button>
                 </CardContent>
               </Card>
             ) : (
               <>
-                <div className='flex flex-wrap items-center gap-3'>
-                  <label
-                    id='workspace-repository-label'
-                    className='text-sm font-medium'
-                  >
-                    Repository
-                  </label>
-                  <Select
-                    value={repository?.githubId ?? ''}
-                    onValueChange={(value) =>
-                      void navigate({
-                        to: `/${module}`,
-                        search: { repository: value },
-                      })
-                    }
-                  >
-                    <SelectTrigger
-                      aria-labelledby='workspace-repository-label'
-                      className='w-full sm:w-80'
-                    >
-                      <SelectValue placeholder='Select a repository' />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {repositories.map((repo) => (
-                        <SelectItem key={repo.githubId} value={repo.githubId}>
-                          {repo.fullName}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {repository && (
-                    <Button variant='ghost' asChild>
-                      <Link
-                        to='/repositories/$repositoryId'
-                        params={{ repositoryId: repository.githubId }}
+                <div className='flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card px-4 py-3'>
+                  <div className='flex min-w-0 flex-wrap items-center gap-3'>
+                    <div className='flex items-center gap-2 text-sm'>
+                      <GitBranch
+                        className='size-4 text-chart-1'
+                        aria-hidden='true'
+                      />
+                      <label
+                        id='workspace-repository-label'
+                        className='font-medium'
                       >
-                        Open repository
-                      </Link>
-                    </Button>
-                  )}
+                        Repository scope
+                      </label>
+                    </div>
+                    <Select
+                      value={repository?.githubId ?? ''}
+                      onValueChange={(value) =>
+                        void navigate({
+                          to: `/${module}`,
+                          search: { repository: value },
+                        })
+                      }
+                    >
+                      <SelectTrigger
+                        aria-labelledby='workspace-repository-label'
+                        className='w-full sm:w-80'
+                      >
+                        <SelectValue placeholder='Select a repository' />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {repositories.map((repo) => (
+                          <SelectItem key={repo.githubId} value={repo.githubId}>
+                            {repo.fullName}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className='flex flex-wrap items-center gap-2'>
+                    <Badge variant='outline' className='text-muted-foreground'>
+                      {repositories.length} selected{' '}
+                      {repositories.length === 1
+                        ? 'repository'
+                        : 'repositories'}
+                    </Badge>
+                    {repository && (
+                      <Button variant='ghost' size='sm' asChild>
+                        <Link
+                          to='/repositories/$repositoryId'
+                          params={{ repositoryId: repository.githubId }}
+                        >
+                          Open repository{' '}
+                          <ArrowUpRight
+                            className='size-3.5'
+                            aria-hidden='true'
+                          />
+                        </Link>
+                      </Button>
+                    )}
+                  </div>
                 </div>
                 {repository ? (
                   <div
@@ -211,6 +391,9 @@ export function WorkspaceModule({ module }: { module: Module }) {
                   >
                     {module === 'assessments' && (
                       <>
+                        <RepositoryActivityPanel
+                          repositoryId={repository.githubId}
+                        />
                         <RepositoryPullRequests
                           repositoryId={repository.githubId}
                         />
@@ -247,10 +430,13 @@ export function WorkspaceModule({ module }: { module: Module }) {
                     )}
                   </div>
                 ) : (
-                  <p role='alert'>
+                  <div
+                    role='alert'
+                    className='rounded-lg border border-warning/20 bg-warning/5 px-4 py-3 text-sm'
+                  >
                     This repository is no longer selected or accessible. Choose
                     another repository.
-                  </p>
+                  </div>
                 )}
               </>
             )}

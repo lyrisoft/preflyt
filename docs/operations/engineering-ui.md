@@ -1,6 +1,6 @@
 # Engineering evidence UI
 
-The repository page retains its existing Shadcn theme, header and tab layout.
+The repository page retains its existing Shadcn sidebar, header and tab layout. Blue and teal accents now distinguish actions, inventory and configuration; status colors retain their own meaning in light and dark themes.
 
 ## Standards
 
@@ -24,7 +24,7 @@ Verification: frontend typecheck, scoped ESLint and formatting checks. Browser t
 
 ## Workspace navigation
 
-The sidebar follows the enterprise specification: Workspace (Overview, Repositories, Assessments, Findings), Governance (Quality Gates, Engineering Standards, Policies), Intelligence (AI Intelligence), and Administration (Integrations, Access Control, Settings). The command palette uses the same navigation data. The sidebar layout, theme, collapse controls and mobile drawer are unchanged.
+The sidebar follows the enterprise specification: Workspace (Overview, Repositories, Assessments, Findings), Governance (Quality Gates, Engineering Standards, Policies), Intelligence (AI Intelligence), and Administration (Integrations, Access Control, Settings). The command palette uses the same navigation data. The sidebar layout, collapse controls and mobile drawer are unchanged.
 
 The four new authenticated routes reuse the existing repository panels with a selected-repository picker. The `repository` search parameter preserves scope across reloads and links. An inaccessible or deselected repository never silently switches to another repository. These are repository-scoped views, not an organization-wide aggregation of results.
 
@@ -39,3 +39,18 @@ Verification: four focused node tests for navigation taxonomy, role filtering, p
 This implements the specified navigation taxonomy and working entry points for available repository features. It does not complete the P0–P3 dashboard specification. Engineering Overview now has [a compact live dashboard](engineering-dashboard.md) with repository and period filters, four record-based KPI cards, an assessment activity heatmap, current PR attention and repository posture. It does not invent passing gates, blocked PRs, findings, policy coverage or service health.
 
 Outstanding requirements: active organization/workspace selection and organization isolation; organization-scoped assessment aggregation beyond the current shared deployment; findings lifecycle; quality gate enforcement; AI investigations; member/role management; organization/AI settings; authorized entity search (the current palette searches navigation commands); notifications and help; the remaining gate/findings/verified-coverage KPI cards, verified readiness outcomes and result-based activity charts, recent findings, and real component health checks. No passing readiness state or live platform status is inferred from imported evidence or a successful page load.
+
+
+## Visual summaries and charts
+
+Repository Overview uses configuration composition and required/advisory distribution charts with legends and tooltips. Invalid saved catalogue definitions suppress the control counts and require review. Configuration hints never imply executed checks or passing gates. Controls are paginated in groups of eight, with guidance and exact-commit file/blob evidence available in a detail dialog.
+
+Repository and global Assessments show a real snapshot activity trend from the cached local dashboard endpoint. The 7/30/90-day selector and daily/weekly grouping use exact UTC period counts, including partial weeks; this is not derived from the capped recent-history list. A zero baseline and onboarding state represent no activity. An accessible table exposes the same chart values. The overview calendar remains useful for day-by-day activity density.
+
+Standards presents pack adoption and rule capability summaries plus compact pack cards. Policies preserves selection and source-approval concurrency contracts while moving historical approval details on demand. Assessment snapshots distinguish linked CI results, configuration-only inputs and missing inputs; tracked PRs show recorded branch/revision context. CI Activity charts label their latest-50-delivery sample and up-to-14-day window explicitly, and provider results remain separate from verified quality gate outcomes.
+
+Repositories uses selected/unselected distribution by GitHub account, inventory filters and compact repository cards. Selection and connection controls require administrative roles. Global module scope bars preserve the requested repository across reloads and fail closed when it becomes unavailable. Integrations displays recorded installation availability, not live service health. Refresh and write actions retain their existing API contracts.
+
+The layout and authentication shell are preserved. Verification is scoped to the frontend changes and chart transformations; browser and whole-system tests remain skipped per project direction.
+
+Task #47 verification: 10 focused Node tests pass for UTC activity aggregation, configuration counts and CI chart semantics. Web TypeScript and the production bundle pass, together with ESLint and formatting checks limited to changed frontend files. Existing standards selection, binding approval and assessment creation editors were audited against their previous versions and remain intact.
