@@ -59,6 +59,10 @@ For detailed user journeys, triggers, check examples, stage contracts and perfor
 
 A **Contributors** sidebar module will show authorized GitHub contributors, activity/assessment coverage/policy adherence metrics and charts. Each contributor opens a profile detailing repositories, PRs, commits, reviews, findings and evidence-backed policy outcomes. P1 captures identities/activity, P2 associates gate evidence, and P3 delivers the working UI; later phases add broader trends. See [Engineering Contributors](docs/product/engineering-contributors.md).
 
+## MVP product experience and implementation guardrails
+
+The [MVP Product Experience Contract](docs/product/mvp-product-experience.md) defines the enterprise sidebar, top navigation, overview/dashboard, every MVP page, contributors drill-down, states and acceptance. The [Enterprise UI Guidelines](docs/design/enterprise-ui-guidelines.md) specify design consistency, and [Agent Implementation Guardrails](docs/agents/product-implementation-guardrails.md) guide Codex/Claude. These are **target specifications**, not claims that every page is already implemented.
+
 ## Built-in Engineering Standards Library
 
 Preflyt ships with versioned, first-party engineering policy packs so organizations can start with established rules rather than authoring policies from scratch. The initial library covers Baseline Engineering, Application Security, Backend Services, Frontend Applications and Infrastructure as Code; further packs cover API, database, production readiness, performance and compliance as their assessment adapters mature.
