@@ -126,7 +126,7 @@ flowchart TD
 
 | Layer | Planned technology |
 | --- | --- |
-| Frontend | React + Vite + TypeScript; Shadcn Admin-based app shell, Tailwind CSS and shadcn/ui |
+| Frontend | Preflyt-owned React + Vite + TypeScript app, Tailwind CSS/shadcn/ui; **selective audited UI patterns/components** from Shadcn Admin (not a starter template) |
 | API / control plane | Node.js + NestJS + TypeScript |
 | Background execution | TypeScript workers; Redis + BullMQ |
 | AI assessment | Read-only/advisory TypeScript worker; model-independent contracts |
@@ -205,7 +205,7 @@ turbo.json
 - [ADR-0002 — MVP safe execution and optional remediation contract](docs/architecture/ADR-0002-safe-execution-fixtures-remediation-contract.md)
 - [ADR-0003 — OIDC human authentication](docs/architecture/ADR-0003-oidc-user-authentication.md)
 - [ADR-0004 — Assessment and governance architecture](docs/architecture/ADR-0004-shift-left-assessment-governance.md)
-- [ADR-0005 — Shadcn Admin frontend foundation](docs/architecture/ADR-0005-shadcn-admin-frontend.md)
+- [ADR-0005 — Selective Shadcn Admin UI reference and component auditing](docs/architecture/ADR-0005-shadcn-admin-frontend.md)
 
 ## Development status
 
