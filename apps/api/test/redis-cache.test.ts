@@ -11,7 +11,10 @@ const services: RedisCacheService[] = []
 const prefixes: string[] = []
 const originalUrl = process.env.REDIS_URL
 const originalPrefix = process.env.REDIS_CACHE_PREFIX
-const client = createClient({ url, socket: { connectTimeout: 1000, reconnectStrategy: false } })
+const client = createClient({
+  url,
+  socket: { connectTimeout: 1000, reconnectStrategy: false },
+})
 client.on('error', () => undefined)
 
 function service(connection = url) {
@@ -25,10 +28,15 @@ function service(connection = url) {
 }
 
 afterEach(async () => {
-  services.splice(0).forEach(cache => cache.onModuleDestroy())
+  services.splice(0).forEach((cache) => cache.onModuleDestroy())
   // Delete only the exact test keys; never flush a shared Redis database.
   if (client.isReady) {
-    for (const prefix of prefixes.splice(0)) await client.del(`${prefix}:v1:inventory`)
+    for (const prefix of prefixes.splice(0))
+      await client.del([
+        `${prefix}:v1:inventory`,
+        `${prefix}:v1:github:fixture:pace`,
+        `${prefix}:v1:github:fixture:cooldown`,
+      ])
   }
   if (originalUrl === undefined) delete process.env.REDIS_URL
   else process.env.REDIS_URL = originalUrl
@@ -38,14 +46,28 @@ afterEach(async () => {
 })
 
 describe('optional Redis cache against local Redis/Valkey', () => {
+  it('coordinates pacing and non-shortening cooldowns across two services with the same deployment prefix', async () => {
+    if (!client.isOpen) await client.connect()
+    const a = service()
+    const b = new RedisCacheService()
+    services.push(b)
+    expect(await a.githubPermit('fixture')).toBe(0)
+    expect(await b.githubPermit('fixture')).toBeGreaterThan(0)
+    await a.githubCooldown('fixture', 60000)
+    await b.githubCooldown('fixture', 1000)
+    expect(await b.githubPermit('fixture')).toBeGreaterThan(58000)
+    expect(await b.githubRemainingCooldown('fixture')).toBeGreaterThan(58000)
+  })
   it('isolates deployments, stores with expiry, and deletes only its own key', async () => {
-    await client.connect()
+    if (!client.isOpen) await client.connect()
     const a = service()
     const b = service()
     await a.set('inventory', 'metadata', 1)
     expect(await a.get('inventory')).toBe('metadata')
     expect(await b.get('inventory')).toBeNull()
-    expect(await client.ttl(`${prefixes[0]}:v1:inventory`)).toBeGreaterThanOrEqual(0)
+    expect(
+      await client.ttl(`${prefixes[0]}:v1:inventory`),
+    ).toBeGreaterThanOrEqual(0)
     await b.set('inventory', 'other-deployment', 30)
     await a.delete('inventory')
     expect(await a.get('inventory')).toBeNull()
@@ -68,7 +90,9 @@ describe('optional Redis cache against local Redis/Valkey', () => {
   })
 
   it('falls back promptly on unavailable Redis without logging credentials', async () => {
-    const warning = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    const warning = vi
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined)
     const a = service('redis://secret-user:secret-password@127.0.0.1:1')
     const start = Date.now()
     expect(await a.get('inventory')).toBeNull()
@@ -82,8 +106,11 @@ describe('optional Redis cache against local Redis/Valkey', () => {
   it('bounds connection handshakes to an unresponsive Redis server', async () => {
     vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
     const sockets = new Set<Socket>()
-    const server = createServer(socket => { sockets.add(socket); socket.on('close', () => sockets.delete(socket)) })
-    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
+    const server = createServer((socket) => {
+      sockets.add(socket)
+      socket.on('close', () => sockets.delete(socket))
+    })
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
     const address = server.address() as { port: number }
     const a = service(`redis://127.0.0.1:${address.port}`)
     try {
@@ -93,9 +120,11 @@ describe('optional Redis cache against local Redis/Valkey', () => {
     } finally {
       a.onModuleDestroy()
       for (const socket of sockets) socket.destroy()
-      await new Promise<void>(resolve => server.close(() => resolve()))
+      await new Promise<void>((resolve) => server.close(() => resolve()))
     }
   })
 })
 
-afterAll(() => { if (client.isOpen) client.destroy() })
+afterAll(() => {
+  if (client.isOpen) client.destroy()
+})

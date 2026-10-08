@@ -7,6 +7,7 @@ import {
   Optional,
   UnauthorizedException,
 } from '@nestjs/common'
+import { GitHubRateLimitError } from './github-rate-limit.js'
 import { RedisCacheService } from '../cache/redis-cache.service.js'
 import { resolveWebOrigin } from '../config/web-origin.js'
 import { PrismaService } from '../prisma/prisma.service.js'
@@ -319,6 +320,7 @@ export class GitHubService {
           }
         })
       } catch (error) {
+        if (error instanceof GitHubRateLimitError) throw error
         if (!(error instanceof GitHubInstallationRevokedError)) {
           throw new ServiceUnavailableException(
             'GitHub is temporarily unavailable; repository access was not changed',

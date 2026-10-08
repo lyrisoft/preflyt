@@ -1,6 +1,21 @@
 import { createHash } from 'node:crypto'
-import { wantsProfileContent, type RepositorySnapshot, type RepositoryFile } from './repository-profile.js'
-import { ForbiddenException, Injectable, ServiceUnavailableException } from '@nestjs/common'
+import {
+  wantsProfileContent,
+  type RepositorySnapshot,
+  type RepositoryFile,
+} from './repository-profile.js'
+import {
+  ForbiddenException,
+  Injectable,
+  ServiceUnavailableException,
+  Inject,
+  Optional,
+} from '@nestjs/common'
+import { RedisCacheService } from '../cache/redis-cache.service.js'
+import {
+  GitHubRequestLimiter,
+  GitHubRateLimitError,
+} from './github-rate-limit.js'
 import { App } from '@octokit/app'
 
 export type GitHubInstallationInfo = {
@@ -30,6 +45,33 @@ export class GitHubInstallationRevokedError extends Error {
 @Injectable()
 export class GitHubProviderService {
   private app?: App
+  private readonly limiter: GitHubRequestLimiter
+  constructor(
+    @Optional() @Inject(RedisCacheService) cache?: RedisCacheService,
+  ) {
+    this.limiter = new GitHubRequestLimiter(cache)
+  }
+  private appRequest(route: string, options: Record<string, unknown>) {
+    return this.limiter.run(
+      `app:${this.requireAppId()}`,
+      () =>
+        this.requireApp().octokit.request(route, {
+          ...options,
+          request: {
+            timeout: 10_000,
+            ...((options.request as Record<string, unknown>) ?? {}),
+          },
+        }),
+      route.startsWith('GET '),
+    )
+  }
+  private apiFetch(scope: string, url: string | URL, options: RequestInit) {
+    return this.limiter.run(
+      scope,
+      () => fetch(url, options),
+      !options.method || options.method === 'GET',
+    )
+  }
 
   createInstallationUrl(state: string) {
     return this.requireApp().getInstallationUrl({ state })
@@ -48,12 +90,20 @@ export class GitHubProviderService {
     return url.href
   }
 
-  async verifyInstallation(installationId: bigint) {
+  verifyInstallation(installationId: bigint) {
+    return this.limiter.singleFlight(`verify:${installationId}`, () =>
+      this.loadInstallation(installationId),
+    )
+  }
+  private async loadInstallation(installationId: bigint) {
     let data
     try {
-      const response = await this.requireApp().octokit.request(
+      const response = await this.appRequest(
         'GET /app/installations/{installation_id}',
-        { installation_id: Number(installationId), request: { timeout: 10_000 } },
+        {
+          installation_id: Number(installationId),
+          request: { timeout: 10_000 },
+        },
       )
       data = response.data
     } catch (error) {
@@ -97,15 +147,19 @@ export class GitHubProviderService {
       redirect_uri: this.requireCallbackUrl(),
       code_verifier: codeVerifier,
     })
-    const response = await fetch('https://github.com/login/oauth/access_token', {
-      method: 'POST',
-      headers: {
-        accept: 'application/json',
-        'content-type': 'application/x-www-form-urlencoded',
+    const response = await this.apiFetch(
+      `oauth:${this.requireClientId()}`,
+      'https://github.com/login/oauth/access_token',
+      {
+        method: 'POST',
+        headers: {
+          accept: 'application/json',
+          'content-type': 'application/x-www-form-urlencoded',
+        },
+        body: formBody,
+        signal: AbortSignal.timeout(10_000),
       },
-      body: formBody,
-      signal: AbortSignal.timeout(10_000),
-    })
+    )
     if (!response.ok) throw new Error('GitHub user authorization failed')
     const tokenResponse = (await response.json()) as {
       access_token?: unknown
@@ -125,30 +179,40 @@ export class GitHubProviderService {
       const url = new URL('https://api.github.com/user/installations')
       url.searchParams.set('per_page', '100')
       url.searchParams.set('page', String(page))
-      const response = await fetch(url, {
+      const response = await this.apiFetch(`user:${userToken}`, url, {
         headers: this.apiHeaders(userToken),
         signal: AbortSignal.timeout(10_000),
       })
-      if (!response.ok) throw new Error('Unable to verify GitHub installation owner')
+      if (!response.ok)
+        throw new Error('Unable to verify GitHub installation owner')
       const body = (await response.json()) as {
         installations?: Array<{ id?: number }>
       }
       const installations = body.installations ?? []
-      if (installations.some((installation) => BigInt(installation.id ?? 0) === installationId)) {
+      if (
+        installations.some(
+          (installation) => BigInt(installation.id ?? 0) === installationId,
+        )
+      ) {
         return
       }
       if (installations.length < 100) {
-        throw new ForbiddenException('Installing GitHub user cannot access this installation')
+        throw new ForbiddenException(
+          'Installing GitHub user cannot access this installation',
+        )
       }
     }
-    throw new Error('GitHub installation list exceeded the safe pagination limit')
+    throw new Error(
+      'GitHub installation list exceeded the safe pagination limit',
+    )
   }
 
   async revokeUserToken(userToken: string) {
     const credentials = Buffer.from(
       `${this.requireClientId()}:${this.requireClientSecret()}`,
     ).toString('base64')
-    const response = await fetch(
+    const response = await this.apiFetch(
+      `app:${process.env.GITHUB_APP_ID ?? this.requireClientId()}`,
       `https://api.github.com/applications/${this.requireClientId()}/token`,
       {
         method: 'DELETE',
@@ -166,10 +230,15 @@ export class GitHubProviderService {
     }
   }
 
-  async listInstallationRepositories(installationId: bigint) {
+  listInstallationRepositories(installationId: bigint) {
+    return this.limiter.singleFlight(`inventory:${installationId}`, () =>
+      this.loadInstallationRepositories(installationId),
+    )
+  }
+  private async loadInstallationRepositories(installationId: bigint) {
     let token
     try {
-      const response = await this.requireApp().octokit.request(
+      const response = await this.appRequest(
         'POST /app/installations/{installation_id}/access_tokens',
         {
           installation_id: Number(installationId),
@@ -186,12 +255,17 @@ export class GitHubProviderService {
       const url = new URL('https://api.github.com/installation/repositories')
       url.searchParams.set('per_page', '100')
       url.searchParams.set('page', String(page))
-      const response = await fetch(url, {
-        headers: this.apiHeaders(token.token),
-        signal: AbortSignal.timeout(10_000),
-      })
+      const response = await this.apiFetch(
+        `installation:${installationId}`,
+        url,
+        {
+          headers: this.apiHeaders(token.token),
+          signal: AbortSignal.timeout(10_000),
+        },
+      )
       if (response.status === 404) throw new GitHubInstallationRevokedError()
-      if (!response.ok) throw new Error('Unable to list GitHub installation repositories')
+      if (!response.ok)
+        throw new Error('Unable to list GitHub installation repositories')
       const body = (await response.json()) as {
         repositories?: Array<{
           id: number
@@ -336,7 +410,11 @@ export class GitHubProviderService {
             throw new Error('Blob integrity failed')
           file.content = bytes.toString('utf8')
         } catch (error) {
-          if (error instanceof ForbiddenException) throw error
+          if (
+            error instanceof ForbiddenException ||
+            error instanceof GitHubRateLimitError
+          )
+            throw error
           file.contentError = 'unavailable_or_invalid'
         }
       }
@@ -357,6 +435,7 @@ export class GitHubProviderService {
     try {
       await this.verifyInstallation(installationId)
     } catch (error) {
+      if (error instanceof GitHubRateLimitError) throw error
       if (error instanceof GitHubInstallationRevokedError)
         throw new ForbiddenException(
           'GitHub installation access is unavailable',
@@ -367,7 +446,7 @@ export class GitHubProviderService {
     }
     let token: string
     try {
-      const response = await this.requireApp().octokit.request(
+      const response = await this.appRequest(
         'POST /app/installations/{installation_id}/access_tokens',
         {
           installation_id: Number(installationId),
@@ -378,6 +457,7 @@ export class GitHubProviderService {
       )
       token = response.data.token
     } catch (error) {
+      if (error instanceof GitHubRateLimitError) throw error
       if (this.isNotFound(error))
         throw new ForbiddenException('GitHub repository access is unavailable')
       throw new ServiceUnavailableException(
@@ -385,12 +465,16 @@ export class GitHubProviderService {
       )
     }
     const signal = AbortSignal.timeout(60_000)
-    const request = async <T,>(path: string): Promise<T> => {
-      const response = await fetch(`https://api.github.com${path}`, {
-        headers: this.apiHeaders(token),
-        redirect: 'error',
-        signal,
-      })
+    const request = async <T>(path: string): Promise<T> => {
+      const response = await this.apiFetch(
+        `installation:${installationId}`,
+        `https://api.github.com${path}`,
+        {
+          headers: this.apiHeaders(token),
+          redirect: 'error',
+          signal,
+        },
+      )
       if (
         response.status === 401 ||
         response.status === 404 ||
@@ -459,11 +543,17 @@ export class GitHubProviderService {
     if (this.app) return this.app
     const appId = this.requireAppId()
     const privateKey = process.env.GITHUB_APP_PRIVATE_KEY?.replace(/\\n/g, '\n')
-    if (!privateKey) throw new ServiceUnavailableException('GitHub App is not configured')
+    if (!privateKey)
+      throw new ServiceUnavailableException('GitHub App is not configured')
     this.app = new App({
       appId,
       privateKey,
-      log: { debug: () => undefined, info: () => undefined, warn: () => undefined, error: () => undefined },
+      log: {
+        debug: () => undefined,
+        info: () => undefined,
+        warn: () => undefined,
+        error: () => undefined,
+      },
     })
     return this.app
   }
@@ -478,22 +568,27 @@ export class GitHubProviderService {
 
   private requireClientId() {
     const clientId = process.env.GITHUB_APP_CLIENT_ID
-    if (!clientId) throw new ServiceUnavailableException('GitHub App is not configured')
+    if (!clientId)
+      throw new ServiceUnavailableException('GitHub App is not configured')
     return clientId
   }
 
   private requireClientSecret() {
     const clientSecret = process.env.GITHUB_APP_CLIENT_SECRET
-    if (!clientSecret) throw new ServiceUnavailableException('GitHub App is not configured')
+    if (!clientSecret)
+      throw new ServiceUnavailableException('GitHub App is not configured')
     return clientSecret
   }
 
   private requireCallbackUrl() {
     const callback = process.env.GITHUB_APP_OAUTH_CALLBACK_URL
-    if (!callback) throw new ServiceUnavailableException('GitHub App is not configured')
+    if (!callback)
+      throw new ServiceUnavailableException('GitHub App is not configured')
     const url = new URL(callback)
     if (process.env.NODE_ENV === 'production' && url.protocol !== 'https:') {
-      throw new ServiceUnavailableException('GitHub callback URL must use HTTPS')
+      throw new ServiceUnavailableException(
+        'GitHub callback URL must use HTTPS',
+      )
     }
     return url.href
   }

@@ -29,3 +29,5 @@ Apply the additive `imported_ci_evidence` migration and regenerate the Prisma cl
 Verification is scoped to provider-result mapping, signed ingestion, transactional rollback, duplicate processing, SHA isolation, late observations, access revocation and the separate worker. Frontend checks cover types and lint; browser tests are intentionally skipped. A live GitHub CI run remains the operator demonstration. Bounded administrator-associated [JUnit/SARIF imports](ci-artifacts.md) are available separately. Manual exact-SHA [assessment snapshots](assessments.md) freeze selected rules and explicit unverified associations. The worker also creates automatic exact-SHA snapshots for repositories with adopted standards. Automatic provider artifact retrieval and trusted coverage mapping remain subsequent slices.
 
 Provider semantics: [GitHub webhook payload reference](https://docs.github.com/en/webhooks/webhook-events-and-payloads).
+
+Outbound GitHub reads use [shared pacing and rate-limit cooldowns](github-rate-limits.md); local evidence/assessment history does not consume the GitHub API budget.
