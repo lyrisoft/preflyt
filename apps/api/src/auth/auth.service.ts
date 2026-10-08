@@ -332,16 +332,39 @@ export class AuthService implements OnModuleInit {
       return
     }
 
-    const salt = randomBytes(16)
-    const key = await deriveScryptKey(this.superAdminPassword!, salt)
-    const passwordHash = `scrypt$${superAdminScryptCost}$${superAdminScryptBlockSize}$${superAdminScryptParallelization}$${salt.toString('base64url')}$${key.toString('base64url')}`
     await this.prisma.$transaction(async (tx) => {
-      await tx.webSession.deleteMany({ where: { identityId: identity.id } })
+      // The membership upsert serializes concurrent startup seeds for this identity.
       await tx.membership.upsert({
         where: { identityId: identity.id },
         create: { identityId: identity.id, role: 'SUPER_ADMIN', active: true },
         update: { role: 'SUPER_ADMIN', active: true },
       })
+      const existing = await tx.superAdminCredential.findUnique({
+        where: { id: superAdminCredentialId },
+      })
+      if (
+        existing &&
+        existing.username === this.superAdminUsername &&
+        existing.identityId === identity.id
+      ) {
+        const stored = parseScryptHash(existing.passwordHash)
+        const configured = await deriveScryptKey(
+          this.superAdminPassword!,
+          stored.salt,
+        )
+        if (timingSafeEqual(configured, stored.key)) return
+      }
+      const salt = randomBytes(16)
+      const key = await deriveScryptKey(this.superAdminPassword!, salt)
+      const passwordHash = [
+        'scrypt',
+        superAdminScryptCost,
+        superAdminScryptBlockSize,
+        superAdminScryptParallelization,
+        salt.toString('base64url'),
+        key.toString('base64url'),
+      ].join('$')
+      await tx.webSession.deleteMany({ where: { identityId: identity.id } })
       await tx.superAdminCredential.upsert({
         where: { id: superAdminCredentialId },
         create: {

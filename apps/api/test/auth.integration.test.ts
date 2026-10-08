@@ -168,6 +168,110 @@ async function startLogin(service: AuthService, invalid?: string) {
 }
 
 describe('OIDC and server-side identity sessions', () => {
+  it('preserves sessions and the password hash across repeated startup without extending expiry', async () => {
+    const service = await newAuthService()
+    const session = await service.loginSuperAdmin(
+      'preflyt-admin',
+      superAdminPassword,
+      '127.0.0.20',
+      webOrigin
+    )
+    const credential = await prisma.superAdminCredential.findUniqueOrThrow({
+      where: { id: 'primary' }
+    })
+    const restarts = await Promise.all([newAuthService(), newAuthService()])
+    for (const restarted of restarts) {
+      expect(
+        await restarted.currentSession(session.sessionToken)
+      ).toMatchObject({ authenticated: true, role: 'SUPER_ADMIN' })
+    }
+    expect(
+      (
+        await prisma.superAdminCredential.findUniqueOrThrow({
+          where: { id: 'primary' }
+        })
+      ).passwordHash
+    ).toBe(credential.passwordHash)
+    const saved = await prisma.webSession.findFirstOrThrow({
+      where: { identityId: session.identityId }
+    })
+    expect(saved.expiresAt).toEqual(session.expiresAt)
+    const expiredAt = new Date(Date.now() - 1000)
+    await prisma.webSession.update({
+      where: { id: saved.id },
+      data: { expiresAt: expiredAt }
+    })
+    const restarted = await newAuthService()
+    expect(await restarted.currentSession(session.sessionToken)).toEqual({
+      authenticated: false
+    })
+    expect(
+      (await prisma.webSession.findUniqueOrThrow({ where: { id: saved.id } }))
+        .expiresAt
+    ).toEqual(expiredAt)
+  })
+  it.each(['username', 'password'])(
+    'revokes existing sessions when the configured admin %s changes',
+    async (field) => {
+      const service = await newAuthService()
+      const session = await service.loginSuperAdmin(
+        'preflyt-admin',
+        superAdminPassword,
+        '127.0.0.21',
+        webOrigin
+      )
+      const key =
+        field === 'username' ? 'SUPER_ADMIN_USERNAME' : 'SUPER_ADMIN_PASSWORD'
+      const original = process.env[key]
+      process.env[key] =
+        field === 'username' ? 'rotated-admin' : superAdminPassword + '-rotated'
+      try {
+        const restarted = await newAuthService()
+        expect(await restarted.currentSession(session.sessionToken)).toEqual({
+          authenticated: false
+        })
+        expect(
+          await prisma.webSession.count({
+            where: { identityId: session.identityId }
+          })
+        ).toBe(0)
+        const replacement = await restarted.loginSuperAdmin(
+          process.env.SUPER_ADMIN_USERNAME!,
+          process.env.SUPER_ADMIN_PASSWORD!,
+          '127.0.0.22',
+          webOrigin
+        )
+        expect(
+          await restarted.currentSession(replacement.sessionToken)
+        ).toMatchObject({ authenticated: true })
+      } finally {
+        if (original === undefined) delete process.env[key]
+        else process.env[key] = original
+      }
+    }
+  )
+  it('revokes existing sessions when local admin access is disabled', async () => {
+    const service = await newAuthService()
+    const session = await service.loginSuperAdmin(
+      'preflyt-admin',
+      superAdminPassword,
+      '127.0.0.23',
+      webOrigin
+    )
+    delete process.env.SUPER_ADMIN_USERNAME
+    delete process.env.SUPER_ADMIN_PASSWORD
+    try {
+      const restarted = await newAuthService()
+      expect(await restarted.currentSession(session.sessionToken)).toEqual({
+        authenticated: false
+      })
+      expect(await prisma.superAdminCredential.count()).toBe(0)
+    } finally {
+      process.env.SUPER_ADMIN_USERNAME = 'preflyt-admin'
+      process.env.SUPER_ADMIN_PASSWORD = superAdminPassword
+    }
+  })
+
   it('starts in Super Admin-only mode when OIDC settings are absent', async () => {
     const oidcKeys = [
       'OIDC_ISSUER',
