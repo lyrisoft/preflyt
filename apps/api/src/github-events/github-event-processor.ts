@@ -32,6 +32,7 @@ export class GitHubEventProcessor {
                 githubId: delivery.repositoryGithubId,
                 installationId: delivery.installationId,
                 selected: true,
+                available: true,
               },
               data: { selected: true },
             })
@@ -46,8 +47,8 @@ export class GitHubEventProcessor {
       const evidence = importCiEvidence(delivery)
       let assessmentId: string | null = null
       let assessmentReason: string | null = null
-      if (evidence) {
-        await tx.importedCiEvidence.create({ data: evidence })
+      if (evidence) await tx.importedCiEvidence.create({ data: evidence })
+      if (evidence || delivery.event === 'pull_request') {
         const snapshot = await this.assessments.createForDelivery(tx, delivery)
         assessmentId = snapshot.assessment?.id ?? null
         assessmentReason = snapshot.reason

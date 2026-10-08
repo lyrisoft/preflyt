@@ -1,6 +1,11 @@
+import {
+  normalizePullRequestContext,
+  type PullRequestContext,
+} from './pull-request-context.js'
 import { BadRequestException } from '@nestjs/common'
 
 export type GitHubEvent = {
+  pullRequestContext?: PullRequestContext
   event: string
   action: string
   installationId: bigint
@@ -110,7 +115,10 @@ export function normalizeGitHubEvent(
       ...(source.run_attempt != null ? { runAttempt: source.run_attempt } : {}),
     }
   }
+  const pullRequestContext =
+    event === 'pull_request' ? normalizePullRequestContext(source) : undefined
   return {
+    ...(pullRequestContext ? { pullRequestContext } : {}),
     event,
     action: payload.action,
     ...(sourceIdentity ? { sourceIdentity } : {}),

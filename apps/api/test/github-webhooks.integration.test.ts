@@ -327,3 +327,18 @@ it('persists signed source identity through ingestion and CI import', async () =
     checkName: 'Unit tests',
   })
 })
+
+it('persists only complete signed PR context and creates a pinned assessment',async()=>{
+  const repo=await prisma.gitHubRepository.findUniqueOrThrow({where:{githubId:501n}})
+  const {catalogue}=await import('../src/standards/catalogue.js');const pack=catalogue.find(p=>p.id==='baseline-engineering')!
+  await prisma.repositoryStandardsSelection.create({data:{repositoryId:repo.id,selectedById:identityId,revision:1,profile:'RECOMMENDED',packs:[{id:pack.id,version:pack.version,digest:pack.digest}]}})
+  const data=payload() as any;data.pull_request.head={repo:{id:501},ref:'feature/test',sha:'c'.repeat(40)};data.pull_request.base={repo:{id:501},ref:'development',sha:'a'.repeat(40)};data.pull_request.draft=false;data.pull_request.merged=false
+  const id=randomUUID();expect((await send(data,id)).status).toBe(202)
+  const stored=await prisma.gitHubWebhookDelivery.findUniqueOrThrow({where:{id}})
+  expect(stored.pullRequestContext).toMatchObject({head:{repositoryId:'501',ref:'feature/test',sha:'c'.repeat(40)},base:{repositoryId:'501',ref:'development',sha:'a'.repeat(40)}})
+  await new GitHubEventProcessor(prisma).process(id)
+  const snapshot=await prisma.commitAssessment.findFirstOrThrow({where:{requestKey:'github:'+id}})
+  expect(snapshot.request).toMatchObject({subjectKind:'PULL_REQUEST',trigger:'GITHUB_PR',pullRequest:{number:3}})
+  expect(JSON.stringify(snapshot.request)).not.toContain('super-secret')
+  const bad=structuredClone(data);bad.pull_request.base.sha='broken';expect((await send(bad)).status).toBe(400)
+})

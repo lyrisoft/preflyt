@@ -1,4 +1,8 @@
 import {
+  readPullRequestContext,
+  type PullRequestContext,
+} from '../github-events/pull-request-context.js'
+import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
@@ -21,6 +25,11 @@ import type {
 import type { ProfileSignal } from '../github/repository-profile.js'
 import { resolveBindings, type Binding } from './ci-binding.js'
 import { buildAssessment, digest, type Mapping } from './assessment-plan.js'
+type Trigger = {
+  kind: 'MANUAL' | 'GITHUB_CI' | 'GITHUB_PR'
+  deliveryId: string | null
+  pullRequest?: PullRequestContext & { number: number; objectId: string }
+}
 export type AssessmentInput = {
   sourceSha: string
   expectedSelectionId: string
@@ -37,6 +46,7 @@ export class AssessmentService {
       where: {
         githubId: BigInt(id),
         selected: true,
+        available: true,
         installation: { active: true },
       },
     })
@@ -109,16 +119,41 @@ export class AssessmentService {
     )
   }
 
-  /** Called only inside the signed-delivery processor transaction after CI evidence import. */
+  /** Called inside the signed-delivery processor transaction; context never establishes current PR readiness. */
   async createForDelivery(
     tx: Prisma.TransactionClient,
     delivery: GitHubWebhookDelivery,
   ) {
+    let pullRequest: Trigger['pullRequest']
+    if (delivery.event === 'pull_request') {
+      const context = readPullRequestContext(delivery.pullRequestContext)
+      if (
+        !context ||
+        !delivery.sourceNumber ||
+        context.head.sha !== delivery.sourceSha ||
+        context.base.repositoryId !== delivery.repositoryGithubId.toString()
+      )
+        return { assessment: null, reason: 'pr_context_unavailable' }
+      if (
+        delivery.action === 'closed' ||
+        context.state !== 'open' ||
+        context.merged
+      )
+        return { assessment: null, reason: 'pr_not_open' }
+      if (context.head.repositoryId !== context.base.repositoryId)
+        return { assessment: null, reason: 'fork_head_not_supported' }
+      pullRequest = {
+        ...context,
+        number: delivery.sourceNumber,
+        objectId: delivery.sourceObjectId,
+      }
+    }
     const repo = await tx.gitHubRepository.findFirst({
       where: {
         githubId: delivery.repositoryGithubId,
         installationId: delivery.installationId,
         selected: true,
+        available: true,
         installation: { active: true },
       },
     })
@@ -139,7 +174,11 @@ export class AssessmentService {
         mappings: [],
       },
       null,
-      { kind: 'GITHUB_CI', deliveryId: delivery.id },
+      {
+        kind: pullRequest ? 'GITHUB_PR' : 'GITHUB_CI',
+        deliveryId: delivery.id,
+        ...(pullRequest ? { pullRequest } : {}),
+      },
     )
     return { assessment: result.assessment, reason: null }
   }
@@ -150,7 +189,7 @@ export class AssessmentService {
     id: string,
     input: AssessmentInput,
     actorId: string | null,
-    trigger: { kind: 'MANUAL' | 'GITHUB_CI'; deliveryId: string | null },
+    trigger: Trigger,
   ) {
     const normalized = {
       sourceSha: input.sourceSha.toLowerCase(),
@@ -177,6 +216,7 @@ export class AssessmentService {
             id: repo.id,
             installationId: repo.installationId,
             selected: true,
+            available: true,
           },
           data: { selected: true },
         })
@@ -229,7 +269,7 @@ export class AssessmentService {
         },
       },
     })
-    if (!snapshot && rows.length === 0)
+    if (!snapshot && rows.length === 0 && trigger.kind !== 'GITHUB_PR')
       throw new NotFoundException(
         'No pinned profile or imported CI evidence exists for this commit',
       )
@@ -245,6 +285,7 @@ export class AssessmentService {
     const observations = rows.slice(0, 100)
     // A delayed delivery must remain in its own report even beyond the latest-100 window.
     if (
+      trigger.kind === 'GITHUB_CI' &&
       trigger.deliveryId &&
       !observations.some((row) => row.deliveryId === trigger.deliveryId)
     ) {
@@ -328,8 +369,9 @@ export class AssessmentService {
       repositoryId: id,
       sourceSha: normalized.sourceSha,
       installationId: repo.installationId.toString(),
-      subjectKind: 'COMMIT',
-      baseContext: null,
+      subjectKind: trigger.pullRequest ? 'PULL_REQUEST' : 'COMMIT',
+      baseContext: trigger.pullRequest?.base ?? null,
+      ...(trigger.pullRequest ? { pullRequest: trigger.pullRequest } : {}),
       trigger: trigger.kind,
       sourceDeliveryId: trigger.deliveryId,
       actorId,

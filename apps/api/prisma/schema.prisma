@@ -190,6 +190,7 @@ enum GitHubDeliveryState {
 }
 
 model GitHubWebhookDelivery {
+  pullRequestContext Json?
   id                 String @id
   ciEvidence         ImportedCiEvidence?
   traceParent        String?

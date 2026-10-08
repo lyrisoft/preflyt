@@ -549,7 +549,7 @@ describe('atomic automatic CI assessment snapshots', () => {
     ).toBe(true)
     expect(newer.request).toMatchObject({ profileSnapshot: null })
   })
-  it('imports evidence without a snapshot when standards are not adopted and ignores PR-only events', async () => {
+  it('imports CI without adoption and does not infer missing PR context', async () => {
     const processor = new GitHubEventProcessor(prisma)
     const delivery = await incoming()
     await processor.process(delivery.id)
@@ -968,5 +968,266 @@ it('prefers the newest workflow attempt without superseding it with a delayed ol
     coverage: 'PENDING',
     superseded: false,
     ambiguous: false,
+  })
+})
+
+const prContext = (head = 'c'.repeat(40), base = 'a'.repeat(40)) => ({
+  version: 1,
+  head: { repositoryId: '501', ref: 'feature/one', sha: head },
+  base: { repositoryId: '501', ref: 'development', sha: base },
+  state: 'open',
+  draft: false,
+  merged: false,
+})
+async function prIncoming(context: any = prContext(), action = 'opened') {
+  return prisma.gitHubWebhookDelivery.create({
+    data: {
+      id: randomUUID(),
+      event: 'pull_request',
+      action,
+      installationId: 500n,
+      repositoryGithubId: 501n,
+      sourceObjectId: '99',
+      sourceNumber: 1,
+      sourceSha: context?.head?.sha ?? 'c'.repeat(40),
+      sourceStatus: context?.state ?? 'open',
+      payloadHash: 'f'.repeat(64),
+      ...(context ? { pullRequestContext: context } : {}),
+    },
+  })
+}
+async function processPr(d: any) {
+  await new GitHubEventProcessor(prisma).process(d.id)
+  return prisma.commitAssessment.findUnique({
+    where: {
+      repositoryId_requestKey: {
+        repositoryId: (
+          await prisma.gitHubRepository.findUniqueOrThrow({
+            where: { githubId: 501n },
+          })
+        ).id,
+        requestKey: 'github:' + d.id,
+      },
+    },
+  })
+}
+describe('PR-triggered exact-head assessments', () => {
+  it('creates an incomplete pinned PR snapshot without CI or a head profile', async () => {
+    const selection = await post()
+    const d = await prIncoming()
+    const snapshot = await processPr(d)
+    expect(snapshot!.sourceSha).toBe('c'.repeat(40))
+    expect(snapshot!.request).toMatchObject({
+      subjectKind: 'PULL_REQUEST',
+      trigger: 'GITHUB_PR',
+      actorId: null,
+      sourceDeliveryId: d.id,
+      selectionId: selection.body.id,
+      baseContext: prContext().base,
+      pullRequest: { ...prContext(), number: 1, objectId: '99' },
+      profileSnapshot: null,
+    })
+    expect(snapshot!.report).toMatchObject({
+      coverage: 'INCOMPLETE',
+      qualityGate: null,
+      trustedExecutedChecks: 0,
+      currentBranchReadiness: 'NOT_VERIFIED',
+      observations: [],
+    })
+    expect(
+      (snapshot!.report as any).checks.find(
+        (c: any) => c.ruleId === 'tests.required',
+      ).coverage,
+    ).toBe('MISSING')
+    expect(await prisma.importedCiEvidence.count()).toBe(0)
+    expect(
+      (snapshot!.report as any).checks.some(
+        (c: any) => c.coverage === 'CONFIGURATION_OBSERVED',
+      ),
+    ).toBe(false)
+  })
+  it('uses approved CI only from the PR head, not the base or unrelated merge SHA', async () => {
+    const { selection, delivery } = await ready('a'.repeat(40))
+    await identify(delivery.id)
+    await bind(selection.id)
+    const merge = await prisma.gitHubWebhookDelivery.create({
+      data: {
+        id: randomUUID(),
+        event: 'check_run',
+        action: 'completed',
+        installationId: 500n,
+        repositoryGithubId: 501n,
+        sourceObjectId: '46',
+        sourceSha: 'e'.repeat(40),
+        sourceStatus: 'completed',
+        sourceConclusion: 'success',
+        sourceUpdatedAt: new Date(),
+        payloadHash: 'e'.repeat(64),
+        sourceIdentity: {
+          kind: 'check_run',
+          appId: '123',
+          checkName: 'unit tests',
+        },
+        state: 'PROCESSED',
+      },
+    })
+    await prisma.importedCiEvidence.create({ data: importCiEvidence(merge)! })
+    const d = await prIncoming()
+    const without = await processPr(d)
+    expect((without!.report as any).observations).toHaveLength(0)
+    const ci = await prisma.gitHubWebhookDelivery.create({
+      data: {
+        id: randomUUID(),
+        event: 'check_run',
+        action: 'completed',
+        installationId: 500n,
+        repositoryGithubId: 501n,
+        sourceObjectId: '45',
+        sourceSha: 'c'.repeat(40),
+        sourceStatus: 'completed',
+        sourceConclusion: 'failure',
+        sourceUpdatedAt: new Date(),
+        payloadHash: 'e'.repeat(64),
+        sourceIdentity: {
+          kind: 'check_run',
+          appId: '123',
+          checkName: 'unit tests',
+        },
+        state: 'PROCESSED',
+      },
+    })
+    await prisma.importedCiEvidence.create({ data: importCiEvidence(ci)! })
+    const next = await processPr(await prIncoming(prContext(), 'synchronize'))
+    expect(
+      (next!.report as any).checks.find(
+        (c: any) => c.ruleId === 'tests.required',
+      ),
+    ).toMatchObject({
+      deliveryId: ci.id,
+      providerResult: 'FAILED',
+      mappingTrust: 'APPROVED_SOURCE_BINDING',
+      coverage: 'UNVERIFIED',
+    })
+    expect((await readAssessment(without!.id)).body.assessmentHash).toBe(
+      without!.assessmentHash,
+    )
+  })
+  it('preserves delayed old-head and changed-base snapshots without advancing a current pointer', async () => {
+    await post()
+    const newer = await processPr(
+      await prIncoming(prContext('d'.repeat(40)), 'synchronize'),
+    )
+    const older = await processPr(
+      await prIncoming(prContext('c'.repeat(40)), 'synchronize'),
+    )
+    const rebased = await processPr(
+      await prIncoming(prContext('d'.repeat(40), 'e'.repeat(40)), 'edited'),
+    )
+    expect([newer!.sourceSha, older!.sourceSha, rebased!.sourceSha]).toEqual([
+      'd'.repeat(40),
+      'c'.repeat(40),
+      'd'.repeat(40),
+    ])
+    expect((rebased!.request as any).baseContext.sha).toBe('e'.repeat(40))
+    expect((newer!.request as any).baseContext.sha).toBe('a'.repeat(40))
+    expect(await prisma.commitAssessment.count()).toBe(3)
+  })
+  it('deduplicates concurrent delivery processing and rolls back PR snapshots with failed audit', async () => {
+    await post()
+    const d = await prIncoming()
+    await Promise.all([processPr(d), processPr(d)])
+    expect(await prisma.commitAssessment.count()).toBe(1)
+    const next = await prIncoming(prContext('d'.repeat(40)))
+    const broken = {
+      $transaction: (cb: any) =>
+        prisma.$transaction((tx) =>
+          cb(
+            new Proxy(tx, {
+              get(target, key) {
+                return key === 'auditEvent'
+                  ? {
+                      create: async () => {
+                        throw new Error('audit unavailable')
+                      },
+                    }
+                  : Reflect.get(target, key)
+              },
+            }),
+          ),
+        ),
+    } as any
+    await expect(
+      new GitHubEventProcessor(broken).process(next.id),
+    ).rejects.toThrow('audit unavailable')
+    expect(
+      (
+        await prisma.gitHubWebhookDelivery.findUniqueOrThrow({
+          where: { id: next.id },
+        })
+      ).state,
+    ).toBe('RECEIVED')
+    expect(await prisma.commitAssessment.count()).toBe(1)
+    await processPr(next)
+    expect(await prisma.commitAssessment.count()).toBe(2)
+  })
+  it('records explicit reasons for forked, closed and missing or inconsistent contexts', async () => {
+    await post()
+    const cases: [any, string, string][] = [
+      [
+        { ...prContext(), head: { ...prContext().head, repositoryId: '999' } },
+        'opened',
+        'fork_head_not_supported',
+      ],
+      [
+        { ...prContext(), state: 'closed', merged: true },
+        'closed',
+        'pr_not_open',
+      ],
+      [null, 'opened', 'pr_context_unavailable'],
+      [
+        { ...prContext(), base: { ...prContext().base, repositoryId: '999' } },
+        'opened',
+        'pr_context_unavailable',
+      ],
+    ]
+    for (const [ctx, action, reason] of cases) {
+      const d = await prIncoming(ctx, action)
+      expect(await processPr(d)).toBeNull()
+      const audit = await prisma.auditEvent.findFirstOrThrow({
+        where: {
+          event: 'github_event_processed',
+          metadata: { path: ['deliveryId'], equals: d.id },
+        },
+      })
+      expect(audit.metadata).toMatchObject({
+        assessmentReason: reason,
+        assessmentId: null,
+      })
+    }
+    expect(await prisma.commitAssessment.count()).toBe(0)
+  })
+  it('requires adoption and active available repository access', async () => {
+    expect(await processPr(await prIncoming())).toBeNull()
+    await post()
+    await prisma.gitHubRepository.updateMany({ data: { available: false } })
+    const d = await prIncoming()
+    expect(await processPr(d)).toBeNull()
+    expect(
+      (
+        await prisma.gitHubWebhookDelivery.findUniqueOrThrow({
+          where: { id: d.id },
+        })
+      ).state,
+    ).toBe('IGNORED')
+  })
+  it('preserves draft status and the selection adopted at processing time', async () => {
+    const first = await post()
+    const d = await prIncoming({ ...prContext(), draft: true })
+    const next = await post(body(first.body.id, 'STRICT'))
+    const snapshot = await processPr(d)
+    expect(snapshot!.request).toMatchObject({
+      selectionId: next.body.id,
+      pullRequest: { draft: true },
+    })
   })
 })

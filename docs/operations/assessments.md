@@ -47,4 +47,6 @@ Apply additive migration `20261009010000_commit_assessments` and regenerate the 
 
 Scoped verification covers frozen plans, unverified associations, expired/future/unknown freshness, skipped/pending/failing results, equal-time conflicts, superseded results, exact-SHA and repository isolation, immutable historical selections/evidence summaries, JSONB-safe digest reproduction/tamper rejection, bounded collection, idempotency, roles/origin/revocation and transactional audit rollback, CI-trigger replay, atomic processor rollback, absent adoption and delayed triggering-observation retention. Frontend checks are types, touched-file lint/format; browser tests remain skipped. Published image/clean-deployment and live GitHub demonstrations remain release acceptance, not claims from these local checks.
 
-Next slices: PR-triggered assessments with explicit head/base context, trusted rule coverage and normalized finding occurrences, deterministic P2 policy gates and exact-SHA GitHub feedback. Those must not upgrade manual associations or raw administrator uploads silently.
+[PR-triggered assessments](pr-assessments.md) now freeze signed head/base context for open same-repository PRs, including incomplete snapshots before head CI exists. They remain historical and do not establish current PR readiness.
+
+Next slices: current PR reconciliation and CI linkage, trusted rule coverage and normalized finding occurrences, deterministic P2 policy gates and exact-SHA GitHub feedback. Those must not upgrade manual associations or raw administrator uploads silently.
