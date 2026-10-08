@@ -4,13 +4,19 @@
     "build": {
       "outputs": [
         "dist/**"
+      ],
+      "dependsOn": [
+        "^build"
       ]
     },
     "lint": {
       "outputs": []
     },
     "typecheck": {
-      "outputs": []
+      "outputs": [],
+      "dependsOn": [
+        "^typecheck"
+      ]
     },
     "test": {
       "cache": false,

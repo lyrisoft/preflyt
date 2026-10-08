@@ -4,7 +4,7 @@
 
 Preflyt is a planned **self-hosted, AI-native Shift Left engineering platform**. It helps engineering teams detect and prevent security vulnerabilities, software defects, reliability failures and infrastructure risks **earlier in the software development lifecycle**, using continuous assessments, explicit engineering standards, policy-based quality gates and actionable developer feedback.
 
-> **Status: frontend source baseline imported; product implementation pending.** The runnable upstream dashboard is under `apps/web`. NestJS services, Preflyt OIDC authentication, repository onboarding, scanners and deployment manifests are not implemented. Product capabilities below remain proposed.
+> **Status: initial OIDC authentication slice implemented.** The repository now includes a NestJS API, PostgreSQL-backed identity/session records, OIDC sign-in, first-Owner bootstrap, and a guarded React sign-in flow. Repository onboarding, user provisioning, scanners, assessments and deployment manifests remain unimplemented; broader product capabilities below are proposed.
 
 Developed by **Lyrisoft Technologies**.
 
@@ -169,7 +169,7 @@ The roadmap is directional, not a delivery promise. See the [phase-by-phase vert
 
 ## Proposed monorepo
 
-The web application and pnpm/Turborepo workspace exist. Other application, service and infrastructure directories below remain planned.
+The web application, NestJS API and pnpm/Turborepo workspace exist. Other application, service and infrastructure directories below remain planned.
 
 ~~~text
 apps/
@@ -209,7 +209,7 @@ turbo.json
 
 ## Development status
 
-The pinned Shadcn Admin frontend is imported and tested. It currently displays upstream demo content; it is not a functioning Preflyt platform. See [source provenance and verification](docs/vendor/shadcn-admin.md).
+The pinned Shadcn Admin frontend is imported. Its OIDC entry, first-Owner setup and protected route boundary use the Preflyt API; most remaining screens still contain upstream demo content. The API supports OIDC authentication and server-managed sessions, but invitation/provisioning and the rest of the platform are pending. See [source provenance and verification](docs/vendor/shadcn-admin.md).
 
 Use Node 24.4.1 and pnpm 10.15.1:
 
@@ -219,7 +219,9 @@ pnpm test:browser:install
 pnpm dev
 ~~~
 
-Workspace checks: `pnpm build`, `pnpm lint`, `pnpm typecheck`, `pnpm format:check`, `pnpm test`, and `pnpm audit`. Contributions use issues and reviewable pull requests.
+For the API, create `apps/api/.env` from `apps/api/.env.example`, configure PostgreSQL and the OIDC provider, then run `pnpm dev:api`. Set `BOOTSTRAP_TOKEN_SHA256` to the SHA-256 hex digest of an out-of-band, high-entropy first-Owner token. Apply schema changes with `pnpm --filter @preflyt/api prisma:migrate`.
+
+Workspace checks: `pnpm build`, `pnpm lint`, `pnpm typecheck`, `pnpm format:check`, `pnpm test`, and `pnpm audit`. Track work in GitHub issues; development work is completed, audited and committed on `development`.
 
 ## License
 

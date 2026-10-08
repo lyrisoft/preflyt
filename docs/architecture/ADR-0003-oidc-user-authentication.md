@@ -1,6 +1,6 @@
 # ADR-0003: OIDC user authentication for self-hosted Preflyt
 
-**Status:** Accepted for MVP planning; implementation pending  
+**Status:** Accepted; initial API and web authentication slice implemented, full acceptance criteria pending
 **Date:** 2026-10-08  
 **Decision owner:** Product / Engineering  
 **Related:** [Product Requirements](../PRD.md), [TypeScript-first architecture](ADR-0001-typescript-first-stack.md)
@@ -42,6 +42,8 @@ The GitHub App installation is solely for repository integration and receives on
 - Separate identity authentication from Preflyt membership, authorization, repository selection and GitHub App permissions.
 
 ## Acceptance criteria
+
+The initial implementation covers OIDC Authorization Code + PKCE, signature/issuer/audience/nonce validation, first-Owner bootstrap, hashed server-side sessions, and denial of unprovisioned identities. Remaining criteria below still require implementation or broader verification before this ADR's MVP requirements are complete.
 
 - [ ] A valid provisioned OIDC user can sign in and receives only the local Preflyt role assigned by an authorized Owner/Admin.
 - [ ] Invalid issuer/signature/audience/expiry/state/nonce, replayed transactions and unprovisioned users are denied and audited.

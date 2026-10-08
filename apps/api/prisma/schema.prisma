@@ -1,0 +1,95 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum MemberRole {
+  OWNER
+  ADMIN
+  DEVELOPER
+  VIEWER
+}
+
+model Identity {
+  id          String   @id @default(cuid())
+  issuer      String
+  subject     String
+  displayName String?
+  email       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  membership  Membership?
+  sessions    WebSession[]
+  bootstrapChallenges BootstrapChallenge[]
+  @@unique([issuer, subject])
+}
+
+model Membership {
+  id         String     @id @default(cuid())
+  identityId String     @unique
+  identity   Identity   @relation(fields: [identityId], references: [id], onDelete: Cascade)
+  role       MemberRole
+  active     Boolean    @default(true)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+}
+
+model LoginTransaction {
+  id              String   @id @default(cuid())
+  stateHash       String   @unique
+  browserBinding  String
+  codeVerifier    String
+  nonce           String
+  expiresAt       DateTime
+  createdAt       DateTime @default(now())
+  @@index([expiresAt])
+}
+
+model WebSession {
+  id           String   @id @default(cuid())
+  tokenHash    String   @unique
+  identityId   String
+  identity     Identity @relation(fields: [identityId], references: [id], onDelete: Cascade)
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  lastSeenAt   DateTime @default(now())
+  @@index([identityId, expiresAt])
+}
+
+model BootstrapState {
+  id         Int       @id @default(1)
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+}
+
+model AuditEvent {
+  id         String   @id @default(cuid())
+  event      String
+  actorId    String?
+  metadata   Json     @default("{}")
+  createdAt  DateTime @default(now())
+  @@index([event, createdAt])
+}
+
+model BootstrapChallenge {
+  id         String   @id @default(cuid())
+  tokenHash  String   @unique
+  identityId String
+  identity   Identity @relation(fields: [identityId], references: [id], onDelete: Cascade)
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  @@index([expiresAt])
+}
+
+model AuthThrottle {
+  id          String   @id @default(cuid())
+  action      String
+  keyHash     String
+  windowStart DateTime
+  count       Int      @default(0)
+  @@unique([action, keyHash, windowStart])
+}

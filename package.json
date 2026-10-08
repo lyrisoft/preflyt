@@ -13,7 +13,11 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "format:check": "turbo run format:check",
-    "test:browser:install": "pnpm --filter @preflyt/web test:browser:install"
+    "test:browser:install": "pnpm --filter @preflyt/web test:browser:install",
+    "dev:api": "pnpm --filter @preflyt/api start:dev",
+    "build:api": "pnpm --filter @preflyt/api build",
+    "test:api": "pnpm --filter @preflyt/api test",
+    "db:generate": "pnpm --filter @preflyt/api prisma:generate"
   },
   "devDependencies": {
     "turbo": "2.11.7"

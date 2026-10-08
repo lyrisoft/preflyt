@@ -3,6 +3,7 @@ node_modules/
 dist/
 coverage/
 *.tsbuildinfo
+apps/api/src/generated/
 .env
 .env.*
 !.env.example
