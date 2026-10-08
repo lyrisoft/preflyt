@@ -251,6 +251,16 @@ describe('administrator-associated artifact imports', () => {
     expect(JSON.stringify(history.body)).not.toContain('secret-case')
     expect(JSON.stringify(results[0].body)).not.toContain('content')
   })
+  it('imports schema-valid SARIF with distinct format and original-byte integrity', async () => {
+    const id = await observation()
+    const content = JSON.stringify({ version: '2.1.0', runs: [{ tool: { driver: { name: 'secret-tool' } }, results: [{ level: 'warning', message: { text: 'secret-report' } }] }] })
+    const body = { format: 'sarif', content, sha256: createHash('sha256').update(content).digest('hex') }
+    const response = await upload(id, body)
+    expect(response.status).toBe(201)
+    expect(response.body.artifact).toMatchObject({ format: 'sarif', sha256: body.sha256, summary: { results: 1, warning: 1, partial: true, execution: 'UNKNOWN' } })
+    expect(JSON.stringify(response.body)).not.toContain('secret')
+    expect(Buffer.from((await prisma.ciArtifactImport.findFirstOrThrow()).content).toString()).toBe(content)
+  })
   it('requires an admin session, exact origin and a completed observation in the selected repository', async () => {
     const id = await observation()
     expect((await upload(id, report(), 'invalid')).status).toBe(401)

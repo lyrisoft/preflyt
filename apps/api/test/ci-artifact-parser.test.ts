@@ -48,6 +48,11 @@ describe('bounded immutable report parsing', () => {
     expect(() => parse('sarif', '['.repeat(34) + '0' + ']'.repeat(34))).toThrow()
     expect(() => parse('junit', '<testsuite>' + '<testcase name="x"/>'.repeat(5001) + '</testsuite>')).toThrow()
   })
+  it('bounds SARIF runs and results before summary publication', () => {
+    const run = { tool: { driver: { name: 's' } }, results: [] }
+    expect(() => parse('sarif', JSON.stringify({ version: '2.1.0', runs: Array.from({ length: 101 }, () => run) }))).toThrow()
+    expect(() => parse('sarif', sarif({ ...run, results: Array.from({ length: 5001 }, () => ({ message: { text: 'x' } })) }))).toThrow()
+  })
   it('rejects digest mismatch and invalid UTF-8 source strings', () => {
     expect(() => parseArtifact('junit', '<testsuite/>', '0'.repeat(64))).toThrow('SHA-256')
     expect(() => parse('junit', '<testsuite>\uD800</testsuite>')).toThrow()
