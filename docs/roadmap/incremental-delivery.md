@@ -45,11 +45,11 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 **User value:** An administrator can sign in, connect one or more selected GitHub repositories, inspect discovered engineering characteristics and see clearly labeled missing/unknown controls.
 
 **Tasks:**
-- P0.1 Set up pnpm/Turborepo, NestJS API, **React/Vite with the reviewed Shadcn Admin starter**, Prisma/PostgreSQL and minimum health/telemetry, **as part of this same usable slice**; pin upstream template version and preserve attribution.
+- P0.1 Set up pnpm/Turborepo, NestJS API and **Preflyt-owned React/Vite application scaffold**, Prisma/PostgreSQL and minimum health/telemetry, **as part of this same usable slice**. Before adapting Shadcn Admin components, pin its full upstream Git SHA and audit selected files, customized components, licenses, dependencies, and required attribution.
 - P0.2 Implement OIDC login, first-owner bootstrap, RBAC and scoped organization membership per ADR-0003.
 - P0.3 Implement GitHub App installation and repository selection with least-privilege *read* permissions, store secrets server-side.
 - P0.4 Discover pinned-commit profile: language/framework, manifest/lockfiles, CI, tests, Docker/IaC, migration hints; evidence and unknown labels.
-- P0.5 Implement functioning Shadcn Admin-derived layout/navigation, OIDC-guarded routes, actual repository list/detail/profile, loading/empty/error states, basic audit and “checks missing” report; no AI, no fake future-feature pages and no executing repository code.
+- P0.5 Implement functioning **Preflyt-owned layout/navigation** with selectively adapted, audited Shadcn Admin UI patterns/components; implement OIDC-guarded routes, actual repository list/detail/profile, loading/empty/error states, basic audit and “checks missing” report. No cloned upstream app, imported demo authentication, AI, fake feature pages, or repository code execution.
 - P0.6 Package documented Compose deployment, DB migration/backup and safe upgrade path.
 
 **Done when:** On a clean deployment an authorized user logs in, selects a GitHub repo and sees a correct profile and missing-control report; an unauthorized user cannot view it. Deleting/losing a provider token gives a visible, non-misleading error. Rollback preserves repository/profile records.
