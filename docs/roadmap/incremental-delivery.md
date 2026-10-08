@@ -71,6 +71,8 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 
 **Done when:** A real sample PR receives a versioned assessment populated by externally executed CI; the user can identify failures and missing evidence. New commits create new current assessments; import failure does not masquerade as PASS. Deployed service remains usable without runners, AI or model keys.
 
+- **P1.RBAC:** Restrict CI evidence, assessments and findings to authorized repository members; validate worker context and artifact access.
+
 ### P2 — Policy Quality Gates
 
 **User value:** A policy owner defines a simple standard and a developer sees an accurate advisory or blocking GitHub quality check.
