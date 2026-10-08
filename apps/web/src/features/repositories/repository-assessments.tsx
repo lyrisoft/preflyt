@@ -38,6 +38,8 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { StatusBadge } from '@/components/status-badge'
+import { AssessmentContext } from './assessment-context'
+import type { ContextRequest } from './engineering-queries'
 import { RelativeTime } from './relative-time'
 import {
   useAssessmentList,
@@ -56,7 +58,7 @@ import {
 type Assessment = AssessmentListItem & {
   assessmentHash: string
   selectionId: string
-  request: {
+  request: ContextRequest & {
     trigger: string
     selectionRevision: number
     profileSnapshotId: string | null
@@ -77,6 +79,7 @@ type Assessment = AssessmentListItem & {
       required: boolean
       coverage: string
       providerResult: CiResult | null
+      mappingTrust?: string | null
       freshness: string
       deliveryId: string | null
       reason: string
@@ -187,7 +190,8 @@ function AssessmentCreator({
               CI result per control
             </legend>
             <p className='text-xs text-muted-foreground'>
-              Optional. Associations are your claim, recorded as unverified.
+              Optional manual overrides. Unassigned controls use active approved
+              source bindings when available. Overrides remain unverified.
             </p>
             {evidence.isError && (
               <p role='alert' className='text-sm text-destructive'>
@@ -212,7 +216,9 @@ function AssessmentCreator({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value='none'>No association</SelectItem>
+                    <SelectItem value='none'>
+                      Use approved binding if available
+                    </SelectItem>
                     {evidence.data?.observations.map((item) => (
                       <SelectItem key={item.deliveryId} value={item.deliveryId}>
                         {sourceLabel(item.sourceKind, item.sourceObjectId)} ·{' '}
@@ -434,6 +440,7 @@ export function RepositoryAssessments({
                     {data.request.selectionRevision} · collected{' '}
                     <RelativeTime value={data.report.collectedAt} />
                   </p>
+                  <AssessmentContext request={data.request} />
                   {data.report.collectionTruncated && (
                     <p
                       role='alert'
@@ -491,6 +498,12 @@ export function RepositoryAssessments({
                                             .label
                                         : 'No result'}{' '}
                                       · {sentence(check.freshness)}
+                                    </p>
+                                    <p className='text-muted-foreground'>
+                                      {check.mappingTrust ===
+                                      'APPROVED_SOURCE_BINDING'
+                                        ? 'Approved source · execution unverified'
+                                        : 'Manual association · execution unverified'}
                                     </p>
                                   </>
                                 ) : (

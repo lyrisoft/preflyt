@@ -43,9 +43,11 @@ import {
 } from './posture-summary'
 import { RelativeTime } from './relative-time'
 import { RepositoryAssessments } from './repository-assessments'
+import { RepositoryBindings } from './repository-bindings'
 import { RepositoryCiEvidence } from './repository-ci-evidence'
 import { RepositoryControls } from './repository-controls'
 import { RepositoryEvents } from './repository-events'
+import { RepositoryPullRequests } from './repository-pull-requests'
 import type { Profile } from './repository-queries'
 import { RepositoryStandards } from './repository-standards'
 import { signalStatus, toneFill } from './repository-vocabulary'
@@ -511,14 +513,19 @@ export function RepositoryProfilePage() {
                   )}
                 </div>
               </TabsContent>
-              <TabsContent value='standards'>
+              <TabsContent value='standards' className='space-y-5'>
                 <RepositoryStandards
                   key={repositoryId}
                   repositoryId={repositoryId}
                   canManage={canDiscover}
                 />
+                <RepositoryBindings
+                  repositoryId={repositoryId}
+                  canManage={canDiscover}
+                />
               </TabsContent>
-              <TabsContent value='assessments'>
+              <TabsContent value='assessments' className='space-y-5'>
+                <RepositoryPullRequests repositoryId={repositoryId} />
                 <RepositoryAssessments
                   key={repositoryId}
                   repositoryId={repositoryId}
