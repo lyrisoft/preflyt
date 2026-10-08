@@ -481,6 +481,10 @@ Every release must publish images and a **complete single-command Docker Compose
 
 **OpenTelemetry must be vendor-neutral.** The root example environment declares standard OTEL exporter endpoint, protocol, header, traces/metrics/logs exporters, resource metadata, propagation and sampling; Compose injects shared settings and distinct `OTEL_SERVICE_NAME` values into first-party services. Users can configure any compatible OTLP endpoint without editing code. Failures of telemetry exporters must not make core application requests fail. See [OTel contract](deployment/opentelemetry-env.md). **Current implementation:** root `.env.example`, complete Compose services, optional collector and API/worker OTLP traces, metrics and structured logs are implemented. Published images require the release workflow to succeed; future model gateway/evidence storage and Kubernetes execution remain planned.
 
+### Kubernetes deployment architecture
+
+**Selected mode:** Docker Compose for standalone self-hosting; **Helm-bootstrapped Preflyt Operator and CRDs for Kubernetes**. Helm installs the controller and CRDs, and a Preflyt custom resource describes the application desired state. Helm's standard CRD packaging cannot be toggled with ordinary chart values; `--skip-crds` is supported when administrators manage CRDs separately. Operator lifecycle management must cover readiness, secrets references, safe upgrades, stateful dependency ownership and drift. A direct Helm application chart is an optional fallback. Kubernetes implementation is **planned** and must not block existing Compose releases. See [ADR-0006](architecture/ADR-0006-kubernetes-operator-deployment.md).
+
 ### Execution trust boundary: mandatory in MVP
 
 **Every Preflyt-executed command touching a connected repository—including scanner parsers, package install scripts, tests and builds—must run under the security-reviewed isolation contract in ADR-0002.** Do not assume Docker or an ordinary Kubernetes Job alone is sufficient for untrusted repositories.

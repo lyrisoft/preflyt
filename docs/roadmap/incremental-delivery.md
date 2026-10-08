@@ -226,6 +226,10 @@ These subphases map to the global deployment phases above and may be tracked as 
 
 Built-in pack lifecycle: **P0 catalogue and recommendations → P1 evidence mapping → P2 deterministic enforcement → P3 native checks → P6–P9 specialized QA/performance packs → P10 owner-approved policy improvements**. See [Engineering Standards Library](../product/engineering-standards-library.md).
 
+## Kubernetes packaging decision
+
+**Preferred Kubernetes mode:** Helm installs Preflyt CRDs and the Preflyt Operator; a Preflyt custom resource causes the Operator to reconcile the application. Docker Compose remains the fully supported standalone path. P0 records the CRD/operator configuration and packaging design without delaying current implementation; P1–P3 add a usable minimal Operator as an independently tested Kubernetes deployment slice; later phases expand lifecycle support. Helm `--skip-crds` permits externally managed CRDs; packaged CRDs are not automatically upgraded/deleted. The direct application Helm chart is an optional fallback. See [ADR-0006](../architecture/ADR-0006-kubernetes-operator-deployment.md).
+
 ## 5. Definition of deployable and usable: mandatory phase checklist
 
 A phase **cannot be marked complete** until all applicable entries below are satisfied.
