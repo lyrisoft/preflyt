@@ -21,7 +21,7 @@ For the initial product, minimizing languages, sharing contracts and simplifying
 | Concern | Choice |
 | --- | --- |
 | Runtime and primary language | Node.js + TypeScript |
-| Browser application | React + Vite + TypeScript; Shadcn Admin UI foundation (see ADR-0005) |
+| Browser application | React + Vite + TypeScript, initially built upon pinned and audited Shadcn Admin source (see ADR-0005) |
 | API and control plane | NestJS |
 | AI assessment and investigation runtime | **Optional read-only** dedicated Node.js/TypeScript intelligence worker; no coding agent required |
 | Core engines | Versioned TypeScript assessment planner, validation adapters and governance/policy evaluator |
@@ -68,7 +68,7 @@ flowchart TD
     STATUS --> SCM
 ~~~
 
-**Frontend implementation choice:** [ADR-0005](ADR-0005-shadcn-admin-frontend.md) selects the Shadcn Admin UI starter, with Preflyt-controlled OIDC/session behavior and a single router. This refines but does not change the TypeScript-first language decision.
+**Frontend implementation choice:** [ADR-0005](ADR-0005-shadcn-admin-frontend.md) directs engineers to **pull Shadcn Admin's full application source at a pinned upstream commit and build Preflyt on top of it**. Upstream correctly calls its project a dashboard UI rather than a starter template; Preflyt adopts and refactors that codebase, reviews its dependencies/customized components, and retains ownership of OIDC/session, RBAC and feature routes. This refines but does not change the TypeScript-first language decision.
 
 ## Rationale
 
