@@ -86,6 +86,8 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 
 **Done when:** A deliberately broken PR is blocked by an activated required check, a clean PR passes, a missing required check is INCOMPLETE, and a changed PR never inherits the prior commit's green status. Existing P0/P1 remains functional.
 
+- **P2.RBAC:** Separate policy drafting, publication, enforcement and exception approval permissions; reject self-approval.
+
 ### P3 — Native Secure Validation
 
 **User value:** Preflyt can perform useful code/security/IaC validation itself, rather than depending exclusively on existing CI.
