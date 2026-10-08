@@ -243,7 +243,7 @@ An optional local Super Admin break-glass login is available at `/super-admin/lo
 
 To enable repository onboarding, configure the GitHub App ID, client ID/secret and private key in that API environment. Set the GitHub App **Setup URL** to `<API_ORIGIN>/github/setup/callback` and its OAuth callback URL to the exact `GITHUB_APP_OAUTH_CALLBACK_URL`. Leave “Request user authorization during installation” disabled; Preflyt starts a separate state/PKCE-bound authorization step and verifies that the installing GitHub user can access the returned installation. The API creates short-lived tokens limited to `metadata:read` and `contents:read` and never stores them.
 
-For container deployment, use the [Docker Compose runbook](docs/operations/docker-compose.md).
+For container deployment, use the [Docker Compose runbook](docs/operations/docker-compose.md). **Kubernetes direction:** Helm bootstraps the Preflyt CRDs and Operator; the Operator reconciles the application from a Preflyt custom resource. A direct application Helm chart may be offered as a fallback. This Kubernetes packaging is planned, **not implemented**. See [ADR-0006](docs/architecture/ADR-0006-kubernetes-operator-deployment.md).
 
 Workspace checks: `pnpm build`, `pnpm lint`, `pnpm typecheck`, `pnpm format:check`, `pnpm test`, and `pnpm audit`. Track work in GitHub issues; development work is completed, audited and committed on `development`.
 
