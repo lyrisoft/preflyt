@@ -55,6 +55,8 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 
 **Done when:** On a clean deployment an authorized user logs in, selects a GitHub repo and sees a correct profile and missing-control report; an unauthorized user cannot view it. Deleting/losing a provider token gives a visible, non-misleading error. Rollback preserves repository/profile records.
 
+- **P0.RBAC:** Implement predefined organization roles, repository-scoped membership/grants, authorization-aware navigation and NestJS resource checks. Test cross-organization denial, assignment/revocation, audit and owner bootstrap. See [RBAC specification](../product/rbac-and-authorization.md).
+
 ### P1 — CI Evidence Assessments
 
 **User value:** A developer opens a PR or a CI run completes and can inspect an assessment with collected test/check status and provenance.
