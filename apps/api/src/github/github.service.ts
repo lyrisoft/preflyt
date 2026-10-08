@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto'
 import {
   ForbiddenException,
+  Inject,
   ServiceUnavailableException,
   Injectable,
   UnauthorizedException,
@@ -21,7 +22,8 @@ const tokenPermissions = { metadata: 'read', contents: 'read' }
 @Injectable()
 export class GitHubService {
   constructor(
-    private readonly prisma: PrismaService,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(GitHubProviderService)
     private readonly provider: GitHubProviderService,
   ) {}
 

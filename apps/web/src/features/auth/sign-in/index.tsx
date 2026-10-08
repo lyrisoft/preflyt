@@ -1,4 +1,5 @@
-import { useSearch } from '@tanstack/react-router'
+import { useEffect, useState } from 'react'
+import { Link, useSearch } from '@tanstack/react-router'
 import { ArrowRight, LockKeyhole } from 'lucide-react'
 import { API_BASE_URL } from '@/lib/api'
 import { Button } from '@/components/ui/button'
@@ -13,6 +14,25 @@ import { AuthLayout } from '../auth-layout'
 
 export function SignIn() {
   const { error } = useSearch({ from: '/(auth)/sign-in' })
+  const [superAdminEnabled, setSuperAdminEnabled] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    fetch(`${API_BASE_URL}/auth/methods`, { credentials: 'include' })
+      .then(async (response) => {
+        if (!response.ok) throw new Error('Unable to load sign-in methods')
+        return (await response.json()) as { superAdmin?: boolean }
+      })
+      .then((methods) => {
+        if (active) setSuperAdminEnabled(methods.superAdmin === true)
+      })
+      .catch(() => {
+        if (active) setSuperAdminEnabled(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [])
 
   return (
     <AuthLayout>
@@ -44,15 +64,20 @@ export function SignIn() {
               <ArrowRight aria-hidden='true' className='ms-auto size-4' />
             </a>
           </Button>
-          <div className='flex items-center gap-3 text-[10px] font-medium tracking-[0.18em] text-muted-foreground uppercase'>
-            <span className='h-px flex-1 bg-border' />
-            Secure sign-in
-            <span className='h-px flex-1 bg-border' />
-          </div>
           <p className='text-center text-xs leading-relaxed text-muted-foreground'>
             Your Preflyt account and access are provisioned by your
             organization.
           </p>
+          {superAdminEnabled && (
+            <div className='border-t border-white/10 pt-4 text-center'>
+              <Link
+                to='/super-admin/login'
+                className='text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline'
+              >
+                Super Admin access
+              </Link>
+            </div>
+          )}
         </CardContent>
       </Card>
     </AuthLayout>

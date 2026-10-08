@@ -12,6 +12,7 @@ enum MemberRole {
   ADMIN
   DEVELOPER
   VIEWER
+  SUPER_ADMIN
 }
 
 enum GitHubSetupPhase {
@@ -28,6 +29,7 @@ model Identity {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   membership  Membership?
+  superAdminCredential SuperAdminCredential?
   sessions    WebSession[]
   bootstrapChallenges BootstrapChallenge[]
   githubSetupTransactions GitHubSetupTransaction[]
@@ -43,6 +45,15 @@ model Membership {
   active     Boolean    @default(true)
   createdAt  DateTime   @default(now())
   updatedAt  DateTime   @updatedAt
+}
+
+model SuperAdminCredential {
+  id           String   @id
+  username     String   @unique
+  passwordHash String
+  identityId   String   @unique
+  identity     Identity @relation(fields: [identityId], references: [id], onDelete: Cascade)
+  updatedAt    DateTime @updatedAt
 }
 
 model LoginTransaction {

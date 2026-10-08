@@ -1,11 +1,7 @@
 import { createHash, generateKeyPairSync } from 'node:crypto'
 import { createServer, type Server } from 'node:http'
 import { AddressInfo } from 'node:net'
-import {
-  exportJWK,
-  SignJWT,
-  type KeyLike,
-} from 'jose'
+import { exportJWK, SignJWT, type KeyLike } from 'jose'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { Request } from 'express'
 import { AuthService } from '../src/auth/auth.service.js'
@@ -14,18 +10,33 @@ import { PrismaService } from '../src/prisma/prisma.service.js'
 const clientId = 'preflyt-test-client'
 const clientSecret = 'test-client-secret'
 const bootstrapToken = 'test-bootstrap-token-value-000000000000'
+const superAdminPassword = 'preflyt-test-super-admin-password-value'
 const webOrigin = 'http://localhost:5173'
-const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 })
-const { privateKey: badPrivateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 })
+const { privateKey, publicKey } = generateKeyPairSync('rsa', {
+  modulusLength: 2048,
+})
+const { privateKey: badPrivateKey } = generateKeyPairSync('rsa', {
+  modulusLength: 2048,
+})
 const kid = 'preflyt-test-signing-key'
-const codes = new Map<string, { nonce: string; challenge: string; sub: string; invalid?: string }>()
+const codes = new Map<
+  string,
+  { nonce: string; challenge: string; sub: string; invalid?: string }
+>()
 let server: Server
 let issuer: string
 let jwk: Record<string, unknown>
 let prisma: PrismaService
 
-async function json(res: import('node:http').ServerResponse, status: number, body: unknown) {
-  res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store' })
+async function json(
+  res: import('node:http').ServerResponse,
+  status: number,
+  body: unknown
+) {
+  res.writeHead(status, {
+    'content-type': 'application/json',
+    'cache-control': 'no-store',
+  })
   res.end(JSON.stringify(body))
 }
 
@@ -85,9 +96,15 @@ beforeAll(async () => {
         .setIssuedAt()
         .setExpirationTime('5m')
         .sign(tokenKey)
-      const deliveredIdToken = entry.invalid === 'signature'
-        ? idToken.split('.').map((part, index) => index === 2 ? 'A'.repeat(part.length) : part).join('.')
-        : idToken
+      const deliveredIdToken =
+        entry.invalid === 'signature'
+          ? idToken
+              .split('.')
+              .map((part, index) =>
+                index === 2 ? 'A'.repeat(part.length) : part
+              )
+              .join('.')
+          : idToken
       return json(res, 200, {
         access_token: 'test-access-token',
         token_type: 'Bearer',
@@ -101,6 +118,8 @@ beforeAll(async () => {
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
   issuer = 'http://127.0.0.1:' + (server.address() as AddressInfo).port
   process.env.OIDC_ISSUER = issuer
+  process.env.SUPER_ADMIN_USERNAME = 'preflyt-admin'
+  process.env.SUPER_ADMIN_PASSWORD = superAdminPassword
   prisma = new PrismaService()
   await prisma.$connect()
 })
@@ -112,6 +131,7 @@ beforeEach(async () => {
   await prisma.gitHubInstallation.deleteMany()
   await prisma.gitHubSetupTransaction.deleteMany()
   await prisma.webSession.deleteMany()
+  await prisma.superAdminCredential.deleteMany()
   await prisma.bootstrapChallenge.deleteMany()
   await prisma.membership.deleteMany()
   await prisma.identity.deleteMany()
@@ -148,16 +168,118 @@ async function startLogin(service: AuthService, invalid?: string) {
 }
 
 describe('OIDC and server-side identity sessions', () => {
+  it('starts in Super Admin-only mode when OIDC settings are absent', async () => {
+    const oidcKeys = [
+      'OIDC_ISSUER',
+      'OIDC_CLIENT_ID',
+      'OIDC_CLIENT_SECRET',
+      'OIDC_REDIRECT_URI',
+      'BOOTSTRAP_TOKEN_SHA256',
+    ] as const
+    const previous = Object.fromEntries(
+      oidcKeys.map((key) => [key, process.env[key]])
+    )
+    oidcKeys.forEach((key) => delete process.env[key])
+
+    try {
+      const service = await newAuthService()
+      expect(service.superAdminEnabled).toBe(true)
+      await expect(service.beginLogin('127.0.0.11')).rejects.toThrow(
+        'Organization OIDC sign-in is not configured'
+      )
+      expect(
+        await prisma.superAdminCredential.findUnique({
+          where: { id: 'primary' },
+        })
+      ).not.toBeNull()
+    } finally {
+      for (const key of oidcKeys) {
+        const value = previous[key]
+        if (value === undefined) delete process.env[key]
+        else process.env[key] = value
+      }
+    }
+
+    delete process.env.OIDC_CLIENT_ID
+    expect(() => new AuthService(prisma)).toThrow('must be configured together')
+    process.env.OIDC_CLIENT_ID = 'preflyt-test-client'
+  })
+
+  it('authenticates only the configured Super Admin on the separate local path', async () => {
+    const service = await newAuthService()
+    expect(service.superAdminEnabled).toBe(true)
+    const seeded = await prisma.superAdminCredential.findUnique({
+      where: { id: 'primary' },
+      include: { identity: { include: { membership: true } } },
+    })
+    expect(seeded?.username).toBe('preflyt-admin')
+    expect(seeded?.passwordHash).not.toContain(superAdminPassword)
+    expect(seeded?.identity.membership?.role).toBe('SUPER_ADMIN')
+    await expect(
+      service.loginSuperAdmin(
+        'preflyt-admin',
+        superAdminPassword,
+        '127.0.0.10',
+        'https://attacker.example'
+      )
+    ).rejects.toThrow()
+
+    await expect(
+      service.loginSuperAdmin(
+        'another-admin',
+        superAdminPassword,
+        '127.0.0.10',
+        webOrigin
+      )
+    ).rejects.toThrow('Invalid username or password')
+    expect(await prisma.identity.count()).toBe(1)
+
+    const session = await service.loginSuperAdmin(
+      ' PREFLYT-ADMIN ',
+      superAdminPassword,
+      '127.0.0.10',
+      webOrigin
+    )
+    expect(session.sessionToken).toMatch(/^[A-Za-z0-9_-]{43}$/)
+    expect(session.expiresAt.getTime() - Date.now()).toBeLessThanOrEqual(
+      60 * 60 * 1000
+    )
+    expect(await service.currentSession(session.sessionToken)).toMatchObject({
+      authenticated: true,
+      identityId: session.identityId,
+      email: null,
+      role: 'SUPER_ADMIN',
+    })
+    expect(
+      await prisma.webSession.findUnique({
+        where: {
+          tokenHash: createHash('sha256')
+            .update(session.sessionToken)
+            .digest('hex'),
+        },
+      })
+    ).not.toBeNull()
+    expect(
+      await prisma.auditEvent.findFirst({
+        where: { event: 'super_admin_login_succeeded' },
+      })
+    ).not.toBeNull()
+  })
+
   it('binds a single-use callback to browser state and PKCE', async () => {
     const service = await newAuthService()
     const { started, request } = await startLogin(service)
     const authUrl = new URL(started.url)
     expect(authUrl.searchParams.get('code_challenge_method')).toBe('S256')
     expect(authUrl.searchParams.get('scope')).toContain('openid')
-    await expect(service.completeLogin(request, 'different-browser')).rejects.toThrow()
+    await expect(
+      service.completeLogin(request, 'different-browser')
+    ).rejects.toThrow()
     const result = await service.completeLogin(request, started.browserBinding)
     expect(result.kind).toBe('bootstrap')
-    await expect(service.completeLogin(request, started.browserBinding)).rejects.toThrow()
+    await expect(
+      service.completeLogin(request, started.browserBinding)
+    ).rejects.toThrow()
   })
 
   it.each(['signature', 'issuer', 'audience', 'nonce'])(
@@ -166,13 +288,22 @@ describe('OIDC and server-side identity sessions', () => {
       const service = await newAuthService()
       const { started, request } = await startLogin(service, invalid)
       await expect(
-        service.completeLogin(request, started.browserBinding),
+        service.completeLogin(request, started.browserBinding)
       ).rejects.toThrow()
-      expect(await prisma.identity.count()).toBe(0)
-      expect(await prisma.auditEvent.findFirst({
-        where: { event: 'login_denied', metadata: { path: ['reason'], equals: 'oidc_validation_failed' } },
-      })).not.toBeNull()
-    },
+      expect(
+        await prisma.identity.count({
+          where: { issuer: { not: 'preflyt://local' } },
+        })
+      ).toBe(0)
+      expect(
+        await prisma.auditEvent.findFirst({
+          where: {
+            event: 'login_denied',
+            metadata: { path: ['reason'], equals: 'oidc_validation_failed' },
+          },
+        })
+      ).not.toBeNull()
+    }
   )
 
   it('bootstraps exactly one Owner, issues a hashed opaque session, and revokes it on logout', async () => {
@@ -180,15 +311,16 @@ describe('OIDC and server-side identity sessions', () => {
     const { started, request } = await startLogin(service)
     const login = await service.completeLogin(request, started.browserBinding)
     expect(login.kind).toBe('bootstrap')
-    if (login.kind !== 'bootstrap') throw new Error('Expected bootstrap challenge')
+    if (login.kind !== 'bootstrap')
+      throw new Error('Expected bootstrap challenge')
 
     await expect(
       service.bootstrapOwner(
         bootstrapToken,
         login.challengeToken,
         'https://attacker.example',
-        '127.0.0.2',
-      ),
+        '127.0.0.2'
+      )
     ).rejects.toThrow()
 
     await expect(
@@ -196,20 +328,26 @@ describe('OIDC and server-side identity sessions', () => {
         'incorrect-bootstrap-token-value-000000000000',
         login.challengeToken,
         webOrigin,
-        '127.0.0.2',
-      ),
+        '127.0.0.2'
+      )
     ).rejects.toThrow()
 
     const created = await service.bootstrapOwner(
       bootstrapToken,
       login.challengeToken,
       webOrigin,
-      '127.0.0.2',
+      '127.0.0.2'
     )
     expect(created.sessionToken).toMatch(/^[A-Za-z0-9_-]{43}$/)
-    expect(await prisma.webSession.findUnique({
-      where: { tokenHash: createHash('sha256').update(created.sessionToken).digest('hex') },
-    })).not.toBeNull()
+    expect(
+      await prisma.webSession.findUnique({
+        where: {
+          tokenHash: createHash('sha256')
+            .update(created.sessionToken)
+            .digest('hex'),
+        },
+      })
+    ).not.toBeNull()
     expect(await service.currentSession(created.sessionToken)).toMatchObject({
       authenticated: true,
       role: 'OWNER',
@@ -221,32 +359,37 @@ describe('OIDC and server-side identity sessions', () => {
         bootstrapToken,
         login.challengeToken,
         webOrigin,
-        '127.0.0.2',
-      ),
+        '127.0.0.2'
+      )
     ).rejects.toThrow()
     await service.logout(created.sessionToken, webOrigin)
     expect(await service.currentSession(created.sessionToken)).toEqual({
       authenticated: false,
     })
-    const bootstrapState = await prisma.bootstrapState.findUnique({ where: { id: 1 } })
+    const bootstrapState = await prisma.bootstrapState.findUnique({
+      where: { id: 1 },
+    })
     expect(bootstrapState?.consumedAt).toBeInstanceOf(Date)
   })
 
   it('denies an OIDC identity without a local membership after an Owner exists', async () => {
     const service = await newAuthService()
     const first = await startLogin(service)
-    const firstLogin = await service.completeLogin(first.request, first.started.browserBinding)
+    const firstLogin = await service.completeLogin(
+      first.request,
+      first.started.browserBinding
+    )
     if (firstLogin.kind !== 'bootstrap') throw new Error('Expected bootstrap')
     await service.bootstrapOwner(
       bootstrapToken,
       firstLogin.challengeToken,
       webOrigin,
-      '127.0.0.3',
+      '127.0.0.3'
     )
 
     const second = await startLogin(service)
     await expect(
-      service.completeLogin(second.request, second.started.browserBinding),
+      service.completeLogin(second.request, second.started.browserBinding)
     ).rejects.toThrow()
   })
 })

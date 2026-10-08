@@ -2,9 +2,10 @@ import { ShieldCheck } from 'lucide-react'
 
 type AuthLayoutProps = {
   children: React.ReactNode
+  footer?: React.ReactNode
 }
 
-export function AuthLayout({ children }: AuthLayoutProps) {
+export function AuthLayout({ children, footer }: AuthLayoutProps) {
   return (
     <div className='dark relative isolate grid min-h-svh place-items-center overflow-hidden bg-background px-4 py-12 text-foreground'>
       <div
@@ -34,10 +35,12 @@ export function AuthLayout({ children }: AuthLayoutProps) {
 
         {children}
 
-        <p className='max-w-sm text-center text-xs leading-relaxed text-muted-foreground'>
-          Access is managed by your organization. Contact a Preflyt Owner or
-          Admin if you need an account.
-        </p>
+        {footer ?? (
+          <p className='max-w-sm text-center text-xs leading-relaxed text-muted-foreground'>
+            Access is managed by your organization. Contact a Preflyt Owner or
+            Admin if you need an account.
+          </p>
+        )}
       </main>
     </div>
   )

@@ -11,7 +11,7 @@ The PRD left the first-deployment human authentication mechanism unresolved. Pre
 
 ## Decision
 
-Use the installation's configured OpenID Connect (OIDC) provider for all routine human sign-in in MVP. Do not add a standing local-password login or use GitHub App credentials as user credentials.
+Use the installation's configured OpenID Connect (OIDC) provider for routine human sign-in in MVP. Permit one deployment-configured local **Super Admin** credential as a separate break-glass path. This is not a general local-password system, an OIDC fallback for regular users, or a GitHub login.
 
 ### Sign-in and session flow
 
@@ -20,6 +20,15 @@ Use the installation's configured OpenID Connect (OIDC) provider for all routine
 3. The NestJS API identifies a user by the exact issuer + subject pair and requires an active Preflyt membership. A valid OIDC identity alone does not confer organization access or a role.
 4. The API issues an opaque, server-managed session in a `Secure`, `HttpOnly`, `SameSite` cookie. Browser code never stores ID/access/refresh tokens in local storage. Logout revokes the server session.
 5. Preflyt roles and membership are local authorization state: Owner, Admin, Developer, Viewer. IdP group/role claims do not silently grant or elevate Preflyt privileges in MVP.
+
+### Local Super Admin break-glass access
+
+- The local Super Admin uses a distinct `/super-admin/login` page and `/auth/super-admin/login` API endpoint; ordinary `/sign-in` remains organization OIDC.
+- The operator configures exactly one username (1–320 non-whitespace characters) and password through deployment-managed `SUPER_ADMIN_USERNAME` and `SUPER_ADMIN_PASSWORD` settings. On startup, Preflyt seeds the reserved local identity, `SUPER_ADMIN` membership and a salted scrypt password hash; the raw password is never stored in the database or returned to the browser. There is no self-registration, reset flow or user-selectable role.
+- Super Admin receives the same server-managed session cookie with a one-hour expiry and passes Owner/Admin authorization checks. Removing the environment settings disables the credential and revokes its sessions at startup.
+- Passwords must be 24–128 characters. Use scrypt with N=32768, r=8, p=1 and a random salt. Rate-limit attempts by both source IP and normalized username, compare derived hashes in constant time, return generic credential errors and audit allowed/denied attempts.
+- When all OIDC settings are absent and a Super Admin username/password are configured, the API starts in Super Admin-only mode. Organization OIDC sign-in and first-owner bootstrap return unavailable until OIDC is configured. Partial OIDC configuration is rejected, and fully configured OIDC must pass normal discovery and issuer validation at startup.
+- Local credentials never become an automatic fallback for organization users. To recover from an IdP outage that prevents startup, an operator must explicitly remove all OIDC settings, retain the Super Admin settings, restart Preflyt, and restore valid OIDC settings before enabling routine user sign-in.
 
 ### Initial owner bootstrap and membership
 
@@ -38,7 +47,7 @@ The GitHub App installation is solely for repository integration and receives on
 - Keep OIDC client credentials server-side in the configured secret provider; do not expose tokens/secrets to the browser, sandbox jobs, prompts, or standard logs.
 - Protect cookie-authenticated state-changing requests against CSRF, enforce TLS in deployment, rotate/revoke sessions on logout, suspension and role changes, and rate-limit sign-in and bootstrap endpoints.
 - Restrict the configured issuer to a valid HTTPS issuer administrator-set out of band. Do not accept arbitrary issuers or user-controlled discovery URLs on login requests.
-- Fail closed if issuer metadata or signing keys cannot be safely validated. Do not silently fall back to local passwords or another provider.
+- Fail closed if issuer metadata or signing keys cannot be safely validated. Do not silently fall back to local credentials for regular users; the separate Super Admin endpoint is the only local-password path.
 - Separate identity authentication from Preflyt membership, authorization, repository selection and GitHub App permissions.
 
 ## Acceptance criteria
@@ -51,9 +60,12 @@ The initial implementation covers OIDC Authorization Code + PKCE, signature/issu
 - [ ] Session cookie flags, CSRF defense, logout revocation, suspension/role-change invalidation and rate limits are verified.
 - [ ] The first Owner can be created only with a valid out-of-band, expiring, single-use token while no Owner exists; successful use consumes it and permanently disables bootstrap.
 - [ ] GitHub login cannot authenticate a Preflyt user, and GitHub App credentials cannot be used as an interactive user session.
-- [ ] IdP outage/misconfiguration blocks new sign-ins clearly and never falls back to local-password authentication. Documented administrator recovery is required before beta.
+- [ ] The configured Super Admin can authenticate only through the separate local route; invalid attempts are rate-limited, audited, and do not reveal whether the username exists.
+- [ ] Super Admin credentials are seeded from deployment-managed settings, only the scrypt password hash is stored in the database, and login produces a one-hour hashed server-side session.
+- [ ] IdP outage/misconfiguration never falls back to local credentials for regular users. Super Admin-only mode is enabled only when all OIDC settings are explicitly absent and the deployment has configured the local account.
+- [ ] Partial OIDC configuration and failed discovery remain fail-closed. Organization sign-in and owner bootstrap remain unavailable in Super Admin-only mode.
 
 ## Deferred
 
-- SAML, multiple identity providers per installation, SCIM, automatic IdP group-to-role mapping, and local-password login.
-- The operator recovery procedure after loss or misconfiguration of the configured IdP; define and security-review it before beta.
+- SAML, multiple identity providers per installation, SCIM, automatic IdP group-to-role mapping, and local-password login for organization members.
+- Automated detection and recovery from IdP outages; recovery requires an operator to explicitly select Super Admin-only mode by removing all OIDC settings.

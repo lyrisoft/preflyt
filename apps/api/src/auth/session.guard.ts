@@ -2,6 +2,7 @@ import {
   CanActivate,
   ExecutionContext,
   ForbiddenException,
+  Inject,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common'
@@ -13,20 +14,19 @@ export type AuthenticatedSession = {
   identityId: string
   subject: string
   email: string | null
-  role: 'OWNER' | 'ADMIN' | 'DEVELOPER' | 'VIEWER'
+  role: 'OWNER' | 'ADMIN' | 'DEVELOPER' | 'VIEWER' | 'SUPER_ADMIN'
 }
 
 type AuthenticatedRequest = Request & { preflytSession?: AuthenticatedSession }
 
 @Injectable()
 export class SessionGuard implements CanActivate {
-  constructor(private readonly auth: AuthService) {}
+  constructor(@Inject(AuthService) private readonly auth: AuthService) {}
 
   async canActivate(context: ExecutionContext) {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>()
     const token = request.cookies?.[this.auth.sessionCookieName] as
-      | string
-      | undefined
+      string | undefined
     const session = await this.auth.currentSession(token)
     if (!session.authenticated) {
       throw new UnauthorizedException('An active Preflyt session is required')
@@ -39,10 +39,12 @@ export class SessionGuard implements CanActivate {
 @Injectable()
 export class OwnerAdminGuard implements CanActivate {
   canActivate(context: ExecutionContext) {
-    const request = context
-      .switchToHttp()
-      .getRequest<AuthenticatedRequest>()
-    if (!['OWNER', 'ADMIN'].includes(request.preflytSession?.role ?? '')) {
+    const request = context.switchToHttp().getRequest<AuthenticatedRequest>()
+    if (
+      !['OWNER', 'ADMIN', 'SUPER_ADMIN'].includes(
+        request.preflytSession?.role ?? ''
+      )
+    ) {
       throw new ForbiddenException('Owner or Admin role required')
     }
     return true

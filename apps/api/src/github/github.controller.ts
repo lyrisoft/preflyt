@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Inject,
   Param,
   Patch,
   Req,
@@ -31,7 +32,7 @@ const cookieOptions = (secure: boolean, maxAge: number) => ({
 
 @Controller('github')
 export class GitHubController {
-  constructor(private readonly github: GitHubService) {}
+  constructor(@Inject(GitHubService) private readonly github: GitHubService) {}
 
   @Get('install')
   @UseGuards(SessionGuard, OwnerAdminGuard)

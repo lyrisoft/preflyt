@@ -4,7 +4,7 @@
 
 Preflyt is a planned **self-hosted, AI-native Shift Left engineering platform**. It helps engineering teams detect and prevent security vulnerabilities, software defects, reliability failures and infrastructure risks **earlier in the software development lifecycle**, using continuous assessments, explicit engineering standards, policy-based quality gates and actionable developer feedback.
 
-> **Status: initial authentication and GitHub onboarding slices implemented.** The repository now includes a NestJS API, PostgreSQL-backed identity/session records, OIDC sign-in, first-Owner bootstrap, guarded React routes, GitHub App installation, and explicit repository selection. User provisioning, repository profile discovery, scanners, assessments and deployment manifests remain unimplemented; broader product capabilities below are proposed.
+> **Status: initial authentication and GitHub onboarding slices implemented.** The repository now includes a NestJS API, PostgreSQL-backed identity/session records, OIDC sign-in, first-Owner bootstrap, an optional deployment-configured Super Admin recovery login, guarded React routes, GitHub App installation, and explicit repository selection. User provisioning, repository profile discovery, scanners, assessments and deployment manifests remain unimplemented; broader product capabilities below are proposed.
 
 Developed by **Lyrisoft Technologies**.
 
@@ -209,7 +209,7 @@ turbo.json
 
 ## Development status
 
-The pinned Shadcn Admin frontend is imported. Its OIDC entry, first-Owner setup, protected route boundary and GitHub repository selection screen use the Preflyt API; most remaining screens still contain upstream demo content. Invitation/provisioning, repository profiles and the rest of the platform are pending. See [source provenance and verification](docs/vendor/shadcn-admin.md).
+The pinned Shadcn Admin frontend is imported. Its OIDC entry, separate Super Admin recovery route, first-Owner setup, protected route boundary and GitHub repository selection screen use the Preflyt API; most remaining screens still contain upstream demo content. Invitation/provisioning, repository profiles and the rest of the platform are pending. See [source provenance and verification](docs/vendor/shadcn-admin.md).
 
 Use Node 24.4.1 and pnpm 10.15.1:
 
@@ -220,6 +220,8 @@ pnpm dev
 ~~~
 
 For the API, create `apps/api/.env` from `apps/api/.env.example`, configure PostgreSQL and the OIDC provider, then run `pnpm dev:api`. Set `BOOTSTRAP_TOKEN_SHA256` to the SHA-256 hex digest of an out-of-band, high-entropy first-Owner token. Apply schema changes with `pnpm --filter @preflyt/api prisma:migrate`.
+
+An optional local Super Admin break-glass login is available at `/super-admin/login`, separately from the organization SSO page. Set `SUPER_ADMIN_USERNAME` and a unique 24–128 character `SUPER_ADMIN_PASSWORD` in the API's deployment-managed environment. On startup, Preflyt seeds one Super Admin account and stores only a salted scrypt hash of the password. The account is rate-limited, audited and receives a one-hour session. If all OIDC settings are absent, Preflyt starts in Super Admin-only mode: organization sign-in and first-owner bootstrap remain unavailable until OIDC is configured. Partial OIDC configuration and failed OIDC discovery still stop startup. To explicitly recover from an IdP outage, remove all OIDC settings, keep the Super Admin settings, and restart the API.
 
 To enable repository onboarding, configure the GitHub App ID, client ID/secret and private key in that API environment. Set the GitHub App **Setup URL** to `<API_ORIGIN>/github/setup/callback` and its OAuth callback URL to the exact `GITHUB_APP_OAUTH_CALLBACK_URL`. Leave “Request user authorization during installation” disabled; Preflyt starts a separate state/PKCE-bound authorization step and verifies that the installing GitHub user can access the returned installation. The API creates short-lived tokens limited to `metadata:read` and `contents:read` and never stores them.
 

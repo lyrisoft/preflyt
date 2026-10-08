@@ -465,7 +465,8 @@ If no safe execution runtime is available, Preflyt is **INGEST_ONLY**: use exter
 
 ### Security and authentication
 
-- OIDC human auth, server-managed sessions, role/organization scoping per [ADR-0003](architecture/ADR-0003-oidc-user-authentication.md).
+- OIDC human auth for routine users plus the deployment-configured, separate local Super Admin break-glass path; server-managed sessions and role/organization scoping per [ADR-0003](architecture/ADR-0003-oidc-user-authentication.md).
+- When OIDC settings are entirely absent and Super Admin credentials are configured, the API may start in Super Admin-only mode; regular OIDC login and initial-owner bootstrap remain unavailable until valid OIDC configuration is restored. Partial OIDC configuration or failed discovery must fail closed.
 - Signed webhook validation, idempotency, replay handling and exact revision association.
 - Least-privilege Git installation access: read repository/CI data plus authorized check-run/status publishing; no general branch write needed.
 - Encryption/rotation of model credentials; source-code egress policy; model tools cannot access CI/SCM secrets or grant themselves new rights.

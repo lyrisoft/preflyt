@@ -1,0 +1,1 @@
+ALTER TYPE "MemberRole" ADD VALUE 'SUPER_ADMIN';

@@ -1,10 +1,17 @@
-import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
+import {
+  createHash,
+  randomBytes,
+  scrypt as scryptCallback,
+  timingSafeEqual,
+} from 'node:crypto'
 import {
   ConflictException,
   ForbiddenException,
   HttpException,
+  Inject,
   Injectable,
   OnModuleInit,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common'
 import * as oidc from 'openid-client'
@@ -15,71 +22,175 @@ const digest = (value: string) =>
   createHash('sha256').update(value).digest('hex')
 const opaque = () => randomBytes(32).toString('base64url')
 const sessionTtlMs = 8 * 60 * 60 * 1000
+const superAdminSessionTtlMs = 60 * 60 * 1000
 const shortTtlMs = 5 * 60 * 1000
+const superAdminIssuer = 'preflyt://local'
+const superAdminSubject = 'super-admin'
+const superAdminCredentialId = 'primary'
+const superAdminScryptCost = 32768
+const superAdminScryptBlockSize = 8
+const superAdminScryptParallelization = 1
+const superAdminScryptKeyLength = 64
+const superAdminScryptMaxMemory = 64 * 1024 * 1024
+
+type ParsedScryptHash = { salt: Buffer; key: Buffer }
+
+const parseScryptHash = (value: string): ParsedScryptHash => {
+  const parts = value.split('$')
+  if (
+    parts.length !== 6 ||
+    parts[0] !== 'scrypt' ||
+    parts[1] !== String(superAdminScryptCost) ||
+    parts[2] !== String(superAdminScryptBlockSize) ||
+    parts[3] !== String(superAdminScryptParallelization)
+  ) {
+    throw new Error(
+      'Stored Super Admin password hash has an unsupported format'
+    )
+  }
+  const salt = Buffer.from(parts[4]!, 'base64url')
+  const key = Buffer.from(parts[5]!, 'base64url')
+  if (
+    salt.length !== 16 ||
+    key.length !== superAdminScryptKeyLength ||
+    salt.toString('base64url') !== parts[4] ||
+    key.toString('base64url') !== parts[5]
+  ) {
+    throw new Error(
+      'Stored Super Admin password hash has an unsupported format'
+    )
+  }
+  return { salt, key }
+}
+
+const deriveScryptKey = (password: string, salt: Buffer) =>
+  new Promise<Buffer>((resolve, reject) => {
+    scryptCallback(
+      password,
+      salt,
+      superAdminScryptKeyLength,
+      {
+        N: superAdminScryptCost,
+        r: superAdminScryptBlockSize,
+        p: superAdminScryptParallelization,
+        maxmem: superAdminScryptMaxMemory,
+      },
+      (error, key) => (error ? reject(error) : resolve(key as Buffer))
+    )
+  })
 
 @Injectable()
 export class AuthService implements OnModuleInit {
   private config?: oidc.Configuration
-  private readonly issuer: URL
-  private readonly clientId: string
-  private readonly clientSecret: string
-  private readonly redirectUri: URL
+  private readonly issuer?: URL
+  private readonly clientId?: string
+  private readonly clientSecret?: string
+  private readonly redirectUri?: URL
   private readonly webOrigin: string
-  private readonly bootstrapHash: string
+  private readonly bootstrapHash?: string
+  private readonly superAdminUsername?: string
+  private readonly superAdminPassword?: string
 
-  constructor(private readonly prisma: PrismaService) {
+  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {
     const issuer = process.env.OIDC_ISSUER
     const clientId = process.env.OIDC_CLIENT_ID
     const clientSecret = process.env.OIDC_CLIENT_SECRET
     const redirectUri = process.env.OIDC_REDIRECT_URI
     const webOrigin = process.env.WEB_ORIGIN
     const bootstrapHash = process.env.BOOTSTRAP_TOKEN_SHA256
-    if (
-      !issuer ||
-      !clientId ||
-      !clientSecret ||
-      !redirectUri ||
-      !webOrigin ||
-      !bootstrapHash
-    ) {
-      throw new Error('OIDC, web-origin and bootstrap configuration is required')
+    const superAdminUsername =
+      process.env.SUPER_ADMIN_USERNAME?.trim().toLowerCase()
+    const superAdminPassword = process.env.SUPER_ADMIN_PASSWORD
+    if (Boolean(superAdminUsername) !== Boolean(superAdminPassword)) {
+      throw new Error(
+        'SUPER_ADMIN_USERNAME and SUPER_ADMIN_PASSWORD must be configured together'
+      )
     }
-    if (!/^[a-f0-9]{64}$/i.test(bootstrapHash)) {
-      throw new Error('BOOTSTRAP_TOKEN_SHA256 must be a SHA-256 hex digest')
+    if (
+      superAdminUsername &&
+      !/^[^\s\u0000-\u001f\u007f]{1,320}$/u.test(superAdminUsername)
+    ) {
+      throw new Error(
+        'SUPER_ADMIN_USERNAME must be 1-320 characters without whitespace or control characters'
+      )
+    }
+    if (
+      superAdminPassword &&
+      (superAdminPassword.length < 24 || superAdminPassword.length > 128)
+    ) {
+      throw new Error(
+        'SUPER_ADMIN_PASSWORD must be between 24 and 128 characters'
+      )
+    }
+    this.superAdminUsername = superAdminUsername || undefined
+    this.superAdminPassword = superAdminPassword || undefined
+
+    const oidcSettings = [issuer, clientId, clientSecret, redirectUri]
+    const oidcHasAnySettings = oidcSettings.some(Boolean)
+    const oidcIsConfigured = oidcSettings.every(Boolean)
+    if (oidcHasAnySettings && !oidcIsConfigured) {
+      throw new Error(
+        'OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET and OIDC_REDIRECT_URI must be configured together'
+      )
+    }
+    if (!oidcIsConfigured && !this.superAdminEnabled) {
+      throw new Error(
+        'Configure OIDC or a Super Admin username and password to start Preflyt'
+      )
     }
 
-    this.issuer = new URL(issuer)
-    if (
-      this.issuer.protocol !== 'https:' &&
-      !(
-        process.env.NODE_ENV !== 'production' &&
-        ['localhost', '127.0.0.1', '[::1]'].includes(this.issuer.hostname)
-      )
-    ) {
-      throw new Error('OIDC_ISSUER must use HTTPS except for a local issuer')
+    const resolvedWebOrigin =
+      webOrigin ??
+      (process.env.NODE_ENV !== 'production'
+        ? 'http://localhost:5173'
+        : undefined)
+    if (!resolvedWebOrigin) {
+      throw new Error('WEB_ORIGIN is required in production')
     }
-    this.redirectUri = new URL(redirectUri)
-    if (
-      this.redirectUri.protocol !== 'https:' &&
-      !(
-        process.env.NODE_ENV !== 'production' &&
-        ['localhost', '127.0.0.1', '[::1]'].includes(
-          this.redirectUri.hostname,
+    this.webOrigin = new URL(resolvedWebOrigin).origin
+
+    if (oidcIsConfigured) {
+      if (!bootstrapHash || !/^[a-f0-9]{64}$/i.test(bootstrapHash)) {
+        throw new Error(
+          'BOOTSTRAP_TOKEN_SHA256 must be a SHA-256 hex digest when OIDC is configured'
         )
-      )
-    ) {
-      throw new Error('OIDC_REDIRECT_URI must use HTTPS except on localhost')
+      }
+      this.issuer = new URL(issuer!)
+      if (
+        this.issuer.protocol !== 'https:' &&
+        !(
+          process.env.NODE_ENV !== 'production' &&
+          ['localhost', '127.0.0.1', '[::1]'].includes(this.issuer.hostname)
+        )
+      ) {
+        throw new Error('OIDC_ISSUER must use HTTPS except for a local issuer')
+      }
+      this.redirectUri = new URL(redirectUri!)
+      if (
+        this.redirectUri.protocol !== 'https:' &&
+        !(
+          process.env.NODE_ENV !== 'production' &&
+          ['localhost', '127.0.0.1', '[::1]'].includes(
+            this.redirectUri.hostname
+          )
+        )
+      ) {
+        throw new Error('OIDC_REDIRECT_URI must use HTTPS except on localhost')
+      }
+      if (this.redirectUri.search || this.redirectUri.hash) {
+        throw new Error('OIDC_REDIRECT_URI cannot contain query or fragment')
+      }
+      this.clientId = clientId
+      this.clientSecret = clientSecret
+      this.bootstrapHash = bootstrapHash.toLowerCase()
     }
-    if (this.redirectUri.search || this.redirectUri.hash) {
-      throw new Error('OIDC_REDIRECT_URI cannot contain query or fragment')
-    }
-    this.clientId = clientId
-    this.clientSecret = clientSecret
-    this.webOrigin = new URL(webOrigin).origin
-    this.bootstrapHash = bootstrapHash.toLowerCase()
   }
 
   async onModuleInit() {
+    if (!this.issuer) {
+      await this.seedSuperAdmin()
+      return
+    }
     const localDevelopmentIssuer =
       process.env.NODE_ENV !== 'production' &&
       this.issuer.protocol === 'http:' &&
@@ -90,14 +201,17 @@ export class AuthService implements OnModuleInit {
     if (localDevelopmentIssuer) execute.push(oidc.allowInsecureRequests)
     this.config = await oidc.discovery(
       this.issuer,
-      this.clientId,
-      this.clientSecret,
+      this.clientId!,
+      this.clientSecret!,
       undefined,
-      { execute },
+      { execute }
     )
-    if (new URL(this.config.serverMetadata().issuer).href !== this.issuer.href) {
+    if (
+      new URL(this.config.serverMetadata().issuer).href !== this.issuer.href
+    ) {
       throw new Error('OIDC discovery issuer mismatch')
     }
+    await this.seedSuperAdmin()
   }
 
   async beginLogin(ip: string) {
@@ -118,7 +232,7 @@ export class AuthService implements OnModuleInit {
       },
     })
     const authorizationUrl = oidc.buildAuthorizationUrl(config, {
-      redirect_uri: this.redirectUri.href,
+      redirect_uri: this.redirectUri!.href,
       scope: 'openid profile email',
       response_type: 'code',
       code_challenge: challenge,
@@ -129,8 +243,125 @@ export class AuthService implements OnModuleInit {
     return { url: authorizationUrl.href, browserBinding }
   }
 
+  get superAdminEnabled() {
+    return Boolean(this.superAdminUsername && this.superAdminPassword)
+  }
+
+  async loginSuperAdmin(
+    username: string,
+    password: string,
+    ip: string,
+    origin: string | undefined
+  ) {
+    this.assertOrigin(origin)
+    const normalizedUsername = username.trim().toLowerCase()
+    await this.rateLimit('super_admin_login_ip', ip, 20)
+    await this.rateLimit('super_admin_login_account', normalizedUsername, 5)
+
+    const credential = await this.prisma.superAdminCredential.findUnique({
+      where: { id: superAdminCredentialId },
+    })
+    const verificationHash = credential
+      ? parseScryptHash(credential.passwordHash)
+      : {
+          salt: Buffer.from('preflyt-super-admin-dummy-salt'),
+          key: Buffer.alloc(superAdminScryptKeyLength),
+        }
+    const derivedKey = await deriveScryptKey(password, verificationHash.salt)
+    const passwordMatches = timingSafeEqual(derivedKey, verificationHash.key)
+    const usernameMatches =
+      this.superAdminEnabled && normalizedUsername === credential?.username
+    if (!usernameMatches || !passwordMatches || !credential) {
+      await this.audit('super_admin_login_denied', null, {
+        reason: 'invalid_credentials',
+      })
+      throw new UnauthorizedException('Invalid username or password')
+    }
+
+    const sessionToken = opaque()
+    const expiresAt = new Date(Date.now() + superAdminSessionTtlMs)
+    await this.prisma.$transaction(async (tx) => {
+      await tx.webSession.create({
+        data: {
+          tokenHash: digest(sessionToken),
+          identityId: credential.identityId,
+          expiresAt,
+        },
+      })
+      await tx.auditEvent.create({
+        data: {
+          event: 'super_admin_login_succeeded',
+          actorId: credential.identityId,
+        },
+      })
+    })
+    return { sessionToken, expiresAt, identityId: credential.identityId }
+  }
+
+  private async seedSuperAdmin() {
+    const identity = await this.prisma.identity.upsert({
+      where: {
+        issuer_subject: {
+          issuer: superAdminIssuer,
+          subject: superAdminSubject,
+        },
+      },
+      create: {
+        issuer: superAdminIssuer,
+        subject: superAdminSubject,
+        displayName: this.superAdminUsername ?? 'Preflyt Super Admin',
+      },
+      update: {
+        displayName: this.superAdminUsername ?? 'Preflyt Super Admin',
+      },
+    })
+
+    if (!this.superAdminEnabled) {
+      await this.prisma.$transaction([
+        this.prisma.superAdminCredential.deleteMany({
+          where: { id: superAdminCredentialId },
+        }),
+        this.prisma.webSession.deleteMany({
+          where: { identityId: identity.id },
+        }),
+        this.prisma.membership.updateMany({
+          where: { identityId: identity.id },
+          data: { active: false },
+        }),
+      ])
+      return
+    }
+
+    const salt = randomBytes(16)
+    const key = await deriveScryptKey(this.superAdminPassword!, salt)
+    const passwordHash = `scrypt$${superAdminScryptCost}$${superAdminScryptBlockSize}$${superAdminScryptParallelization}$${salt.toString('base64url')}$${key.toString('base64url')}`
+    await this.prisma.$transaction(async (tx) => {
+      await tx.webSession.deleteMany({ where: { identityId: identity.id } })
+      await tx.membership.upsert({
+        where: { identityId: identity.id },
+        create: { identityId: identity.id, role: 'SUPER_ADMIN', active: true },
+        update: { role: 'SUPER_ADMIN', active: true },
+      })
+      await tx.superAdminCredential.upsert({
+        where: { id: superAdminCredentialId },
+        create: {
+          id: superAdminCredentialId,
+          username: this.superAdminUsername!,
+          passwordHash,
+          identityId: identity.id,
+        },
+        update: {
+          username: this.superAdminUsername!,
+          passwordHash,
+          identityId: identity.id,
+        },
+      })
+    })
+  }
+
   async completeLogin(request: Request, browserBinding?: string) {
-    const state = typeof request.query.state === 'string' ? request.query.state : ''
+    const state =
+      typeof request.query.state === 'string' ? request.query.state : ''
     if (!state || !browserBinding) {
       await this.audit('login_denied', null, { reason: 'invalid_transaction' })
       throw new UnauthorizedException('Invalid sign-in transaction')
@@ -154,11 +385,13 @@ export class AuthService implements OnModuleInit {
       },
     })
     if (consumed.count !== 1) {
-      await this.audit('login_denied', null, { reason: 'replayed_transaction' })
+      await this.audit('login_denied', null, {
+        reason: 'replayed_transaction',
+      })
       throw new UnauthorizedException('Sign-in expired or already used')
     }
 
-    const callbackUrl = new URL(this.redirectUri.href)
+    const callbackUrl = new URL(this.redirectUri!.href)
     for (const key of ['code', 'state', 'iss', 'error', 'error_description']) {
       const value = request.query[key]
       if (typeof value === 'string') callbackUrl.searchParams.set(key, value)
@@ -172,7 +405,7 @@ export class AuthService implements OnModuleInit {
           pkceCodeVerifier: transaction.codeVerifier,
           expectedState: state,
           expectedNonce: transaction.nonce,
-        },
+        }
       )
     } catch (error) {
       await this.audit('login_denied', null, {
@@ -189,20 +422,19 @@ export class AuthService implements OnModuleInit {
     const identity = await this.prisma.identity.upsert({
       where: {
         issuer_subject: {
-          issuer: this.issuer.href,
+          issuer: this.issuer!.href,
           subject: claims.sub,
         },
       },
       create: {
-        issuer: this.issuer.href,
+        issuer: this.issuer!.href,
         subject: claims.sub,
         email: typeof claims.email === 'string' ? claims.email : null,
         displayName: typeof claims.name === 'string' ? claims.name : null,
       },
       update: {
         email: typeof claims.email === 'string' ? claims.email : undefined,
-        displayName:
-          typeof claims.name === 'string' ? claims.name : undefined,
+        displayName: typeof claims.name === 'string' ? claims.name : undefined,
       },
       include: { membership: true },
     })
@@ -245,9 +477,14 @@ export class AuthService implements OnModuleInit {
     token: string,
     challengeToken: string,
     origin: string | undefined,
-    ip: string,
+    ip: string
   ) {
     this.assertOrigin(origin)
+    if (!this.bootstrapHash) {
+      throw new ServiceUnavailableException(
+        'Owner bootstrap requires organization OIDC configuration'
+      )
+    }
     await this.rateLimit('bootstrap', ip, 8)
     const suppliedHash = Buffer.from(digest(token), 'hex')
     const expectedHash = Buffer.from(this.bootstrapHash, 'hex')
@@ -311,7 +548,7 @@ export class AuthService implements OnModuleInit {
             },
           })
         },
-        { isolationLevel: 'Serializable' },
+        { isolationLevel: 'Serializable' }
       )
     } catch (error) {
       if (error instanceof ConflictException) throw error
@@ -386,7 +623,11 @@ export class AuthService implements OnModuleInit {
   }
 
   private requireConfig() {
-    if (!this.config) throw new Error('OIDC provider is unavailable')
+    if (!this.config) {
+      throw new ServiceUnavailableException(
+        'Organization OIDC sign-in is not configured for this deployment'
+      )
+    }
     return this.config
   }
 
@@ -402,7 +643,7 @@ export class AuthService implements OnModuleInit {
   private async audit(
     event: string,
     actorId: string | null,
-    metadata: Record<string, string>,
+    metadata: Record<string, string>
   ) {
     await this.prisma.auditEvent.create({ data: { event, actorId, metadata } })
   }
