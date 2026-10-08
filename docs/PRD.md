@@ -178,6 +178,11 @@ Capabilities:
 
 **Required separation:** AI can recommend improvements and explain risks, but must not set PASS/BLOCK directly, grant policy exceptions, execute arbitrary code without a validated tool boundary, merge PRs or deploy.
 
+
+### Built-in Engineering Standards Library
+
+Preflyt ships first-party versioned policy packs for baseline engineering, application security, backend/frontend apps, infrastructure, APIs, databases, production readiness, performance and compliance evidence. Rules specify applicability, required/advisory classification, severity, accepted check evidence, capability availability and policy version. An organization can browse, combine and pin packs using Default, Recommended or Strict profiles. Repository discovery recommends packs with reasons. Missing or unsupported checks cannot count as passing. P0: working catalogue and selection. P1: evidence mapping. P2: deterministic quality-gate enforcement and controlled pack upgrades. P3: approved native execution for supported checks. AI recommendations cannot activate enforcement or grant exceptions. Full specification: [Engineering Standards Library](product/engineering-standards-library.md).
+
 ## 6. Supported SDLC stages and user journeys
 
 ### 6.1 Lifecycle coverage
@@ -336,6 +341,16 @@ Use **M** for MVP, **V1** for next stage and **V2** for expansion. Every require
 | FR-015 | M | Distinguish pass, fail, error, skipped, stale, inconclusive and not applicable | Missing mandatory evidence never becomes passing status |
 | FR-016 | V1 | Add reliability, DB migration, observability and performance validation adapters | Each domain has defined evidence and benchmark fixture cases |
 | FR-017 | V1 | Add configurable local/design/pre-production assessment entrypoints | Inputs identify lifecycle stage and immutable subject revision |
+
+### 8.2A Built-in policy library requirements
+
+| ID | Phase | Requirement | Acceptance |
+| --- | --- | --- | --- |
+| FR-POL-01 | P0 | Browse first-party versioned packs and see supported/planned checks | Five initial packs can be inspected and selected |
+| FR-POL-02 | P0 | Recommend packs from detected stack and save organization/repository profile | Backend and IaC repositories receive explainable recommendations |
+| FR-POL-03 | P1 | Map CI evidence to required template checks | Missing evidence remains INCOMPLETE |
+| FR-POL-04 | P2 | Compile and evaluate effective versioned policy, with manual upgrade approval | Same rule/evidence yields same gate; update never silently changes enforced policy |
+| FR-POL-05 | P3+ | Enable supported native check adapters and later specialized packs | Unsupported pack checks never report PASS |
 
 ### 8.3 Engineering Governance Engine
 
@@ -609,6 +624,7 @@ A task can be developed behind a feature flag in parallel, but it cannot be coun
 - [ADR-0004 — Shift Left assessment and governance architecture](architecture/ADR-0004-shift-left-assessment-governance.md)
 - [ADR-0005 — Pinned Shadcn Admin source import](architecture/ADR-0005-shadcn-admin-frontend.md)
 - [Capabilities across the SDLC](product/sdlc-capabilities.md)
+- [Engineering Standards Library](product/engineering-standards-library.md)
 - [Incremental delivery phases and task breakdown](roadmap/incremental-delivery.md)
 - [README](../README.md)
 
