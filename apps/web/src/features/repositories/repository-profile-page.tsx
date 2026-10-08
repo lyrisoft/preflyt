@@ -1,8 +1,17 @@
+import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, getRouteApi } from '@tanstack/react-router'
-import { ArrowLeft, LoaderCircle, RefreshCw } from 'lucide-react'
+import {
+  AlertTriangle,
+  ArrowLeft,
+  GitBranch,
+  GitCommitHorizontal,
+  Info,
+  LoaderCircle,
+  RefreshCw,
+} from 'lucide-react'
 import { API_BASE_URL } from '@/lib/api'
-import { Badge } from '@/components/ui/badge'
+import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -11,40 +20,38 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import { Separator } from '@/components/ui/separator'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ConfigDrawer } from '@/components/config-drawer'
+import { AppBreadcrumbs } from '@/components/layout/app-breadcrumbs'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
+import { StatusBadge } from '@/components/status-badge'
 import { ThemeSwitch } from '@/components/theme-switch'
+import { EvidenceDialog } from './evidence-dialog'
+import {
+  PostureSummary,
+  type ControlFilter,
+  type RepositoryTab,
+} from './posture-summary'
+import { RelativeTime } from './relative-time'
 import { RepositoryAssessments } from './repository-assessments'
 import { RepositoryCiEvidence } from './repository-ci-evidence'
+import { RepositoryControls } from './repository-controls'
 import { RepositoryEvents } from './repository-events'
+import type { Profile } from './repository-queries'
 import { RepositoryStandards } from './repository-standards'
+import { signalStatus, toneFill } from './repository-vocabulary'
+import { TechIcon } from './tech-icon'
 
 const route = getRouteApi('/_authenticated/repositories/$repositoryId')
-type Signal = {
-  id: string
-  label: string
-  state: 'detected' | 'not_detected' | 'unknown'
-  observations: string[]
-  evidence: { path: string; blobSha: string; reason: string }[]
-}
-type Profile = {
-  id: string
-  sourceSha: string
-  treeSha: string
-  branch: string
-  fullName: string
-  createdAt: string
-  complete: boolean
-  report: {
-    inspectedFileCount: number
-    signals: Signal[]
-    warnings: string[]
-    limitations: string[]
-  }
-}
 type Result = {
   repository: {
     githubId: string
@@ -53,21 +60,17 @@ type Result = {
   }
   profile: Profile | null
 }
-const stateLabels = {
-  detected: 'Detected hint',
-  not_detected: 'Not detected',
-  unknown: 'Unknown',
-}
-const controlIds = new Set([
-  'ci',
-  'tests',
-  'lockfiles',
-  'ownership',
-  'semgrep',
-  'trivy',
-  'gitleaks',
-  'checkov',
-])
+const stackIds = new Set(['languages', 'frameworks'])
+/** Engineering controls are covered by the standards table, not repeated here. */
+const toolingIds = new Set(['manifests', 'containers', 'iac', 'migrations'])
+const profileNotes = [
+  'Config found means a supported file or workflow reference exists at the inspected commit. Nothing was built, tested or scanned.',
+  'Not found means no supported hint was found. It is not a policy failure.',
+]
+const evidenceNotes = [
+  'CI results are reported by GitHub. Administrator associations to rules stay unverified.',
+  'Assessments are frozen at one commit; later evidence needs a new snapshot.',
+]
 
 class ProfileRequestError extends Error {
   constructor(
@@ -78,9 +81,165 @@ class ProfileRequestError extends Error {
   }
 }
 
+function RepositoryFacts({ profile }: { profile: Profile }) {
+  const stack = profile.report.signals.filter((s) => stackIds.has(s.id))
+  const tooling = profile.report.signals.filter((s) => toolingIds.has(s.id))
+  return (
+    <Card className='gap-0 py-0'>
+      <section className='space-y-3 p-5'>
+        <h2 className='text-sm font-semibold'>Stack</h2>
+        {stack.map((signal) => (
+          <div key={signal.id} className='flex flex-wrap items-center gap-2'>
+            <span className='w-full text-xs text-muted-foreground'>
+              {signal.label}
+            </span>
+            {signal.state === 'detected' && signal.observations.length ? (
+              signal.observations.map((name) => (
+                <TechIcon key={name} name={name} />
+              ))
+            ) : (
+              <span className='text-sm text-muted-foreground'>
+                {signalStatus[signal.state].label}
+              </span>
+            )}
+          </div>
+        ))}
+      </section>
+      <Separator />
+      <section className='p-5'>
+        <h2 className='mb-2 text-sm font-semibold'>Tooling</h2>
+        <ul className='space-y-1'>
+          {tooling.map((signal) => {
+            const status = signalStatus[signal.state]
+            return (
+              <li
+                key={signal.id}
+                className='flex min-h-7 items-center gap-2 text-sm'
+              >
+                <span
+                  aria-hidden='true'
+                  className={cn(
+                    'size-2 shrink-0 rounded-full',
+                    toneFill[status.tone]
+                  )}
+                />
+                <span className='min-w-0 flex-1 truncate'>{signal.label}</span>
+                <span className='sr-only'>{status.label}</span>
+                {signal.evidence.length ? (
+                  <EvidenceDialog
+                    compact
+                    title={signal.label}
+                    files={signal.evidence}
+                    repositoryName={profile.fullName}
+                    sourceSha={profile.sourceSha}
+                  />
+                ) : (
+                  <span className='text-xs text-muted-foreground'>
+                    {status.label}
+                  </span>
+                )}
+              </li>
+            )
+          })}
+        </ul>
+      </section>
+      <Separator />
+      <section className='p-5'>
+        <h2 className='mb-3 text-sm font-semibold'>Snapshot</h2>
+        <dl className='grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm'>
+          <dt className='text-muted-foreground'>Branch</dt>
+          <dd className='truncate font-medium'>{profile.branch}</dd>
+          <dt className='text-muted-foreground'>Commit</dt>
+          <dd
+            className='truncate font-mono text-xs leading-5'
+            title={profile.sourceSha}
+          >
+            {profile.sourceSha}
+          </dd>
+          <dt className='text-muted-foreground'>Tree</dt>
+          <dd
+            className='truncate font-mono text-xs leading-5'
+            title={profile.treeSha}
+          >
+            {profile.treeSha}
+          </dd>
+          <dt className='text-muted-foreground'>Files</dt>
+          <dd className='tabular-nums'>
+            {profile.report.inspectedFileCount.toLocaleString()} inspected
+          </dd>
+          <dt className='text-muted-foreground'>Captured</dt>
+          <dd>
+            <RelativeTime value={profile.createdAt} />
+          </dd>
+        </dl>
+      </section>
+    </Card>
+  )
+}
+
+function InspectionBadge({ profile }: { profile: Profile }) {
+  if (profile.complete)
+    return <StatusBadge tone='success'>Inspection complete</StatusBadge>
+  return (
+    <Popover>
+      <PopoverTrigger className='rounded-lg focus-visible:outline-2 focus-visible:outline-ring'>
+        <StatusBadge tone='warning' className='cursor-pointer'>
+          Partial inspection
+        </StatusBadge>
+      </PopoverTrigger>
+      <PopoverContent align='start' className='w-80 text-sm'>
+        <p className='flex items-center gap-2 font-medium'>
+          <AlertTriangle aria-hidden='true' className='size-4 text-amber-600' />
+          Inspection limits
+        </p>
+        <ul className='mt-2 list-disc space-y-1 ps-5 text-muted-foreground'>
+          {profile.report.warnings.length ? (
+            profile.report.warnings.map((warning) => (
+              <li key={warning}>{warning}</li>
+            ))
+          ) : (
+            <li>Some files could not be read within discovery limits.</li>
+          )}
+        </ul>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+function ReadingGuide({ limitations }: { limitations: string[] }) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          variant='link'
+          size='sm'
+          className='h-auto p-0 text-xs text-muted-foreground'
+        >
+          <Info aria-hidden='true' className='size-3.5' />
+          How to read this page
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align='start' className='w-96 text-sm'>
+        <p className='font-medium'>Reading repository posture</p>
+        <ul className='mt-2 list-disc space-y-1.5 ps-5 text-muted-foreground'>
+          {[
+            ...(limitations.length ? limitations : profileNotes),
+            ...evidenceNotes,
+          ].map((note) => (
+            <li key={note}>{note}</li>
+          ))}
+        </ul>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
 export function RepositoryProfilePage() {
   const { repositoryId } = route.useParams()
+  const { tab = 'overview' } = route.useSearch()
+  const navigate = route.useNavigate()
   const queryClient = useQueryClient()
+  const [filter, setFilter] = useState<ControlFilter>('all')
   const profileQuery = useQuery({
     queryKey: ['repository-profile', repositoryId],
     retry: false,
@@ -137,6 +296,9 @@ export function RepositoryProfilePage() {
     },
     onSuccess: (value, id) => {
       queryClient.setQueryData(['repository-profile', id], value)
+      void queryClient.invalidateQueries({
+        queryKey: ['repository-standards', id],
+      })
     },
   })
   const loading = profileQuery.isPending || profileQuery.isFetching
@@ -154,91 +316,137 @@ export function RepositoryProfilePage() {
   const canDiscover = ['OWNER', 'ADMIN', 'SUPER_ADMIN'].includes(
     sessionQuery.data?.role ?? ''
   )
-  function discover() {
-    discovery.mutate(repositoryId)
+  function selectTab(value: string) {
+    void navigate({
+      search: (old) => ({
+        ...old,
+        tab: value === 'overview' ? undefined : (value as typeof tab),
+      }),
+      replace: true,
+    })
+  }
+  function openTab(value: RepositoryTab) {
+    selectTab(value)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+  function filterControls(value: ControlFilter) {
+    setFilter(value)
+    if (tab !== 'overview') selectTab('overview')
+    document
+      .getElementById('repository-controls')
+      ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
   const profile = result?.profile
-  const gaps =
-    profile?.report.signals.filter(
-      (signal) => controlIds.has(signal.id) && signal.state !== 'detected'
-    ) ?? []
   return (
     <>
-      <Header>
-        <Search className='me-auto' />
+      <Header fixed>
+        <AppBreadcrumbs
+          className='me-auto hidden sm:block'
+          items={[
+            { label: 'Repositories', to: '/apps' },
+            { label: result?.repository.fullName ?? 'Repository' },
+          ]}
+        />
+        <Search />
         <ThemeSwitch />
         <ConfigDrawer />
         <ProfileDropdown />
       </Header>
-      <Main>
-        <Button asChild variant='ghost' className='-ms-3 mb-4'>
-          <Link to='/apps'>
-            <ArrowLeft aria-hidden='true' />
-            Repositories
-          </Link>
-        </Button>
-        <div className='mb-6 flex flex-wrap items-start justify-between gap-4'>
-          <div className='min-w-0'>
-            <h1 className='text-2xl font-bold tracking-tight break-words'>
-              {result?.repository.fullName ?? 'Repository profile'}
-            </h1>
-            <p className='mt-1 text-muted-foreground'>
-              Engineering configuration and source hints from a saved repository
-              snapshot.
-            </p>
-          </div>
-          {canDiscover && result && (
-            <Button
-              disabled={loading || discovering}
-              onClick={() => void discover()}
-            >
-              {discovering ? (
-                <LoaderCircle className='animate-spin' />
+      <Main className='space-y-5'>
+        <div>
+          <Button
+            asChild
+            variant='ghost'
+            size='sm'
+            className='-ms-3 mb-2 sm:hidden'
+          >
+            <Link to='/apps'>
+              <ArrowLeft aria-hidden='true' />
+              Repositories
+            </Link>
+          </Button>
+          <div className='flex flex-wrap items-start justify-between gap-4'>
+            <div className='min-w-0 space-y-2'>
+              <h1 className='text-2xl font-bold tracking-tight break-words'>
+                {result?.repository.fullName ?? 'Repository'}
+              </h1>
+              {profile ? (
+                <div className='flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-muted-foreground'>
+                  <span className='flex items-center gap-1.5'>
+                    <GitBranch aria-hidden='true' className='size-4' />
+                    {profile.branch}
+                  </span>
+                  <span
+                    className='flex items-center gap-1.5'
+                    title={profile.sourceSha}
+                  >
+                    <GitCommitHorizontal
+                      aria-hidden='true'
+                      className='size-4'
+                    />
+                    <code className='text-xs'>
+                      {profile.sourceSha.slice(0, 7)}
+                    </code>
+                  </span>
+                  <span>
+                    Profiled <RelativeTime value={profile.createdAt} />
+                  </span>
+                  <InspectionBadge profile={profile} />
+                </div>
               ) : (
-                <RefreshCw />
+                result && (
+                  <p className='text-sm text-muted-foreground'>
+                    No profile discovered yet.
+                  </p>
+                )
               )}
-              {discovering
-                ? 'Discovering…'
-                : profile
-                  ? 'Refresh profile'
-                  : 'Discover profile'}
-            </Button>
-          )}
+              {result && (
+                <p className='flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground'>
+                  <span>
+                    Observe mode: Preflyt reads configuration and imported CI
+                    results. It does not run checks or block merges.
+                  </span>
+                  <ReadingGuide
+                    limitations={profile?.report.limitations ?? []}
+                  />
+                </p>
+              )}
+            </div>
+            {canDiscover && result && (
+              <Button
+                size='sm'
+                variant='outline'
+                disabled={loading || discovering}
+                onClick={() => discovery.mutate(repositoryId)}
+              >
+                {discovering ? (
+                  <LoaderCircle className='animate-spin' />
+                ) : (
+                  <RefreshCw />
+                )}
+                {discovering
+                  ? 'Discovering…'
+                  : profile
+                    ? 'Refresh profile'
+                    : 'Discover profile'}
+              </Button>
+            )}
+          </div>
         </div>
-        {result && (
-          <RepositoryStandards
-            key={repositoryId}
-            repositoryId={repositoryId}
-            canManage={canDiscover}
-          />
-        )}
-        {result && (
-          <RepositoryAssessments
-            key={repositoryId}
-            repositoryId={repositoryId}
-            canCreate={canDiscover}
-            initialSha={profile?.sourceSha ?? ''}
-          />
-        )}
-        {result && <RepositoryEvents repositoryId={repositoryId} />}
-        {result && (
-          <RepositoryCiEvidence
-            canImport={canDiscover}
-            key={repositoryId}
-            repositoryId={repositoryId}
-          />
-        )}
         {error && (
           <div
             role='alert'
-            className='mb-4 rounded-md border border-destructive/30 bg-destructive/5 p-4 text-sm'
+            className='flex flex-wrap items-start gap-3 rounded-md border border-destructive/30 bg-destructive/5 p-4 text-sm'
           >
-            <p>{error}</p>
+            <AlertTriangle
+              aria-hidden='true'
+              className='mt-0.5 size-4 shrink-0 text-destructive'
+            />
+            <p className='min-w-0 flex-1'>{error}</p>
             <Button
               size='sm'
               variant='outline'
               disabled={discovering}
-              className='mt-3'
               onClick={() => {
                 discovery.reset()
                 void profileQuery.refetch()
@@ -254,172 +462,79 @@ export function RepositoryProfilePage() {
             className='flex items-center gap-2 text-muted-foreground'
           >
             <LoaderCircle className='size-4 animate-spin' />
-            Loading repository profile…
+            Loading repository…
           </p>
-        ) : result && !profile ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>No profile discovered yet</CardTitle>
-              <CardDescription>
-                {canDiscover
-                  ? 'Discover the default branch to save its languages, tooling, and engineering control hints.'
-                  : 'Ask an Owner or Admin to discover this repository profile.'}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className='text-sm text-muted-foreground'>
-              Discovery reads GitHub metadata and selected manifests. Repository
-              commands and code are not executed.
-            </CardContent>
-          </Card>
         ) : (
-          profile && (
-            <>
-              <Card className='mb-4'>
-                <CardHeader>
-                  <div className='flex flex-wrap items-center justify-between gap-2'>
-                    <CardTitle>Inspected snapshot</CardTitle>
-                    <Badge variant='outline'>
-                      {profile.complete
-                        ? 'Inspection complete'
-                        : 'Partial inspection'}
-                    </Badge>
+          result && (
+            <Tabs value={tab} onValueChange={selectTab} className='gap-5'>
+              <TabsList className='no-scrollbar max-w-full flex-nowrap overflow-x-auto'>
+                <TabsTrigger value='overview'>Overview</TabsTrigger>
+                <TabsTrigger value='standards'>Standards</TabsTrigger>
+                <TabsTrigger value='assessments'>Assessments</TabsTrigger>
+                <TabsTrigger value='activity'>CI activity</TabsTrigger>
+              </TabsList>
+              <TabsContent value='overview' className='space-y-5'>
+                <PostureSummary
+                  repositoryId={repositoryId}
+                  profile={profile}
+                  filter={filter}
+                  onFilter={filterControls}
+                  onOpenTab={openTab}
+                />
+                <div className='grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]'>
+                  <div id='repository-controls' className='min-w-0 scroll-mt-4'>
+                    <RepositoryControls
+                      repositoryId={repositoryId}
+                      repositoryName={result.repository.fullName}
+                      filter={filter}
+                      onFilter={setFilter}
+                      onOpenTab={openTab}
+                    />
                   </div>
-                  <CardDescription>
-                    Captured {new Date(profile.createdAt).toLocaleString()}.
-                    Refresh to inspect the latest default-branch revision. This
-                    snapshot is not a validation result.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className='space-y-2 text-sm'>
-                  <p>
-                    Branch:{' '}
-                    <span className='font-medium'>{profile.branch}</span>
-                  </p>
-                  <p className='break-all'>
-                    Commit: <code>{profile.sourceSha}</code>
-                  </p>
-                  <p className='break-all'>
-                    Git tree: <code>{profile.treeSha}</code>
-                  </p>
-                  <p>
-                    {profile.report.inspectedFileCount} source/configuration
-                    file paths inspected.
-                  </p>
-                </CardContent>
-              </Card>
-              {profile.report.warnings.length > 0 && (
-                <div
-                  role='status'
-                  className='mb-4 rounded-md border p-4 text-sm'
-                >
-                  <p className='font-medium'>Inspection limits</p>
-                  <ul className='mt-2 list-disc space-y-1 ps-5'>
-                    {profile.report.warnings.map((warning) => (
-                      <li key={warning}>{warning}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              <Card className='mb-4'>
-                <CardHeader>
-                  <CardTitle>Controls to review</CardTitle>
-                  <CardDescription>
-                    Missing hints and unknown coverage need review. No
-                    engineering policy or execution result is inferred.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {gaps.length ? (
-                    <ul className='space-y-2'>
-                      {gaps.map((signal) => (
-                        <li
-                          key={signal.id}
-                          className='flex flex-wrap items-center justify-between gap-2 text-sm'
-                        >
-                          <span>{signal.label}</span>
-                          <Badge variant='outline'>
-                            {stateLabels[signal.state]}
-                          </Badge>
-                        </li>
-                      ))}
-                    </ul>
+                  {profile ? (
+                    <RepositoryFacts profile={profile} />
                   ) : (
-                    <p className='text-sm text-muted-foreground'>
-                      Configuration hints were detected for all listed controls.
-                      Their execution and effectiveness remain unverified.
-                    </p>
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>No profile yet</CardTitle>
+                        <CardDescription>
+                          {canDiscover
+                            ? 'Discover the default branch to detect its stack, tooling and control configuration.'
+                            : 'Ask an Owner or Admin to discover this repository.'}
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className='text-xs text-muted-foreground'>
+                        Discovery reads GitHub metadata and selected manifests.
+                        Repository code is not executed.
+                      </CardContent>
+                    </Card>
                   )}
-                </CardContent>
-              </Card>
-              <div className='grid gap-4 md:grid-cols-2'>
-                {profile.report.signals.map((signal) => (
-                  <Card key={signal.id}>
-                    <CardHeader>
-                      <div className='flex flex-wrap items-center justify-between gap-2'>
-                        <CardTitle className='text-base'>
-                          {signal.label}
-                        </CardTitle>
-                        <Badge variant='outline'>
-                          {stateLabels[signal.state]}
-                        </Badge>
-                      </div>
-                    </CardHeader>
-                    <CardContent className='space-y-3 text-sm'>
-                      {signal.observations.map((observation) => (
-                        <p key={observation} className='text-muted-foreground'>
-                          {observation}
-                        </p>
-                      ))}
-                      {signal.evidence.length ? (
-                        <details>
-                          <summary className='cursor-pointer font-medium'>
-                            File evidence ({signal.evidence.length})
-                          </summary>
-                          <ul className='mt-3 space-y-3'>
-                            {signal.evidence.map((file) => (
-                              <li
-                                key={`${file.path}-${file.blobSha}`}
-                                className='break-all'
-                              >
-                                <a
-                                  className='underline underline-offset-4'
-                                  href={`https://github.com/${profile.fullName.split('/').map(encodeURIComponent).join('/')}/blob/${profile.sourceSha}/${file.path.split('/').map(encodeURIComponent).join('/')}`}
-                                  target='_blank'
-                                  rel='noreferrer'
-                                >
-                                  {file.path}
-                                </a>
-                                <p className='mt-1 text-xs text-muted-foreground'>
-                                  Blob: {file.blobSha}
-                                </p>
-                              </li>
-                            ))}
-                          </ul>
-                        </details>
-                      ) : (
-                        <p className='text-muted-foreground'>
-                          {signal.state === 'unknown'
-                            ? 'Coverage could not be established from the inspected files.'
-                            : 'No supported configuration or source hint was detected.'}
-                        </p>
-                      )}
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-              <Card className='mt-4'>
-                <CardHeader>
-                  <CardTitle>Interpretation</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ul className='list-disc space-y-2 ps-5 text-sm text-muted-foreground'>
-                    {profile.report.limitations.map((limitation) => (
-                      <li key={limitation}>{limitation}</li>
-                    ))}
-                  </ul>
-                </CardContent>
-              </Card>
-            </>
+                </div>
+              </TabsContent>
+              <TabsContent value='standards'>
+                <RepositoryStandards
+                  key={repositoryId}
+                  repositoryId={repositoryId}
+                  canManage={canDiscover}
+                />
+              </TabsContent>
+              <TabsContent value='assessments'>
+                <RepositoryAssessments
+                  key={repositoryId}
+                  repositoryId={repositoryId}
+                  canCreate={canDiscover}
+                  initialSha={profile?.sourceSha ?? ''}
+                />
+              </TabsContent>
+              <TabsContent value='activity' className='space-y-5'>
+                <RepositoryCiEvidence
+                  canImport={canDiscover}
+                  key={repositoryId}
+                  repositoryId={repositoryId}
+                />
+                <RepositoryEvents repositoryId={repositoryId} />
+              </TabsContent>
+            </Tabs>
           )
         )}
       </Main>

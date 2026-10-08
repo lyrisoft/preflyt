@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { ConfigDrawer } from '@/components/config-drawer'
+import { AppBreadcrumbs } from '@/components/layout/app-breadcrumbs'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
@@ -145,8 +146,12 @@ export function Apps() {
 
   return (
     <>
-      <Header>
-        <Search className='me-auto' />
+      <Header fixed>
+        <AppBreadcrumbs
+          className='me-auto hidden sm:block'
+          items={[{ label: 'Repositories' }]}
+        />
+        <Search />
         <ThemeSwitch />
         <ConfigDrawer />
         <ProfileDropdown />

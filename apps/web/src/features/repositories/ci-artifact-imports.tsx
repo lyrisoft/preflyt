@@ -1,141 +1,42 @@
-import { useRef, useState } from 'react'
-import { API_BASE_URL } from '@/lib/api'
-import { Button } from '@/components/ui/button'
+import { RelativeTime } from './relative-time'
+import type { ArtifactSummary } from './repository-queries'
+import { sentence } from './repository-vocabulary'
 
-export type ArtifactSummary = {
-  id: string
-  format: 'junit' | 'sarif'
-  sha256: string
-  parserVersion: number
-  verification: string
-  summary: Record<string, number | boolean | string>
-  createdAt: string
-}
-
-export function CiArtifactImports({
-  repositoryId,
-  deliveryId,
-  artifacts,
-  canImport,
-  onImported,
-}: {
-  repositoryId: string
-  deliveryId: string
-  artifacts: ArtifactSummary[]
-  canImport: boolean
-  onImported: () => Promise<unknown>
-}) {
-  const input = useRef<HTMLInputElement>(null)
-  const format = useRef<'junit' | 'sarif'>('junit')
-  const [busy, setBusy] = useState(false)
-  const [message, setMessage] = useState('')
-  async function upload(file: File) {
-    setBusy(true)
-    setMessage('')
-    try {
-      if (!file.size || file.size > 256 * 1024)
-        throw new Error('Choose a UTF-8 report up to 256 KiB.')
-      const bytes = await file.arrayBuffer()
-      const content = new TextDecoder('utf-8', {
-        fatal: true,
-        ignoreBOM: true,
-      }).decode(bytes)
-      const digest = await crypto.subtle.digest('SHA-256', bytes)
-      const sha256 = Array.from(new Uint8Array(digest), (byte) =>
-        byte.toString(16).padStart(2, '0')
-      ).join('')
-      const response = await fetch(
-        `${API_BASE_URL}/github/repositories/${encodeURIComponent(repositoryId)}/ci-evidence/${encodeURIComponent(deliveryId)}/artifacts`,
-        {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ format: format.current, content, sha256 }),
-        }
-      )
-      if (!response.ok)
-        throw new Error(
-          response.status === 429
-            ? 'This observation already has ten reports.'
-            : response.status === 400
-              ? 'Report rejected. Check its format, counts and import limits.'
-              : 'Import failed. Check your session and repository access.'
-        )
-      await onImported()
-      setMessage('Report imported.')
-    } catch (error) {
-      setMessage(
-        error instanceof TypeError
-          ? 'Choose a valid UTF-8 report, or check your connection.'
-          : error instanceof Error
-            ? error.message
-            : 'Import failed.'
-      )
-    } finally {
-      setBusy(false)
-      if (input.current) input.current.value = ''
-    }
-  }
+/** Reports an administrator attached to one CI result. */
+export function ReportList({ artifacts }: { artifacts: ArtifactSummary[] }) {
+  if (artifacts.length === 0)
+    return <p className='text-sm text-muted-foreground'>No reports imported.</p>
   return (
-    <div className='mt-3 space-y-2 text-xs'>
+    <ul className='divide-y rounded-md border'>
       {artifacts.map((artifact) => (
-        <details key={artifact.id}>
-          <summary className='cursor-pointer'>
-            {artifact.format === 'junit' ? 'JUnit' : 'SARIF'} report · admin
-            upload
-          </summary>
-          <div className='mt-2 space-y-1 break-all'>
-            <p>Associated by an administrator. CI origin is unverified.</p>
-            <p>SHA-256: {artifact.sha256}</p>
-            <p>
+        <li key={artifact.id} className='space-y-1 p-3 text-sm'>
+          <p className='flex flex-wrap items-center justify-between gap-2'>
+            <span className='font-medium'>
+              {artifact.format === 'junit' ? 'JUnit' : 'SARIF'} report
+            </span>
+            <span className='text-xs text-muted-foreground'>
               Parser v{artifact.parserVersion} ·{' '}
-              {new Date(artifact.createdAt).toLocaleString()}
-            </p>
-            {Object.entries(artifact.summary).map(([key, value]) => (
-              <p key={key}>
-                {key}: {String(value)}
-              </p>
-            ))}
-          </div>
-        </details>
-      ))}
-      {canImport && (
-        <>
-          <p className='text-muted-foreground'>
-            Upload a report for this exact CI observation. It does not establish
-            a quality gate.
+              <RelativeTime value={artifact.createdAt} />
+            </span>
           </p>
-          <input
-            ref={input}
-            type='file'
-            hidden
-            accept='.xml,.json,.sarif'
-            onChange={(event) => {
-              const file = event.target.files?.[0]
-              if (file) void upload(file)
-            }}
-          />
-          <div className='flex flex-wrap gap-2'>
-            {(['junit', 'sarif'] as const).map((value) => (
-              <Button
-                key={value}
-                type='button'
-                size='sm'
-                variant='outline'
-                disabled={busy || artifacts.length >= 10}
-                onClick={() => {
-                  format.current = value
-                  input.current?.click()
-                }}
-              >
-                Import {value === 'junit' ? 'JUnit' : 'SARIF'}
-              </Button>
+          <p className='text-xs text-muted-foreground'>
+            Uploaded by an administrator; CI origin is unverified.
+          </p>
+          <p className='flex flex-wrap gap-x-3 gap-y-1 text-xs'>
+            {Object.entries(artifact.summary).map(([key, value]) => (
+              <span key={key}>
+                <span className='text-muted-foreground'>{sentence(key)}</span>{' '}
+                <span className='font-medium tabular-nums'>
+                  {String(value)}
+                </span>
+              </span>
             ))}
-          </div>
-        </>
-      )}
-      {busy && <p role='status'>Importing report…</p>}
-      {message && <p role='status'>{message}</p>}
-    </div>
+          </p>
+          <p className='font-mono text-xs break-all text-muted-foreground'>
+            SHA-256 {artifact.sha256}
+          </p>
+        </li>
+      ))}
+    </ul>
   )
 }

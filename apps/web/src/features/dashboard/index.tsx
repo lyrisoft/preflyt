@@ -11,9 +11,9 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { ConfigDrawer } from '@/components/config-drawer'
+import { AppBreadcrumbs } from '@/components/layout/app-breadcrumbs'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
-import { TopNav } from '@/components/layout/top-nav'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
@@ -73,8 +73,11 @@ export function Dashboard() {
 
   return (
     <>
-      <Header>
-        <TopNav links={topNav} className='me-auto' />
+      <Header fixed>
+        <AppBreadcrumbs
+          className='me-auto hidden sm:block'
+          items={[{ label: 'Overview' }]}
+        />
         <Search />
         <ThemeSwitch />
         <ConfigDrawer />
@@ -231,18 +234,3 @@ export function Dashboard() {
     </>
   )
 }
-
-const topNav = [
-  {
-    title: 'Overview',
-    href: '/',
-    isActive: true,
-    disabled: false,
-  },
-  {
-    title: 'Repositories',
-    href: '/apps',
-    isActive: false,
-    disabled: false,
-  },
-]

@@ -1,10 +1,10 @@
 import { useQuery } from '@tanstack/react-query'
 import { RefreshCw } from 'lucide-react'
 import { API_BASE_URL } from '@/lib/api'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -18,6 +18,14 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { StatusBadge } from '@/components/status-badge'
+import { RelativeTime } from './relative-time'
+import {
+  deliveryStatus,
+  sentence,
+  sourceLabel,
+  type DeliveryState,
+} from './repository-vocabulary'
 
 type Delivery = {
   id: string
@@ -28,23 +36,11 @@ type Delivery = {
   sourceNumber: number | null
   sourceStatus: string | null
   sourceConclusion: string | null
-  state: 'RECEIVED' | 'PROCESSED' | 'IGNORED' | 'FAILED'
+  state: DeliveryState
   reason: string | null
   receivedAt: string
 }
 type Events = { enabled: boolean; deliveries: Delivery[] }
-const states = {
-  RECEIVED: 'Awaiting worker',
-  PROCESSED: 'Recorded',
-  IGNORED: 'Access changed',
-  FAILED: 'Processing failed',
-}
-const sources: Record<string, string> = {
-  pull_request: 'Pull request',
-  workflow_run: 'Workflow run',
-  check_run: 'Check run',
-}
-
 export function RepositoryEvents({ repositoryId }: { repositoryId: string }) {
   const query = useQuery<Events>({
     queryKey: ['repository-events', repositoryId],
@@ -68,91 +64,95 @@ export function RepositoryEvents({ repositoryId }: { repositoryId: string }) {
     },
   })
   return (
-    <Card className='mb-6'>
-      <CardHeader className='flex flex-row items-start justify-between gap-4'>
-        <div>
-          <CardTitle>Pull request and CI events</CardTitle>
-          <CardDescription className='mt-2'>
-            Recent GitHub deliveries at their reported commit revisions.
-          </CardDescription>
-        </div>
-        <Button
-          variant='outline'
-          size='icon'
-          aria-label='Refresh GitHub events'
-          disabled={query.isFetching}
-          onClick={() => void query.refetch()}
-        >
-          <RefreshCw className={query.isFetching ? 'animate-spin' : ''} />
-        </Button>
+    <Card className='gap-4'>
+      <CardHeader>
+        <CardTitle>Pull request and CI events</CardTitle>
+        <CardDescription>
+          Recent GitHub deliveries at their reported commit revisions.
+        </CardDescription>
+        <CardAction>
+          <Button
+            variant='outline'
+            size='icon'
+            className='size-8'
+            aria-label='Refresh GitHub events'
+            disabled={query.isFetching}
+            onClick={() => void query.refetch()}
+          >
+            <RefreshCw className={query.isFetching ? 'animate-spin' : ''} />
+          </Button>
+        </CardAction>
       </CardHeader>
-      <CardContent>
+      <CardContent className='px-0'>
         {query.isPending ? (
-          <p role='status' className='text-sm text-muted-foreground'>
+          <p role='status' className='px-6 text-sm text-muted-foreground'>
             Loading GitHub events…
           </p>
         ) : query.isError ? (
-          <p role='alert' className='text-sm text-destructive'>
+          <p role='alert' className='px-6 text-sm text-destructive'>
             {query.error.message}
           </p>
         ) : (
           <>
             {!query.data.enabled && (
-              <p className='mb-3 text-sm text-muted-foreground'>
+              <p className='mb-3 px-6 text-sm text-muted-foreground'>
                 GitHub event collection is not configured for this deployment.
               </p>
             )}
             {query.data.deliveries.length === 0 ? (
-              <p className='text-sm text-muted-foreground'>
-                No pull request or CI events have been received for this
-                selected repository.
+              <p className='px-6 text-sm text-muted-foreground'>
+                No pull request or CI events received yet.
               </p>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Source</TableHead>
+                    <TableHead className='ps-6'>Source</TableHead>
                     <TableHead>Commit</TableHead>
                     <TableHead>GitHub state</TableHead>
                     <TableHead>Processing</TableHead>
-                    <TableHead>Received</TableHead>
+                    <TableHead className='pe-6'>Received</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {query.data.deliveries.map((delivery) => (
                     <TableRow key={delivery.id}>
-                      <TableCell>
-                        <p className='whitespace-nowrap'>
-                          {sources[delivery.event] ?? delivery.event} #
-                          {delivery.sourceNumber ?? delivery.sourceObjectId}
+                      <TableCell className='ps-6'>
+                        <p className='font-medium whitespace-nowrap'>
+                          {sourceLabel(
+                            delivery.event,
+                            delivery.sourceNumber ?? delivery.sourceObjectId
+                          )}
                         </p>
                         <p className='text-xs text-muted-foreground'>
-                          {delivery.action}
+                          {sentence(delivery.action)}
                         </p>
                       </TableCell>
                       <TableCell>
                         <code className='text-xs' title={delivery.sourceSha}>
-                          {delivery.sourceSha.slice(0, 12)}
+                          {delivery.sourceSha.slice(0, 7)}
                         </code>
                       </TableCell>
-                      <TableCell>
-                        {delivery.sourceConclusion ??
-                          delivery.sourceStatus ??
-                          'Unknown'}
+                      <TableCell className='text-sm'>
+                        {(delivery.sourceConclusion ??
+                        delivery.sourceStatus) ? (
+                          sentence(
+                            (delivery.sourceConclusion ??
+                              delivery.sourceStatus)!
+                          )
+                        ) : (
+                          <span className='text-muted-foreground'>
+                            Not reported
+                          </span>
+                        )}
                       </TableCell>
                       <TableCell>
-                        <Badge
-                          variant={
-                            delivery.state === 'FAILED'
-                              ? 'destructive'
-                              : 'secondary'
-                          }
-                        >
-                          {states[delivery.state]}
-                        </Badge>
+                        <StatusBadge tone={deliveryStatus[delivery.state].tone}>
+                          {deliveryStatus[delivery.state].label}
+                        </StatusBadge>
                       </TableCell>
-                      <TableCell className='text-xs whitespace-nowrap'>
-                        {new Date(delivery.receivedAt).toLocaleString()}
+                      <TableCell className='pe-6 text-xs whitespace-nowrap text-muted-foreground'>
+                        <RelativeTime value={delivery.receivedAt} />
                       </TableCell>
                     </TableRow>
                   ))}

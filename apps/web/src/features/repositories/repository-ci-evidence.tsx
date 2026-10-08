@@ -1,16 +1,28 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { RefreshCw } from 'lucide-react'
-import { API_BASE_URL } from '@/lib/api'
-import { Badge } from '@/components/ui/badge'
+import { FileUp, MoreHorizontal, RefreshCw, ScrollText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import {
   Table,
@@ -20,31 +32,71 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { CiArtifactImports, type ArtifactSummary } from './ci-artifact-imports'
+import { StatusBadge } from '@/components/status-badge'
+import { ReportList } from './ci-artifact-imports'
+import { RelativeTime } from './relative-time'
+import { useCiEvidence, type CiObservation } from './repository-queries'
+import { ciResultStatus, sentence, sourceLabel } from './repository-vocabulary'
+import { useReportImport } from './use-report-import'
 
-type Observation = {
-  artifacts: ArtifactSummary[]
-  sourceAction: string
-  deliveryId: string
-  version: number
-  sourceSha: string
-  sourceKind: string
-  sourceObjectId: string
-  sourceStatus: string | null
-  sourceConclusion: string | null
-  sourceUpdatedAt: string | null
-  result: 'SUCCEEDED' | 'FAILED' | 'PENDING' | 'NOT_EXECUTED' | 'UNKNOWN'
-  sourcePayloadHash: string
-  evidenceHash: string
-  observedAt: string
+function providerDetail(item: CiObservation) {
+  return [item.sourceStatus, item.sourceConclusion]
+    .filter((value): value is string => !!value)
+    .map(sentence)
+    .join(' · ')
 }
-type Evidence = { enabled: boolean; observations: Observation[] }
-const labels = {
-  SUCCEEDED: 'Provider succeeded',
-  FAILED: 'Provider failed',
-  PENDING: 'Pending',
-  NOT_EXECUTED: 'Not executed',
-  UNKNOWN: 'Unknown',
+
+function DeliveryDialog({
+  item,
+  onClose,
+}: {
+  item: CiObservation | null
+  onClose: () => void
+}) {
+  return (
+    <Dialog open={!!item} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className='sm:max-w-2xl'>
+        {item && (
+          <>
+            <DialogHeader>
+              <DialogTitle>
+                {sourceLabel(item.sourceKind, item.sourceObjectId)}
+              </DialogTitle>
+              <DialogDescription>
+                Signed GitHub delivery at commit{' '}
+                <code>{item.sourceSha.slice(0, 12)}</code>.
+              </DialogDescription>
+            </DialogHeader>
+            <dl className='grid gap-x-4 gap-y-2 text-xs sm:grid-cols-[max-content_1fr]'>
+              <dt className='text-muted-foreground'>Provider result</dt>
+              <dd>
+                {ciResultStatus[item.result].label}
+                {providerDetail(item) && ` (${providerDetail(item)})`}
+              </dd>
+              <dt className='text-muted-foreground'>Provider timestamp</dt>
+              <dd>
+                {item.sourceUpdatedAt
+                  ? new Date(item.sourceUpdatedAt).toLocaleString()
+                  : 'Not reported'}
+              </dd>
+              <dt className='text-muted-foreground'>Delivery</dt>
+              <dd className='font-mono break-all'>{item.deliveryId}</dd>
+              <dt className='text-muted-foreground'>Commit</dt>
+              <dd className='font-mono break-all'>{item.sourceSha}</dd>
+              <dt className='text-muted-foreground'>
+                Evidence SHA-256 (v{item.version})
+              </dt>
+              <dd className='font-mono break-all'>{item.evidenceHash}</dd>
+              <dt className='text-muted-foreground'>Signed delivery digest</dt>
+              <dd className='font-mono break-all'>{item.sourcePayloadHash}</dd>
+            </dl>
+            <h3 className='text-sm font-medium'>Reports</h3>
+            <ReportList artifacts={item.artifacts} />
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  )
 }
 
 export function RepositoryCiEvidence({
@@ -56,191 +108,197 @@ export function RepositoryCiEvidence({
 }) {
   const [draft, setDraft] = useState('')
   const [sha, setSha] = useState('')
+  const [details, setDetails] = useState<string | null>(null)
   const valid = draft === '' || /^[a-f0-9]{40}$/i.test(draft)
-  const query = useQuery<Evidence>({
-    queryKey: ['ci-evidence', repositoryId, sha],
-    retry: false,
-    refetchInterval: (query) => (query.state.data?.enabled ? 10_000 : false),
-    queryFn: async ({ signal }) => {
-      const response = await fetch(
-        `${API_BASE_URL}/github/repositories/${encodeURIComponent(repositoryId)}/ci-evidence${sha ? `?sha=${encodeURIComponent(sha)}` : ''}`,
-        { credentials: 'include', signal }
-      )
-      if (!response.ok)
-        throw new Error(
-          response.status === 403
-            ? 'Repository selection or access changed. Reload the profile.'
-            : 'Could not load CI evidence. Try again.'
-        )
-      return response.json() as Promise<Evidence>
-    },
+  const query = useCiEvidence(repositoryId, sha, { poll: true })
+  const reports = useReportImport({
+    repositoryId,
+    onImported: () => query.refetch(),
   })
+  const observations = query.data?.observations ?? []
+  const detailItem =
+    observations.find((item) => item.deliveryId === details) ?? null
   return (
-    <Card className='mb-6'>
-      <CardHeader className='flex flex-row items-start justify-between gap-4'>
-        <div>
-          <CardTitle>Imported CI evidence</CardTitle>
-          <CardDescription className='mt-2'>
-            GitHub-reported observations at exact commits. Preflyt has not
-            evaluated a quality gate.
-          </CardDescription>
-        </div>
-        <Button
-          variant='outline'
-          size='icon'
-          aria-label='Refresh CI evidence'
-          disabled={query.isFetching}
-          onClick={() => void query.refetch()}
-        >
-          <RefreshCw className={query.isFetching ? 'animate-spin' : ''} />
-        </Button>
+    <Card className='gap-4'>
+      <CardHeader>
+        <CardTitle>CI results</CardTitle>
+        <CardDescription>
+          Latest 50 GitHub check and workflow results at exact commits.
+        </CardDescription>
+        <CardAction>
+          <Button
+            variant='outline'
+            size='icon'
+            className='size-8'
+            aria-label='Refresh CI results'
+            disabled={query.isFetching}
+            onClick={() => void query.refetch()}
+          >
+            <RefreshCw className={query.isFetching ? 'animate-spin' : ''} />
+          </Button>
+        </CardAction>
       </CardHeader>
-      <CardContent>
+      <CardContent className='space-y-4 px-0'>
         <form
-          className='mb-4 flex flex-wrap items-end gap-2'
+          className='flex max-w-xl flex-wrap items-center gap-2 px-6'
           onSubmit={(event) => {
             event.preventDefault()
             if (valid) setSha(draft.toLowerCase())
           }}
         >
-          <div className='min-w-0 flex-1'>
-            <label
-              htmlFor='ci-evidence-sha'
-              className='mb-2 block text-sm font-medium'
-            >
-              Commit filter
-            </label>
-            <Input
-              id='ci-evidence-sha'
-              value={draft}
-              maxLength={40}
-              placeholder='Full commit SHA, or leave empty for history'
-              aria-invalid={!valid}
-              onChange={(event) => setDraft(event.target.value)}
-            />
-          </div>
-          <Button type='submit' variant='outline' disabled={!valid}>
-            Apply filter
+          <Input
+            aria-label='Filter by commit SHA'
+            value={draft}
+            maxLength={40}
+            className='h-8 min-w-0 flex-1 font-mono text-xs'
+            placeholder='Filter by full commit SHA'
+            aria-invalid={!valid}
+            onChange={(event) => setDraft(event.target.value.trim())}
+          />
+          <Button type='submit' size='sm' variant='outline' disabled={!valid}>
+            Apply
           </Button>
+          {sha && (
+            <Button
+              type='button'
+              size='sm'
+              variant='ghost'
+              onClick={() => {
+                setDraft('')
+                setSha('')
+              }}
+            >
+              Clear
+            </Button>
+          )}
+          {!valid && (
+            <p className='w-full text-xs text-destructive'>
+              Enter all 40 characters of a commit SHA.
+            </p>
+          )}
         </form>
-        {!valid && (
-          <p className='mb-3 text-sm text-destructive'>
-            Enter all 40 characters of a commit SHA.
-          </p>
-        )}
         {query.isPending ? (
-          <p role='status' className='text-sm text-muted-foreground'>
-            Loading CI evidence…
+          <p role='status' className='px-6 text-sm text-muted-foreground'>
+            Loading CI results…
           </p>
         ) : query.isError ? (
-          <p role='alert' className='text-sm text-destructive'>
+          <p role='alert' className='px-6 text-sm text-destructive'>
             {query.error.message}
           </p>
+        ) : observations.length === 0 ? (
+          <p className='px-6 text-sm text-muted-foreground'>
+            {!query.data.enabled
+              ? 'GitHub event collection is not configured.'
+              : sha
+                ? 'No CI results for this commit.'
+                : 'No CI results yet. They appear after the worker processes check or workflow events.'}
+          </p>
         ) : (
-          <>
-            {!query.data.enabled && (
-              <p className='mb-3 text-sm text-muted-foreground'>
-                GitHub event collection is not configured.
-              </p>
-            )}
-            {query.data.observations.length === 0 ? (
-              <p className='text-sm text-muted-foreground'>
-                No imported CI evidence{sha ? ' for this commit' : ''}. Evidence
-                appears after the worker processes new check or workflow events.
-              </p>
-            ) : (
-              <>
-                <p className='mb-3 text-xs text-muted-foreground'>
-                  Latest 50 received observations. Reruns and late deliveries
-                  remain separate history; these rows do not establish current
-                  PR readiness.
-                </p>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Source</TableHead>
-                      <TableHead>Commit</TableHead>
-                      <TableHead>Result</TableHead>
-                      <TableHead>Received</TableHead>
-                      <TableHead>Provenance</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {query.data.observations.map((item) => (
-                      <TableRow key={item.deliveryId}>
-                        <TableCell className='whitespace-nowrap'>
-                          {item.sourceKind === 'check_run'
-                            ? 'Check'
-                            : 'Workflow'}{' '}
-                          #{item.sourceObjectId}
-                        </TableCell>
-                        <TableCell>
-                          <code title={item.sourceSha} className='text-xs'>
-                            {item.sourceSha.slice(0, 12)}
-                          </code>
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={
-                              item.result === 'FAILED'
-                                ? 'destructive'
-                                : 'secondary'
-                            }
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className='ps-6'>Source</TableHead>
+                <TableHead>Commit</TableHead>
+                <TableHead>Provider result</TableHead>
+                <TableHead>Reports</TableHead>
+                <TableHead>Received</TableHead>
+                <TableHead className='w-12 pe-6'>
+                  <span className='sr-only'>Actions</span>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {observations.map((item) => {
+                const status = ciResultStatus[item.result]
+                const importable =
+                  canImport &&
+                  item.sourceStatus === 'completed' &&
+                  item.sourceAction === 'completed' &&
+                  item.artifacts.length < 10
+                const label = sourceLabel(item.sourceKind, item.sourceObjectId)
+                return (
+                  <TableRow key={item.deliveryId}>
+                    <TableCell className='ps-6 font-medium'>{label}</TableCell>
+                    <TableCell>
+                      <code className='text-xs' title={item.sourceSha}>
+                        {item.sourceSha.slice(0, 7)}
+                      </code>
+                    </TableCell>
+                    <TableCell>
+                      <div className='flex items-center gap-2'>
+                        <StatusBadge tone={status.tone}>
+                          {status.label}
+                        </StatusBadge>
+                        {item.result === 'UNKNOWN' && providerDetail(item) && (
+                          <span className='text-xs text-muted-foreground'>
+                            {providerDetail(item)}
+                          </span>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className='text-xs text-muted-foreground tabular-nums'>
+                      {reports.busy === item.deliveryId
+                        ? 'Importing…'
+                        : item.artifacts.length
+                          ? `${item.artifacts.length} report${item.artifacts.length === 1 ? '' : 's'}`
+                          : 'None'}
+                    </TableCell>
+                    <TableCell className='text-xs text-muted-foreground'>
+                      <RelativeTime value={item.observedAt} />
+                    </TableCell>
+                    <TableCell className='pe-6 text-end'>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant='ghost'
+                            size='icon'
+                            className='size-8'
+                            aria-label={`Actions for ${label}`}
                           >
-                            {labels[item.result]}
-                          </Badge>
-                          <p className='mt-1 text-xs text-muted-foreground'>
-                            {item.sourceStatus ?? 'unknown'} ·{' '}
-                            {item.sourceConclusion ?? 'no conclusion'}
-                          </p>
-                        </TableCell>
-                        <TableCell className='text-xs whitespace-nowrap'>
-                          {new Date(item.observedAt).toLocaleString()}
-                        </TableCell>
-                        <TableCell>
-                          <details className='max-w-64 text-xs'>
-                            <summary className='cursor-pointer'>
-                              Signed delivery
-                            </summary>
-                            <dl className='mt-2 space-y-1 break-all'>
-                              <dt>Delivery</dt>
-                              <dd>{item.deliveryId}</dd>
-                              <dt>Commit</dt>
-                              <dd>{item.sourceSha}</dd>
-                              <dt>Evidence SHA-256 (v{item.version})</dt>
-                              <dd>{item.evidenceHash}</dd>
-                              <dt>Signed delivery digest</dt>
-                              <dd>{item.sourcePayloadHash}</dd>
-                              <dt>Provider timestamp</dt>
-                              <dd>
-                                {item.sourceUpdatedAt
-                                  ? new Date(
-                                      item.sourceUpdatedAt
-                                    ).toLocaleString()
-                                  : 'Not reported'}
-                              </dd>
-                            </dl>
-                          </details>
-                          <CiArtifactImports
-                            repositoryId={repositoryId}
-                            deliveryId={item.deliveryId}
-                            artifacts={item.artifacts}
-                            canImport={
-                              canImport &&
-                              item.sourceStatus === 'completed' &&
-                              item.sourceAction === 'completed'
-                            }
-                            onImported={() => query.refetch()}
-                          />
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </>
-            )}
-          </>
+                            <MoreHorizontal />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align='end'>
+                          <DropdownMenuItem
+                            onSelect={() => setDetails(item.deliveryId)}
+                          >
+                            <ScrollText aria-hidden='true' />
+                            Delivery details
+                          </DropdownMenuItem>
+                          {importable && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                disabled={!!reports.busy}
+                                onSelect={() =>
+                                  reports.choose(item.deliveryId, 'junit')
+                                }
+                              >
+                                <FileUp aria-hidden='true' />
+                                Import JUnit report
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                disabled={!!reports.busy}
+                                onSelect={() =>
+                                  reports.choose(item.deliveryId, 'sarif')
+                                }
+                              >
+                                <FileUp aria-hidden='true' />
+                                Import SARIF report
+                              </DropdownMenuItem>
+                            </>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
         )}
+        <input {...reports.inputProps} />
+        <DeliveryDialog item={detailItem} onClose={() => setDetails(null)} />
       </CardContent>
     </Card>
   )

@@ -1,10 +1,12 @@
 import { useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { AlertTriangle, Plus, RefreshCw } from 'lucide-react'
 import { API_BASE_URL } from '@/lib/api'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -18,9 +20,40 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { StatusBadge } from '@/components/status-badge'
+import { RelativeTime } from './relative-time'
+import {
+  useAssessmentList,
+  useCiEvidence,
+  useStandards,
+  type AssessmentListItem,
+} from './repository-queries'
+import {
+  ciResultStatus,
+  coverageStatus,
+  sentence,
+  sourceLabel,
+  type CiResult,
+} from './repository-vocabulary'
 
-type ListItem = { id: string; sourceSha: string; createdAt: string }
-type Assessment = ListItem & {
+type Assessment = AssessmentListItem & {
   assessmentHash: string
   selectionId: string
   request: {
@@ -43,7 +76,7 @@ type Assessment = ListItem & {
       title: string
       required: boolean
       coverage: string
-      providerResult: string | null
+      providerResult: CiResult | null
       freshness: string
       deliveryId: string | null
       reason: string
@@ -65,31 +98,7 @@ type Assessment = ListItem & {
     }[]
   }
 }
-type Standards = {
-  selection: { id: string } | null
-  selectionIntegrity: boolean
-  controls: { id: string; title: string }[]
-}
-type Evidence = {
-  observations: {
-    deliveryId: string
-    sourceKind: string
-    sourceObjectId: string
-    result: string
-    observedAt: string
-  }[]
-}
-async function read<T>(path: string, signal: AbortSignal): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    credentials: 'include',
-    signal,
-  })
-  if (!response.ok)
-    throw new Error(
-      'Could not load assessment inputs. Check your session and repository access.'
-    )
-  return response.json() as Promise<T>
-}
+
 function AssessmentCreator({
   repositoryId,
   initialSha,
@@ -103,25 +112,8 @@ function AssessmentCreator({
   const [mappings, setMappings] = useState<Record<string, string>>({})
   const key = useRef(crypto.randomUUID())
   const valid = /^[a-f0-9]{40}$/i.test(sha)
-  const standards = useQuery({
-    queryKey: ['repository-standards', repositoryId],
-    retry: false,
-    queryFn: ({ signal }) =>
-      read<Standards>(
-        `/github/repositories/${encodeURIComponent(repositoryId)}/standards`,
-        signal
-      ),
-  })
-  const evidence = useQuery({
-    queryKey: ['ci-evidence', repositoryId, sha],
-    enabled: valid,
-    retry: false,
-    queryFn: ({ signal }) =>
-      read<Evidence>(
-        `/github/repositories/${encodeURIComponent(repositoryId)}/ci-evidence?sha=${sha}`,
-        signal
-      ),
-  })
+  const standards = useStandards(repositoryId)
+  const evidence = useCiEvidence(repositoryId, sha, { enabled: valid })
   const mutation = useMutation({
     mutationFn: async () => {
       const response = await fetch(
@@ -155,18 +147,18 @@ function AssessmentCreator({
       onCreated(assessment.id)
     },
   })
+  const ready = standards.data?.selection && standards.data.selectionIntegrity
   return (
-    <details className='rounded-md border p-3'>
-      <summary className='cursor-pointer text-sm font-medium'>
-        Create commit assessment
-      </summary>
-      <div className='mt-4 space-y-4'>
+    <>
+      <div className='flex-1 space-y-5 overflow-y-auto px-4'>
         <label className='block space-y-2 text-sm'>
-          <span>Exact commit SHA</span>
+          <span className='font-medium'>Commit SHA</span>
           <Input
             value={sha}
             maxLength={40}
             placeholder='Full 40-character SHA'
+            className='font-mono text-xs'
+            aria-invalid={sha !== '' && !valid}
             disabled={mutation.isPending}
             onChange={(event) => {
               setSha(event.target.value.trim().toLowerCase())
@@ -174,71 +166,65 @@ function AssessmentCreator({
               key.current = crypto.randomUUID()
             }}
           />
+          <span className='block text-xs text-muted-foreground'>
+            Defaults to the profiled commit.
+          </span>
         </label>
-        <p className='text-sm text-muted-foreground'>
-          Associations are administrative claims, not verified check coverage.
-          Provider success cannot produce Preflyt PASS.
-        </p>
         {standards.isError ? (
-          <p role='alert'>{standards.error.message}</p>
+          <p role='alert' className='text-sm text-destructive'>
+            {standards.error.message}
+          </p>
         ) : !standards.data?.selection ? (
           <p className='text-sm'>Save a standards selection first.</p>
         ) : !standards.data.selectionIntegrity ? (
-          <p role='alert'>
+          <p role='alert' className='text-sm text-destructive'>
             Review the saved pack versions and digests before creating an
             assessment.
           </p>
         ) : (
-          <>
-            {evidence.isError && <p role='alert'>{evidence.error.message}</p>}
-            <div className='space-y-3'>
-              {standards.data.controls.map((rule) => (
-                <label key={rule.id} className='block space-y-2 text-sm'>
-                  <span>{rule.title}</span>
-                  <Select
-                    value={mappings[rule.id] ?? 'none'}
-                    disabled={
-                      !valid || evidence.isFetching || mutation.isPending
-                    }
-                    onValueChange={(value) => {
-                      setMappings((old) => ({ ...old, [rule.id]: value }))
-                      key.current = crypto.randomUUID()
-                    }}
+          <fieldset className='space-y-3'>
+            <legend className='mb-1 text-sm font-medium'>
+              CI result per control
+            </legend>
+            <p className='text-xs text-muted-foreground'>
+              Optional. Associations are your claim, recorded as unverified.
+            </p>
+            {evidence.isError && (
+              <p role='alert' className='text-sm text-destructive'>
+                {evidence.error.message}
+              </p>
+            )}
+            {standards.data.controls.map((rule) => (
+              <label key={rule.id} className='block space-y-1.5 text-sm'>
+                <span>{rule.title}</span>
+                <Select
+                  value={mappings[rule.id] ?? 'none'}
+                  disabled={!valid || evidence.isFetching || mutation.isPending}
+                  onValueChange={(value) => {
+                    setMappings((old) => ({ ...old, [rule.id]: value }))
+                    key.current = crypto.randomUUID()
+                  }}
+                >
+                  <SelectTrigger
+                    className='w-full'
+                    aria-label={`CI result for ${rule.title}`}
                   >
-                    <SelectTrigger
-                      aria-label={`CI observation for ${rule.title}`}
-                    >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value='none'>No association</SelectItem>
-                      {evidence.data?.observations.map((item) => (
-                        <SelectItem
-                          key={item.deliveryId}
-                          value={item.deliveryId}
-                        >
-                          {item.sourceKind} #{item.sourceObjectId} ·{' '}
-                          {item.result} ·{' '}
-                          {new Date(item.observedAt).toLocaleString()}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </label>
-              ))}
-            </div>
-            <Button
-              disabled={
-                !valid ||
-                mutation.isPending ||
-                evidence.isFetching ||
-                evidence.isError
-              }
-              onClick={() => mutation.mutate()}
-            >
-              {mutation.isPending ? 'Creating…' : 'Create assessment snapshot'}
-            </Button>
-          </>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value='none'>No association</SelectItem>
+                    {evidence.data?.observations.map((item) => (
+                      <SelectItem key={item.deliveryId} value={item.deliveryId}>
+                        {sourceLabel(item.sourceKind, item.sourceObjectId)} ·{' '}
+                        {ciResultStatus[item.result].label} ·{' '}
+                        {new Date(item.observedAt).toLocaleString()}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </label>
+            ))}
+          </fieldset>
         )}
         {mutation.error && (
           <p role='alert' className='text-sm text-destructive'>
@@ -246,9 +232,24 @@ function AssessmentCreator({
           </p>
         )}
       </div>
-    </details>
+      <SheetFooter className='border-t'>
+        <Button
+          disabled={
+            !ready ||
+            !valid ||
+            mutation.isPending ||
+            evidence.isFetching ||
+            evidence.isError
+          }
+          onClick={() => mutation.mutate()}
+        >
+          {mutation.isPending ? 'Creating…' : 'Create snapshot'}
+        </Button>
+      </SheetFooter>
+    </>
   )
 }
+
 export function RepositoryAssessments({
   repositoryId,
   canCreate,
@@ -260,186 +261,298 @@ export function RepositoryAssessments({
 }) {
   const client = useQueryClient()
   const [selected, setSelected] = useState<string | null>(null)
-  const history = useQuery({
-    queryKey: ['assessments', repositoryId],
-    retry: false,
-    queryFn: ({ signal }) =>
-      read<{ assessments: ListItem[] }>(
-        `/github/repositories/${encodeURIComponent(repositoryId)}/assessments`,
-        signal
-      ),
-  })
+  const [creating, setCreating] = useState(false)
+  const history = useAssessmentList(repositoryId)
   const current = selected ?? history.data?.assessments[0]?.id
   const detail = useQuery({
     queryKey: ['assessment', repositoryId, current],
     retry: false,
     enabled: !!current && !history.isError,
-    queryFn: ({ signal }) =>
-      read<Assessment>(
-        `/github/repositories/${encodeURIComponent(repositoryId)}/assessments/${current}`,
-        signal
-      ),
+    queryFn: async ({ signal }) => {
+      const response = await fetch(
+        `${API_BASE_URL}/github/repositories/${encodeURIComponent(repositoryId)}/assessments/${current}`,
+        { credentials: 'include', signal }
+      )
+      if (!response.ok)
+        throw new Error(
+          'Could not load this snapshot. Check your session and repository access.'
+        )
+      return response.json() as Promise<Assessment>
+    },
   })
   const data = detail.data
+  const sources = new Map(
+    data?.report.observations.map((item) => [
+      item.deliveryId,
+      sourceLabel(item.sourceKind, item.sourceObjectId),
+    ])
+  )
+  const configFound =
+    data?.report.checks.filter((c) => c.coverage === 'CONFIGURATION_OBSERVED')
+      .length ?? 0
+  const withCi = data?.report.checks.filter((c) => c.deliveryId).length ?? 0
+  const coverage = data ? coverageStatus(data.report.coverage) : null
   return (
-    <Card className='mb-6'>
-      <CardHeader className='flex flex-row flex-wrap items-start justify-between gap-3'>
-        <div>
-          <CardTitle>Commit assessments</CardTitle>
-          <CardDescription className='mt-2'>
-            Frozen plans and imported evidence at exact revisions. Quality gates
-            are not evaluated.
-          </CardDescription>
-        </div>
-        <Button
-          size='sm'
-          variant='outline'
-          disabled={history.isFetching}
-          onClick={() => {
-            void history.refetch()
-            if (current) void detail.refetch()
-          }}
-        >
-          Reload assessments
-        </Button>
+    <Card className='gap-4'>
+      <CardHeader>
+        <CardTitle>Commit assessments</CardTitle>
+        <CardDescription>
+          Standards and CI results frozen at an exact commit.
+        </CardDescription>
+        <CardAction className='flex gap-2'>
+          <Button
+            size='icon'
+            variant='outline'
+            className='size-8'
+            aria-label='Reload assessments'
+            disabled={history.isFetching}
+            onClick={() => {
+              void history.refetch()
+              if (current) void detail.refetch()
+            }}
+          >
+            <RefreshCw className={history.isFetching ? 'animate-spin' : ''} />
+          </Button>
+          {canCreate && !history.isError && (
+            <Sheet open={creating} onOpenChange={setCreating}>
+              <SheetTrigger asChild>
+                <Button size='sm'>
+                  <Plus aria-hidden='true' />
+                  New assessment
+                </Button>
+              </SheetTrigger>
+              <SheetContent className='gap-0 sm:max-w-md'>
+                <SheetHeader>
+                  <SheetTitle>New commit assessment</SheetTitle>
+                  <SheetDescription>
+                    Freeze the saved standards and CI results at one commit.
+                  </SheetDescription>
+                </SheetHeader>
+                <AssessmentCreator
+                  key={initialSha}
+                  repositoryId={repositoryId}
+                  initialSha={initialSha}
+                  onCreated={(id) => {
+                    setSelected(id)
+                    setCreating(false)
+                    void client.invalidateQueries({
+                      queryKey: ['assessments', repositoryId],
+                    })
+                  }}
+                />
+              </SheetContent>
+            </Sheet>
+          )}
+        </CardAction>
       </CardHeader>
       <CardContent className='space-y-4'>
-        {canCreate && !history.isError && (
-          <AssessmentCreator
-            key={initialSha}
-            repositoryId={repositoryId}
-            initialSha={initialSha}
-            onCreated={(id) => {
-              setSelected(id)
-              void client.invalidateQueries({
-                queryKey: ['assessments', repositoryId],
-              })
-            }}
-          />
-        )}
         {history.isPending ? (
-          <p role='status'>Loading assessments…</p>
+          <p role='status' className='text-sm text-muted-foreground'>
+            Loading assessments…
+          </p>
         ) : history.isError ? (
-          <p role='alert' className='text-destructive'>
+          <p role='alert' className='text-sm text-destructive'>
             {history.error.message}
           </p>
         ) : history.data.assessments.length === 0 ? (
-          <p className='text-sm text-muted-foreground'>
-            No assessment snapshots yet.
-          </p>
+          <div className='rounded-md border border-dashed p-8 text-center text-sm'>
+            <p className='font-medium'>No snapshots yet</p>
+            <p className='mt-1 text-muted-foreground'>
+              {canCreate
+                ? 'Create one to compare this repository across commits.'
+                : 'An Owner or Admin can create one for an exact commit.'}
+            </p>
+          </div>
         ) : (
           <>
-            <Select value={current} onValueChange={setSelected}>
-              <SelectTrigger aria-label='Assessment snapshot'>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {history.data.assessments.map((item) => (
-                  <SelectItem key={item.id} value={item.id}>
-                    {item.sourceSha.slice(0, 12)} ·{' '}
-                    {new Date(item.createdAt).toLocaleString()}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className='flex flex-wrap items-center gap-3'>
+              <Select value={current} onValueChange={setSelected}>
+                <SelectTrigger
+                  aria-label='Assessment snapshot'
+                  className='w-full sm:w-80'
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {history.data.assessments.map((item) => (
+                    <SelectItem key={item.id} value={item.id}>
+                      <code className='text-xs'>
+                        {item.sourceSha.slice(0, 7)}
+                      </code>{' '}
+                      · {new Date(item.createdAt).toLocaleString()}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <span className='text-xs text-muted-foreground'>
+                {history.data.assessments.length} snapshot
+                {history.data.assessments.length === 1 ? '' : 's'}
+              </span>
+            </div>
             {detail.isError ? (
-              <p role='alert' className='text-destructive'>
+              <p role='alert' className='text-sm text-destructive'>
                 {detail.error.message}
               </p>
             ) : detail.isPending ? (
-              <p role='status'>Loading snapshot…</p>
+              <p role='status' className='text-sm text-muted-foreground'>
+                Loading snapshot…
+              </p>
             ) : (
-              data && (
+              data &&
+              coverage && (
                 <>
-                  <div className='space-y-1 text-sm'>
-                    <p className='break-all'>Commit: {data.sourceSha}</p>
-                    <p>
-                      Selection revision {data.request.selectionRevision} ·{' '}
-                      {data.plan.adoptionProfile.toLowerCase()} ·{' '}
-                      {data.report.coverage.replace(/_/g, ' ').toLowerCase()}{' '}
-                      coverage
-                    </p>
-                    <p className='text-muted-foreground'>
-                      {data.report.requiredChecks} required controls ·{' '}
-                      {data.report.trustedExecutedChecks} trusted executed
-                      checks. Historical snapshot; current branch readiness is
-                      not verified.
-                    </p>
-                    <p className='text-muted-foreground'>
-                      Collected{' '}
-                      {new Date(data.report.collectedAt).toLocaleString()}.
-                      Freshness below is recorded at collection, not a live
-                      readiness claim.
-                    </p>
-                    {data.report.collectionTruncated && (
-                      <p role='alert'>
-                        CI collection reached its 100-observation limit;
-                        coverage is incomplete.
-                      </p>
-                    )}
-                  </div>
-                  <div className='space-y-3'>
-                    {data.report.checks.map((check) => (
-                      <div
-                        key={check.ruleId}
-                        className='rounded-md border p-3 text-sm'
-                      >
-                        <div className='flex flex-wrap items-center gap-2'>
-                          <span>{check.title}</span>
-                          <Badge variant='secondary'>
-                            {check.required ? 'Required' : 'Advisory'}
-                          </Badge>
-                          <Badge variant='outline'>
-                            {check.coverage.replace(/_/g, ' ').toLowerCase()}
-                          </Badge>
-                        </div>
-                        <p className='mt-2 text-xs text-muted-foreground'>
-                          {check.reason}
-                        </p>
-                        {check.deliveryId && (
-                          <p className='mt-1 text-xs break-all'>
-                            Associated delivery {check.deliveryId} · provider{' '}
-                            {check.providerResult?.toLowerCase()} ·{' '}
-                            {check.freshness.replace(/_/g, ' ').toLowerCase()}
-                          </p>
-                        )}
+                  <dl className='grid gap-px overflow-hidden rounded-md border bg-border text-sm sm:grid-cols-4'>
+                    <div className='bg-card px-4 py-3'>
+                      <dt className='text-xs text-muted-foreground'>
+                        Coverage
+                      </dt>
+                      <dd className='mt-1.5'>
+                        <StatusBadge tone={coverage.tone}>
+                          {coverage.label}
+                        </StatusBadge>
+                      </dd>
+                    </div>
+                    {[
+                      ['Required controls', data.report.requiredChecks],
+                      ['Config found', configFound],
+                      ['With CI result', withCi],
+                    ].map(([label, value]) => (
+                      <div key={label} className='bg-card px-4 py-3'>
+                        <dt className='text-xs text-muted-foreground'>
+                          {label}
+                        </dt>
+                        <dd className='mt-1 text-xl font-semibold'>{value}</dd>
                       </div>
                     ))}
+                  </dl>
+                  <p className='text-xs text-muted-foreground'>
+                    Commit{' '}
+                    <code className='text-foreground' title={data.sourceSha}>
+                      {data.sourceSha.slice(0, 12)}
+                    </code>{' '}
+                    · {sentence(data.plan.adoptionProfile)} profile, revision{' '}
+                    {data.request.selectionRevision} · collected{' '}
+                    <RelativeTime value={data.report.collectedAt} />
+                  </p>
+                  {data.report.collectionTruncated && (
+                    <p
+                      role='alert'
+                      className='flex items-center gap-2 rounded-md border border-amber-600/30 bg-amber-600/5 p-3 text-sm'
+                    >
+                      <AlertTriangle
+                        aria-hidden='true'
+                        className='size-4 text-amber-600'
+                      />
+                      CI collection hit its 100-result limit; coverage is
+                      incomplete.
+                    </p>
+                  )}
+                  <div className='overflow-hidden rounded-md border'>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Control</TableHead>
+                          <TableHead>Requirement</TableHead>
+                          <TableHead>Coverage</TableHead>
+                          <TableHead>CI result</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {data.report.checks.map((check) => {
+                          const status = coverageStatus(check.coverage)
+                          return (
+                            <TableRow key={check.ruleId}>
+                              <TableCell className='max-w-md min-w-64 whitespace-normal'>
+                                <p className='font-medium'>{check.title}</p>
+                                <p className='mt-0.5 text-xs text-muted-foreground'>
+                                  {check.reason}
+                                </p>
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant='neutral'>
+                                  {check.required ? 'Required' : 'Advisory'}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                <StatusBadge tone={status.tone}>
+                                  {status.label}
+                                </StatusBadge>
+                              </TableCell>
+                              <TableCell className='text-xs'>
+                                {check.deliveryId ? (
+                                  <>
+                                    <p className='font-medium'>
+                                      {sources.get(check.deliveryId) ??
+                                        'CI result'}
+                                    </p>
+                                    <p className='text-muted-foreground'>
+                                      {check.providerResult
+                                        ? ciResultStatus[check.providerResult]
+                                            .label
+                                        : 'No result'}{' '}
+                                      · {sentence(check.freshness)}
+                                    </p>
+                                  </>
+                                ) : (
+                                  <span className='text-muted-foreground'>
+                                    None
+                                  </span>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          )
+                        })}
+                      </TableBody>
+                    </Table>
                   </div>
-                  <details className='rounded-md border p-3 text-xs'>
-                    <summary className='cursor-pointer'>
-                      Frozen provenance and integrity
+                  <details className='group rounded-md border text-xs'>
+                    <summary className='cursor-pointer px-4 py-3 text-sm font-medium'>
+                      Provenance and integrity
                     </summary>
-                    <div className='mt-3 space-y-2 break-all'>
-                      <p>Assessment SHA-256: {data.assessmentHash}</p>
-                      <p>Selection: {data.selectionId}</p>
+                    <dl className='grid gap-x-4 gap-y-2 border-t px-4 py-3 font-mono break-all sm:grid-cols-[max-content_1fr]'>
+                      <dt className='font-sans text-muted-foreground'>
+                        Assessment SHA-256
+                      </dt>
+                      <dd>{data.assessmentHash}</dd>
+                      <dt className='font-sans text-muted-foreground'>
+                        Selection
+                      </dt>
+                      <dd>{data.selectionId}</dd>
                       {data.plan.packs.map((pack) => (
-                        <p key={pack.id}>
-                          {pack.id} v{pack.version} · {pack.digest}
-                        </p>
-                      ))}
-                      {data.report.observations.map((item) => (
-                        <div
-                          key={item.deliveryId}
-                          className='space-y-1 border-t pt-2'
-                        >
-                          <p>
-                            {item.sourceKind} #{item.sourceObjectId} ·{' '}
-                            {item.result}
-                          </p>
-                          <p>Delivery: {item.deliveryId}</p>
-                          <p>Evidence: {item.evidenceHash}</p>
-                          <p>Signed payload: {item.sourcePayloadHash}</p>
-                          {item.artifacts.map((artifact) => (
-                            <p key={artifact.id}>
-                              {artifact.format} · {artifact.sha256} ·{' '}
-                              {artifact.verification.toLowerCase()} ·{' '}
-                              {JSON.stringify(artifact.summary)}
-                            </p>
-                          ))}
+                        <div key={pack.id} className='contents'>
+                          <dt className='font-sans text-muted-foreground'>
+                            {pack.id} v{pack.version}
+                          </dt>
+                          <dd>{pack.digest}</dd>
                         </div>
                       ))}
-                    </div>
+                      {data.report.observations.map((item) => (
+                        <div key={item.deliveryId} className='contents'>
+                          <dt className='font-sans text-muted-foreground'>
+                            {sourceLabel(item.sourceKind, item.sourceObjectId)}
+                          </dt>
+                          <dd>
+                            Delivery {item.deliveryId}
+                            <br />
+                            Evidence {item.evidenceHash}
+                            <br />
+                            Signed payload {item.sourcePayloadHash}
+                            {item.artifacts.map((artifact) => (
+                              <span key={artifact.id} className='block'>
+                                {artifact.format.toUpperCase()} report{' '}
+                                {artifact.sha256} ·{' '}
+                                {sentence(artifact.verification)} ·{' '}
+                                {Object.entries(artifact.summary)
+                                  .map(
+                                    ([key, value]) => `${key} ${String(value)}`
+                                  )
+                                  .join(', ')}
+                              </span>
+                            ))}
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
                   </details>
                 </>
               )

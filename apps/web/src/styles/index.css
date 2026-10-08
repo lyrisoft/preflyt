@@ -85,3 +85,30 @@
     height: 0;
   }
 }
+
+/* Data marks grow in from their baseline once; transform only, ease-out-expo. */
+@utility mark-grow-x {
+  transform-origin: left;
+  &:where([dir='rtl'], [dir='rtl'] *) {
+    transform-origin: right;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    animation: mark-grow-x 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+}
+@utility mark-grow-y {
+  transform-origin: bottom;
+  @media (prefers-reduced-motion: no-preference) {
+    animation: mark-grow-y 600ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+}
+@keyframes mark-grow-x {
+  from {
+    transform: scaleX(0);
+  }
+}
+@keyframes mark-grow-y {
+  from {
+    transform: scaleY(0);
+  }
+}
