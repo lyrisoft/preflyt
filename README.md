@@ -140,6 +140,12 @@ flowchart TD
 
 **AI is optional for core operation.** Preflyt can import checks, enforce policies and publish readiness without any frontier-model keys or local LLM.
 
+## Deployment and OpenTelemetry configuration
+
+**Required self-hosted installation contract (planned):** published versioned images, a root `.env.example`, and a complete Docker Compose deployment that starts all services necessary for the released feature set using `docker compose up -d`. The stack must include the frontend, API, PostgreSQL, Redis and relevant first-party workers/gateways/stores. No Node.js, pnpm, Redis or PostgreSQL host installation should be necessary. External services such as GitHub, OIDC and frontier models still require configured credentials/endpoints; do not claim a working deployment before manifests/images exist.
+
+**Provider-neutral OpenTelemetry:** the root `.env.example` includes standard OTEL resource, endpoint/protocol, headers, traces, metrics, logs and sampling variables. Pass them to all app containers and override `OTEL_SERVICE_NAME` per service. Operators may send data to **any compatible OTLP APM**, with an optional self-hosted collector profile; SigNoz is not mandatory. See [OpenTelemetry environment contract](docs/deployment/opentelemetry-env.md).
+
 ## Security and execution safety
 
 **Safe execution is an MVP prerequisite, not an advanced V1 feature.** Running package installation, test hooks, scanners, builds or other commands against a connected repository can execute untrusted code.
