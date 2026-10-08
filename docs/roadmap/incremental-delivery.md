@@ -90,6 +90,8 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 
 - **P2.RBAC:** Separate policy drafting, publication, enforcement and exception approval permissions; reject self-approval.
 
+- **P2.Contributors:** Attribute deterministic gate outcomes and evidence completeness to PR authors and revisions, with first-pass and final assessment status; do not conflate missing evidence with compliance.
+
 ### P3 — Native Secure Validation
 
 **User value:** Preflyt can perform useful code/security/IaC validation itself, rather than depending exclusively on existing CI.
