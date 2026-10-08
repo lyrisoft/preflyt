@@ -55,6 +55,8 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 
 **Done when:** On a clean deployment an authorized user logs in, selects a GitHub repo and sees a correct profile and missing-control report; an unauthorized user cannot view it. Deleting/losing a provider token gives a visible, non-misleading error. Rollback preserves repository/profile records.
 
+- **P0.RBAC:** Implement predefined organization roles, repository-scoped membership/grants, authorization-aware navigation and NestJS resource checks. Test cross-organization denial, assignment/revocation, audit and owner bootstrap. See [RBAC specification](../product/rbac-and-authorization.md).
+
 ### P1 — CI Evidence Assessments
 
 **User value:** A developer opens a PR or a CI run completes and can inspect an assessment with collected test/check status and provenance.
@@ -69,6 +71,8 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 
 **Done when:** A real sample PR receives a versioned assessment populated by externally executed CI; the user can identify failures and missing evidence. New commits create new current assessments; import failure does not masquerade as PASS. Deployed service remains usable without runners, AI or model keys.
 
+- **P1.RBAC:** Restrict CI evidence, assessments and findings to authorized repository members; validate worker context and artifact access.
+
 ### P2 — Policy Quality Gates
 
 **User value:** A policy owner defines a simple standard and a developer sees an accurate advisory or blocking GitHub quality check.
@@ -81,6 +85,8 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 - P2.5 Test stale commits, skipped required tests, unsupported check, and required test failed; ensure each reports correct result.
 
 **Done when:** A deliberately broken PR is blocked by an activated required check, a clean PR passes, a missing required check is INCOMPLETE, and a changed PR never inherits the prior commit's green status. Existing P0/P1 remains functional.
+
+- **P2.RBAC:** Separate policy drafting, publication, enforcement and exception approval permissions; reject self-approval.
 
 ### P3 — Native Secure Validation
 
@@ -95,6 +101,8 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 
 **Done when:** A seeded vulnerability, failing test and unsafe IaC config are caught on pinned repos in an approved sandbox and affect the P2 gate; no untrusted job runs if approval/egress/security preflight fails. An ingest-only installation remains usable.
 
+- **P3.RBAC:** Enforce separate execution admission and least-privilege worker identities; repository access alone never authorizes unsafe execution.
+
 ### P4 — AI Engineering Explanations (optional)
 
 **User value:** A developer sees an evidence-linked explanation and recommended action for an assessment finding.
@@ -106,6 +114,8 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 - P4.4 Negative tests for prompt injection, policy override claims, credential leakage, hallucinated results and provider outage.
 
 **Done when:** A security finding has a traceable explanation and recommended remediation, but the exact deterministic quality gate **never changes** when AI is enabled, disabled or malicious. All P0–P3 workflows work without model keys.
+
+- **P4.RBAC:** Restrict AI provider credentials, model routing, usage visibility and data-egress policy to authorized roles.
 
 ### P5 — Developer CLI
 

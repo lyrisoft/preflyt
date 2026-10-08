@@ -183,6 +183,10 @@ Capabilities:
 
 Preflyt ships first-party versioned policy packs for baseline engineering, application security, backend/frontend apps, infrastructure, APIs, databases, production readiness, performance and compliance evidence. Rules specify applicability, required/advisory classification, severity, accepted check evidence, capability availability and policy version. An organization can browse, combine and pin packs using Default, Recommended or Strict profiles. Repository discovery recommends packs with reasons. Missing or unsupported checks cannot count as passing. P0: working catalogue and selection. P1: evidence mapping. P2: deterministic quality-gate enforcement and controlled pack upgrades. P3: approved native execution for supported checks. AI recommendations cannot activate enforcement or grant exceptions. Full specification: [Engineering Standards Library](product/engineering-standards-library.md).
 
+### RBAC and resource authorization requirements
+
+Preflyt uses OIDC identity with **NestJS-enforced organization and repository-scoped RBAC**, predefined roles and least-privilege action permissions. **P0** includes owner bootstrap, membership, roles, repository grants, server-side checks and audit; **P1** scopes assessment/evidence access; **P2** separates policy publishing/enforcement/exception approvals; **P3** requires independent execution admission; **P4** scopes AI provider/model management; later phases add QA, performance and production permissions. No self-approved policy waivers, implicit cross-organization access or frontend-only enforcement. See [RBAC specification](product/rbac-and-authorization.md).
+
 ## 6. Supported SDLC stages and user journeys
 
 ### 6.1 Lifecycle coverage
