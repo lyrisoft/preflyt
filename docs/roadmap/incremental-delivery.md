@@ -107,6 +107,8 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 
 - **P3.RBAC:** Enforce separate execution admission and least-privilege worker identities; repository access alone never authorizes unsafe execution.
 
+- **P3.Contributors:** Deliver a functional **Contributors** sidebar entry with searchable/paginated contributor list, activity/coverage/adherence metrics, charts, repository filters and individual detail pages (PRs, commits, reviews, findings, policy evidence). Include RBAC and source drill-down; see [Contributors specification](../product/engineering-contributors.md).
+
 ### P4 — AI Engineering Explanations (optional)
 
 **User value:** A developer sees an evidence-linked explanation and recommended action for an assessment finding.
