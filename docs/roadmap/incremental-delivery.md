@@ -101,6 +101,8 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 
 **Done when:** A seeded vulnerability, failing test and unsafe IaC config are caught on pinned repos in an approved sandbox and affect the P2 gate; no untrusted job runs if approval/egress/security preflight fails. An ingest-only installation remains usable.
 
+- **P3.RBAC:** Enforce separate execution admission and least-privilege worker identities; repository access alone never authorizes unsafe execution.
+
 ### P4 — AI Engineering Explanations (optional)
 
 **User value:** A developer sees an evidence-linked explanation and recommended action for an assessment finding.
