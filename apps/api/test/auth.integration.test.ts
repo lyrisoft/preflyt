@@ -1,3 +1,7 @@
+import { NestFactory } from '@nestjs/core'
+import { AuthController } from '../src/auth/auth.controller.js'
+import cookieParser from 'cookie-parser'
+import request from 'supertest'
 import { createHash, generateKeyPairSync } from 'node:crypto'
 import { createServer, type Server } from 'node:http'
 import { AddressInfo } from 'node:net'
@@ -345,8 +349,9 @@ describe('OIDC and server-side identity sessions', () => {
       webOrigin
     )
     expect(session.sessionToken).toMatch(/^[A-Za-z0-9_-]{43}$/)
+    expect(session.expiresAt.getTime() - Date.now()).toBeGreaterThan(23 * 60 * 60 * 1000)
     expect(session.expiresAt.getTime() - Date.now()).toBeLessThanOrEqual(
-      60 * 60 * 1000
+      24 * 60 * 60 * 1000
     )
     expect(await service.currentSession(session.sessionToken)).toMatchObject({
       authenticated: true,
@@ -496,4 +501,55 @@ describe('OIDC and server-side identity sessions', () => {
       service.completeLogin(second.request, second.started.browserBinding)
     ).rejects.toThrow()
   })
+})
+
+it('sets a persistent 24-hour admin cookie and prevents caching session decisions', async () => {
+  const service = await newAuthService()
+  const app = await NestFactory.create(
+    {
+      module: class TestModule {},
+      controllers: [AuthController],
+      providers: [{ provide: AuthService, useValue: service }],
+    },
+    { logger: false },
+  )
+  app.use(cookieParser())
+  await app.init()
+  try {
+    const login = await request(app.getHttpServer())
+      .post('/auth/super-admin/login')
+      .set('Origin', webOrigin)
+      .send({ username: 'preflyt-admin', password: superAdminPassword })
+    expect(login.status).toBe(201)
+    const cookie = login.headers['set-cookie'][0]
+    expect(cookie).toMatch(/Max-Age=86[0-9]{3}/)
+    expect(cookie).toContain('HttpOnly')
+    expect(cookie).toContain('SameSite=Lax')
+    const checked = await request(app.getHttpServer())
+      .get('/auth/session')
+      .set('Cookie', cookie.split(';')[0])
+    expect(checked.headers['cache-control']).toBe('no-store')
+    expect(checked.body).toMatchObject({
+      authenticated: true,
+      role: 'SUPER_ADMIN',
+    })
+    const restarted = await newAuthService()
+    expect(
+      await restarted.currentSession(cookie.split(';')[0].split('=')[1]),
+    ).toMatchObject({ authenticated: true })
+    const loggedOut = await request(app.getHttpServer())
+      .post('/auth/logout')
+      .set('Origin', webOrigin)
+      .set('Cookie', cookie.split(';')[0])
+    expect(loggedOut.status).toBe(204)
+    expect(
+      (
+        await request(app.getHttpServer())
+          .get('/auth/session')
+          .set('Cookie', cookie.split(';')[0])
+      ).body,
+    ).toEqual({ authenticated: false })
+  } finally {
+    await app.close()
+  }
 })

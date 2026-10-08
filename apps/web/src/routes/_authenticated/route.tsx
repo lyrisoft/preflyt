@@ -1,13 +1,12 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { API_BASE_URL } from '@/lib/api'
+import { checkSession } from '@/lib/session-request'
 import { AuthenticatedLayout } from '@/components/layout/authenticated-layout'
+import { SessionUnavailable } from '@/features/auth/session-unavailable'
 
 export const Route = createFileRoute('/_authenticated')({
   beforeLoad: async ({ location }) => {
-    const response = await fetch(`${API_BASE_URL}/auth/session`, {
-      credentials: 'include',
-    }).catch(() => null)
-    const session = response?.ok ? await response.json() : null
+    const session = await checkSession(`${API_BASE_URL}/auth/session`)
     if (!session?.authenticated) {
       throw redirect({
         to: '/sign-in',
@@ -16,4 +15,5 @@ export const Route = createFileRoute('/_authenticated')({
     }
   },
   component: AuthenticatedLayout,
+  errorComponent: SessionUnavailable,
 })

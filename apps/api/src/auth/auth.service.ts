@@ -22,7 +22,7 @@ const digest = (value: string) =>
   createHash('sha256').update(value).digest('hex')
 const opaque = () => randomBytes(32).toString('base64url')
 const sessionTtlMs = 8 * 60 * 60 * 1000
-const superAdminSessionTtlMs = 60 * 60 * 1000
+const superAdminSessionTtlMs = 24 * 60 * 60 * 1000
 const shortTtlMs = 5 * 60 * 1000
 const superAdminIssuer = 'preflyt://local'
 const superAdminSubject = 'super-admin'

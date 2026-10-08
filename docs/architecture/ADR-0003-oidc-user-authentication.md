@@ -25,7 +25,7 @@ Use the installation's configured OpenID Connect (OIDC) provider for routine hum
 
 - The local Super Admin uses a distinct `/super-admin/login` page and `/auth/super-admin/login` API endpoint; ordinary `/sign-in` remains organization OIDC.
 - The operator configures exactly one username (1–320 non-whitespace characters) and password through deployment-managed `SUPER_ADMIN_USERNAME` and `SUPER_ADMIN_PASSWORD` settings. On startup, Preflyt seeds the reserved local identity, `SUPER_ADMIN` membership and a salted scrypt password hash; the raw password is never stored in the database or returned to the browser. There is no self-registration, reset flow or user-selectable role.
-- Super Admin receives the same server-managed session cookie with a one-hour expiry and passes Owner/Admin authorization checks. Removing the environment settings disables the credential and revokes its sessions at startup.
+- Super Admin receives the same server-managed session cookie with a 24-hour absolute expiry and passes Owner/Admin authorization checks. Removing the environment settings disables the credential and revokes its sessions at startup.
 - Passwords must be 24–128 characters. Use scrypt with N=32768, r=8, p=1 and a random salt. Rate-limit attempts by both source IP and normalized username, compare derived hashes in constant time, return generic credential errors and audit allowed/denied attempts.
 - When all OIDC settings are absent and a Super Admin username/password are configured, the API starts in Super Admin-only mode. Organization OIDC sign-in and first-owner bootstrap return unavailable until OIDC is configured. Partial OIDC configuration is rejected, and fully configured OIDC must pass normal discovery and issuer validation at startup.
 - Local credentials never become an automatic fallback for organization users. To recover from an IdP outage that prevents startup, an operator must explicitly remove all OIDC settings, retain the Super Admin settings, restart Preflyt, and restore valid OIDC settings before enabling routine user sign-in.
@@ -69,3 +69,5 @@ The initial implementation covers OIDC Authorization Code + PKCE, signature/issu
 
 - SAML, multiple identity providers per installation, SCIM, automatic IdP group-to-role mapping, and local-password login for organization members.
 - Automated detection and recovery from IdP outages; recovery requires an operator to explicitly select Super Admin-only mode by removing all OIDC settings.
+
+Session restoration reads PostgreSQL and survives API restarts with unchanged credentials. The frontend redirects to sign-in only on a confirmed unauthenticated response; transient transport/server errors retry and display a reconnect action. Session responses and frontend login checks are not HTTP-cached. Ordinary OIDC sessions retain their eight-hour absolute expiry; Super Admin sessions last 24 hours, without sliding renewal. Expired sessions must sign in again; they are never revived.

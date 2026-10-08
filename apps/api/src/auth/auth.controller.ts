@@ -142,6 +142,7 @@ export class AuthController {
   }
 
   @Get('session')
+  @Header('Cache-Control', 'no-store')
   session(@Req() req: Request) {
     return this.auth.currentSession(
       req.cookies?.[this.auth.sessionCookieName] as string | undefined
