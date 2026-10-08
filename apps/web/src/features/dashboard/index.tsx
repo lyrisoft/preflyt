@@ -87,11 +87,11 @@ export function Dashboard() {
         <div className='mb-6 flex flex-wrap items-start justify-between gap-4'>
           <div>
             <h1 className='text-2xl font-bold tracking-tight'>
-              Repository overview
+              Engineering Overview
             </h1>
             <p className='mt-1 text-muted-foreground'>
-              Review the last synced repository state and selections for
-              Preflyt.
+              Monitor engineering readiness, assess risk, and enforce quality
+              standards across your repositories.
             </p>
           </div>
           <Button asChild>
@@ -144,7 +144,7 @@ export function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className='text-2xl font-bold'>
-                {loading ? '—' : repositories.length}
+                {loading || error ? '—' : repositories.length}
               </div>
               <p className='text-xs text-muted-foreground'>
                 Repositories from the last successful GitHub sync
@@ -160,7 +160,7 @@ export function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className='text-2xl font-bold'>
-                {loading ? '—' : selected.length}
+                {loading || error ? '—' : selected.length}
               </div>
               <p className='text-xs text-muted-foreground'>
                 Repositories explicitly selected for Preflyt
@@ -168,6 +168,29 @@ export function Dashboard() {
             </CardContent>
           </Card>
         </div>
+
+        {!loading && !error && selected.length > 0 && (
+          <Card className='mt-4'>
+            <CardHeader>
+              <CardTitle>Engineering readiness</CardTitle>
+              <CardDescription>
+                Review standards, approve CI sources, and inspect assessment
+                evidence. Verified quality gate outcomes are not available yet.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className='flex flex-wrap gap-3'>
+              <Button variant='outline' asChild>
+                <Link to='/standards'>Review standards</Link>
+              </Button>
+              <Button variant='outline' asChild>
+                <Link to='/integrations'>Review CI evidence</Link>
+              </Button>
+              <Button variant='outline' asChild>
+                <Link to='/assessments'>Open assessments</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        )}
 
         <Card className='mt-4'>
           <CardHeader>

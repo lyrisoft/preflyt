@@ -18,7 +18,16 @@ import { Route as errors404RouteImport } from './routes/(errors)/404'
 import { Route as errors500RouteImport } from './routes/(errors)/500'
 import { Route as errors503RouteImport } from './routes/(errors)/503'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
+import { Route as AuthenticatedAccessControlRouteImport } from './routes/_authenticated/access-control'
+import { Route as AuthenticatedAssessmentsRouteImport } from './routes/_authenticated/assessments'
+import { Route as AuthenticatedFindingsRouteImport } from './routes/_authenticated/findings'
+import { Route as AuthenticatedIntegrationsRouteImport } from './routes/_authenticated/integrations'
+import { Route as AuthenticatedIntelligenceRouteImport } from './routes/_authenticated/intelligence'
+import { Route as AuthenticatedOrganizationSettingsRouteImport } from './routes/_authenticated/organization-settings'
+import { Route as AuthenticatedPoliciesRouteImport } from './routes/_authenticated/policies'
+import { Route as AuthenticatedQualityGatesRouteImport } from './routes/_authenticated/quality-gates'
 import { Route as AuthenticatedSettingsRouteRouteImport } from './routes/_authenticated/settings/route'
+import { Route as AuthenticatedStandardsRouteImport } from './routes/_authenticated/standards'
 import { Route as authSuperAdminLoginRouteImport } from './routes/(auth)/super-admin/login'
 import { Route as AuthenticatedAppsIndexRouteImport } from './routes/_authenticated/apps/index'
 import { Route as AuthenticatedChatsIndexRouteImport } from './routes/_authenticated/chats/index'
@@ -77,12 +86,63 @@ const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedAccessControlRoute =
+  AuthenticatedAccessControlRouteImport.update({
+    id: '/access-control',
+    path: '/access-control',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedAssessmentsRoute =
+  AuthenticatedAssessmentsRouteImport.update({
+    id: '/assessments',
+    path: '/assessments',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedFindingsRoute = AuthenticatedFindingsRouteImport.update({
+  id: '/findings',
+  path: '/findings',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedIntegrationsRoute =
+  AuthenticatedIntegrationsRouteImport.update({
+    id: '/integrations',
+    path: '/integrations',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedIntelligenceRoute =
+  AuthenticatedIntelligenceRouteImport.update({
+    id: '/intelligence',
+    path: '/intelligence',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedOrganizationSettingsRoute =
+  AuthenticatedOrganizationSettingsRouteImport.update({
+    id: '/organization-settings',
+    path: '/organization-settings',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedPoliciesRoute = AuthenticatedPoliciesRouteImport.update({
+  id: '/policies',
+  path: '/policies',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedQualityGatesRoute =
+  AuthenticatedQualityGatesRouteImport.update({
+    id: '/quality-gates',
+    path: '/quality-gates',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedSettingsRouteRoute =
   AuthenticatedSettingsRouteRouteImport.update({
     id: '/settings',
     path: '/settings',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedStandardsRoute = AuthenticatedStandardsRouteImport.update({
+  id: '/standards',
+  path: '/standards',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const authSuperAdminLoginRoute = authSuperAdminLoginRouteImport.update({
   id: '/(auth)/super-admin/login',
   path: '/super-admin/login',
@@ -167,6 +227,15 @@ export interface FileRoutesByFullPath {
   '/404': typeof errors404Route
   '/500': typeof errors500Route
   '/503': typeof errors503Route
+  '/access-control': typeof AuthenticatedAccessControlRoute
+  '/assessments': typeof AuthenticatedAssessmentsRoute
+  '/findings': typeof AuthenticatedFindingsRoute
+  '/integrations': typeof AuthenticatedIntegrationsRoute
+  '/intelligence': typeof AuthenticatedIntelligenceRoute
+  '/organization-settings': typeof AuthenticatedOrganizationSettingsRoute
+  '/policies': typeof AuthenticatedPoliciesRoute
+  '/quality-gates': typeof AuthenticatedQualityGatesRoute
+  '/standards': typeof AuthenticatedStandardsRoute
   '/super-admin/login': typeof authSuperAdminLoginRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/repositories/$repositoryId': typeof AuthenticatedRepositoriesRepositoryIdRoute
@@ -189,6 +258,15 @@ export interface FileRoutesByTo {
   '/404': typeof errors404Route
   '/500': typeof errors500Route
   '/503': typeof errors503Route
+  '/access-control': typeof AuthenticatedAccessControlRoute
+  '/assessments': typeof AuthenticatedAssessmentsRoute
+  '/findings': typeof AuthenticatedFindingsRoute
+  '/integrations': typeof AuthenticatedIntegrationsRoute
+  '/intelligence': typeof AuthenticatedIntelligenceRoute
+  '/organization-settings': typeof AuthenticatedOrganizationSettingsRoute
+  '/policies': typeof AuthenticatedPoliciesRoute
+  '/quality-gates': typeof AuthenticatedQualityGatesRoute
+  '/standards': typeof AuthenticatedStandardsRoute
   '/': typeof AuthenticatedIndexRoute
   '/super-admin/login': typeof authSuperAdminLoginRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
@@ -215,6 +293,15 @@ export interface FileRoutesById {
   '/(errors)/404': typeof errors404Route
   '/(errors)/500': typeof errors500Route
   '/(errors)/503': typeof errors503Route
+  '/_authenticated/access-control': typeof AuthenticatedAccessControlRoute
+  '/_authenticated/assessments': typeof AuthenticatedAssessmentsRoute
+  '/_authenticated/findings': typeof AuthenticatedFindingsRoute
+  '/_authenticated/integrations': typeof AuthenticatedIntegrationsRoute
+  '/_authenticated/intelligence': typeof AuthenticatedIntelligenceRoute
+  '/_authenticated/organization-settings': typeof AuthenticatedOrganizationSettingsRoute
+  '/_authenticated/policies': typeof AuthenticatedPoliciesRoute
+  '/_authenticated/quality-gates': typeof AuthenticatedQualityGatesRoute
+  '/_authenticated/standards': typeof AuthenticatedStandardsRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/(auth)/super-admin/login': typeof authSuperAdminLoginRoute
   '/_authenticated/errors/$error': typeof AuthenticatedErrorsErrorRoute
@@ -242,6 +329,15 @@ export interface FileRouteTypes {
     | '/404'
     | '/500'
     | '/503'
+    | '/access-control'
+    | '/assessments'
+    | '/findings'
+    | '/integrations'
+    | '/intelligence'
+    | '/organization-settings'
+    | '/policies'
+    | '/quality-gates'
+    | '/standards'
     | '/super-admin/login'
     | '/errors/$error'
     | '/repositories/$repositoryId'
@@ -264,6 +360,15 @@ export interface FileRouteTypes {
     | '/404'
     | '/500'
     | '/503'
+    | '/access-control'
+    | '/assessments'
+    | '/findings'
+    | '/integrations'
+    | '/intelligence'
+    | '/organization-settings'
+    | '/policies'
+    | '/quality-gates'
+    | '/standards'
     | '/'
     | '/super-admin/login'
     | '/errors/$error'
@@ -289,6 +394,15 @@ export interface FileRouteTypes {
     | '/(errors)/404'
     | '/(errors)/500'
     | '/(errors)/503'
+    | '/_authenticated/access-control'
+    | '/_authenticated/assessments'
+    | '/_authenticated/findings'
+    | '/_authenticated/integrations'
+    | '/_authenticated/intelligence'
+    | '/_authenticated/organization-settings'
+    | '/_authenticated/policies'
+    | '/_authenticated/quality-gates'
+    | '/_authenticated/standards'
     | '/_authenticated/'
     | '/(auth)/super-admin/login'
     | '/_authenticated/errors/$error'
@@ -382,11 +496,74 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/access-control': {
+      id: '/_authenticated/access-control'
+      path: '/access-control'
+      fullPath: '/access-control'
+      preLoaderRoute: typeof AuthenticatedAccessControlRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/assessments': {
+      id: '/_authenticated/assessments'
+      path: '/assessments'
+      fullPath: '/assessments'
+      preLoaderRoute: typeof AuthenticatedAssessmentsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/findings': {
+      id: '/_authenticated/findings'
+      path: '/findings'
+      fullPath: '/findings'
+      preLoaderRoute: typeof AuthenticatedFindingsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/integrations': {
+      id: '/_authenticated/integrations'
+      path: '/integrations'
+      fullPath: '/integrations'
+      preLoaderRoute: typeof AuthenticatedIntegrationsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/intelligence': {
+      id: '/_authenticated/intelligence'
+      path: '/intelligence'
+      fullPath: '/intelligence'
+      preLoaderRoute: typeof AuthenticatedIntelligenceRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/organization-settings': {
+      id: '/_authenticated/organization-settings'
+      path: '/organization-settings'
+      fullPath: '/organization-settings'
+      preLoaderRoute: typeof AuthenticatedOrganizationSettingsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/policies': {
+      id: '/_authenticated/policies'
+      path: '/policies'
+      fullPath: '/policies'
+      preLoaderRoute: typeof AuthenticatedPoliciesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/quality-gates': {
+      id: '/_authenticated/quality-gates'
+      path: '/quality-gates'
+      fullPath: '/quality-gates'
+      preLoaderRoute: typeof AuthenticatedQualityGatesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/settings': {
       id: '/_authenticated/settings'
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof AuthenticatedSettingsRouteRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/standards': {
+      id: '/_authenticated/standards'
+      path: '/standards'
+      fullPath: '/standards'
+      preLoaderRoute: typeof AuthenticatedStandardsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/(auth)/super-admin/login': {
@@ -508,6 +685,15 @@ const AuthenticatedSettingsRouteRouteWithChildren =
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedSettingsRouteRoute: typeof AuthenticatedSettingsRouteRouteWithChildren
+  AuthenticatedAccessControlRoute: typeof AuthenticatedAccessControlRoute
+  AuthenticatedAssessmentsRoute: typeof AuthenticatedAssessmentsRoute
+  AuthenticatedFindingsRoute: typeof AuthenticatedFindingsRoute
+  AuthenticatedIntegrationsRoute: typeof AuthenticatedIntegrationsRoute
+  AuthenticatedIntelligenceRoute: typeof AuthenticatedIntelligenceRoute
+  AuthenticatedOrganizationSettingsRoute: typeof AuthenticatedOrganizationSettingsRoute
+  AuthenticatedPoliciesRoute: typeof AuthenticatedPoliciesRoute
+  AuthenticatedQualityGatesRoute: typeof AuthenticatedQualityGatesRoute
+  AuthenticatedStandardsRoute: typeof AuthenticatedStandardsRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedErrorsErrorRoute: typeof AuthenticatedErrorsErrorRoute
   AuthenticatedRepositoriesRepositoryIdRoute: typeof AuthenticatedRepositoriesRepositoryIdRoute
@@ -520,6 +706,16 @@ interface AuthenticatedRouteRouteChildren {
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedSettingsRouteRoute: AuthenticatedSettingsRouteRouteWithChildren,
+  AuthenticatedAccessControlRoute: AuthenticatedAccessControlRoute,
+  AuthenticatedAssessmentsRoute: AuthenticatedAssessmentsRoute,
+  AuthenticatedFindingsRoute: AuthenticatedFindingsRoute,
+  AuthenticatedIntegrationsRoute: AuthenticatedIntegrationsRoute,
+  AuthenticatedIntelligenceRoute: AuthenticatedIntelligenceRoute,
+  AuthenticatedOrganizationSettingsRoute:
+    AuthenticatedOrganizationSettingsRoute,
+  AuthenticatedPoliciesRoute: AuthenticatedPoliciesRoute,
+  AuthenticatedQualityGatesRoute: AuthenticatedQualityGatesRoute,
+  AuthenticatedStandardsRoute: AuthenticatedStandardsRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedErrorsErrorRoute: AuthenticatedErrorsErrorRoute,
   AuthenticatedRepositoriesRepositoryIdRoute:

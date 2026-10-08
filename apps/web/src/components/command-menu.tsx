@@ -12,11 +12,12 @@ import {
   CommandList,
   CommandSeparator,
 } from '@/components/ui/command'
-import { sidebarData } from './layout/data/sidebar-data'
+import { useNavigation } from './layout/data/use-navigation'
 import { ScrollArea } from './ui/scroll-area'
 
 export function CommandMenu() {
   const navigate = useNavigate()
+  const navGroups = useNavigation()
   const { setTheme } = useTheme()
   const { open, setOpen } = useSearch()
 
@@ -34,7 +35,7 @@ export function CommandMenu() {
       <CommandList>
         <ScrollArea type='hover' className='h-72 pe-1'>
           <CommandEmpty>No results found.</CommandEmpty>
-          {sidebarData.navGroups.map((group) => (
+          {navGroups.map((group) => (
             <CommandGroup key={group.title} heading={group.title}>
               {group.items.map((navItem, i) => {
                 if (navItem.url)
@@ -50,6 +51,7 @@ export function CommandMenu() {
                         <ArrowRight className='size-2 text-muted-foreground/80' />
                       </div>
                       {navItem.title}
+                      {navItem.badge ? ` (${navItem.badge})` : ''}
                     </CommandItem>
                   )
 

@@ -14,6 +14,7 @@ type Team = {
 
 type BaseNavItem = {
   title: string
+  adminOnly?: boolean
   badge?: string
   icon?: React.ElementType
 }
