@@ -50,7 +50,7 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 - P0.3 Implement GitHub App installation and repository selection with least-privilege *read* permissions, store secrets server-side.
 - P0.4 Discover pinned-commit profile: language/framework, manifest/lockfiles, CI, tests, Docker/IaC, migration hints; evidence and unknown labels.
 - P0.5 **Refactor the imported Shadcn Admin layout, routing and navigation** into Preflyt-branded functional screens; remove unrelated demos and mock data, replace upstream Clerk/demo auth with OIDC-guarded routes, implement the actual repository list/detail/profile with loading/empty/error states, basic audit and missing-control report. No AI, fake future-feature pages or repository code execution.
-- P0.6 Package documented Compose deployment, DB migration/backup and safe upgrade path.
+- P0.6 Package versioned prebuilt images and **complete Docker Compose deployment** (frontend, API, PostgreSQL, Redis, required workers, model gateway and evidence storage as applicable), with a root `.env.example`, DB migrations, health checks, persistent volumes, backup and safe upgrade/rollback. **All current-release services start through `docker compose up -d` after configuration; no host-side application dependency installation.** Include standard OpenTelemetry exporter environment variables for any OTLP-compatible APM, per-service names, and an optional collector profile; see [OTel deployment contract](../deployment/opentelemetry-env.md).
 
 **Done when:** On a clean deployment an authorized user logs in, selects a GitHub repo and sees a correct profile and missing-control report; an unauthorized user cannot view it. Deleting/losing a provider token gives a visible, non-misleading error. Rollback preserves repository/profile records.
 
@@ -215,7 +215,7 @@ A phase **cannot be marked complete** until all applicable entries below are sat
 
 - [ ] A user can complete the promised workflow end-to-end in a clean deployment, with sample evidence/output and documented limits.
 - [ ] UI, API and worker workflows agree on statuses; there is no dead-end placeholder screen or unfinished dependency on a future phase.
-- [ ] Docker Compose evaluation or supported Helm/Kubernetes packaging can be installed/upgraded repeatably; database migrations and configuration are versioned.
+- [ ] **Every release** has published versioned images, a working full-stack Docker Compose file, and documented root `.env.example` supporting standard OTLP environment variables. After configuring required secrets/endpoints, `docker compose up -d` boots all release-required services without host installs; migrations, health, persistence, startup order, upgrades and rollback are tested. Kubernetes/Helm remains an optional deployment target.
 - [ ] Authentication, role scoping, secrets, event signatures, safe execution boundaries and target authorization relevant to this phase are validated.
 - [ ] Provider outages, invalid evidence, unavailable executors and disabled AI **fail safely with useful messages**.
 - [ ] Check/report semantics preserve exact revision and deterministic gate decisions, with INCOMPLETE for missing mandatory evidence.
