@@ -4,7 +4,7 @@
 **Date:** 2026-10-08  
 **Product:** Preflyt  
 **Decision owner:** Product / Engineering  
-**Related:** [Product Requirements](../PRD.md), [Repository README](../../README.md), [ADR-0002: safe MVP execution and remediation evidence](ADR-0002-safe-execution-fixtures-remediation-contract.md)
+**Related:** [Product Requirements](../PRD.md), [Repository README](../../README.md), [ADR-0003: OIDC user authentication](ADR-0003-oidc-user-authentication.md), [ADR-0002: safe MVP execution and remediation evidence](ADR-0002-safe-execution-fixtures-remediation-contract.md)
 
 ## Context
 
@@ -38,7 +38,7 @@ For the initial product, minimizing languages, sharing contracts, and simplifyin
 
 ### Process and trust boundaries
 
-1. **HTTP API:** NestJS validates webhook signatures, authenticates users, enforces organizational policy, persists metadata, and enqueues work. No model-generated shell commands or code execution in the API process.
+1. **HTTP API:** NestJS validates webhook signatures and OIDC identities, establishes server-managed user sessions, maps provisioned issuer/subject identities to local roles, enforces organizational policy, persists metadata, and enqueues work. No model-generated shell commands or code execution in the API process. Human auth is defined in [ADR-0003](ADR-0003-oidc-user-authentication.md).
 2. **Workflow/integration workers:** BullMQ consumers own asynchronous workflow transitions, CI/SCM integration, state persistence, retry and cancellation logic. Jobs use idempotency keys: queue delivery may occur more than once.
 3. **Agent workers:** Separate TypeScript processes consume approved evidence, use model routing, and ask typed tools to perform bounded operations. They hold no cluster-admin or GitHub write credentials.
 4. **Execution controller:** Distinct TypeScript service validates tool authorization then dispatches ephemeral Docker or Kubernetes jobs. The controller is not a general-purpose shell proxy.
