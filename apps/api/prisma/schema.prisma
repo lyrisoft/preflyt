@@ -14,6 +14,11 @@ enum MemberRole {
   VIEWER
 }
 
+enum GitHubSetupPhase {
+  INSTALLATION
+  USER_AUTHORIZATION
+}
+
 model Identity {
   id          String   @id @default(cuid())
   issuer      String
@@ -25,6 +30,8 @@ model Identity {
   membership  Membership?
   sessions    WebSession[]
   bootstrapChallenges BootstrapChallenge[]
+  githubSetupTransactions GitHubSetupTransaction[]
+  githubInstallations GitHubInstallation[]
   @@unique([issuer, subject])
 }
 
@@ -92,4 +99,49 @@ model AuthThrottle {
   windowStart DateTime
   count       Int      @default(0)
   @@unique([action, keyHash, windowStart])
+}
+
+model GitHubSetupTransaction {
+  id                  String          @id @default(cuid())
+  stateHash           String          @unique
+  browserBindingHash  String
+  identityId          String
+  identity            Identity        @relation(fields: [identityId], references: [id], onDelete: Cascade)
+  phase               GitHubSetupPhase @default(INSTALLATION)
+  installationId      BigInt?
+  codeVerifier        String?
+  expiresAt           DateTime
+  createdAt           DateTime        @default(now())
+  @@index([expiresAt])
+}
+
+model GitHubInstallation {
+  id                  BigInt             @id
+  accountLogin        String
+  accountType         String
+  repositorySelection String
+  permissions         Json
+  connectedById       String
+  connectedBy         Identity           @relation(fields: [connectedById], references: [id], onDelete: Restrict)
+  active              Boolean            @default(true)
+  lastVerifiedAt      DateTime?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  repositories        GitHubRepository[]
+}
+
+model GitHubRepository {
+  id             String            @id @default(cuid())
+  githubId       BigInt            @unique
+  installationId BigInt
+  installation   GitHubInstallation @relation(fields: [installationId], references: [id], onDelete: Cascade)
+  name           String
+  fullName       String
+  ownerLogin     String
+  defaultBranch  String?
+  isPrivate      Boolean
+  selected       Boolean           @default(false)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  @@index([installationId, selected])
 }

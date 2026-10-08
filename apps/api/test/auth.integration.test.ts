@@ -108,6 +108,9 @@ beforeAll(async () => {
 beforeEach(async () => {
   await prisma.authThrottle.deleteMany()
   await prisma.auditEvent.deleteMany()
+  await prisma.gitHubRepository.deleteMany()
+  await prisma.gitHubInstallation.deleteMany()
+  await prisma.gitHubSetupTransaction.deleteMany()
   await prisma.webSession.deleteMany()
   await prisma.bootstrapChallenge.deleteMany()
   await prisma.membership.deleteMany()

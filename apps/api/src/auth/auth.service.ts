@@ -343,6 +343,7 @@ export class AuthService implements OnModuleInit {
     }
     return {
       authenticated: true as const,
+      identityId: session.identity.id,
       subject: session.identity.subject,
       email: session.identity.email,
       role: session.identity.membership.role,

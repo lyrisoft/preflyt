@@ -1,176 +1,307 @@
-import { type ChangeEvent, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { getRouteApi } from '@tanstack/react-router'
-import { SlidersHorizontal, ArrowUpAZ, ArrowDownAZ } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { Separator } from '@/components/ui/separator'
+  Check,
+  GitBranch,
+  LoaderCircle,
+  LockKeyhole,
+  RefreshCw,
+} from 'lucide-react'
+import { API_BASE_URL } from '@/lib/api'
+import { Button } from '@/components/ui/button'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
 import { ConfigDrawer } from '@/components/config-drawer'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
-import { apps } from './data/apps'
 
 const route = getRouteApi('/_authenticated/apps/')
 
-type AppType = 'all' | 'connected' | 'notConnected'
+type Repository = {
+  githubId: string
+  name: string
+  fullName: string
+  ownerLogin: string
+  defaultBranch: string | null
+  isPrivate: boolean
+  selected: boolean
+  installation: { accountLogin: string }
+}
 
-const appText = new Map<AppType, string>([
-  ['all', 'All Apps'],
-  ['connected', 'Connected'],
-  ['notConnected', 'Not Connected'],
-])
+type Installation = { id: string; accountLogin: string; active: boolean }
 
 export function Apps() {
-  const {
-    filter = '',
-    type = 'all',
-    sort: initSort = 'asc',
-  } = route.useSearch()
-  const navigate = route.useNavigate()
+  const { github, account } = route.useSearch()
+  const [repositories, setRepositories] = useState<Repository[]>([])
+  const [installations, setInstallations] = useState<Installation[]>([])
+  const [loading, setLoading] = useState(true)
+  const [savingRepository, setSavingRepository] = useState<string | null>(null)
+  const [error, setError] = useState('')
 
-  const [sort, setSort] = useState(initSort)
-  const [appType, setAppType] = useState(type)
-  const [searchTerm, setSearchTerm] = useState(filter)
-
-  const filteredApps = apps
-    .sort((a, b) =>
-      sort === 'asc'
-        ? a.name.localeCompare(b.name)
-        : b.name.localeCompare(a.name)
-    )
-    .filter((app) =>
-      appType === 'connected'
-        ? app.connected
-        : appType === 'notConnected'
-          ? !app.connected
-          : true
-    )
-    .filter((app) => app.name.toLowerCase().includes(searchTerm.toLowerCase()))
-
-  const handleSearch = (e: ChangeEvent<HTMLInputElement>) => {
-    setSearchTerm(e.target.value)
-    navigate({
-      search: (prev) => ({
-        ...prev,
-        filter: e.target.value || undefined,
-      }),
-    })
+  async function loadRepositories() {
+    setLoading(true)
+    setError('')
+    try {
+      const response = await fetch(`${API_BASE_URL}/github/repositories`, {
+        credentials: 'include',
+      })
+      if (!response.ok) throw new Error('Could not load GitHub repositories.')
+      const result = (await response.json()) as {
+        repositories: Repository[]
+        installations: Installation[]
+      }
+      setRepositories(result.repositories)
+      setInstallations(result.installations)
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : 'Could not load GitHub repositories.'
+      )
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const handleTypeChange = (value: AppType) => {
-    setAppType(value)
-    navigate({
-      search: (prev) => ({
-        ...prev,
-        type: value === 'all' ? undefined : value,
-      }),
-    })
-  }
+  useEffect(() => {
+    let active = true
+    const load = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/github/repositories`, {
+          credentials: 'include',
+        })
+        if (!response.ok) throw new Error('Could not load GitHub repositories.')
+        const result = (await response.json()) as {
+          repositories: Repository[]
+          installations: Installation[]
+        }
+        if (active) {
+          setRepositories(result.repositories)
+          setInstallations(result.installations)
+        }
+      } catch (cause) {
+        if (active) {
+          setError(
+            cause instanceof Error
+              ? cause.message
+              : 'Could not load GitHub repositories.'
+          )
+        }
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
+    void load()
+    return () => {
+      active = false
+    }
+  }, [])
 
-  const handleSortChange = (sort: 'asc' | 'desc') => {
-    setSort(sort)
-    navigate({ search: (prev) => ({ ...prev, sort }) })
+  async function setSelected(repository: Repository, selected: boolean) {
+    setSavingRepository(repository.githubId)
+    setError('')
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/github/repositories/${repository.githubId}/selection`,
+        {
+          method: 'PATCH',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ selected }),
+        }
+      )
+      if (!response.ok) {
+        throw new Error(
+          response.status === 403
+            ? 'Only a Preflyt Owner or Admin can change repository selection.'
+            : 'Could not update repository selection.'
+        )
+      }
+      setRepositories((current) =>
+        current.map((item) =>
+          item.githubId === repository.githubId ? { ...item, selected } : item
+        )
+      )
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : 'Could not update repository selection.'
+      )
+    } finally {
+      setSavingRepository(null)
+    }
   }
 
   return (
     <>
-      {/* ===== Top Heading ===== */}
       <Header>
         <Search className='me-auto' />
         <ThemeSwitch />
         <ConfigDrawer />
         <ProfileDropdown />
       </Header>
-
-      {/* ===== Content ===== */}
       <Main fixed>
-        <div>
-          <h1 className='text-2xl font-bold tracking-tight'>
-            App Integrations
-          </h1>
-          <p className='text-muted-foreground'>
-            Here&apos;s a list of your apps for the integration!
-          </p>
-        </div>
-        <div className='my-4 flex items-end justify-between sm:my-0 sm:items-center'>
-          <div className='flex flex-col gap-4 sm:my-4 sm:flex-row'>
-            <Input
-              placeholder='Filter apps...'
-              className='h-9 w-40 lg:w-62.5'
-              value={searchTerm}
-              onChange={handleSearch}
-            />
-            <Select value={appType} onValueChange={handleTypeChange}>
-              <SelectTrigger className='w-36'>
-                <SelectValue>{appText.get(appType)}</SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value='all'>All Apps</SelectItem>
-                <SelectItem value='connected'>Connected</SelectItem>
-                <SelectItem value='notConnected'>Not Connected</SelectItem>
-              </SelectContent>
-            </Select>
+        <div className='flex flex-wrap items-start justify-between gap-4'>
+          <div>
+            <h1 className='text-2xl font-bold tracking-tight'>
+              GitHub repositories
+            </h1>
+            <p className='mt-1 text-muted-foreground'>
+              Connect a GitHub App installation, then choose which repositories
+              Preflyt may assess.
+            </p>
           </div>
-
-          <Select value={sort} onValueChange={handleSortChange}>
-            <SelectTrigger className='w-16'>
-              <SelectValue>
-                <SlidersHorizontal size={18} />
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent align='end'>
-              <SelectItem value='asc'>
-                <div className='flex items-center gap-4'>
-                  <ArrowUpAZ size={16} />
-                  <span>Ascending</span>
-                </div>
-              </SelectItem>
-              <SelectItem value='desc'>
-                <div className='flex items-center gap-4'>
-                  <ArrowDownAZ size={16} />
-                  <span>Descending</span>
-                </div>
-              </SelectItem>
-            </SelectContent>
-          </Select>
+          <Button asChild>
+            <a href={`${API_BASE_URL}/github/install`}>
+              <GitBranch aria-hidden='true' /> Connect GitHub App
+            </a>
+          </Button>
         </div>
-        <Separator className='shadow-sm' />
-        <ul className='faded-bottom no-scrollbar grid gap-4 overflow-auto pt-4 pb-16 md:grid-cols-2 lg:grid-cols-3'>
-          {filteredApps.map((app) => (
-            <li
-              key={app.name}
-              className='rounded-lg border p-4 hover:shadow-md'
+
+        {github === 'connected' && (
+          <div
+            role='status'
+            className='mt-5 rounded-md border border-green-600/30 bg-green-600/5 p-3 text-sm'
+          >
+            GitHub installation connected{account ? ` for ${account}` : ''}.
+            Select the repositories Preflyt should use.
+          </div>
+        )}
+        {github === 'error' && (
+          <div
+            role='alert'
+            className='mt-5 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive'
+          >
+            GitHub was not connected. The authorization may have expired or the
+            installation could not be verified. Try again or contact your
+            Preflyt administrator.
+          </div>
+        )}
+        {installations.some((installation) => !installation.active) && (
+          <div
+            role='alert'
+            className='mt-5 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive'
+          >
+            A GitHub installation is no longer available. Its repositories have
+            been deselected. Reconnect the App to restore access.
+          </div>
+        )}
+        {error && (
+          <div
+            role='alert'
+            className='mt-5 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive'
+          >
+            {error}
+          </div>
+        )}
+
+        <Card className='mt-6'>
+          <CardHeader className='flex flex-row items-center justify-between gap-4'>
+            <div>
+              <CardTitle>Available repositories</CardTitle>
+              <CardDescription>
+                Preflyt requests read access to repository metadata and
+                contents. Selection does not run or modify repository code.
+              </CardDescription>
+            </div>
+            <Button
+              variant='outline'
+              size='icon'
+              onClick={() => void loadRepositories()}
+              disabled={loading}
+              aria-label='Refresh repositories'
             >
-              <div className='mb-8 flex items-center justify-between'>
-                <div
-                  className={`flex size-10 items-center justify-center rounded-lg bg-muted p-2`}
-                >
-                  {app.logo}
-                </div>
-                <Button
-                  variant='outline'
-                  size='sm'
-                  className={`${app.connected ? 'border border-blue-300 bg-blue-50 hover:bg-blue-100 dark:border-blue-700 dark:bg-blue-950 dark:hover:bg-blue-900' : ''}`}
-                >
-                  {app.connected ? 'Connected' : 'Connect'}
-                </Button>
+              {loading ? (
+                <LoaderCircle className='animate-spin' />
+              ) : (
+                <RefreshCw />
+              )}
+            </Button>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <div className='flex min-h-32 items-center justify-center text-sm text-muted-foreground'>
+                <LoaderCircle className='me-2 size-4 animate-spin' /> Loading
+                repositories…
               </div>
-              <div>
-                <h2 className='mb-1 font-semibold'>{app.name}</h2>
-                <p className='line-clamp-2 text-gray-500'>{app.desc}</p>
+            ) : repositories.length === 0 ? (
+              <div className='flex min-h-40 flex-col items-center justify-center rounded-lg border border-dashed p-6 text-center'>
+                <GitBranch className='mb-3 size-8 text-muted-foreground' />
+                <h2 className='font-medium'>
+                  {installations.some((installation) => !installation.active)
+                    ? 'GitHub installation unavailable'
+                    : 'No GitHub installation connected'}
+                </h2>
+                <p className='mt-1 max-w-lg text-sm text-muted-foreground'>
+                  Connect the Preflyt GitHub App and grant it access only to the
+                  repositories you want to assess.
+                </p>
               </div>
-            </li>
-          ))}
-        </ul>
+            ) : (
+              <div className='overflow-x-auto'>
+                <table className='w-full min-w-[38rem] text-sm'>
+                  <thead>
+                    <tr className='border-b text-left text-muted-foreground'>
+                      <th className='w-12 py-3 pe-3 font-medium'>Selected</th>
+                      <th className='py-3 pe-3 font-medium'>Repository</th>
+                      <th className='py-3 pe-3 font-medium'>Installation</th>
+                      <th className='py-3 pe-3 font-medium'>Default branch</th>
+                      <th className='py-3 font-medium'>Access</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {repositories.map((repository) => (
+                      <tr
+                        key={repository.githubId}
+                        className='border-b last:border-0'
+                      >
+                        <td className='py-3 pe-3'>
+                          <Checkbox
+                            checked={repository.selected}
+                            disabled={savingRepository === repository.githubId}
+                            onCheckedChange={(checked) =>
+                              void setSelected(repository, checked === true)
+                            }
+                            aria-label={`Select ${repository.fullName}`}
+                          />
+                        </td>
+                        <td className='py-3 pe-3 font-medium'>
+                          {repository.fullName}
+                        </td>
+                        <td className='py-3 pe-3'>
+                          {repository.installation.accountLogin}
+                        </td>
+                        <td className='py-3 pe-3'>
+                          {repository.defaultBranch ?? 'Not set'}
+                        </td>
+                        <td className='py-3'>
+                          <span className='inline-flex items-center gap-1.5 text-muted-foreground'>
+                            {repository.isPrivate ? (
+                              <LockKeyhole className='size-3.5' />
+                            ) : (
+                              <Check className='size-3.5' />
+                            )}
+                            {repository.isPrivate ? 'Private' : 'Public'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </Main>
     </>
   )
