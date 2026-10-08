@@ -1,6 +1,6 @@
 # ADR-0005: Build Preflyt on the Shadcn Admin source codebase
 
-**Status:** Selected for implementation planning; upstream pin, audit and application integration pending  
+**Status:** Source baseline imported and verified; Preflyt product integration pending
 **Date:** 2026-10-08  
 **Related:** [ADR-0001](ADR-0001-typescript-first-stack.md), [ADR-0003](ADR-0003-oidc-user-authentication.md), [ADR-0004](ADR-0004-shift-left-assessment-governance.md), [Incremental delivery plan](../roadmap/incremental-delivery.md)
 
@@ -103,4 +103,4 @@ Importing and rendering Shadcn Admin alone is **not P0 completion**.
 | Adopt a full React-admin management framework | Not selected; adds another application framework and more opinionated data/navigation architecture |
 | Rebuild dashboard from scratch | Rejected unless upstream audit proves the source unsuitable or insecure |
 
-**Implementation status:** This ADR specifies how to build the frontend. It does not claim the Shadcn Admin source has already been pulled into Preflyt. The upstream baseline SHA will be selected and recorded **before** the P0 import PR.
+**Implementation status:** The source at e16c87f213a5ba5e45964e9b67c792105ec74d26 is imported into apps/web with a pnpm/Turborepo workspace. See [provenance, dependency changes and verification](../vendor/shadcn-admin.md). OIDC, real P0 screens, GitHub onboarding, asset/accessibility review and deployment packaging remain pending. Source import alone does not complete P0.

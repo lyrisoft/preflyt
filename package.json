@@ -1,0 +1,21 @@
+{
+  "name": "preflyt",
+  "private": true,
+  "packageManager": "pnpm@10.15.1",
+  "engines": {
+    "node": ">=24.4.1 <25",
+    "pnpm": ">=10.15.1 <11"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @preflyt/web dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "format:check": "turbo run format:check",
+    "test:browser:install": "pnpm --filter @preflyt/web test:browser:install"
+  },
+  "devDependencies": {
+    "turbo": "2.11.7"
+  }
+}

@@ -4,7 +4,7 @@
 
 Preflyt is a planned **self-hosted, AI-native Shift Left engineering platform**. It helps engineering teams detect and prevent security vulnerabilities, software defects, reliability failures and infrastructure risks **earlier in the software development lifecycle**, using continuous assessments, explicit engineering standards, policy-based quality gates and actionable developer feedback.
 
-> **Status: product specification / pre-implementation.** This repository documents the intended platform; it does **not** yet contain runnable services, deployment manifests, scanners or an operational UI. Capabilities below are proposed unless otherwise stated.
+> **Status: frontend source baseline imported; product implementation pending.** The runnable upstream dashboard is under `apps/web`. NestJS services, Preflyt OIDC authentication, repository onboarding, scanners and deployment manifests are not implemented. Product capabilities below remain proposed.
 
 Developed by **Lyrisoft Technologies**.
 
@@ -169,7 +169,7 @@ The roadmap is directional, not a delivery promise. See the [phase-by-phase vert
 
 ## Proposed monorepo
 
-This structure is planned; the directories below are **not yet implemented**.
+The web application and pnpm/Turborepo workspace exist. Other application, service and infrastructure directories below remain planned.
 
 ~~~text
 apps/
@@ -209,7 +209,17 @@ turbo.json
 
 ## Development status
 
-**Preflyt is currently a documented product design, not a functioning platform.** There is no documented install command and no claim that Docker Compose, Helm, services, scanners, UI or AI integration are running. Future contributions should follow branch protection, scoped security policy and reviewable PRs.
+The pinned Shadcn Admin frontend is imported and tested. It currently displays upstream demo content; it is not a functioning Preflyt platform. See [source provenance and verification](docs/vendor/shadcn-admin.md).
+
+Use Node 24.4.1 and pnpm 10.15.1:
+
+~~~sh
+pnpm install --frozen-lockfile --ignore-scripts
+pnpm test:browser:install
+pnpm dev
+~~~
+
+Workspace checks: `pnpm build`, `pnpm lint`, `pnpm typecheck`, `pnpm format:check`, `pnpm test`, and `pnpm audit`. Contributions use issues and reviewable pull requests.
 
 ## License
 
