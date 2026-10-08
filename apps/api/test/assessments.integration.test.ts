@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto'
+import { parseArtifact } from '../src/github-events/ci-artifact-parser.js'
 import { PullRequestController } from '../src/assessments/pull-request.controller.js'
 import { PullRequestService } from '../src/assessments/pull-request.service.js'
 import { GitHubPrSyncService } from '../src/github/github-pr-sync.service.js'
@@ -228,7 +230,7 @@ describe('immutable exact-SHA assessment API', () => {
       stored.report.checks.find(
         (c: { ruleId: string }) => c.ruleId === 'tests.required',
       ),
-    ).toMatchObject({ coverage: 'UNVERIFIED', providerResult: 'SUCCEEDED' })
+    ).toMatchObject({ coverage: 'INVALID', providerResult: 'SUCCEEDED' })
     expect(JSON.stringify(stored)).not.toContain('secret-report')
     expect(stored.assessmentHash).toBe(
       digest({
@@ -1495,4 +1497,93 @@ it('withholds links when state changes during a read and rejects matching tamper
     data: { report: { qualityGate: 'PASS' } },
   })
   expect((await currentPr()).status).toBe(409)
+})
+
+it('freezes fail-closed evidence validation and exposes no report content', async () => {
+  const { selection, delivery } = await ready()
+  await identify(delivery.id)
+  await bind(selection.id)
+  const content = '<testsuite><testcase name="secret-report-name"/></testsuite>'
+  const sha256 = createHash('sha256').update(content).digest('hex')
+  const artifact = await prisma.ciArtifactImport.create({
+    data: {
+      deliveryId: delivery.id,
+      format: 'junit',
+      sha256,
+      content: Buffer.from(content),
+      summary: parseArtifact('junit', content, sha256).summary,
+      uploadedById: actorId,
+    },
+  })
+  const response = await boundAssessment(selection.id)
+  expect(response.status).toBe(201)
+  expect(testRule(response).evidenceValidation).toMatchObject({
+    status: 'INCOMPLETE',
+    trustedExecuted: false,
+    sourceApproved: true,
+    observationIntegrity: true,
+    reports: [
+      { artifactId: artifact.id, integrity: 'VALID', executedTests: 1 },
+    ],
+  })
+  expect(JSON.stringify(response.body)).not.toContain('secret-report-name')
+  await prisma.ciArtifactImport.update({
+    where: { id: artifact.id },
+    data: { content: Buffer.from('tampered') },
+  })
+  const later = await boundAssessment(selection.id)
+  expect(testRule(later)).toMatchObject({
+    coverage: 'INVALID',
+    evidenceValidation: { status: 'INVALID', trustedExecuted: false },
+  })
+  expect(
+    (await readAssessment(response.body.assessment.id)).body.assessmentHash,
+  ).toBe(response.body.assessment.assessmentHash)
+})
+it('detects changed imported observation metadata and never trusts failed or missing proofs', async () => {
+  const { selection, delivery } = await ready()
+  await identify(delivery.id)
+  await bind(selection.id)
+  await prisma.importedCiEvidence.update({
+    where: { deliveryId: delivery.id },
+    data: { sourceObjectId: 'forged' },
+  })
+  const response = await boundAssessment(selection.id)
+  expect(testRule(response).evidenceValidation.reasons).toContain(
+    'CI_OBSERVATION_INTEGRITY_INVALID',
+  )
+  expect(response.body.assessment.report).toMatchObject({
+    trustedExecutedChecks: 0,
+    qualityGate: null,
+  })
+})
+it('bounds original artifact validation and freezes truncation without trusted outcomes', async () => {
+  const { selection, delivery } = await ready()
+  // Deliberately simulate legacy/out-of-band rows beyond the upload quota.
+  for (let i = 0; i < 33; i++) {
+    const content = `<testsuite><testcase name="test-${i}"/></testsuite>`
+    const sha256 = createHash('sha256').update(content).digest('hex')
+    await prisma.ciArtifactImport.create({
+      data: {
+        deliveryId: delivery.id,
+        format: 'junit',
+        sha256,
+        content: Buffer.from(content),
+        summary: parseArtifact('junit', content, sha256).summary,
+        uploadedById: actorId,
+      },
+    })
+  }
+  const response = await create(assessmentBody(selection.id, delivery.id))
+  expect(response.status).toBe(201)
+  const check = testRule(response)
+  expect(check.evidenceValidation.reports).toHaveLength(32)
+  expect(check.evidenceValidation.reasons).toContain(
+    'VALIDATION_COLLECTION_TRUNCATED',
+  )
+  expect(response.body.assessment.report).toMatchObject({
+    validationCollectionTruncated: true,
+    trustedExecutedChecks: 0,
+    qualityGate: null,
+  })
 })

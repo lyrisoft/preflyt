@@ -40,6 +40,10 @@ import {
 import { StatusBadge } from '@/components/status-badge'
 import { AssessmentContext } from './assessment-context'
 import type { ContextRequest } from './engineering-queries'
+import {
+  EvidenceValidationPanel,
+  type EvidenceValidation,
+} from './evidence-validation-panel'
 import { RelativeTime } from './relative-time'
 import {
   useAssessmentList,
@@ -78,6 +82,7 @@ type Assessment = AssessmentListItem & {
       title: string
       required: boolean
       coverage: string
+      evidenceValidation?: EvidenceValidation | null
       providerResult: CiResult | null
       mappingTrust?: string | null
       freshness: string
@@ -466,7 +471,13 @@ export function RepositoryAssessments({
                       </TableHeader>
                       <TableBody>
                         {data.report.checks.map((check) => {
-                          const status = coverageStatus(check.coverage)
+                          const status =
+                            check.coverage === 'INVALID'
+                              ? {
+                                  tone: 'error' as const,
+                                  label: 'Invalid evidence',
+                                }
+                              : coverageStatus(check.coverage)
                           return (
                             <TableRow key={check.ruleId}>
                               <TableCell className='max-w-md min-w-64 whitespace-normal'>
@@ -474,6 +485,9 @@ export function RepositoryAssessments({
                                 <p className='mt-0.5 text-xs text-muted-foreground'>
                                   {check.reason}
                                 </p>
+                                <EvidenceValidationPanel
+                                  validation={check.evidenceValidation}
+                                />
                               </TableCell>
                               <TableCell>
                                 <Badge variant='neutral'>

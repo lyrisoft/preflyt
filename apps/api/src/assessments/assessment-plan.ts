@@ -1,5 +1,10 @@
+import {
+  validateRuleEvidence,
+  type ObservationValidation,
+  VALIDATOR_VERSION,
+  MAX_VALIDATION_ARTIFACTS,
+} from './evidence-validation.js'
 import { runAttempt } from './ci-binding.js'
-import { createHash } from 'node:crypto'
 import {
   posture,
   resolvePacks,
@@ -7,22 +12,7 @@ import {
   type PackRef,
 } from '../standards/catalogue.js'
 import type { ProfileSignal } from '../github/repository-profile.js'
-function canonical(value: unknown): unknown {
-  if (value instanceof Date) return value.toISOString()
-  if (Array.isArray(value)) return value.map(canonical)
-  if (value && typeof value === 'object')
-    return Object.fromEntries(
-      Object.entries(value)
-        .filter(([, v]) => v !== undefined)
-        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-        .map(([k, v]) => [k, canonical(v)]),
-    )
-  return value
-}
-export const digest = (value: unknown) =>
-  createHash('sha256')
-    .update(JSON.stringify(canonical(value)))
-    .digest('hex')
+export { digest } from './assessment-digest.js'
 export type Mapping = {
   ruleId: string
   deliveryId: string
@@ -64,6 +54,8 @@ export function buildAssessment(input: {
   at: Date
   truncated: boolean
   ambiguousRules?: string[]
+  validations?: Map<string, ObservationValidation>
+  validationCollectionTruncated?: boolean
 }) {
   if (input.observations.some((row) => row.sourceSha !== input.sourceSha))
     throw new Error('Cross-revision evidence')
@@ -93,7 +85,12 @@ export function buildAssessment(input: {
       applicabilityReason:
         'Selected repository pack; changed-path and PR applicability are not evaluated in this commit slice.',
     })),
-    limits: { observations: 100, maxAgeHoursPerRule: true },
+    evidenceValidatorVersion: VALIDATOR_VERSION,
+    limits: {
+      observations: 100,
+      maxAgeHoursPerRule: true,
+      validationArtifacts: MAX_VALIDATION_ARTIFACTS,
+    },
     enforcement: 'observe',
   }
   const observed = input.observations.map((row) => ({
@@ -115,7 +112,42 @@ export function buildAssessment(input: {
     sourceUpdatedAt: row.sourceUpdatedAt?.toISOString() ?? null,
     observedAt: row.observedAt.toISOString(),
     artifacts: row.artifacts.map((artifact) => ({
-      ...artifact,
+      id: artifact.id,
+      format: artifact.format,
+      sha256: artifact.sha256,
+      parserVersion: artifact.parserVersion,
+      verification: artifact.verification,
+      summary: Object.fromEntries(
+        Object.entries(
+          (artifact.summary ?? {}) as Record<string, unknown>,
+        ).filter(([key, value]) =>
+          [
+            'tests',
+            'failures',
+            'errors',
+            'skipped',
+            'passed',
+            'suites',
+            'runs',
+            'results',
+            'error',
+            'warning',
+            'note',
+            'none',
+            'unknown',
+            'suppressed',
+          ].includes(key)
+            ? typeof value === 'number' &&
+              Number.isSafeInteger(value) &&
+              value >= 0
+            : key === 'partial'
+              ? typeof value === 'boolean'
+              : key === 'execution' &&
+                ['UNKNOWN', 'REPORTED_SUCCESS', 'REPORTED_FAILURE'].includes(
+                  String(value),
+                ),
+        ),
+      ),
       createdAt: artifact.createdAt.toISOString(),
     })),
   }))
@@ -194,14 +226,31 @@ export function buildAssessment(input: {
                     ? 'PENDING'
                     : 'UNVERIFIED'
     }
+    const evidenceValidation =
+      control.capability === 'import_only'
+        ? validateRuleEvidence(
+            control.id,
+            mapping?.bindingApproved === true,
+            evidence ? input.validations?.get(evidence.deliveryId) : undefined,
+            evidence ? freshness : 'NOT_APPLICABLE',
+            evidence?.result ?? null,
+            ambiguous || !!input.ambiguousRules?.includes(control.id),
+            superseded,
+            input.validationCollectionTruncated ?? false,
+          )
+        : null
     return {
       ruleId: control.id,
       title: control.title,
       required: control.required,
       capability: control.capability,
-      coverage: input.ambiguousRules?.includes(control.id)
-        ? 'AMBIGUOUS'
-        : coverage,
+      coverage:
+        evidenceValidation?.status === 'INVALID'
+          ? 'INVALID'
+          : input.ambiguousRules?.includes(control.id)
+            ? 'AMBIGUOUS'
+            : coverage,
+      evidenceValidation,
       ruleOutcome: null,
       deliveryId: mapping?.deliveryId ?? null,
       providerResult: evidence?.result ?? null,
@@ -215,15 +264,18 @@ export function buildAssessment(input: {
       superseded,
       ambiguous: ambiguous || !!input.ambiguousRules?.includes(control.id),
       configurationEvidence: control.evidence,
-      reason: input.ambiguousRules?.includes(control.id)
-        ? 'CI source is ambiguous or the observation collection is incomplete.'
-        : coverage === 'CONFIGURATION_OBSERVED'
-          ? 'Exact-revision configuration hint only; execution is not established.'
-          : control.capability === 'planned'
-            ? 'Check adapter is not implemented; an association cannot enable it.'
-            : !mapping && control.operator !== 'configuration_hint_present'
-              ? 'No CI observation associated with this rule.'
-              : 'Imported result/association does not prove trusted rule coverage.',
+      reason:
+        evidenceValidation?.status === 'INVALID'
+          ? 'Evidence integrity validation failed; inspect validation reasons.'
+          : input.ambiguousRules?.includes(control.id)
+            ? 'CI source is ambiguous or the observation collection is incomplete.'
+            : coverage === 'CONFIGURATION_OBSERVED'
+              ? 'Exact-revision configuration hint only; execution is not established.'
+              : control.capability === 'planned'
+                ? 'Check adapter is not implemented; an association cannot enable it.'
+                : !mapping && control.operator !== 'configuration_hint_present'
+                  ? 'No CI observation associated with this rule.'
+                  : 'Imported result/association does not prove trusted rule coverage.',
     }
   })
   const required = checks.filter((check) => check.required)
@@ -243,6 +295,8 @@ export function buildAssessment(input: {
       ).length,
       trustedExecutedChecks: 0,
       collectionTruncated: input.truncated,
+      validationCollectionTruncated:
+        input.validationCollectionTruncated ?? false,
       currentBranchReadiness: 'NOT_VERIFIED',
       limitations: [
         'Manual CI-to-rule associations are unverified coverage.',

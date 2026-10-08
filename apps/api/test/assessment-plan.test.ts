@@ -175,6 +175,18 @@ describe('frozen assessment contracts', () => {
     const poisoned = {
       ...observation(),
       secret: 'never-copy',
+      artifacts: [
+        {
+          id: 'a',
+          format: 'junit',
+          sha256: 'a'.repeat(64),
+          parserVersion: 1,
+          verification: 'ADMIN_ASSOCIATED_UNVERIFIED',
+          summary: { tests: 1, privateName: 'never-copy' },
+          createdAt: new Date(),
+          content: 'never-copy',
+        },
+      ],
       repositoryGithubId: 501n,
     }
     const result = buildAssessment({ ...input(), observations: [poisoned] })

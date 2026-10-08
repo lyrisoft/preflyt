@@ -1,4 +1,10 @@
 import {
+  validateObservation,
+  validateReport,
+  MAX_VALIDATION_ARTIFACTS,
+  type ObservationValidation,
+} from './evidence-validation.js'
+import {
   readPullRequestContext,
   type PullRequestContext,
 } from '../github-events/pull-request-context.js'
@@ -341,6 +347,35 @@ export class AssessmentService {
       ...input.mappings,
       ...approved.mappings.filter((m) => !manualRules.has(m.ruleId)),
     ]
+    const mappedIds = [...new Set(mappings.map((m) => m.deliveryId))]
+    const deliveries = await tx.gitHubWebhookDelivery.findMany({
+      where: {
+        id: { in: mappedIds },
+        repositoryGithubId: repo.githubId,
+        installationId: repo.installationId,
+      },
+    })
+    const artifacts = await tx.ciArtifactImport.findMany({
+      where: { deliveryId: { in: mappedIds } },
+      orderBy: [{ deliveryId: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
+      take: MAX_VALIDATION_ARTIFACTS + 1,
+    })
+    const validationCollectionTruncated =
+      artifacts.length > MAX_VALIDATION_ARTIFACTS
+    const validations = new Map<string, ObservationValidation>()
+    for (const row of observations.filter((o) =>
+      mappedIds.includes(o.deliveryId),
+    ))
+      validations.set(row.deliveryId, {
+        observationIntegrity: validateObservation(
+          row,
+          deliveries.find((d) => d.id === row.deliveryId),
+        ),
+        reports: artifacts
+          .slice(0, MAX_VALIDATION_ARTIFACTS)
+          .filter((a) => a.deliveryId === row.deliveryId)
+          .map(validateReport),
+      })
     const at = new Date()
     let result
     try {
@@ -355,6 +390,8 @@ export class AssessmentService {
           (id) => !manualRules.has(id),
         ),
         observations,
+        validations,
+        validationCollectionTruncated,
         at,
         truncated: rows.length > 100,
       })

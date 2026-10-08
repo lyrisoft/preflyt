@@ -17,3 +17,5 @@ View assessment opens a snapshot dialog with pinned PR context, approved sources
 Neither confirmation badges nor provider success imply verified execution, a quality gate or merge readiness. Historical snapshots are preserved when approvals or PR context change.
 
 Verification: frontend typecheck, scoped ESLint and formatting checks. Browser tests remain skipped at the user's request. Global navigation, enterprise overview metrics, findings, quality gates and organization switching are separate product capabilities; no placeholder metrics are fabricated by these panels.
+
+[Evidence validation](evidence-validation.md) now freezes report integrity and missing execution-trust prerequisites in new snapshots. Invalid evidence is explicitly marked INVALID; administrator uploads remain unverified.

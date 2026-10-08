@@ -11,6 +11,7 @@ import {
   useSnapshot,
   identityLabel,
 } from './engineering-queries'
+import { EvidenceValidationPanel } from './evidence-validation-panel'
 import { coverageStatus, sentence } from './repository-vocabulary'
 
 export function AssessmentContext({ request }: { request: ContextRequest }) {
@@ -122,7 +123,10 @@ export function AssessmentSnapshotDialog({
             )}
             <div className='divide-y rounded-md border'>
               {query.data.report.checks.map((check) => {
-                const status = coverageStatus(check.coverage)
+                const status =
+                  check.coverage === 'INVALID'
+                    ? { tone: 'error' as const, label: 'Invalid evidence' }
+                    : coverageStatus(check.coverage)
                 return (
                   <div key={check.ruleId} className='space-y-1 p-3 text-sm'>
                     <div className='flex flex-wrap items-center justify-between gap-2'>
@@ -134,6 +138,9 @@ export function AssessmentSnapshotDialog({
                     <p className='text-xs text-muted-foreground'>
                       {check.reason}
                     </p>
+                    <EvidenceValidationPanel
+                      validation={check.evidenceValidation}
+                    />
                     <p className='text-xs'>
                       Provider result:{' '}
                       {check.providerResult

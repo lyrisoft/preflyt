@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { API_BASE_URL } from '@/lib/api'
+import type { EvidenceValidation } from './evidence-validation-panel'
 
 export const engineeringPath = (repo: string, path: string) =>
   `${API_BASE_URL}/github/repositories/${encodeURIComponent(repo)}${path}`
@@ -138,6 +139,7 @@ export type Snapshot = {
       ruleId: string
       title: string
       coverage: string
+      evidenceValidation?: EvidenceValidation | null
       providerResult: string | null
       mappingTrust?: string | null
       reason: string

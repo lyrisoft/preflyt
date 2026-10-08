@@ -52,3 +52,5 @@ Scoped verification covers frozen plans, unverified associations, expired/future
 [Current PR state and CI links](current-pr-state.md) now provide locally served, recently verified PR context and matching historical assessment links. These still do not establish executed coverage or a quality gate.
 
 Next slices: trusted rule coverage and normalized finding occurrences, deterministic P2 policy gates and exact-SHA GitHub feedback. Those must not upgrade manual associations or raw administrator uploads silently.
+
+[Evidence validation](evidence-validation.md) now freezes report integrity and missing execution-trust prerequisites in new snapshots. Invalid evidence is explicitly marked INVALID; administrator uploads remain unverified.

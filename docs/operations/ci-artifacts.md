@@ -35,3 +35,5 @@ Schema source: [OASIS pinned schema](https://github.com/oasis-tcs/sarif-spec/blo
 Apply additive migration `20261008230000_ci_artifacts` and regenerate the Prisma client before using the new API. No existing application rows are changed. Deleting retained inbox/evidence records cascades their artifacts, so plan retention and backups together. Rollback to the preceding API preserves added records/table; do not reset the database.
 
 Focused verification covers parser rejection/redaction/integrity bounds and actual PostgreSQL API transactions: role/origin checks, selected/revoked/wrong repository access, immutable original bytes, exact revision derivation, concurrent replay, quota and audit rollback. Frontend verification uses type/lint/format checks; browser tests remain skipped. Automatic provider artifact retrieval/provenance verification, normalized finding occurrences and assessment planning remain subsequent slices.
+
+[Evidence validation](evidence-validation.md) now freezes report integrity and missing execution-trust prerequisites in new snapshots. Invalid evidence is explicitly marked INVALID; administrator uploads remain unverified.
