@@ -455,6 +455,12 @@ flowchart TD
 
 Open-source component/rule/model license checks are mandatory before redistribution or commercialization.
 
+### Complete Compose and APM configuration requirements
+
+Every release must publish images and a **complete single-command Docker Compose install** for its current services (frontend, NestJS API, PostgreSQL, Redis, workers, LiteLLM and object store where needed), with versioned `.env.example`, startup/health checks, safe migrations, durable volumes, upgrade and rollback instructions. Configured users should start all required services via `docker compose up -d` with no host application dependency installation. Optional OTEL Collector and local model services may be separate Compose profiles.
+
+**OpenTelemetry must be vendor-neutral.** The root example environment declares standard OTEL exporter endpoint, protocol, header, traces/metrics/logs exporters, resource metadata, propagation and sampling; Compose injects shared settings and distinct `OTEL_SERVICE_NAME` values into first-party services. Users can configure any compatible OTLP endpoint without editing code. Failures of telemetry exporters must not make core application requests fail. See [OTel contract](deployment/opentelemetry-env.md). **The current `.env.example` is a configuration draft, not evidence of existing running services or Compose manifests.**
+
 ### Execution trust boundary: mandatory in MVP
 
 **Every Preflyt-executed command touching a connected repository—including scanner parsers, package install scripts, tests and builds—must run under the security-reviewed isolation contract in ADR-0002.** Do not assume Docker or an ordinary Kubernetes Job alone is sufficient for untrusted repositories.
