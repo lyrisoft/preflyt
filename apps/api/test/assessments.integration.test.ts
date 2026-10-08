@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { AssessmentController } from '../src/assessments/assessment.controller.js'
 import { AssessmentService } from '../src/assessments/assessment.service.js'
 import { digest } from '../src/assessments/assessment-plan.js'
+import { GitHubEventProcessor } from '../src/github-events/github-event-processor.js'
 import { importCiEvidence } from '../src/github-events/ci-evidence.js'
 import { ForbiddenException, ValidationPipe } from '@nestjs/common'
 import { NestFactory } from '@nestjs/core'
@@ -403,5 +404,265 @@ describe('immutable exact-SHA assessment API', () => {
       },
     })
     expect((await create(value)).status).toBe(409)
+  })
+})
+
+describe('atomic automatic CI assessment snapshots', () => {
+  it('preserves manual request idempotency hashes used before automatic triggers were added', async () => {
+    const { selection, delivery } = await ready()
+    const input = assessmentBody(selection.id, delivery.id)
+    const first = await create(input)
+    expect(first.status).toBe(201)
+    const stored = await prisma.commitAssessment.findUniqueOrThrow({
+      where: { id: first.body.assessment.id },
+    })
+    expect(stored.inputHash).toBe(
+      digest({
+        sourceSha: input.sourceSha,
+        expectedSelectionId: input.expectedSelectionId,
+        mappings: input.mappings,
+        actorId,
+      }),
+    )
+    const retry = await create(input)
+    expect(retry.status).toBe(201)
+    expect(retry.body).toMatchObject({
+      duplicate: true,
+      assessment: { id: stored.id },
+    })
+  })
+  async function incoming(
+    sha = 'd'.repeat(40),
+    event = 'check_run',
+    action = 'completed',
+  ) {
+    return prisma.gitHubWebhookDelivery.create({
+      data: {
+        id: randomUUID(),
+        event,
+        action,
+        installationId: 500n,
+        repositoryGithubId: 501n,
+        sourceSha: sha,
+        sourceObjectId: '99',
+        sourceStatus: 'completed',
+        sourceConclusion: 'success',
+        sourceUpdatedAt: new Date(),
+        payloadHash: 'e'.repeat(64),
+      },
+    })
+  }
+  it('commits one exact-SHA frozen assessment with evidence and audits under concurrent retries', async () => {
+    const selection = (await post()).body
+    const delivery = await incoming()
+    const processor = new GitHubEventProcessor(prisma)
+    await Promise.all([
+      processor.process(delivery.id),
+      processor.process(delivery.id),
+    ])
+    await processor.process(delivery.id)
+    const snapshot = await prisma.commitAssessment.findFirstOrThrow()
+    expect(await prisma.commitAssessment.count()).toBe(1)
+    expect(await prisma.importedCiEvidence.count()).toBe(1)
+    expect(snapshot.request).toMatchObject({
+      trigger: 'GITHUB_CI',
+      sourceDeliveryId: delivery.id,
+      sourceSha: delivery.sourceSha,
+      actorId: null,
+      selectionId: selection.id,
+      mappings: [],
+      profileSnapshot: null,
+    })
+    expect(snapshot.report).toMatchObject({
+      sourceSha: delivery.sourceSha,
+      coverage: 'INCOMPLETE',
+      qualityGate: null,
+      trustedExecutedChecks: 0,
+      observations: [{ deliveryId: delivery.id, result: 'SUCCEEDED' }],
+    })
+    expect(
+      (snapshot.report as any).checks.find(
+        (c: any) => c.ruleId === 'tests.required',
+      ),
+    ).toMatchObject({
+      coverage: 'MISSING',
+      mappingTrust: null,
+      ruleOutcome: null,
+    })
+    expect(snapshot.assessmentHash).toBe(
+      digest({
+        request: snapshot.request,
+        plan: snapshot.plan,
+        report: snapshot.report,
+      }),
+    )
+    expect(
+      await prisma.auditEvent.count({ where: { event: 'assessment.created' } }),
+    ).toBe(1)
+    expect(
+      await prisma.auditEvent.count({
+        where: { event: 'github_event_processed' },
+      }),
+    ).toBe(1)
+    expect(
+      (
+        await prisma.gitHubWebhookDelivery.findUniqueOrThrow({
+          where: { id: delivery.id },
+        })
+      ).state,
+    ).toBe('PROCESSED')
+  })
+  it('keeps new commits and out-of-order deliveries historical without borrowing a profile or rewriting old reports', async () => {
+    await post()
+    const processor = new GitHubEventProcessor(prisma)
+    const first = await incoming('d'.repeat(40))
+    await processor.process(first.id)
+    const old = await prisma.commitAssessment.findFirstOrThrow()
+    const second = await incoming('c'.repeat(40), 'workflow_run')
+    await prisma.gitHubWebhookDelivery.update({
+      where: { id: second.id },
+      data: { sourceUpdatedAt: new Date('2020-01-01') },
+    })
+    await processor.process(second.id)
+    expect(await prisma.commitAssessment.count()).toBe(2)
+    expect(
+      await prisma.commitAssessment.findUnique({ where: { id: old.id } }),
+    ).toEqual(old)
+    const newer = await prisma.commitAssessment.findFirstOrThrow({
+      where: { sourceSha: second.sourceSha },
+    })
+    expect(
+      (newer.report as any).observations.every(
+        (o: any) => o.sourceSha === second.sourceSha,
+      ),
+    ).toBe(true)
+    expect(newer.request).toMatchObject({ profileSnapshot: null })
+  })
+  it('imports evidence without a snapshot when standards are not adopted and ignores PR-only events', async () => {
+    const processor = new GitHubEventProcessor(prisma)
+    const delivery = await incoming()
+    await processor.process(delivery.id)
+    expect(await prisma.importedCiEvidence.count()).toBe(1)
+    expect(await prisma.commitAssessment.count()).toBe(0)
+    expect(
+      (
+        await prisma.auditEvent.findFirstOrThrow({
+          where: { event: 'github_event_processed' },
+        })
+      ).metadata,
+    ).toMatchObject({
+      assessmentId: null,
+      assessmentReason: 'standards_not_adopted',
+    })
+    await post()
+    const pr = await incoming('e'.repeat(40), 'pull_request', 'synchronize')
+    await processor.process(pr.id)
+    expect(await prisma.commitAssessment.count()).toBe(0)
+  })
+  it('does not create evidence or assessments after selection is revoked', async () => {
+    await post()
+    const delivery = await incoming()
+    await prisma.gitHubRepository.updateMany({ data: { selected: false } })
+    await new GitHubEventProcessor(prisma).process(delivery.id)
+    expect(await prisma.importedCiEvidence.count()).toBe(0)
+    expect(await prisma.commitAssessment.count()).toBe(0)
+    expect(
+      (
+        await prisma.gitHubWebhookDelivery.findUniqueOrThrow({
+          where: { id: delivery.id },
+        })
+      ).state,
+    ).toBe('IGNORED')
+  })
+  it('retains a delayed triggering observation beyond the bounded latest-100 collection', async () => {
+    await post()
+    const old = await incoming()
+    await prisma.gitHubWebhookDelivery.update({
+      where: { id: old.id },
+      data: { receivedAt: new Date('2020-01-01') },
+    })
+    for (let index = 0; index < 101; index++) {
+      const newer = await incoming()
+      await prisma.importedCiEvidence.create({ data: importCiEvidence(newer)! })
+      await prisma.gitHubWebhookDelivery.update({
+        where: { id: newer.id },
+        data: { state: 'PROCESSED' },
+      })
+    }
+    await new GitHubEventProcessor(prisma).process(old.id)
+    const snapshot = await prisma.commitAssessment.findFirstOrThrow()
+    const report = snapshot.report as any
+    expect(report.collectionTruncated).toBe(true)
+    expect(report.observations).toHaveLength(100)
+    expect(report.observations.some((o: any) => o.deliveryId === old.id)).toBe(
+      true,
+    )
+  })
+  it('rolls back the claimed delivery and CI evidence if adopted definitions are corrupt; retry recovers', async () => {
+    const selection = (await post()).body
+    const adopted = await prisma.repositoryStandardsSelection.findUniqueOrThrow(
+      { where: { id: selection.id } },
+    )
+    await prisma.repositoryStandardsSelection.update({
+      where: { id: selection.id },
+      data: { packs: [{ id: 'missing', version: '1', digest: 'bad' }] },
+    })
+    const delivery = await incoming()
+    const processor = new GitHubEventProcessor(prisma)
+    await expect(processor.process(delivery.id)).rejects.toThrow()
+    expect(await prisma.importedCiEvidence.count()).toBe(0)
+    expect(await prisma.commitAssessment.count()).toBe(0)
+    expect(
+      (
+        await prisma.gitHubWebhookDelivery.findUniqueOrThrow({
+          where: { id: delivery.id },
+        })
+      ).state,
+    ).toBe('RECEIVED')
+    await prisma.repositoryStandardsSelection.update({
+      where: { id: selection.id },
+      data: { packs: adopted.packs! },
+    })
+    await processor.process(delivery.id)
+    expect(await prisma.commitAssessment.count()).toBe(1)
+  })
+  it('rolls back delivery, CI evidence and snapshot if the processor audit fails after snapshot creation', async () => {
+    await post()
+    const delivery = await incoming()
+    const broken = {
+      $transaction: (callback: (tx: unknown) => Promise<unknown>) =>
+        prisma.$transaction((tx) =>
+          callback(
+            new Proxy(tx, {
+              get(target, key) {
+                return key === 'auditEvent'
+                  ? {
+                      create: async (args: any) => {
+                        if (args.data.event === 'github_event_processed')
+                          throw new Error('processor audit unavailable')
+                        return tx.auditEvent.create(args)
+                      },
+                    }
+                  : Reflect.get(target, key)
+              },
+            }),
+          ),
+        ),
+    } as unknown as PrismaService
+    await expect(
+      new GitHubEventProcessor(broken).process(delivery.id),
+    ).rejects.toThrow('processor audit unavailable')
+    expect(await prisma.importedCiEvidence.count()).toBe(0)
+    expect(await prisma.commitAssessment.count()).toBe(0)
+    expect(
+      await prisma.auditEvent.count({ where: { event: 'assessment.created' } }),
+    ).toBe(0)
+    expect(
+      (
+        await prisma.gitHubWebhookDelivery.findUniqueOrThrow({
+          where: { id: delivery.id },
+        })
+      ).state,
+    ).toBe('RECEIVED')
   })
 })

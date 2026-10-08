@@ -13,6 +13,11 @@ import {
   type AdoptionProfile,
   type PackRef,
 } from '../standards/catalogue.js'
+import type {
+  Prisma,
+  GitHubRepository,
+  GitHubWebhookDelivery,
+} from '../generated/prisma/client.js'
 import type { ProfileSignal } from '../github/repository-profile.js'
 import { buildAssessment, digest, type Mapping } from './assessment-plan.js'
 export type AssessmentInput = {
@@ -95,6 +100,57 @@ export class AssessmentService {
         'Choose an exact SHA and at most one observation per rule',
       )
     const repo = await this.repository(id)
+    return this.prisma.$transaction((tx) =>
+      this.persist(tx, repo, id, input, actorId, {
+        kind: 'MANUAL',
+        deliveryId: null,
+      }),
+    )
+  }
+
+  /** Called only inside the signed-delivery processor transaction after CI evidence import. */
+  async createForDelivery(
+    tx: Prisma.TransactionClient,
+    delivery: GitHubWebhookDelivery,
+  ) {
+    const repo = await tx.gitHubRepository.findFirst({
+      where: {
+        githubId: delivery.repositoryGithubId,
+        installationId: delivery.installationId,
+        selected: true,
+        installation: { active: true },
+      },
+    })
+    if (!repo) throw new ForbiddenException('Repository access changed')
+    const selection = await tx.repositoryStandardsSelection.findFirst({
+      where: { repositoryId: repo.id },
+      orderBy: { revision: 'desc' },
+    })
+    if (!selection) return { assessment: null, reason: 'standards_not_adopted' }
+    const result = await this.persist(
+      tx,
+      repo,
+      repo.githubId.toString(),
+      {
+        sourceSha: delivery.sourceSha,
+        expectedSelectionId: selection.id,
+        requestKey: `github:${delivery.id}`,
+        mappings: [],
+      },
+      null,
+      { kind: 'GITHUB_CI', deliveryId: delivery.id },
+    )
+    return { assessment: result.assessment, reason: null }
+  }
+
+  private async persist(
+    tx: Prisma.TransactionClient,
+    repo: GitHubRepository,
+    id: string,
+    input: AssessmentInput,
+    actorId: string | null,
+    trigger: { kind: 'MANUAL' | 'GITHUB_CI'; deliveryId: string | null },
+  ) {
     const normalized = {
       sourceSha: input.sourceSha.toLowerCase(),
       expectedSelectionId: input.expectedSelectionId,
@@ -102,67 +158,102 @@ export class AssessmentService {
         a.ruleId < b.ruleId ? -1 : 1,
       ),
       actorId,
+      // Preserve the original manual idempotency projection across worker upgrades.
+      ...(trigger.kind === 'MANUAL' ? {} : { trigger }),
     }
     const inputHash = digest(normalized)
-    return this.prisma.$transaction(async (tx) => {
-      if (
-        !(
-          await tx.gitHubInstallation.updateMany({
-            where: { id: repo.installationId, active: true },
-            data: { active: true },
-          })
-        ).count ||
-        !(
-          await tx.gitHubRepository.updateMany({
-            where: {
-              id: repo.id,
-              installationId: repo.installationId,
-              selected: true,
-            },
-            data: { selected: true },
-          })
-        ).count
-      )
-        throw new ForbiddenException('Repository access changed')
-      const existing = await tx.commitAssessment.findUnique({
-        where: {
-          repositoryId_requestKey: {
-            repositoryId: repo.id,
-            requestKey: input.requestKey.toLowerCase(),
+
+    if (
+      !(
+        await tx.gitHubInstallation.updateMany({
+          where: { id: repo.installationId, active: true },
+          data: { active: true },
+        })
+      ).count ||
+      !(
+        await tx.gitHubRepository.updateMany({
+          where: {
+            id: repo.id,
+            installationId: repo.installationId,
+            selected: true,
           },
+          data: { selected: true },
+        })
+      ).count
+    )
+      throw new ForbiddenException('Repository access changed')
+    const existing = await tx.commitAssessment.findUnique({
+      where: {
+        repositoryId_requestKey: {
+          repositoryId: repo.id,
+          requestKey: input.requestKey.toLowerCase(),
         },
-      })
-      if (existing) {
-        this.verify(existing)
-        if (existing.inputHash !== inputHash)
-          throw new ConflictException(
-            'Request key was reused with different inputs',
-          )
-        return { assessment: existing, duplicate: true }
-      }
-      const selection = await tx.repositoryStandardsSelection.findFirst({
-        where: { repositoryId: repo.id },
-        orderBy: { revision: 'desc' },
-      })
-      if (!selection || selection.id !== input.expectedSelectionId)
+      },
+    })
+    if (existing) {
+      this.verify(existing)
+      if (existing.inputHash !== inputHash)
         throw new ConflictException(
-          'Save or reload the current standards selection first',
+          'Request key was reused with different inputs',
         )
-      const packs = selection.packs as unknown as (PackRef & {
-        digest: string
-      })[]
-      const snapshot = await tx.repositoryProfile.findFirst({
-        where: { repositoryId: repo.id, sourceSha: normalized.sourceSha },
-        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      })
-      const rows = await tx.importedCiEvidence.findMany({
+      return { assessment: existing, duplicate: true }
+    }
+    const selection = await tx.repositoryStandardsSelection.findFirst({
+      where: { repositoryId: repo.id },
+      orderBy: { revision: 'desc' },
+    })
+    if (!selection || selection.id !== input.expectedSelectionId)
+      throw new ConflictException(
+        'Save or reload the current standards selection first',
+      )
+    const packs = selection.packs as unknown as (PackRef & {
+      digest: string
+    })[]
+    const snapshot = await tx.repositoryProfile.findFirst({
+      where: { repositoryId: repo.id, sourceSha: normalized.sourceSha },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    })
+    const rows = await tx.importedCiEvidence.findMany({
+      where: {
+        repositoryGithubId: repo.githubId,
+        installationId: repo.installationId,
+        sourceSha: normalized.sourceSha,
+      },
+      orderBy: [{ observedAt: 'desc' }, { deliveryId: 'desc' }],
+      take: 101,
+      include: {
+        artifacts: {
+          select: artifactSummarySelect,
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+    })
+    if (!snapshot && rows.length === 0)
+      throw new NotFoundException(
+        'No pinned profile or imported CI evidence exists for this commit',
+      )
+    const signals =
+      (snapshot?.report as { signals?: ProfileSignal[] } | undefined)
+        ?.signals ?? []
+    let controls
+    try {
+      controls = posture(packs, selection.profile as AdoptionProfile, signals)
+    } catch {
+      throw new ConflictException('Selected pack definitions are unavailable')
+    }
+    const observations = rows.slice(0, 100)
+    // A delayed delivery must remain in its own report even beyond the latest-100 window.
+    if (
+      trigger.deliveryId &&
+      !observations.some((row) => row.deliveryId === trigger.deliveryId)
+    ) {
+      const triggering = await tx.importedCiEvidence.findFirst({
         where: {
+          deliveryId: trigger.deliveryId,
           repositoryGithubId: repo.githubId,
           installationId: repo.installationId,
           sourceSha: normalized.sourceSha,
         },
-        orderBy: [{ observedAt: 'desc' }, { deliveryId: 'desc' }],
-        take: 101,
         include: {
           artifacts: {
             select: artifactSummarySelect,
@@ -170,109 +261,102 @@ export class AssessmentService {
           },
         },
       })
-      if (!snapshot && rows.length === 0)
-        throw new NotFoundException(
-          'No pinned profile or imported CI evidence exists for this commit',
-        )
-      const signals =
-        (snapshot?.report as { signals?: ProfileSignal[] } | undefined)
-          ?.signals ?? []
-      let controls
-      try {
-        controls = posture(packs, selection.profile as AdoptionProfile, signals)
-      } catch {
-        throw new ConflictException('Selected pack definitions are unavailable')
-      }
-      const observations = rows.slice(0, 100)
-      if (
-        input.mappings.some(
-          (m) =>
-            !controls.some((c) => c.id === m.ruleId) ||
-            !observations.some((o) => o.deliveryId === m.deliveryId),
-        )
+      if (!triggering)
+        throw new ConflictException('Triggering CI evidence is unavailable')
+      if (observations.length === 100) observations.pop()
+      observations.push(triggering)
+    }
+    if (
+      input.mappings.some(
+        (m) =>
+          !controls.some((c) => c.id === m.ruleId) ||
+          !observations.some((o) => o.deliveryId === m.deliveryId),
       )
-        throw new BadRequestException(
-          'Mappings must reference selected rules and collected evidence from this exact repository commit',
-        )
-      const at = new Date()
-      let result
-      try {
-        result = buildAssessment({
-          sourceSha: normalized.sourceSha,
-          profile: selection.profile as AdoptionProfile,
-          packs,
-          signals,
-          profileCreatedAt: snapshot?.createdAt ?? null,
-          mappings: input.mappings,
-          observations,
-          at,
-          truncated: rows.length > 100,
-        })
-      } catch {
-        throw new ConflictException(
-          'Selected pack definitions are unavailable or their integrity changed',
-        )
-      }
-      const request = {
-        version: 1,
-        organization: 'deployment',
-        repositoryId: id,
+    )
+      throw new BadRequestException(
+        'Mappings must reference selected rules and collected evidence from this exact repository commit',
+      )
+    const at = new Date()
+    let result
+    try {
+      result = buildAssessment({
         sourceSha: normalized.sourceSha,
-        installationId: repo.installationId.toString(),
-        subjectKind: 'COMMIT',
-        baseContext: null,
-        trigger: 'MANUAL',
-        actorId,
-        selectionId: selection.id,
-        selectionRevision: selection.revision,
-        profileSnapshotId: snapshot?.id ?? null,
-        profileSnapshot: snapshot
-          ? {
-              id: snapshot.id,
-              sourceSha: snapshot.sourceSha,
-              treeSha: snapshot.treeSha,
-              version: snapshot.version,
-              complete: snapshot.complete,
-              createdAt: snapshot.createdAt.toISOString(),
-            }
-          : null,
-        mappings: normalized.mappings,
-        requestedAt: at.toISOString(),
-      }
-      const assessmentHash = digest({
-        request,
-        plan: result.plan,
-        report: result.report,
+        profile: selection.profile as AdoptionProfile,
+        packs,
+        signals,
+        profileCreatedAt: snapshot?.createdAt ?? null,
+        mappings: input.mappings,
+        observations,
+        at,
+        truncated: rows.length > 100,
       })
-      const assessment = await tx.commitAssessment.create({
-        data: {
-          repositoryId: repo.id,
+    } catch {
+      throw new ConflictException(
+        'Selected pack definitions are unavailable or their integrity changed',
+      )
+    }
+    const request = {
+      version: 1,
+      organization: 'deployment',
+      repositoryId: id,
+      sourceSha: normalized.sourceSha,
+      installationId: repo.installationId.toString(),
+      subjectKind: 'COMMIT',
+      baseContext: null,
+      trigger: trigger.kind,
+      sourceDeliveryId: trigger.deliveryId,
+      actorId,
+      selectionId: selection.id,
+      selectionRevision: selection.revision,
+      profileSnapshotId: snapshot?.id ?? null,
+      profileSnapshot: snapshot
+        ? {
+            id: snapshot.id,
+            sourceSha: snapshot.sourceSha,
+            treeSha: snapshot.treeSha,
+            version: snapshot.version,
+            complete: snapshot.complete,
+            createdAt: snapshot.createdAt.toISOString(),
+          }
+        : null,
+      mappings: normalized.mappings,
+      requestedAt: at.toISOString(),
+    }
+    const assessmentHash = digest({
+      request,
+      plan: result.plan,
+      report: result.report,
+    })
+    const assessment = await tx.commitAssessment.create({
+      data: {
+        repositoryId: repo.id,
+        sourceSha: normalized.sourceSha,
+        selectionId: selection.id,
+        requestKey: input.requestKey.toLowerCase(),
+        inputHash,
+        request,
+        plan: JSON.parse(JSON.stringify(result.plan)),
+        report: JSON.parse(JSON.stringify(result.report)),
+        assessmentHash,
+      },
+    })
+    await tx.auditEvent.create({
+      data: {
+        event: 'assessment.created',
+        actorId,
+        metadata: {
+          assessmentId: assessment.id,
+          repositoryId: id,
           sourceSha: normalized.sourceSha,
           selectionId: selection.id,
-          requestKey: input.requestKey.toLowerCase(),
-          inputHash,
-          request,
-          plan: JSON.parse(JSON.stringify(result.plan)),
-          report: JSON.parse(JSON.stringify(result.report)),
           assessmentHash,
+          mappingTrust: 'ADMIN_ASSOCIATED_UNVERIFIED',
+          qualityGate: null,
+          trigger: trigger.kind,
+          sourceDeliveryId: trigger.deliveryId,
         },
-      })
-      await tx.auditEvent.create({
-        data: {
-          event: 'assessment.created',
-          actorId,
-          metadata: {
-            assessmentId: assessment.id,
-            repositoryId: id,
-            sourceSha: normalized.sourceSha,
-            selectionId: selection.id,
-            assessmentHash,
-            mappingTrust: 'ADMIN_ASSOCIATED_UNVERIFIED',
-            qualityGate: null,
-          },
-        },
-      })
-      return { assessment, duplicate: false }
+      },
     })
+    return { assessment, duplicate: false }
   }
 }
