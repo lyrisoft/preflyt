@@ -154,5 +154,21 @@ model GitHubRepository {
   selected       Boolean           @default(false)
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
+  profiles       RepositoryProfile[]
   @@index([installationId, selected])
+}
+
+model RepositoryProfile {
+  id           String @id @default(cuid())
+  repositoryId String
+  repository   GitHubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  sourceSha    String
+  treeSha      String
+  branch       String
+  fullName     String
+  version      Int
+  complete     Boolean
+  report       Json
+  createdAt    DateTime @default(now())
+  @@index([repositoryId, createdAt])
 }

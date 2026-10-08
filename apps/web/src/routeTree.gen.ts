@@ -24,6 +24,7 @@ import { Route as AuthenticatedAppsIndexRouteImport } from './routes/_authentica
 import { Route as AuthenticatedChatsIndexRouteImport } from './routes/_authenticated/chats/index'
 import { Route as AuthenticatedErrorsErrorRouteImport } from './routes/_authenticated/errors/$error'
 import { Route as AuthenticatedHelpCenterIndexRouteImport } from './routes/_authenticated/help-center/index'
+import { Route as AuthenticatedRepositoriesRepositoryIdRouteImport } from './routes/_authenticated/repositories/$repositoryId'
 import { Route as AuthenticatedSettingsIndexRouteImport } from './routes/_authenticated/settings/index'
 import { Route as AuthenticatedSettingsAccountRouteImport } from './routes/_authenticated/settings/account'
 import { Route as AuthenticatedSettingsAppearanceRouteImport } from './routes/_authenticated/settings/appearance'
@@ -109,6 +110,12 @@ const AuthenticatedHelpCenterIndexRoute =
     path: '/help-center/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedRepositoriesRepositoryIdRoute =
+  AuthenticatedRepositoriesRepositoryIdRouteImport.update({
+    id: '/repositories/$repositoryId',
+    path: '/repositories/$repositoryId',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedSettingsIndexRoute =
   AuthenticatedSettingsIndexRouteImport.update({
     id: '/',
@@ -162,6 +169,7 @@ export interface FileRoutesByFullPath {
   '/503': typeof errors503Route
   '/super-admin/login': typeof authSuperAdminLoginRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
+  '/repositories/$repositoryId': typeof AuthenticatedRepositoriesRepositoryIdRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/settings/display': typeof AuthenticatedSettingsDisplayRoute
@@ -184,6 +192,7 @@ export interface FileRoutesByTo {
   '/': typeof AuthenticatedIndexRoute
   '/super-admin/login': typeof authSuperAdminLoginRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
+  '/repositories/$repositoryId': typeof AuthenticatedRepositoriesRepositoryIdRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/settings/display': typeof AuthenticatedSettingsDisplayRoute
@@ -209,6 +218,7 @@ export interface FileRoutesById {
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/(auth)/super-admin/login': typeof authSuperAdminLoginRoute
   '/_authenticated/errors/$error': typeof AuthenticatedErrorsErrorRoute
+  '/_authenticated/repositories/$repositoryId': typeof AuthenticatedRepositoriesRepositoryIdRoute
   '/_authenticated/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/_authenticated/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/_authenticated/settings/display': typeof AuthenticatedSettingsDisplayRoute
@@ -234,6 +244,7 @@ export interface FileRouteTypes {
     | '/503'
     | '/super-admin/login'
     | '/errors/$error'
+    | '/repositories/$repositoryId'
     | '/settings/account'
     | '/settings/appearance'
     | '/settings/display'
@@ -256,6 +267,7 @@ export interface FileRouteTypes {
     | '/'
     | '/super-admin/login'
     | '/errors/$error'
+    | '/repositories/$repositoryId'
     | '/settings/account'
     | '/settings/appearance'
     | '/settings/display'
@@ -280,6 +292,7 @@ export interface FileRouteTypes {
     | '/_authenticated/'
     | '/(auth)/super-admin/login'
     | '/_authenticated/errors/$error'
+    | '/_authenticated/repositories/$repositoryId'
     | '/_authenticated/settings/account'
     | '/_authenticated/settings/appearance'
     | '/_authenticated/settings/display'
@@ -411,6 +424,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedHelpCenterIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/repositories/$repositoryId': {
+      id: '/_authenticated/repositories/$repositoryId'
+      path: '/repositories/$repositoryId'
+      fullPath: '/repositories/$repositoryId'
+      preLoaderRoute: typeof AuthenticatedRepositoriesRepositoryIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/settings/': {
       id: '/_authenticated/settings/'
       path: '/'
@@ -490,6 +510,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedSettingsRouteRoute: typeof AuthenticatedSettingsRouteRouteWithChildren
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedErrorsErrorRoute: typeof AuthenticatedErrorsErrorRoute
+  AuthenticatedRepositoriesRepositoryIdRoute: typeof AuthenticatedRepositoriesRepositoryIdRoute
   AuthenticatedAppsIndexRoute: typeof AuthenticatedAppsIndexRoute
   AuthenticatedChatsIndexRoute: typeof AuthenticatedChatsIndexRoute
   AuthenticatedHelpCenterIndexRoute: typeof AuthenticatedHelpCenterIndexRoute
@@ -501,6 +522,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedSettingsRouteRoute: AuthenticatedSettingsRouteRouteWithChildren,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedErrorsErrorRoute: AuthenticatedErrorsErrorRoute,
+  AuthenticatedRepositoriesRepositoryIdRoute:
+    AuthenticatedRepositoriesRepositoryIdRoute,
   AuthenticatedAppsIndexRoute: AuthenticatedAppsIndexRoute,
   AuthenticatedChatsIndexRoute: AuthenticatedChatsIndexRoute,
   AuthenticatedHelpCenterIndexRoute: AuthenticatedHelpCenterIndexRoute,

@@ -190,7 +190,13 @@ export function Dashboard() {
                     className='flex flex-wrap items-center justify-between gap-2 py-3 first:pt-0 last:pb-0'
                   >
                     <div>
-                      <p className='font-medium'>{repository.fullName}</p>
+                      <Link
+                        className='font-medium underline underline-offset-4'
+                        to='/repositories/$repositoryId'
+                        params={{ repositoryId: repository.githubId }}
+                      >
+                        {repository.fullName}
+                      </Link>
                       <p className='text-sm text-muted-foreground'>
                         {repository.installation.accountLogin}
                         {repository.defaultBranch

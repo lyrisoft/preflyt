@@ -1,4 +1,6 @@
-import { Injectable, ServiceUnavailableException } from '@nestjs/common'
+import { createHash } from 'node:crypto'
+import { wantsProfileContent, type RepositorySnapshot, type RepositoryFile } from './repository-profile.js'
+import { ForbiddenException, Injectable, ServiceUnavailableException } from '@nestjs/common'
 import { App } from '@octokit/app'
 
 export type GitHubInstallationInfo = {
@@ -51,7 +53,7 @@ export class GitHubProviderService {
     try {
       const response = await this.requireApp().octokit.request(
         'GET /app/installations/{installation_id}',
-        { installation_id: Number(installationId) },
+        { installation_id: Number(installationId), request: { timeout: 10_000 } },
       )
       data = response.data
     } catch (error) {
@@ -212,6 +214,226 @@ export class GitHubProviderService {
       if (pageRepositories.length < 100) return repositories
     }
     throw new Error('GitHub repository list exceeded the safe pagination limit')
+  }
+
+  async verifyRepositoryAccess(installationId: bigint, repositoryId: bigint) {
+    const reader = await this.openRepository(installationId, repositoryId)
+    return {
+      fullName: reader.metadata.full_name,
+      branch: reader.metadata.default_branch,
+    }
+  }
+
+  async readRepositorySnapshot(
+    installationId: bigint,
+    repositoryId: bigint,
+  ): Promise<RepositorySnapshot> {
+    const { metadata, request } = await this.openRepository(
+      installationId,
+      repositoryId,
+    )
+    if (!metadata.default_branch)
+      throw new ServiceUnavailableException(
+        'Repository has no default branch to inspect',
+      )
+    const base = `/repos/${encodeURIComponent(metadata.owner.login)}/${encodeURIComponent(metadata.name)}`
+    const commit = await request<{
+      sha: string
+      commit: { tree: { sha: string } }
+    }>(`${base}/commits/${encodeURIComponent(metadata.default_branch)}`)
+    const shaPattern = /^[a-f0-9]{40}$/
+    if (
+      !shaPattern.test(commit.sha) ||
+      !shaPattern.test(commit.commit?.tree?.sha ?? '')
+    ) {
+      throw new ServiceUnavailableException(
+        'GitHub returned an invalid source revision',
+      )
+    }
+    const tree = await request<{
+      sha: string
+      truncated: boolean
+      tree: Array<{
+        path: string
+        type: string
+        mode: string
+        sha: string
+        size?: number
+      }>
+    }>(`${base}/git/trees/${commit.commit.tree.sha}?recursive=1`)
+    if (tree.sha !== commit.commit.tree.sha || !Array.isArray(tree.tree))
+      throw new ServiceUnavailableException(
+        'GitHub returned an invalid repository tree',
+      )
+    const omitted = tree.tree.some(
+      (entry) => entry.type === 'commit' || entry.mode === '120000',
+    )
+    const complete = !tree.truncated && tree.tree.length <= 10_000 && !omitted
+    const warnings: string[] = []
+    if (tree.truncated || tree.tree.length > 10_000)
+      warnings.push(
+        'Repository tree is partial; discovery is limited to 10,000 entries. Absence cannot be established.',
+      )
+    if (omitted)
+      warnings.push(
+        'Symlink or submodule content was omitted; absent controls remain unknown.',
+      )
+    const files: RepositoryFile[] = tree.tree
+      .slice(0, 10_000)
+      .filter(
+        (entry) =>
+          entry.type === 'blob' && ['100644', '100755'].includes(entry.mode),
+      )
+      .map((entry) => {
+        if (
+          typeof entry.path !== 'string' ||
+          entry.path.length > 4096 ||
+          !shaPattern.test(entry.sha)
+        )
+          throw new ServiceUnavailableException(
+            'GitHub returned invalid file evidence',
+          )
+        return { path: entry.path, sha: entry.sha, size: entry.size ?? -1 }
+      })
+    const candidates = files
+      .filter((file) => wantsProfileContent(file.path))
+      .sort((a, b) => a.path.localeCompare(b.path))
+    if (candidates.length > 32)
+      warnings.push(
+        'Manifest/workflow content inspection is limited to 32 files. Unread files remain unknown.',
+      )
+    let cursor = 0
+    const worker = async () => {
+      while (cursor < Math.min(candidates.length, 32)) {
+        const file = candidates[cursor++]!
+        if (file.size < 0 || file.size > 262_144) {
+          file.contentError = 'size_limit'
+          continue
+        }
+        try {
+          const blob = await request<{
+            sha: string
+            size: number
+            encoding: string
+            content: string
+          }>(`${base}/git/blobs/${file.sha}`)
+          if (
+            blob.sha !== file.sha ||
+            blob.encoding !== 'base64' ||
+            blob.size !== file.size ||
+            typeof blob.content !== 'string' ||
+            blob.content.length > 360_000
+          )
+            throw new Error('Invalid blob')
+          const bytes = Buffer.from(blob.content, 'base64')
+          const hash = createHash('sha1')
+            .update(`blob ${bytes.length}\0`)
+            .update(bytes)
+            .digest('hex')
+          if (bytes.length !== file.size || hash !== file.sha)
+            throw new Error('Blob integrity failed')
+          file.content = bytes.toString('utf8')
+        } catch (error) {
+          if (error instanceof ForbiddenException) throw error
+          file.contentError = 'unavailable_or_invalid'
+        }
+      }
+    }
+    await Promise.all(Array.from({ length: 4 }, () => worker()))
+    return {
+      sourceSha: commit.sha,
+      treeSha: tree.sha,
+      branch: metadata.default_branch,
+      fullName: metadata.full_name,
+      complete,
+      files,
+      warnings,
+    }
+  }
+
+  private async openRepository(installationId: bigint, repositoryId: bigint) {
+    try {
+      await this.verifyInstallation(installationId)
+    } catch (error) {
+      if (error instanceof GitHubInstallationRevokedError)
+        throw new ForbiddenException(
+          'GitHub installation access is unavailable',
+        )
+      throw new ServiceUnavailableException(
+        'GitHub installation could not be verified',
+      )
+    }
+    let token: string
+    try {
+      const response = await this.requireApp().octokit.request(
+        'POST /app/installations/{installation_id}/access_tokens',
+        {
+          installation_id: Number(installationId),
+          repository_ids: [Number(repositoryId)],
+          permissions: { metadata: 'read', contents: 'read' },
+          request: { timeout: 10_000 },
+        },
+      )
+      token = response.data.token
+    } catch (error) {
+      if (this.isNotFound(error))
+        throw new ForbiddenException('GitHub repository access is unavailable')
+      throw new ServiceUnavailableException(
+        'Unable to authorize repository inspection',
+      )
+    }
+    const signal = AbortSignal.timeout(60_000)
+    const request = async <T,>(path: string): Promise<T> => {
+      const response = await fetch(`https://api.github.com${path}`, {
+        headers: this.apiHeaders(token),
+        redirect: 'error',
+        signal,
+      })
+      if (
+        response.status === 401 ||
+        response.status === 404 ||
+        (response.status === 403 &&
+          response.headers.get('x-ratelimit-remaining') !== '0' &&
+          !response.headers.has('retry-after'))
+      )
+        throw new ForbiddenException('GitHub repository access is unavailable')
+      if (!response.ok || !response.body)
+        throw new ServiceUnavailableException(
+          'GitHub repository inspection is unavailable; try again later',
+        )
+      const stream = response.body.getReader()
+      const chunks: Uint8Array[] = []
+      let size = 0
+      while (true) {
+        const chunk = await stream.read()
+        if (chunk.done) break
+        size += chunk.value.byteLength
+        if (size > 8_000_000) {
+          await stream.cancel()
+          throw new ServiceUnavailableException(
+            'GitHub response exceeded the discovery limit',
+          )
+        }
+        chunks.push(chunk.value)
+      }
+      return JSON.parse(Buffer.concat(chunks).toString('utf8')) as T
+    }
+    const metadata = await request<{
+      id: number
+      name: string
+      full_name: string
+      owner: { login: string }
+      default_branch: string | null
+    }>(`/repositories/${repositoryId}`)
+    if (
+      BigInt(metadata.id) !== repositoryId ||
+      !metadata.owner?.login ||
+      !metadata.name
+    )
+      throw new ForbiddenException(
+        'GitHub repository identity could not be verified',
+      )
+    return { metadata, request }
   }
 
   private apiHeaders(token: string) {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getRouteApi } from '@tanstack/react-router'
+import { Link, getRouteApi } from '@tanstack/react-router'
 import {
   Check,
   GitBranch,
@@ -274,7 +274,17 @@ export function Apps() {
                           />
                         </td>
                         <td className='py-3 pe-3 font-medium'>
-                          {repository.fullName}
+                          {repository.selected ? (
+                            <Link
+                              className='underline underline-offset-4'
+                              to='/repositories/$repositoryId'
+                              params={{ repositoryId: repository.githubId }}
+                            >
+                              {repository.fullName}
+                            </Link>
+                          ) : (
+                            repository.fullName
+                          )}
                         </td>
                         <td className='py-3 pe-3'>
                           {repository.installation.accountLogin}

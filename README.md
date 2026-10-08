@@ -4,7 +4,7 @@
 
 Preflyt is a planned **self-hosted, AI-native Shift Left engineering platform**. It helps engineering teams detect and prevent security vulnerabilities, software defects, reliability failures and infrastructure risks **earlier in the software development lifecycle**, using continuous assessments, explicit engineering standards, policy-based quality gates and actionable developer feedback.
 
-> **Status: initial authentication and GitHub onboarding slices implemented.** The repository now includes a NestJS API, PostgreSQL-backed identity/session records, OIDC sign-in, first-Owner bootstrap, an optional deployment-configured Super Admin recovery login, guarded React routes, GitHub App installation, and explicit repository selection. User provisioning, repository profile discovery, scanners, assessments and deployment manifests remain unimplemented; broader product capabilities below are proposed.
+> **Status: authentication, GitHub onboarding and repository profiles implemented.** The repository now includes a NestJS API, PostgreSQL-backed identity/session records, OIDC sign-in, first-Owner bootstrap, an optional deployment-configured Super Admin recovery login, guarded React routes, GitHub App installation, explicit repository selection, and commit-pinned repository profiles with file evidence. User provisioning, scanner execution, assessments and deployment manifests remain unimplemented; broader product capabilities below are proposed.
 
 Developed by **Lyrisoft Technologies**.
 
@@ -209,7 +209,7 @@ turbo.json
 
 ## Development status
 
-The pinned Shadcn Admin frontend is imported. Its OIDC entry, separate Super Admin recovery route, first-Owner setup, protected route boundary and GitHub repository selection screen use the Preflyt API; most remaining screens still contain upstream demo content. Invitation/provisioning, repository profiles and the rest of the platform are pending. See [source provenance and verification](docs/vendor/shadcn-admin.md).
+The pinned Shadcn Admin frontend is imported. Its OIDC entry, separate Super Admin recovery route, first-Owner setup, protected route boundary, overview, GitHub repository selection and repository profile detail use the Preflyt API. The existing theme and navigation components are preserved; retained upstream demo routes are not linked from Preflyt navigation. Profiles show supported language/framework and engineering-control hints at an exact commit, with file/blob evidence and explicit unknown states. They do not execute repository code or prove that tests or scanners ran. Invitation/provisioning, assessments and deployment packaging are pending. See [repository profile setup and limits](docs/operations/repository-profiles.md). See [source provenance and verification](docs/vendor/shadcn-admin.md).
 
 Use Node 24.4.1 and pnpm 10.15.1:
 
