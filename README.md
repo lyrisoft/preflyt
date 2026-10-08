@@ -146,7 +146,7 @@ docs/
 - **V1 — Verified remediation:** hardened execution sandboxes, bounded agent code editing, reproducibility checks, regression validation, developer-reviewed fix PRs, GitLab integration.
 - **V2 — Engineering intelligence:** specialized agents, accepted-fix retrieval, cross-repository trends within tenant boundaries, advanced custom workflows, performance/reliability insights.
 
-This is a planning sequence, not a release-date commitment. The [Product Requirements Document](docs/PRD.md) defines requirements, acceptance criteria, constraints, and open decisions.
+This is a planning sequence, not a release-date commitment. The [Product Requirements Document](docs/PRD.md) defines requirements, acceptance criteria, constraints, and open decisions. [ADR-0001](docs/architecture/ADR-0001-typescript-first-stack.md) records the TypeScript-first language, runtime, and process boundaries.
 
 ## Security and data handling
 
