@@ -43,7 +43,7 @@ It is **not** intended to replace GitHub Actions, GitLab CI, Jenkins, a source-c
 | Engineering intelligence | Retrieve approved historical fixes and incident patterns | V2 |
 | Specialized agents | Reliability, security, infrastructure, database, performance agents | V1 → V2 |
 
-**Initial emphasis:** diagnosing and reproducing failed CI jobs on TypeScript/Node.js and Python repositories. Security and static analysis provide supporting evidence; autonomous fixes come after safe sandboxing and validation are proven.
+**Initial emphasis:** diagnosing and reproducing failed CI jobs on TypeScript/Node.js and Python *target repositories* (the source code under test). Preflyt application and agent services are written in TypeScript. Security and static analysis provide supporting evidence; autonomous fixes come after safe sandboxing and validation are proven.
 
 ## Proposed user experience
 
@@ -65,12 +65,13 @@ flowchart TB
   WH --> API
   API --> DB[("PostgreSQL")]
   API --> STORE["S3-compatible artifacts"]
-  API --> ORCH["Workflow / task coordinator"]
+  API --> Q["Redis / BullMQ durable jobs"]
+  Q --> ORCH["Node.js / TypeScript worker coordinator"]
   API --> POLICY["Policy decision layer"]
   ORCH --> EXEC["Execution adapter"]
   EXEC --> SCAN["Scanner & test jobs"]
   EXEC --> SANDBOX["Ephemeral agent sandbox"]
-  ORCH --> AGENT["Python AI agent service"]
+  ORCH --> AGENT["Isolated TypeScript AI agent worker"]
   AGENT --> LLM["LiteLLM model gateway"]
   LLM --> EXT["Optional frontier models"]
   LLM --> LOCAL["Optional private inference"]
@@ -81,27 +82,30 @@ flowchart TB
   API --> OTEL["OpenTelemetry / SigNoz"]
 ~~~
 
-**Technology direction (subject to technical spikes):**
+**Selected application stack (framework and runtime versions to be validated in implementation spikes):**
 
 | Layer | Preferred approach |
 | --- | --- |
-| Frontend | React + TypeScript |
-| Backend/control plane | NestJS + TypeScript |
-| AI agent runtime | Python; evaluate OpenHands SDK and mini-SWE-agent behind an adapter |
-| Model routing | LiteLLM, with API-key-backed frontier models and optional local inference |
-| Workflow engine | Start simple with durable jobs; Argo Workflows for Kubernetes-scale execution |
+| Frontend | React + TypeScript + Vite |
+| Backend/control plane | Node.js + NestJS + TypeScript |
+| AI agent runtime | Node.js + TypeScript using provider-neutral tool contracts; evaluate Vercel AI SDK / OpenAI Agents SDK for JavaScript |
+| Model routing | LiteLLM container, with API-key-backed frontier models and optional local inference; application services remain TypeScript |
+| Workflow execution | BullMQ + Redis for durable jobs, bounded retries, and orchestration; consider Argo Workflows only if complex Kubernetes DAGs justify it |
+| Execution controller | TypeScript, using Docker APIs for local evaluation and `@kubernetes/client-node` for Kubernetes Jobs |
 | Sandboxes | Ephemeral Docker containers for trusted local development; hardened Kubernetes Jobs for production |
-| Database | PostgreSQL |
+| Database | PostgreSQL + Prisma ORM/migrations |
 | Evidence and artifacts | S3-compatible object storage |
 | Technical checks | Trivy, Semgrep Community Edition, Gitleaks, Checkov, and project-native test tools (subject to licenses) |
 | Policies | Deterministic rules; evaluate OPA as policy complexity grows |
 | Observability | OpenTelemetry; SigNoz as an optional self-hosted backend |
 
+**Runtime boundary:** NestJS serves APIs and enqueues workflows; dedicated Node.js/TypeScript workers investigate findings and coordinate execution. Never execute model-generated shell commands inside the API or agent control process. Sandboxed code runs only in isolated jobs with independently enforced tool permissions. We can integrate a non-TypeScript agent as an external adapter later if a specific capability requires it, but Python is **not required** for Preflyt application services.
+
 **Execution isolation:** containers alone are not a security boundary for malicious repositories. A production design must use dedicated worker isolation, resource ceilings, restricted egress, and ideally a sandbox runtime such as gVisor or Kata Containers. Code-execution jobs must not receive model API keys, repository write credentials, or production secrets.
 
 ## Deployment targets
 
-- **Local / evaluation (planned):** Docker Compose for API, UI, PostgreSQL, model gateway, and local execution worker.
+- **Local / evaluation (planned):** Docker Compose for API, UI, PostgreSQL, Redis, LiteLLM, TypeScript agent worker, and local execution worker.
 - **Production (planned):** Helm/Kubernetes for control-plane services and short-lived, isolated scanner/test/agent Jobs.
 - **AI inference:** supply credentials for supported external models, point to a local model endpoint, or disable AI until configured.
 
@@ -109,21 +113,28 @@ flowchart TB
 
 ## Proposed repository layout
 
-The following is a **target structure**, not a listing of currently implemented files:
+The following is a **target structure**, not a listing of currently implemented files. Use pnpm workspaces and Turborepo to manage TypeScript builds, linting, and shared packages:
 
 ~~~text
 apps/
   web/                    # React product UI
   api/                    # NestJS control plane
 services/
-  agent-runtime/          # Python agent adapter and investigator
-  execution-controller/   # sandbox dispatch and collection
+  agent-worker/           # Node.js / TypeScript AI investigations
+  execution-worker/       # TypeScript Docker / Kubernetes execution controller
+  integration-worker/     # TypeScript GitHub / GitLab adapters
 packages/
-  contracts/              # schemas and API/event contracts
+  agents/                 # reusable agent definitions and tools
+  contracts/              # shared TS API/event schemas
+  database/               # Prisma schema and migrations
+  integrations/           # shared SCM / CI adapters
   policies/               # shared policy definitions
+  ui/                     # shared React components
 infra/
   compose/                # development deployments
   helm/                   # production deployment charts
+pnpm-workspace.yaml       # TypeScript workspace declaration (planned)
+turbo.json                # monorepo task orchestration (planned)
 docs/
   PRD.md                  # product requirements
   architecture/           # ADRs and threat model, later
@@ -135,7 +146,7 @@ docs/
 - **V1 — Verified remediation:** hardened execution sandboxes, bounded agent code editing, reproducibility checks, regression validation, developer-reviewed fix PRs, GitLab integration.
 - **V2 — Engineering intelligence:** specialized agents, accepted-fix retrieval, cross-repository trends within tenant boundaries, advanced custom workflows, performance/reliability insights.
 
-This is a planning sequence, not a release-date commitment. The [Product Requirements Document](docs/PRD.md) defines requirements, acceptance criteria, constraints, and open decisions.
+This is a planning sequence, not a release-date commitment. The [Product Requirements Document](docs/PRD.md) defines requirements, acceptance criteria, constraints, and open decisions. [ADR-0001](docs/architecture/ADR-0001-typescript-first-stack.md) records the TypeScript-first language, runtime, and process boundaries.
 
 ## Security and data handling
 
