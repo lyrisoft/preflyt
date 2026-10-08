@@ -28,7 +28,7 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 | **P2** | **Policy Quality Gates** | PR/CI + UI | Apply mandatory/advisory policy, publish exact-SHA status and clear PASS/WARN/BLOCK/INCOMPLETE |
 | **P3** | **Native Secure Validation** | PR + approved executor | Execute security/testing/IaC scans safely and enrich findings beyond imported evidence |
 | **P4** | **AI Engineering Explanations** | Assessment UI | Optional model-backed, evidence-cited explanations; works without a configured model |
-| **P5** | **Developer CLI** | Laptop | Developer-initiated fast checks locally; policy sync and optional pre-commit hook |
+| **P5** | **Developer Experience: CLI + IDE** | Laptop / VS Code | Shared local engine, CLI, policy sync, inline diagnostics, AI explanations and optional Git hooks |
 | **P6** | **QA Release Readiness** | QA/CI + UI | Import end-to-end/contract/regression evidence and validate release candidate readiness |
 | **P7** | **k6 Performance Evidence** | Existing k6/CI + UI | Import k6 results and gate comparable performance evidence against budgets |
 | **P8** | **Managed k6 Smoke & Load** | Performance UI + approved runner | Run approved smoke/load tests, view reports and thresholds safely |
@@ -117,7 +117,10 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 
 - **P4.RBAC:** Restrict AI provider credentials, model routing, usage visibility and data-egress policy to authorized roles.
 
-### P5 — Developer CLI
+### P5 — Developer Experience: CLI and IDE Extension
+
+**Incremental release contract:** P5.1 shared local engine and installable CLI; P5.2 OIDC repository link and cached policy; P5.3 installable VS Code extension with inline diagnostics; P5.4 AI explanation and revision-bound PR gate visibility; P5.5 opt-in Git hooks and tested compatible editors. Each is independently usable and deployable. See [developer CLI and IDE specification](../product/developer-cli-ide-extension.md).
+
 
 **User value:** A developer runs fast local checks and gets actionable feedback before pushing code.
 
@@ -214,7 +217,7 @@ These subphases map to the global deployment phases above and may be tracked as 
 
 | Stage | Usable first slice | Second slice | Third slice | Advanced slice |
 | --- | --- | --- | --- | --- |
-| Laptop | L1 fast CLI checks (P5) | L2 cached policy sync (P5) | L3 richer tools and optional AI (P5+) | IDE plugin later |
+| Laptop | P5.1 shared engine + CLI | P5.2 organization policy sync | P5.3 VS Code diagnostics; P5.4 AI and PR status | P5.5 Git hooks/editor compatibility |
 | Repository | R1 discovery/profile (P0) | R2 baseline policies/evidence (P1–P3) | R3 scheduled drift (P11) | Cross-repo standards |
 | PR/CI | P1 CI evidence viewer | P2 deterministic quality gate | P3 isolated scanner/test jobs | P4 AI explanation |
 | QA | Q1 imported suite/candidate report (P6) | Q2 contract/migration tests (P6) | Q3 QA quality gates/sign-off (P6) | Cross-service matrix later |
@@ -250,7 +253,7 @@ flowchart TD
     P1 --> P2["P2 Quality Gates"]
     P2 --> P3["P3 Safe Native Scans"]
     P3 --> P4["P4 Optional AI Explanations"]
-    P3 --> P5["P5 Developer CLI"]
+    P3 --> P5["P5 CLI + IDE Extension"]
     P3 --> P6["P6 QA Readiness"]
     P2 --> P7["P7 Imported k6 Gates"]
     P7 --> P8["P8 Managed Smoke / Load"]
