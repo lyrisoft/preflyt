@@ -115,6 +115,8 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 
 **Done when:** A security finding has a traceable explanation and recommended remediation, but the exact deterministic quality gate **never changes** when AI is enabled, disabled or malicious. All P0–P3 workflows work without model keys.
 
+- **P4.RBAC:** Restrict AI provider credentials, model routing, usage visibility and data-egress policy to authorized roles.
+
 ### P5 — Developer CLI
 
 **User value:** A developer runs fast local checks and gets actionable feedback before pushing code.
