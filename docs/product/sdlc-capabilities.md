@@ -24,7 +24,7 @@ All stages use the same **Assessment → CheckEvidence → Finding → PolicyEva
 
 ## 2. Developer laptop — before commit
 
-**Planned experience:** opt-in Preflyt CLI and later pre-commit/IDE integrations. Developers run deterministic fast checks on their working tree: lint/typecheck, changed-path unit tests, secret scanning, dependency manifests, Terraform/Kubernetes/Docker configuration, API/schema contracts and database migration patterns.
+**Planned experience:** shared local assessment engine powering an opt-in Preflyt CLI and VS Code extension in P5.1–P5.5, with pre-commit integration and additional editor compatibility delivered incrementally. See [developer CLI and IDE specification](developer-cli-ide-extension.md). Developers run deterministic fast checks on their working tree: lint/typecheck, changed-path unit tests, secret scanning, dependency manifests, Terraform/Kubernetes/Docker configuration, API/schema contracts and database migration patterns.
 
 ~~~text
 preflyt check
