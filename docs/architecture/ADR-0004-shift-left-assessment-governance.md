@@ -134,6 +134,10 @@ flowchart TD
 
 Subsequent phases use the same planning/reporting contracts: P5 local developer CLI, P6 QA readiness, P7 k6 result ingestion/performance budgets, P8 managed k6 smoke/load, P9 advanced controlled stress/spike/soak/breakpoint/scalability, P10 production-feedback-based policy improvement and P11 optional provider/scaling extensions. Compare test results only where environment and workload are meaningfully comparable; gate impact is determined by recorded evidence and policy, not AI.
 
+## Built-in engineering policy packs
+
+The Engineering Governance Engine includes a **first-party versioned Engineering Standards Library**. Initial packs cover baseline, application security, backend, frontend and IaC; additional packs for APIs, databases, production readiness, performance and compliance expand in later phases. Packs are declarative, stage/repository aware and require explicit rule evidence and capability status. P0 supports catalogue/recommendations and policy selection, P1 evidence mapping, P2 deterministic quality gates, and P3 approved native checks. Unsupported or missing evidence never becomes PASS. Updates are pinned and owner-approved before changing enforcement. AI may recommend, but cannot activate or waive policy. See [Engineering Standards Library](../product/engineering-standards-library.md).
+
 ## Governance and quality gates
 
 - Every rule declares **scope**, trigger/stage, applicability, data source, severity, mandatory/advisory, expiration/exception handling, and enforcement mode.

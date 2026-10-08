@@ -49,6 +49,7 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 - P0.2 Implement OIDC login, first-owner bootstrap, RBAC and scoped organization membership per ADR-0003.
 - P0.3 Implement GitHub App installation and repository selection with least-privilege *read* permissions, store secrets server-side.
 - P0.4 Discover pinned-commit profile: language/framework, manifest/lockfiles, CI, tests, Docker/IaC, migration hints; evidence and unknown labels.
+- **P0.4a:** Ship a browsable, versioned first-party Engineering Standards Library (baseline, security, backend, frontend, IaC); recommend applicable packs based on detected stack and allow authorized Default/Recommended/Strict profile selection. Mark unsupported checks clearly.
 - P0.5 **Refactor the imported Shadcn Admin layout, routing and navigation** into Preflyt-branded functional screens; remove unrelated demos and mock data, replace upstream Clerk/demo auth with OIDC-guarded routes, implement the actual repository list/detail/profile with loading/empty/error states, basic audit and missing-control report. No AI, fake future-feature pages or repository code execution.
 - P0.6 Package versioned prebuilt images and **complete Docker Compose deployment** (frontend, API, PostgreSQL, Redis, required workers, model gateway and evidence storage as applicable), with a root `.env.example`, DB migrations, health checks, persistent volumes, backup and safe upgrade/rollback. **All current-release services start through `docker compose up -d` after configuration; no host-side application dependency installation.** Include standard OpenTelemetry exporter environment variables for any OTLP-compatible APM, per-service names, and an optional collector profile; see [OTel deployment contract](../deployment/opentelemetry-env.md).
 
@@ -62,6 +63,7 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 - P1.1 GitHub signed webhook, replay/idempotency and revision-aware event processing; Redis/BullMQ worker with persistence/reconciliation.
 - P1.2 Ingest GitHub check/CI status and common test/scanner artifact formats without executing connected code.
 - P1.3 Define AssessmentRequest/Plan, imported CheckEvidence, result/status vocabulary and artifact integrity references.
+- **P1.3a:** Map imported CI evidence to selected versioned pack rules and expose missing or unsupported evidence.
 - P1.4 Assessment list/detail screen, exact SHA, required evidence provenance, evidence freshness, run state and failure reasons.
 - P1.5 Exercise webhook retry/out-of-order cases, artifact rejection, CI outage, and redacted logs.
 
@@ -72,10 +74,10 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 **User value:** A policy owner defines a simple standard and a developer sees an accurate advisory or blocking GitHub quality check.
 
 **Tasks:**
-- P2.1 Versioned organization/repository/branch policy baselines: required vs advisory, applicability, severity, allowed evidence source.
+- P2.1 Versioned first-party policy pack composition and organization/repository/branch baselines: required vs advisory, applicability, severity, allowed evidence source, effective-policy preview and authorized overrides.
 - P2.2 Deterministic evaluator returning PASS/WARN/BLOCK/INCOMPLETE/NOT_APPLICABLE with reason codes.
 - P2.3 Publish check/status for **exact** SHA; advisory rollout default, explicit authorized blocking activation.
-- P2.4 Policy UI, readiness report, failed/missing evidence explanation, audit of changes.
+- P2.4 Policy UI, readiness report, failed/missing evidence explanation, audit of changes; show template version diffs and require explicit approval before upgrading enforced policy versions.
 - P2.5 Test stale commits, skipped required tests, unsupported check, and required test failed; ensure each reports correct result.
 
 **Done when:** A deliberately broken PR is blocked by an activated required check, a clean PR passes, a missing required check is INCOMPLETE, and a changed PR never inherits the prior commit's green status. Existing P0/P1 remains functional.
@@ -208,6 +210,8 @@ These subphases map to the global deployment phases above and may be tracked as 
 | QA | Q1 imported suite/candidate report (P6) | Q2 contract/migration tests (P6) | Q3 QA quality gates/sign-off (P6) | Cross-service matrix later |
 | Performance | F1 import k6 reports (P7) | F2 smoke/load execution (P8) | F3 advanced workload profiles (P9) | F4 distributed/correlation (P11) |
 | Production | O1 incidents/deploy mapping (P10) | O2 correlation to missed checks (P10) | O3 policy proposal and approval (P10) | Outcome trends later |
+
+Built-in pack lifecycle: **P0 catalogue and recommendations → P1 evidence mapping → P2 deterministic enforcement → P3 native checks → P6–P9 specialized QA/performance packs → P10 owner-approved policy improvements**. See [Engineering Standards Library](../product/engineering-standards-library.md).
 
 ## 5. Definition of deployable and usable: mandatory phase checklist
 
