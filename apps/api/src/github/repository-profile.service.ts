@@ -38,18 +38,6 @@ export class RepositoryProfileService {
 
   async get(rawId: string) {
     const repository = await this.selectedRepository(rawId)
-    const current = await this.provider.verifyRepositoryAccess(
-      repository.installationId,
-      repository.githubId,
-    )
-    const checked = await this.selectedRepository(rawId)
-    if (
-      checked.id !== repository.id ||
-      checked.installationId !== repository.installationId
-    )
-      throw new ForbiddenException(
-        'Repository installation changed during access verification',
-      )
     const profile = await this.prisma.repositoryProfile.findFirst({
       where: { repositoryId: repository.id },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
@@ -57,10 +45,18 @@ export class RepositoryProfileService {
     return {
       repository: {
         githubId: repository.githubId.toString(),
-        fullName: current.fullName,
-        defaultBranch: current.branch,
+        fullName: repository.fullName,
+        defaultBranch: repository.defaultBranch,
       },
       profile,
+      sync: await this.prisma.gitHubInstallation.findUnique({
+        where: { id: repository.installationId },
+        select: {
+          syncState: true,
+          lastVerifiedAt: true,
+          lastSyncAttemptAt: true,
+        },
+      }),
     }
   }
 

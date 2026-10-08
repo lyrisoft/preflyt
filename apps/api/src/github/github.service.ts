@@ -1,12 +1,14 @@
 import { createHash, randomBytes } from 'node:crypto'
 import {
   ForbiddenException,
+  ConflictException,
   Inject,
   ServiceUnavailableException,
   Injectable,
   Optional,
   UnauthorizedException,
 } from '@nestjs/common'
+import { GitHubSyncService } from './github-sync.service.js'
 import { GitHubRateLimitError } from './github-rate-limit.js'
 import { RedisCacheService } from '../cache/redis-cache.service.js'
 import { resolveWebOrigin } from '../config/web-origin.js'
@@ -15,7 +17,6 @@ import {
   GitHubInstallationRevokedError,
   GitHubProviderService,
   type GitHubInstallationInfo,
-  type GitHubRepositoryInfo,
 } from './github-provider.service.js'
 
 const digest = (value: string) =>
@@ -30,7 +31,9 @@ export class GitHubService {
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(GitHubProviderService)
     private readonly provider: GitHubProviderService,
-    @Optional() @Inject(RedisCacheService) private readonly cache?: RedisCacheService,
+    @Optional()
+    @Inject(RedisCacheService)
+    private readonly cache?: RedisCacheService,
   ) {}
 
   async beginInstallation(identityId: string) {
@@ -120,7 +123,9 @@ export class GitHubService {
       'USER_AUTHORIZATION',
     )
     if (!transaction.installationId || !transaction.codeVerifier) {
-      throw new UnauthorizedException('GitHub authorization transaction is invalid')
+      throw new UnauthorizedException(
+        'GitHub authorization transaction is invalid',
+      )
     }
     const consumed = await this.prisma.gitHubSetupTransaction.deleteMany({
       where: {
@@ -135,9 +140,15 @@ export class GitHubService {
       await this.audit('github_installation_denied', transaction.identityId, {
         reason: 'replayed_user_authorization',
       })
-      throw new UnauthorizedException('GitHub authorization transaction expired')
+      throw new UnauthorizedException(
+        'GitHub authorization transaction expired',
+      )
     }
 
+    const beforeAccess = await this.prisma.gitHubInstallation.findUnique({
+      where: { id: transaction.installationId },
+      select: { accessRevision: true },
+    })
     const installation = await this.provider.verifyInstallation(
       transaction.installationId,
     )
@@ -171,6 +182,27 @@ export class GitHubService {
       transaction.installationId,
     )
     await this.prisma.$transaction(async (tx) => {
+      if (beforeAccess) {
+        const locked = await tx.gitHubInstallation.updateMany({
+          where: {
+            id: installation.id,
+            accessRevision: beforeAccess.accessRevision,
+          },
+          data: { accessRevision: { increment: 0 } },
+        })
+        if (!locked.count)
+          throw new ConflictException(
+            'GitHub access changed during connection; retry setup',
+          )
+      }
+      const current = await tx.gitHubInstallation.findUnique({
+        where: { id: installation.id },
+        select: { accessRevision: true },
+      })
+      if (current?.accessRevision !== beforeAccess?.accessRevision)
+        throw new ConflictException(
+          'GitHub access changed during connection; retry setup',
+        )
       await tx.gitHubInstallation.upsert({
         where: { id: installation.id },
         create: {
@@ -182,8 +214,12 @@ export class GitHubService {
           connectedById: transaction.identityId,
           active: true,
           lastVerifiedAt: new Date(),
+          syncState: 'OK',
+          lastSyncAttemptAt: new Date(),
         },
         update: {
+          accessRevision: { increment: 1 },
+          syncLeaseUntil: null,
           accountLogin: installation.accountLogin,
           accountType: installation.accountType,
           repositorySelection: installation.repositorySelection,
@@ -191,6 +227,8 @@ export class GitHubService {
           connectedById: transaction.identityId,
           active: true,
           lastVerifiedAt: new Date(),
+          syncState: 'OK',
+          lastSyncAttemptAt: new Date(),
         },
       })
       for (const repository of repositories) {
@@ -212,6 +250,7 @@ export class GitHubService {
             defaultBranch: repository.defaultBranch,
             isPrivate: repository.isPrivate,
             installationId: installation.id,
+            available: true,
           },
         })
       }
@@ -253,97 +292,27 @@ export class GitHubService {
       })
     })
     await this.cache?.delete(this.inventoryKey(installation.id))
-    return { accountLogin: installation.accountLogin, repositoryCount: repositories.length }
+    return {
+      accountLogin: installation.accountLogin,
+      repositoryCount: repositories.length,
+    }
   }
 
   async listRepositories(refresh = false) {
+    if (!refresh) return this.repositoryOverview()
     const installations = await this.prisma.gitHubInstallation.findMany({
-      where: { active: true },
+      select: { id: true },
     })
+    const sync = new GitHubSyncService(this.prisma, this.provider)
     for (const installation of installations) {
       try {
-        await this.provider.verifyInstallation(installation.id)
-        const currentRepositories =
-          await this.repositoryInventory(installation.id, refresh)
-        await this.prisma.$transaction(async (tx) => {
-          await tx.gitHubInstallation.update({
-            where: { id: installation.id },
-            data: { lastVerifiedAt: new Date() },
-          })
-          for (const repository of currentRepositories) {
-            await tx.gitHubRepository.upsert({
-              where: { githubId: repository.id },
-              create: {
-                githubId: repository.id,
-                name: repository.name,
-                fullName: repository.fullName,
-                ownerLogin: repository.ownerLogin,
-                defaultBranch: repository.defaultBranch,
-                isPrivate: repository.isPrivate,
-                installationId: installation.id,
-              },
-              update: {
-                name: repository.name,
-                fullName: repository.fullName,
-                ownerLogin: repository.ownerLogin,
-                defaultBranch: repository.defaultBranch,
-                isPrivate: repository.isPrivate,
-                installationId: installation.id,
-              },
-            })
-          }
-          const currentIds = currentRepositories.map((repository) => repository.id)
-          if (currentIds.length) {
-            await tx.gitHubRepository.updateMany({
-              where: {
-                installationId: installation.id,
-                githubId: { notIn: currentIds },
-                selected: true,
-              },
-              data: { selected: false },
-            })
-            await tx.gitHubRepository.deleteMany({
-              where: {
-                installationId: installation.id,
-                githubId: { notIn: currentIds },
-                selected: false,
-              },
-            })
-          } else {
-            await tx.gitHubRepository.updateMany({
-              where: { installationId: installation.id, selected: true },
-              data: { selected: false },
-            })
-            await tx.gitHubRepository.deleteMany({
-              where: { installationId: installation.id, selected: false },
-            })
-          }
-        })
+        await sync.sync(installation.id)
       } catch (error) {
         if (error instanceof GitHubRateLimitError) throw error
-        if (!(error instanceof GitHubInstallationRevokedError)) {
+        if (!(error instanceof GitHubInstallationRevokedError))
           throw new ServiceUnavailableException(
             'GitHub is temporarily unavailable; repository access was not changed',
           )
-        }
-        await this.cache?.delete(this.inventoryKey(installation.id))
-        await this.prisma.$transaction(async (tx) => {
-          await tx.gitHubInstallation.update({
-            where: { id: installation.id },
-            data: { active: false, lastVerifiedAt: new Date() },
-          })
-          await tx.gitHubRepository.updateMany({
-            where: { installationId: installation.id, selected: true },
-            data: { selected: false },
-          })
-          await tx.auditEvent.create({
-            data: {
-              event: 'github_installation_unavailable',
-              actorId: null,
-              metadata: { installationId: installation.id.toString() },
-            },
-          })
-        })
       }
     }
 
@@ -354,7 +323,7 @@ export class GitHubService {
   async repositoryOverview() {
     const [repositories, allInstallations] = await Promise.all([
       this.prisma.gitHubRepository.findMany({
-        where: { installation: { active: true } },
+        where: { available: true, installation: { active: true } },
         select: {
           githubId: true,
           name: true,
@@ -368,13 +337,23 @@ export class GitHubService {
         orderBy: [{ ownerLogin: 'asc' }, { name: 'asc' }],
       }),
       this.prisma.gitHubInstallation.findMany({
-        select: { id: true, accountLogin: true, active: true },
+        select: {
+          id: true,
+          accountLogin: true,
+          active: true,
+          syncState: true,
+          lastVerifiedAt: true,
+          lastSyncAttemptAt: true,
+        },
         orderBy: { accountLogin: 'asc' },
       }),
     ])
     return {
       installations: allInstallations.map((installation) => ({
         id: installation.id.toString(),
+        syncState: installation.syncState,
+        lastVerifiedAt: installation.lastVerifiedAt,
+        lastSyncAttemptAt: installation.lastSyncAttemptAt,
         accountLogin: installation.accountLogin,
         active: installation.active,
       })),
@@ -398,11 +377,16 @@ export class GitHubService {
       include: { installation: { select: { active: true } } },
     })
     if (!repository || !repository.installation.active) {
-      throw new ForbiddenException('Repository is not available to a GitHub App installation')
+      throw new ForbiddenException(
+        'Repository is not available to a GitHub App installation',
+      )
     }
     if (selected) {
       // Cached inventory is discovery metadata, never permission to select a repository.
-      await this.provider.verifyRepositoryAccess(repository.installationId, repositoryId)
+      await this.provider.verifyRepositoryAccess(
+        repository.installationId,
+        repositoryId,
+      )
     }
     const changed = await this.prisma.gitHubRepository.updateMany({
       where: {
@@ -412,7 +396,10 @@ export class GitHubService {
       },
       data: { selected },
     })
-    if (changed.count !== 1) throw new ForbiddenException('Repository access changed; reload repositories')
+    if (changed.count !== 1)
+      throw new ForbiddenException(
+        'Repository access changed; reload repositories',
+      )
     await this.audit('github_repository_selection_changed', identityId, {
       repositoryId: repositoryId.toString(),
       selected: String(selected),
@@ -421,34 +408,6 @@ export class GitHubService {
 
   private inventoryKey(installationId: bigint) {
     return `github:${process.env.GITHUB_APP_ID ?? 'unconfigured'}:installation:${installationId}:repositories`
-  }
-
-  private async repositoryInventory(installationId: bigint, refresh: boolean): Promise<GitHubRepositoryInfo[]> {
-    const key = this.inventoryKey(installationId)
-    const cached = refresh ? null : await this.cache?.get(key)
-    if (cached) {
-      try {
-        const payload = JSON.parse(cached)
-        if (typeof payload.expiresAt === 'number' && payload.expiresAt > Date.now() &&
-          payload.expiresAt <= Date.now() + 30_000 && Array.isArray(payload.repositories) &&
-          payload.repositories.length <= 10_000 && payload.repositories.every((repo: Record<string, unknown>) =>
-            repo && typeof repo.id === 'string' && /^[1-9][0-9]{0,19}$/.test(repo.id) &&
-            typeof repo.name === 'string' && typeof repo.fullName === 'string' &&
-            typeof repo.ownerLogin === 'string' && typeof repo.isPrivate === 'boolean' &&
-            (repo.defaultBranch === null || typeof repo.defaultBranch === 'string'))) {
-          return payload.repositories.map((repo: Omit<GitHubRepositoryInfo, 'id'> & { id: string }) => ({
-            id: BigInt(repo.id), name: repo.name, fullName: repo.fullName,
-            ownerLogin: repo.ownerLogin, defaultBranch: repo.defaultBranch, isPrivate: repo.isPrivate,
-          }))
-        }
-      } catch { /* Invalid entries are cache misses. */ }
-    }
-    const repositories = await this.provider.listInstallationRepositories(installationId)
-    await this.cache?.set(key, JSON.stringify({
-      expiresAt: Date.now() + 30_000,
-      repositories: repositories.map(repo => ({ ...repo, id: repo.id.toString() })),
-    }), 30)
-    return repositories
   }
 
   get setupCookieName() {
@@ -472,7 +431,9 @@ export class GitHubService {
     phase: 'INSTALLATION' | 'USER_AUTHORIZATION',
   ) {
     if (!state || !browserBinding) {
-      throw new UnauthorizedException('GitHub installation transaction is invalid')
+      throw new UnauthorizedException(
+        'GitHub installation transaction is invalid',
+      )
     }
     const transaction = await this.prisma.gitHubSetupTransaction.findFirst({
       where: {
@@ -486,18 +447,24 @@ export class GitHubService {
       await this.audit('github_installation_denied', null, {
         reason: 'invalid_state_or_browser_binding',
       })
-      throw new UnauthorizedException('GitHub installation transaction expired or already used')
+      throw new UnauthorizedException(
+        'GitHub installation transaction expired or already used',
+      )
     }
     return transaction
   }
 
   private parseInstallationId(raw: string) {
     if (!/^\d{1,19}$/.test(raw)) {
-      throw new UnauthorizedException('GitHub installation or repository ID is invalid')
+      throw new UnauthorizedException(
+        'GitHub installation or repository ID is invalid',
+      )
     }
     const id = BigInt(raw)
     if (id <= 0n || BigInt(Number(id)) !== id) {
-      throw new UnauthorizedException('GitHub installation or repository ID is invalid')
+      throw new UnauthorizedException(
+        'GitHub installation or repository ID is invalid',
+      )
     }
     return id
   }

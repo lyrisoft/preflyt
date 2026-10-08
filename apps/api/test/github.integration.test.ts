@@ -1,5 +1,13 @@
 import { createHash } from 'node:crypto'
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest'
 import { RedisCacheService } from '../src/cache/redis-cache.service.js'
 import { GitHubService } from '../src/github/github.service.js'
 import {
@@ -50,11 +58,13 @@ beforeEach(async () => {
   })
   identityId = identity.id
   provider = {
-    createInstallationUrl: vi.fn(async (state: string) =>
-      `https://github.com/apps/preflyt/installations/new?state=${state}`,
+    createInstallationUrl: vi.fn(
+      async (state: string) =>
+        `https://github.com/apps/preflyt/installations/new?state=${state}`,
     ),
-    createUserAuthorizationUrl: vi.fn(async (state: string, challenge: string) =>
-      `https://github.com/login/oauth/authorize?state=${state}&code_challenge=${challenge}`,
+    createUserAuthorizationUrl: vi.fn(
+      async (state: string, challenge: string) =>
+        `https://github.com/login/oauth/authorize?state=${state}&code_challenge=${challenge}`,
     ),
     verifyInstallation: vi.fn(async (id: bigint) => ({
       id,
@@ -70,7 +80,10 @@ beforeEach(async () => {
     }),
     userCanAccessInstallation: vi.fn(async () => undefined),
     revokeUserToken: vi.fn(async () => undefined),
-    verifyRepositoryAccess: vi.fn(async () => ({ fullName: 'lyrisoft-fixtures/fixture-service', branch: 'main' })),
+    verifyRepositoryAccess: vi.fn(async () => ({
+      fullName: 'lyrisoft-fixtures/fixture-service',
+      branch: 'main',
+    })),
     listInstallationRepositories: vi.fn(async () => [
       {
         id: 88001n,
@@ -86,17 +99,48 @@ beforeEach(async () => {
 
 describe('GitHub App installation and repository selection', () => {
   it('authorizes an existing-installation update only through a valid state-bound setup flow', async () => {
-    const service = new GitHubService(prisma, provider as unknown as GitHubProviderService)
+    const service = new GitHubService(
+      prisma,
+      provider as unknown as GitHubProviderService,
+    )
     const started = await service.beginInstallation(identityId)
     const state = new URL(started.url).searchParams.get('state')!
-    await expect(service.beginUserAuthorization(state, 'wrong-browser', '8800', 'update')).rejects.toThrow()
-    await expect(service.beginUserAuthorization(state, started.browserBinding, '8800', 'delete')).rejects.toThrow('flow is invalid')
-    const url = await service.beginUserAuthorization(state, started.browserBinding, '8800', 'update')
-    await service.completeUserAuthorization(new URL(url).searchParams.get('state')!, started.browserBinding, 'oauth-code')
+    await expect(
+      service.beginUserAuthorization(state, 'wrong-browser', '8800', 'update'),
+    ).rejects.toThrow()
+    await expect(
+      service.beginUserAuthorization(
+        state,
+        started.browserBinding,
+        '8800',
+        'delete',
+      ),
+    ).rejects.toThrow('flow is invalid')
+    const url = await service.beginUserAuthorization(
+      state,
+      started.browserBinding,
+      '8800',
+      'update',
+    )
+    await service.completeUserAuthorization(
+      new URL(url).searchParams.get('state')!,
+      started.browserBinding,
+      'oauth-code',
+    )
     expect(provider.verifyInstallation).toHaveBeenCalledWith(8800n)
-    expect(provider.userCanAccessInstallation).toHaveBeenCalledWith('ephemeral-user-token',8800n)
+    expect(provider.userCanAccessInstallation).toHaveBeenCalledWith(
+      'ephemeral-user-token',
+      8800n,
+    )
     expect(await prisma.gitHubInstallation.count()).toBe(1)
-    await expect(service.beginUserAuthorization(state, started.browserBinding, '8800', 'update')).rejects.toThrow()
+    await expect(
+      service.beginUserAuthorization(
+        state,
+        started.browserBinding,
+        '8800',
+        'update',
+      ),
+    ).rejects.toThrow()
   })
   it('binds both GitHub redirects to one browser and single-use server state', async () => {
     const service = new GitHubService(
@@ -168,30 +212,42 @@ describe('GitHub App installation and repository selection', () => {
       'ephemeral-user-token',
       8800n,
     )
-    expect(provider.revokeUserToken).toHaveBeenCalledWith('ephemeral-user-token')
+    expect(provider.revokeUserToken).toHaveBeenCalledWith(
+      'ephemeral-user-token',
+    )
     expect(provider.listInstallationRepositories).toHaveBeenCalledWith(8800n)
-    expect(await prisma.gitHubInstallation.findUnique({ where: { id: 8800n } })).toMatchObject({
+    expect(
+      await prisma.gitHubInstallation.findUnique({ where: { id: 8800n } }),
+    ).toMatchObject({
       accountLogin: 'lyrisoft-fixtures',
       permissions: { metadata: 'read', contents: 'read' },
       connectedById: identityId,
     })
-    expect(await prisma.gitHubRepository.findUnique({ where: { githubId: 88001n } })).toMatchObject({
+    expect(
+      await prisma.gitHubRepository.findUnique({ where: { githubId: 88001n } }),
+    ).toMatchObject({
       fullName: 'lyrisoft-fixtures/fixture-service',
       selected: false,
       isPrivate: true,
     })
-    const listing = await service.listRepositories()
+    const listing = await service.listRepositories(true)
     expect(listing.repositories).toHaveLength(1)
     expect(listing.repositories[0]?.githubId).toBe('88001')
     expect(listing.installations).toMatchObject([
       { id: '8800', accountLogin: 'lyrisoft-fixtures', active: true },
     ])
-    expect(await prisma.auditEvent.findFirst({ where: { event: 'github_installation_connected' } })).not.toBeNull()
+    expect(
+      await prisma.auditEvent.findFirst({
+        where: { event: 'github_installation_connected' },
+      }),
+    ).not.toBeNull()
     expect(await prisma.gitHubSetupTransaction.count()).toBe(0)
   })
 
   it('rejects an installation the authorizing GitHub user cannot access and revokes the temporary token', async () => {
-    provider.userCanAccessInstallation.mockRejectedValueOnce(new Error('not accessible'))
+    provider.userCanAccessInstallation.mockRejectedValueOnce(
+      new Error('not accessible'),
+    )
     const service = new GitHubService(
       prisma,
       provider as unknown as GitHubProviderService,
@@ -213,13 +269,21 @@ describe('GitHub App installation and repository selection', () => {
         'oauth-code',
       ),
     ).rejects.toThrow('not accessible')
-    expect(provider.revokeUserToken).toHaveBeenCalledWith('ephemeral-user-token')
+    expect(provider.revokeUserToken).toHaveBeenCalledWith(
+      'ephemeral-user-token',
+    )
     expect(await prisma.gitHubInstallation.count()).toBe(0)
-    expect(await prisma.auditEvent.findFirst({ where: { event: 'github_installation_denied' } })).not.toBeNull()
+    expect(
+      await prisma.auditEvent.findFirst({
+        where: { event: 'github_installation_denied' },
+      }),
+    ).not.toBeNull()
   })
 
   it('does not persist an installation when temporary-token revocation fails', async () => {
-    provider.revokeUserToken.mockRejectedValueOnce(new Error('revocation failed'))
+    provider.revokeUserToken.mockRejectedValueOnce(
+      new Error('revocation failed'),
+    )
     const service = new GitHubService(
       prisma,
       provider as unknown as GitHubProviderService,
@@ -264,10 +328,20 @@ describe('GitHub App installation and repository selection', () => {
     )
 
     await expect(
-      service.setRepositorySelected(identityId, '88001', true, 'https://attacker.test'),
+      service.setRepositorySelected(
+        identityId,
+        '88001',
+        true,
+        'https://attacker.test',
+      ),
     ).rejects.toThrow()
     await expect(
-      service.setRepositorySelected(identityId, '99999', true, 'http://localhost:5173'),
+      service.setRepositorySelected(
+        identityId,
+        '99999',
+        true,
+        'http://localhost:5173',
+      ),
     ).rejects.toThrow()
     await service.setRepositorySelected(
       identityId,
@@ -275,10 +349,16 @@ describe('GitHub App installation and repository selection', () => {
       true,
       'http://localhost:5173',
     )
-    expect(await prisma.gitHubRepository.findUnique({ where: { githubId: 88001n } })).toMatchObject({
+    expect(
+      await prisma.gitHubRepository.findUnique({ where: { githubId: 88001n } }),
+    ).toMatchObject({
       selected: true,
     })
-    expect(await prisma.auditEvent.findFirst({ where: { event: 'github_repository_selection_changed' } })).not.toBeNull()
+    expect(
+      await prisma.auditEvent.findFirst({
+        where: { event: 'github_repository_selection_changed' },
+      }),
+    ).not.toBeNull()
 
     const guard = new OwnerAdminGuard()
     expect(() =>
@@ -318,16 +398,20 @@ describe('GitHub App installation and repository selection', () => {
     provider.verifyInstallation.mockRejectedValueOnce(
       new GitHubInstallationRevokedError(),
     )
-    const listing = await service.listRepositories()
+    const listing = await service.listRepositories(true)
 
     expect(listing.repositories).toEqual([])
-    expect(listing.installations).toMatchObject([
-      { id: '8800', active: false },
-    ])
-    expect(await prisma.gitHubRepository.findUnique({ where: { githubId: 88001n } })).toMatchObject({
+    expect(listing.installations).toMatchObject([{ id: '8800', active: false }])
+    expect(
+      await prisma.gitHubRepository.findUnique({ where: { githubId: 88001n } }),
+    ).toMatchObject({
       selected: false,
     })
-    expect(await prisma.auditEvent.findFirst({ where: { event: 'github_installation_unavailable' } })).not.toBeNull()
+    expect(
+      await prisma.auditEvent.findFirst({
+        where: { event: 'github_installation_unavailable' },
+      }),
+    ).not.toBeNull()
     await expect(
       service.setRepositorySelected(
         identityId,
@@ -339,39 +423,57 @@ describe('GitHub App installation and repository selection', () => {
   })
 })
 
-
-describe('repository inventory caching preserves live authorization', () => {
+describe('local inventory reads and explicit upstream synchronization', () => {
   async function setup() {
-    await prisma.gitHubInstallation.create({ data: {
-      id: 8800n, accountLogin: 'lyrisoft-fixtures', accountType: 'Organization',
-      repositorySelection: 'selected', permissions: { metadata: 'read', contents: 'read' },
-      connectedById: identityId, active: true, lastVerifiedAt: new Date(),
-    } })
+    await prisma.gitHubInstallation.create({
+      data: {
+        id: 8800n,
+        accountLogin: 'lyrisoft-fixtures',
+        accountType: 'Organization',
+        repositorySelection: 'selected',
+        permissions: { metadata: 'read', contents: 'read' },
+        connectedById: identityId,
+        active: true,
+        lastVerifiedAt: new Date(),
+      },
+    })
     const entries = new Map<string, string>()
     const cache = {
       get: vi.fn(async (key: string) => entries.get(key) ?? null),
-      set: vi.fn(async (key: string, value: string) => { entries.set(key, value) }),
-      delete: vi.fn(async (key: string) => { entries.delete(key) }),
+      set: vi.fn(async (key: string, value: string) => {
+        entries.set(key, value)
+      }),
+      delete: vi.fn(async (key: string) => {
+        entries.delete(key)
+      }),
     }
-    const service = new GitHubService(prisma, provider as unknown as GitHubProviderService,
-      cache as unknown as RedisCacheService)
+    const service = new GitHubService(
+      prisma,
+      provider as unknown as GitHubProviderService,
+      cache as unknown as RedisCacheService,
+    )
     return { service, cache, entries }
   }
 
-  it('reuses inventory but verifies installation and reads selection state on every listing', async () => {
+  it('reads saved inventory and current selection without upstream verification', async () => {
     const { service } = await setup()
-    await service.listRepositories()
-    await service.setRepositorySelected(identityId, '88001', true, 'http://localhost:5173')
+    await service.listRepositories(true)
+    await service.setRepositorySelected(
+      identityId,
+      '88001',
+      true,
+      'http://localhost:5173',
+    )
+    provider.verifyInstallation.mockClear()
+    provider.listInstallationRepositories.mockClear()
     const listing = await service.listRepositories()
-    expect(provider.listInstallationRepositories).toHaveBeenCalledTimes(1)
-    expect(provider.verifyInstallation).toHaveBeenCalledTimes(2)
-    expect(provider.verifyRepositoryAccess).toHaveBeenCalledWith(8800n, 88001n)
     expect(listing.repositories[0]?.selected).toBe(true)
+    expect(provider.verifyInstallation).not.toHaveBeenCalled()
+    expect(provider.listInstallationRepositories).not.toHaveBeenCalled()
   })
-
   it('explicit refresh bypasses inventory and reconciles removals', async () => {
     const { service } = await setup()
-    await service.listRepositories()
+    await service.listRepositories(true)
     provider.listInstallationRepositories.mockResolvedValueOnce([])
     expect((await service.listRepositories(true)).repositories).toEqual([])
     expect(provider.listInstallationRepositories).toHaveBeenCalledTimes(2)
@@ -379,92 +481,157 @@ describe('repository inventory caching preserves live authorization', () => {
 
   it('never enables a cached repository when current upstream access is denied', async () => {
     const { service } = await setup()
-    await service.listRepositories()
-    provider.verifyRepositoryAccess.mockRejectedValueOnce(new Error('Repository unavailable'))
-    await expect(service.setRepositorySelected(identityId, '88001', true, 'http://localhost:5173'))
-      .rejects.toThrow('Repository unavailable')
-    expect((await prisma.gitHubRepository.findUnique({ where: { githubId: 88001n } }))?.selected).toBe(false)
-  })
-
-  it('rejects expired or malformed cache payloads and refetches upstream', async () => {
-    const { service, entries } = await setup()
-    await service.listRepositories()
-    const key = [...entries.keys()][0]!
-    const payload = JSON.parse(entries.get(key)!)
-    entries.set(key, JSON.stringify({ ...payload, expiresAt: Date.now() - 1 }))
-    await service.listRepositories()
-    entries.set(key, JSON.stringify({ expiresAt: Date.now() + 30_000, repositories: [{ id: 'invalid' }] }))
-    await service.listRepositories()
-    entries.set(key, 'not-json')
-    await service.listRepositories()
-    expect(provider.listInstallationRepositories).toHaveBeenCalledTimes(4)
-  })
-
-  it('invalidates cache on revoked installations and does not return their repository metadata', async () => {
-    const { service, entries, cache } = await setup()
-    await service.listRepositories()
-    provider.verifyInstallation.mockRejectedValueOnce(new GitHubInstallationRevokedError())
-    const listing = await service.listRepositories()
-    expect(listing.repositories).toEqual([])
-    expect(listing.installations[0]?.active).toBe(false)
-    expect(cache.delete).toHaveBeenCalledTimes(1)
-    expect(entries.size).toBe(0)
+    await service.listRepositories(true)
+    provider.verifyRepositoryAccess.mockRejectedValueOnce(
+      new Error('Repository unavailable'),
+    )
+    await expect(
+      service.setRepositorySelected(
+        identityId,
+        '88001',
+        true,
+        'http://localhost:5173',
+      ),
+    ).rejects.toThrow('Repository unavailable')
+    expect(
+      (
+        await prisma.gitHubRepository.findUnique({
+          where: { githubId: 88001n },
+        })
+      )?.selected,
+    ).toBe(false)
   })
 
   it('does not serve cached inventory on live verification or explicit refresh failure', async () => {
     const { service } = await setup()
-    await service.listRepositories()
-    provider.verifyInstallation.mockRejectedValueOnce(new Error('GitHub offline'))
-    await expect(service.listRepositories()).rejects.toThrow('temporarily unavailable')
-    provider.listInstallationRepositories.mockRejectedValueOnce(new Error('GitHub offline'))
-    await expect(service.listRepositories(true)).rejects.toThrow('temporarily unavailable')
+    await service.listRepositories(true)
+    provider.verifyInstallation.mockRejectedValueOnce(
+      new Error('GitHub offline'),
+    )
+    await expect(service.listRepositories(true)).rejects.toThrow(
+      'temporarily unavailable',
+    )
+    provider.listInstallationRepositories.mockRejectedValueOnce(
+      new Error('GitHub offline'),
+    )
+    await expect(service.listRepositories(true)).rejects.toThrow(
+      'temporarily unavailable',
+    )
   })
 })
-
 
 describe('cache invalidation and selection races', () => {
   it('invalidates the installation inventory after authorized reconnect', async () => {
     const cache = { delete: vi.fn(async () => undefined) }
-    const service = new GitHubService(prisma, provider as unknown as GitHubProviderService,
-      cache as unknown as RedisCacheService)
+    const service = new GitHubService(
+      prisma,
+      provider as unknown as GitHubProviderService,
+      cache as unknown as RedisCacheService,
+    )
     const started = await service.beginInstallation(identityId)
     const state = new URL(started.url).searchParams.get('state')!
-    const authorization = await service.beginUserAuthorization(state, started.browserBinding, '8800', 'update')
-    await service.completeUserAuthorization(new URL(authorization).searchParams.get('state')!, started.browserBinding, 'oauth-code')
-    expect(cache.delete).toHaveBeenCalledWith(expect.stringContaining('installation:8800:repositories'))
+    const authorization = await service.beginUserAuthorization(
+      state,
+      started.browserBinding,
+      '8800',
+      'update',
+    )
+    await service.completeUserAuthorization(
+      new URL(authorization).searchParams.get('state')!,
+      started.browserBinding,
+      'oauth-code',
+    )
+    expect(cache.delete).toHaveBeenCalledWith(
+      expect.stringContaining('installation:8800:repositories'),
+    )
   })
 
   it('blocks selection if the installation becomes inactive during the live access check', async () => {
-    const service = new GitHubService(prisma, provider as unknown as GitHubProviderService)
+    const service = new GitHubService(
+      prisma,
+      provider as unknown as GitHubProviderService,
+    )
     const started = await service.beginInstallation(identityId)
-    const authorization = await service.beginUserAuthorization(new URL(started.url).searchParams.get('state')!, started.browserBinding, '8800', 'install')
-    await service.completeUserAuthorization(new URL(authorization).searchParams.get('state')!, started.browserBinding, 'oauth-code')
+    const authorization = await service.beginUserAuthorization(
+      new URL(started.url).searchParams.get('state')!,
+      started.browserBinding,
+      '8800',
+      'install',
+    )
+    await service.completeUserAuthorization(
+      new URL(authorization).searchParams.get('state')!,
+      started.browserBinding,
+      'oauth-code',
+    )
     provider.verifyRepositoryAccess.mockImplementationOnce(async () => {
-      await prisma.gitHubInstallation.update({ where: { id: 8800n }, data: { active: false } })
+      await prisma.gitHubInstallation.update({
+        where: { id: 8800n },
+        data: { active: false },
+      })
     })
-    await expect(service.setRepositorySelected(identityId, '88001', true, 'http://localhost:5173'))
-      .rejects.toThrow('Repository access changed')
-    expect((await prisma.gitHubRepository.findUnique({ where: { githubId: 88001n } }))?.selected).toBe(false)
+    await expect(
+      service.setRepositorySelected(
+        identityId,
+        '88001',
+        true,
+        'http://localhost:5173',
+      ),
+    ).rejects.toThrow('Repository access changed')
+    expect(
+      (
+        await prisma.gitHubRepository.findUnique({
+          where: { githubId: 88001n },
+        })
+      )?.selected,
+    ).toBe(false)
   })
 })
 
-
 describe('dashboard reads last synced local state without upstream latency', () => {
   it('loads while GitHub is unavailable, reflects current selection, and excludes inactive installations', async () => {
-    const service = new GitHubService(prisma, provider as unknown as GitHubProviderService)
+    const service = new GitHubService(
+      prisma,
+      provider as unknown as GitHubProviderService,
+    )
     const started = await service.beginInstallation(identityId)
-    const authorization = await service.beginUserAuthorization(new URL(started.url).searchParams.get('state')!, started.browserBinding, '8800', 'install')
-    await service.completeUserAuthorization(new URL(authorization).searchParams.get('state')!, started.browserBinding, 'oauth-code')
-    await prisma.gitHubRepository.update({ where: { githubId: 88001n }, data: { selected: true } })
-    provider.verifyInstallation.mockReset().mockRejectedValue(new Error('GitHub offline'))
-    provider.listInstallationRepositories.mockReset().mockRejectedValue(new Error('GitHub offline'))
+    const authorization = await service.beginUserAuthorization(
+      new URL(started.url).searchParams.get('state')!,
+      started.browserBinding,
+      '8800',
+      'install',
+    )
+    await service.completeUserAuthorization(
+      new URL(authorization).searchParams.get('state')!,
+      started.browserBinding,
+      'oauth-code',
+    )
+    await prisma.gitHubRepository.update({
+      where: { githubId: 88001n },
+      data: { selected: true },
+    })
+    provider.verifyInstallation
+      .mockReset()
+      .mockRejectedValue(new Error('GitHub offline'))
+    provider.listInstallationRepositories
+      .mockReset()
+      .mockRejectedValue(new Error('GitHub offline'))
     const overview = await service.repositoryOverview()
-    expect(overview.repositories).toMatchObject([{ githubId: '88001', selected: true }])
+    expect(overview.repositories).toMatchObject([
+      { githubId: '88001', selected: true },
+    ])
     expect(provider.verifyInstallation).not.toHaveBeenCalled()
     expect(provider.listInstallationRepositories).not.toHaveBeenCalled()
-    await prisma.gitHubRepository.update({ where: { githubId: 88001n }, data: { selected: false } })
-    expect((await service.repositoryOverview()).repositories[0]?.selected).toBe(false)
-    await prisma.gitHubInstallation.update({ where: { id: 8800n }, data: { active: false } })
+    await prisma.gitHubRepository.update({
+      where: { githubId: 88001n },
+      data: { selected: false },
+    })
+    expect((await service.repositoryOverview()).repositories[0]?.selected).toBe(
+      false,
+    )
+    await prisma.gitHubInstallation.update({
+      where: { id: 8800n },
+      data: { active: false },
+    })
     expect((await service.repositoryOverview()).repositories).toEqual([])
   })
 })

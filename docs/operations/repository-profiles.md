@@ -30,3 +30,5 @@ Discovery covers languages by file extension; Node.js frameworks by dependencies
 - No clone, dependency install, build, test, scanner, agent, write-back or remediation action is performed.
 
 Apply migrations with pnpm --filter @preflyt/api prisma:migrate before starting the updated API. The repository-profile migration adds a table and relation without changing existing repository/session records. Failed discovery does not overwrite prior evidence. Snapshot records follow repository-record retention: deleting a repository record also deletes its profiles; deselection alone retains them but blocks access. Back up PostgreSQL before upgrades. Deployment-wide concurrency, scheduled refresh, historical browsing and non-Node framework parsing remain future work.
+
+Saved profile GET requests use the [local GitHub read model](github-sync.md), with sync freshness metadata and no live GitHub round trip. Discovery still verifies upstream access.

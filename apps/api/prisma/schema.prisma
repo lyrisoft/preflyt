@@ -135,6 +135,10 @@ model GitHubInstallation {
   connectedById       String
   connectedBy         Identity           @relation(fields: [connectedById], references: [id], onDelete: Restrict)
   active              Boolean            @default(true)
+  accessRevision      Int @default(0)
+  syncState           String @default("UNKNOWN")
+  lastSyncAttemptAt   DateTime?
+  syncLeaseUntil      DateTime?
   lastVerifiedAt      DateTime?
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
@@ -151,6 +155,7 @@ model GitHubRepository {
   ownerLogin     String
   defaultBranch  String?
   isPrivate      Boolean
+  available      Boolean @default(true)
   selected       Boolean           @default(false)
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
@@ -286,4 +291,16 @@ model CommitAssessment {
   @@unique([repositoryId, requestKey])
   @@index([repositoryId, sourceSha, createdAt])
   @@index([repositoryId, createdAt])
+}
+
+model GitHubAccessDelivery {
+  id String @id
+  payloadHash String
+  installationId BigInt
+  event String
+  action String
+  state GitHubDeliveryState @default(RECEIVED)
+  receivedAt DateTime @default(now())
+  processedAt DateTime?
+  @@index([state, receivedAt])
 }

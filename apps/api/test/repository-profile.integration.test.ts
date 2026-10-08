@@ -171,23 +171,18 @@ describe('profile HTTP authorization and persistence', () => {
       'd'.repeat(40),
     )
   })
-  it('uses verified current metadata and rechecks selection after provider verification', async () => {
-    provider.verifyRepositoryAccess.mockResolvedValueOnce({
-      fullName: 'fixture/renamed',
-      branch: 'trunk',
-    })
-    expect((await owner('get').expect(200)).body.repository).toMatchObject({
-      fullName: 'fixture/renamed',
-      defaultBranch: 'trunk',
-    })
-    provider.verifyRepositoryAccess.mockImplementationOnce(async () => {
-      await prisma.gitHubRepository.update({
-        where: { githubId: 501n },
-        data: { selected: false },
-      })
-      return { fullName: 'fixture/app', branch: 'main' }
-    })
-    await owner('get').expect(403)
+  it('returns saved metadata without upstream calls even when GitHub is unavailable', async () => {
+    provider.verifyRepositoryAccess.mockRejectedValue(
+      new Error('GitHub offline'),
+    )
+    const loaded = await owner('get')
+    expect(loaded.status).toBe(200)
+    expect(loaded.body.repository.fullName).toBe('fixture/app')
+    expect(loaded.body).toHaveProperty('sync')
+    expect(provider.verifyRepositoryAccess).not.toHaveBeenCalled()
+    expect(provider.readRepositorySnapshot).not.toHaveBeenCalled()
+    await prisma.gitHubRepository.updateMany({ data: { selected: false } })
+    expect((await owner('get')).status).toBe(403)
   })
   it('preserves earlier snapshots on failure and refuses cached evidence after revocation', async () => {
     await owner('post').expect(201)
@@ -196,9 +191,7 @@ describe('profile HTTP authorization and persistence', () => {
     )
     await owner('post').expect(503)
     expect(await prisma.repositoryProfile.count()).toBe(1)
-    provider.verifyRepositoryAccess.mockRejectedValueOnce(
-      new ForbiddenException('revoked'),
-    )
+    await prisma.gitHubInstallation.updateMany({ data: { active: false } })
     await owner('get').expect(403)
   })
   it('blocks a discovery if selection changes while GitHub is being read', async () => {

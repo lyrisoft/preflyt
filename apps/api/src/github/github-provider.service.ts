@@ -11,6 +11,7 @@ import {
   Inject,
   Optional,
 } from '@nestjs/common'
+import { PrismaService } from '../prisma/prisma.service.js'
 import { RedisCacheService } from '../cache/redis-cache.service.js'
 import {
   GitHubRequestLimiter,
@@ -45,12 +46,56 @@ export class GitHubInstallationRevokedError extends Error {
 @Injectable()
 export class GitHubProviderService {
   private app?: App
+  private readonly cancellation = new AbortController()
+  close() {
+    this.cancellation.abort()
+  }
   private readonly limiter: GitHubRequestLimiter
+  private readonly tokens = new Map<
+    string,
+    { token: string; expiresAt: number }
+  >()
   constructor(
     @Optional() @Inject(RedisCacheService) cache?: RedisCacheService,
+    @Optional() @Inject(PrismaService) private readonly prisma?: PrismaService,
   ) {
     this.limiter = new GitHubRequestLimiter(cache)
   }
+  private async installationToken(
+    installationId: bigint,
+    repositoryId?: bigint,
+  ) {
+    const installation = await this.prisma?.gitHubInstallation.findUnique({
+      where: { id: installationId },
+      select: { accessRevision: true },
+    })
+    const key = `${installationId}:${repositoryId ?? 'inventory'}:${installation?.accessRevision ?? 0}`
+    for (const [entry, value] of this.tokens)
+      if (value.expiresAt <= Date.now() + 60000) this.tokens.delete(entry)
+    const cached = this.tokens.get(key)
+    if (cached) return cached.token
+    return this.limiter.singleFlight('token:' + key, async () => {
+      const response = await this.appRequest(
+        'POST /app/installations/{installation_id}/access_tokens',
+        {
+          installation_id: Number(installationId),
+          ...(repositoryId ? { repository_ids: [Number(repositoryId)] } : {}),
+          permissions: { metadata: 'read', contents: 'read' },
+        },
+      )
+      const expiresAt = Date.parse(response.data.expires_at)
+      if (
+        typeof response.data.token !== 'string' ||
+        !Number.isFinite(expiresAt)
+      )
+        throw new ServiceUnavailableException(
+          'GitHub issued an invalid installation token',
+        )
+      this.tokens.set(key, { token: response.data.token, expiresAt })
+      return response.data.token as string
+    })
+  }
+
   private appRequest(route: string, options: Record<string, unknown>) {
     return this.limiter.run(
       `app:${this.requireAppId()}`,
@@ -59,6 +104,7 @@ export class GitHubProviderService {
           ...options,
           request: {
             timeout: 10_000,
+            signal: this.cancellation.signal,
             ...((options.request as Record<string, unknown>) ?? {}),
           },
         }),
@@ -68,7 +114,13 @@ export class GitHubProviderService {
   private apiFetch(scope: string, url: string | URL, options: RequestInit) {
     return this.limiter.run(
       scope,
-      () => fetch(url, options),
+      () =>
+        fetch(url, {
+          ...options,
+          signal: options.signal
+            ? AbortSignal.any([options.signal, this.cancellation.signal])
+            : this.cancellation.signal,
+        }),
       !options.method || options.method === 'GET',
     )
   }
@@ -238,14 +290,7 @@ export class GitHubProviderService {
   private async loadInstallationRepositories(installationId: bigint) {
     let token
     try {
-      const response = await this.appRequest(
-        'POST /app/installations/{installation_id}/access_tokens',
-        {
-          installation_id: Number(installationId),
-          permissions: { metadata: 'read', contents: 'read' },
-        },
-      )
-      token = response.data
+      token = { token: await this.installationToken(installationId) }
     } catch (error) {
       if (this.isNotFound(error)) throw new GitHubInstallationRevokedError()
       throw error
@@ -263,6 +308,9 @@ export class GitHubProviderService {
           signal: AbortSignal.timeout(10_000),
         },
       )
+      if ([401, 403, 404].includes(response.status))
+        for (const key of this.tokens.keys())
+          if (key.startsWith(`${installationId}:`)) this.tokens.delete(key)
       if (response.status === 404) throw new GitHubInstallationRevokedError()
       if (!response.ok)
         throw new Error('Unable to list GitHub installation repositories')
@@ -446,16 +494,7 @@ export class GitHubProviderService {
     }
     let token: string
     try {
-      const response = await this.appRequest(
-        'POST /app/installations/{installation_id}/access_tokens',
-        {
-          installation_id: Number(installationId),
-          repository_ids: [Number(repositoryId)],
-          permissions: { metadata: 'read', contents: 'read' },
-          request: { timeout: 10_000 },
-        },
-      )
-      token = response.data.token
+      token = await this.installationToken(installationId, repositoryId)
     } catch (error) {
       if (error instanceof GitHubRateLimitError) throw error
       if (this.isNotFound(error))
@@ -475,6 +514,9 @@ export class GitHubProviderService {
           signal,
         },
       )
+      if ([401, 403, 404].includes(response.status))
+        for (const key of this.tokens.keys())
+          if (key.startsWith(`${installationId}:`)) this.tokens.delete(key)
       if (
         response.status === 401 ||
         response.status === 404 ||
