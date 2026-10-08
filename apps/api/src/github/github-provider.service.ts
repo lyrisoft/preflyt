@@ -1,3 +1,4 @@
+import { normalizeGitHubEvent } from '../github-events/github-event.js'
 import { createHash } from 'node:crypto'
 import {
   wantsProfileContent,
@@ -64,12 +65,13 @@ export class GitHubProviderService {
   private async installationToken(
     installationId: bigint,
     repositoryId?: bigint,
+    permission: 'contents' | 'pull_requests' = 'contents',
   ) {
     const installation = await this.prisma?.gitHubInstallation.findUnique({
       where: { id: installationId },
       select: { accessRevision: true },
     })
-    const key = `${installationId}:${repositoryId ?? 'inventory'}:${installation?.accessRevision ?? 0}`
+    const key = `${installationId}:${repositoryId ?? 'inventory'}:${installation?.accessRevision ?? 0}${permission === 'pull_requests' ? ':pull_requests' : ''}`
     for (const [entry, value] of this.tokens)
       if (value.expiresAt <= Date.now() + 60000) this.tokens.delete(entry)
     const cached = this.tokens.get(key)
@@ -80,7 +82,7 @@ export class GitHubProviderService {
         {
           installation_id: Number(installationId),
           ...(repositoryId ? { repository_ids: [Number(repositoryId)] } : {}),
-          permissions: { metadata: 'read', contents: 'read' },
+          permissions: { metadata: 'read', [permission]: 'read' },
         },
       )
       const expiresAt = Date.parse(response.data.expires_at)
@@ -479,7 +481,47 @@ export class GitHubProviderService {
     }
   }
 
-  private async openRepository(installationId: bigint, repositoryId: bigint) {
+  async readPullRequest(
+    installationId: bigint,
+    repositoryId: bigint,
+    number: number,
+  ) {
+    if (!Number.isSafeInteger(number) || number < 1 || number > 2147483647)
+      throw new ForbiddenException('Pull request is unavailable')
+    const { metadata, request } = await this.openRepository(
+      installationId,
+      repositoryId,
+      'pull_requests',
+    )
+    const data = await request<Record<string, unknown>>(
+      `/repos/${encodeURIComponent(metadata.owner.login)}/${encodeURIComponent(metadata.name)}/pulls/${number}`,
+    )
+    const normalized = normalizeGitHubEvent('pull_request', {
+      action: 'edited',
+      installation: { id: Number(installationId) },
+      repository: { id: Number(repositoryId) },
+      pull_request: data,
+    })
+    if (
+      !normalized?.pullRequestContext ||
+      normalized.sourceNumber !== number ||
+      !normalized.sourceUpdatedAt
+    )
+      throw new ServiceUnavailableException(
+        'Pull request context is unavailable',
+      )
+    return {
+      context: normalized.pullRequestContext,
+      sourceUpdatedAt: normalized.sourceUpdatedAt,
+      sourceObjectId: normalized.sourceObjectId,
+    }
+  }
+
+  private async openRepository(
+    installationId: bigint,
+    repositoryId: bigint,
+    permission: 'contents' | 'pull_requests' = 'contents',
+  ) {
     try {
       await this.verifyInstallation(installationId)
     } catch (error) {
@@ -494,7 +536,11 @@ export class GitHubProviderService {
     }
     let token: string
     try {
-      token = await this.installationToken(installationId, repositoryId)
+      token = await this.installationToken(
+        installationId,
+        repositoryId,
+        permission,
+      )
     } catch (error) {
       if (error instanceof GitHubRateLimitError) throw error
       if (this.isNotFound(error))

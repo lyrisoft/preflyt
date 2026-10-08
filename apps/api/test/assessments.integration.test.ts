@@ -1,3 +1,6 @@
+import { PullRequestController } from '../src/assessments/pull-request.controller.js'
+import { PullRequestService } from '../src/assessments/pull-request.service.js'
+import { GitHubPrSyncService } from '../src/github/github-pr-sync.service.js'
 import { CiBindingController } from '../src/assessments/ci-binding.controller.js'
 import { CiBindingService } from '../src/assessments/ci-binding.service.js'
 import 'reflect-metadata'
@@ -49,11 +52,13 @@ beforeAll(async () => {
     {
       module: class TestModule {},
       controllers: [
+        PullRequestController,
         StandardsController,
         AssessmentController,
         CiBindingController,
       ],
       providers: [
+        PullRequestService,
         CiBindingService,
         StandardsService,
         AssessmentService,
@@ -1230,4 +1235,264 @@ describe('PR-triggered exact-head assessments', () => {
       pullRequest: { draft: true },
     })
   })
+})
+
+const currentPr = () =>
+  request(app.getHttpServer())
+    .get('/github/repositories/501/pull-requests/1')
+    .set('Cookie', 'test.sid=VIEWER')
+async function tracked(
+  context: any = prContext(),
+  at = new Date(),
+  action = 'opened',
+) {
+  const d = await prIncoming(context, action)
+  await prisma.gitHubWebhookDelivery.update({
+    where: { id: d.id },
+    data: { sourceUpdatedAt: at },
+  })
+  await processPr(d)
+  return prisma.repositoryPullRequest.findFirstOrThrow()
+}
+async function verifyPr(context: any = prContext(), provider?: any) {
+  const row = await prisma.repositoryPullRequest.findFirstOrThrow()
+  await new GitHubPrSyncService(
+    prisma,
+    provider ??
+      ({
+        readPullRequest: async () => ({
+          context,
+          sourceObjectId: row.objectId,
+          sourceUpdatedAt: new Date(),
+        }),
+      } as any),
+  ).sync(row.id)
+  return prisma.repositoryPullRequest.findUniqueOrThrow({
+    where: { id: row.id },
+  })
+}
+describe('current PR state and exact-head CI links', () => {
+  it('keeps newer provider timestamps and blocks equal-time conflicts', async () => {
+    await post()
+    const now = new Date()
+    const first = await tracked(prContext('d'.repeat(40)), now)
+    await tracked(
+      prContext('c'.repeat(40)),
+      new Date(now.getTime() - 1000),
+      'synchronize',
+    )
+    expect(
+      (await prisma.repositoryPullRequest.findFirstOrThrow()).revision,
+    ).toBe(first.revision)
+    expect((await currentPr()).body.reason).toBe('CURRENT_STATE_UNVERIFIED')
+    const verified = await verifyPr(prContext('d'.repeat(40)))
+    await tracked(
+      prContext('e'.repeat(40)),
+      verified.sourceUpdatedAt!,
+      'synchronize',
+    )
+    expect(
+      (await prisma.repositoryPullRequest.findFirstOrThrow()).syncState,
+    ).toBe('CONFLICTED')
+    expect((await currentPr()).body.ciAssessment).toBeNull()
+  })
+  it('links later exact-head CI and invalidates policy, head, base and binding changes', async () => {
+    const selection = await post()
+    const b = await bind(selection.body.id)
+    await tracked()
+    await verifyPr()
+    const pr = (await currentPr()).body
+    expect(pr.prAssessment.id).toBeTruthy()
+    const ci = await prisma.gitHubWebhookDelivery.create({
+      data: {
+        id: randomUUID(),
+        event: 'check_run',
+        action: 'completed',
+        installationId: 500n,
+        repositoryGithubId: 501n,
+        sourceObjectId: '42',
+        sourceSha: 'c'.repeat(40),
+        sourceStatus: 'completed',
+        sourceConclusion: 'success',
+        sourceUpdatedAt: new Date(),
+        payloadHash: 'e'.repeat(64),
+      },
+    })
+    await new GitHubEventProcessor(prisma).process(ci.id)
+    const linked = (await currentPr()).body
+    expect(linked.ciAssessment.id).toBeTruthy()
+    expect(linked.prAssessment.id).toBe(pr.prAssessment.id)
+    expect(linked).toMatchObject({
+      reason: 'EXECUTION_NOT_VERIFIED',
+      qualityGate: null,
+      readiness: 'NOT_EVALUATED',
+    })
+    await verifyPr(prContext('d'.repeat(40)))
+    expect((await currentPr()).body).toMatchObject({
+      ciAssessment: null,
+      prAssessment: null,
+    })
+    await verifyPr(prContext('c'.repeat(40), 'b'.repeat(40)))
+    expect((await currentPr()).body.prAssessment).toBeNull()
+    await verifyPr()
+    await bind(selection.body.id, [], b.body.id)
+    expect((await currentPr()).body).toMatchObject({
+      ciAssessment: null,
+      prAssessment: null,
+    })
+    expect((await readAssessment(pr.prAssessment.id)).status).toBe(200)
+    await post(body(selection.body.id, 'STRICT'))
+    expect((await currentPr()).body.reason).toBe('NO_APPLICABLE_ASSESSMENT')
+  })
+  it('hides links for closed/forked state and expired or failed verification', async () => {
+    await post()
+    await tracked()
+    await verifyPr({ ...prContext(), state: 'closed', merged: true })
+    expect((await currentPr()).body.reason).toBe('PR_CLOSED')
+    await verifyPr({
+      ...prContext(),
+      head: { ...prContext().head, repositoryId: '999' },
+    })
+    expect((await currentPr()).body.reason).toBe('FORK_HEAD_UNSUPPORTED')
+    await verifyPr()
+    await prisma.repositoryPullRequest.updateMany({
+      data: { verifiedAt: new Date(Date.now() - 300001) },
+    })
+    expect((await currentPr()).body.verification).toBe('UNVERIFIED')
+    await verifyPr(undefined, {
+      readPullRequest: async () => {
+        throw new Error('rate limited')
+      },
+    })
+    expect((await currentPr()).body).toMatchObject({
+      verification: 'UNVERIFIED',
+      ciAssessment: null,
+    })
+    expect(
+      (await prisma.repositoryPullRequest.findFirstOrThrow()).syncState,
+    ).toBe('ERROR')
+  })
+  it('cannot overwrite a newer webhook or restore revoked access from in-flight provider data', async () => {
+    await post()
+    await tracked()
+    await verifyPr(undefined, {
+      readPullRequest: async () => {
+        await tracked(
+          prContext('d'.repeat(40)),
+          new Date(Date.now() + 1000),
+          'synchronize',
+        )
+        return {
+          context: prContext(),
+          sourceObjectId: '99',
+          sourceUpdatedAt: new Date(),
+        }
+      },
+    })
+    expect(
+      (await prisma.repositoryPullRequest.findFirstOrThrow()).context,
+    ).toMatchObject({ head: { sha: 'd'.repeat(40) } })
+    expect((await currentPr()).body.verification).toBe('UNVERIFIED')
+    await verifyPr(prContext('d'.repeat(40)))
+    await prisma.gitHubInstallation.updateMany({
+      data: { accessRevision: { increment: 1 } },
+    })
+    expect((await currentPr()).body.verification).toBe('UNVERIFIED')
+    await verifyPr(undefined, {
+      readPullRequest: async () => {
+        await prisma.gitHubInstallation.updateMany({
+          data: { active: false, accessRevision: { increment: 1 } },
+        })
+        return {
+          context: prContext(),
+          sourceObjectId: '99',
+          sourceUpdatedAt: new Date(),
+        }
+      },
+    })
+    expect((await currentPr()).status).toBe(403)
+  })
+  it('requires session and repository access and serves local list metadata', async () => {
+    await tracked()
+    expect(
+      (
+        await request(app.getHttpServer()).get(
+          '/github/repositories/501/pull-requests',
+        )
+      ).status,
+    ).toBe(401)
+    const list = await request(app.getHttpServer())
+      .get('/github/repositories/501/pull-requests')
+      .set('Cookie', 'test.sid=VIEWER')
+    expect(list.status).toBe(200)
+    expect(list.headers['cache-control']).toBe('no-store')
+    expect(list.body.pullRequests[0].verification).toBe('UNVERIFIED')
+    expect(
+      (
+        await request(app.getHttpServer())
+          .get('/github/repositories/501/pull-requests/0')
+          .set('Cookie', 'test.sid=VIEWER')
+      ).status,
+    ).toBe(404)
+    await prisma.gitHubRepository.updateMany({ data: { selected: false } })
+    expect((await currentPr()).status).toBe(403)
+  })
+  it('repairs missing webhook events periodically without calling GitHub on reload', async () => {
+    await post()
+    await tracked()
+    let calls = 0
+    const sync = new GitHubPrSyncService(prisma, {
+      readPullRequest: async () => {
+        calls++
+        return {
+          context: { ...prContext(), state: 'closed', merged: true },
+          sourceObjectId: '99',
+          sourceUpdatedAt: new Date(),
+        }
+      },
+    } as any)
+    await sync.reconcile()
+    await sync.reconcile()
+    await currentPr()
+    await currentPr()
+    expect(calls).toBe(1)
+    expect((await currentPr()).body.reason).toBe('PR_CLOSED')
+  })
+})
+
+it('withholds links when state changes during a read and rejects matching tampered assessments', async () => {
+  await post()
+  await tracked()
+  await verifyPr()
+  const wrapper = new Proxy(prisma, {
+    get(target, key) {
+      if (key === 'commitAssessment')
+        return {
+          findMany: async (args: any) => {
+            const rows = await target.commitAssessment.findMany(args)
+            await target.repositoryPullRequest.updateMany({
+              data: {
+                revision: { increment: 1 },
+                verifiedAt: null,
+                syncState: 'PENDING',
+              },
+            })
+            return rows
+          },
+        }
+      return Reflect.get(target, key)
+    },
+  })
+  expect(await new PullRequestService(wrapper).get('501', '1')).toMatchObject({
+    reason: 'CONTEXT_CHANGED',
+    prAssessment: null,
+    ciAssessment: null,
+  })
+  await verifyPr()
+  const linked = (await currentPr()).body
+  await prisma.commitAssessment.update({
+    where: { id: linked.prAssessment.id },
+    data: { report: { qualityGate: 'PASS' } },
+  })
+  expect((await currentPr()).status).toBe(409)
 })

@@ -1,3 +1,4 @@
+import { GitHubPrSyncService } from './github/github-pr-sync.service.js'
 import {
   telemetryLog,
   telemetryOperation,
@@ -35,6 +36,7 @@ async function start() {
   const cache = new RedisCacheService()
   const githubProvider = new GitHubProviderService(cache, prisma)
   const sync = new GitHubSyncService(prisma, githubProvider)
+  const prSync = new GitHubPrSyncService(prisma, githubProvider)
   const processor = new GitHubEventProcessor(prisma)
   const dispatcher = new GitHubEventDispatcher(prisma, queue)
   const worker = new Worker(
@@ -114,6 +116,7 @@ async function start() {
       if (!syncRun) {
         syncRun = sync
           .reconcile()
+          .then(() => prSync.reconcile())
           .catch(warn)
           .finally(() => {
             syncRun = undefined
@@ -137,6 +140,7 @@ async function start() {
     closing = true
     clearInterval(timer)
     sync.close()
+    prSync.close()
     githubProvider.close()
     const force = consumer.status !== 'ready'
     if (force) {

@@ -1,8 +1,9 @@
+import { observePullRequest } from '../assessments/pull-request-state.js'
 import { AssessmentService } from '../assessments/assessment.service.js'
 import { importCiEvidence } from './ci-evidence.js'
 import { PrismaService } from '../prisma/prisma.service.js'
 
-/** Replay-safe append-only event processing; never advances a current PR revision or evaluates a gate. */
+/** Replay-safe historical assessment creation and ordered observed PR state; no gate evaluation. */
 export class GitHubEventProcessor {
   private readonly assessments: AssessmentService
   constructor(private readonly prisma: PrismaService) {
@@ -44,6 +45,7 @@ export class GitHubEventProcessor {
         })
         return
       }
+      await observePullRequest(tx, delivery)
       const evidence = importCiEvidence(delivery)
       let assessmentId: string | null = null
       let assessmentReason: string | null = null

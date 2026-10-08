@@ -159,6 +159,7 @@ model GitHubRepository {
   selected       Boolean           @default(false)
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
+  pullRequests RepositoryPullRequest[]
   ciBindings RepositoryCiBindings[]
   assessments    CommitAssessment[]
   standards      RepositoryStandardsSelection[]
@@ -318,4 +319,22 @@ model RepositoryCiBindings {
   bindings Json
   createdAt DateTime @default(now())
   @@unique([repositoryId,revision])
+}
+
+model RepositoryPullRequest {
+ verifiedInstallationId String?
+ verifiedAccessRevision Int?
+ id String @id @default(cuid())
+ repositoryId String
+ repository GitHubRepository @relation(fields:[repositoryId],references:[id],onDelete:Cascade)
+ number Int
+ objectId String
+ context Json
+ sourceUpdatedAt DateTime?
+ revision Int @default(1)
+ syncState String @default("PENDING")
+ verifiedAt DateTime?
+ lastSyncAttemptAt DateTime?
+ @@unique([repositoryId,number])
+ @@index([lastSyncAttemptAt])
 }

@@ -23,9 +23,9 @@ Processing records a fixed assessmentReason when it cannot create a snapshot:
 
 Access revoked before processing marks the delivery IGNORED. Assessment creation, delivery processing and audit writes commit atomically; failed transactions leave the delivery retryable. Duplicate/concurrent processing cannot duplicate snapshots or audit events.
 
-Out-of-order deliveries create separate snapshots for their reported heads and bases. They never advance a current-PR pointer or claim branch readiness. Even the newest receipt is not evidence that a PR is currently open or at that revision. CI events arriving later continue to create COMMIT assessments; they do not silently rewrite or upgrade a prior PR snapshot. A subsequent supported PR delivery creates another snapshot from then-available exact-head evidence.
+Out-of-order deliveries create separate snapshots for their reported heads and bases. Historical snapshots do not themselves establish current state or branch readiness; the separate [PR read model](current-pr-state.md) orders observations and verifies them with GitHub. Even the newest receipt is not evidence that a PR is currently open or at that revision. CI events arriving later continue to create COMMIT assessments; they do not silently rewrite or upgrade a prior PR snapshot. A subsequent supported PR delivery creates another snapshot from then-available exact-head evidence.
 
-Current PR state reconciliation, linking later CI assessments into a PR readiness view, fork-safe evidence support, trusted execution coverage and policy gates remain later slices. No additional provider API request is needed for this implementation.
+[Current PR state reconciliation and exact-head CI links](current-pr-state.md) are available separately through local API reads and background provider refresh. Fork-safe evidence support, trusted execution coverage and policy gates remain later slices. Historical snapshot creation itself requires no provider API request.
 
 ## Verification
 
