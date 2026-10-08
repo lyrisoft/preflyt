@@ -1,3 +1,5 @@
+import { DashboardController } from '../dashboard/dashboard.controller.js'
+import { DashboardService } from '../dashboard/dashboard.service.js'
 import { Module } from '@nestjs/common'
 import { CacheModule } from '../cache/cache.module.js'
 import { AuthModule } from '../auth/auth.module.js'
@@ -10,7 +12,16 @@ import { GitHubService } from './github.service.js'
 
 @Module({
   imports: [AuthModule, PrismaModule, CacheModule],
-  controllers: [GitHubController, RepositoryProfileController],
-  providers: [GitHubProviderService, GitHubService, RepositoryProfileService],
+  controllers: [
+    GitHubController,
+    RepositoryProfileController,
+    DashboardController,
+  ],
+  providers: [
+    GitHubProviderService,
+    GitHubService,
+    RepositoryProfileService,
+    DashboardService,
+  ],
 })
 export class GitHubModule {}
