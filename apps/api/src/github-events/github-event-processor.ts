@@ -1,3 +1,4 @@
+import { importCiEvidence } from './ci-evidence.js'
 import { PrismaService } from '../prisma/prisma.service.js'
 
 /** Replay-safe append-only event processing; never advances a current PR revision or evaluates a gate. */
@@ -24,6 +25,8 @@ export class GitHubEventProcessor {
         await tx.gitHubWebhookDelivery.update({ where: { id }, data: { state: 'IGNORED', reason: 'repository_access_changed' } })
         return
       }
+      const evidence = importCiEvidence(delivery)
+      if (evidence) await tx.importedCiEvidence.create({ data: evidence })
       await tx.auditEvent.create({ data: {
         event: 'github_event_processed', actorId: null,
         metadata: { deliveryId: id, event: delivery.event, action: delivery.action, repositoryId: delivery.repositoryGithubId.toString(), sourceSha: delivery.sourceSha },

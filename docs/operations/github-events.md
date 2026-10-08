@@ -1,6 +1,6 @@
 # GitHub PR and CI webhook events (P1.1)
 
-This slice records signed, revision-bound GitHub events for selected repositories. It does not import test artifacts, execute code, create assessments or publish a quality gate. Open a selected repository profile to view the latest 50 deliveries, GitHub source state, exact commit and processing status. Older revisions remain history; a late delivery never advances a current PR or changes a verdict.
+This slice records signed, revision-bound GitHub events for selected repositories. The worker also projects new check/workflow observations into [imported CI status evidence](ci-evidence.md). It does not import test artifacts, execute code, create assessments or publish a quality gate. Open a selected repository profile to view the latest 50 deliveries, GitHub source state, exact commit and processing status. Older revisions remain history; a late delivery never advances a current PR or changes a verdict.
 
 ## Configure
 

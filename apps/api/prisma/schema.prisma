@@ -183,6 +183,7 @@ enum GitHubDeliveryState {
 
 model GitHubWebhookDelivery {
   id                 String @id
+  ciEvidence         ImportedCiEvidence?
   traceParent        String?
   payloadHash        String
   event              String
@@ -201,4 +202,35 @@ model GitHubWebhookDelivery {
   processedAt        DateTime?
   @@index([state, receivedAt])
   @@index([repositoryGithubId, receivedAt])
+}
+
+// Immutable observations of externally executed CI; not Preflyt policy verdicts.
+enum ImportedCiResult {
+  SUCCEEDED
+  FAILED
+  PENDING
+  NOT_EXECUTED
+  UNKNOWN
+}
+
+model ImportedCiEvidence {
+  deliveryId         String @id
+  delivery           GitHubWebhookDelivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  version            Int @default(1)
+  repositoryGithubId BigInt
+  installationId     BigInt
+  sourceSha          String
+  sourceKind         String
+  sourceObjectId     String
+  sourceAction       String
+  sourceStatus       String?
+  sourceConclusion   String?
+  sourceUpdatedAt    DateTime?
+  result             ImportedCiResult
+  sourcePayloadHash  String
+  evidenceHash       String
+  observedAt         DateTime
+  importedAt         DateTime @default(now())
+  @@index([repositoryGithubId, installationId, observedAt])
+  @@index([repositoryGithubId, sourceSha, observedAt])
 }

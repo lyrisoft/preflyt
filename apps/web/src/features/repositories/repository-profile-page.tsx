@@ -17,6 +17,7 @@ import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
+import { RepositoryCiEvidence } from './repository-ci-evidence'
 import { RepositoryEvents } from './repository-events'
 
 const route = getRouteApi('/_authenticated/repositories/$repositoryId')
@@ -203,6 +204,12 @@ export function RepositoryProfilePage() {
           )}
         </div>
         {result && <RepositoryEvents repositoryId={repositoryId} />}
+        {result && (
+          <RepositoryCiEvidence
+            key={repositoryId}
+            repositoryId={repositoryId}
+          />
+        )}
         {error && (
           <div
             role='alert'

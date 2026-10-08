@@ -45,13 +45,33 @@ export class GitHubWebhookService {
     return { accepted: true, duplicate: created.count === 0, deliveryId: id }
   }
 
-  async list(repositoryId: string) {
+  async evidence(repositoryId: string, sha?: string) {
+    if (sha !== undefined && (typeof sha !== 'string' || !/^[a-f0-9]{40}$/i.test(sha)))
+      throw new BadRequestException('A full commit SHA is required')
+    const repository = await this.selectedRepository(repositoryId)
+    const observations = await this.prisma.importedCiEvidence.findMany({
+      where: { repositoryGithubId: repository.githubId, installationId: repository.installationId,
+        ...(sha === undefined ? {} : { sourceSha: sha.toLowerCase() }) },
+      orderBy: [{ observedAt: 'desc' }, { deliveryId: 'desc' }], take: 50,
+    })
+    return { enabled: this.enabled, source: 'github_signed_webhook', qualityGate: null,
+      observations: observations.map(({ repositoryGithubId, installationId, ...observation }) => ({
+        ...observation, repositoryGithubId: repositoryGithubId.toString(), installationId: installationId.toString(),
+      })) }
+  }
+
+  private async selectedRepository(repositoryId: string) {
     if (!/^[1-9][0-9]{0,15}$/.test(repositoryId) || !Number.isSafeInteger(Number(repositoryId)))
       throw new ForbiddenException('Repository is unavailable')
     const repository = await this.prisma.gitHubRepository.findFirst({
       where: { githubId: BigInt(repositoryId), selected: true, installation: { active: true } },
     })
     if (!repository) throw new ForbiddenException('Select an available repository to view events')
+    return repository
+  }
+
+  async list(repositoryId: string) {
+    const repository = await this.selectedRepository(repositoryId)
     const deliveries = await this.prisma.gitHubWebhookDelivery.findMany({
       where: { repositoryGithubId: repository.githubId, installationId: repository.installationId },
       orderBy: [{ receivedAt: 'desc' }, { id: 'desc' }], take: 50,

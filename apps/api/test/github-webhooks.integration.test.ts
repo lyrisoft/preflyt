@@ -152,11 +152,13 @@ describe('signed webhook durable inbox and repository history', () => {
 
   it('marks accepted events ignored if the installation is revoked before worker processing', async () => {
     const id = randomUUID()
-    await send(payload(), id)
+    await send({ action: 'completed', installation: { id: 77 }, repository: { id: 501 },
+      check_run: { id: 2003, head_sha: 'c'.repeat(40), status: 'completed', conclusion: 'success' } }, id, 'check_run')
     await prisma.gitHubInstallation.update({ where: { id: 77n }, data: { active: false } })
     await new GitHubEventProcessor(prisma).process(id)
     expect(await prisma.gitHubWebhookDelivery.findUnique({ where: { id } })).toMatchObject({ state: 'IGNORED', reason: 'repository_access_changed' })
     expect(await prisma.auditEvent.count()).toBe(0)
+    expect(await prisma.importedCiEvidence.count()).toBe(0)
   })
 
   it('records workflow and check events without interpreting a successful source check as a Preflyt gate', async () => {
@@ -169,4 +171,48 @@ describe('signed webhook durable inbox and repository history', () => {
     expect(deliveries).toHaveLength(2)
     expect(deliveries.every(delivery => delivery.state === 'RECEIVED' && delivery.sourceConclusion === 'success')).toBe(true)
   })
+  it('imports immutable CI observations transactionally, with replay safety and SHA isolation', async () => {
+    const processor = new GitHubEventProcessor(prisma)
+    const ids = [randomUUID(), randomUUID(), randomUUID()]
+    for (const [index, sha] of ['c'.repeat(40), 'd'.repeat(40), 'c'.repeat(40)].entries()) {
+      await send({ action: 'completed', installation: { id: 77 }, repository: { id: 501 },
+        check_run: { id: 2001, head_sha: sha, status: 'completed', conclusion: index === 2 ? 'failure' : 'success',
+          updated_at: index === 2 ? '2026-10-07T16:00:00Z' : '2026-10-08T16:00:00Z', output: { text: 'secret-not-evidence' } } }, ids[index], 'check_run')
+    }
+    await Promise.all([processor.process(ids[0]), processor.process(ids[0])])
+    await processor.process(ids[1]); await processor.process(ids[2])
+    const evidence = await prisma.importedCiEvidence.findMany()
+    expect(evidence).toHaveLength(3)
+    expect(evidence.find(row => row.deliveryId === ids[0])).toMatchObject({ result: 'SUCCEEDED', sourceSha: 'c'.repeat(40), version: 1 })
+    expect(evidence.find(row => row.deliveryId === ids[2])?.result).toBe('FAILED')
+    expect(evidence.every(row => /^[a-f0-9]{64}$/.test(row.evidenceHash))).toBe(true)
+    expect(JSON.stringify(evidence, (_, value) => typeof value === 'bigint' ? value.toString() : value)).not.toContain('secret-not-evidence')
+    expect((await request(app.getHttpServer()).get('/github/repositories/501/ci-evidence')).status).toBe(401)
+    const query = (path: string) => request(app.getHttpServer()).get(path).set('Cookie', 'test.sid=VIEWER')
+    expect((await query('/github/repositories/501/ci-evidence?sha=main')).status).toBe(400)
+    const response = await query('/github/repositories/501/ci-evidence?sha=' + 'C'.repeat(40))
+    expect(response.status).toBe(200); expect(response.body.qualityGate).toBeNull()
+    expect(response.body.observations).toHaveLength(2)
+    expect(response.body.observations.every((row: { sourceSha: string }) => row.sourceSha === 'c'.repeat(40))).toBe(true)
+    expect((await query('/github/repositories/501/ci-evidence?sha=' + 'e'.repeat(40))).body.observations).toEqual([])
+    await prisma.gitHubRepository.update({ where: { githubId: 501n }, data: { selected: false } })
+    expect((await query('/github/repositories/501/ci-evidence')).status).toBe(403)
+  })
+
+  it('rolls back the event claim when evidence persistence fails', async () => {
+    const id = randomUUID()
+    await send({ action: 'completed', installation: { id: 77 }, repository: { id: 501 },
+      workflow_run: { id: 2002, head_sha: 'c'.repeat(40), status: 'completed', conclusion: 'success' } }, id, 'workflow_run')
+    // Simulate a storage constraint failure after claiming the inbox record.
+    const broken = { $transaction: (callback: (tx: unknown) => Promise<unknown>) => prisma.$transaction(tx => callback(new Proxy(tx, { get(target, key) {
+      return key === 'importedCiEvidence' ? { create: async () => { throw new Error('storage unavailable') } } : Reflect.get(target, key)
+    } }))) } as unknown as PrismaService
+    await expect(new GitHubEventProcessor(broken).process(id)).rejects.toThrow('storage unavailable')
+    expect((await prisma.gitHubWebhookDelivery.findUniqueOrThrow({ where: { id } })).state).toBe('RECEIVED')
+    expect(await prisma.importedCiEvidence.count()).toBe(0)
+    expect(await prisma.auditEvent.count()).toBe(0)
+    await new GitHubEventProcessor(prisma).process(id)
+    expect(await prisma.importedCiEvidence.count()).toBe(1)
+  })
+
 })
