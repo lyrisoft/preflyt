@@ -1,18 +1,11 @@
-import { Link } from '@tanstack/react-router'
-import {
-  BadgeCheck,
-  Bell,
-  ChevronsUpDown,
-  CreditCard,
-  LogOut,
-  Sparkles,
-} from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { ChevronsUpDown, LogOut } from 'lucide-react'
+import { API_BASE_URL } from '@/lib/api'
 import useDialogState from '@/hooks/use-dialog-state'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -34,8 +27,31 @@ type NavUserProps = {
   }
 }
 
+type Session = {
+  email?: string | null
+  role?: string
+}
+
 export function NavUser({ user }: NavUserProps) {
   const { isMobile } = useSidebar()
+  const [session, setSession] = useState<Session | null>(null)
+  useEffect(() => {
+    const controller = new AbortController()
+    fetch(`${API_BASE_URL}/auth/session`, {
+      credentials: 'include',
+      signal: controller.signal,
+    })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((value: Session | null) => {
+        if (!controller.signal.aborted) setSession(value)
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setSession(null)
+      })
+    return () => controller.abort()
+  }, [])
+  const accountName = session?.role?.replace(/_/g, ' ') ?? user.name
+  const accountEmail = session?.email || user.email
   const [open, setOpen] = useDialogState()
 
   return (
@@ -49,12 +65,11 @@ export function NavUser({ user }: NavUserProps) {
                 className='data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground'
               >
                 <Avatar className='h-8 w-8 rounded-lg'>
-                  <AvatarImage src={user.avatar} alt={user.name} />
-                  <AvatarFallback className='rounded-lg'>SN</AvatarFallback>
+                  <AvatarFallback className='rounded-lg'>PF</AvatarFallback>
                 </Avatar>
                 <div className='grid flex-1 text-start text-sm leading-tight'>
-                  <span className='truncate font-semibold'>{user.name}</span>
-                  <span className='truncate text-xs'>{user.email}</span>
+                  <span className='truncate font-semibold'>{accountName}</span>
+                  <span className='truncate text-xs'>{accountEmail}</span>
                 </div>
                 <ChevronsUpDown className='ms-auto size-4' />
               </SidebarMenuButton>
@@ -68,43 +83,16 @@ export function NavUser({ user }: NavUserProps) {
               <DropdownMenuLabel className='p-0 font-normal'>
                 <div className='flex items-center gap-2 px-1 py-1.5 text-start text-sm'>
                   <Avatar className='h-8 w-8 rounded-lg'>
-                    <AvatarImage src={user.avatar} alt={user.name} />
-                    <AvatarFallback className='rounded-lg'>SN</AvatarFallback>
+                    <AvatarFallback className='rounded-lg'>PF</AvatarFallback>
                   </Avatar>
                   <div className='grid flex-1 text-start text-sm leading-tight'>
-                    <span className='truncate font-semibold'>{user.name}</span>
-                    <span className='truncate text-xs'>{user.email}</span>
+                    <span className='truncate font-semibold'>
+                      {accountName}
+                    </span>
+                    <span className='truncate text-xs'>{accountEmail}</span>
                   </div>
                 </div>
               </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuGroup>
-                <DropdownMenuItem>
-                  <Sparkles />
-                  Upgrade to Pro
-                </DropdownMenuItem>
-              </DropdownMenuGroup>
-              <DropdownMenuSeparator />
-              <DropdownMenuGroup>
-                <DropdownMenuItem asChild>
-                  <Link to='/settings/account'>
-                    <BadgeCheck />
-                    Account
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link to='/settings'>
-                    <CreditCard />
-                    Billing
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link to='/settings/notifications'>
-                    <Bell />
-                    Notifications
-                  </Link>
-                </DropdownMenuItem>
-              </DropdownMenuGroup>
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 variant='destructive'

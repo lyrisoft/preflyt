@@ -153,12 +153,10 @@ export function Apps() {
       <Main fixed>
         <div className='flex flex-wrap items-start justify-between gap-4'>
           <div>
-            <h1 className='text-2xl font-bold tracking-tight'>
-              GitHub repositories
-            </h1>
+            <h1 className='text-2xl font-bold tracking-tight'>Repositories</h1>
             <p className='mt-1 text-muted-foreground'>
               Connect a GitHub App installation, then choose which repositories
-              Preflyt may assess.
+              Preflyt should track.
             </p>
           </div>
           <Button asChild>

@@ -1,11 +1,10 @@
 import * as React from 'react'
-import { ChevronsUpDown, Plus } from 'lucide-react'
+import { ChevronsUpDown } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
@@ -56,7 +55,7 @@ export function TeamSwitcher({ teams }: TeamSwitcherProps) {
             sideOffset={4}
           >
             <DropdownMenuLabel className='text-xs text-muted-foreground'>
-              Teams
+              Deployment
             </DropdownMenuLabel>
             {teams.map((team, index) => (
               <DropdownMenuItem
@@ -71,13 +70,6 @@ export function TeamSwitcher({ teams }: TeamSwitcherProps) {
                 <DropdownMenuShortcut>⌘{index + 1}</DropdownMenuShortcut>
               </DropdownMenuItem>
             ))}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem className='gap-2 p-2'>
-              <div className='flex size-6 items-center justify-center rounded-md border bg-background'>
-                <Plus className='size-4' />
-              </div>
-              <div className='font-medium text-muted-foreground'>Add team</div>
-            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </SidebarMenuItem>

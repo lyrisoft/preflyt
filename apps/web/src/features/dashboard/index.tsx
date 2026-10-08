@@ -1,3 +1,7 @@
+import { useEffect, useState } from 'react'
+import { Link } from '@tanstack/react-router'
+import { AlertTriangle, GitBranch, RefreshCw, ShieldCheck } from 'lucide-react'
+import { API_BASE_URL } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -6,7 +10,6 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ConfigDrawer } from '@/components/config-drawer'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
@@ -14,14 +17,62 @@ import { TopNav } from '@/components/layout/top-nav'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
-import { Analytics } from './components/analytics'
-import { Overview } from './components/overview'
-import { RecentSales } from './components/recent-sales'
+
+type Repository = {
+  githubId: string
+  name: string
+  fullName: string
+  defaultBranch: string | null
+  isPrivate: boolean
+  selected: boolean
+  installation: { accountLogin: string }
+}
+
+type RepositoryResponse = {
+  repositories: Repository[]
+  installations: Array<{ id: string; accountLogin: string; active: boolean }>
+}
 
 export function Dashboard() {
+  const [result, setResult] = useState<RepositoryResponse | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [refresh, setRefresh] = useState(0)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    const controller = new AbortController()
+    async function load() {
+      setLoading(true)
+      setError('')
+      try {
+        const response = await fetch(`${API_BASE_URL}/github/repositories`, {
+          credentials: 'include',
+          signal: controller.signal,
+        })
+        if (!response.ok) throw new Error('Could not load GitHub repositories.')
+        setResult((await response.json()) as RepositoryResponse)
+      } catch (cause) {
+        if (controller.signal.aborted) return
+        setError(
+          cause instanceof Error
+            ? cause.message
+            : 'Could not load GitHub repositories.'
+        )
+      } finally {
+        if (!controller.signal.aborted) setLoading(false)
+      }
+    }
+    void load()
+    return () => controller.abort()
+  }, [refresh])
+
+  const repositories = result?.repositories ?? []
+  const selected = repositories.filter((repository) => repository.selected)
+  const unavailable =
+    result?.installations.filter((installation) => !installation.active) ?? []
+
   return (
     <>
-      {/* ===== Top Heading ===== */}
       <Header>
         <TopNav links={topNav} className='me-auto' />
         <Search />
@@ -29,162 +80,146 @@ export function Dashboard() {
         <ConfigDrawer />
         <ProfileDropdown />
       </Header>
-
-      {/* ===== Main ===== */}
       <Main>
-        <div className='mb-2 flex items-center justify-between space-y-2'>
-          <h1 className='text-2xl font-bold tracking-tight'>Dashboard</h1>
-          <div className='flex items-center space-x-2'>
-            <Button>Download</Button>
+        <div className='mb-6 flex flex-wrap items-start justify-between gap-4'>
+          <div>
+            <h1 className='text-2xl font-bold tracking-tight'>
+              Repository overview
+            </h1>
+            <p className='mt-1 text-muted-foreground'>
+              Review GitHub access and the repositories selected for Preflyt.
+            </p>
           </div>
+          <Button asChild>
+            <Link to='/apps'>
+              <GitBranch aria-hidden='true' /> Manage repositories
+            </Link>
+          </Button>
         </div>
-        <Tabs
-          orientation='vertical'
-          defaultValue='overview'
-          className='space-y-4'
-        >
-          <div className='w-full overflow-x-auto pb-2'>
-            <TabsList>
-              <TabsTrigger value='overview'>Overview</TabsTrigger>
-              <TabsTrigger value='analytics'>Analytics</TabsTrigger>
-              <TabsTrigger value='reports' disabled>
-                Reports
-              </TabsTrigger>
-              <TabsTrigger value='notifications' disabled>
-                Notifications
-              </TabsTrigger>
-            </TabsList>
+
+        {error && (
+          <div
+            role='alert'
+            className='mb-5 flex items-start gap-3 rounded-md border border-destructive/30 bg-destructive/5 p-4 text-sm'
+          >
+            <AlertTriangle className='mt-0.5 size-4 shrink-0 text-destructive' />
+            <div>
+              <p className='font-medium'>Repository data is unavailable</p>
+              <p className='mt-1 text-muted-foreground'>{error}</p>
+            </div>
+            <Button
+              variant='outline'
+              size='sm'
+              className='ms-auto shrink-0'
+              onClick={() => setRefresh((value) => value + 1)}
+            >
+              <RefreshCw aria-hidden='true' /> Retry
+            </Button>
           </div>
-          <TabsContent value='overview' className='space-y-4'>
-            <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-4'>
-              <Card>
-                <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                  <CardTitle className='text-sm font-medium'>
-                    Total Revenue
-                  </CardTitle>
-                  <svg
-                    xmlns='http://www.w3.org/2000/svg'
-                    viewBox='0 0 24 24'
-                    fill='none'
-                    stroke='currentColor'
-                    strokeLinecap='round'
-                    strokeLinejoin='round'
-                    strokeWidth='2'
-                    className='h-4 w-4 text-muted-foreground'
+        )}
+
+        {unavailable.length > 0 && (
+          <div
+            role='status'
+            className='mb-5 rounded-md border border-amber-600/30 bg-amber-600/5 p-4 text-sm'
+          >
+            {unavailable.length} GitHub installation
+            {unavailable.length === 1 ? ' is' : 's are'} unavailable. Repository
+            access may have been revoked or suspended. Review the connection on
+            the repositories page.
+          </div>
+        )}
+
+        <div className='grid gap-4 sm:grid-cols-2'>
+          <Card>
+            <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
+              <CardTitle className='text-sm font-medium'>
+                Available repositories
+              </CardTitle>
+              <GitBranch className='size-4 text-muted-foreground' />
+            </CardHeader>
+            <CardContent>
+              <div className='text-2xl font-bold'>
+                {loading ? '—' : repositories.length}
+              </div>
+              <p className='text-xs text-muted-foreground'>
+                Repositories visible through active GitHub installations
+              </p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
+              <CardTitle className='text-sm font-medium'>
+                Selected repositories
+              </CardTitle>
+              <ShieldCheck className='size-4 text-muted-foreground' />
+            </CardHeader>
+            <CardContent>
+              <div className='text-2xl font-bold'>
+                {loading ? '—' : selected.length}
+              </div>
+              <p className='text-xs text-muted-foreground'>
+                Repositories explicitly selected for Preflyt
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
+        <Card className='mt-4'>
+          <CardHeader>
+            <CardTitle>Selected repositories</CardTitle>
+            <CardDescription>
+              GitHub repositories currently selected in this Preflyt deployment.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <p className='text-sm text-muted-foreground' role='status'>
+                Loading repository access…
+              </p>
+            ) : error ? (
+              <p className='text-sm text-muted-foreground'>
+                Repository data could not be loaded. Retry after checking the
+                API connection.
+              </p>
+            ) : selected.length > 0 ? (
+              <ul className='divide-y'>
+                {selected.map((repository) => (
+                  <li
+                    key={repository.githubId}
+                    className='flex flex-wrap items-center justify-between gap-2 py-3 first:pt-0 last:pb-0'
                   >
-                    <path d='M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6' />
-                  </svg>
-                </CardHeader>
-                <CardContent>
-                  <div className='text-2xl font-bold'>$45,231.89</div>
-                  <p className='text-xs text-muted-foreground'>
-                    +20.1% from last month
-                  </p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                  <CardTitle className='text-sm font-medium'>
-                    Subscriptions
-                  </CardTitle>
-                  <svg
-                    xmlns='http://www.w3.org/2000/svg'
-                    viewBox='0 0 24 24'
-                    fill='none'
-                    stroke='currentColor'
-                    strokeLinecap='round'
-                    strokeLinejoin='round'
-                    strokeWidth='2'
-                    className='h-4 w-4 text-muted-foreground'
-                  >
-                    <path d='M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2' />
-                    <circle cx='9' cy='7' r='4' />
-                    <path d='M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75' />
-                  </svg>
-                </CardHeader>
-                <CardContent>
-                  <div className='text-2xl font-bold'>+2350</div>
-                  <p className='text-xs text-muted-foreground'>
-                    +180.1% from last month
-                  </p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                  <CardTitle className='text-sm font-medium'>Sales</CardTitle>
-                  <svg
-                    xmlns='http://www.w3.org/2000/svg'
-                    viewBox='0 0 24 24'
-                    fill='none'
-                    stroke='currentColor'
-                    strokeLinecap='round'
-                    strokeLinejoin='round'
-                    strokeWidth='2'
-                    className='h-4 w-4 text-muted-foreground'
-                  >
-                    <rect width='20' height='14' x='2' y='5' rx='2' />
-                    <path d='M2 10h20' />
-                  </svg>
-                </CardHeader>
-                <CardContent>
-                  <div className='text-2xl font-bold'>+12,234</div>
-                  <p className='text-xs text-muted-foreground'>
-                    +19% from last month
-                  </p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                  <CardTitle className='text-sm font-medium'>
-                    Active Now
-                  </CardTitle>
-                  <svg
-                    xmlns='http://www.w3.org/2000/svg'
-                    viewBox='0 0 24 24'
-                    fill='none'
-                    stroke='currentColor'
-                    strokeLinecap='round'
-                    strokeLinejoin='round'
-                    strokeWidth='2'
-                    className='h-4 w-4 text-muted-foreground'
-                  >
-                    <path d='M22 12h-4l-3 9L9 3l-3 9H2' />
-                  </svg>
-                </CardHeader>
-                <CardContent>
-                  <div className='text-2xl font-bold'>+573</div>
-                  <p className='text-xs text-muted-foreground'>
-                    +201 since last hour
-                  </p>
-                </CardContent>
-              </Card>
-            </div>
-            <div className='grid grid-cols-1 gap-4 lg:grid-cols-7'>
-              <Card className='col-span-1 lg:col-span-4'>
-                <CardHeader>
-                  <CardTitle>Overview</CardTitle>
-                </CardHeader>
-                <CardContent className='ps-2'>
-                  <Overview />
-                </CardContent>
-              </Card>
-              <Card className='col-span-1 lg:col-span-3'>
-                <CardHeader>
-                  <CardTitle>Recent Sales</CardTitle>
-                  <CardDescription>
-                    You made 265 sales this month.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <RecentSales />
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-          <TabsContent value='analytics' className='space-y-4'>
-            <Analytics />
-          </TabsContent>
-        </Tabs>
+                    <div>
+                      <p className='font-medium'>{repository.fullName}</p>
+                      <p className='text-sm text-muted-foreground'>
+                        {repository.installation.accountLogin}
+                        {repository.defaultBranch
+                          ? ` · default branch ${repository.defaultBranch}`
+                          : ''}
+                      </p>
+                    </div>
+                    <span className='text-xs text-muted-foreground'>
+                      {repository.isPrivate ? 'Private' : 'Public'}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className='rounded-md border border-dashed p-6 text-center'>
+                <GitBranch className='mx-auto mb-3 size-6 text-muted-foreground' />
+                <p className='font-medium'>No repositories selected</p>
+                <p className='mt-1 text-sm text-muted-foreground'>
+                  {repositories.length === 0
+                    ? 'Connect a GitHub App installation and select repositories for Preflyt.'
+                    : 'Select repositories for Preflyt on the repositories page.'}
+                </p>
+                <Button asChild variant='outline' className='mt-4'>
+                  <Link to='/apps'>Open repositories</Link>
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </Main>
     </>
   )
@@ -193,26 +228,14 @@ export function Dashboard() {
 const topNav = [
   {
     title: 'Overview',
-    href: 'dashboard/overview',
+    href: '/',
     isActive: true,
     disabled: false,
   },
   {
-    title: 'Customers',
-    href: 'dashboard/customers',
+    title: 'Repositories',
+    href: '/apps',
     isActive: false,
-    disabled: true,
-  },
-  {
-    title: 'Products',
-    href: 'dashboard/products',
-    isActive: false,
-    disabled: true,
-  },
-  {
-    title: 'Settings',
-    href: 'dashboard/settings',
-    isActive: false,
-    disabled: true,
+    disabled: false,
   },
 ]
