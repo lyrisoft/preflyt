@@ -5,7 +5,7 @@
 **Tagline:** Engineering confidence before production  
 **Owner:** Lyrisoft Technologies  
 **Document status:** Draft for review  
-**Version:** 0.1  
+**Version:** 0.2  
 **Date:** 2026-10-08  
 **Implementation status:** Not started; requirements are proposed, not statements of shipped functionality
 
@@ -15,7 +15,7 @@
 
 Preflyt is a self-hosted engineering platform that detects, investigates, and helps remediate software quality, security, infrastructure, and reliability problems **before changes reach production**. It integrates with existing source-control and CI/CD systems rather than replacing them.
 
-Preflyt collects deterministic evidence from tests, scanners, pull-request diffs, and CI failures. AI agents correlate that evidence, investigate likely causes, and—when authorized—reproduce failures and generate patches inside constrained execution sandboxes. The platform reruns relevant checks and opens remediation pull requests for **human review**, preserving a full audit record.
+Preflyt collects deterministic evidence from tests, scanners, pull-request diffs, and CI failures. AI agents correlate that evidence, investigate likely causes and, **only within an approved sandbox**, execute reproduction steps. **General MVP is read-only and does not create remediation PRs.** Fixture-only proof-of-concept experiments may generate PRs in explicitly allowlisted disposable repositories. **V1** introduces controlled remediation: independent reproduction and validation followed by a human-reviewable PR, preserving immutable evidence.
 
 The initial product is an internal/self-hosted, single-organization platform supporting GitHub and TypeScript/Node.js and Python **target repositories**. **Preflyt itself uses Node.js + TypeScript across its application services and React + TypeScript on the frontend; it does not require a Python agent service.** It uses open-source orchestration and scanning components and provides **bring-your-own-model** inference through a configurable gateway: hosted frontier models via API keys or local inference. Docker Compose is the intended evaluation environment; Kubernetes is the production target.
 
@@ -91,11 +91,11 @@ Preflyt must close the gap between a detected engineering issue and a **validate
 
 ### 5.1 Proof of concept (technical validation)
 
-Implement one end-to-end workflow on a controlled repository:
+Implement one end-to-end workflow **only on administrator-designated, disposable fixture repositories**:
 
-**GitHub failed check → collect evidence → investigate → reproduce in sandbox → patch → rerun tests → open a reviewable PR.**
+**GitHub fixture failed check → collect evidence → investigate → reproduce in approved fixture sandbox → patch → rerun tests → open a fixture-only reviewable PR.**
 
-Evaluate on intentionally broken fixtures and previously unseen, real failures. Prove access boundaries, timeout/cost termination, and repeatability before adding a broad UI.
+The PoC uses a **separate GitHub App installation/write identity restricted to allowlisted stable fixture repository IDs**. The same fixture allowlist is enforced at workflow admission and independently at the Git writer. It **must not create branches, comments or PRs on ordinary/customer repositories**. Even when testing previously unseen real failures, use read-only evidence and approved isolated execution; never write to non-fixture repositories. Docker-based local fixture sandboxes are not approved for real untrusted repository execution. The normal MVP explicitly excludes the PoC's fixture-only write function. Refer to [ADR-0002](architecture/ADR-0002-safe-execution-fixtures-remediation-contract.md).
 
 ### 5.2 MVP — Detect and explain
 
@@ -105,20 +105,20 @@ Evaluate on intentionally broken fixtures and previously unseen, real failures. 
 - Signed webhook ingestion and idempotent event tracking.
 - Read-only retrieval of PR diff, CI checks, selected logs, and repository metadata.
 - Repository profile for TypeScript/Node.js and Python.
-- Existing test output ingestion plus configurable scanner runs (Trivy, Gitleaks, Semgrep CE); normalize and deduplicate findings.
+- Existing test output ingestion plus configurable scanner/test runs (Trivy, Gitleaks, Semgrep CE and project-native tools); normalize and deduplicate findings. **Every Preflyt-executed repository job requires an independently approved isolated executor before MVP release.**
 - AI CI Failure Investigation Agent with evidence-linked diagnosis and uncertainty labels.
 - Findings and investigation screens; audit and model-usage history.
 - Organization/repository workflow enablement, basic model and privacy policy, execution budgets.
-- Docker Compose evaluation path and a design validated for Kubernetes.
+- Docker Compose evaluation path for control-plane services and restricted fixture-only evaluation; **approved stronger-isolation execution for real connected repositories**, with an ingest-only mode whenever the safe executor is absent.
 
-**Not yet in MVP:** autonomous write-back of patches, auto-created fix PRs, GitLab, specialized agent catalog, predictive risk scoring, enterprise SSO, custom visual workflow builder.
+**Not yet in MVP:** write-back of patches or fix PRs on ordinary repositories (fixture-only PoC is a separate restricted experiment), GitLab, specialized agent catalog, predictive risk scoring, enterprise SSO, custom visual workflow builder. **No real repository scanner/test execution until the MVP sandbox security gate passes.**
 
 ### 5.3 V1 — Validate and remediate
 
-- Hardened ephemeral Kubernetes sandbox jobs; Docker sandbox option for controlled local evaluation.
+- **Edit-capable** ephemeral Kubernetes sandbox jobs and scaled execution management, building on the **mandatory MVP safe-execution baseline**, rather than introducing isolation for the first time; Docker remains fixture-only for local evaluation.
 - Agent code editing under repository/path/command scope.
-- Failure reproduction, targeted validation, regression checks, bounded retries.
-- Restricted Git write-back and remediation PR creation; never merge or approve.
+- **Versioned reproduction/validation contract:** pinned commit and branch context, environment/image digest, exact commands, baseline failure, canonical patch SHA-256, before/after Git tree SHAs, predeclared mandatory checks and independently captured outcomes.
+- Restricted Git write-back and remediation PR creation; never merge or approve. For an **open same-repository feature PR**, a fix PR targets that **feature branch**, never silently the default branch; stale, forked or ambiguous targets fail closed.
 - Independent deterministic quality gates and configurable policy enforcement.
 - GitLab integration through a provider adapter.
 - Reliability/IaC/database-migration validations where executable checks exist.
@@ -176,7 +176,7 @@ flowchart TD
     J --> K["Human review and protected-branch checks"]
 ~~~
 
-**Definitions:** A finding is an observed issue or check result; an investigation is an evidence-gathering and reasoning run; a remediation is a proposed code or configuration change; a validated remediation passes the checks specified by policy and links to the original reproduction. Passing checks do not guarantee overall correctness.
+**Definitions:** A finding is an observed issue or check result; an investigation is an evidence-gathering and reasoning run; a remediation is a proposed code or configuration change. A **validated** remediation requires the original failure to be reproduced on the pinned commit, a separately executed post-patch passing reproduction, and **all predeclared mandatory checks passing**. Missing, skipped, failed or unavailable mandatory checks mean **not validated**. Passing checks do not guarantee overall correctness.
 
 ### 6.3 Status model
 
@@ -184,10 +184,30 @@ flowchart TD
 - **Investigation:** queued → collecting evidence → running checks → analyzing → completed / inconclusive / failed / cancelled.
 - **Remediation (V1):** proposed → patching → validating → PR opened / failed / cancelled; merged and declined statuses are synchronized from the SCM provider, not decided by an agent.
 - Retries create linked attempts; no job is allowed to spin indefinitely.
+- **Execution availability:** approved sandbox → eligible to run; absent/failed sandbox → BLOCKED_EXECUTION_ENVIRONMENT, with INGEST_ONLY evidence and an inconclusive investigation where necessary.
+- **Repro/validation:** not_reproduced / reproduced → patch_proposed → validating → validated / not_validated / stale_revision; status transitions require machine-verifiable evidence.
+
+### 6.4 Safe execution is an MVP entry criterion
+
+**Every scanner, test, dependency-installation script, build step, and agent-generated command that processes real connected repository contents is untrusted code execution.** The initial MVP must use an approved repository sandbox with verified isolation, not a generic Docker process or an unsandboxed Kubernetes Job.
+
+Mandatory controls: non-root/no privilege escalation, no host Docker socket or privileged/host mounts, read-only base image and bounded workspace, capability reduction and system-call restrictions, CPU/memory/disk/PID/deadline limits, default-deny network including cloud metadata and internal services, zero production/model/SCM-write credentials inside jobs, pinned checkout and image digest, independent runtime/preflight attestation, cleanup on cancellation, and negative escape/exfiltration tests. Real-repository execution additionally requires an assessed stronger sandbox boundary (e.g. gVisor/Kata or equivalent), with an approved worker/runtime profile. A plain Docker sandbox can be used for **explicit PoC fixtures only**.
+
+**Fail closed:** If the sandbox is not approved or a control fails, Preflyt may consume previously generated CI evidence but must not execute repository code. Show BLOCKED_EXECUTION_ENVIRONMENT; never fall back to running code in the API/agent host. The [execution security contract](architecture/ADR-0002-safe-execution-fixtures-remediation-contract.md#1-mvp-isolation-and-execution-policy) defines the gate.
+
+### 6.5 Remediation reproducibility contract (V1; fixture PoC uses same rules)
+
+A versioned, immutable attempt record is required before labeling a remediation as validated or creating a fix PR. It **must** include: stable provider repository ID, originating CI/check and source PR identity; **exact source commit SHA** and branch/head/PR-base context; sandbox type, **image digest**, architecture, runtime/tool versions, dependency lock and configuration hashes, network-policy identity and redacted environment-variable names; **exact commands**, working directories, timeouts, exit codes and evidence artifacts; **baseline expected/observed failure signature**; **canonical patch SHA-256**, changed paths and before/after Git tree SHAs; **policy version and mandatory check set frozen before patching**; results of independent validation jobs; and final SCM target/authorization. Never persist secret values in these records.
+
+Process: (1) reproduce a matching failure on the pinned original revision, (2) generate a bounded patch, (3) independently rerun **the identical original reproducer** against the patched tree in an equivalent pinned environment and show it passing, (4) pass the affected regression tests, repository-required configured tests/build/lint/typecheck, applicable security/IaC checks, and patch policy checks, (5) recheck authorization and target HEAD before Git write. A mandatory check missing, skipped, errored, timed out or failed means NOT_VALIDATED; nondeterministic/nonmatching baseline means INCONCLUSIVE. A not-applicable determination must be made by deterministic policy **before** editing; exceptions need recorded authorized approval.
+
+**Branch target decision:** For a failure on an **open same-repository feature PR**, branch the fix from the original PR's **head SHA** and create a **separate remediation PR targeting that feature branch**, not main. For a failure directly on the default branch, target that branch after verifying its HEAD is still pinned. **Forked PRs do not receive automatic write-back in initial V1**; supply a patch artifact instead. Deleted, moved, merged, closed or ambiguous sources block writing and require renewed investigation. Merge-ref-only CI failures require additional integration-context verification; head-only tests cannot establish a merge fix. No agent can directly push to an existing source branch, merge, or approve.
+
+Full normative field definitions, check-selection rules, branch-target matrix and acceptance tests: [ADR-0002](architecture/ADR-0002-safe-execution-fixtures-remediation-contract.md).
 
 ## 7. Functional requirements
 
-Each requirement is testable and has a delivery stage: M = MVP, V1 = V1, V2 = V2.
+Each requirement is testable and has a delivery stage: P = restricted fixture-only PoC, M = MVP, V1 = V1, V2 = V2. P is **not** a general customer-facing capability.
 
 ### 7.1 Identity, access, and repository connections
 
@@ -206,11 +226,15 @@ Each requirement is testable and has a delivery stage: M = MVP, V1 = V1, V2 = V2
 | ID | Stage | Requirement | Acceptance signal |
 | --- | --- | --- | --- |
 | FR-010 | M | Ingest PR and CI lifecycle events and associate them with exact commit SHA and run ID. | Each investigation links to original revision and check. |
-| FR-011 | M | Execute configured scanners and project-native tests in bounded jobs, or ingest existing CI results. | Results distinguish imported and Preflyt-executed checks. |
+| FR-011 | M | Execute configured scanners and project-native tests **only in independently approved, preflight-verified repository sandboxes**, or ingest existing external CI results. | Unapproved executors block execution and produce evidence-only status; imported and locally executed checks are distinct. |
 | FR-012 | M | Normalize findings with source, rule, severity, file/location, evidence, timestamps, and run. | Users can filter, inspect, and trace each finding to a source. |
 | FR-013 | M | Deduplicate repeated findings across reruns without losing occurrence history. | One logical issue, multiple observations. |
 | FR-014 | M | Mark check outcomes as pass/fail/inconclusive/skipped/error; never equate skipped with passed. | UI and API preserve all states. |
 | FR-015 | V1 | Support OPA-compatible policy decisions and scoped exceptions with expiry and approver. | Blocking checks cannot be waived by AI output alone. |
+| FR-016 | M | Gate **all** real-repository scanner/test/build/install commands on approved isolation class, effective preflight and negative security tests. | Untrusted job cannot run with plain Docker, untrusted host execution, missing restrictions, or secrets. |
+| FR-017 | M | Support INGEST_ONLY operation when safe execution is unavailable. | Logs/findings still import while execution reports BLOCKED_EXECUTION_ENVIRONMENT. |
+| FR-018 | P | Enforce PoC remediation write permission through stable fixture-repository allowlist **and** separate provider installation scope. | Attempts on non-fixtures fail at policy and Git provider layers, even with tampered events. |
+| FR-019 | M | Preserve source revision, execution environment identity, exact commands, and check evidence for Preflyt-run investigations. | Every run is traceable to a pinned commit and runtime; sensitive values are redacted. |
 
 ### 7.3 AI investigation and model control
 
@@ -228,11 +252,13 @@ Each requirement is testable and has a delivery stage: M = MVP, V1 = V1, V2 = V2
 
 | ID | Stage | Requirement | Acceptance signal |
 | --- | --- | --- | --- |
-| FR-030 | V1 | Reproduce the original defect on the exact commit in an ephemeral sandbox when feasible. | Original failure and command/environment are recorded. |
+| FR-030 | V1 | Reproduce the original defect on the pinned commit in an approved sandbox and store the matching baseline failure signature and exact environment/command evidence. | Without matching reproducible failure, mark INCONCLUSIVE; no validated remediation. |
 | FR-031 | V1 | Allow agents to edit only approved repository paths in their sandbox workspace. | Protected path modification is blocked. |
-| FR-032 | V1 | Rerun relevant tests/scanners and required policy checks independently after a patch. | Patch must satisfy checks tied to the original failure. |
+| FR-032 | V1 | Re-run the original reproducer and every **predeclared** mandatory regression/CI/scanner/policy check independently against the patched tree under equivalent pinned environment. | Every mandatory check is present and passes; skipped/missing/error checks fail validation. |
 | FR-033 | V1 | Limit patch size, file count, attempts, duration, and model spend per task. | Exceeding a threshold stops and reports. |
-| FR-034 | V1 | Open a separate remediation PR through a privileged, restricted Git writer only after required checks pass. | PR links finding, reproduction, patch, and validation. |
+| FR-034 | V1 | Open a separate remediation PR through a privileged, restricted Git writer only after required checks pass and branch head/permission are rechecked. | PR links source SHA, target branch, original failure, patch SHA-256 and validation; target is feature branch for an open same-repo feature PR. |
+| FR-038 | V1 | Persist append-only, versioned reproduction and remediation evidence contracts. | Required source/environment/commands, patch and tree hashes, check-policy snapshot and artifact hashes are complete. |
+| FR-039 | V1 | Block write-back to forked, moved, deleted, merged or ambiguous branch contexts unless reauthorized and revalidated. | No stale/unauthorized PRs; no silent fallback to default branch. |
 | FR-035 | V1 | Never automatically merge, self-review, deploy, or alter branch protection. | Automated tests demonstrate those actions are forbidden. |
 | FR-036 | V1 | Mark a remediation inconclusive when it cannot reproduce a defect or cannot run required validation. | System does not label it “fixed.” |
 | FR-037 | V1 | Capture human accept/reject/merge outcomes for agent evaluation. | GitHub state is reconciled without direct agent authority. |
@@ -366,10 +392,10 @@ The selected provider's retention and data-use terms must be evaluated; a self-h
 
 ### 10.4 Runtime strategy
 
-- **Development/evaluation:** Docker Compose for NestJS API, React/Vite web, TypeScript agent and execution workers, PostgreSQL, Redis, LiteLLM gateway, and optional local inference; trusted-only sandbox evaluation with explicit warnings about isolation limitations.
+- **Development/evaluation:** Docker Compose for NestJS API, React/Vite web, TypeScript agent and execution workers, PostgreSQL, Redis, LiteLLM gateway, and optional local inference. Local Docker execution is **fixture-only** and cannot be used for real untrusted repositories.
 - **Background workflows:** **BullMQ + Redis**, with durable queued tasks, job state, bounded backoff/retries, dead-letter handling policy, and idempotent external effects. Treat queue delivery as at-least-once; never assume exactly-once patch or PR creation.
 - **Production:** Helm/Kubernetes deployments for control-plane services and isolated Jobs; use `@kubernetes/client-node` for dispatch. Argo Workflows is an **optional later adapter** if complex Kubernetes DAG execution warrants it, not a required first-release dependency.
-- **Isolation target:** separate worker pool/namespace, least-privilege service accounts, network policies, read-only base images, quotas, bounded lifetime; assess gVisor/Kata or equivalent stronger sandbox runtime.
+- **MVP isolation prerequisite:** an approved independent security-reviewed sandbox with separate worker pool/namespace, least-privilege service accounts, default-deny network policies, read-only base images, quotas, bounded lifetime, and assessed stronger runtime isolation such as gVisor/Kata or equivalent; preflight and escape/exfiltration checks are mandatory **before real-repository execution**.
 - **Fault tolerance:** workflows must resume or terminate predictably after controller restarts; out-of-order events and repeated callbacks must not create duplicate PRs.
 
 ### 10.5 Language, monorepo and process boundaries (selected decision)
@@ -423,7 +449,7 @@ turbo.json
 
 ### 11.2 Enforceable controls
 
-- Default read-only GitHub integration; enable write-capable Git service only for V1 remediation workflows.
+- Default read-only GitHub integration. The **only PoC exception** uses a separately scoped GitHub App restricted to designated disposable fixture repository IDs; general repository write capability begins in V1 after security and validation gates.
 - Agent workers cannot access model provider keys, stored integration tokens, or cluster-admin capabilities.
 - Agents cannot change security configuration, bypass branch protections, approve/merge their own changes, or trigger production deployment.
 - Per-repository editable path/command allowlists and protected-file rules.
@@ -445,7 +471,7 @@ These are **initial acceptance targets** requiring validation against actual har
 | NFR-03 | Latency | 95% of valid webhooks acknowledged within 2 seconds, excluding upstream delivery time. |
 | NFR-04 | Diagnosis time | Median CI failure diagnosis under 5 minutes for benchmark fixtures with available logs. |
 | NFR-05 | Bounded execution | Every workflow has configurable wall-clock timeout, retry cap, tool-call cap, and budget. |
-| NFR-06 | Isolation | A sandbox cannot access platform API keys, protected SCM write tokens, or other repos by default. |
+| NFR-06 | MVP execution isolation | Before any real-repository execution, runtime preflight and adversarial tests must demonstrate isolation from secrets, internal networks, other repositories, and host/container runtime privileges. |
 | NFR-07 | Observability | 100% of workflow runs have traceable IDs, terminal status, model spend record or explicit unavailable state, and evidence references. |
 | NFR-08 | Security | Sensitive credentials never appear in standard UI, logs, artifacts, or outbound model context in seeded leakage tests. |
 | NFR-09 | Deployment | A documented, tested Compose installation for evaluation; a separately tested Kubernetes deployment for production release. |
@@ -493,9 +519,9 @@ For each case capture baseline time, agent attempts, reproduction outcome, patch
 - [ ] A GitHub failed-check event starts exactly one investigation.
 - [ ] CI logs and exact commit diff are collected with appropriate permissions.
 - [ ] A bounded agent produces an evidence-linked diagnosis with uncertainty labels.
-- [ ] An isolated run demonstrates reproduction of a known failing test.
+- [ ] An approved **fixture sandbox** run demonstrates reproduction of a known failing test; fixture-only Docker is never enabled for untrusted customer repositories.
 - [ ] A proposed patch passes the original failing test plus required regression checks.
-- [ ] A separate fix PR is created with a diff, reproduction proof, validation output, and linked finding.
+- [ ] A separate fix PR is created **only within an explicitly allowlisted disposable fixture repository** using a fixture-only Git App, with diff, reproduction proof, validation output, and linked finding.
 - [ ] A human—not the agent—remains responsible for review and merge.
 - [ ] Seeded prompt-injection and secret-leak tests cannot access protected capabilities.
 - [ ] Timeouts and cost ceilings stop runaway runs.
@@ -508,15 +534,17 @@ For each case capture baseline time, agent attempts, reproduction outcome, patch
 - [ ] Findings are searchable and source-traceable, with pass/fail/inconclusive states.
 - [ ] AI CI investigation can be triggered automatically or manually within policy.
 - [ ] The UI shows investigation evidence, hypotheses, costs, run status, and audit timeline.
-- [ ] Docker Compose evaluation deployment is documented and tested.
-- [ ] No claim of autonomous remediation is shown in the product UI until V1 is shipped.
+- [ ] Docker Compose evaluation deployment is documented and tested; any local code execution is limited to fixtures.
+- [ ] The **MVP-safe executor gate** passes: verified runtime isolation, deny-by-default networking, resource limits, zero credentials, sandbox escape/exfiltration tests, and fail-closed ingest-only mode.
+- [ ] MVP real-repository scanner/test jobs are refused unless an independently approved execution runtime is available.
+- [ ] No general remediation PR/write feature is enabled or marketed until V1; fixture PoC writes are separately gated.
 
 ### 15.3 V1 release acceptance
 
 - [ ] Hardened Kubernetes execution isolation is security-tested.
 - [ ] Agent edits and commands are restricted independently of prompt instructions.
-- [ ] Reproduction and validation contracts cannot be silently skipped.
-- [ ] Approved workflows can open remediation PRs; never merge them.
+- [ ] Reproduction and validation contracts capture exact revision, environment, original/patched commands, patch checksum and tree SHAs, plus all predeclared mandatory checks; skipped/failed checks prevent validated status.
+- [ ] Approved workflows open remediation PRs into the original open **same-repository feature branch**, or default branch for direct default-branch failures; reject stale/fork/ambiguous targets and never merge.
 - [ ] An authorized user can cancel runs and revoke model/SCM credentials.
 - [ ] GitLab adapter passes provider contract tests.
 - [ ] End-to-end audit and cost records survive retry/controller restart.
@@ -543,12 +571,12 @@ These items require explicit engineering/product decisions before implementation
 1. Authentication for first deployment: built-in credentials, OIDC, or both?
 2. GitHub integration mechanism: GitHub App preferred; required permission set and installation ownership?
 3. Scope of allowed outbound network destinations per sandbox and external-model policy?
-4. Sandbox choice for production isolation: hardened Jobs with gVisor/Kata or an alternative?
+4. Which **independently validated stronger isolation runtime** (gVisor/Kata/equivalent), cluster/node security profile and negative security-test suite satisfy the mandatory MVP execution gate?
 5. Which TypeScript agent SDK and tool framework should be adopted after license and proof-of-concept review: Vercel AI SDK, OpenAI Agents SDK for JavaScript, or a thin custom adapter? When would LangGraph.js add value?
 6. What BullMQ queue taxonomy, job persistence/recovery strategy, and Redis high-availability model are required, and what evidence would justify an Argo Workflows execution adapter later?
 7. Which scanner binaries/rules can be redistributed under Preflyt's eventual license?
 8. Artifact retention defaults, data residency policy, and whether any personal data is persisted.
-9. Which checks are mandatory before a remediation PR can be labeled “validated”?
+9. Which repository-specific additional checks must supplement the **mandatory baseline defined in ADR-0002**, and how should compatibility/context-sensitive requirements be configured?
 10. Whether automatic comments on source PRs are enabled by default or require explicit opt-in.
 11. Release concurrency, hardware sizing, Kubernetes support matrix, and recovery objectives.
 12. Preflyt source-code license and external contribution policy.
@@ -561,15 +589,15 @@ These items require explicit engineering/product decisions before implementation
 
 **Workstream C — AI investigation:** TypeScript agent-worker foundation, model-gateway integration, evidence packaging/redaction, selected TypeScript SDK/adapter, structured diagnosis, limits and evaluation.
 
-**Workstream D — Execution safety:** TypeScript execution controller using Docker/Kubernetes APIs, immutable source checkout, quotas, egress restrictions, artifact collection, hardening and threat tests.
+**Workstream D — MVP execution prerequisite:** implement and independently verify TypeScript execution controller, approved stronger isolation for real-repository jobs, immutable checkout, limits, default-deny egress, absence of secrets, threat/escape testing and fail-closed ingest-only fallback **before** enabling MVP scanner/test execution.
 
-**Workstream E — Remediation (V1):** bounded patching, independent validation jobs, scoped Git writer, remediation PRs, lifecycle sync.
+**Workstream E — V1 remediation:** bounded patching, exact revision/environment/command/hash evidence contract, independent mandatory validation, source-branch-aware Git writer, stale/fork fail-closed behavior, remediation PRs and lifecycle sync. A separate PoC exercises this flow only against allowlisted fixtures.
 
 **Workstream F — Operations:** Compose/Helm packaging, secret management, OTel/SigNoz, backup/recovery and operational runbooks.
 
 ### Suggested next documents
 
-- [ADR-0001: TypeScript-first stack](architecture/ADR-0001-typescript-first-stack.md) plus future ADRs for agent adapter, workflow engine, sandbox model, and model gateway.
+- [ADR-0001: TypeScript-first stack](architecture/ADR-0001-typescript-first-stack.md) and [ADR-0002: MVP execution safety, PoC scope, and verified remediation](architecture/ADR-0002-safe-execution-fixtures-remediation-contract.md) plus future ADRs for agent adapter, workflow engine, and model gateway.
 - Threat model and data-flow diagram.
 - API/events and database schema specification.
 - MVP UX journeys and wireframes.
