@@ -401,7 +401,7 @@ infra/
   compose/              # Docker Compose evaluation stack
   helm/                 # Kubernetes application manifests
 pnpm-workspace.yaml
- turbo.json
+turbo.json
 ~~~
 
 ## 11. Security, governance, and threat model
@@ -569,7 +569,7 @@ These items require explicit engineering/product decisions before implementation
 
 ### Suggested next documents
 
-- Architecture Decision Records (TypeScript-first stack, agent adapter, workflow engine, sandbox model, model gateway).
+- [ADR-0001: TypeScript-first stack](architecture/ADR-0001-typescript-first-stack.md) plus future ADRs for agent adapter, workflow engine, sandbox model, and model gateway.
 - Threat model and data-flow diagram.
 - API/events and database schema specification.
 - MVP UX journeys and wireframes.
