@@ -53,8 +53,8 @@ It is **not** intended to replace GitHub Actions, GitLab CI, Jenkins, a source-c
 3. A PR or failed CI job generates a signed event.
 4. Preflyt collects relevant diffs, test failures, and scanner output; creates a finding and investigation.
 5. An AI investigator proposes a hypothesis with evidence and, when enabled, reproduces the failure in an isolated execution job.
-6. **In fixture-only PoC or V1 remediation mode**, an agent generates a bounded patch and the platform reproduces the original failure and independently runs all mandatory validation checks under an equivalent pinned environment.
-7. **Only for fixture-only PoC or authorized V1**, Preflyt opens a separate fix PR for developer review. If the original change is on an open same-repository feature branch, the fix PR **targets that feature branch**, not the default branch. Stale, forked or ambiguous targets stop automatic write-back. The platform never self-approves or auto-merges.
+6. **In fixture-only PoC or V1 remediation mode**, an agent generates a bounded patch and the platform reproduces the original failure and independently runs the **protected original reproduction harness** and all mandatory validation checks under an equivalent pinned environment. Agent-written tests cannot replace or weaken that harness.
+7. **Only for fixture-only PoC or authorized V1**, Preflyt creates a separate **draft** fix PR and verifies source/target state and the pushed tree again before human-review readiness. If the original change is on an open same-repository feature branch, the fix PR **targets that feature branch**, not the default branch. Known stale, forked or ambiguous targets stop automatic write-back. Post-creation races or later target changes invalidate current validation and trigger audited cleanup of the Preflyt-owned fix PR; unknown freshness blocks review promotion. The platform never self-approves or auto-merges.
 8. Audit events and approved outcomes become available for reporting and later engineering knowledge retrieval.
 
 ## Architecture (proposed)
@@ -158,7 +158,7 @@ This is a planning sequence, not a release-date commitment. The [Product Require
 - Enforce organization and repository boundaries across database queries, artifacts, logs, knowledge retrieval, and executions.
 - Treat repository contents, CI logs, issue text, and tool output as **untrusted prompt input**.
 - Gate sending source code to external models on administrator-approved data policies.
-- Require human review, protected branches, and independent passing checks before merge. **Validate the exact source revision, environment, commands, canonical patch checksum and predeclared mandatory checks before write-back; recheck the source branch head to prevent stale fixes.**
+- Require human review, protected branches, and independent passing checks before merge. **Validate pinned revisions, the protected original harness, environment, commands, patch checksum and mandatory checks before write-back. Recheck source/target state before and after draft PR creation and reconcile later changes; historical results must never appear as current validation on a changed target.**
 - Preserve redacted, tamper-evident audit records and bounded artifact retention.
 
 ## Development and contribution status

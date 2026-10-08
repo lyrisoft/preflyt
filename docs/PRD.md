@@ -5,7 +5,7 @@
 **Tagline:** Engineering confidence before production  
 **Owner:** Lyrisoft Technologies  
 **Document status:** Draft for review  
-**Version:** 0.2  
+**Version:** 0.3  
 **Date:** 2026-10-08  
 **Implementation status:** Not started; requirements are proposed, not statements of shipped functionality
 
@@ -172,20 +172,23 @@ flowchart TD
     G --> H{"Required checks pass?"}
     H -->|No, retry budget remains| F
     H -->|No, budget exhausted| I["Mark unresolved and escalate"]
-    H -->|Yes| J["Restricted Git writer creates fix PR"]
-    J --> K["Human review and protected-branch checks"]
+    H -->|Yes| J["Restricted Git writer creates draft fix PR"]
+    J --> L["Post-creation source/target/tree verification"]
+    L -->|Matching observed revisions| K["Human review and protected-branch checks"]
+    L -->|Changed or unavailable| M["Invalidate current status; reconcile and clean up"]
 ~~~
 
-**Definitions:** A finding is an observed issue or check result; an investigation is an evidence-gathering and reasoning run; a remediation is a proposed code or configuration change. A **validated** remediation requires the original failure to be reproduced on the pinned commit, a separately executed post-patch passing reproduction, and **all predeclared mandatory checks passing**. Missing, skipped, failed or unavailable mandatory checks mean **not validated**. Passing checks do not guarantee overall correctness.
+**Definitions:** A finding is an observed issue or check result; an investigation is an evidence-gathering and reasoning run; a remediation is a proposed code or configuration change. A **validated** remediation requires the original failure to be reproduced on the pinned commit, a separately executed post-patch passing reproduction using the **same protected original harness**, and **all predeclared mandatory checks passing**. Validation is tied to the recorded revision tuple; PR freshness is tracked separately and rechecked after creation and on relevant source/target changes. Missing, skipped, failed or unavailable mandatory checks mean **not validated**. Passing checks do not guarantee overall correctness.
 
 ### 6.3 Status model
 
 - **Finding:** open → triaged → investigating → remediation proposed → resolved / accepted risk / false positive (authorized disposition).
 - **Investigation:** queued → collecting evidence → running checks → analyzing → completed / inconclusive / failed / cancelled.
-- **Remediation (V1):** proposed → patching → validating → PR opened / failed / cancelled; merged and declined statuses are synchronized from the SCM provider, not decided by an agent.
+- **Remediation (V1):** proposed → patching → validating → draft PR pending verification → human-review eligible / stale / failed / cancelled; merged and declined statuses are synchronized from the SCM provider, not decided by an agent.
 - Retries create linked attempts; no job is allowed to spin indefinitely.
 - **Execution availability:** approved sandbox → eligible to run; absent/failed sandbox → BLOCKED_EXECUTION_ENVIRONMENT, with INGEST_ONLY evidence and an inconclusive investigation where necessary.
-- **Repro/validation:** not_reproduced / reproduced → patch_proposed → validating → validated / not_validated / stale_revision; status transitions require machine-verifiable evidence.
+- **Repro/validation:** not_reproduced / reproduced → patch_proposed → validating → validated / not_validated; historical validation stays bound to its immutable revision tuple.
+- **PR freshness:** PENDING_VERIFICATION / CURRENT_AT_OBSERVED_REVISION / STALE_REVISION / TARGET_UNAVAILABLE / UNKNOWN_FRESHNESS. Record the last successful observation time; stale, pending, unknown or policy-expired freshness blocks current-validation claims and review promotion.
 
 ### 6.4 Safe execution is an MVP entry criterion
 
@@ -197,11 +200,13 @@ Mandatory controls: non-root/no privilege escalation, no host Docker socket or p
 
 ### 6.5 Remediation reproducibility contract (V1; fixture PoC uses same rules)
 
-A versioned, immutable attempt record is required before labeling a remediation as validated or creating a fix PR. It **must** include: stable provider repository ID, originating CI/check and source PR identity; **exact source commit SHA** and branch/head/PR-base context; sandbox type, **image digest**, architecture, runtime/tool versions, dependency lock and configuration hashes, network-policy identity and redacted environment-variable names; **exact commands**, working directories, timeouts, exit codes and evidence artifacts; **baseline expected/observed failure signature**; **canonical patch SHA-256**, changed paths and before/after Git tree SHAs; **policy version and mandatory check set frozen before patching**; results of independent validation jobs; and final SCM target/authorization. Never persist secret values in these records.
+A versioned, immutable attempt record is required before labeling a remediation as validated or creating a fix PR. It **must** include: stable provider repository ID, originating CI/check and source PR identity; **exact source commit SHA** and branch/head/PR-base context; sandbox type, **image digest**, architecture, runtime/tool versions, dependency lock and configuration hashes, network-policy identity and redacted environment-variable names; **exact commands**, working directories, timeouts, exit codes and evidence artifacts; **baseline expected/observed failure signature and protected original reproducer artifact/manifest hashes, frozen selectors/configuration/inputs and expected test discovery**; **canonical patch SHA-256**, changed paths and before/after Git tree SHAs; **policy version and mandatory check set frozen before patching**; results of independent validation jobs; and final SCM target/authorization, pre/post-creation source/target observations, freshness timestamps and cleanup outcome. Never persist secret values in these records.
 
-Process: (1) reproduce a matching failure on the pinned original revision, (2) generate a bounded patch, (3) independently rerun **the identical original reproducer** against the patched tree in an equivalent pinned environment and show it passing, (4) pass the affected regression tests, repository-required configured tests/build/lint/typecheck, applicable security/IaC checks, and patch policy checks, (5) recheck authorization and target HEAD before Git write. A mandatory check missing, skipped, errored, timed out or failed means NOT_VALIDATED; nondeterministic/nonmatching baseline means INCONCLUSIVE. A not-applicable determination must be made by deterministic policy **before** editing; exceptions need recorded authorized approval.
+Process: (1) independently freeze and hash the original reproduction harness outside agent-editable files, (2) reproduce a matching failure on the pinned original revision, (3) generate a bounded patch, (4) independently rerun **the identical original reproducer with its unchanged trusted assertions, selectors, configuration and inputs** against patched application code in an equivalent pinned environment and show the expected tests executing and passing, (5) pass affected regression tests, repository-required configured tests/build/lint/typecheck, applicable security/IaC checks and patch/harness-integrity checks, (6) recheck authorization and required source/target revisions before writing, (7) create a **draft** fix PR, verify its identity and pushed tree and re-fetch source PR state/target HEAD/integration base after creation, then reconcile on events and periodically. Agent-written tests are supplemental; removing assertions, introducing skips, redirecting selectors, zero discovered tests or forged reports cannot satisfy the protected reproducer. A mandatory check missing, skipped, errored, timed out or failed means NOT_VALIDATED; nondeterministic/nonmatching baseline means INCONCLUSIVE. Applicability is decided deterministically **before** editing; recorded authorized exceptions cannot waive the original trusted reproduction. Harness revisions require independent approval and a new baseline attempt.
 
 **Branch target decision:** For a failure on an **open same-repository feature PR**, branch the fix from the original PR's **head SHA** and create a **separate remediation PR targeting that feature branch**, not main. For a failure directly on the default branch, target that branch after verifying its HEAD is still pinned. **Forked PRs do not receive automatic write-back in initial V1**; supply a patch artifact instead. Deleted, moved, merged, closed or ambiguous sources block writing and require renewed investigation. Merge-ref-only CI failures require additional integration-context verification; head-only tests cannot establish a merge fix. No agent can directly push to an existing source branch, merge, or approve.
+
+**Branch-race handling:** GitHub PR creation targets a live branch name and does not atomically compare its HEAD to a supplied expected SHA. Pre-write checks cannot rule out transient stale drafts. Post-creation checks must record the exact source/target revisions, fix tree and source PR state before establishing CURRENT_AT_OBSERVED_REVISION or human-review readiness. Changed revisions/state invalidate current validation and trigger bounded, audited closure of the **Preflyt-owned** fix PR only; pending/failed cleanup stays visible, with draft retention where supported and authorized intervention on failure. Never close or modify the original source PR, retarget automatically, force-push its branch or reuse validation on a new base. Provider outages or expired freshness produce UNKNOWN_FRESHNESS and block promotion until reconciliation. Events plus periodic reconciliation cover missed deliveries; durable unique operation records and serialized retries prevent duplicate PR writes. Historical evidence remains immutable and is displayed with its validated revisions and observation time.
 
 Full normative field definitions, check-selection rules, branch-target matrix and acceptance tests: [ADR-0002](architecture/ADR-0002-safe-execution-fixtures-remediation-contract.md).
 
@@ -254,11 +259,11 @@ Each requirement is testable and has a delivery stage: P = restricted fixture-on
 | --- | --- | --- | --- |
 | FR-030 | V1 | Reproduce the original defect on the pinned commit in an approved sandbox and store the matching baseline failure signature and exact environment/command evidence. | Without matching reproducible failure, mark INCONCLUSIVE; no validated remediation. |
 | FR-031 | V1 | Allow agents to edit only approved repository paths in their sandbox workspace. | Protected path modification is blocked. |
-| FR-032 | V1 | Re-run the original reproducer and every **predeclared** mandatory regression/CI/scanner/policy check independently against the patched tree under equivalent pinned environment. | Every mandatory check is present and passes; skipped/missing/error checks fail validation. |
+| FR-032 | V1 | Re-run the **protected original harness** and every predeclared mandatory regression/CI/scanner/policy check independently against patched application code under equivalent pinned environment. | Harness hashes and expected tests match; weakened assertions, skips, zero tests, substituted reports or missing/errored checks cannot pass validation. |
 | FR-033 | V1 | Limit patch size, file count, attempts, duration, and model spend per task. | Exceeding a threshold stops and reports. |
-| FR-034 | V1 | Open a separate remediation PR through a privileged, restricted Git writer only after required checks pass and branch head/permission are rechecked. | PR links source SHA, target branch, original failure, patch SHA-256 and validation; target is feature branch for an open same-repo feature PR. |
-| FR-038 | V1 | Persist append-only, versioned reproduction and remediation evidence contracts. | Required source/environment/commands, patch and tree hashes, check-policy snapshot and artifact hashes are complete. |
-| FR-039 | V1 | Block write-back to forked, moved, deleted, merged or ambiguous branch contexts unless reauthorized and revalidated. | No stale/unauthorized PRs; no silent fallback to default branch. |
+| FR-034 | V1 | Create a separate **draft** remediation PR after mandatory validation and pre-write authorization/revision checks; verify source/target state and fix identity/tree again after creation before human-review readiness. | PR links pinned revisions, harness/patch digests, validation and freshness observations; same-repo feature fixes target their feature branch. Unknown/stale freshness blocks promotion. |
+| FR-038 | V1 | Persist append-only, versioned reproduction/remediation contracts and separate freshness/cleanup observations. | Source/environment/commands, protected harness, patch/tree/artifact hashes and check-policy snapshot are complete; historical evidence is never overwritten by live status. |
+| FR-039 | V1 | Block known forked/moved/deleted/merged/closed/ambiguous targets before writing; detect post-creation races and invalidate current validation, reconcile freshness and close only Preflyt-owned stale fix PRs. | Transient stale drafts are never represented as currently validated; outages block promotion, cleanup failures are audited, and concurrent/restarted retries do not duplicate PRs. |
 | FR-035 | V1 | Never automatically merge, self-review, deploy, or alter branch protection. | Automated tests demonstrate those actions are forbidden. |
 | FR-036 | V1 | Mark a remediation inconclusive when it cannot reproduce a defect or cannot run required validation. | System does not label it “fixed.” |
 | FR-037 | V1 | Capture human accept/reject/merge outcomes for agent evaluation. | GitHub state is reconciled without direct agent authority. |
@@ -520,8 +525,8 @@ For each case capture baseline time, agent attempts, reproduction outcome, patch
 - [ ] CI logs and exact commit diff are collected with appropriate permissions.
 - [ ] A bounded agent produces an evidence-linked diagnosis with uncertainty labels.
 - [ ] An approved **fixture sandbox** run demonstrates reproduction of a known failing test; fixture-only Docker is never enabled for untrusted customer repositories.
-- [ ] A proposed patch passes the original failing test plus required regression checks.
-- [ ] A separate fix PR is created **only within an explicitly allowlisted disposable fixture repository** using a fixture-only Git App, with diff, reproduction proof, validation output, and linked finding.
+- [ ] A proposed patch passes the protected original reproduction harness plus required regression checks; changed assertions, skips or zero tests cannot satisfy the reproduction gate.
+- [ ] A separate **draft** fix PR is created only within an explicitly allowlisted disposable fixture repository using a fixture-only Git App, with diff, trusted-harness reproduction proof, validation output and linked finding; post-creation freshness verification precedes human-review readiness.
 - [ ] A human—not the agent—remains responsible for review and merge.
 - [ ] Seeded prompt-injection and secret-leak tests cannot access protected capabilities.
 - [ ] Timeouts and cost ceilings stop runaway runs.
@@ -543,8 +548,11 @@ For each case capture baseline time, agent attempts, reproduction outcome, patch
 
 - [ ] Hardened Kubernetes execution isolation is security-tested.
 - [ ] Agent edits and commands are restricted independently of prompt instructions.
-- [ ] Reproduction and validation contracts capture exact revision, environment, original/patched commands, patch checksum and tree SHAs, plus all predeclared mandatory checks; skipped/failed checks prevent validated status.
-- [ ] Approved workflows open remediation PRs into the original open **same-repository feature branch**, or default branch for direct default-branch failures; reject stale/fork/ambiguous targets and never merge.
+- [ ] Reproduction and validation contracts capture exact revisions, environment, original/patched commands, protected-harness manifest/digests, patch checksum/tree SHAs and all predeclared mandatory checks; skipped/failed checks prevent validated status.
+- [ ] Negative cases cover removed assertions, skipped original tests, selector/configuration changes, zero discovered tests and forged reports; supplemental tests never replace the frozen original harness.
+- [ ] Approved workflows create draft remediation PRs into the original open same-repository feature branch, or default branch for direct default-branch failures; known stale/fork/ambiguous targets block writing, and post-creation verification precedes human-review readiness. Never merge.
+- [ ] Target/source/integration-base movement during or after PR creation, missed events, provider outages and expired freshness invalidate current status or leave it unknown; audited cleanup closes only Preflyt-owned stale fix PRs, with visible bounded retries/failure.
+- [ ] Restarted and concurrent retries reconcile durable write records without duplicate PRs or reuse of stale validation.
 - [ ] An authorized user can cancel runs and revoke model/SCM credentials.
 - [ ] GitLab adapter passes provider contract tests.
 - [ ] End-to-end audit and cost records survive retry/controller restart.
