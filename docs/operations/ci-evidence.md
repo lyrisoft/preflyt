@@ -18,7 +18,7 @@ Every observation retains its signed delivery ID, installation/repository IDs, e
 | NOT_EXECUTED | Provider reported completed/skipped |
 | UNKNOWN | Missing/inconsistent state, cancellation, neutral, stale, action_required or unsupported conclusion |
 
-A rerequest can contain the previous completion and success; it always records PENDING. Cancellation can follow partial execution, so it is UNKNOWN rather than a claim that nothing ran. Provider success is **not Preflyt PASS**. `qualityGate` is null: there is no policy evaluation, assessment coverage, execution-environment verification, artifact validation or source-control check publication in this slice. GitHub source object IDs identify observations; policy check identities/tool versions remain future evidence enrichment.
+A rerequest can contain the previous completion and success; it always records PENDING. Cancellation can follow partial execution, so it is UNKNOWN rather than a claim that nothing ran. Provider success is **not Preflyt PASS**. `qualityGate` is null: there is no policy evaluation, assessment coverage, execution-environment verification, artifact validation or source-control check publication in this slice. GitHub source object IDs identify observations; [Approved source bindings](ci-bindings.md) use signed app/check and workflow identities; trusted tool versions and execution proof remain future evidence enrichment.
 
 ## Processing, deployment and rollback
 

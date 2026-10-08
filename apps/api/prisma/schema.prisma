@@ -159,6 +159,7 @@ model GitHubRepository {
   selected       Boolean           @default(false)
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
+  ciBindings RepositoryCiBindings[]
   assessments    CommitAssessment[]
   standards      RepositoryStandardsSelection[]
   profiles       RepositoryProfile[]
@@ -198,6 +199,7 @@ model GitHubWebhookDelivery {
   installationId     BigInt
   repositoryGithubId BigInt
   sourceSha          String
+  sourceIdentity Json?
   sourceObjectId     String
   sourceNumber       Int?
   sourceStatus       String?
@@ -229,6 +231,7 @@ model ImportedCiEvidence {
   installationId     BigInt
   sourceSha          String
   sourceKind         String
+  sourceIdentity Json?
   sourceObjectId     String
   sourceAction       String
   sourceStatus       String?
@@ -303,4 +306,15 @@ model GitHubAccessDelivery {
   receivedAt DateTime @default(now())
   processedAt DateTime?
   @@index([state, receivedAt])
+}
+
+model RepositoryCiBindings {
+  id String @id @default(cuid())
+  repositoryId String
+  repository GitHubRepository @relation(fields:[repositoryId],references:[id],onDelete:Cascade)
+  revision Int
+  selectionId String
+  bindings Json
+  createdAt DateTime @default(now())
+  @@unique([repositoryId,revision])
 }

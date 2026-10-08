@@ -1,3 +1,4 @@
+import { runAttempt } from './ci-binding.js'
 import { createHash } from 'node:crypto'
 import {
   posture,
@@ -22,8 +23,13 @@ export const digest = (value: unknown) =>
   createHash('sha256')
     .update(JSON.stringify(canonical(value)))
     .digest('hex')
-export type Mapping = { ruleId: string; deliveryId: string }
+export type Mapping = {
+  ruleId: string
+  deliveryId: string
+  bindingApproved?: boolean
+}
 export type Observation = {
+  sourceIdentity?: unknown
   version: number
   deliveryId: string
   sourceSha: string
@@ -57,6 +63,7 @@ export function buildAssessment(input: {
   observations: Observation[]
   at: Date
   truncated: boolean
+  ambiguousRules?: string[]
 }) {
   if (input.observations.some((row) => row.sourceSha !== input.sourceSha))
     throw new Error('Cross-revision evidence')
@@ -92,6 +99,7 @@ export function buildAssessment(input: {
   const observed = input.observations.map((row) => ({
     version: row.version,
     provenance: 'github_signed_webhook',
+    sourceIdentity: row.sourceIdentity ?? null,
     toolVersion: null,
     executionEnvironment: null,
     deliveryId: row.deliveryId,
@@ -131,9 +139,13 @@ export function buildAssessment(input: {
             row.sourceKind === evidence.sourceKind &&
             row.sourceObjectId === evidence.sourceObjectId &&
             row.deliveryId !== evidence.deliveryId &&
-            (row.sourceUpdatedAt && clock
-              ? row.sourceUpdatedAt.getTime() > clock.getTime()
-              : row.observedAt.getTime() > evidence.observedAt.getTime()),
+            (runAttempt(row.sourceIdentity) !==
+            runAttempt(evidence.sourceIdentity)
+              ? runAttempt(row.sourceIdentity) >
+                runAttempt(evidence.sourceIdentity)
+              : row.sourceUpdatedAt && clock
+                ? row.sourceUpdatedAt.getTime() > clock.getTime()
+                : row.observedAt.getTime() > evidence.observedAt.getTime()),
         )
       : false
     const ambiguous = evidence
@@ -143,6 +155,8 @@ export function buildAssessment(input: {
             row.sourceObjectId === evidence.sourceObjectId &&
             row.deliveryId !== evidence.deliveryId &&
             row.result !== evidence.result &&
+            runAttempt(row.sourceIdentity) ===
+              runAttempt(evidence.sourceIdentity) &&
             (!row.sourceUpdatedAt ||
               !clock ||
               row.sourceUpdatedAt.getTime() === clock.getTime()),
@@ -185,18 +199,25 @@ export function buildAssessment(input: {
       title: control.title,
       required: control.required,
       capability: control.capability,
-      coverage,
+      coverage: input.ambiguousRules?.includes(control.id)
+        ? 'AMBIGUOUS'
+        : coverage,
       ruleOutcome: null,
       deliveryId: mapping?.deliveryId ?? null,
       providerResult: evidence?.result ?? null,
-      mappingTrust: mapping ? 'ADMIN_ASSOCIATED_UNVERIFIED' : null,
+      mappingTrust: mapping
+        ? mapping.bindingApproved
+          ? 'APPROVED_SOURCE_BINDING'
+          : 'ADMIN_ASSOCIATED_UNVERIFIED'
+        : null,
       freshness: mapping ? freshness : 'NOT_APPLICABLE',
       ageHoursAtCollection: age === null ? null : Math.round(age * 100) / 100,
       superseded,
-      ambiguous,
+      ambiguous: ambiguous || !!input.ambiguousRules?.includes(control.id),
       configurationEvidence: control.evidence,
-      reason:
-        coverage === 'CONFIGURATION_OBSERVED'
+      reason: input.ambiguousRules?.includes(control.id)
+        ? 'CI source is ambiguous or the observation collection is incomplete.'
+        : coverage === 'CONFIGURATION_OBSERVED'
           ? 'Exact-revision configuration hint only; execution is not established.'
           : control.capability === 'planned'
             ? 'Check adapter is not implemented; an association cannot enable it.'

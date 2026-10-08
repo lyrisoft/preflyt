@@ -298,3 +298,32 @@ describe('administrator-associated artifact imports', () => {
     expect(await prisma.auditEvent.count({ where: { event: 'ci.artifact.imported' } })).toBe(0)
   })
 })
+
+it('persists signed source identity through ingestion and CI import', async () => {
+  const id = randomUUID()
+  const data = {
+    action: 'completed',
+    installation: { id: 77 },
+    repository: { id: 501 },
+    check_run: {
+      id: 1001,
+      head_sha: 'a'.repeat(40),
+      status: 'completed',
+      conclusion: 'success',
+      name: 'Unit tests',
+      app: { id: 123, name: 'not-stored' },
+      updated_at: new Date().toISOString(),
+    },
+  }
+  expect((await send(data, id, 'check_run')).status).toBe(202)
+  await new GitHubEventProcessor(prisma).process(id)
+  const evidence = await prisma.importedCiEvidence.findUniqueOrThrow({
+    where: { deliveryId: id },
+  })
+  expect(evidence.version).toBe(2)
+  expect(evidence.sourceIdentity).toEqual({
+    kind: 'check_run',
+    appId: '123',
+    checkName: 'Unit tests',
+  })
+})

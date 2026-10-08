@@ -1,3 +1,5 @@
+import { CiBindingController } from '../src/assessments/ci-binding.controller.js'
+import { CiBindingService } from '../src/assessments/ci-binding.service.js'
 import 'reflect-metadata'
 import { randomUUID } from 'node:crypto'
 import { AssessmentController } from '../src/assessments/assessment.controller.js'
@@ -46,8 +48,13 @@ beforeAll(async () => {
   app = await NestFactory.create(
     {
       module: class TestModule {},
-      controllers: [StandardsController, AssessmentController],
+      controllers: [
+        StandardsController,
+        AssessmentController,
+        CiBindingController,
+      ],
       providers: [
+        CiBindingService,
         StandardsService,
         AssessmentService,
         SessionGuard,
@@ -357,6 +364,10 @@ describe('immutable exact-SHA assessment API', () => {
     })
     expect(result.status).toBe(201)
     expect(result.body.assessment.report.collectionTruncated).toBe(true)
+    await bind(selection.id)
+    expect(testRule(await boundAssessment(selection.id)).coverage).toBe(
+      'AMBIGUOUS',
+    )
     expect(result.body.assessment.report.observations).toHaveLength(100)
     expect(result.body.assessment.report.coverage).toBe('INCOMPLETE')
   })
@@ -664,5 +675,298 @@ describe('atomic automatic CI assessment snapshots', () => {
         })
       ).state,
     ).toBe('RECEIVED')
+  })
+})
+
+const ciBinding = {
+  ruleId: 'tests.required',
+  kind: 'check_run',
+  appId: '123',
+  checkName: 'unit tests',
+}
+const bind = (
+  selectionId: string,
+  bindings: object[] = [ciBinding],
+  expectedBindingId: string | null = null,
+  role = 'OWNER',
+  origin = 'http://localhost:5173',
+) =>
+  request(app.getHttpServer())
+    .post('/github/repositories/501/ci-bindings')
+    .set('Cookie', 'test.sid=' + role)
+    .set('Origin', origin)
+    .send({ expectedSelectionId: selectionId, expectedBindingId, bindings })
+const boundAssessment = (selectionId: string) =>
+  create({
+    sourceSha: 'a'.repeat(40),
+    expectedSelectionId: selectionId,
+    requestKey: randomUUID(),
+    mappings: [],
+  })
+async function identify(
+  deliveryId: string,
+  identity: object = {
+    kind: 'check_run',
+    appId: '123',
+    checkName: 'unit tests',
+  },
+) {
+  // Re-import the normalized signed delivery exactly as the processor does.
+  await prisma.importedCiEvidence.delete({ where: { deliveryId } })
+  const d = await prisma.gitHubWebhookDelivery.update({
+    where: { id: deliveryId },
+    data: { sourceIdentity: identity },
+  })
+  await prisma.importedCiEvidence.create({ data: importCiEvidence(d)! })
+}
+const testRule = (response: any) =>
+  response.body.assessment.report.checks.find(
+    (c: any) => c.ruleId === 'tests.required',
+  )
+describe('approved source bindings', () => {
+  it('requires role, origin, current adoption and valid exact identities', async () => {
+    const { selection } = await ready()
+    expect((await bind(selection.id, [ciBinding], null, 'VIEWER')).status).toBe(
+      403,
+    )
+    expect(
+      (
+        await bind(
+          selection.id,
+          [ciBinding],
+          null,
+          'OWNER',
+          'https://evil.example',
+        )
+      ).status,
+    ).toBe(403)
+    expect((await bind('stale')).status).toBe(409)
+    for (const b of [
+      { ...ciBinding, appId: '0' },
+      { ...ciBinding, checkName: '' },
+      { ...ciBinding, workflowId: '9' },
+      { ...ciBinding, ruleId: 'dependencies.locked' },
+      { ...ciBinding, ruleId: 'unknown' },
+    ])
+      expect((await bind(selection.id, [b])).status).toBe(400)
+    expect((await bind(selection.id, [ciBinding, ciBinding])).status).toBe(400)
+    expect(await prisma.repositoryCiBindings.count()).toBe(0)
+  })
+  it('serializes competing approvals and audits only the winner', async () => {
+    const { selection } = await ready()
+    const responses = await Promise.all([
+      bind(selection.id),
+      bind(selection.id),
+    ])
+    expect(responses.map((r) => r.status).sort()).toEqual([201, 409])
+    expect(await prisma.repositoryCiBindings.count()).toBe(1)
+    expect(
+      await prisma.auditEvent.count({
+        where: { event: 'ci_bindings.adopted' },
+      }),
+    ).toBe(1)
+  })
+  it('automatically associates exact signed identities without claiming execution and freezes approvals', async () => {
+    const { selection, delivery } = await ready()
+    await identify(delivery.id)
+    const approved = await bind(selection.id)
+    expect(approved.status).toBe(201)
+    const assessed = await boundAssessment(selection.id)
+    expect(testRule(assessed)).toMatchObject({
+      deliveryId: delivery.id,
+      mappingTrust: 'APPROVED_SOURCE_BINDING',
+      coverage: 'UNVERIFIED',
+      ruleOutcome: null,
+      providerResult: 'SUCCEEDED',
+    })
+    expect(assessed.body.assessment.request.sourceBindings.id).toBe(
+      approved.body.id,
+    )
+    expect(assessed.body.assessment.report).toMatchObject({
+      trustedExecutedChecks: 0,
+      qualityGate: null,
+    })
+    expect((await bind(selection.id, [], approved.body.id)).status).toBe(201)
+    expect(testRule(await boundAssessment(selection.id)).deliveryId).toBeNull()
+    const historical = await readAssessment(assessed.body.assessment.id)
+    expect(historical.body.assessmentHash).toBe(
+      assessed.body.assessment.assessmentHash,
+    )
+  })
+  it('rejects another app, differently cased names and identity-free historic evidence', async () => {
+    const { selection, delivery } = await ready()
+    await bind(selection.id)
+    expect(testRule(await boundAssessment(selection.id)).deliveryId).toBeNull()
+    for (const identity of [
+      { kind: 'check_run', appId: '124', checkName: 'unit tests' },
+      { kind: 'check_run', appId: '123', checkName: 'Unit tests' },
+    ]) {
+      await identify(delivery.id, identity)
+      expect(
+        testRule(await boundAssessment(selection.id)).deliveryId,
+      ).toBeNull()
+    }
+  })
+  it('blocks automatic selection between distinct matching run IDs', async () => {
+    const { selection, delivery } = await ready()
+    await identify(delivery.id)
+    await bind(selection.id)
+    const d = await prisma.gitHubWebhookDelivery.create({
+      data: {
+        id: randomUUID(),
+        event: 'check_run',
+        action: 'completed',
+        installationId: 500n,
+        repositoryGithubId: 501n,
+        sourceSha: 'a'.repeat(40),
+        sourceObjectId: '45',
+        sourceStatus: 'completed',
+        sourceConclusion: 'failure',
+        sourceUpdatedAt: new Date(),
+        payloadHash: 'e'.repeat(64),
+        sourceIdentity: {
+          kind: 'check_run',
+          appId: '123',
+          checkName: 'unit tests',
+        },
+        state: 'PROCESSED',
+      },
+    })
+    await prisma.importedCiEvidence.create({ data: importCiEvidence(d)! })
+    expect(testRule(await boundAssessment(selection.id))).toMatchObject({
+      coverage: 'AMBIGUOUS',
+      ambiguous: true,
+      deliveryId: null,
+    })
+    expect(
+      testRule(await create(assessmentBody(selection.id, delivery.id))),
+    ).toMatchObject({ mappingTrust: 'ADMIN_ASSOCIATED_UNVERIFIED' })
+  })
+  it('requires reapproval after standards adoption and keeps bindings inactive', async () => {
+    const { selection, delivery } = await ready()
+    await identify(delivery.id)
+    const b = await bind(selection.id)
+    const next = await post(body(selection.id, 'STRICT'))
+    const status = await request(app.getHttpServer())
+      .get('/github/repositories/501/ci-bindings')
+      .set('Cookie', 'test.sid=VIEWER')
+    expect(status.body.active).toBe(false)
+    expect(testRule(await boundAssessment(next.body.id)).deliveryId).toBeNull()
+    expect((await bind(next.body.id, [ciBinding], b.body.id)).status).toBe(201)
+  })
+  it('uses the approved binding atomically during automatic CI processing', async () => {
+    const { selection, delivery } = await ready()
+    await bind(selection.id)
+    await prisma.importedCiEvidence.delete({
+      where: { deliveryId: delivery.id },
+    })
+    await prisma.gitHubWebhookDelivery.update({
+      where: { id: delivery.id },
+      data: {
+        state: 'RECEIVED',
+        sourceIdentity: {
+          kind: 'check_run',
+          appId: '123',
+          checkName: 'unit tests',
+        },
+      },
+    })
+    await new GitHubEventProcessor(prisma).process(delivery.id)
+    const snapshot = await prisma.commitAssessment.findFirst({
+      where: { requestKey: 'github:' + delivery.id },
+    })
+    expect(
+      (snapshot!.report as any).checks.find(
+        (c: any) => c.ruleId === 'tests.required',
+      ),
+    ).toMatchObject({
+      mappingTrust: 'APPROVED_SOURCE_BINDING',
+      coverage: 'UNVERIFIED',
+    })
+    expect((snapshot!.request as any).sourceBindings.selectionId).toBe(
+      selection.id,
+    )
+  })
+})
+
+it('rolls back binding adoption when auditing fails', async () => {
+  const { selection } = await ready()
+  const service = new CiBindingService({
+    gitHubRepository: prisma.gitHubRepository,
+    $transaction: (cb: any) =>
+      prisma.$transaction((tx) =>
+        cb(
+          new Proxy(tx, {
+            get(target, key) {
+              return key === 'auditEvent'
+                ? {
+                    create: async () => {
+                      throw new Error('audit unavailable')
+                    },
+                  }
+                : Reflect.get(target, key)
+            },
+          }),
+        ),
+      ),
+  } as any)
+  await expect(
+    service.save(
+      '501',
+      {
+        expectedSelectionId: selection.id,
+        expectedBindingId: null,
+        bindings: [ciBinding as any],
+      },
+      actorId,
+    ),
+  ).rejects.toThrow('audit unavailable')
+  expect(await prisma.repositoryCiBindings.count()).toBe(0)
+})
+it('does not borrow an approved source observation from a different SHA', async () => {
+  const { selection, delivery } = await ready('b'.repeat(40))
+  await identify(delivery.id)
+  await bind(selection.id)
+  expect(testRule(await boundAssessment(selection.id)).deliveryId).toBeNull()
+})
+it('prefers the newest workflow attempt without superseding it with a delayed old success', async () => {
+  const { selection, delivery } = await ready()
+  const identity = { kind: 'workflow_run', workflowId: '7', runAttempt: 1 }
+  await prisma.importedCiEvidence.delete({ where: { deliveryId: delivery.id } })
+  const old = await prisma.gitHubWebhookDelivery.update({
+    where: { id: delivery.id },
+    data: {
+      event: 'workflow_run',
+      sourceIdentity: identity,
+      sourceUpdatedAt: new Date(Date.now() + 1000),
+    },
+  })
+  await prisma.importedCiEvidence.create({ data: importCiEvidence(old)! })
+  const next = await prisma.gitHubWebhookDelivery.create({
+    data: {
+      id: randomUUID(),
+      event: 'workflow_run',
+      action: 'in_progress',
+      installationId: 500n,
+      repositoryGithubId: 501n,
+      sourceSha: 'a'.repeat(40),
+      sourceObjectId: old.sourceObjectId,
+      sourceStatus: 'in_progress',
+      sourceConclusion: null,
+      sourceUpdatedAt: new Date(),
+      payloadHash: 'e'.repeat(64),
+      sourceIdentity: { ...identity, runAttempt: 2 },
+      state: 'PROCESSED',
+    },
+  })
+  await prisma.importedCiEvidence.create({ data: importCiEvidence(next)! })
+  await bind(selection.id, [
+    { ruleId: 'tests.required', kind: 'workflow_run', workflowId: '7' },
+  ])
+  expect(testRule(await boundAssessment(selection.id))).toMatchObject({
+    deliveryId: next.id,
+    coverage: 'PENDING',
+    superseded: false,
+    ambiguous: false,
   })
 })

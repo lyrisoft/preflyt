@@ -19,6 +19,7 @@ import type {
   GitHubWebhookDelivery,
 } from '../generated/prisma/client.js'
 import type { ProfileSignal } from '../github/repository-profile.js'
+import { resolveBindings, type Binding } from './ci-binding.js'
 import { buildAssessment, digest, type Mapping } from './assessment-plan.js'
 export type AssessmentInput = {
   sourceSha: string
@@ -276,6 +277,29 @@ export class AssessmentService {
       throw new BadRequestException(
         'Mappings must reference selected rules and collected evidence from this exact repository commit',
       )
+    const binding = await tx.repositoryCiBindings.findFirst({
+      where: { repositoryId: repo.id },
+      orderBy: { revision: 'desc' },
+    })
+    const bindingActive = binding?.selectionId === selection.id
+    const approved = bindingActive
+      ? rows.length > 100
+        ? {
+            mappings: [],
+            ambiguousRules: (binding!.bindings as unknown as Binding[]).map(
+              (b) => b.ruleId,
+            ),
+          }
+        : resolveBindings(
+            binding!.bindings as unknown as Binding[],
+            observations,
+          )
+      : { mappings: [], ambiguousRules: [] }
+    const manualRules = new Set(input.mappings.map((m) => m.ruleId))
+    const mappings = [
+      ...input.mappings,
+      ...approved.mappings.filter((m) => !manualRules.has(m.ruleId)),
+    ]
     const at = new Date()
     let result
     try {
@@ -285,7 +309,10 @@ export class AssessmentService {
         packs,
         signals,
         profileCreatedAt: snapshot?.createdAt ?? null,
-        mappings: input.mappings,
+        mappings,
+        ambiguousRules: approved.ambiguousRules.filter(
+          (id) => !manualRules.has(id),
+        ),
         observations,
         at,
         truncated: rows.length > 100,
@@ -319,7 +346,15 @@ export class AssessmentService {
             createdAt: snapshot.createdAt.toISOString(),
           }
         : null,
-      mappings: normalized.mappings,
+      mappings,
+      sourceBindings: bindingActive
+        ? {
+            id: binding!.id,
+            revision: binding!.revision,
+            selectionId: binding!.selectionId,
+            bindings: binding!.bindings,
+          }
+        : null,
       requestedAt: at.toISOString(),
     }
     const assessmentHash = digest({
