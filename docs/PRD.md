@@ -100,7 +100,7 @@ The PoC uses a **separate GitHub App installation/write identity restricted to a
 ### 5.2 MVP — Detect and explain
 
 **In scope:**
-- Single self-hosted organization; basic authentication and RBAC.
+- Single self-hosted organization; OIDC user sign-in, one-time first-Owner bootstrap, explicitly provisioned users and Preflyt-managed RBAC.
 - GitHub installation or scoped integration; repository onboarding.
 - Signed webhook ingestion and idempotent event tracking.
 - Read-only retrieval of PR diff, CI checks, selected logs, and repository metadata.
@@ -225,6 +225,7 @@ Each requirement is testable and has a delivery stage: P = restricted fixture-on
 | FR-005 | M | Enable/disable workflows at org and repo level; configure path filters and branch scopes. | Nonmatching events do not run agents. |
 | FR-006 | V1 | Support GitLab through the same repository/CI abstraction. | GitLab fixtures pass core integration contract tests. |
 | FR-007 | V1 | Separate Git read, branch-write, and PR-create authorization. | Agent execution token cannot create PRs or read secrets. |
+| FR-008 | M | Authenticate human users through the installation's configured OIDC provider using Authorization Code flow with PKCE. Bootstrap the first Owner only with a short-lived, single-use operator-supplied setup token; disable bootstrap after Owner creation. OIDC login grants no membership or role by itself. | Invalid issuer/audience/state is rejected; unprovisioned identities cannot access the organization; bootstrap expires and cannot be reused; login/session actions and role changes are audited. |
 
 ### 7.2 Events, scans, and findings
 
@@ -407,6 +408,8 @@ The selected provider's retention and data-use terms must be evaluated; a self-h
 
 **Application stack:** Node.js + TypeScript for API, integrations, queue/workflow workers, agent workers, and execution controller; React + TypeScript + Vite for the browser UI. Use **pnpm workspaces + Turborepo** for builds and shared package workflows. Use **PostgreSQL + Prisma** for typed data access and schema migrations. Choose an approved provider-neutral TypeScript agent SDK during a focused spike; **LangGraph.js is optional** and should be introduced only if it demonstrably improves stateful multi-agent workflows.
 
+**Human authentication:** One installation-configured OIDC provider; Authorization Code with PKCE; short-lived, single-use bootstrap for the first Owner; explicit membership provisioning and local Preflyt roles. The secure session and GitHub identity boundaries are defined in [ADR-0003](architecture/ADR-0003-oidc-user-authentication.md).
+
 **Separation of responsibilities:** NestJS handles authenticated requests and persists/schedules work; BullMQ workers handle long-running investigation state and coordination; TypeScript agent workers make model/tool decisions; the execution controller dispatches isolated Docker/Kubernetes jobs. Scanners and customer code may run in containers written in any language, but they are not part of the Preflyt application language decision. Third-party model gateways may use a different implementation language without becoming a Preflyt-maintained Python service.
 
 **Shared schemas:** TypeScript contracts and runtime validation (e.g., Zod or a comparable schema validator) cover API, event, agent-tool, and execution-job messages. Version all cross-process payloads; persist enough state for safe restart and reconciliation.
@@ -434,6 +437,14 @@ infra/
 pnpm-workspace.yaml
 turbo.json
 ~~~
+
+### 10.6 Human authentication and sessions (selected decision)
+
+MVP human sign-in uses the single OIDC provider configured for that self-hosted installation, following the OIDC Authorization Code flow with PKCE. The NestJS API performs the Authorization Code flow with PKCE, validates issuer, audience, signature, expiry and transaction state/nonce, then creates a server-managed session in a Secure, HttpOnly, SameSite cookie. Do not store identity or refresh tokens in browser storage. Keep provider client secrets in deployment-managed secrets.
+
+OIDC establishes identity; it does not automatically create organization access or assign Preflyt roles. An operator provisions the first Owner with a short-lived, single-use bootstrap token supplied out of band. The token is invalidated immediately after use, and bootstrap is disabled once an Owner exists. Further users need an authorized invitation/provisioning action; Preflyt maps identities by issuer plus subject and manages Owner/Admin/Developer/Viewer roles locally. Audit sign-in, sign-out, bootstrap, membership and role changes.
+
+GitHub App installation credentials remain a separate integration identity scoped to repositories and requested operations. Linking a GitHub account does not authenticate a Preflyt user. The initial bootstrap establishes the first owner; IdP outage and post-bootstrap recovery procedures remain an operational decision before beta.
 
 ## 11. Security, governance, and threat model
 
@@ -534,6 +545,7 @@ For each case capture baseline time, agent attempts, reproduction outcome, patch
 ### 15.2 MVP product acceptance
 
 - [ ] Admin can configure an organization, users, selected GitHub repositories, models, and budgets.
+- [ ] Users sign in through configured OIDC; only an out-of-band, expiring, single-use bootstrap token can establish the first Owner, and subsequent users require explicit provisioning. GitHub App credentials never act as user credentials.
 - [ ] PR and CI events are authenticated, deduplicated, and mapped to the correct commit.
 - [ ] Repository profiles drive applicable scanner/test configurations.
 - [ ] Findings are searchable and source-traceable, with pass/fail/inconclusive states.
@@ -576,7 +588,7 @@ For each case capture baseline time, agent attempts, reproduction outcome, patch
 
 These items require explicit engineering/product decisions before implementation; they are not resolved by this draft.
 
-1. Authentication for first deployment: built-in credentials, OIDC, or both?
+1. Define and document administrator recovery when the configured OIDC provider is unavailable or misconfigured; recovery must not create a standing local-password bypass.
 2. GitHub integration mechanism: GitHub App preferred; required permission set and installation ownership?
 3. Scope of allowed outbound network destinations per sandbox and external-model policy?
 4. Which **independently validated stronger isolation runtime** (gVisor/Kata/equivalent), cluster/node security profile and negative security-test suite satisfy the mandatory MVP execution gate?
@@ -605,7 +617,7 @@ These items require explicit engineering/product decisions before implementation
 
 ### Suggested next documents
 
-- [ADR-0001: TypeScript-first stack](architecture/ADR-0001-typescript-first-stack.md) and [ADR-0002: MVP execution safety, PoC scope, and verified remediation](architecture/ADR-0002-safe-execution-fixtures-remediation-contract.md) plus future ADRs for agent adapter, workflow engine, and model gateway.
+- [ADR-0001: TypeScript-first stack](architecture/ADR-0001-typescript-first-stack.md), [ADR-0002: MVP execution safety, PoC scope, and verified remediation](architecture/ADR-0002-safe-execution-fixtures-remediation-contract.md), and [ADR-0003: user authentication](architecture/ADR-0003-oidc-user-authentication.md); future ADRs will cover the agent adapter, workflow engine, and model gateway.
 - Threat model and data-flow diagram.
 - API/events and database schema specification.
 - MVP UX journeys and wireframes.

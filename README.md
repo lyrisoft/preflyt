@@ -48,14 +48,15 @@ It is **not** intended to replace GitHub Actions, GitLab CI, Jenkins, a source-c
 
 ## Proposed user experience
 
-1. An administrator connects a GitHub organization using scoped credentials.
-2. The administrator selects repositories, sets model/data policies, and enables workflows.
-3. A PR or failed CI job generates a signed event.
-4. Preflyt collects relevant diffs, test failures, and scanner output; creates a finding and investigation.
-5. An AI investigator proposes a hypothesis with evidence and, when enabled, reproduces the failure in an isolated execution job.
-6. **In fixture-only PoC or V1 remediation mode**, an agent generates a bounded patch and the platform reproduces the original failure and independently runs the **protected original reproduction harness** and all mandatory validation checks under an equivalent pinned environment. Agent-written tests cannot replace or weaken that harness.
-7. **Only for fixture-only PoC or authorized V1**, Preflyt creates a separate **draft** fix PR and verifies source/target state and the pushed tree again before human-review readiness. If the original change is on an open same-repository feature branch, the fix PR **targets that feature branch**, not the default branch. Known stale, forked or ambiguous targets stop automatic write-back. Post-creation races or later target changes invalidate current validation and trigger audited cleanup of the Preflyt-owned fix PR; unknown freshness blocks review promotion. The platform never self-approves or auto-merges.
-8. Audit events and approved outcomes become available for reporting and later engineering knowledge retrieval.
+1. An operator configures the installation's OIDC provider and uses a short-lived, single-use bootstrap token to establish the first Owner.
+2. The Owner provisions users in Preflyt and connects GitHub using a separate scoped GitHub App installation.
+3. The administrator selects repositories, sets model/data policies, and enables workflows.
+4. A PR or failed CI job generates a signed event.
+5. Preflyt collects relevant diffs, test failures, and scanner output; creates a finding and investigation.
+6. An AI investigator proposes a hypothesis with evidence and, when enabled, reproduces the failure in an isolated execution job.
+7. **In fixture-only PoC or V1 remediation mode**, an agent generates a bounded patch and the platform reproduces the original failure and independently runs the **protected original reproduction harness** and all mandatory validation checks under an equivalent pinned environment. Agent-written tests cannot replace or weaken that harness.
+8. **Only for fixture-only PoC or authorized V1**, Preflyt creates a separate **draft** fix PR and verifies source/target state and the pushed tree again before human-review readiness. If the original change is on an open same-repository feature branch, the fix PR **targets that feature branch**, not the default branch. Known stale, forked or ambiguous targets stop automatic write-back. Post-creation races or later target changes invalidate current validation and trigger audited cleanup of the Preflyt-owned fix PR; unknown freshness blocks review promotion. The platform never self-approves or auto-merges.
+9. Audit events and approved outcomes become available for reporting and later engineering knowledge retrieval.
 
 ## Architecture (proposed)
 
@@ -90,6 +91,7 @@ flowchart TB
 | Frontend | React + TypeScript + Vite |
 | Backend/control plane | Node.js + NestJS + TypeScript |
 | AI agent runtime | Node.js + TypeScript using provider-neutral tool contracts; evaluate Vercel AI SDK / OpenAI Agents SDK for JavaScript |
+| Human authentication | Installation-configured OIDC; one-time first-Owner bootstrap; Preflyt-managed membership and roles |
 | Model routing | LiteLLM container, with API-key-backed frontier models and optional local inference; application services remain TypeScript |
 | Workflow execution | BullMQ + Redis for durable jobs, bounded retries, and orchestration; consider Argo Workflows only if complex Kubernetes DAGs justify it |
 | Execution controller | TypeScript, using Docker APIs for local evaluation and `@kubernetes/client-node` for Kubernetes Jobs |
