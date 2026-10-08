@@ -137,7 +137,9 @@ export class GitHubProviderService {
       if (installations.some((installation) => BigInt(installation.id ?? 0) === installationId)) {
         return
       }
-      if (installations.length < 100) return
+      if (installations.length < 100) {
+        throw new ForbiddenException('Installing GitHub user cannot access this installation')
+      }
     }
     throw new Error('GitHub installation list exceeded the safe pagination limit')
   }
