@@ -59,7 +59,7 @@ export class GitHubService {
       browserBinding,
       'INSTALLATION',
     )
-    if (setupAction !== 'install') {
+    if (setupAction !== 'install' && setupAction !== 'update') {
       await this.audit('github_installation_denied', transaction.identityId, {
         reason: 'unexpected_setup_action',
       })

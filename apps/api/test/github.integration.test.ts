@@ -82,6 +82,19 @@ beforeEach(async () => {
 })
 
 describe('GitHub App installation and repository selection', () => {
+  it('authorizes an existing-installation update only through a valid state-bound setup flow', async () => {
+    const service = new GitHubService(prisma, provider as unknown as GitHubProviderService)
+    const started = await service.beginInstallation(identityId)
+    const state = new URL(started.url).searchParams.get('state')!
+    await expect(service.beginUserAuthorization(state, 'wrong-browser', '8800', 'update')).rejects.toThrow()
+    await expect(service.beginUserAuthorization(state, started.browserBinding, '8800', 'delete')).rejects.toThrow('flow is invalid')
+    const url = await service.beginUserAuthorization(state, started.browserBinding, '8800', 'update')
+    await service.completeUserAuthorization(new URL(url).searchParams.get('state')!, started.browserBinding, 'oauth-code')
+    expect(provider.verifyInstallation).toHaveBeenCalledWith(8800n)
+    expect(provider.userCanAccessInstallation).toHaveBeenCalledWith('ephemeral-user-token',8800n)
+    expect(await prisma.gitHubInstallation.count()).toBe(1)
+    await expect(service.beginUserAuthorization(state, started.browserBinding, '8800', 'update')).rejects.toThrow()
+  })
   it('binds both GitHub redirects to one browser and single-use server state', async () => {
     const service = new GitHubService(
       prisma,
