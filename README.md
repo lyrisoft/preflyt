@@ -55,6 +55,14 @@ Its main output is an **Engineering Readiness Report**: a traceable account of w
 
 For detailed user journeys, triggers, check examples, stage contracts and performance workloads, see [Capabilities across the SDLC](docs/product/sdlc-capabilities.md).
 
+## Built-in Engineering Standards Library
+
+Preflyt ships with versioned, first-party engineering policy packs so organizations can start with established rules rather than authoring policies from scratch. The initial library covers Baseline Engineering, Application Security, Backend Services, Frontend Applications and Infrastructure as Code; further packs cover API, database, production readiness, performance and compliance as their assessment adapters mature.
+
+During repository onboarding (P0), Preflyt recommends applicable packs based on detected technologies and allows an administrator to select Default, Recommended or Strict profiles. P1 maps existing CI evidence to the selected rules, P2 enforces deterministic policies through quality gates, and P3 introduces native approved scans. Unsupported and missing mandatory checks are never reported as passing.
+
+See the [Engineering Standards Library](docs/product/engineering-standards-library.md) for pack contracts, governance, release tasks and acceptance criteria.
+
 ## Example: a pull request assessment
 
 A developer opens a PR. Preflyt discovers changed paths and applicable organization standards, ingests CI evidence or executes eligible checks in an approved sandbox, then evaluates rules.
@@ -206,6 +214,7 @@ turbo.json
 
 - [Product Requirements Document](docs/PRD.md): user journeys, validation domains, policy semantics, functional requirements and acceptance criteria.
 - [SDLC capabilities](docs/product/sdlc-capabilities.md): laptop, repository, PR/CI, QA, performance/staging, production-feedback experience.
+- [Engineering Standards Library](docs/product/engineering-standards-library.md): built-in versioned policy packs, adoption profiles and enforcement phases.
 - [Incremental delivery plan](docs/roadmap/incremental-delivery.md): **independently deployable P0–P11 vertical releases**, implementation tasks and acceptance gates.
 - [ADR-0001 — TypeScript-first application stack](docs/architecture/ADR-0001-typescript-first-stack.md)
 - [ADR-0002 — MVP safe execution and optional remediation contract](docs/architecture/ADR-0002-safe-execution-fixtures-remediation-contract.md)
