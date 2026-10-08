@@ -1,5 +1,8 @@
 import 'reflect-metadata'
-import { createHmac, randomUUID } from 'node:crypto'
+import { ForbiddenException, ValidationPipe } from '@nestjs/common'
+import { CiArtifactController } from '../src/github-events/ci-artifact.controller.js'
+import { CiArtifactService } from '../src/github-events/ci-artifact.service.js'
+import { createHash, createHmac, randomUUID } from 'node:crypto'
 import { NestFactory } from '@nestjs/core'
 import type { NestExpressApplication } from '@nestjs/platform-express'
 import cookieParser from 'cookie-parser'
@@ -7,7 +10,7 @@ import request from 'supertest'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { PrismaService } from '../src/prisma/prisma.service.js'
 import { AuthService } from '../src/auth/auth.service.js'
-import { SessionGuard } from '../src/auth/session.guard.js'
+import { OwnerAdminGuard, SessionGuard } from '../src/auth/session.guard.js'
 import { GitHubWebhookController } from '../src/github-events/github-webhook.controller.js'
 import * as telemetry from '../src/telemetry.js'
 import { GitHubWebhookService } from '../src/github-events/github-webhook.service.js'
@@ -34,15 +37,17 @@ beforeAll(async () => {
   prisma = new PrismaService()
   await prisma.$connect()
   app = await NestFactory.create<NestExpressApplication>({
-    module: class TestModule {}, controllers: [GitHubWebhookController],
-    providers: [GitHubWebhookService, SessionGuard, { provide: PrismaService, useValue: prisma },
+    module: class TestModule {}, controllers: [GitHubWebhookController, CiArtifactController],
+    providers: [GitHubWebhookService, CiArtifactService, OwnerAdminGuard, SessionGuard, { provide: PrismaService, useValue: prisma },
       { provide: AuthService, useValue: {
-        sessionCookieName: 'test.sid', currentSession: async (token?: string) => token === 'VIEWER'
-          ? { authenticated: true, identityId, role: 'VIEWER' } : { authenticated: false },
+        sessionCookieName: 'test.sid', assertOrigin: (origin?: string) => { if (origin !== 'http://localhost:5173') throw new ForbiddenException() },
+        currentSession: async (token?: string) => ['VIEWER', 'OWNER', 'SUPER_ADMIN'].includes(token ?? '')
+          ? { authenticated: true, identityId, role: token } : { authenticated: false },
       } }],
   }, { logger: false, rawBody: true })
   app.useBodyParser('json', { limit: '1mb' })
   app.use(cookieParser())
+  app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
   await app.init()
 })
 afterAll(async () => {
@@ -215,4 +220,71 @@ describe('signed webhook durable inbox and repository history', () => {
     expect(await prisma.importedCiEvidence.count()).toBe(1)
   })
 
+})
+
+const report = (content = '<testsuite tests="1"><testcase name="secret-case"/></testsuite>') => ({ format: 'junit', content, sha256: createHash('sha256').update(content).digest('hex') })
+async function observation(status = 'completed') {
+  const id = randomUUID()
+  await send({ action: status === 'completed' ? 'completed' : 'created', installation: { id: 77 }, repository: { id: 501 },
+    check_run: { id: 2001, head_sha: 'c'.repeat(40), status, conclusion: status === 'completed' ? 'success' : null } }, id, 'check_run')
+  await new GitHubEventProcessor(prisma).process(id)
+  return id
+}
+const upload = (id: string, body = report(), role = 'OWNER', origin = 'http://localhost:5173', repo = '501') => request(app.getHttpServer())
+  .post(`/github/repositories/${repo}/ci-evidence/${id}/artifacts`).set('Cookie', 'test.sid=' + role).set('Origin', origin).send(body)
+
+describe('administrator-associated artifact imports', () => {
+  it('retains original bytes once under concurrent replay, audits exact SHA, and exposes redacted summaries', async () => {
+    const id = await observation()
+    const results = await Promise.all(Array.from({ length: 4 }, () => upload(id)))
+    expect(results.every(r => r.status === 201)).toBe(true)
+    expect(results.filter(r => !r.body.duplicate)).toHaveLength(1)
+    expect(await prisma.ciArtifactImport.count()).toBe(1)
+    const stored = await prisma.ciArtifactImport.findFirstOrThrow()
+    expect(Buffer.from(stored.content).toString()).toBe(report().content)
+    expect(stored.uploadedById).toBe(identityId)
+    expect(await prisma.auditEvent.count({ where: { event: 'ci.artifact.imported' } })).toBe(1)
+    expect((await prisma.auditEvent.findFirstOrThrow({ where: { event: 'ci.artifact.imported' } })).metadata).toMatchObject({ sourceSha: 'c'.repeat(40) })
+    const history = await request(app.getHttpServer()).get('/github/repositories/501/ci-evidence').set('Cookie', 'test.sid=VIEWER')
+    expect(history.body.qualityGate).toBeNull()
+    expect(history.body.observations[0].artifacts[0]).toMatchObject({ verification: 'ADMIN_ASSOCIATED_UNVERIFIED', summary: { tests: 1, passed: 1 } })
+    expect(JSON.stringify(history.body)).not.toContain('secret-case')
+    expect(JSON.stringify(results[0].body)).not.toContain('content')
+  })
+  it('requires an admin session, exact origin and a completed observation in the selected repository', async () => {
+    const id = await observation()
+    expect((await upload(id, report(), 'invalid')).status).toBe(401)
+    expect((await upload(id, report(), 'VIEWER')).status).toBe(403)
+    expect((await upload(id, report(), 'OWNER', 'https://attacker.example')).status).toBe(403)
+    expect((await upload(id, report(), 'OWNER', 'http://localhost:5173', '502')).status).toBe(403)
+    await prisma.gitHubRepository.create({ data: { githubId: 502n, installationId: 77n, name: 'other', fullName: 'fixture/other', ownerLogin: 'fixture', isPrivate: true, selected: true } })
+    expect((await upload(id, report(), 'OWNER', 'http://localhost:5173', '502')).status).toBe(404)
+    expect((await upload(randomUUID())).status).toBe(404)
+    expect((await upload(await observation('queued'))).status).toBe(400)
+    expect((await upload(id, report(), 'SUPER_ADMIN')).status).toBe(201)
+    await prisma.gitHubInstallation.update({ where: { id: 77n }, data: { active: false } })
+    expect((await upload(id)).status).toBe(403)
+  })
+  it('rejects digest mismatches, forged revision fields and oversized reports without writes', async () => {
+    const id = await observation()
+    expect((await upload(id, { ...report(), sha256: '0'.repeat(64) })).status).toBe(400)
+    expect((await upload(id, { ...report(), sourceSha: 'd'.repeat(40) } as ReturnType<typeof report>)).status).toBe(400)
+    expect((await upload(id, report('<testsuite>' + 'x'.repeat(262144) + '</testsuite>'))).status).toBe(400)
+    expect(await prisma.ciArtifactImport.count()).toBe(0)
+  })
+  it('enforces a serialized ten-artifact quota', async () => {
+    const id = await observation()
+    for (let i = 0; i < 10; i++) expect((await upload(id, report(`<testsuite name="${i}"/>`))).status).toBe(201)
+    expect((await upload(id, report('<testsuite name="extra"/>'))).status).toBe(429)
+    expect((await upload(id, report('<testsuite name="0"/>'))).body.duplicate).toBe(true)
+  })
+  it('rolls back original-byte storage when audit persistence fails', async () => {
+    const id = await observation()
+    const broken = { $transaction: (callback: (tx: unknown) => Promise<unknown>) => prisma.$transaction(tx => callback(new Proxy(tx, { get(target, key) {
+      return key === 'auditEvent' ? { create: async () => { throw new Error('storage unavailable') } } : Reflect.get(target, key)
+    } }))) } as unknown as PrismaService
+    await expect(new CiArtifactService(broken).import('501', id, report(), identityId)).rejects.toThrow('storage unavailable')
+    expect(await prisma.ciArtifactImport.count()).toBe(0)
+    expect(await prisma.auditEvent.count({ where: { event: 'ci.artifact.imported' } })).toBe(0)
+  })
 })

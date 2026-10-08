@@ -215,6 +215,7 @@ enum ImportedCiResult {
 
 model ImportedCiEvidence {
   deliveryId         String @id
+  artifacts          CiArtifactImport[]
   delivery           GitHubWebhookDelivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
   version            Int @default(1)
   repositoryGithubId BigInt
@@ -233,4 +234,20 @@ model ImportedCiEvidence {
   importedAt         DateTime @default(now())
   @@index([repositoryGithubId, installationId, observedAt])
   @@index([repositoryGithubId, sourceSha, observedAt])
+}
+
+// Administrator-associated original bytes; never treated as verified provider artifacts.
+model CiArtifactImport {
+  id            String @id @default(cuid())
+  deliveryId    String
+  evidence      ImportedCiEvidence @relation(fields: [deliveryId], references: [deliveryId], onDelete: Cascade, map: "CiArtifactImport_evidence_fkey")
+  format        String
+  sha256        String
+  parserVersion Int @default(1)
+  verification  String @default("ADMIN_ASSOCIATED_UNVERIFIED")
+  content       Bytes
+  summary       Json
+  uploadedById  String
+  createdAt     DateTime @default(now())
+  @@unique([deliveryId, format, sha256])
 }

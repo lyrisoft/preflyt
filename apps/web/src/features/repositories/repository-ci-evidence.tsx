@@ -20,8 +20,11 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { CiArtifactImports, type ArtifactSummary } from './ci-artifact-imports'
 
 type Observation = {
+  artifacts: ArtifactSummary[]
+  sourceAction: string
   deliveryId: string
   version: number
   sourceSha: string
@@ -46,8 +49,10 @@ const labels = {
 
 export function RepositoryCiEvidence({
   repositoryId,
+  canImport,
 }: {
   repositoryId: string
+  canImport: boolean
 }) {
   const [draft, setDraft] = useState('')
   const [sha, setSha] = useState('')
@@ -216,6 +221,17 @@ export function RepositoryCiEvidence({
                               </dd>
                             </dl>
                           </details>
+                          <CiArtifactImports
+                            repositoryId={repositoryId}
+                            deliveryId={item.deliveryId}
+                            artifacts={item.artifacts}
+                            canImport={
+                              canImport &&
+                              item.sourceStatus === 'completed' &&
+                              item.sourceAction === 'completed'
+                            }
+                            onImported={() => query.refetch()}
+                          />
                         </TableCell>
                       </TableRow>
                     ))}

@@ -206,6 +206,7 @@ export function RepositoryProfilePage() {
         {result && <RepositoryEvents repositoryId={repositoryId} />}
         {result && (
           <RepositoryCiEvidence
+            canImport={canDiscover}
             key={repositoryId}
             repositoryId={repositoryId}
           />

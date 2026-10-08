@@ -1,3 +1,4 @@
+import { artifactSummarySelect } from './ci-artifact.service.js'
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
 import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service.js'
@@ -52,6 +53,7 @@ export class GitHubWebhookService {
     const observations = await this.prisma.importedCiEvidence.findMany({
       where: { repositoryGithubId: repository.githubId, installationId: repository.installationId,
         ...(sha === undefined ? {} : { sourceSha: sha.toLowerCase() }) },
+      include: { artifacts: { select: artifactSummarySelect, orderBy: { createdAt: 'asc' } } },
       orderBy: [{ observedAt: 'desc' }, { deliveryId: 'desc' }], take: 50,
     })
     return { enabled: this.enabled, source: 'github_signed_webhook', qualityGate: null,
