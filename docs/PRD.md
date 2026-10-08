@@ -5,7 +5,7 @@
 **Tagline:** Engineering confidence before production  
 **Owner:** Lyrisoft Technologies  
 **Status:** Draft for engineering and product review; features are not yet implemented  
-**Version:** 0.3 — Shift Left scope correction  
+**Version:** 0.4 — SDLC lifecycle capabilities and deployable vertical slices  
 **Date:** 2026-10-08  
 **Source of architectural decisions:** [ADR-0001](architecture/ADR-0001-typescript-first-stack.md) · [ADR-0002](architecture/ADR-0002-safe-execution-fixtures-remediation-contract.md) · [ADR-0003](architecture/ADR-0003-oidc-user-authentication.md) · [ADR-0004](architecture/ADR-0004-shift-left-assessment-governance.md)
 
@@ -182,14 +182,18 @@ Capabilities:
 
 ### 6.1 Lifecycle coverage
 
-| Stage | Experience | Release |
-| --- | --- | --- |
-| Requirements / design | Evidence checklists and architecture/API-contract review inputs; optional advisory AI | V1 and later |
-| Local development | Developer-side/pre-commit checks and future CLI integrations | V1 and later |
-| Pull request | Repo-aware policy, applicable checks, AI explanation, actionable PR status | **MVP** |
-| CI | Ingest test/scanner evidence and execute approved checks where safe | **MVP** |
-| Pre-production | Performance, database migration, reliability and release-readiness evidence | V1 |
-| Production feedback | Track escaped defects and feed findings into earlier standards | V2 |
+| Stage | Primary goal | Planned workflow | Release slices |
+| --- | --- | --- | --- |
+| **Developer laptop** | Prevent defects before commit/push | Explicit CLI/pre-commit lint, secrets, types, tests, IaC/migration checks and local policy feedback | P5 |
+| **Repository** | Establish engineering posture/standards | Discover stack, profile controls, baseline and later scheduled drift assessment | P0, P1–P3, P11 |
+| **Pull request / CI** | Enforce change quality before merge | Import CI evidence, diff-aware planning, revision-bound gates, approved native validation and optional AI advice | P1–P4 |
+| **QA / functional validation** | Validate functional and compatibility readiness | Unit/integration/E2E/contract/regression evidence and QA gate | P6 |
+| **Performance / staging** | Catch latency and resilience regressions | k6 smoke, load, stress, spike, soak, breakpoint, scalability, regression, budgets and baselines | P7–P9, P11 |
+| **Production feedback** | Convert escaped defects into earlier preventive controls | Link incident/deploy evidence to missing checks and propose owner-approved policy changes | P10 |
+
+Requirements/design artifact validation is a later optional entrypoint alongside these six stages; production monitoring itself remains Shift Right and is used to improve earlier gates.
+
+**Authoritative full-stage user journeys:** [Preflyt across the SDLC](product/sdlc-capabilities.md). **Authoritative incremental release and implementation-task breakdown:** [Deployable delivery plan](roadmap/incremental-delivery.md).
 
 ### 6.2 User journey A: GitHub onboarding and baseline
 
@@ -244,6 +248,14 @@ flowchart TD
 
 ## 7. Delivery scope and roadmap
 
+### 7.0 Shipping principle: each phase independently usable
+
+No phase is considered delivered merely because a database, frontend shell, queue, infrastructure module or model gateway exists. **Every phase must ship a complete, deployable, user-visible vertical slice**, with its own installation/upgrade path, auth/security and safe-execution controls, end-to-end success/failure tests, observability, configuration, supported limitations and tested rollback. Earlier phases must keep working after later upgrades.
+
+The sequence of independently useful releases is: **P0 Repository Posture → P1 CI Evidence → P2 Policy Gates → P3 Secure Native Validation → P4 optional AI Explanations → P5 Developer CLI → P6 QA Readiness → P7 k6 Evidence/Gates → P8 Managed k6 Smoke/Load → P9 Advanced Performance → P10 Production Feedback → P11 Provider/Scale Extensions**.
+
+Implementation tasks, dependencies, release criteria and rollback gates for every slice are in [docs/roadmap/incremental-delivery.md](roadmap/incremental-delivery.md). Do not treat the umbrella MVP/V1 labels below as excuses to defer a usable outcome until all their components are implemented.
+
 ### 7.1 Technical proof of concept — validate assessments, not code generation
 
 **Required vertical slice:**
@@ -256,7 +268,7 @@ The PoC does **not** need to generate a patch or remediation PR. If a future sep
 
 ### 7.2 MVP — continuous engineering assessments
 
-**Must deliver (P0):**
+**MVP target outcomes, delivered incrementally by P0–P3:**
 
 - Self-hosted initial single-organization installation, OIDC user auth, authorization and audit.
 - GitHub integration, selected-repository onboarding, webhook signatures and idempotent PR/CI event ingestion.
@@ -266,7 +278,7 @@ The PoC does **not** need to generate a patch or remediation PR. If a future sep
 - Safe isolated repository execution **before** any Preflyt-run scanner, test, install/build or command on real repositories; ingest-only fail-safe fallback.
 - Normalized findings and source/provenance/freshness; deterministic quality-gate engine.
 - Readiness Report and revision-bound GitHub check/status feedback.
-- Optional AI explanation and analysis through approved model gateway; **must function without AI**.
+- Optional AI explanation and analysis through approved model gateway (**P4 extension**); **all core P0–P3 workflows must function without AI**.
 - Basic Overview, Repositories, Assessments, Findings, Policies, Models/Integrations and Audit screens.
 - Structured traces/metrics and per-run costs where models are used.
 - Docker Compose local/evaluation setup; supported Kubernetes deployment path for approved real-repo execution.
@@ -275,25 +287,25 @@ The PoC does **not** need to generate a patch or remediation PR. If a future sep
 
 ### 7.3 V1 — broaden prevention across the SDLC
 
-- GitLab integration; additional evidence-source adapters.
-- Reliability and observability readiness templates with **executable** checks wherever available.
-- Database migration compatibility assessments and pre-production validation.
-- Performance regression baselines and transparent comparability requirements.
-- Developer-side/CLI and design artifact assessment paths.
-- More detailed policy management, exceptions and approval workflows.
-- Scaled execution profiles and cost/compliance advisory checks.
-- Engineering coverage, trends and reporting.
+Deliver as separate working releases, not one all-or-nothing project:
+
+- **P5 Developer CLI:** locally initiated lint/types/secrets/dependencies and policy feedback, followed by local test/IaC/migration expansion.
+- **P6 QA readiness:** import test suites and release candidate evidence, then add API-contract/database compatibility checks and QA gates.
+- **P7 Performance evidence:** import existing k6 result artifacts, apply performance budgets and publish comparable baseline reports **without needing a Preflyt-owned load generator**.
+- **P8 Managed performance:** authorized non-production k6 **smoke and load** tests using controlled execution, thresholds, results and cancellation.
+- **P9 Advanced performance:** safe **stress, spike, soak/endurance, breakpoint, scalability and regression** scenarios with workload limits, meaningful baselines and reporting.
+- Optional domain extensions: reliability/observability readiness, versioned exceptions and approval workflows, GitLab and design/requirements checks, each delivered as a separate usable vertical slice.
+
+Complex distributed k6 Operator execution and organization-wide trends are later extensions unless validated demand justifies an earlier deployable slice.
 
 **Automated remediation remains a separately proposed optional extension**, not a condition for V1 completion.
 
-### 7.4 V2 — organization-wide engineering intelligence
+### 7.4 V2 — production feedback and broader engineering intelligence
 
-- Expanded reliability, performance, cloud-cost, compliance and database policy libraries.
-- Evidence-backed organizational engineering trends, recurring issue patterns and escaped-defect feedback.
-- Cross-repository assessment history within authorized organization boundaries.
-- Advanced workflow templates and contextual AI advisory agents.
-- Additional source systems and private/offline inference configurations.
-- Optional explicitly authorized remediation integration if validated, justified and separately prioritized.
+- **P10 Production feedback:** read-only incident/deployment context, correlation with prior engineering evidence, owner-reviewed proposed checks, and recurrence tracking.
+- **P11 Expansion:** GitLab and other provider adapters, scheduled posture/drift reports, optional distributed k6 Operator execution, observability correlations and broader cost/compliance/reliability policies.
+- Broader cross-repository assessment trends, context-aware AI *advice*, and additional local/design-stage integrations may ship as independently useful follow-on releases.
+- Automated code remediation remains a **separately authorized optional module**, not a condition for any stage to be usable.
 
 **Roadmap gate:** features advance based on validated effectiveness, safety and user adoption, not assumed model autonomy.
 
@@ -346,7 +358,26 @@ Use **M** for MVP, **V1** for next stage and **V2** for expansion. Every require
 | FR-033 | M | Work normally without any model/API key | Scans, policy and readiness operate when inference is disabled |
 | FR-034 | V1 | Provide optional specialized domain advisory analysis | No automatic code edits or Git PR writes implied |
 
-### 8.5 User interface, feedback and audit
+### 8.5 Stage-specific capabilities and deployable increments
+
+The [SDLC capability document](product/sdlc-capabilities.md) defines inputs, outputs and rules for all six stages. The [delivery plan](roadmap/incremental-delivery.md) breaks every stage into independently deployable slices. The following requirements ensure that the roadmap produces real usable outcomes:
+
+| ID | Phase | Required capability | Acceptance |
+| --- | --- | --- | --- |
+| FR-050 | P0 | Repository engineering profile and missing-control view | One selected GitHub repository produces a useful profile in a clean installation |
+| FR-051 | P1 | CI evidence assessment | A sample PR displays imported checks, exact revision, provenance and failed/missing evidence |
+| FR-052 | P2 | Policy quality gate | A required failing check BLOCKs, absent evidence is INCOMPLETE and a new commit does not inherit old PASS |
+| FR-053 | P3 | Safely executed native scanners/tests | Seeded issue detected in approved sandbox; missing approved executor fails closed to ingest-only |
+| FR-054 | P4 | Optional AI explanation | Evidence-linked explanation never changes a deterministic gate; no-AI operation remains usable |
+| FR-055 | P5 | Local developer checks | CLI detects seeded local issue and marks its result advisory, not a trusted CI pass |
+| FR-056 | P6 | QA release readiness | Release candidate includes test-suite identity, required contract checks and incomplete/failing gate semantics |
+| FR-057 | P7 | Import k6 reports and evaluate budgets | Existing k6 result becomes an evidence-backed performance report without managed load generation |
+| FR-058 | P8 | Execute bounded k6 smoke/load on registered non-production target | Achieved workload, p95/error thresholds, evidence and safe cancellation are visible |
+| FR-059 | P9 | Advanced k6 stress/spike/soak/breakpoint/scalability | Workload-specific limits, emergency stop, baseline comparability and complete results are enforced |
+| FR-060 | P10 | Production feedback to earlier engineering standards | SRE links incident and release to previous control gaps and produces an owner-reviewable policy proposal |
+| FR-061 | All | Complete deployable usable vertical slice | Phase can be installed/upgraded, demonstrated, monitored and safely rolled back without later phases |
+
+### 8.6 User interface, feedback and audit
 
 | ID | Stage | Requirement | Acceptance |
 | --- | --- | --- | --- |
@@ -552,16 +583,17 @@ Avoid claiming engineering incidents were prevented without observing policy enf
 9. API contract and persistence schemas for AssessmentPlan, CheckEvidence and PolicyEvaluation.
 10. Whether any future remediation module should be built or integrated with an external coding tool; **not a blocker for the core platform**.
 
-## 17. Engineering workstreams
+## 17. Engineering workstreams and release task ownership
 
-1. **Foundation:** pnpm/Turborepo, NestJS API, React/Vite UI, Prisma/PostgreSQL, OIDC, BullMQ and audit/telemetry.
-2. **SCM and repository profiles:** GitHub installation, signed webhook, PR/CI event correlation, language/framework/IaC discovery.
-3. **Assessment planner and evidence:** subject SHA, policy-driven applicability, provenance, normalized findings, artifact storage.
-4. **Safe execution + imports:** CI report adapters, approved sandbox profile, security test harness, ingestion-only fallback.
-5. **Policy/gate engine:** versioned standards, deterministic results, advisory/blocking rollout, GitHub status publisher.
-6. **AI assessment:** read-only TypeScript intelligence worker, model gateway, source/data egress control, evidence-linked advice.
-7. **Product UX and evaluation:** repository/assessment pages, readiness report, audit, fixture corpus, operational documentation.
-8. **V1 extensions:** richer SRE/DB/performance/observability checks, pre-production evidence, GitLab and local developer entrypoints.
+The release ownership model is **end-to-end vertical slices**, not standalone infrastructure workstreams. Each phase in [the task breakdown](roadmap/incremental-delivery.md) contains the minimum frontend, API, provider, storage, job, policy, test, security, documentation, deployment and rollback tasks required for the promised user action.
+
+- **P0–P3:** repository profile → imported CI evidence → required quality gate → approved native scans/tests.
+- **P4:** optional read-only AI explanation, isolated from policy evaluation.
+- **P5–P6:** local developer checks and QA/release-candidate assessments.
+- **P7–P9:** k6 performance evidence/imports, managed smoke/load, then advanced controlled performance profiles.
+- **P10–P11:** production feedback, provider expansion, scheduled baselines and advanced operations.
+
+A task can be developed behind a feature flag in parallel, but it cannot be counted as delivered until its **usable phase-level acceptance test** and rollback procedure pass.
 
 ### Related documents
 
@@ -569,6 +601,8 @@ Avoid claiming engineering incidents were prevented without observing policy enf
 - [ADR-0002 — Safe execution and optional future remediation contract](architecture/ADR-0002-safe-execution-fixtures-remediation-contract.md)
 - [ADR-0003 — OIDC user authentication](architecture/ADR-0003-oidc-user-authentication.md)
 - [ADR-0004 — Shift Left assessment and governance architecture](architecture/ADR-0004-shift-left-assessment-governance.md)
+- [Capabilities across the SDLC](product/sdlc-capabilities.md)
+- [Incremental delivery phases and task breakdown](roadmap/incremental-delivery.md)
 - [README](../README.md)
 
 ---

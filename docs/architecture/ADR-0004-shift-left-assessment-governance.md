@@ -37,6 +37,10 @@ Preflyt is an **AI-native Shift Left engineering platform** with three product e
 
 No single check is universally applicable. Assessment *plans* depend on repository characteristics, touched paths, changed capabilities, organization standards and stage context.
 
+The [six-stage SDLC capability model](../product/sdlc-capabilities.md) distinguishes **developer laptop, repository, PR/CI, QA, performance/staging, and production-feedback** use cases, alongside optional requirements/design checks. Production integration is **feedback into earlier assurance**, not a production auto-remediation or APM platform.
+
+**Delivery rule:** each phase must produce a **deployable and usable** product slice, not only an architecture component. The [P0–P11 incremental delivery plan](../roadmap/incremental-delivery.md) is the implementation release contract. Later stages must extend a common Assessment/Policy/Evidence model without blocking earlier useful releases.
+
 ## Assessment model
 
 **State machine:** REQUESTED -> PLANNED -> COLLECTING -> EVALUATING -> COMPLETED / INCONCLUSIVE / FAILED / CANCELLED.
@@ -126,7 +130,9 @@ flowchart TD
 | Compliance | organization-defined evidence obligations and security controls | Rules/controls with provenance and policy exceptions, not automatic certification |
 | Cost | IaC estimated cost deltas and budgets | Validated plans / cost tools; estimates clearly labeled and nonbinding |
 
-**MVP vertical slice:** GitHub PR/CI event -> repo profile -> security, tests, and IaC evidence -> policy decision -> readiness report / PR check -> optional AI explanation. Other domains must be architecturally extensible but are not all required to be fully implemented at MVP.
+**MVP user-value slices:** P0 connects and profiles selected GitHub repositories; P1 imports CI evidence; P2 publishes an actual deterministic PR quality gate; P3 adds safe native scanners/testing in an independently approved executor. Each can be deployed and used without the later releases. AI explanation is an **optional P4 enhancement**, not a prerequisite.
+
+Subsequent phases use the same planning/reporting contracts: P5 local developer CLI, P6 QA readiness, P7 k6 result ingestion/performance budgets, P8 managed k6 smoke/load, P9 advanced controlled stress/spike/soak/breakpoint/scalability, P10 production-feedback-based policy improvement and P11 optional provider/scaling extensions. Compare test results only where environment and workload are meaningfully comparable; gate impact is determined by recorded evidence and policy, not AI.
 
 ## Governance and quality gates
 
@@ -150,6 +156,12 @@ Accordingly:
 - The assessment platform can recommend a change without editing source code.
 - Future remediation integration must remain optional, independently authorized, and separately validated.
 
+## Phase-level operability and usability
+
+Every increment must include a working end-to-end user workflow, named trigger and target, minimal UI/API/persistence/worker path, documented installation/upgrade, safe default configuration, audit/telemetry, expected success and failure tests, operator rollback and backward compatibility. **A foundation-only deployment is not a complete phase.**
+
+The GitHub PR pipeline begins with imported evidence and does not wait for a sandbox; P3 enables native execution only after the mandatory ADR-0002 isolation approval. The k6 pathway starts with imported reports and budgets before Preflyt performs any load testing. Production evidence is read-only and requires human approval before policies change.
+
 ## Acceptance criteria for this decision
 
 - [ ] A GitHub PR change is assessed against a versioned ruleset with exact revision-bound, evidence-backed quality gate.
@@ -162,5 +174,10 @@ Accordingly:
 - [ ] Report differentiates deterministic observations from AI advice.
 - [ ] No code-writing GitHub permission is required to run the product's core flow.
 - [ ] Reports and check runs are tied to an exact commit SHA and cannot be reused as current results after code changes.
+- [ ] All six SDLC stages share typed assessment/evidence/policy contracts with stage-specific triggers, environment and evidence types.
+- [ ] Every delivered phase is independently deployable/usable, has an end-to-end success case, a safe failure path and a tested rollback.
+- [ ] The first deployable P0 delivers an actual connected-repository profile; it is not only service scaffolding.
+- [ ] Imported k6 result assessment works before Preflyt-run load generation is enabled.
+- [ ] Production telemetry cannot autonomously alter gate enforcement or deploy changes.
 
 **Implementation status:** architecture decision only. This ADR does not claim any checks, control plane, UI, sandbox or source-control integration has shipped.

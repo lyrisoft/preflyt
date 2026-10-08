@@ -35,12 +35,25 @@ Its main output is an **Engineering Readiness Report**: a traceable account of w
 | **Reliability** | Graceful shutdown, timeouts, retries, health checks, readiness, resilience |
 | **Infrastructure** | Terraform/OpenTofu, Kubernetes, Docker and cloud policy validation |
 | **Databases** | Destructive migration detection, backward compatibility, query-performance tests |
-| **Performance** | Reproducible benchmark baselines, latency/resource regression |
+| **Performance** | k6 smoke, load, stress, spike, soak/endurance, breakpoint, scalability and regression tests; versioned budgets, comparability and target safety |
 | **Observability** | Trace/log/metric instrumentation and health/telemetry contracts |
 | **Compliance** | Organization-defined requirements, controls and auditable evidence |
 | **Cost** | IaC plan cost estimates and engineering budgets |
 
-**MVP priority:** security, testing/code quality and infrastructure assessments on **GitHub pull requests and CI**. Other domains and earlier/later SDLC entrypoints expand through subsequent releases; the full list above does not mean all checks ship in the MVP.
+**MVP priority:** repository posture plus security, testing/code quality and infrastructure assessments on **GitHub pull requests and CI**. Other stages and deeper domain checks arrive in deployable increments.
+
+### Shift Left at each SDLC stage
+
+| Stage | What Preflyt will help engineers do | Delivery |
+| --- | --- | --- |
+| **Developer laptop** | Run local checks before commit, sync organization policy, receive actionable feedback | V1 |
+| **Repository** | Discover stack, find missing controls, apply repository engineering standards | MVP |
+| **PR / CI** | Evaluate changes, import/run safe checks, publish evidence-backed quality gates | MVP |
+| **QA** | Evaluate test coverage, API contracts, regressions and database migration compatibility | V1 |
+| **Performance / staging** | Import and execute safe k6 workloads; compare baselines and performance budgets | V1 basic; advanced later |
+| **Production feedback** | Trace escaped defects to revisions and recommend stronger earlier controls | V2 |
+
+For detailed user journeys, triggers, check examples, stage contracts and performance workloads, see [Capabilities across the SDLC](docs/product/sdlc-capabilities.md).
 
 ## Example: a pull request assessment
 
@@ -150,7 +163,9 @@ See [ADR-0002](docs/architecture/ADR-0002-safe-execution-fixtures-remediation-co
 | **V2** | Engineering intelligence at scale | More domain coverage, historical trend analysis, recurring issue patterns, organizational standards and integrations |
 | **Optional future module** | Separately approved | AI-assisted code remediation or fix PRs; not required for Preflyt to deliver Shift Left value |
 
-The roadmap is directional, not a delivery promise. See the [PRD](docs/PRD.md) for testable acceptance criteria.
+**Every engineering phase must be deployable and usable on its own.** The first usable release is a GitHub-connected **Repository Posture** view, not an empty backend. Subsequent slices add CI evidence, deterministic quality gates, approved scans, optional AI explanations, a local CLI, QA readiness, performance testing and production feedback, with each existing capability preserved.
+
+The roadmap is directional, not a delivery promise. See the [phase-by-phase vertical-slice delivery plan](docs/roadmap/incremental-delivery.md) for P0–P11, implementation tasks, acceptance demonstrations, operations and rollback requirements; the [PRD](docs/PRD.md) defines product acceptance criteria.
 
 ## Proposed monorepo
 
@@ -183,7 +198,9 @@ turbo.json
 
 ## Documents and decision records
 
-- [Product Requirements Document](docs/PRD.md): user journeys, validation domains, policy semantics, functional requirements and phased acceptance criteria.
+- [Product Requirements Document](docs/PRD.md): user journeys, validation domains, policy semantics, functional requirements and acceptance criteria.
+- [SDLC capabilities](docs/product/sdlc-capabilities.md): laptop, repository, PR/CI, QA, performance/staging, production-feedback experience.
+- [Incremental delivery plan](docs/roadmap/incremental-delivery.md): **independently deployable P0–P11 vertical releases**, implementation tasks and acceptance gates.
 - [ADR-0001 — TypeScript-first application stack](docs/architecture/ADR-0001-typescript-first-stack.md)
 - [ADR-0002 — MVP safe execution and optional remediation contract](docs/architecture/ADR-0002-safe-execution-fixtures-remediation-contract.md)
 - [ADR-0003 — OIDC human authentication](docs/architecture/ADR-0003-oidc-user-authentication.md)
