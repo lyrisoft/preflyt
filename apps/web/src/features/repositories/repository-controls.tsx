@@ -67,7 +67,9 @@ export function RepositoryControls({
   return (
     <Card className='gap-4'>
       <CardHeader>
-        <CardTitle>Controls</CardTitle>
+        <CardTitle asChild>
+          <h2>Controls</h2>
+        </CardTitle>
         <CardDescription>
           {data?.selection
             ? `From the saved ${data.selection.profile.toLowerCase()} standards selection.`
@@ -97,7 +99,7 @@ export function RepositoryControls({
                     type='button'
                     aria-pressed={filter === item.value}
                     onClick={() => onFilter(item.value)}
-                    className='inline-flex h-7 items-center gap-1.5 rounded-sm px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring aria-pressed:bg-muted aria-pressed:text-foreground'
+                    className='touch-target inline-flex h-7 items-center gap-1.5 rounded-sm px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring aria-pressed:bg-muted aria-pressed:text-foreground'
                   >
                     {item.label}
                     <span className='tabular-nums opacity-70'>

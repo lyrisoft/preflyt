@@ -85,16 +85,16 @@ export const sourceLabel = (kind: string, id: string | number) =>
 
 /** Mark fills for charts; validated order keeps CVD-confusable hues apart. */
 export const toneFill: Record<StatusTone, string> = {
-  success: 'bg-green-600',
-  warning: 'bg-amber-600',
-  error: 'bg-red-600',
-  info: 'bg-blue-600',
-  neutral: 'bg-slate-400 dark:bg-slate-500',
+  success: 'bg-success',
+  warning: 'bg-warning',
+  error: 'bg-danger',
+  info: 'bg-info',
+  neutral: 'bg-neutral-mark',
 }
 export const toneTrack: Record<StatusTone, string> = {
-  success: 'bg-green-600/15',
-  warning: 'bg-amber-600/15',
-  error: 'bg-red-600/15',
-  info: 'bg-blue-600/15',
+  success: 'bg-success/15',
+  warning: 'bg-warning/15',
+  error: 'bg-danger/15',
+  info: 'bg-info/15',
   neutral: 'bg-muted',
 }

@@ -112,3 +112,19 @@
     transform: scaleY(0);
   }
 }
+
+/* Touch screens get a 44px hit area; the visible control keeps its dense size. */
+@utility touch-target {
+  position: relative;
+  @media (pointer: coarse) {
+    &::after {
+      content: '';
+      position: absolute;
+      inset-inline-start: 50%;
+      top: 50%;
+      width: max(100%, 2.75rem);
+      height: max(100%, 2.75rem);
+      translate: -50% -50%;
+    }
+  }
+}

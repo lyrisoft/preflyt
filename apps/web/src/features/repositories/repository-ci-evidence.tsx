@@ -130,7 +130,9 @@ export function RepositoryCiEvidence({
   return (
     <Card className='gap-4'>
       <CardHeader>
-        <CardTitle>CI results</CardTitle>
+        <CardTitle asChild>
+          <h2>CI results</h2>
+        </CardTitle>
         <CardDescription>
           Latest 50 GitHub check and workflow results at exact commits.
         </CardDescription>
@@ -138,7 +140,7 @@ export function RepositoryCiEvidence({
           <Button
             variant='outline'
             size='icon'
-            className='size-8'
+            className='touch-target size-8'
             aria-label='Refresh CI results'
             disabled={query.isFetching}
             onClick={() => void query.refetch()}
@@ -162,6 +164,7 @@ export function RepositoryCiEvidence({
             className='h-8 min-w-0 flex-1 font-mono text-xs'
             placeholder='Filter by full commit SHA'
             aria-invalid={!valid}
+            aria-describedby={valid ? undefined : 'ci-filter-error'}
             onChange={(event) => setDraft(event.target.value.trim())}
           />
           <Button type='submit' size='sm' variant='outline' disabled={!valid}>
@@ -181,7 +184,7 @@ export function RepositoryCiEvidence({
             </Button>
           )}
           {!valid && (
-            <p className='w-full text-xs text-destructive'>
+            <p id='ci-filter-error' className='w-full text-xs text-destructive'>
               Enter all 40 characters of a commit SHA.
             </p>
           )}
@@ -261,7 +264,7 @@ export function RepositoryCiEvidence({
                           <Button
                             variant='ghost'
                             size='icon'
-                            className='size-8'
+                            className='touch-target size-8'
                             aria-label={`Actions for ${label}`}
                           >
                             <MoreHorizontal />

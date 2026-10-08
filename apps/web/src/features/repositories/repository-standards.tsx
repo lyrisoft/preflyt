@@ -211,7 +211,7 @@ function RulesDialog({ pack }: { pack: Pack }) {
         <Button
           variant='ghost'
           size='sm'
-          className='h-7 px-2 text-xs'
+          className='touch-target h-7 px-2 text-xs'
           aria-label={`View ${pack.title} rules`}
         >
           <ListChecks aria-hidden='true' />
@@ -281,7 +281,9 @@ export function RepositoryStandards({
       )}
       <Card className='gap-4'>
         <CardHeader>
-          <CardTitle>Standards selection</CardTitle>
+          <CardTitle asChild>
+            <h2>Standards selection</h2>
+          </CardTitle>
           <CardDescription>
             Packs that define this repository&apos;s controls.
           </CardDescription>
@@ -289,7 +291,7 @@ export function RepositoryStandards({
             <Button
               variant='outline'
               size='icon'
-              className='size-8'
+              className='touch-target size-8'
               aria-label='Reload standards'
               disabled={query.isFetching}
               onClick={() => void query.refetch()}
@@ -372,7 +374,9 @@ export function RepositoryStandards({
       {data && (
         <Card className='gap-4'>
           <CardHeader>
-            <CardTitle>Pack catalogue</CardTitle>
+            <CardTitle asChild>
+              <h2>Pack catalogue</h2>
+            </CardTitle>
             <CardDescription>
               First-party packs available in this deployment.
             </CardDescription>

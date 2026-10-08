@@ -58,7 +58,7 @@ function TileLink({
     <Button
       variant='ghost'
       size='sm'
-      className='-me-2 h-6 px-2 text-xs text-muted-foreground'
+      className='touch-target -me-2 h-6 px-2 text-xs text-muted-foreground'
       onClick={onClick}
     >
       {children}
@@ -195,14 +195,14 @@ export function PostureSummary({
               <button
                 type='button'
                 onClick={() => onFilter('review')}
-                className='flex items-center gap-1.5 text-start text-xs font-medium text-amber-700 hover:underline dark:text-amber-400'
+                className='touch-target flex min-h-6 items-center gap-1.5 text-start text-xs font-medium text-warning-text hover:underline'
               >
                 <AlertTriangle aria-hidden='true' className='size-3.5' />
                 {requiredGaps} required{' '}
                 {requiredGaps === 1 ? 'control needs' : 'controls need'} review
               </button>
             ) : (
-              <p className='flex items-center gap-1.5 text-xs font-medium text-green-700 dark:text-green-400'>
+              <p className='flex items-center gap-1.5 text-xs font-medium text-success-text'>
                 <CircleCheck aria-hidden='true' className='size-3.5' />
                 Every required control has config
               </p>
@@ -242,7 +242,11 @@ export function PostureSummary({
               </span>
             </p>
             <RunStrip
-              label={`Last ${runs.length} CI results, oldest first`}
+              label={`Last ${runs.length} CI results, oldest first: ${ciSegments
+                .map(
+                  (segment) => `${segment.value} ${segment.label.toLowerCase()}`
+                )
+                .join(', ')}`}
               runs={runs.map((item) => ({
                 key: item.deliveryId,
                 tone: ciResultStatus[item.result].tone,

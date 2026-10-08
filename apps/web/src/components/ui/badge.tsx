@@ -17,12 +17,12 @@ const badgeVariants = cva(
         outline:
           'text-foreground [a&]:hover:bg-accent [a&]:hover:text-accent-foreground',
         success:
-          'rounded-lg border-green-600/20 bg-green-600/10 font-semibold text-green-700 dark:text-green-400',
+          'rounded-lg border-success/20 bg-success/10 font-semibold text-success-text',
         warning:
-          'rounded-lg border-amber-500/20 bg-amber-500/10 font-semibold text-amber-700 dark:text-amber-400',
+          'rounded-lg border-warning/20 bg-warning/10 font-semibold text-warning-text',
         error:
-          'rounded-lg border-destructive/20 bg-destructive/10 font-semibold text-destructive dark:text-red-400',
-        info: 'rounded-lg border-blue-600/25 bg-blue-600/10 font-semibold text-blue-700 dark:text-blue-400',
+          'rounded-lg border-danger/20 bg-danger/10 font-semibold text-danger-text',
+        info: 'rounded-lg border-info/25 bg-info/10 font-semibold text-info-text',
         neutral:
           'rounded-lg border-border bg-muted font-semibold text-foreground',
       },

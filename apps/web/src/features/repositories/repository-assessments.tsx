@@ -306,7 +306,9 @@ export function RepositoryAssessments({
   return (
     <Card className='gap-4'>
       <CardHeader>
-        <CardTitle>Commit assessments</CardTitle>
+        <CardTitle asChild>
+          <h2>Commit assessments</h2>
+        </CardTitle>
         <CardDescription>
           Standards and CI results frozen at an exact commit.
         </CardDescription>
@@ -314,7 +316,7 @@ export function RepositoryAssessments({
           <Button
             size='icon'
             variant='outline'
-            className='size-8'
+            className='touch-target size-8'
             aria-label='Reload assessments'
             disabled={history.isFetching}
             onClick={() => {
@@ -449,11 +451,11 @@ export function RepositoryAssessments({
                   {data.report.collectionTruncated && (
                     <p
                       role='alert'
-                      className='flex items-center gap-2 rounded-md border border-amber-600/30 bg-amber-600/5 p-3 text-sm'
+                      className='flex items-center gap-2 rounded-md border border-warning/30 bg-warning/5 p-3 text-sm'
                     >
                       <AlertTriangle
                         aria-hidden='true'
-                        className='size-4 text-amber-600'
+                        className='size-4 text-warning'
                       />
                       CI collection hit its 100-result limit; coverage is
                       incomplete.

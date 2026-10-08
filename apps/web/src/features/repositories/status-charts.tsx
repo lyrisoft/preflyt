@@ -1,7 +1,8 @@
+import * as TooltipPrimitive from '@radix-ui/react-tooltip'
 import { cn } from '@/lib/utils'
 import {
-  Tooltip,
   TooltipContent,
+  TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import type { StatusTone } from '@/components/status-badge'
@@ -25,37 +26,39 @@ export function StackedBar({
   const visible = segments.filter((segment) => segment.value > 0)
   const total = visible.reduce((sum, segment) => sum + segment.value, 0)
   return (
-    <div
-      role='img'
-      aria-label={`${label}: ${segments.map((s) => `${s.value} ${s.label.toLowerCase()}`).join(', ')}`}
-      className='flex h-5 w-full mark-grow-x items-center gap-0.5'
-    >
-      {total === 0 ? (
-        <div className='h-2.5 w-full rounded-sm bg-muted' />
-      ) : (
-        visible.map((segment) => (
-          <Tooltip key={segment.key}>
-            <TooltipTrigger asChild>
-              <div
-                className='flex h-5 min-w-1.5 items-center'
-                style={{ flexGrow: segment.value }}
-              >
+    <TooltipProvider>
+      <div
+        role='img'
+        aria-label={`${label}: ${segments.map((s) => `${s.value} ${s.label.toLowerCase()}`).join(', ')}`}
+        className='flex h-5 w-full mark-grow-x items-center gap-0.5'
+      >
+        {total === 0 ? (
+          <div className='h-2.5 w-full rounded-sm bg-muted' />
+        ) : (
+          visible.map((segment) => (
+            <TooltipPrimitive.Root key={segment.key}>
+              <TooltipTrigger asChild>
                 <div
-                  className={cn(
-                    'h-2.5 w-full rounded-sm',
-                    toneFill[segment.tone]
-                  )}
-                />
-              </div>
-            </TooltipTrigger>
-            <TooltipContent>
-              {segment.label}: {segment.value} of {total} (
-              {Math.round((segment.value / total) * 100)}%)
-            </TooltipContent>
-          </Tooltip>
-        ))
-      )}
-    </div>
+                  className='flex h-5 min-w-1.5 items-center'
+                  style={{ flexGrow: segment.value }}
+                >
+                  <div
+                    className={cn(
+                      'h-2.5 w-full rounded-sm',
+                      toneFill[segment.tone]
+                    )}
+                  />
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                {segment.label}: {segment.value} of {total} (
+                {Math.round((segment.value / total) * 100)}%)
+              </TooltipContent>
+            </TooltipPrimitive.Root>
+          ))
+        )}
+      </div>
+    </TooltipProvider>
   )
 }
 
@@ -92,7 +95,7 @@ export function Legend({
                 type='button'
                 aria-pressed={active === segment.key}
                 onClick={() => onSelect(segment.key)}
-                className='-mx-1 inline-flex items-center gap-1.5 rounded px-1 py-0.5 hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring aria-pressed:bg-muted'
+                className='touch-target -mx-1 inline-flex min-h-6 items-center gap-1.5 rounded px-1 hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring aria-pressed:bg-muted'
               >
                 {content}
               </button>
@@ -149,26 +152,28 @@ export type Run = {
 /** Chronological run history, oldest to newest. */
 export function RunStrip({ runs, label }: { runs: Run[]; label: string }) {
   return (
-    <div role='img' aria-label={label} className='flex h-8 items-end gap-0.5'>
-      {runs.map((run, index) => (
-        <Tooltip key={run.key}>
-          <TooltipTrigger asChild>
-            <div className='flex h-8 w-2 shrink-0 items-end'>
-              <div
-                className={cn(
-                  'w-full mark-grow-y rounded-sm',
-                  toneFill[run.tone]
-                )}
-                style={{
-                  height: `${Math.round(run.weight * 100)}%`,
-                  animationDelay: `${index * 18}ms`,
-                }}
-              />
-            </div>
-          </TooltipTrigger>
-          <TooltipContent>{run.label}</TooltipContent>
-        </Tooltip>
-      ))}
-    </div>
+    <TooltipProvider>
+      <div role='img' aria-label={label} className='flex h-8 items-end gap-0.5'>
+        {runs.map((run, index) => (
+          <TooltipPrimitive.Root key={run.key}>
+            <TooltipTrigger asChild>
+              <div className='flex h-8 w-2 shrink-0 items-end'>
+                <div
+                  className={cn(
+                    'w-full mark-grow-y rounded-sm',
+                    toneFill[run.tone]
+                  )}
+                  style={{
+                    height: `${Math.round(run.weight * 100)}%`,
+                    animationDelay: `${index * 18}ms`,
+                  }}
+                />
+              </div>
+            </TooltipTrigger>
+            <TooltipContent>{run.label}</TooltipContent>
+          </TooltipPrimitive.Root>
+        ))}
+      </div>
+    </TooltipProvider>
   )
 }

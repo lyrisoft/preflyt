@@ -37,7 +37,7 @@ export function EvidenceDialog({
           variant='ghost'
           size='sm'
           aria-label={`${title}: ${count}`}
-          className='-ms-2 h-7 px-2 text-xs text-muted-foreground'
+          className='touch-target -ms-2 h-7 px-2 text-xs text-muted-foreground'
         >
           <FileText aria-hidden='true' />
           {compact

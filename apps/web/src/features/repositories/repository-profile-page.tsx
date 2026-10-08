@@ -184,14 +184,14 @@ function InspectionBadge({ profile }: { profile: Profile }) {
     return <StatusBadge tone='success'>Inspection complete</StatusBadge>
   return (
     <Popover>
-      <PopoverTrigger className='rounded-lg focus-visible:outline-2 focus-visible:outline-ring'>
+      <PopoverTrigger className='touch-target rounded-lg focus-visible:outline-2 focus-visible:outline-ring'>
         <StatusBadge tone='warning' className='cursor-pointer'>
           Partial inspection
         </StatusBadge>
       </PopoverTrigger>
       <PopoverContent align='start' className='w-80 text-sm'>
         <p className='flex items-center gap-2 font-medium'>
-          <AlertTriangle aria-hidden='true' className='size-4 text-amber-600' />
+          <AlertTriangle aria-hidden='true' className='size-4 text-warning' />
           Inspection limits
         </p>
         <ul className='mt-2 list-disc space-y-1 ps-5 text-muted-foreground'>
@@ -215,7 +215,7 @@ function ReadingGuide({ limitations }: { limitations: string[] }) {
         <Button
           variant='link'
           size='sm'
-          className='h-auto p-0 text-xs text-muted-foreground'
+          className='touch-target h-auto min-h-6 p-0 text-xs text-muted-foreground'
         >
           <Info aria-hidden='true' className='size-3.5' />
           How to read this page
@@ -498,7 +498,9 @@ export function RepositoryProfilePage() {
                   ) : (
                     <Card>
                       <CardHeader>
-                        <CardTitle>No profile yet</CardTitle>
+                        <CardTitle asChild>
+                          <h2>No profile yet</h2>
+                        </CardTitle>
                         <CardDescription>
                           {canDiscover
                             ? 'Discover the default branch to detect its stack, tooling and control configuration.'

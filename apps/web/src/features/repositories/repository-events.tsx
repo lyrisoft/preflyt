@@ -66,7 +66,9 @@ export function RepositoryEvents({ repositoryId }: { repositoryId: string }) {
   return (
     <Card className='gap-4'>
       <CardHeader>
-        <CardTitle>Pull request and CI events</CardTitle>
+        <CardTitle asChild>
+          <h2>Pull request and CI events</h2>
+        </CardTitle>
         <CardDescription>
           Recent GitHub deliveries at their reported commit revisions.
         </CardDescription>
@@ -74,7 +76,7 @@ export function RepositoryEvents({ repositoryId }: { repositoryId: string }) {
           <Button
             variant='outline'
             size='icon'
-            className='size-8'
+            className='touch-target size-8'
             aria-label='Refresh GitHub events'
             disabled={query.isFetching}
             onClick={() => void query.refetch()}
