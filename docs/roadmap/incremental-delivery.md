@@ -73,6 +73,8 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 
 - **P1.RBAC:** Restrict CI evidence, assessments and findings to authorized repository members; validate worker context and artifact access.
 
+- **P1.Contributors:** Capture GitHub contributor IDs, PR authors, reviewers and commit associations with signed-event provenance; show verified identities on PR/CI details. See [Contributors specification](../product/engineering-contributors.md).
+
 ### P2 — Policy Quality Gates
 
 **User value:** A policy owner defines a simple standard and a developer sees an accurate advisory or blocking GitHub quality check.
