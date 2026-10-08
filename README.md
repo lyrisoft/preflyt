@@ -55,6 +55,10 @@ Its main output is an **Engineering Readiness Report**: a traceable account of w
 
 For detailed user journeys, triggers, check examples, stage contracts and performance workloads, see [Capabilities across the SDLC](docs/product/sdlc-capabilities.md).
 
+## Engineering Contributors (planned)
+
+A **Contributors** sidebar module will show authorized GitHub contributors, activity/assessment coverage/policy adherence metrics and charts. Each contributor opens a profile detailing repositories, PRs, commits, reviews, findings and evidence-backed policy outcomes. P1 captures identities/activity, P2 associates gate evidence, and P3 delivers the working UI; later phases add broader trends. See [Engineering Contributors](docs/product/engineering-contributors.md).
+
 ## Built-in Engineering Standards Library
 
 Preflyt ships with versioned, first-party engineering policy packs so organizations can start with established rules rather than authoring policies from scratch. The initial library covers Baseline Engineering, Application Security, Backend Services, Frontend Applications and Infrastructure as Code; further packs cover API, database, production readiness, performance and compliance as their assessment adapters mature.
