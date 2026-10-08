@@ -17,7 +17,7 @@ Preflyt is a self-hosted engineering platform that detects, investigates, and he
 
 Preflyt collects deterministic evidence from tests, scanners, pull-request diffs, and CI failures. AI agents correlate that evidence, investigate likely causes, and—when authorized—reproduce failures and generate patches inside constrained execution sandboxes. The platform reruns relevant checks and opens remediation pull requests for **human review**, preserving a full audit record.
 
-The initial product is an internal/self-hosted, single-organization platform supporting GitHub and TypeScript/Node.js and Python repositories. It uses open-source orchestration and scanning components, and offers **bring-your-own-model** inference through a configurable gateway: hosted frontier models via API keys or local inference. Docker Compose is the intended evaluation environment; Kubernetes is the production target.
+The initial product is an internal/self-hosted, single-organization platform supporting GitHub and TypeScript/Node.js and Python **target repositories**. **Preflyt itself uses Node.js + TypeScript across its application services and React + TypeScript on the frontend; it does not require a Python agent service.** It uses open-source orchestration and scanning components and provides **bring-your-own-model** inference through a configurable gateway: hosted frontier models via API keys or local inference. Docker Compose is the intended evaluation environment; Kubernetes is the production target.
 
 **Product hypothesis:** Connecting detection to evidence-based AI investigation and verified, reviewable fixes will reduce engineer time spent diagnosing CI failures and remediating common defects without weakening security or change controls.
 
@@ -216,7 +216,7 @@ Each requirement is testable and has a delivery stage: M = MVP, V1 = V1, V2 = V2
 
 | ID | Stage | Requirement | Acceptance signal |
 | --- | --- | --- | --- |
-| FR-020 | M | Use an agent adapter with LiteLLM or equivalent gateway; external and local models are configurable. | Same workflow can route to at least two configured model targets. |
+| FR-020 | M | Use a TypeScript agent adapter (evaluate Vercel AI SDK or OpenAI Agents SDK for JavaScript) with LiteLLM or equivalent gateway; external and local models are configurable. | Same TypeScript workflow can route to at least two configured model targets. |
 | FR-021 | M | Allow admins to set API keys, permitted models, per-task budget, token limits, and data-egress policy. | Missing/forbidden provider is blocked before execution. |
 | FR-022 | M | Generate diagnoses with observed evidence, hypotheses, uncertainty, affected files, and recommended checks. | Report links directly to supporting logs, tests, or diff. |
 | FR-023 | M | Respect repo/org boundaries in every tool call and context retrieval operation. | Cross-repo unauthorized reads fail and are audited. |
@@ -328,15 +328,16 @@ flowchart TB
     Hook --> API
     API --> DB[("PostgreSQL")]
     API --> Artifacts["S3-compatible artifact store"]
-    API --> Queue["Durable workflow dispatch"]
+    API --> Queue["Redis + BullMQ"]
     API --> Policy["Policy evaluator"]
-    Queue --> Orchestrator["Workflow orchestrator"]
+    Queue --> Orchestrator["Node.js / TypeScript workflow workers"]
     Orchestrator --> Scanner["Isolated scan/test jobs"]
-    Orchestrator --> Agent["Python agent service"]
-    Agent --> Gateway["LiteLLM"]
+    Orchestrator --> Agent["TypeScript AI agent worker"]
+    Agent --> Gateway["LiteLLM container"]
     Gateway --> Frontier["Approved frontier APIs"]
     Gateway --> Local["Optional local model"]
-    Agent --> Sandbox["Ephemeral code execution sandbox"]
+    Agent --> Exec["TypeScript execution controller"]
+    Exec --> Sandbox["Ephemeral Docker / Kubernetes sandbox"]
     Sandbox --> Results["Validation evidence"]
     Scanner --> Results
     Results --> API
@@ -347,15 +348,15 @@ flowchart TB
 
 ### 10.1 Control plane
 
-NestJS API owns auth, organizations, repository configuration, webhook/event normalization, workflows, findings, investigation state, policies, model usage, audit, and external integration permissions. PostgreSQL stores structured metadata. Large logs, diffs, test reports, and patches reside in object storage and are referenced by immutable IDs.
+The **Node.js + TypeScript NestJS API** owns auth, organizations, repository configuration, webhook/event normalization, workflow requests, findings, investigation state, policies, model usage, audit, and external integration permissions. **Prisma** provides the typed database access/migration layer over PostgreSQL. Large logs, diffs, test reports, and patches reside in object storage and are referenced by immutable IDs. The API must remain responsive and must **not** run LLM loops, compile untrusted source, or execute model-generated commands in-process.
 
 ### 10.2 Execution plane
 
-A dedicated execution controller dispatches jobs with immutable inputs and a narrow capability set. Jobs clone pinned commits, run scanners or tests, or host a coding-agent task. Artifacts are uploaded to scoped storage; workloads are destroyed on completion, timeout, or cancellation. Production environments require dedicated isolation and restricted network egress; no host Docker socket, privileged pods, or production IAM access.
+A separate **TypeScript execution controller** (not the HTTP API process) dispatches jobs with immutable inputs and a narrow capability set, using Docker APIs for local evaluation and `@kubernetes/client-node` for Kubernetes Jobs. The **TypeScript agent worker** performs model interaction, tool planning, and evidence analysis, but delegates all untrusted commands and source-code execution to this controller. Jobs clone pinned commits, run scanners or tests, or host a bounded code-editing task. Artifacts are uploaded to scoped storage; workloads are destroyed on completion, timeout, or cancellation. Production environments require dedicated isolation and restricted network egress; no host Docker socket, privileged pods, or production IAM access.
 
 ### 10.3 Model plane
 
-LiteLLM or an equivalent proxy enforces routing, allowlists, budget accounting, and API-key isolation. Initial supported configurations:
+**TypeScript agent services** access providers through **LiteLLM running as a separately deployed gateway container** (or an equivalent proxy). LiteLLM may have its own runtime dependencies, but no Preflyt application or AI agent service is required to be written in Python. The gateway enforces routing, allowlists, budget accounting, and API-key isolation. Initial supported configurations:
 
 1. Hosted models, e.g. OpenAI/Anthropic/DeepSeek, using server-side credentials.
 2. Self-hosted inference via an approved local endpoint.
@@ -365,10 +366,43 @@ The selected provider's retention and data-use terms must be evaluated; a self-h
 
 ### 10.4 Runtime strategy
 
-- **Development/evaluation:** Docker Compose for platform services; trusted-only sandbox evaluation with explicit warnings about isolation limitations.
-- **Production:** Helm/Kubernetes deployments for control plane and isolated Jobs; Argo Workflows is a candidate once workflow durability and job topology are validated.
+- **Development/evaluation:** Docker Compose for NestJS API, React/Vite web, TypeScript agent and execution workers, PostgreSQL, Redis, LiteLLM gateway, and optional local inference; trusted-only sandbox evaluation with explicit warnings about isolation limitations.
+- **Background workflows:** **BullMQ + Redis**, with durable queued tasks, job state, bounded backoff/retries, dead-letter handling policy, and idempotent external effects. Treat queue delivery as at-least-once; never assume exactly-once patch or PR creation.
+- **Production:** Helm/Kubernetes deployments for control-plane services and isolated Jobs; use `@kubernetes/client-node` for dispatch. Argo Workflows is an **optional later adapter** if complex Kubernetes DAG execution warrants it, not a required first-release dependency.
 - **Isolation target:** separate worker pool/namespace, least-privilege service accounts, network policies, read-only base images, quotas, bounded lifetime; assess gVisor/Kata or equivalent stronger sandbox runtime.
 - **Fault tolerance:** workflows must resume or terminate predictably after controller restarts; out-of-order events and repeated callbacks must not create duplicate PRs.
+
+### 10.5 Language, monorepo and process boundaries (selected decision)
+
+**Application stack:** Node.js + TypeScript for API, integrations, queue/workflow workers, agent workers, and execution controller; React + TypeScript + Vite for the browser UI. Use **pnpm workspaces + Turborepo** for builds and shared package workflows. Use **PostgreSQL + Prisma** for typed data access and schema migrations. Choose an approved provider-neutral TypeScript agent SDK during a focused spike; **LangGraph.js is optional** and should be introduced only if it demonstrably improves stateful multi-agent workflows.
+
+**Separation of responsibilities:** NestJS handles authenticated requests and persists/schedules work; BullMQ workers handle long-running investigation state and coordination; TypeScript agent workers make model/tool decisions; the execution controller dispatches isolated Docker/Kubernetes jobs. Scanners and customer code may run in containers written in any language, but they are not part of the Preflyt application language decision. Third-party model gateways may use a different implementation language without becoming a Preflyt-maintained Python service.
+
+**Shared schemas:** TypeScript contracts and runtime validation (e.g., Zod or a comparable schema validator) cover API, event, agent-tool, and execution-job messages. Version all cross-process payloads; persist enough state for safe restart and reconciliation.
+
+**Candidate workspace layout (planned, not yet implemented):**
+
+~~~text
+apps/
+  web/                  # React + Vite + TypeScript
+  api/                  # NestJS control-plane API
+services/
+  agent-worker/         # TypeScript AI reasoning / investigation
+  execution-worker/     # TypeScript Docker and Kubernetes job controller
+  integration-worker/   # TypeScript GitHub/GitLab event handling
+packages/
+  agents/               # reusable agent roles and typed tools
+  contracts/            # API, queue/event and tool schemas
+  database/             # Prisma schema, migrations and client
+  integrations/         # source-control and CI adapters
+  policies/             # engineering policy contracts
+  ui/                   # shared React components
+infra/
+  compose/              # Docker Compose evaluation stack
+  helm/                 # Kubernetes application manifests
+pnpm-workspace.yaml
+ turbo.json
+~~~
 
 ## 11. Security, governance, and threat model
 
@@ -499,7 +533,7 @@ For each case capture baseline time, agent attempts, reproduction outcome, patch
 | GitHub/GitLab API limits | Delays, failed integrations | Backoff, pagination, caching, queueing, idempotency |
 | Broad language/framework scope | Delays and fragile behaviour | Start with Node.js/TypeScript and Python; adapter contracts |
 | Scanner/model licensing | Distribution restrictions | Maintain OSS/license inventory, assess each rule pack and model |
-| Overbuilding orchestration | Slow delivery | Build one end-to-end workflow before multi-agent platform expansion |
+| Overbuilding orchestration | Slow delivery | Begin with BullMQ jobs and one end-to-end workflow before multi-agent platform expansion |
 | Misleading dashboards | False confidence | Report evidence-backed metrics and data coverage |
 
 ## 17. Open decisions
@@ -510,8 +544,8 @@ These items require explicit engineering/product decisions before implementation
 2. GitHub integration mechanism: GitHub App preferred; required permission set and installation ownership?
 3. Scope of allowed outbound network destinations per sandbox and external-model policy?
 4. Sandbox choice for production isolation: hardened Jobs with gVisor/Kata or an alternative?
-5. Agent SDK selection and license validation: OpenHands SDK, mini-SWE-agent, or a custom thin adapter?
-6. Workflow engine: lightweight durable queue initially versus Argo Workflows from the first deployment?
+5. Which TypeScript agent SDK and tool framework should be adopted after license and proof-of-concept review: Vercel AI SDK, OpenAI Agents SDK for JavaScript, or a thin custom adapter? When would LangGraph.js add value?
+6. What BullMQ queue taxonomy, job persistence/recovery strategy, and Redis high-availability model are required, and what evidence would justify an Argo Workflows execution adapter later?
 7. Which scanner binaries/rules can be redistributed under Preflyt's eventual license?
 8. Artifact retention defaults, data residency policy, and whether any personal data is persisted.
 9. Which checks are mandatory before a remediation PR can be labeled “validated”?
@@ -521,13 +555,13 @@ These items require explicit engineering/product decisions before implementation
 
 ## 18. Proposed engineering workstreams
 
-**Workstream A — Platform foundation:** repository layout, API, auth, PostgreSQL schema, event contracts, UI shell, audit and tracing.
+**Workstream A — Platform foundation:** pnpm/Turborepo TypeScript monorepo, NestJS API, React/Vite UI, auth, Prisma/PostgreSQL schema, Redis/BullMQ worker foundation, event contracts, audit and tracing.
 
 **Workstream B — GitHub and findings:** installation flow, webhook gateway, CI artifacts, repository profile, scanner adapters, deduplication.
 
-**Workstream C — AI investigation:** model-gateway integration, evidence packaging/redaction, agent adapter, structured diagnosis, limits and evaluation.
+**Workstream C — AI investigation:** TypeScript agent-worker foundation, model-gateway integration, evidence packaging/redaction, selected TypeScript SDK/adapter, structured diagnosis, limits and evaluation.
 
-**Workstream D — Execution safety:** immutable source checkout, sandbox controller, quotas, egress restrictions, artifact collection, hardening and threat tests.
+**Workstream D — Execution safety:** TypeScript execution controller using Docker/Kubernetes APIs, immutable source checkout, quotas, egress restrictions, artifact collection, hardening and threat tests.
 
 **Workstream E — Remediation (V1):** bounded patching, independent validation jobs, scoped Git writer, remediation PRs, lifecycle sync.
 
@@ -535,7 +569,7 @@ These items require explicit engineering/product decisions before implementation
 
 ### Suggested next documents
 
-- Architecture Decision Records (agent adapter, workflow engine, sandbox model, model gateway).
+- Architecture Decision Records (TypeScript-first stack, agent adapter, workflow engine, sandbox model, model gateway).
 - Threat model and data-flow diagram.
 - API/events and database schema specification.
 - MVP UX journeys and wireframes.
