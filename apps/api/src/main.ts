@@ -2,10 +2,12 @@ import 'dotenv/config'
 import 'reflect-metadata'
 import { ValidationPipe } from '@nestjs/common'
 import { NestFactory } from '@nestjs/core'
+import type { NestExpressApplication } from '@nestjs/platform-express'
 import cookieParser from 'cookie-parser'
 import { AppModule } from './app.module.js'
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { bufferLogs: true })
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { bufferLogs: true, rawBody: true })
+  app.useBodyParser('json', { limit: '1mb' })
   app.use(cookieParser())
   const webOrigin =
     process.env.WEB_ORIGIN ??

@@ -65,6 +65,8 @@ services:
       BOOTSTRAP_TOKEN_SHA256: ${BOOTSTRAP_TOKEN_SHA256:-}
       SUPER_ADMIN_USERNAME: ${SUPER_ADMIN_USERNAME:-}
       SUPER_ADMIN_PASSWORD: ${SUPER_ADMIN_PASSWORD:-}
+      GITHUB_EVENTS_ENABLED: ${GITHUB_EVENTS_ENABLED:-false}
+      GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:-}
       GITHUB_APP_ID: ${GITHUB_APP_ID:-}
       GITHUB_APP_CLIENT_ID: ${GITHUB_APP_CLIENT_ID:-}
       GITHUB_APP_CLIENT_SECRET: ${GITHUB_APP_CLIENT_SECRET:-}
@@ -84,6 +86,39 @@ services:
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     mem_limit: 1g
+    cpus: 1.0
+    networks: [backend, egress]
+
+  worker:
+    profiles: [events]
+    image: preflyt-api:${PREFLYT_VERSION:-development}
+    build:
+      context: .
+      dockerfile: deploy/api.Dockerfile
+      target: runtime
+    command: [node, dist/worker.js]
+    init: true
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://preflyt_app:${DATABASE_APP_PASSWORD:?Set DATABASE_APP_PASSWORD}@db:5432/${PREFLYT_DATABASE:-preflyt}
+      GITHUB_EVENTS_ENABLED: ${GITHUB_EVENTS_ENABLED:-false}
+      QUEUE_REDIS_URL: ${QUEUE_REDIS_URL:-}
+      QUEUE_PREFIX: ${QUEUE_PREFIX:-preflyt:production:queue}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: [CMD, node, -e, 'const fs=require("fs");try{process.exit(Date.now()-Number(fs.readFileSync("/tmp/preflyt-github-worker-heartbeat","utf8"))<20000?0:1)}catch{process.exit(1)}']
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 512m
     cpus: 1.0
     networks: [backend, egress]
 

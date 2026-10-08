@@ -172,3 +172,32 @@ model RepositoryProfile {
   createdAt    DateTime @default(now())
   @@index([repositoryId, createdAt])
 }
+
+// Durable inbox; Redis loss cannot discard accepted deliveries. No raw payloads or tokens.
+enum GitHubDeliveryState {
+  RECEIVED
+  PROCESSED
+  IGNORED
+  FAILED
+}
+
+model GitHubWebhookDelivery {
+  id                 String @id
+  payloadHash        String
+  event              String
+  action             String
+  installationId     BigInt
+  repositoryGithubId BigInt
+  sourceSha          String
+  sourceObjectId     String
+  sourceNumber       Int?
+  sourceStatus       String?
+  sourceConclusion   String?
+  sourceUpdatedAt    DateTime?
+  state              GitHubDeliveryState @default(RECEIVED)
+  reason             String?
+  receivedAt         DateTime @default(now())
+  processedAt        DateTime?
+  @@index([state, receivedAt])
+  @@index([repositoryGithubId, receivedAt])
+}

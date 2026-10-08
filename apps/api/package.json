@@ -10,7 +10,9 @@
     "test": "vitest run",
     "typecheck": "pnpm prisma:generate && tsc --noEmit -p tsconfig.json",
     "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate deploy"
+    "prisma:migrate": "prisma migrate deploy",
+    "start:worker:dev": "tsx watch src/worker.ts",
+    "start:worker": "node --env-file-if-exists=.env dist/worker.js"
   },
   "dependencies": {
     "@nestjs/common": "^12.1.2",
@@ -20,10 +22,12 @@
     "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "^7.10.0",
     "@redis/client": "^6.3.0",
+    "bullmq": "^6.3.11",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.2",
     "cookie-parser": "^1.4.7",
     "dotenv": "^16.6.1",
+    "ioredis": "^6.0.0",
     "openid-client": "6.8.8",
     "pg": "^8.16.3",
     "reflect-metadata": "^0.2.2",

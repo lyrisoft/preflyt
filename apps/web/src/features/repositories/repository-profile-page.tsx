@@ -17,6 +17,7 @@ import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
+import { RepositoryEvents } from './repository-events'
 
 const route = getRouteApi('/_authenticated/repositories/$repositoryId')
 type Signal = {
@@ -201,6 +202,7 @@ export function RepositoryProfilePage() {
             </Button>
           )}
         </div>
+        {result && <RepositoryEvents repositoryId={repositoryId} />}
         {error && (
           <div
             role='alert'
