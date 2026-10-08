@@ -73,6 +73,8 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 
 - **P1.RBAC:** Restrict CI evidence, assessments and findings to authorized repository members; validate worker context and artifact access.
 
+- **P1.Contributors:** Capture GitHub contributor IDs, PR authors, reviewers and commit associations with signed-event provenance; show verified identities on PR/CI details. See [Contributors specification](../product/engineering-contributors.md).
+
 ### P2 — Policy Quality Gates
 
 **User value:** A policy owner defines a simple standard and a developer sees an accurate advisory or blocking GitHub quality check.
@@ -88,6 +90,8 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 
 - **P2.RBAC:** Separate policy drafting, publication, enforcement and exception approval permissions; reject self-approval.
 
+- **P2.Contributors:** Attribute deterministic gate outcomes and evidence completeness to PR authors and revisions, with first-pass and final assessment status; do not conflate missing evidence with compliance.
+
 ### P3 — Native Secure Validation
 
 **User value:** Preflyt can perform useful code/security/IaC validation itself, rather than depending exclusively on existing CI.
@@ -102,6 +106,8 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 **Done when:** A seeded vulnerability, failing test and unsafe IaC config are caught on pinned repos in an approved sandbox and affect the P2 gate; no untrusted job runs if approval/egress/security preflight fails. An ingest-only installation remains usable.
 
 - **P3.RBAC:** Enforce separate execution admission and least-privilege worker identities; repository access alone never authorizes unsafe execution.
+
+- **P3.Contributors:** Deliver a functional **Contributors** sidebar entry with searchable/paginated contributor list, activity/coverage/adherence metrics, charts, repository filters and individual detail pages (PRs, commits, reviews, findings, policy evidence). Include RBAC and source drill-down; see [Contributors specification](../product/engineering-contributors.md).
 
 ### P4 — AI Engineering Explanations (optional)
 

@@ -10,6 +10,8 @@ Use OIDC for authentication and Preflyt-owned, **server-enforced organization-sc
 
 **Initial permission identifiers:** `organization.members.manage`, `organization.settings.update`, `repository.read`, `repository.connect`, `repository.manage`, `assessment.read`, `assessment.run`, `assessment.cancel`, `finding.read`, `finding.triage`, `policy.read`, `policy.draft`, `policy.publish`, `policy.enforcement.manage`, `policy.exception.request`, `policy.exception.approve`, `ai.provider.manage`, `ai.routing.manage`, `ai.usage.read`, `audit.read`, `execution.request`, `environment.read`, `performance.run`. Never infer authority from a frontend role label.
 
+**Contributor permissions:** `contributors.read`, `contributors.activity.read`, `contributors.policy_evidence.read` are repository-scoped and require authorization to underlying GitHub evidence. Organization aggregates must exclude unauthorized private repositories. See [Engineering Contributors](engineering-contributors.md).
+
 ## Scope and security
 
 - P0 supports organization membership and repository-level assignments, with team membership/inheritance if implemented; otherwise defer team management explicitly and do not pretend it works.

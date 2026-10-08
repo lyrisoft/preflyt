@@ -187,6 +187,10 @@ Preflyt ships first-party versioned policy packs for baseline engineering, appli
 
 Preflyt uses OIDC identity with **NestJS-enforced organization and repository-scoped RBAC**, predefined roles and least-privilege action permissions. **P0** includes owner bootstrap, membership, roles, repository grants, server-side checks and audit; **P1** scopes assessment/evidence access; **P2** separates policy publishing/enforcement/exception approvals; **P3** requires independent execution admission; **P4** scopes AI provider/model management; later phases add QA, performance and production permissions. No self-approved policy waivers, implicit cross-organization access or frontend-only enforcement. See [RBAC specification](product/rbac-and-authorization.md).
 
+### Engineering Contributors module
+
+Preflyt shall provide a **Contributors** item in the Engineering sidebar when implemented in P3. The list shows authorized GitHub contributors, activity metrics, charts, policy adherence and assessment coverage, with repository/time filters. Selecting a contributor opens a detail page with their repositories, commits, PRs, reviews, assessments, findings and policy evidence. P1 captures identity/activity metadata; P2 links revision-specific gate evidence; P3 ships the complete usable list and drill-down; P10/P11 add advanced trends. Missing evidence and private GitHub membership are explicitly represented. No opaque AI-generated employee productivity scores. See [Engineering Contributors](product/engineering-contributors.md).
+
 ## 6. Supported SDLC stages and user journeys
 
 ### 6.1 Lifecycle coverage
