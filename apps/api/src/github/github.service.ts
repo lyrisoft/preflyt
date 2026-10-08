@@ -4,14 +4,17 @@ import {
   Inject,
   ServiceUnavailableException,
   Injectable,
+  Optional,
   UnauthorizedException,
 } from '@nestjs/common'
+import { RedisCacheService } from '../cache/redis-cache.service.js'
 import { resolveWebOrigin } from '../config/web-origin.js'
 import { PrismaService } from '../prisma/prisma.service.js'
 import {
   GitHubInstallationRevokedError,
   GitHubProviderService,
   type GitHubInstallationInfo,
+  type GitHubRepositoryInfo,
 } from './github-provider.service.js'
 
 const digest = (value: string) =>
@@ -26,6 +29,7 @@ export class GitHubService {
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(GitHubProviderService)
     private readonly provider: GitHubProviderService,
+    @Optional() @Inject(RedisCacheService) private readonly cache?: RedisCacheService,
   ) {}
 
   async beginInstallation(identityId: string) {
@@ -247,10 +251,11 @@ export class GitHubService {
         },
       })
     })
+    await this.cache?.delete(this.inventoryKey(installation.id))
     return { accountLogin: installation.accountLogin, repositoryCount: repositories.length }
   }
 
-  async listRepositories() {
+  async listRepositories(refresh = false) {
     const installations = await this.prisma.gitHubInstallation.findMany({
       where: { active: true },
     })
@@ -258,7 +263,7 @@ export class GitHubService {
       try {
         await this.provider.verifyInstallation(installation.id)
         const currentRepositories =
-          await this.provider.listInstallationRepositories(installation.id)
+          await this.repositoryInventory(installation.id, refresh)
         await this.prisma.$transaction(async (tx) => {
           await tx.gitHubInstallation.update({
             where: { id: installation.id },
@@ -319,6 +324,7 @@ export class GitHubService {
             'GitHub is temporarily unavailable; repository access was not changed',
           )
         }
+        await this.cache?.delete(this.inventoryKey(installation.id))
         await this.prisma.$transaction(async (tx) => {
           await tx.gitHubInstallation.update({
             where: { id: installation.id },
@@ -339,6 +345,11 @@ export class GitHubService {
       }
     }
 
+    return this.repositoryOverview()
+  }
+
+  // Last-synced display data only. No upstream calls and no permission grants.
+  async repositoryOverview() {
     const [repositories, allInstallations] = await Promise.all([
       this.prisma.gitHubRepository.findMany({
         where: { installation: { active: true } },
@@ -387,14 +398,55 @@ export class GitHubService {
     if (!repository || !repository.installation.active) {
       throw new ForbiddenException('Repository is not available to a GitHub App installation')
     }
-    await this.prisma.gitHubRepository.update({
-      where: { githubId: repositoryId },
+    if (selected) {
+      // Cached inventory is discovery metadata, never permission to select a repository.
+      await this.provider.verifyRepositoryAccess(repository.installationId, repositoryId)
+    }
+    const changed = await this.prisma.gitHubRepository.updateMany({
+      where: {
+        githubId: repositoryId,
+        installationId: repository.installationId,
+        installation: { active: true },
+      },
       data: { selected },
     })
+    if (changed.count !== 1) throw new ForbiddenException('Repository access changed; reload repositories')
     await this.audit('github_repository_selection_changed', identityId, {
       repositoryId: repositoryId.toString(),
       selected: String(selected),
     })
+  }
+
+  private inventoryKey(installationId: bigint) {
+    return `github:${process.env.GITHUB_APP_ID ?? 'unconfigured'}:installation:${installationId}:repositories`
+  }
+
+  private async repositoryInventory(installationId: bigint, refresh: boolean): Promise<GitHubRepositoryInfo[]> {
+    const key = this.inventoryKey(installationId)
+    const cached = refresh ? null : await this.cache?.get(key)
+    if (cached) {
+      try {
+        const payload = JSON.parse(cached)
+        if (typeof payload.expiresAt === 'number' && payload.expiresAt > Date.now() &&
+          payload.expiresAt <= Date.now() + 30_000 && Array.isArray(payload.repositories) &&
+          payload.repositories.length <= 10_000 && payload.repositories.every((repo: Record<string, unknown>) =>
+            repo && typeof repo.id === 'string' && /^[1-9][0-9]{0,19}$/.test(repo.id) &&
+            typeof repo.name === 'string' && typeof repo.fullName === 'string' &&
+            typeof repo.ownerLogin === 'string' && typeof repo.isPrivate === 'boolean' &&
+            (repo.defaultBranch === null || typeof repo.defaultBranch === 'string'))) {
+          return payload.repositories.map((repo: Omit<GitHubRepositoryInfo, 'id'> & { id: string }) => ({
+            id: BigInt(repo.id), name: repo.name, fullName: repo.fullName,
+            ownerLogin: repo.ownerLogin, defaultBranch: repo.defaultBranch, isPrivate: repo.isPrivate,
+          }))
+        }
+      } catch { /* Invalid entries are cache misses. */ }
+    }
+    const repositories = await this.provider.listInstallationRepositories(installationId)
+    await this.cache?.set(key, JSON.stringify({
+      expiresAt: Date.now() + 30_000,
+      repositories: repositories.map(repo => ({ ...repo, id: repo.id.toString() })),
+    }), 30)
+    return repositories
   }
 
   get setupCookieName() {

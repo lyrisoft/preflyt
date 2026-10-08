@@ -45,10 +45,10 @@ export function Dashboard() {
       setLoading(true)
       setError('')
       try {
-        const response = await fetch(`${API_BASE_URL}/github/repositories`, {
-          credentials: 'include',
-          signal: controller.signal,
-        })
+        const response = await fetch(
+          `${API_BASE_URL}/github/repositories/overview`,
+          { credentials: 'include', signal: controller.signal }
+        )
         if (!response.ok) throw new Error('Could not load GitHub repositories.')
         setResult((await response.json()) as RepositoryResponse)
       } catch (cause) {
@@ -87,7 +87,8 @@ export function Dashboard() {
               Repository overview
             </h1>
             <p className='mt-1 text-muted-foreground'>
-              Review GitHub access and the repositories selected for Preflyt.
+              Review the last synced repository state and selections for
+              Preflyt.
             </p>
           </div>
           <Button asChild>
@@ -143,7 +144,7 @@ export function Dashboard() {
                 {loading ? '—' : repositories.length}
               </div>
               <p className='text-xs text-muted-foreground'>
-                Repositories visible through active GitHub installations
+                Repositories from the last successful GitHub sync
               </p>
             </CardContent>
           </Card>

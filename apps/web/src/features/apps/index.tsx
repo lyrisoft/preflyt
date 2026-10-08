@@ -51,9 +51,10 @@ export function Apps() {
     setLoading(true)
     setError('')
     try {
-      const response = await fetch(`${API_BASE_URL}/github/repositories`, {
-        credentials: 'include',
-      })
+      const response = await fetch(
+        `${API_BASE_URL}/github/repositories?refresh=true`,
+        { credentials: 'include' }
+      )
       if (!response.ok) throw new Error('Could not load GitHub repositories.')
       const result = (await response.json()) as {
         repositories: Repository[]

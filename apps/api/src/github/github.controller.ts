@@ -94,8 +94,14 @@ export class GitHubController {
 
   @Get('repositories')
   @UseGuards(SessionGuard)
-  repositories() {
-    return this.github.listRepositories()
+  repositories(@Req() req: Request) {
+    return this.github.listRepositories(req.query.refresh === 'true')
+  }
+
+  @Get('repositories/overview')
+  @UseGuards(SessionGuard)
+  overview() {
+    return this.github.repositoryOverview()
   }
 
   @Patch('repositories/:repositoryId/selection')

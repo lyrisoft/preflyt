@@ -53,6 +53,8 @@ services:
       NODE_ENV: production
       API_HOST: 0.0.0.0
       API_PORT: '3000'
+      REDIS_URL: ${REDIS_URL:-}
+      REDIS_CACHE_PREFIX: ${REDIS_CACHE_PREFIX:-preflyt:production:cache}
       DATABASE_URL: postgresql://preflyt_app:${DATABASE_APP_PASSWORD:?Set DATABASE_APP_PASSWORD}@db:5432/${PREFLYT_DATABASE:-preflyt}
       WEB_ORIGIN: ${WEB_ORIGIN:?Set WEB_ORIGIN}
       COOKIE_SECURE: 'true'
