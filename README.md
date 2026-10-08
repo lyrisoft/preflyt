@@ -2,173 +2,197 @@
 
 **Engineering confidence before production.**
 
-Preflyt is a planned **self-hosted, AI-native Shift Left engineering control plane**. It connects to existing development systems, detects software quality, security, and reliability issues early, investigates failures with AI agents, attempts reproducible fixes in isolated environments, and opens validated remediation pull requests for human review.
+Preflyt is a planned **self-hosted, AI-native Shift Left engineering platform**. It helps engineering teams detect and prevent security vulnerabilities, software defects, reliability failures and infrastructure risks **earlier in the software development lifecycle**, using continuous assessments, explicit engineering standards, policy-based quality gates and actionable developer feedback.
 
-> **Project status: specification / pre-implementation.** The repository currently contains product documentation, not a runnable platform. Features, APIs, deployment charts, and commands described below are planned unless explicitly marked as implemented.
+> **Status: product specification / pre-implementation.** This repository documents the intended platform; it does **not** yet contain runnable services, deployment manifests, scanners or an operational UI. Capabilities below are proposed unless otherwise stated.
 
-Maintained by **Lyrisoft Technologies**.
+Developed by **Lyrisoft Technologies**.
 
 ## Why Preflyt?
 
-Modern CI/CD systems execute builds and tests; scanners report findings; developers then spend time correlating evidence, reproducing failures, and preparing fixes. Preflyt connects these stages into an accountable workflow:
+Problems discovered in QA, pre-production or production cost more to diagnose and fix than problems found during design, development, pull request review or CI. Existing scanners and CI systems produce valuable signals, but engineering teams still need to decide **which checks apply, whether the evidence is trustworthy, and whether a change is ready to progress**.
 
-**Detect → Triage → Reproduce → Remediate → Validate → Review → Learn**
+Preflyt coordinates that work. It is **not a coding agent, another IDE, a replacement CI platform, or a general-purpose code generation tool**.
 
-It is **not** intended to replace GitHub Actions, GitLab CI, Jenkins, a source-control system, or established scanners. It acts as the engineering control plane above them.
+**Shift Left workflow: Discover → Assess → Validate → Enforce → Improve**
 
-## Product principles
+Its main output is an **Engineering Readiness Report**: a traceable account of which required engineering checks passed, failed, were not applicable or lacked sufficient evidence at a specific repository revision.
 
-- **Evidence before inference:** findings are grounded in code diffs, test output, scanner results, and reproducible observations.
-- **Agents propose; deterministic checks and humans decide:** AI never overrides required policy checks, merges its own PRs, or deploys to production in the initial release.
-- **Untrusted code stays isolated:** repository code and agent shell commands run in ephemeral, least-privileged sandboxes with restricted networking.
-- **Bring your own models:** use external frontier-model APIs through a gateway or private local inference; enforce organizational data-egress and budget policies.
-- **Self-host first:** Docker Compose is the planned local deployment path; Kubernetes is the planned production execution environment.
-- **Integrate, don't replace:** keep CI/CD and repository hosting where they already are.
-- **Explicit, auditable outcomes:** each investigation records evidence, actions, costs, validation results, and review links.
+## Three core engines
 
-## Proposed capabilities
+| Engine | Purpose |
+| --- | --- |
+| **Engineering Validation Engine** | Discover repository context, select applicable scanners/tests, import CI results or run approved checks, and normalize evidence |
+| **Engineering Governance Engine** | Define engineering policies, apply required checks, evaluate deterministic quality gates and audit exceptions |
+| **Engineering Intelligence Engine** | Explain findings, correlate risks and recommend improvements using optional AI; **AI never determines the gate result** |
 
-| Area | Planned behaviour | Delivery stage |
-| --- | --- | --- |
-| GitHub integration | Connect repositories; receive PR and CI-status events; read diffs and logs | MVP |
-| Repository profile | Detect language, tests, manifest files, Docker/IaC/migration signals | MVP |
-| Findings | Normalize scanner, test, and CI failures; deduplicate and track state | MVP |
-| Automated checks | Run scanners/tests only in an approved safe sandbox; otherwise ingest external CI evidence | MVP |
-| AI investigation | Correlate evidence, diagnose root causes, report confidence and uncertainty | MVP |
-| Investigation workspace | View evidence, model usage, run history, and recommended next steps | MVP |
-| Fixture-only PoC remediation | Write validated fix PRs only to explicitly allowlisted disposable fixture repositories | PoC only |
-| Remediation | Apply bounded code changes in an isolated sandbox for approved repositories | V1 |
-| Validation and fix PR | Rerun required checks; open a human-reviewable remediation PR | V1 |
-| Policy enforcement | Repository/organization rules and approval requirements | MVP → V1 |
-| GitLab integration | Additional source-control and CI provider adapter | V1 |
-| Engineering intelligence | Retrieve approved historical fixes and incident patterns | V2 |
-| Specialized agents | Reliability, security, infrastructure, database, performance agents | V1 → V2 |
+### Shift Left coverage
 
-**Initial emphasis:** diagnosing failed CI jobs on TypeScript/Node.js and Python *target repositories* (the source code under test). Preflyt application and agent services are written in TypeScript. **Before running scanners, tests, builds, or scripts on real repositories in MVP, Preflyt must have a security-reviewed execution sandbox; otherwise operation is ingest-only.** The end-to-end PoC is deliberately restricted to disposable fixture repositories; general write-back and remediation PR creation begin in V1.
+| Area | Example controls |
+| --- | --- |
+| **Security** | Code/SAST, dependencies, leaked secrets, containers, API security, IaC misconfigurations |
+| **Testing and software quality** | Lint/typecheck, unit/integration/contract tests, regression checks |
+| **Reliability** | Graceful shutdown, timeouts, retries, health checks, readiness, resilience |
+| **Infrastructure** | Terraform/OpenTofu, Kubernetes, Docker and cloud policy validation |
+| **Databases** | Destructive migration detection, backward compatibility, query-performance tests |
+| **Performance** | Reproducible benchmark baselines, latency/resource regression |
+| **Observability** | Trace/log/metric instrumentation and health/telemetry contracts |
+| **Compliance** | Organization-defined requirements, controls and auditable evidence |
+| **Cost** | IaC plan cost estimates and engineering budgets |
 
-## Proposed user experience
+**MVP priority:** security, testing/code quality and infrastructure assessments on **GitHub pull requests and CI**. Other domains and earlier/later SDLC entrypoints expand through subsequent releases; the full list above does not mean all checks ship in the MVP.
 
-1. An operator configures the installation's OIDC provider and uses a short-lived, single-use bootstrap token to establish the first Owner.
-2. The Owner provisions users in Preflyt and connects GitHub using a separate scoped GitHub App installation.
-3. The administrator selects repositories, sets model/data policies, and enables workflows.
-4. A PR or failed CI job generates a signed event.
-5. Preflyt collects relevant diffs, test failures, and scanner output; creates a finding and investigation.
-6. An AI investigator proposes a hypothesis with evidence and, when enabled, reproduces the failure in an isolated execution job.
-7. **In fixture-only PoC or V1 remediation mode**, an agent generates a bounded patch and the platform reproduces the original failure and independently runs the **protected original reproduction harness** and all mandatory validation checks under an equivalent pinned environment. Agent-written tests cannot replace or weaken that harness.
-8. **Only for fixture-only PoC or authorized V1**, Preflyt creates a separate **draft** fix PR and verifies source/target state and the pushed tree again before human-review readiness. If the original change is on an open same-repository feature branch, the fix PR **targets that feature branch**, not the default branch. Known stale, forked or ambiguous targets stop automatic write-back. Post-creation races or later target changes invalidate current validation and trigger audited cleanup of the Preflyt-owned fix PR; unknown freshness blocks review promotion. The platform never self-approves or auto-merges.
-9. Audit events and approved outcomes become available for reporting and later engineering knowledge retrieval.
+## Example: a pull request assessment
+
+A developer opens a PR. Preflyt discovers changed paths and applicable organization standards, ingests CI evidence or executes eligible checks in an approved sandbox, then evaluates rules.
+
+~~~text
+Preflyt / payment-api / PR #184
+Revision: <pinned commit>
+Policy: production-readiness-v3
+
+Security              PASS
+Testing               PASS
+Infrastructure        PASS
+Reliability           BLOCK        Shutdown test failed
+Performance           INCOMPLETE   Required benchmark not available
+
+Engineering gate: BLOCK
+AI explanation (optional): Request draining during SIGTERM needs review.
+
+Developer action: Correct the failed check and rerun the assessment.
+Preflyt does not modify source code as part of this workflow.
+~~~
+
+A quality gate is tied to a **specific commit SHA and policy version**. Passing old checks cannot automatically give a new commit a passing result.
+
+### Gate semantics
+
+- **PASS:** all mandatory applicable checks have trusted passing evidence.
+- **WARN:** mandatory evidence is complete; only warnings remain.
+- **BLOCK:** blocking policy violation or required check failure.
+- **INCOMPLETE:** missing, stale, skipped, failed-to-run or untrusted mandatory evidence; **never silently green**.
+- **NOT_APPLICABLE:** a rule formally does not apply under versioned criteria.
+
+Quality-gate **enforcement** may start advisory before an authorized policy owner makes it merge-blocking. The gate is computed deterministically; AI never waives rules or invents successful tests.
+
+## Planned user journey
+
+1. An administrator signs in with the configured OIDC identity provider and connects selected GitHub repositories.
+2. Preflyt constructs a **Repository Engineering Profile** from languages, test tools, manifests, CI, IaC and deployment evidence.
+3. A policy owner chooses a **versioned engineering baseline** and configures check applicability and enforcement mode.
+4. Every relevant PR/CI event creates a **revision-bound AssessmentPlan**.
+5. Preflyt collects scanner/test evidence from CI or performs allowed checks in an independently approved isolation environment.
+6. The platform normalizes findings and computes an **Engineering Readiness Report** and quality gate.
+7. Optional AI explains observed issues and recommends engineering changes, clearly distinguishing facts and hypotheses.
+8. Developers receive PR/dashboard feedback; changed code starts a new assessment rather than inheriting stale readiness.
 
 ## Architecture (proposed)
 
 ~~~mermaid
-flowchart TB
-  SCM["GitHub initially / GitLab later"] --> WH["Webhook & integration API"]
-  UI["React / TypeScript UI"] --> API["NestJS control-plane API"]
-  WH --> API
-  API --> DB[("PostgreSQL")]
-  API --> STORE["S3-compatible artifacts"]
-  API --> Q["Redis / BullMQ durable jobs"]
-  Q --> ORCH["Node.js / TypeScript worker coordinator"]
-  API --> POLICY["Policy decision layer"]
-  ORCH --> EXEC["Execution adapter"]
-  EXEC --> SCAN["Scanner & test jobs"]
-  EXEC --> SANDBOX["Ephemeral agent sandbox"]
-  ORCH --> AGENT["Isolated TypeScript AI agent worker"]
-  AGENT --> LLM["LiteLLM model gateway"]
-  LLM --> EXT["Optional frontier models"]
-  LLM --> LOCAL["Optional private inference"]
-  SCAN --> API
-  SANDBOX --> API
-  API --> GITWRITE["Restricted Git write service"]
-  GITWRITE --> SCM
-  API --> OTEL["OpenTelemetry / SigNoz"]
+flowchart TD
+  SCM["GitHub / CI (GitLab later)"] --> API["NestJS assessment API"]
+  WEB["React + TypeScript UI"] --> API
+  API --> DB[("PostgreSQL + Prisma")]
+  API --> Q[("Redis + BullMQ")]
+  API --> RULES["Versioned governance policies"]
+  Q --> PLAN["Assessment planner"]
+  PLAN --> CHECKS["External CI evidence / approved sandbox validation"]
+  CHECKS --> RESULTS["Normalized findings and evidence"]
+  RESULTS --> GOV["Deterministic quality-gate evaluator"]
+  RESULTS --> INTEL["Optional TypeScript AI assessment worker"]
+  INTEL --> LLM["LiteLLM -> frontier / local models"]
+  GOV --> REPORT["Engineering readiness report"]
+  INTEL --> REPORT
+  REPORT --> API
+  API --> SCM
+  API --> OBS["OpenTelemetry / SigNoz"]
 ~~~
 
-**Selected application stack (framework and runtime versions to be validated in implementation spikes):**
+### Application stack
 
-| Layer | Preferred approach |
+| Layer | Planned technology |
 | --- | --- |
-| Frontend | React + TypeScript + Vite |
-| Backend/control plane | Node.js + NestJS + TypeScript |
-| AI agent runtime | Node.js + TypeScript using provider-neutral tool contracts; evaluate Vercel AI SDK / OpenAI Agents SDK for JavaScript |
-| Human authentication | Installation-configured OIDC; one-time first-Owner bootstrap; Preflyt-managed membership and roles |
-| Model routing | LiteLLM container, with API-key-backed frontier models and optional local inference; application services remain TypeScript |
-| Workflow execution | BullMQ + Redis for durable jobs, bounded retries, and orchestration; consider Argo Workflows only if complex Kubernetes DAGs justify it |
-| Execution controller | TypeScript, using Docker APIs for local evaluation and `@kubernetes/client-node` for Kubernetes Jobs |
-| Sandboxes | MVP: approved stronger isolation for real-repository execution (such as independently tested gVisor/Kata on Kubernetes); Docker-based execution limited to allowlisted local fixtures; ingest-only fallback |
-| Database | PostgreSQL + Prisma ORM/migrations |
-| Evidence and artifacts | S3-compatible object storage |
-| Technical checks | Trivy, Semgrep Community Edition, Gitleaks, Checkov, and project-native test tools (subject to licenses) |
-| Policies | Deterministic rules; evaluate OPA as policy complexity grows |
-| Observability | OpenTelemetry; SigNoz as an optional self-hosted backend |
+| Frontend | React + Vite + TypeScript |
+| API / control plane | Node.js + NestJS + TypeScript |
+| Background execution | TypeScript workers; Redis + BullMQ |
+| AI assessment | Read-only/advisory TypeScript worker; model-independent contracts |
+| Model gateway | LiteLLM container; optional OpenAI, Anthropic, DeepSeek or local endpoints |
+| Database | PostgreSQL + Prisma |
+| Evidence / artifacts | S3-compatible object storage |
+| Test and scanner execution | TypeScript controller, approved isolated Docker/Kubernetes backends |
+| Scanners (candidate tools) | Trivy, Gitleaks, Semgrep CE, Checkov and repository-native tools; license review required |
+| Monorepo | pnpm workspaces + Turborepo |
+| Observability | OpenTelemetry; optional self-hosted SigNoz |
 
-**Runtime boundary:** NestJS serves APIs and enqueues workflows; dedicated Node.js/TypeScript workers investigate findings and coordinate execution. Never execute model-generated shell commands inside the API or agent control process. Sandboxed code runs only in isolated jobs with independently enforced tool permissions. We can integrate a non-TypeScript agent as an external adapter later if a specific capability requires it, but Python is **not required** for Preflyt application services.
+**AI is optional for core operation.** Preflyt can import checks, enforce policies and publish readiness without any frontier-model keys or local LLM.
 
-**Execution isolation (mandatory in MVP):** containers alone are not an adequate boundary for malicious repositories. Real-repository jobs require an **independently reviewed stronger sandbox** (e.g. gVisor/Kata or equivalent) with dedicated worker isolation, effective preflight checks, CPU/memory/disk/PID/deadline limits, default-deny networking, immutable checkout/image, and tests demonstrating no escape or credential exfiltration. No untrusted job receives model API keys, repository write credentials, or production secrets. If an approved executor is unavailable, Preflyt **does not execute repository code** and uses imported CI evidence instead.
+## Security and execution safety
 
-## Deployment targets
+**Safe execution is an MVP prerequisite, not an advanced V1 feature.** Running package installation, test hooks, scanners, builds or other commands against a connected repository can execute untrusted code.
 
-- **Local / evaluation (planned):** Docker Compose for API, UI, PostgreSQL, Redis, LiteLLM, TypeScript agent worker, and a **fixture-only** local Docker execution worker. Real repository jobs require an independently approved secure execution environment.
-- **Production (planned):** Helm/Kubernetes for control-plane services and short-lived, isolated scanner/test/agent Jobs.
-- **AI inference:** supply credentials for supported external models, point to a local model endpoint, or disable AI until configured.
+- For **real** connected repositories, Preflyt-run code requires an independently security-reviewed stronger sandbox boundary (e.g. dedicated hardened Kubernetes workers with gVisor/Kata or equivalent, after validation), controlled quotas, no production/model/Git write credentials, restricted network egress and audit evidence.
+- If an approved executor is missing or fails admission, Preflyt **does not run repository code**. It may import existing CI evidence, but missing mandatory results stay **INCOMPLETE**.
+- Local Docker-based execution is restricted to explicitly designated disposable test fixtures.
+- The core Git integration does **not** require permissions to push branches, approve/merge PRs or edit code. Check/status publishing uses narrowly scoped permissions.
+- Organization policies, report evidence and Git statuses must be revision-bound, auditable and resistant to prompt injection or stale result reuse.
+- Source-code egress to external AI models requires organization-approved model/data policy; API keys remain server-side.
 
-> **There is no install command yet.** No Compose file, Helm chart, API, or application source has been committed. Do not interpret this README as evidence that Preflyt can be deployed today.
-
-## Proposed repository layout
-
-The following is a **target structure**, not a listing of currently implemented files. Use pnpm workspaces and Turborepo to manage TypeScript builds, linting, and shared packages:
-
-~~~text
-apps/
-  web/                    # React product UI
-  api/                    # NestJS control plane
-services/
-  agent-worker/           # Node.js / TypeScript AI investigations
-  execution-worker/       # TypeScript Docker / Kubernetes execution controller
-  integration-worker/     # TypeScript GitHub / GitLab adapters
-packages/
-  agents/                 # reusable agent definitions and tools
-  contracts/              # shared TS API/event schemas
-  database/               # Prisma schema and migrations
-  integrations/           # shared SCM / CI adapters
-  policies/               # shared policy definitions
-  ui/                     # shared React components
-infra/
-  compose/                # development deployments
-  helm/                   # production deployment charts
-pnpm-workspace.yaml       # TypeScript workspace declaration (planned)
-turbo.json                # monorepo task orchestration (planned)
-docs/
-  PRD.md                  # product requirements
-  architecture/           # ADRs and threat model, later
-~~~
+See [ADR-0002](docs/architecture/ADR-0002-safe-execution-fixtures-remediation-contract.md) for the enforceable execution isolation baseline and a **separate optional future remediation specification**.
 
 ## Roadmap
 
-- **MVP — Detect and explain safely:** GitHub repository onboarding, PR/CI event processing, scanner and test result ingestion, findings, AI CI investigation, read-only dashboard, audit trail, basic policy and model configuration. **Real-repository scanner/test execution requires approved sandbox isolation before launch**, with a fail-closed ingest-only mode.
-- **PoC (evaluation only):** full remediation flow with fix PR creation **only** in designated disposable GitHub fixture repositories, backed by separate restricted write credentials.
-- **V1 — Verified remediation:** expand the existing MVP-safe execution plane to editable, isolated workspaces with immutable reproducibility/validation evidence, bounded agent code editing, mandatory regression checks, branch-aware developer-reviewed fix PRs and GitLab integration.
-- **V2 — Engineering intelligence:** specialized agents, accepted-fix retrieval, cross-repository trends within tenant boundaries, advanced custom workflows, performance/reliability insights.
+| Stage | Priority | Outcome |
+| --- | --- | --- |
+| **Proof of concept** | One vertical slice | PR → repository profile → security/test/IaC assessment → deterministic gate → readiness report and GitHub feedback; **no code writing** |
+| **MVP** | Core Shift Left platform | GitHub integration, policy baselines, assessment planner, safe validation/imports, findings, readiness, optional AI explanation, audit and reporting |
+| **V1** | Broader lifecycle coverage | Reliability/observability/database/performance checks, design/pre-prod/developer entrypoints, GitLab, richer policies and exceptions |
+| **V2** | Engineering intelligence at scale | More domain coverage, historical trend analysis, recurring issue patterns, organizational standards and integrations |
+| **Optional future module** | Separately approved | AI-assisted code remediation or fix PRs; not required for Preflyt to deliver Shift Left value |
 
-This is a planning sequence, not a release-date commitment. The [Product Requirements Document](docs/PRD.md) defines requirements, acceptance criteria, constraints, and open decisions. [ADR-0001](docs/architecture/ADR-0001-typescript-first-stack.md) records the TypeScript-first language/runtime decision, while [ADR-0002](docs/architecture/ADR-0002-safe-execution-fixtures-remediation-contract.md) defines the **MVP safety gate, fixture-only PoC boundaries, immutable validation contract, and remediation PR target policy**.
+The roadmap is directional, not a delivery promise. See the [PRD](docs/PRD.md) for testable acceptance criteria.
 
-## Security and data handling
+## Proposed monorepo
 
-- Verify webhook signatures and process events idempotently.
-- Use least-privilege GitHub/GitLab integrations; separate read access from patch/PR writing.
-- Store API keys in a server-side secrets system; never embed them in source, logs, prompts, or agent sandboxes.
-- Enforce organization and repository boundaries across database queries, artifacts, logs, knowledge retrieval, and executions.
-- Treat repository contents, CI logs, issue text, and tool output as **untrusted prompt input**.
-- Gate sending source code to external models on administrator-approved data policies.
-- Require human review, protected branches, and independent passing checks before merge. **Validate pinned revisions, the protected original harness, environment, commands, patch checksum and mandatory checks before write-back. Recheck source/target state before and after draft PR creation and reconcile later changes; historical results must never appear as current validation on a changed target.**
-- Preserve redacted, tamper-evident audit records and bounded artifact retention.
+This structure is planned; the directories below are **not yet implemented**.
 
-## Development and contribution status
+~~~text
+apps/
+  web/                      # React / Vite assessment UI
+  api/                      # NestJS control plane
+services/
+  assessment-worker/        # Planning, check orchestration and normalization
+  execution-worker/         # Approved sandbox dispatch and artifact collection
+  intelligence-worker/      # Optional TypeScript AI assessment service
+  integration-worker/       # GitHub/GitLab and CI adapters
+packages/
+  contracts/                # Versioned API, check and evidence schemas
+  database/                 # Prisma
+  policies/                 # Rules, profiles, enforcement
+  integrations/             # Provider and scanner adapters
+  ui/                       # Shared React components
+infra/
+  compose/                  # Local evaluation (planned)
+  helm/                     # Production deployment (planned)
+docs/
+  PRD.md
+  architecture/
+pnpm-workspace.yaml
+turbo.json
+~~~
 
-This repository is at the **product definition stage**. Before accepting implementation PRs, maintainers plan to define coding standards, contribution guidelines, CI checks, secret-scanning rules, and a license.
+## Documents and decision records
 
-Use reviewable feature branches and PRs; do not assume undocumented environment variables or setup commands exist. See [docs/PRD.md](docs/PRD.md) for the initial acceptance criteria and MVP definition.
+- [Product Requirements Document](docs/PRD.md): user journeys, validation domains, policy semantics, functional requirements and phased acceptance criteria.
+- [ADR-0001 — TypeScript-first application stack](docs/architecture/ADR-0001-typescript-first-stack.md)
+- [ADR-0002 — MVP safe execution and optional remediation contract](docs/architecture/ADR-0002-safe-execution-fixtures-remediation-contract.md)
+- [ADR-0003 — OIDC human authentication](docs/architecture/ADR-0003-oidc-user-authentication.md)
+- [ADR-0004 — Assessment and governance architecture](docs/architecture/ADR-0004-shift-left-assessment-governance.md)
+
+## Development status
+
+**Preflyt is currently a documented product design, not a functioning platform.** There is no documented install command and no claim that Docker Compose, Helm, services, scanners, UI or AI integration are running. Future contributions should follow branch protection, scoped security policy and reviewable PRs.
 
 ## License
 
-**Not yet selected.** Preflyt's own source license will be decided before implementation or redistribution. Third-party scanners, model gateways, SDKs, model weights, and rule packs have separate licenses and terms; each must be reviewed before bundling or commercial distribution.
+**Preflyt's source license is not yet selected.** The licensing and redistribution requirements of third-party engines, rulesets, models and gateways must be reviewed before shipping or commercializing the platform.

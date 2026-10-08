@@ -1,15 +1,21 @@
-# ADR-0002: MVP safe execution and verified remediation
+# ADR-0002: MVP execution safety and optional remediation safeguards
 
-**Status:** Accepted product design; implementation pending  
+**Status:** MVP isolation requirements accepted; remediation provisions retained as **conditional future-module safeguards**, not a current release commitment  
 **Date:** 2026-10-08  
-**Related:** [Product requirements](../PRD.md), [ADR-0001](ADR-0001-typescript-first-stack.md)
+**Related:** [Product requirements](../PRD.md), [ADR-0001](ADR-0001-typescript-first-stack.md), [ADR-0004: Shift Left assessment architecture](ADR-0004-shift-left-assessment-governance.md)
+
+## Scope and precedence
+
+**Current core product:** Preflyt is an assessment-first Shift Left platform. [ADR-0004](ADR-0004-shift-left-assessment-governance.md) governs its validation, assessment, engineering policy and readiness-gate architecture. **The MVP execution security requirements in Section 1 of this ADR are mandatory for all Preflyt-run repository scans, tests, builds, dependency installs and commands.** They are not deferred.
+
+**Conditional future scope:** Sections 2–4 and their remediation-specific acceptance criteria are a **security/design specification only if Preflyt later authorizes an optional automated coding-remediation module**. The primary assessment PoC, MVP and V1 **do not require patch generation, branch writing or remediation PR creation**. Earlier wording about a remediation PoC or V1 is historical and does not override this scope correction. The core Git integration may publish only revision-bound check/status results with appropriately scoped permissions.
 
 ## Decisions
 
 1. **MVP may execute code only in an approved isolation environment.** Safe execution is a prerequisite for scanner/test/build jobs, not deferred to V1. If no approved executor exists, Preflyt only ingests external CI findings.
-2. **PoC repository writes are fixture-only.** End-to-end proof of concept may create remediation PRs solely in administrator-designated, disposable fixture repositories. General MVP remains read-only.
-3. **Remediation validation has a versioned, immutable evidence contract** with exact source commit, environment, commands, a protected original reproduction harness, patch SHA-256 and required check outcomes.
-4. **Unmerged source PRs are fixed into their own feature branch**, not silently into main. Fix PRs are created as drafts, checked again after creation, and reconciled when source state changes; historical validation must never be presented as current validation after a target change.
+2. **Optional future remediation experiments are fixture-only.** If separately approved, a remediation proof of concept may create PRs solely in administrator-designated disposable fixture repositories. **The current Shift Left assessment PoC writes no code.** General MVP remains code-read-only.
+3. **Any future remediation validation has a versioned, immutable evidence contract** with exact source commit, environment, commands, a protected original reproduction harness, patch SHA-256 and required check outcomes.
+4. **If the optional remediation module is implemented, unmerged source PRs are fixed into their own feature branch**, not silently into main. Fix PRs are created as drafts, checked again after creation, and reconciled when source state changes; historical validation must never be presented as current validation after a target change.
 
 ## 1. MVP isolation and execution policy
 
@@ -18,7 +24,7 @@
 | INGEST_ONLY | Any connected repository without an approved executor | Consume externally generated CI logs, checks and scanner artifacts; do not run repository code |
 | FIXTURE_SANDBOX | Allowlisted disposable PoC fixtures on an approved test host | Limited local Docker evaluation; **never** real untrusted/customer repositories |
 | APPROVED_REPOSITORY_SANDBOX | Real connected repositories (MVP scan/test/reproduction) | Independently validated stronger isolation; e.g. dedicated Kubernetes workers with gVisor/Kata or an equivalent assessed sandbox |
-| REMEDIATION_SANDBOX | V1 patch and independent validation | All approved repository controls plus editable-path restrictions and Git-writer authorization |
+| REMEDIATION_SANDBOX | Optional future module: patch and independent validation | All approved repository controls plus editable-path restrictions and Git-writer authorization |
 
 Required before **every** sandboxed scanner, test, install, build or agent-command task:
 
@@ -35,11 +41,11 @@ Required before **every** sandboxed scanner, test, install, build or agent-comma
 
 If the approved executor is unavailable or preflight fails, mark the step BLOCKED_EXECUTION_ENVIRONMENT, preserve imported CI evidence, and return an evidence-only or inconclusive investigation. **No silent fallback** to the NestJS API host, a worker shell, or unsafe Docker.
 
-**V1 adds:** edit-capable ephemeral jobs, repro-and-validation pipelines, patch limits, restricted Git writes, scaled sandbox orchestration and further hardening. It does **not** introduce the first mandatory isolation barrier.
+**If an optional remediation module is ever approved:** it would add edit-capable ephemeral jobs, repro-and-validation pipelines, patch limits and restricted Git writes. These are **not V1 commitments**; the mandatory sandbox baseline already applies to MVP validation jobs.
 
-## 2. PoC fixture-only write boundary
+## 2. Optional remediation experiment: fixture-only write boundary
 
-The PoC is a restricted technical experiment, **not a customer-facing MVP remediation feature**:
+**Only if separately authorized**, a coding-remediation PoC would be a restricted technical experiment, **not** a customer-facing feature or a prerequisite to the assessment PoC, MVP or V1:
 
 - Maintain a signed administrator-managed allowlist of **stable provider repository IDs**, not repository-name patterns or LLM instructions.
 - Use a **separate GitHub App installation/write identity** provisioned exclusively on designated disposable fixture repositories (ideally a throwaway organization). General repo integrations remain read-only.
@@ -49,11 +55,11 @@ The PoC is a restricted technical experiment, **not a customer-facing MVP remedi
 - Fixture-local Docker must pass its own controls but is **not** promoted to the approved real-repository executor.
 - Hide PoC write controls from ordinary MVP onboarding; label fixture PRs as evaluations and audit all write attempts.
 
-**Hard acceptance test:** A non-fixture repository must reject branch/PR/comment/push operations even if the request is tampered with, an event is replayed or source code contains prompt injection. Until V1, non-fixture outcomes are findings or downloadable patch suggestions, not automated SCM writes.
+**Hard acceptance test for a future remediation experiment:** A non-fixture repository must reject branch/PR/comment/push operations even if the request is tampered with, an event is replayed or source code contains prompt injection. The present MVP and V1 do not include automated remediation write-back; ordinary outcomes are findings, readiness gates and advice.
 
-## 3. Immutable reproduction and validation evidence contract
+## 3. Optional remediation module: immutable reproduction and validation evidence contract
 
-Each investigation/remediation attempt receives a versioned, append-only evidence record. It must capture:
+**If** a future automated remediation attempt is permitted, it must receive a versioned, append-only evidence record. It must capture:
 
 | Group | Mandatory fields |
 | --- | --- |
@@ -171,7 +177,7 @@ For a mismatch detected after creation, or a subsequent source/target change, in
 
 If the provider cannot be reached, record UNKNOWN_FRESHNESS and keep review promotion blocked; reconcile on recovery and then either confirm the recorded revisions or perform stale cleanup. Recovery and cleanup attempts are bounded and audited. Post-creation checks narrow and detect race windows but cannot eliminate future branch changes. Human review, branch protections and required SCM checks remain independent merge controls; Preflyt never merges.
 
-## 4. PR target policy
+## 4. Optional remediation PR target policy
 
 | Failure origin | New remediation PR base | Behaviour |
 | --- | --- | --- |
@@ -194,14 +200,14 @@ Do not push changes into an existing feature branch. An agent's fix must be prop
 - [ ] Docker-only local runner refuses real untrusted repository jobs; unsafe/missing executor falls back to INGEST_ONLY evidence, **never unsafe execution**.
 - [ ] Imported CI results are clearly marked as external observations and not Preflyt-verified reproduction.
 
-### Restricted PoC
+### Optional fixture-only remediation experiment
 
 - [ ] Only stable fixture repository IDs have write permissions in a separate GitHub App installation.
 - [ ] A controlled fixture produces a validated patch and a human-reviewed fix PR.
 - [ ] Every write to a non-fixture fails from both policy and provider-permission enforcement, including forged event and prompt-injection tests.
 - [ ] General MVP repositories have no automated PR-write workflow.
 
-### V1 validation and targeting
+### Optional future remediation validation and targeting
 
 - [ ] Every attempt stores exact source commit and PR state, immutable environment/toolchain, commands, output evidence, patch checksum and both tree SHAs.
 - [ ] The baseline expected failure is reproduced; after-patch the same original command passes with the frozen trusted harness in an independent equivalent sandbox.
@@ -217,6 +223,8 @@ Do not push changes into an existing feature branch. An agent's fix must be prop
 
 ## 6. Scope note
 
-The [TypeScript-first decision](ADR-0001-typescript-first-stack.md) remains unchanged. The exact choice of isolation runtime, supported OS/kernel versions and approved code-execution hosting still requires engineering/security verification, but **the requirement for safe MVP execution is resolved**.
+The [TypeScript-first decision](ADR-0001-typescript-first-stack.md) remains unchanged. The [assessment and governance decision](ADR-0004-shift-left-assessment-governance.md) is authoritative for product scope. The exact choice of isolation runtime, supported OS/kernel versions and approved code-execution hosting still requires engineering/security verification, but **the requirement for safe MVP execution is resolved and binding**.
 
-**These are design decisions, not statements that the corresponding security controls have been implemented or tested.**
+**The current Shift Left PoC tests assessment planning, evidence, policies and quality gates, without source edits or remediation PRs.** Optional automated coding remediation requires a **new, explicit product decision**, independent implementation/security approval and its own prioritized roadmap before Sections 2–4 become build commitments. None of this ADR's safeguards authorize granting remediation/write privileges to core MVP or V1 workers.
+
+**These are design decisions, not statements that corresponding security controls have been implemented or tested.**

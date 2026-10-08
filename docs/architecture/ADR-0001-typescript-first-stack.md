@@ -4,13 +4,13 @@
 **Date:** 2026-10-08  
 **Product:** Preflyt  
 **Decision owner:** Product / Engineering  
-**Related:** [Product Requirements](../PRD.md), [Repository README](../../README.md), [ADR-0003: OIDC user authentication](ADR-0003-oidc-user-authentication.md), [ADR-0002: safe MVP execution and remediation evidence](ADR-0002-safe-execution-fixtures-remediation-contract.md)
+**Related:** [Product Requirements](../PRD.md), [Repository README](../../README.md), [ADR-0003: OIDC authentication](ADR-0003-oidc-user-authentication.md), [ADR-0002: safe execution and optional remediation](ADR-0002-safe-execution-fixtures-remediation-contract.md), [ADR-0004: Shift Left assessment and governance](ADR-0004-shift-left-assessment-governance.md)
 
 ## Context
 
-Preflyt is a self-hosted, AI-native Shift Left engineering control plane. It ingests repository and CI events, runs engineering checks, investigates failures with AI agents, and ultimately proposes validated remediation pull requests. The original product draft suggested a NestJS/TypeScript control plane plus a Python AI agent service.
+Preflyt is a self-hosted, AI-native **Shift Left engineering assessment and governance platform**. It ingests repository and CI events, plans and executes or imports relevant engineering checks, enforces deterministic quality gates, and explains evidence-backed findings with optional AI. **Automated coding/remediation PRs are not a core product or an MVP/V1 requirement.** The original product draft suggested a NestJS/TypeScript control plane plus a Python AI agent service.
 
-For the initial product, minimizing languages, sharing contracts, and simplifying operations take priority over using a Python-specific coding-agent SDK. Preflyt requires sophisticated tool authorization, orchestration, sandbox execution, evidence capture, and model access—not model training.
+For the initial product, minimizing languages, sharing contracts and simplifying operations take priority over introducing Python-based coding-agent frameworks. Preflyt needs repository/CI integration, assessment planning, sandbox execution, evidence normalization, deterministic policy evaluation and optional explanatory model access—not model training or code generation.
 
 ## Decision
 
@@ -23,10 +23,10 @@ For the initial product, minimizing languages, sharing contracts, and simplifyin
 | Runtime and primary language | Node.js + TypeScript |
 | Browser application | React + Vite + TypeScript |
 | API and control plane | NestJS |
-| AI investigation and remediation agent runtime | Dedicated Node.js/TypeScript worker service |
-| Agent tools | Versioned TypeScript interfaces with runtime input/output validation |
-| Agent SDK | Evaluate Vercel AI SDK and OpenAI Agents SDK for JavaScript; select after a spike |
-| Multi-agent orchestration | Start with ordinary TypeScript state machines/jobs; LangGraph.js only if justified |
+| AI assessment and investigation runtime | **Optional read-only** dedicated Node.js/TypeScript intelligence worker; no coding agent required |
+| Core engines | Versioned TypeScript assessment planner, validation adapters and governance/policy evaluator |
+| AI SDK (optional) | Evaluate TypeScript provider/structured-output SDK against LiteLLM only when AI assessment is implemented |
+| Orchestration | BullMQ job state and TypeScript assessment state machines; multi-agent orchestration is not required |
 | Durable background processing | Redis + BullMQ |
 | Persistent metadata | PostgreSQL + Prisma |
 | Local isolated execution | Docker backend for **allowlisted fixture-only** evaluation |
@@ -40,10 +40,10 @@ For the initial product, minimizing languages, sharing contracts, and simplifyin
 
 1. **HTTP API:** NestJS validates webhook signatures and OIDC identities, establishes server-managed user sessions, maps provisioned issuer/subject identities to local roles, enforces organizational policy, persists metadata, and enqueues work. No model-generated shell commands or code execution in the API process. Human auth is defined in [ADR-0003](ADR-0003-oidc-user-authentication.md).
 2. **Workflow/integration workers:** BullMQ consumers own asynchronous workflow transitions, CI/SCM integration, state persistence, retry and cancellation logic. Jobs use idempotency keys: queue delivery may occur more than once.
-3. **Agent workers:** Separate TypeScript processes consume approved evidence, use model routing, and ask typed tools to perform bounded operations. They hold no cluster-admin or GitHub write credentials.
-4. **Execution controller:** Distinct TypeScript service validates tool authorization then dispatches ephemeral Docker or Kubernetes jobs. The controller is not a general-purpose shell proxy.
+3. **Optional AI assessment worker:** A separate TypeScript process consumes authorized, normalized evidence and produces read-only explanations/recommendations. It cannot change policy decisions or hold cluster-admin or GitHub code-write credentials. Deterministic assessments function without this worker.
+4. **Validation execution controller:** A separate TypeScript service checks assessment admission/executor authorization then dispatches approved scanner/test jobs into isolated fixtures or hardened Kubernetes environments. It is not a general-purpose shell proxy.
 5. **Isolated sandbox:** The only place repository commands run. **MVP** real-repository execution already requires independently validated stronger isolation, least privilege, no production secrets, restricted egress, resource/time ceilings, and runtime preflight; local Docker execution is fixture-only. Unsafe/missing executors must fail closed to ingest-only evidence.
-6. **Restricted Git writer:** Separate integration identity can create a branch/remediation PR **only for fixture repositories in the PoC or authorized V1 workflows** after independent validation with the protected original harness and pre-write source/target checks. Create a draft fix PR and verify source/target state and the pushed tree after creation before human-review readiness; reconcile later changes and invalidate stale/unknown freshness. On an open same-repository feature PR, remediation targets the original feature branch. Stale cleanup affects only the Preflyt-owned fix PR. Agents cannot merge, approve, deploy, or alter protections.
+6. **GitHub checks/status publisher:** The core GitHub integration may publish a revision-bound **engineering quality-gate result**, using only narrowly scoped status/check permissions. It **does not** need branch-write, merge or remediation PR privileges. ADR-0002 documents a **separate optional future remediation Git writer**, whose fixture-only/testing and branch-safety controls remain in force if that capability is ever built.
 7. **LiteLLM gateway:** Separately hosted implementation and provider APIs; provider secrets stay outside sandbox workloads. A third-party gateway may use Python internally without making Python a language for maintained Preflyt services.
 
 ~~~mermaid
@@ -52,22 +52,25 @@ flowchart TD
     SCM["GitHub (GitLab later)"] --> API
     API --> PG[("PostgreSQL + Prisma")]
     API --> Q[("Redis / BullMQ")]
-    Q --> WORK["TypeScript workflow worker"]
-    WORK --> AGENT["TypeScript agent worker"]
-    AGENT --> GATE["LiteLLM container"]
+    Q --> WORK["TypeScript assessment planner / worker"]
+    WORK --> EX["TypeScript approved execution controller"]
+    EX --> S["Isolated scanner / test jobs"]
+    S --> RESULTS["Evidence + normalized findings"]
+    WORK --> RESULTS
+    RESULTS --> POL["Deterministic policy/gate engine"]
+    RESULTS --> AI["Optional TypeScript AI assessment worker"]
+    AI --> GATE["LiteLLM container"]
     GATE --> MODELS["Frontier / local models"]
-    WORK --> EX["TypeScript execution controller"]
-    AGENT --> EX
-    EX --> S["Isolated Docker / Kubernetes Jobs"]
-    S --> RESULTS["Scan, test and patch artifacts"]
-    RESULTS --> API
-    API --> GIT["Restricted SCM writer"]
-    GIT --> SCM
+    POL --> REPORT["Engineering Readiness Report"]
+    AI --> REPORT
+    REPORT --> API
+    API --> STATUS["Revision-bound Git status publisher"]
+    STATUS --> SCM
 ~~~
 
 ## Rationale
 
-- One application language across frontend, backend, integration workers, agent workers, and execution coordination.
+- One application language across frontend, backend, integration workers, assessment/planning workers, optional AI workers and execution coordination.
 - Shared types and runtime validation for requests, events, tool calls, and workflow contracts.
 - Node.js is well suited to I/O-heavy control-plane workloads and Git/CI APIs.
 - Model SDKs, tool-calling, provider routing, and prompt/evaluation tooling are accessible from TypeScript.
@@ -84,22 +87,23 @@ flowchart TD
 
 ## Consequences and guardrails
 
-- Some specialized coding-agent frameworks are Python-first; we may need more TypeScript adapter work or an optional external service later.
-- Agent framework choice is **not yet final**. Evaluate TypeScript SDKs against sandbox/tool control, structured outputs, streaming/cancellation, tracing, compatibility with LiteLLM, security, and licensing.
+- Specialized coding-agent SDKs are not required for the core platform. Should future optional remediation be built, assess framework licensing and execution/security implications separately.
+- For optional AI **assessment**, prioritize reliable structured outputs, traceable evidence links, provider/data-egress policy and LiteLLM compatibility; multi-agent handoffs are not initially necessary.
 - BullMQ is a job queue, **not** an exactly-once workflow engine. Persist explicit workflow state and make external actions idempotent.
 - Prisma is the initial persistence abstraction; use migrations with backward-compatibility safeguards.
 - Kubernetes Jobs execute work; Kubernetes is not the workflow state database.
 - Model code/data egress remains governed by explicit organization policy. Self-hosted orchestration does not automatically imply locally hosted models.
 - The platform must remain capable of analyzing **Python, Go, Java, and other target-language repositories**, even though Preflyt itself is TypeScript-first. Initial tested target languages are Node.js/TypeScript and Python.
-- [ADR-0002](ADR-0002-safe-execution-fixtures-remediation-contract.md) is authoritative for stage-specific safe execution, PoC write scope, immutable reproduction/validation records and remediation PR targeting.
+- [ADR-0004](ADR-0004-shift-left-assessment-governance.md) defines the **primary assessment and governance architecture** and deterministic quality-gate semantics.
+- [ADR-0002](ADR-0002-safe-execution-fixtures-remediation-contract.md) remains authoritative for **mandatory MVP sandbox safety**, while its fixture-only PoC and remediation PR sections apply only to a **separately authorized optional future module**.
 - No runnable services have been implemented at the time of this ADR.
 
 ## Validation before scaling
 
-1. Create a pnpm/Turborepo skeleton with API, web, agent-worker, and execution-worker.
-2. Demonstrate a signed GitHub CI-failure webhook enqueuing an idempotent BullMQ task.
-3. Run a TypeScript agent through LiteLLM, capturing token usage and evidence links.
-4. Dispatch an isolated container job, enforce a timeout, and collect a failing and passing test result.
-5. Show that an agent cannot run commands within the API container or access SCM writer secrets.
-6. Restart the queue worker and verify state reconciliation without duplicate fixes or PRs.
-7. Record outcomes of the agent SDK spike and update this ADR if the decision materially changes.
+1. Create a pnpm/Turborepo skeleton with API, web, assessment worker, execution worker and optional intelligence worker.
+2. Demonstrate a signed GitHub PR/CI webhook enqueuing one idempotent, revision-bound assessment.
+3. Resolve a Repository Engineering Profile and AssessmentPlan from an immutable policy version and changed paths.
+4. Import CI evidence; run eligible scan/test fixture jobs under approved executor profiles, refusing unsafe real-repository execution.
+5. Compute PASS/WARN/BLOCK/INCOMPLETE deterministically and publish the quality gate for the exact commit.
+6. Show that AI disabled/unavailable does not affect deterministic results; if enabled, AI cannot alter the gate or run commands inside the API container.
+7. Restart workers and demonstrate no duplicated assessments, stale green statuses or unauthorized write operations.

@@ -1,629 +1,576 @@
 # Preflyt — Product Requirements Document
 
 **Product:** Preflyt  
-**Positioning:** AI-native Shift Left engineering control plane  
+**Positioning:** AI-native Shift Left engineering platform  
 **Tagline:** Engineering confidence before production  
 **Owner:** Lyrisoft Technologies  
-**Document status:** Draft for review  
-**Version:** 0.3  
+**Status:** Draft for engineering and product review; features are not yet implemented  
+**Version:** 0.3 — Shift Left scope correction  
 **Date:** 2026-10-08  
-**Implementation status:** Not started; requirements are proposed, not statements of shipped functionality
+**Source of architectural decisions:** [ADR-0001](architecture/ADR-0001-typescript-first-stack.md) · [ADR-0002](architecture/ADR-0002-safe-execution-fixtures-remediation-contract.md) · [ADR-0003](architecture/ADR-0003-oidc-user-authentication.md) · [ADR-0004](architecture/ADR-0004-shift-left-assessment-governance.md)
 
 ---
 
 ## 1. Executive summary
 
-Preflyt is a self-hosted engineering platform that detects, investigates, and helps remediate software quality, security, infrastructure, and reliability problems **before changes reach production**. It integrates with existing source-control and CI/CD systems rather than replacing them.
+**Preflyt is a self-hosted, AI-native Shift Left engineering platform that helps organizations find and prevent security vulnerabilities, software defects, infrastructure misconfigurations, reliability failures, and other engineering risks earlier in the software development lifecycle (SDLC).**
 
-Preflyt collects deterministic evidence from tests, scanners, pull-request diffs, and CI failures. AI agents correlate that evidence, investigate likely causes and, **only within an approved sandbox**, execute reproduction steps. **General MVP is read-only and does not create remediation PRs.** Fixture-only proof-of-concept experiments may generate PRs in explicitly allowlisted disposable repositories. **V1** introduces controlled remediation: independent reproduction and validation followed by a human-reviewable PR, preserving immutable evidence.
+Preflyt does not replace Git hosting, CI/CD or software scanners. It combines engineering standards, deterministic technical checks, imported CI evidence, optional AI assessment and source-control feedback into a **continuous engineering assessment and quality-gate system**.
 
-The initial product is an internal/self-hosted, single-organization platform supporting GitHub and TypeScript/Node.js and Python **target repositories**. **Preflyt itself uses Node.js + TypeScript across its application services and React + TypeScript on the frontend; it does not require a Python agent service.** It uses open-source orchestration and scanning components and provides **bring-your-own-model** inference through a configurable gateway: hosted frontier models via API keys or local inference. Docker Compose is the intended evaluation environment; Kubernetes is the production target.
+Preflyt has three core engines:
 
-**Product hypothesis:** Connecting detection to evidence-based AI investigation and verified, reviewable fixes will reduce engineer time spent diagnosing CI failures and remediating common defects without weakening security or change controls.
+1. **Engineering Validation Engine:** discover what needs checking, run/ingest eligible scanners and tests, normalize results and retain trustworthy evidence.
+2. **Engineering Governance Engine:** apply versioned policies, calculate evidence-backed readiness and enforce explicit PASS/WARN/BLOCK/INCOMPLETE outcomes across repositories and lifecycle stages.
+3. **Engineering Intelligence Engine:** use optional AI agents to explain findings, investigate risks and propose next steps without owning policy decisions or editing source code.
 
-## 2. Problem statement
+The **primary entity is an Assessment**: evaluation of a design artifact, change, commit, pull request, or release candidate against a specific set of rules at a pinned revision. The **primary deliverable is an Engineering Readiness Report**, not a remediation PR.
 
-Engineering tools are fragmented. CI/CD systems identify failed steps; scanners identify suspicious code or dependencies; test frameworks report assertion failures. Developers and DevOps/SRE engineers must still gather context, reproduce defects, determine root causes, make fixes, and validate outcomes. Results are often scattered across PR comments, logs, chats, and incident reports.
+**Automated code editing and remediation PRs are not the core product and are not required for MVP or V1.** A separately authorized future remediation module may use the previously designed evidence/reproduction contract in ADR-0002.
 
-Current gaps include:
+The planned application stack is **Node.js + TypeScript, React + Vite, NestJS, PostgreSQL/Prisma, Redis/BullMQ**, and optionally LiteLLM for frontier or self-hosted models. Docker Compose is the local/evaluation packaging goal; Kubernetes with an approved hardened sandbox is the production execution target.
 
-1. **Disconnected signals:** a CI failure, a vulnerable dependency, and an IaC policy breach appear in different systems with little correlation.
-2. **High investigation cost:** experienced engineers repeatedly sift through logs and repository history for routine failures.
-3. **Late reliability checks:** shutdown handling, migrations, timeouts, and deployment safety are often discovered too late.
-4. **Unverified AI suggestions:** conversational explanations and generated patches can appear convincing without a failing repro and passing regression checks.
-5. **Inconsistent governance:** quality gates, model access, execution privileges, and developer approvals differ by repository.
-6. **Weak organizational memory:** accepted fixes and known failure patterns are not systematically retained as reusable evidence.
+## 2. Problem and opportunity
 
-Preflyt must close the gap between a detected engineering issue and a **validated, auditable remediation proposal**.
+Engineering organizations shift important validation too far right. Security findings, broken API contracts, migration mistakes, expensive infrastructure, missing telemetry and unsafe deployment behaviour can be discovered during QA, staging, audits, or production incidents.
 
-## 3. Goals, non-goals, and principles
+Existing engineering tools are numerous but fragmented. Developers may see several CI checks without understanding which are required, whether evidence is current, whether failures matter to their change, or whether an engineering standard has been met.
 
-### 3.1 Goals
+### Problems to solve
 
-| ID | Goal |
-| --- | --- |
-| G-01 | Reduce time from CI/scanner failure to an actionable, evidence-linked diagnosis. |
-| G-02 | Make quality, security, and reliability checks available as early as PR and CI stages. |
-| G-03 | Produce reproducible evidence before claiming that an AI-generated patch fixes an issue. |
-| G-04 | Create developer-reviewable remediation PRs, never bypassing branch protection. |
-| G-05 | Operate on customer-controlled infrastructure with optional external model inference. |
-| G-06 | Centralize engineering policies, findings, investigations, and audit trails across repositories. |
-| G-07 | Keep SCM, CI, model providers, scanners, and sandbox backends replaceable. |
-| G-08 | Provide measurable effectiveness, latency, safety, and model-cost telemetry. |
-
-### 3.2 Non-goals
-
-- Replacing GitHub/GitLab, their CI systems, artifact registries, or an IDE.
-- General-purpose agent access to production credentials or infrastructure.
-- Autonomous merging, release approvals, or production deployments in MVP/V1.
-- Guaranteeing security or correctness from an AI review or a passing test suite.
-- Building a proprietary language compiler, SAST engine, or model from scratch.
-- Predictive incident detection or full operational auto-remediation in MVP.
-- Multi-tenant SaaS, on-prem air-gap guarantees, and regulatory certification in MVP.
-- Running untrusted user repositories directly in privileged control-plane containers.
-
-### 3.3 Principles
-
-**Evidence before inference; least privilege; human-controlled delivery; reproducibility; fail closed; explainable outcomes; composability; privacy by configuration.** An agent's confidence statement must never substitute for a deterministic release policy.
-
-## 4. Users and jobs to be done
-
-| Persona | Jobs to be done | Main workflow |
+| Problem | Consequence | Shift Left response |
 | --- | --- | --- |
-| Developer | Understand failing tests quickly; receive small, reviewable patches | Investigation → fix PR |
-| Tech lead / reviewer | Assess root cause, evidence, risks, and patch quality | Findings / remediation review |
-| Platform / DevOps engineer | Apply reusable standards across repositories | Integrations, repo profiles, workflows |
-| SRE / reliability engineer | Shift startup, shutdown, retry, timeout, and compatibility risks earlier | Reliability findings and validations |
-| Application security engineer | Prioritize scanner findings and review safe fixes | Security findings and policy exceptions |
-| Engineering manager | Understand trends and time saved without misleading scoring | Overview, reports, audit |
-| Organization administrator | Control users, model/API keys, repositories, and execution policy | Settings and access controls |
+| Inconsistent security, test and infrastructure checks | Defects escape code review | Repository-aware assessment profiles and required checks |
+| Disconnected tools and reports | Slow interpretation, missing context | Unified evidence, provenance and normalized findings |
+| Policies exist only in documents | Standards not consistently applied | Versioned machine-evaluable policy and quality gates |
+| Failure evidence arrives too late | More expensive fixes | PR/CI feedback with future local/design-stage extensions |
+| AI suggestions are not evidence | Incorrect prioritization or false confidence | AI interpretation distinctly labeled as advisory |
+| Missing/expired test results appear green | Unsafe merges | Explicit INCOMPLETE states and revision-bound freshness |
+| Security, reliability and cost reviewed in silos | Incomplete readiness decisions | Unified, domain-based engineering assessment |
+| No systematic learning from escaped defects | Repeat regressions | Trend/evidence analysis and evolving engineering standards |
 
-### 4.1 Primary user stories
+### Value proposition
 
-- As a developer, when CI fails, I want a diagnosis linked to the exact failed job and relevant files.
-- As a developer, I want the agent to distinguish a confirmed reproduction from a hypothesis.
-- As a reviewer, I want to inspect the patch, test evidence, and commands run before approving any remediation.
-- As a platform engineer, I want an organization-wide policy baseline with repository-specific overrides.
-- As an administrator, I want to specify which models may receive source code, per-run cost caps, and retention rules.
-- As a security engineer, I want secrets, destructive operations, and policy bypass attempts prevented independently of the AI model.
+**Prevent engineering issues before production through continuous evidence-based assessments and enforceable, explainable quality gates.**
 
-## 5. Scope and delivery stages
+Do not claim that Preflyt guarantees vulnerability-free software, regulatory certification, lower cloud bills, or zero downtime.
 
-### 5.1 Proof of concept (technical validation)
+## 3. Target users and jobs
 
-Implement one end-to-end workflow **only on administrator-designated, disposable fixture repositories**:
+| Persona | Primary job |
+| --- | --- |
+| Software developer | Receive early, actionable feedback tied to the exact code change, with evidence and recommended improvements |
+| Tech lead / reviewer | See whether a change satisfies required standards and why a gate passed/failed |
+| Platform / DevOps engineer | Configure and reuse engineering assessments across teams and repositories |
+| SRE | Define checks for graceful shutdown, health, reliability, timeouts, retries, deployment readiness and observability |
+| AppSec engineer | Govern SAST, dependencies, secrets, containers and IaC compliance, including justified exceptions |
+| Database engineer | Catch dangerous schema changes and compatibility risks before deployment |
+| Engineering manager | Understand coverage, recurring classes of risk, enforcement adoption and escaped defects |
+| Organization administrator | Govern identity, integrations, source-code/model egress, executor profiles, budgets and approval rights |
 
-**GitHub fixture failed check → collect evidence → investigate → reproduce in approved fixture sandbox → patch → rerun tests → open a fixture-only reviewable PR.**
+### User stories
 
-The PoC uses a **separate GitHub App installation/write identity restricted to allowlisted stable fixture repository IDs**. The same fixture allowlist is enforced at workflow admission and independently at the Git writer. It **must not create branches, comments or PRs on ordinary/customer repositories**. Even when testing previously unseen real failures, use read-only evidence and approved isolated execution; never write to non-fixture repositories. Docker-based local fixture sandboxes are not approved for real untrusted repository execution. The normal MVP explicitly excludes the PoC's fixture-only write function. Refer to [ADR-0002](architecture/ADR-0002-safe-execution-fixtures-remediation-contract.md).
+- As a developer, I want changes assessed during PR/CI so I can correct defects before merge.
+- As a tech lead, I want a single report showing which required checks passed, failed or lack evidence.
+- As a platform engineer, I want baseline policies inherited across repositories with controlled overrides.
+- As an SRE, I want executable production-readiness checks and clear warnings where only heuristic analysis is possible.
+- As AppSec, I want confirmed security evidence and no AI ability to waive mandatory rules.
+- As an administrator, I want a read-only source integration for ordinary assessments, with model traffic and job execution restricted by policy.
+- As an engineering manager, I want trends based on observed checks rather than opaque health scores.
 
-### 5.2 MVP — Detect and explain
+## 4. Product principles and non-goals
 
-**In scope:**
-- Single self-hosted organization; OIDC user sign-in, one-time first-Owner bootstrap, explicitly provisioned users and Preflyt-managed RBAC.
-- GitHub installation or scoped integration; repository onboarding.
-- Signed webhook ingestion and idempotent event tracking.
-- Read-only retrieval of PR diff, CI checks, selected logs, and repository metadata.
-- Repository profile for TypeScript/Node.js and Python.
-- Existing test output ingestion plus configurable scanner/test runs (Trivy, Gitleaks, Semgrep CE and project-native tools); normalize and deduplicate findings. **Every Preflyt-executed repository job requires an independently approved isolated executor before MVP release.**
-- AI CI Failure Investigation Agent with evidence-linked diagnosis and uncertainty labels.
-- Findings and investigation screens; audit and model-usage history.
-- Organization/repository workflow enablement, basic model and privacy policy, execution budgets.
-- Docker Compose evaluation path for control-plane services and restricted fixture-only evaluation; **approved stronger-isolation execution for real connected repositories**, with an ingest-only mode whenever the safe executor is absent.
+### Principles
 
-**Not yet in MVP:** write-back of patches or fix PRs on ordinary repositories (fixture-only PoC is a separate restricted experiment), GitLab, specialized agent catalog, predictive risk scoring, enterprise SSO, custom visual workflow builder. **No real repository scanner/test execution until the MVP sandbox security gate passes.**
+1. **Shift left across the SDLC, not just CI failure response.**
+2. **Assessment first:** every run has a subject, revision, policy, plan and traceable evidence.
+3. **Deterministic governance:** quality gates rely on check results and rules, never LLM confidence alone.
+4. **No evidence is not success:** missing, skipped, timed-out or stale mandatory checks cannot yield PASS.
+5. **AI is optional:** deterministic assessments work without an AI model or external inference API.
+6. **Safe execution from day one:** tests, scanners, build scripts and parsers processing repository code are untrusted workloads.
+7. **Integrate rather than replace:** GitHub/GitLab and CI remain the systems of record for code and build execution.
+8. **Provenance and freshness:** identify whether a result was imported or executed, and the exact revision it covers.
+9. **Developer-friendly feedback:** actionable, low-noise, explainable results with controlled rollout and exceptions.
+10. **Self-hosted with provider choice:** open-source components, configurable frontier-model keys, and local-model option.
 
-### 5.3 V1 — Validate and remediate
+### Non-goals
 
-- **Edit-capable** ephemeral Kubernetes sandbox jobs and scaled execution management, building on the **mandatory MVP safe-execution baseline**, rather than introducing isolation for the first time; Docker remains fixture-only for local evaluation.
-- Agent code editing under repository/path/command scope.
-- **Versioned reproduction/validation contract:** pinned commit and branch context, environment/image digest, exact commands, baseline failure, canonical patch SHA-256, before/after Git tree SHAs, predeclared mandatory checks and independently captured outcomes.
-- Restricted Git write-back and remediation PR creation; never merge or approve. For an **open same-repository feature PR**, a fix PR targets that **feature branch**, never silently the default branch; stale, forked or ambiguous targets fail closed.
-- Independent deterministic quality gates and configurable policy enforcement.
-- GitLab integration through a provider adapter.
-- Reliability/IaC/database-migration validations where executable checks exist.
-- More comprehensive permissions and workflow reporting.
+- Building a general-purpose autonomous coding agent or IDE.
+- Automated code modification or remediation PRs as core MVP/V1 requirements.
+- Replacing source control, CI/CD pipelines, vulnerability databases, or specialized testing frameworks.
+- Allowing AI to pass quality gates or authorize changes.
+- Fully automatic compliance certification, cost accuracy guarantees or incident prediction.
+- Providing multi-tenant SaaS isolation in the initial self-hosted single-organization installation.
+- Automatically running all possible scanners against every repository regardless of relevance.
+- Requiring frontier-model API keys to obtain deterministic validation.
 
-### 5.4 V2 — Engineering intelligence
+## 5. Core product engines
 
-- Specialized security, reliability, database, infrastructure, test, and performance agents.
-- Retrieval from approved prior investigations, accepted fixes, and incident documentation.
-- Configurable multi-stage workflow templates, controlled escalations, and model routing.
-- Cross-repository trend analysis, evidence-backed engineering health and recurring-failure patterns.
-- Optional additional model runtimes, CI adapters, and organization deployment profiles.
+### 5.1 Engineering Validation Engine
 
-V2 scope is directional and depends on measured MVP/V1 outcomes.
+**Responsibility:** evaluate proposed changes and repository baselines using deterministic checks, imported third-party evidence, or approved isolated jobs.
 
-## 6. End-to-end product flows
+Capabilities:
 
-### 6.1 CI failure investigation
+- Build a **Repository Engineering Profile** by inspecting languages, manifests, lockfiles, CI configuration, frameworks, test tooling, Dockerfiles, database migration tools, IaC and telemetry configuration. Unknowns are recorded.
+- Identify applicable checks from organization policies, repository profile, touched files, lifecycle stage and configured environment.
+- Ingest GitHub CI/check status, test artifacts and supported scanner reports with provenance.
+- Execute configured checks in **approved execution sandboxes only**, when a suitable runtime is available.
+- Normalize findings, scan results, check coverage, status, location, category, severity, evidence references, revision and timestamps.
+- Distinguish observed findings from heuristic or AI-suggested concerns.
+- Produce a consistent, versioned **AssessmentPlan** and evidence registry.
 
-~~~mermaid
-sequenceDiagram
-    participant Git as GitHub/CI
-    participant Ingest as Webhook Gateway
-    participant Ctrl as Preflyt Control Plane
-    participant Job as Isolated Job
-    participant AI as AI Investigator
-    participant User as Developer
+**Validation domains** (not all equally deep in MVP):
 
-    Git->>Ingest: Signed failed-check event
-    Ingest->>Ctrl: Validated, idempotent event
-    Ctrl->>Git: Fetch check metadata and scoped logs
-    Ctrl->>Ctrl: Create finding / investigation
-    Ctrl->>Job: Run configured repro/check (when permitted)
-    Job-->>Ctrl: Structured evidence and artifacts
-    Ctrl->>AI: Evidence + approved context
-    AI-->>Ctrl: Hypothesis, citations, next checks
-    Ctrl->>User: Investigation report
-~~~
+| Domain | Representative checks | Target stage |
+| --- | --- | --- |
+| Security | SAST, dependency/SCA, secrets, container vulnerabilities, API security, IaC misconfiguration | PR and CI |
+| Testing and code quality | Lint/typecheck, unit/integration/contract tests, changed-path requirements, regression results | Local, PR and CI |
+| Reliability | Health/readiness, graceful shutdown, timeout/retry contracts, connection lifecycle, resilience tests | PR, CI and pre-production |
+| Infrastructure | Terraform/OpenTofu validation/plan, Kubernetes manifest policy, Docker hardening | PR and CI |
+| Database | Destructive migration detection, expand/contract compatibility, query performance tests | PR and CI |
+| Performance | Comparable benchmark baselines, latency/resource regression, k6 evidence | CI and pre-production |
+| Observability | Log/tracing/metrics instrumentation, propagation, health endpoints, expected telemetry | PR and CI |
+| Compliance | Organization-defined controls and evidence obligations | Design through release |
+| Cost | IaC cost-delta estimates and budgets | Infrastructure PR and pre-deploy |
 
-### 6.2 Remediation workflow (V1)
+**MVP must ship usable Security, Testing/Quality and Infrastructure assessment adapters** with a general mechanism for the other categories. Reliability, performance, observability, database, compliance and cost deepen in later stages. "Supported" always refers to specific tested checks, not a blanket claim of full-domain coverage.
+
+### 5.2 Engineering Governance Engine
+
+**Responsibility:** determine whether observed engineering evidence meets organizational standards and produce quality-gate outcomes.
+
+Capabilities:
+
+- Define versioned policies at organization, repository, branch/environment and lifecycle-stage scopes.
+- Specify required vs advisory checks, applicability criteria, severity thresholds, owners, evidence-source acceptance rules, freshness and enforcement mode.
+- Evaluate evidence with **deterministic rules**; optionally use OPA later.
+- Return **PASS / WARN / BLOCK / INCOMPLETE / NOT_APPLICABLE**, with precise reasons.
+- Permit explicitly scoped, time-limited waivers with named approver and full audit trail; non-waivable system security controls remain enforced.
+- Publish the assessment outcome to the exact GitHub commit/PR as a check run/status when permitted, with deep links to findings.
+- Support advisory-only rollout before switching policies to blocking mode; never silently default incomplete evidence to green.
+- Maintain policy evolution and historical evaluation results without rewriting past outcomes.
+
+**Gate semantics:**
+
+| Gate | Meaning |
+| --- | --- |
+| PASS | Every applicable mandatory check has fresh trusted passing evidence and no blocking policy finding |
+| WARN | Mandatory checks are complete; advisory warnings remain |
+| BLOCK | Confirmed blocking policy violation or required check failure |
+| INCOMPLETE | Required evidence missing, invalid, stale, skipped, timed out, or untrusted |
+| NOT_APPLICABLE | Deterministically established that the policy/check does not apply, with reason |
+
+A gate's **enforcement** (advisory versus merge-blocking) is separate from its **evaluation result**. A PASS is not an authorization to merge, and an AI explanation never changes the underlying decision.
+
+### 5.3 Engineering Intelligence Engine
+
+**Responsibility:** add contextual intelligence without becoming a coding agent or policy decision authority.
+
+Capabilities:
+
+- Explain scanner/test findings and their relevance to the changed code.
+- Correlate related evidence across domains, such as a risky Terraform change combined with missing network policy.
+- Investigate likely causes of failed assessments, with evidence-linked hypotheses and uncertainty.
+- Recommend remediation approaches, test scenarios, safer configurations and relevant engineering standards.
+- Identify missing checks or blind spots as **advisory** findings; do not fabricate passing evidence.
+- Summarize engineering readiness for developers, reviewers and leaders.
+- Optionally use external frontier models through LiteLLM or local inference, gated by organization policy and redaction.
+
+**Required separation:** AI can recommend improvements and explain risks, but must not set PASS/BLOCK directly, grant policy exceptions, execute arbitrary code without a validated tool boundary, merge PRs or deploy.
+
+## 6. Supported SDLC stages and user journeys
+
+### 6.1 Lifecycle coverage
+
+| Stage | Experience | Release |
+| --- | --- | --- |
+| Requirements / design | Evidence checklists and architecture/API-contract review inputs; optional advisory AI | V1 and later |
+| Local development | Developer-side/pre-commit checks and future CLI integrations | V1 and later |
+| Pull request | Repo-aware policy, applicable checks, AI explanation, actionable PR status | **MVP** |
+| CI | Ingest test/scanner evidence and execute approved checks where safe | **MVP** |
+| Pre-production | Performance, database migration, reliability and release-readiness evidence | V1 |
+| Production feedback | Track escaped defects and feed findings into earlier standards | V2 |
+
+### 6.2 User journey A: GitHub onboarding and baseline
+
+1. Administrator authenticates using the approved OIDC provider and installs GitHub App with selected repository access.
+2. Preflyt discovers languages, manifests and CI/infra signals and drafts a Repository Engineering Profile.
+3. Administrator reviews the profile and selects the applicable policy baseline.
+4. Preflyt explains which checks are imported, which run in approved sandboxes, and which remain unavailable.
+5. Initial read-only baseline assessment is triggered.
+6. Repository detail displays findings, missing evidence, policy coverage and current readiness.
+
+### 6.3 User journey B: Pull request assessment (MVP primary flow)
+
+1. A GitHub PR is opened/updated; authenticated webhook resolves exact head SHA and relevant base state.
+2. Assessment Planner identifies changed paths, repository profile, stage and versioned policies.
+3. Validation Engine collects already available CI evidence and runs eligible checks **only** if an approved sandbox is available.
+4. Normalized evidence and findings are evaluated deterministically.
+5. Intelligence Engine optionally provides evidence-linked analysis and recommendations.
+6. A revision-bound Readiness Report is generated; GitHub check status/comment links to the report according to installed permissions.
+7. Any new commit invalidates the previous report as *current*; a new assessment is scheduled.
 
 ~~~mermaid
 flowchart TD
-    A["Finding / failed CI run"] --> B["Policy and permission check"]
-    B --> C["Collect and redact context"]
-    C --> D["Isolated repro job"]
-    D --> E{"Failure reproduced?"}
-    E -->|No| U["Unverified diagnosis; report and stop"]
-    E -->|Yes| F["Agent proposes bounded patch"]
-    F --> G["Independent validation jobs"]
-    G --> H{"Required checks pass?"}
-    H -->|No, retry budget remains| F
-    H -->|No, budget exhausted| I["Mark unresolved and escalate"]
-    H -->|Yes| J["Restricted Git writer creates draft fix PR"]
-    J --> L["Post-creation source/target/tree verification"]
-    L -->|Matching observed revisions| K["Human review and protected-branch checks"]
-    L -->|Changed or unavailable| M["Invalidate current status; reconcile and clean up"]
+  PR["PR / CI event"] --> PROFILE["Repository profile + changed paths"]
+  PROFILE --> PLAN["Versioned assessment plan"]
+  PLAN --> SOURCE["Import CI evidence / approved sandbox checks"]
+  SOURCE --> FIND["Normalized findings + provenance"]
+  FIND --> RULES["Deterministic policy evaluation"]
+  FIND --> AI["Optional AI assessment"]
+  RULES --> REPORT["Engineering readiness report"]
+  AI --> REPORT
+  REPORT --> GATE{"Gate result"}
+  GATE --> PASS["PASS / WARN"]
+  GATE --> HOLD["BLOCK / INCOMPLETE"]
+  PASS --> FEEDBACK["PR / dashboard feedback"]
+  HOLD --> FEEDBACK
 ~~~
 
-**Definitions:** A finding is an observed issue or check result; an investigation is an evidence-gathering and reasoning run; a remediation is a proposed code or configuration change. A **validated** remediation requires the original failure to be reproduced on the pinned commit, a separately executed post-patch passing reproduction using the **same protected original harness**, and **all predeclared mandatory checks passing**. Validation is tied to the recorded revision tuple; PR freshness is tracked separately and rechecked after creation and on relevant source/target changes. Missing, skipped, failed or unavailable mandatory checks mean **not validated**. Passing checks do not guarantee overall correctness.
+### 6.4 User journey C: Engineering standard enforcement
 
-### 6.3 Status model
+1. Platform/AppSec/SRE owner defines policy (e.g., no critical dependency CVEs, required test results, no public database exposure, or graceful shutdown test).
+2. Policy starts in advisory mode with visible applicability and required evidence definitions.
+3. Teams monitor observed pass/fail/unknown rates and tune false positives.
+4. Authorized owner activates blocking enforcement for scoped repositories/branches.
+5. Exceptions require reason, approver, expiry and audit; no agent can grant them.
 
-- **Finding:** open → triaged → investigating → remediation proposed → resolved / accepted risk / false positive (authorized disposition).
-- **Investigation:** queued → collecting evidence → running checks → analyzing → completed / inconclusive / failed / cancelled.
-- **Remediation (V1):** proposed → patching → validating → draft PR pending verification → human-review eligible / stale / failed / cancelled; merged and declined statuses are synchronized from the SCM provider, not decided by an agent.
-- Retries create linked attempts; no job is allowed to spin indefinitely.
-- **Execution availability:** approved sandbox → eligible to run; absent/failed sandbox → BLOCKED_EXECUTION_ENVIRONMENT, with INGEST_ONLY evidence and an inconclusive investigation where necessary.
-- **Repro/validation:** not_reproduced / reproduced → patch_proposed → validating → validated / not_validated; historical validation stays bound to its immutable revision tuple.
-- **PR freshness:** PENDING_VERIFICATION / CURRENT_AT_OBSERVED_REVISION / STALE_REVISION / TARGET_UNAVAILABLE / UNKNOWN_FRESHNESS. Record the last successful observation time; stale, pending, unknown or policy-expired freshness blocks current-validation claims and review promotion.
+### 6.5 User journey D: AI-assisted assessment explanation
 
-### 6.4 Safe execution is an MVP entry criterion
+1. Developer opens a failed assessment.
+2. Preflyt shows deterministic failed checks and evidence **before** any model-generated analysis.
+3. AI explains likely impact and reasonable next steps, differentiating observed evidence from hypotheses.
+4. If the model is unavailable or source-code egress is disallowed, the deterministic assessment and quality gate remain available.
 
-**Every scanner, test, dependency-installation script, build step, and agent-generated command that processes real connected repository contents is untrusted code execution.** The initial MVP must use an approved repository sandbox with verified isolation, not a generic Docker process or an unsandboxed Kubernetes Job.
+## 7. Delivery scope and roadmap
 
-Mandatory controls: non-root/no privilege escalation, no host Docker socket or privileged/host mounts, read-only base image and bounded workspace, capability reduction and system-call restrictions, CPU/memory/disk/PID/deadline limits, default-deny network including cloud metadata and internal services, zero production/model/SCM-write credentials inside jobs, pinned checkout and image digest, independent runtime/preflight attestation, cleanup on cancellation, and negative escape/exfiltration tests. Real-repository execution additionally requires an assessed stronger sandbox boundary (e.g. gVisor/Kata or equivalent), with an approved worker/runtime profile. A plain Docker sandbox can be used for **explicit PoC fixtures only**.
+### 7.1 Technical proof of concept — validate assessments, not code generation
 
-**Fail closed:** If the sandbox is not approved or a control fails, Preflyt may consume previously generated CI evidence but must not execute repository code. Show BLOCKED_EXECUTION_ENVIRONMENT; never fall back to running code in the API/agent host. The [execution security contract](architecture/ADR-0002-safe-execution-fixtures-remediation-contract.md#1-mvp-isolation-and-execution-policy) defines the gate.
+**Required vertical slice:**
 
-### 6.5 Remediation reproducibility contract (V1; fixture PoC uses same rules)
+**GitHub PR → repository discovery → import/approved execution of security, tests and IaC checks → normalized findings → versioned policy evaluation → PASS/WARN/BLOCK/INCOMPLETE readiness report → GitHub feedback.**
 
-A versioned, immutable attempt record is required before labeling a remediation as validated or creating a fix PR. It **must** include: stable provider repository ID, originating CI/check and source PR identity; **exact source commit SHA** and branch/head/PR-base context; sandbox type, **image digest**, architecture, runtime/tool versions, dependency lock and configuration hashes, network-policy identity and redacted environment-variable names; **exact commands**, working directories, timeouts, exit codes and evidence artifacts; **baseline expected/observed failure signature and protected original reproducer artifact/manifest hashes, frozen selectors/configuration/inputs and expected test discovery**; **canonical patch SHA-256**, changed paths and before/after Git tree SHAs; **policy version and mandatory check set frozen before patching**; results of independent validation jobs; and final SCM target/authorization, pre/post-creation source/target observations, freshness timestamps and cleanup outcome. Never persist secret values in these records.
+Prove one seeded security failure, one missing required test result and one IaC violation, plus a clean PR, a stale revision and an AI-disabled run.
 
-Process: (1) independently freeze and hash the original reproduction harness outside agent-editable files, (2) reproduce a matching failure on the pinned original revision, (3) generate a bounded patch, (4) independently rerun **the identical original reproducer with its unchanged trusted assertions, selectors, configuration and inputs** against patched application code in an equivalent pinned environment and show the expected tests executing and passing, (5) pass affected regression tests, repository-required configured tests/build/lint/typecheck, applicable security/IaC checks and patch/harness-integrity checks, (6) recheck authorization and required source/target revisions before writing, (7) create a **draft** fix PR, verify its identity and pushed tree and re-fetch source PR state/target HEAD/integration base after creation, then reconcile on events and periodically. Agent-written tests are supplemental; removing assertions, introducing skips, redirecting selectors, zero discovered tests or forged reports cannot satisfy the protected reproducer. A mandatory check missing, skipped, errored, timed out or failed means NOT_VALIDATED; nondeterministic/nonmatching baseline means INCONCLUSIVE. Applicability is decided deterministically **before** editing; recorded authorized exceptions cannot waive the original trusted reproduction. Harness revisions require independent approval and a new baseline attempt.
+The PoC does **not** need to generate a patch or remediation PR. If a future separate coding-remediation experiment is authorized, fixture-only Git writing is governed by ADR-0002 and is **not part of this PoC's acceptance criteria**.
 
-**Branch target decision:** For a failure on an **open same-repository feature PR**, branch the fix from the original PR's **head SHA** and create a **separate remediation PR targeting that feature branch**, not main. For a failure directly on the default branch, target that branch after verifying its HEAD is still pinned. **Forked PRs do not receive automatic write-back in initial V1**; supply a patch artifact instead. Deleted, moved, merged, closed or ambiguous sources block writing and require renewed investigation. Merge-ref-only CI failures require additional integration-context verification; head-only tests cannot establish a merge fix. No agent can directly push to an existing source branch, merge, or approve.
+### 7.2 MVP — continuous engineering assessments
 
-**Branch-race handling:** GitHub PR creation targets a live branch name and does not atomically compare its HEAD to a supplied expected SHA. Pre-write checks cannot rule out transient stale drafts. Post-creation checks must record the exact source/target revisions, fix tree and source PR state before establishing CURRENT_AT_OBSERVED_REVISION or human-review readiness. Changed revisions/state invalidate current validation and trigger bounded, audited closure of the **Preflyt-owned** fix PR only; pending/failed cleanup stays visible, with draft retention where supported and authorized intervention on failure. Never close or modify the original source PR, retarget automatically, force-push its branch or reuse validation on a new base. Provider outages or expired freshness produce UNKNOWN_FRESHNESS and block promotion until reconciliation. Events plus periodic reconciliation cover missed deliveries; durable unique operation records and serialized retries prevent duplicate PR writes. Historical evidence remains immutable and is displayed with its validated revisions and observation time.
+**Must deliver (P0):**
 
-Full normative field definitions, check-selection rules, branch-target matrix and acceptance tests: [ADR-0002](architecture/ADR-0002-safe-execution-fixtures-remediation-contract.md).
+- Self-hosted initial single-organization installation, OIDC user auth, authorization and audit.
+- GitHub integration, selected-repository onboarding, webhook signatures and idempotent PR/CI event ingestion.
+- Repository Engineering Profile and changed-path applicability detection.
+- Versioned baseline engineering policy with inherited repo scope, mandatory/advisory checks, enforcement mode.
+- Security, testing/code-quality and infrastructure assessment adapters, with imported CI evidence support.
+- Safe isolated repository execution **before** any Preflyt-run scanner, test, install/build or command on real repositories; ingest-only fail-safe fallback.
+- Normalized findings and source/provenance/freshness; deterministic quality-gate engine.
+- Readiness Report and revision-bound GitHub check/status feedback.
+- Optional AI explanation and analysis through approved model gateway; **must function without AI**.
+- Basic Overview, Repositories, Assessments, Findings, Policies, Models/Integrations and Audit screens.
+- Structured traces/metrics and per-run costs where models are used.
+- Docker Compose local/evaluation setup; supported Kubernetes deployment path for approved real-repo execution.
 
-## 7. Functional requirements
+**Explicitly excluded:** general automatic code edits/fix PRs, custom general-purpose coding agents, Kubernetes/CI replacement, advanced SRE incident remediation, GitLab initially, unbounded workflows, comprehensive domain-wide scanner coverage, multi-tenant SaaS.
 
-Each requirement is testable and has a delivery stage: P = restricted fixture-only PoC, M = MVP, V1 = V1, V2 = V2. P is **not** a general customer-facing capability.
+### 7.3 V1 — broaden prevention across the SDLC
 
-### 7.1 Identity, access, and repository connections
+- GitLab integration; additional evidence-source adapters.
+- Reliability and observability readiness templates with **executable** checks wherever available.
+- Database migration compatibility assessments and pre-production validation.
+- Performance regression baselines and transparent comparability requirements.
+- Developer-side/CLI and design artifact assessment paths.
+- More detailed policy management, exceptions and approval workflows.
+- Scaled execution profiles and cost/compliance advisory checks.
+- Engineering coverage, trends and reporting.
 
-| ID | Stage | Requirement | Acceptance signal |
+**Automated remediation remains a separately proposed optional extension**, not a condition for V1 completion.
+
+### 7.4 V2 — organization-wide engineering intelligence
+
+- Expanded reliability, performance, cloud-cost, compliance and database policy libraries.
+- Evidence-backed organizational engineering trends, recurring issue patterns and escaped-defect feedback.
+- Cross-repository assessment history within authorized organization boundaries.
+- Advanced workflow templates and contextual AI advisory agents.
+- Additional source systems and private/offline inference configurations.
+- Optional explicitly authorized remediation integration if validated, justified and separately prioritized.
+
+**Roadmap gate:** features advance based on validated effectiveness, safety and user adoption, not assumed model autonomy.
+
+## 8. Functional requirements
+
+Use **M** for MVP, **V1** for next stage and **V2** for expansion. Every requirement must have testable acceptance evidence.
+
+### 8.1 Identity, integrations and repository profiles
+
+| ID | Stage | Requirement | Acceptance |
 | --- | --- | --- | --- |
-| FR-001 | M | Administrators can create a single organization and manage owner/admin/developer/viewer roles. | Unauthorized role attempts are denied and audited. |
-| FR-002 | M | Connect selected GitHub repositories using minimally scoped integration credentials. | Unselected repositories are inaccessible. |
-| FR-003 | M | Verify webhook signatures, ignore duplicates, and handle out-of-order events. | Replayed events do not spawn duplicate investigations. |
-| FR-004 | M | Discover project language, CI configuration, lockfile, test commands, and relevant IaC files. | Profile includes evidence and editable settings. |
-| FR-005 | M | Enable/disable workflows at org and repo level; configure path filters and branch scopes. | Nonmatching events do not run agents. |
-| FR-006 | V1 | Support GitLab through the same repository/CI abstraction. | GitLab fixtures pass core integration contract tests. |
-| FR-007 | V1 | Separate Git read, branch-write, and PR-create authorization. | Agent execution token cannot create PRs or read secrets. |
-| FR-008 | M | Authenticate human users through the installation's configured OIDC provider using Authorization Code flow with PKCE. Bootstrap the first Owner only with a short-lived, single-use operator-supplied setup token; disable bootstrap after Owner creation. OIDC login grants no membership or role by itself. | Invalid issuer/audience/state is rejected; unprovisioned identities cannot access the organization; bootstrap expires and cannot be reused; login/session actions and role changes are audited. |
+| FR-001 | M | Authenticate human users via OIDC; establish server-owned session and mapped organization roles | Token/session and authorization tests pass per ADR-0003 |
+| FR-002 | M | Connect explicitly selected GitHub repositories with least-privilege permissions | No access to unselected repositories; no code-write scope required |
+| FR-003 | M | Verify webhooks and process events idempotently and revision-aware | Duplicate/out-of-order deliveries cannot overwrite newer assessment |
+| FR-004 | M | Discover repository languages, manifest/test/CI/IaC signals with unknown-state reporting | Profile links to observed evidence and supports authorized corrections |
+| FR-005 | M | Create assessment from PR, CI event, or authorized manual request at a specified revision | Assessment records source event/actor, SHA, stage and scope |
+| FR-006 | V1 | Add GitLab using repository/CI provider adapters | Provider contract tests match GitHub semantics |
 
-### 7.2 Events, scans, and findings
+### 8.2 Engineering Validation Engine
 
-| ID | Stage | Requirement | Acceptance signal |
+| ID | Stage | Requirement | Acceptance |
 | --- | --- | --- | --- |
-| FR-010 | M | Ingest PR and CI lifecycle events and associate them with exact commit SHA and run ID. | Each investigation links to original revision and check. |
-| FR-011 | M | Execute configured scanners and project-native tests **only in independently approved, preflight-verified repository sandboxes**, or ingest existing external CI results. | Unapproved executors block execution and produce evidence-only status; imported and locally executed checks are distinct. |
-| FR-012 | M | Normalize findings with source, rule, severity, file/location, evidence, timestamps, and run. | Users can filter, inspect, and trace each finding to a source. |
-| FR-013 | M | Deduplicate repeated findings across reruns without losing occurrence history. | One logical issue, multiple observations. |
-| FR-014 | M | Mark check outcomes as pass/fail/inconclusive/skipped/error; never equate skipped with passed. | UI and API preserve all states. |
-| FR-015 | V1 | Support OPA-compatible policy decisions and scoped exceptions with expiry and approver. | Blocking checks cannot be waived by AI output alone. |
-| FR-016 | M | Gate **all** real-repository scanner/test/build/install commands on approved isolation class, effective preflight and negative security tests. | Untrusted job cannot run with plain Docker, untrusted host execution, missing restrictions, or secrets. |
-| FR-017 | M | Support INGEST_ONLY operation when safe execution is unavailable. | Logs/findings still import while execution reports BLOCKED_EXECUTION_ENVIRONMENT. |
-| FR-018 | P | Enforce PoC remediation write permission through stable fixture-repository allowlist **and** separate provider installation scope. | Attempts on non-fixtures fail at policy and Git provider layers, even with tampered events. |
-| FR-019 | M | Preserve source revision, execution environment identity, exact commands, and check evidence for Preflyt-run investigations. | Every run is traceable to a pinned commit and runtime; sensitive values are redacted. |
+| FR-010 | M | Generate versioned AssessmentPlan from profile, changed paths and scoped policy | Applicable checks and skip/nonapplicable reasons deterministic |
+| FR-011 | M | Import GitHub check results and supported test/scanner artifacts | Provenance, source, revision, age and trust classification visible |
+| FR-012 | M | Support initial security, testing/quality and IaC check adapters | Seeded positive, negative and malformed evidence cases pass |
+| FR-013 | M | Execute applicable scans/tests in **approved repository sandboxes only** | Missing approval blocks run; no fallback to API/worker shell |
+| FR-014 | M | Normalize check results and findings, preserve occurrences and immutable artifacts | Fingerprinted findings show category, severity, location and source |
+| FR-015 | M | Distinguish pass, fail, error, skipped, stale, inconclusive and not applicable | Missing mandatory evidence never becomes passing status |
+| FR-016 | V1 | Add reliability, DB migration, observability and performance validation adapters | Each domain has defined evidence and benchmark fixture cases |
+| FR-017 | V1 | Add configurable local/design/pre-production assessment entrypoints | Inputs identify lifecycle stage and immutable subject revision |
 
-### 7.3 AI investigation and model control
+### 8.3 Engineering Governance Engine
 
-| ID | Stage | Requirement | Acceptance signal |
+| ID | Stage | Requirement | Acceptance |
 | --- | --- | --- | --- |
-| FR-020 | M | Use a TypeScript agent adapter (evaluate Vercel AI SDK or OpenAI Agents SDK for JavaScript) with LiteLLM or equivalent gateway; external and local models are configurable. | Same TypeScript workflow can route to at least two configured model targets. |
-| FR-021 | M | Allow admins to set API keys, permitted models, per-task budget, token limits, and data-egress policy. | Missing/forbidden provider is blocked before execution. |
-| FR-022 | M | Generate diagnoses with observed evidence, hypotheses, uncertainty, affected files, and recommended checks. | Report links directly to supporting logs, tests, or diff. |
-| FR-023 | M | Respect repo/org boundaries in every tool call and context retrieval operation. | Cross-repo unauthorized reads fail and are audited. |
-| FR-024 | M | Redact known secrets/PII from log/model contexts and support opt-out from external model egress. | Injected test secrets are absent from outbound requests. |
-| FR-025 | M | Terminate jobs at configured wall-clock, tool-step, token, and cost limits. | Exhausted task ends deterministically with reason. |
-| FR-026 | V2 | Route subtasks to specialized agents with typed inputs/outputs and clear orchestration state. | Agent handoffs are reproducible and traceable. |
+| FR-020 | M | Manage versioned org/repo/stage quality policies and required/advisory check definitions | Policy version tied to report and audit record |
+| FR-021 | M | Evaluate PASS/WARN/BLOCK/INCOMPLETE/NOT_APPLICABLE deterministically | Fixture permutations produce unambiguous expected outcome |
+| FR-022 | M | Publish revision-bound readiness as GitHub check/status, with advisory or blocking mode | New commit cannot inherit stale green result |
+| FR-023 | M | Preserve rule applicability, trusted evidence source and exclusion reason | Unavailable or stale required evidence produces INCOMPLETE |
+| FR-024 | V1 | Permit authorized time-limited exception/waiver with reason and approver | AI and ordinary developers cannot self-waive mandatory rules |
+| FR-025 | M | Support initial policy rollout in advisory mode with explicit enforcement change | No accidental blocked merge before configured enforcement |
 
-### 7.4 Reproduction, patching, and validation
+### 8.4 Engineering Intelligence Engine
 
-| ID | Stage | Requirement | Acceptance signal |
+| ID | Stage | Requirement | Acceptance |
 | --- | --- | --- | --- |
-| FR-030 | V1 | Reproduce the original defect on the pinned commit in an approved sandbox and store the matching baseline failure signature and exact environment/command evidence. | Without matching reproducible failure, mark INCONCLUSIVE; no validated remediation. |
-| FR-031 | V1 | Allow agents to edit only approved repository paths in their sandbox workspace. | Protected path modification is blocked. |
-| FR-032 | V1 | Re-run the **protected original harness** and every predeclared mandatory regression/CI/scanner/policy check independently against patched application code under equivalent pinned environment. | Harness hashes and expected tests match; weakened assertions, skips, zero tests, substituted reports or missing/errored checks cannot pass validation. |
-| FR-033 | V1 | Limit patch size, file count, attempts, duration, and model spend per task. | Exceeding a threshold stops and reports. |
-| FR-034 | V1 | Create a separate **draft** remediation PR after mandatory validation and pre-write authorization/revision checks; verify source/target state and fix identity/tree again after creation before human-review readiness. | PR links pinned revisions, harness/patch digests, validation and freshness observations; same-repo feature fixes target their feature branch. Unknown/stale freshness blocks promotion. |
-| FR-038 | V1 | Persist append-only, versioned reproduction/remediation contracts and separate freshness/cleanup observations. | Source/environment/commands, protected harness, patch/tree/artifact hashes and check-policy snapshot are complete; historical evidence is never overwritten by live status. |
-| FR-039 | V1 | Block known forked/moved/deleted/merged/closed/ambiguous targets before writing; detect post-creation races and invalidate current validation, reconcile freshness and close only Preflyt-owned stale fix PRs. | Transient stale drafts are never represented as currently validated; outages block promotion, cleanup failures are audited, and concurrent/restarted retries do not duplicate PRs. |
-| FR-035 | V1 | Never automatically merge, self-review, deploy, or alter branch protection. | Automated tests demonstrate those actions are forbidden. |
-| FR-036 | V1 | Mark a remediation inconclusive when it cannot reproduce a defect or cannot run required validation. | System does not label it “fixed.” |
-| FR-037 | V1 | Capture human accept/reject/merge outcomes for agent evaluation. | GitHub state is reconciled without direct agent authority. |
+| FR-030 | M | Provide evidence-linked optional AI explanation and triage of findings | Distinguishes observed from inferred and cites check/evidence |
+| FR-031 | M | Use approved model gateway with external frontier keys and/or local endpoints | Routes to configured model with scope, budgets and egress policy |
+| FR-032 | M | Never delegate deterministic gate decision, authorization or waiver to AI | Adversarial AI response cannot set PASS or change policy |
+| FR-033 | M | Work normally without any model/API key | Scans, policy and readiness operate when inference is disabled |
+| FR-034 | V1 | Provide optional specialized domain advisory analysis | No automatic code edits or Git PR writes implied |
 
-### 7.5 User experience and administration
+### 8.5 User interface, feedback and audit
 
-| ID | Stage | Requirement | Acceptance signal |
+| ID | Stage | Requirement | Acceptance |
 | --- | --- | --- | --- |
-| FR-040 | M | Overview shows repository coverage, active investigations, open findings, and recent activity. | Counts reconcile with underlying records. |
-| FR-041 | M | Repository page shows profile, integrations, checks, agents, and policy configuration. | Authorized users can see latest run details. |
-| FR-042 | M | Investigation workspace displays timeline, evidence, tool executions, costs, and outcome. | A reviewer can reconstruct what happened. |
-| FR-043 | M | Support manual read-only investigation trigger with repo and commit scope. | Manual run respects the same authorization/budgets as event runs. |
-| FR-044 | M | Provide basic model/integration administration and an append-only audit-event API. | Configuration changes identify actor and timestamp. |
-| FR-045 | V1 | Remediation workspace shows diff, reproduction proof, validations, and linked PR. | Reviewer can open SCM PR with full context. |
-| FR-046 | V2 | Search approved historical investigations and accepted fixes using scoped retrieval. | No cross-repository/tenant context leakage. |
+| FR-040 | M | Overview lists assessment coverage, open findings, gate outcomes and freshness | Counts reconcile to reports; no opaque ungrounded score |
+| FR-041 | M | Repository page shows profile, applicable policies, checks, findings and assessment history | User can identify missing and blocked evidence |
+| FR-042 | M | Assessment detail shows plan, check timeline, evidence, policy reasons, optional AI advice | Reviewer can reconstruct gate decision for exact revision |
+| FR-043 | M | Audit model, policy, integration, execution and report publication operations | Actor, timestamp, policy version and resource retained |
+| FR-044 | V1 | Add comparative trends and risk/domain breakdowns | Coverage and uncertainty visible; apples-to-apples comparisons |
+| FR-045 | M | Show executor availability and evidence-only fallback explicitly | No false green results when sandbox is blocked |
 
-## 8. UI and information architecture
+## 9. Data model and interface contracts
 
-**Proposed navigation:** Overview; Repositories; Findings; Investigations; Remediations (V1); Agents; Workflows; Policies; Models; Integrations; Reports (later); Audit; Settings.
+### 9.1 Primary logical entities
 
-### 8.1 Overview
+Organization, User, Membership, IdentityProviderConfiguration, GitInstallation, Repository, RepositoryProfile, AssessmentRequest, Assessment, AssessmentPlan, AssessmentCheck, CheckEvidence, Finding, FindingOccurrence, PolicySet, PolicyRule, PolicyEvaluation, PolicyException, ReadinessReport, WorkflowRun, ToolExecution, EvidenceArtifact, ModelUsage, AuditEvent.
 
-Summarize connected repos, recent failed runs, investigation outcomes, budget utilization, and urgent findings. Avoid an opaque “engineering health score” in MVP; show measurable underlying indicators instead.
+RemediationAttempt and RemediationPR belong to a **separate future optional module**, not the primary MVP data model.
 
-### 8.2 Repository detail
+### 9.2 Assessment and evidence contract
 
-Display branch/CI provider, languages, checks enabled, per-repo workflow policy, recent failed checks, and investigations. Provide a clear “Run investigation” action for authorized users.
+The normative architecture is in [ADR-0004](architecture/ADR-0004-shift-left-assessment-governance.md). Key requirements:
 
-### 8.3 Investigation workspace
+- Assessment subject: stable org/repo ID, PR number or asset, original commit SHA, base/integration context and lifecycle stage.
+- Plan: policy version and applicability computed **before** running checks.
+- Evidence: trust/provenance, source/imported-vs-executed, outcome, artifact integrity digest, freshness, tool version, and pinned environment where executed.
+- Report: check coverage, findings, rule decisions, gate output, current-at-observed-revision status and separate optional AI explanation.
+- No evidence payload may be substituted by a model-generated assertion of test success.
+- Historical results remain immutable; subsequent commits or changed policy produce new assessments.
 
-Show **timeline + evidence + agent analysis** side by side. Every statement must be labeled as observed, inferred, or unverified. Display execution environment, exact commit, original failure, steps/commands, links to artifacts, token/model usage, cost, and final disposition.
+### 9.3 Adapter interfaces
 
-### 8.4 Agent and model controls
+- **RepositoryProvider:** repository profile, PR diff, commit/branch context, GitHub/GitLab check-state publishing.
+- **CIProvider:** run/check status, logs and report artifacts with source verification.
+- **CheckProvider:** configured scanner/test execution plan and normalized result schema.
+- **SandboxBackend:** admission verification, create/run/cancel, resource and egress controls, artifacts, cleanup.
+- **AssessmentPlanner:** subject, profile, policy -> applicable checks and data collection plan.
+- **PolicyEvaluator:** immutable plan + normalized evidence -> deterministic decisions and reasons.
+- **IntelligenceProvider:** read-only evidence context -> explanation/recommendations, with model/effect limits.
+- **ArtifactStore / SecretProvider / AuditSink:** scoped storage, lifecycle/rotation and traceability.
 
-Administrators manage allowed agents, model routes, execution budgets, source-code egress permissions, and remediation scope. Secrets are write-only after creation; rotate or revoke rather than revealing stored credentials.
-
-## 9. Domain model and interfaces
-
-### 9.1 Initial logical entities
-
-- **Organization, User, Membership, Role**
-- **IntegrationInstallation, Repository, RepositoryProfile**
-- **WebhookEvent, PipelineRun, CheckRun, ScanExecution**
-- **Finding, FindingOccurrence, Investigation, InvestigationStep**
-- **EvidenceArtifact, ToolExecution, ModelUsage**
-- **AgentDefinition, AgentRun, WorkflowDefinition, WorkflowRun**
-- **Policy, PolicyEvaluation, PolicyException, AuditEvent**
-- **RemediationAttempt, PatchArtifact, ValidationRun, RemediationPR** (V1)
-
-Every record that contains repository context must carry organization/repository identity, trace identifiers, timestamps, and an authorization-aware access path.
-
-### 9.2 Normalized finding contract (illustrative)
-
-~~~json
-{
-  "finding_id": "fnd_example",
-  "organization_id": "org_example",
-  "repository_id": "repo_example",
-  "commit_sha": "0123456789abcdef",
-  "category": "ci_test_failure",
-  "source": "jest",
-  "rule_id": "test_suite_failed",
-  "severity": "medium",
-  "status": "open",
-  "location": {"path": "tests/payment.test.ts", "line": 42},
-  "evidence_refs": ["artifact://redacted/example"],
-  "first_seen_at": "2026-10-08T09:00:00Z"
-}
-~~~
-
-This is a **proposed contract**, not an implemented API. The schema must be versioned, validated, and refined during design.
-
-### 9.3 Adapter contracts
-
-Define typed, replaceable interfaces for:
-
-- **SCMProvider:** repository metadata, PR diff, checks, comments, create branch/PR.
-- **CIProvider:** run metadata, logs, checks, artifact references.
-- **ScannerRunner:** inputs, findings schema, result provenance.
-- **AgentRuntime:** context, allowed tools, action plan, structured output.
-- **ModelGateway:** provider routing, token/cost accounting, policy enforcement.
-- **SandboxBackend:** create, execute, stream output, stop, destroy.
-- **PolicyEngine:** deterministic decision and reason codes.
-- **ArtifactStore:** scoped evidence storage with expiry and retention.
-- **SecretProvider:** write/rotate/revoke and scoped token retrieval.
-
-## 10. Reference architecture and deployment
+## 10. Technical architecture
 
 ~~~mermaid
-flowchart TB
-    User["Web UI (React)"] --> API["Control API (NestJS)"]
-    SCM["GitHub; GitLab later"] --> Hook["Webhook ingestion"]
-    Hook --> API
-    API --> DB[("PostgreSQL")]
-    API --> Artifacts["S3-compatible artifact store"]
-    API --> Queue["Redis + BullMQ"]
-    API --> Policy["Policy evaluator"]
-    Queue --> Orchestrator["Node.js / TypeScript workflow workers"]
-    Orchestrator --> Scanner["Isolated scan/test jobs"]
-    Orchestrator --> Agent["TypeScript AI agent worker"]
-    Agent --> Gateway["LiteLLM container"]
-    Gateway --> Frontier["Approved frontier APIs"]
-    Gateway --> Local["Optional local model"]
-    Agent --> Exec["TypeScript execution controller"]
-    Exec --> Sandbox["Ephemeral Docker / Kubernetes sandbox"]
-    Sandbox --> Results["Validation evidence"]
-    Scanner --> Results
-    Results --> API
-    API --> Writer["Scoped Git writer"]
-    Writer --> SCM
-    API --> Telemetry["OpenTelemetry exporter"]
+flowchart TD
+  SOURCE["GitHub / GitLab later / CI"] --> API["NestJS integration + assessment API"]
+  USER["React + TypeScript"] --> API
+  API --> P[("PostgreSQL / Prisma")]
+  API --> QUEUE[("Redis / BullMQ")]
+  API --> POLICY["Policy store + ruleset versions"]
+  QUEUE --> PLANNER["Assessment planner"]
+  PLANNER --> EXEC["Evidence import / approved execution controller"]
+  EXEC --> SCAN["Sandboxed scans and tests"]
+  EXEC --> NORMAL["Normalization + evidence provenance"]
+  SCAN --> NORMAL
+  NORMAL --> GATE["Deterministic governance evaluator"]
+  NORMAL --> INTEL["Optional TypeScript AI assessment worker"]
+  INTEL --> MODEL["LiteLLM -> frontier or local models"]
+  GATE --> REPORT["Engineering Readiness Report"]
+  INTEL --> REPORT
+  REPORT --> API
+  API --> CHECK["GitHub revision-bound check/status"]
+  API --> AUDIT["Object storage + OTel / SigNoz"]
 ~~~
 
-### 10.1 Control plane
+### Technology decisions (unchanged)
 
-The **Node.js + TypeScript NestJS API** owns auth, organizations, repository configuration, webhook/event normalization, workflow requests, findings, investigation state, policies, model usage, audit, and external integration permissions. **Prisma** provides the typed database access/migration layer over PostgreSQL. Large logs, diffs, test reports, and patches reside in object storage and are referenced by immutable IDs. The API must remain responsive and must **not** run LLM loops, compile untrusted source, or execute model-generated commands in-process.
+- **Frontend:** React, Vite and TypeScript.
+- **API/control plane:** Node.js, NestJS and TypeScript.
+- **Background workers:** TypeScript with Redis/BullMQ for bounded durable work. Workers are separate from the API process.
+- **Database:** PostgreSQL + Prisma; large evidence/artifacts in scoped object storage.
+- **Model plane:** LiteLLM as an independently deployed gateway; external provider API keys and/or local inference, with redaction and provider policy.
+- **Execution:** TypeScript Docker/Kubernetes controller; approved stronger sandbox runtime for real repository code execution.
+- **Packaging:** planned Docker Compose evaluation and Helm/Kubernetes deployments.
+- **Observability:** OpenTelemetry and optional SigNoz.
 
-### 10.2 Execution plane
+Open-source component/rule/model license checks are mandatory before redistribution or commercialization.
 
-A separate **TypeScript execution controller** (not the HTTP API process) dispatches jobs with immutable inputs and a narrow capability set, using Docker APIs for local evaluation and `@kubernetes/client-node` for Kubernetes Jobs. The **TypeScript agent worker** performs model interaction, tool planning, and evidence analysis, but delegates all untrusted commands and source-code execution to this controller. Jobs clone pinned commits, run scanners or tests, or host a bounded code-editing task. Artifacts are uploaded to scoped storage; workloads are destroyed on completion, timeout, or cancellation. Production environments require dedicated isolation and restricted network egress; no host Docker socket, privileged pods, or production IAM access.
+### Execution trust boundary: mandatory in MVP
 
-### 10.3 Model plane
+**Every Preflyt-executed command touching a connected repository—including scanner parsers, package install scripts, tests and builds—must run under the security-reviewed isolation contract in ADR-0002.** Do not assume Docker or an ordinary Kubernetes Job alone is sufficient for untrusted repositories.
 
-**TypeScript agent services** access providers through **LiteLLM running as a separately deployed gateway container** (or an equivalent proxy). LiteLLM may have its own runtime dependencies, but no Preflyt application or AI agent service is required to be written in Python. The gateway enforces routing, allowlists, budget accounting, and API-key isolation. Initial supported configurations:
+For real repositories, require approved stronger isolation, pinned checkout/image, no platform/model/Git write credentials, default-deny egress, worker/node separation, non-root/no host socket, quotas/deadlines, clean artifacts, effective runtime checks and escape/exfiltration tests.
 
-1. Hosted models, e.g. OpenAI/Anthropic/DeepSeek, using server-side credentials.
-2. Self-hosted inference via an approved local endpoint.
-3. “No external egress” mode that denies sending repository data to hosted models.
+If no safe execution runtime is available, Preflyt is **INGEST_ONLY**: use external CI evidence, mark unsupported/missing required checks INCOMPLETE and never run code unsafely. A local Docker runner may be used only with explicitly designated disposable fixtures.
 
-The selected provider's retention and data-use terms must be evaluated; a self-hosted gateway alone does **not** make remote inference private.
+### Security and authentication
 
-### 10.4 Runtime strategy
+- OIDC human auth, server-managed sessions, role/organization scoping per [ADR-0003](architecture/ADR-0003-oidc-user-authentication.md).
+- Signed webhook validation, idempotency, replay handling and exact revision association.
+- Least-privilege Git installation access: read repository/CI data plus authorized check-run/status publishing; no general branch write needed.
+- Encryption/rotation of model credentials; source-code egress policy; model tools cannot access CI/SCM secrets or grant themselves new rights.
+- Sandbox and API/worker isolation, resource quotas, default-deny egress and secret redaction.
+- Protected immutable evidence and time-bounded retention, with access controlled at organization/repository levels.
+- Prompt injection from repository/PR/CI text is untrusted input; AI is advisory only.
 
-- **Development/evaluation:** Docker Compose for NestJS API, React/Vite web, TypeScript agent and execution workers, PostgreSQL, Redis, LiteLLM gateway, and optional local inference. Local Docker execution is **fixture-only** and cannot be used for real untrusted repositories.
-- **Background workflows:** **BullMQ + Redis**, with durable queued tasks, job state, bounded backoff/retries, dead-letter handling policy, and idempotent external effects. Treat queue delivery as at-least-once; never assume exactly-once patch or PR creation.
-- **Production:** Helm/Kubernetes deployments for control-plane services and isolated Jobs; use `@kubernetes/client-node` for dispatch. Argo Workflows is an **optional later adapter** if complex Kubernetes DAG execution warrants it, not a required first-release dependency.
-- **MVP isolation prerequisite:** an approved independent security-reviewed sandbox with separate worker pool/namespace, least-privilege service accounts, default-deny network policies, read-only base images, quotas, bounded lifetime, and assessed stronger runtime isolation such as gVisor/Kata or equivalent; preflight and escape/exfiltration checks are mandatory **before real-repository execution**.
-- **Fault tolerance:** workflows must resume or terminate predictably after controller restarts; out-of-order events and repeated callbacks must not create duplicate PRs.
+## 11. UI structure and example output
 
-### 10.5 Language, monorepo and process boundaries (selected decision)
+**Core navigation:** Overview · Repositories · Assessments · Findings · Policies & Quality Gates · Standards/Profiles · Integrations · Models & AI · Audit · Settings.
 
-**Application stack:** Node.js + TypeScript for API, integrations, queue/workflow workers, agent workers, and execution controller; React + TypeScript + Vite for the browser UI. Use **pnpm workspaces + Turborepo** for builds and shared package workflows. Use **PostgreSQL + Prisma** for typed data access and schema migrations. Choose an approved provider-neutral TypeScript agent SDK during a focused spike; **LangGraph.js is optional** and should be introduced only if it demonstrably improves stateful multi-agent workflows.
+**Assessment detail must present** exact repository/revision/PR, policy version, lifecycle stage, planned vs completed checks, source provenance and freshness, deterministic gate reasons, domain findings with severity and location, and separate AI advice.
 
-**Human authentication:** One installation-configured OIDC provider; Authorization Code with PKCE; short-lived, single-use bootstrap for the first Owner; explicit membership provisioning and local Preflyt roles. The secure session and GitHub identity boundaries are defined in [ADR-0003](architecture/ADR-0003-oidc-user-authentication.md).
-
-**Separation of responsibilities:** NestJS handles authenticated requests and persists/schedules work; BullMQ workers handle long-running investigation state and coordination; TypeScript agent workers make model/tool decisions; the execution controller dispatches isolated Docker/Kubernetes jobs. Scanners and customer code may run in containers written in any language, but they are not part of the Preflyt application language decision. Third-party model gateways may use a different implementation language without becoming a Preflyt-maintained Python service.
-
-**Shared schemas:** TypeScript contracts and runtime validation (e.g., Zod or a comparable schema validator) cover API, event, agent-tool, and execution-job messages. Version all cross-process payloads; persist enough state for safe restart and reconciliation.
-
-**Candidate workspace layout (planned, not yet implemented):**
+An illustrative report:
 
 ~~~text
-apps/
-  web/                  # React + Vite + TypeScript
-  api/                  # NestJS control-plane API
-services/
-  agent-worker/         # TypeScript AI reasoning / investigation
-  execution-worker/     # TypeScript Docker and Kubernetes job controller
-  integration-worker/   # TypeScript GitHub/GitLab event handling
-packages/
-  agents/               # reusable agent roles and typed tools
-  contracts/            # API, queue/event and tool schemas
-  database/             # Prisma schema, migrations and client
-  integrations/         # source-control and CI adapters
-  policies/             # engineering policy contracts
-  ui/                   # shared React components
-infra/
-  compose/              # Docker Compose evaluation stack
-  helm/                 # Kubernetes application manifests
-pnpm-workspace.yaml
-turbo.json
+Preflyt / payment-api / PR #184
+Revision: pinned SHA
+Assessment stage: Pull request
+Policy: production-readiness-v3
+
+Security            PASS
+Testing             PASS
+Infrastructure      PASS
+Reliability         BLOCK    Graceful shutdown integration test failed
+Performance         INCOMPLETE   Comparable benchmark absent
+
+Overall gate: BLOCK
+AI advice: Check request draining during SIGTERM; add a reproducible shutdown test.
+Action: Fix the failing check and rerun the assessment. Preflyt does not edit your code.
 ~~~
 
-### 10.6 Human authentication and sessions (selected decision)
+Readiness status must never be based on fabricated AI tests or an unexplained aggregate score.
 
-MVP human sign-in uses the single OIDC provider configured for that self-hosted installation, following the OIDC Authorization Code flow with PKCE. The NestJS API performs the Authorization Code flow with PKCE, validates issuer, audience, signature, expiry and transaction state/nonce, then creates a server-managed session in a Secure, HttpOnly, SameSite cookie. Do not store identity or refresh tokens in browser storage. Keep provider client secrets in deployment-managed secrets.
+## 12. Non-functional requirements and initial targets
 
-OIDC establishes identity; it does not automatically create organization access or assign Preflyt roles. An operator provisions the first Owner with a short-lived, single-use bootstrap token supplied out of band. The token is invalidated immediately after use, and bootstrap is disabled once an Owner exists. Further users need an authorized invitation/provisioning action; Preflyt maps identities by issuer plus subject and manages Owner/Admin/Developer/Viewer roles locally. Audit sign-in, sign-out, bootstrap, membership and role changes.
-
-GitHub App installation credentials remain a separate integration identity scoped to repositories and requested operations. Linking a GitHub account does not authenticate a Preflyt user. The initial bootstrap establishes the first owner; IdP outage and post-bootstrap recovery procedures remain an operational decision before beta.
-
-## 11. Security, governance, and threat model
-
-### 11.1 Threats
-
-| Threat | Required defense |
-| --- | --- |
-| Malicious code in connected repositories | Disposable sandboxes, no privileged runtime, deny-by-default egress, no production credentials |
-| Prompt injection in code, PR text, CI logs, or web content | Treat as untrusted data, typed tool authorization, separate system policy, prevent tool privilege escalation |
-| Exfiltration to model provider | Redaction, model/data allowlists, private-model option, outbound routing enforcement |
-| Stolen or overprivileged SCM token | Minimal scopes, separation of read/write identities, rotation, protected branches |
-| Secrets in logs, artifacts, or model traces | Secret scanning, redaction, restricted retention and access, encryption |
-| Cross-organization/repository data leaks | Scoping in queries, object paths, caches, retrieval, jobs, and telemetry |
-| Unsafe AI patch | Reproduction, scoped edits, independent tests, bounded changes, human PR review |
-| Denial of service or cost runaway | Quotas, per-run limits, queues, rate limiting, cancellation |
-| Forged/replayed SCM event | Signed webhook verification, idempotency keys, event deduplication |
-| Supply chain / licensing issue | Version pinning, SBOMs, license review of tools, rules, models, and packaged binaries |
-
-### 11.2 Enforceable controls
-
-- Default read-only GitHub integration. The **only PoC exception** uses a separately scoped GitHub App restricted to designated disposable fixture repository IDs; general repository write capability begins in V1 after security and validation gates.
-- Agent workers cannot access model provider keys, stored integration tokens, or cluster-admin capabilities.
-- Agents cannot change security configuration, bypass branch protections, approve/merge their own changes, or trigger production deployment.
-- Per-repository editable path/command allowlists and protected-file rules.
-- Human approval for all remediation PRs; policy exceptions require an authorized, logged approver with expiry.
-- Encryption in transit/at rest; credential rotation/revocation; request-scoped audit and trace IDs.
-- Configurable evidence retention, default minimum necessary collection, secure artifact deletion, and no unrestricted raw prompt logging.
-- Software licenses and scanner rule-pack terms must be assessed before commercial redistribution.
-
-**Multi-tenancy:** MVP targets one organization per installation. Data structures should be organization-scoped from the start, but multi-tenant SaaS is not a claim of MVP readiness and requires a separate isolation review.
-
-## 12. Non-functional requirements and target SLOs
-
-These are **initial acceptance targets** requiring validation against actual hardware, workflow types, and provider SLAs.
-
-| ID | Area | Proposed target |
+| ID | Requirement | Initial target / test |
 | --- | --- | --- |
-| NFR-01 | Reliability | Webhook acknowledgement does not depend on completion of analysis; events persist before background processing. |
-| NFR-02 | Idempotency | Duplicate event deliveries do not generate duplicate investigations or PRs. |
-| NFR-03 | Latency | 95% of valid webhooks acknowledged within 2 seconds, excluding upstream delivery time. |
-| NFR-04 | Diagnosis time | Median CI failure diagnosis under 5 minutes for benchmark fixtures with available logs. |
-| NFR-05 | Bounded execution | Every workflow has configurable wall-clock timeout, retry cap, tool-call cap, and budget. |
-| NFR-06 | MVP execution isolation | Before any real-repository execution, runtime preflight and adversarial tests must demonstrate isolation from secrets, internal networks, other repositories, and host/container runtime privileges. |
-| NFR-07 | Observability | 100% of workflow runs have traceable IDs, terminal status, model spend record or explicit unavailable state, and evidence references. |
-| NFR-08 | Security | Sensitive credentials never appear in standard UI, logs, artifacts, or outbound model context in seeded leakage tests. |
-| NFR-09 | Deployment | A documented, tested Compose installation for evaluation; a separately tested Kubernetes deployment for production release. |
-| NFR-10 | Compatibility | Node.js/TypeScript and Python fixture repos pass integration contract tests; others explicitly marked unsupported initially. |
-| NFR-11 | Audit | Material actions and authorization decisions captured with actor, resource, action, outcome, and time. |
-| NFR-12 | Recoverability | Durable job state supports safe restart/retry without duplicate external writes. |
+| NFR-01 | Webhook durability | Authenticate + persist event before asynchronous acknowledgement; duplicates do not create duplicate assessments |
+| NFR-02 | Revision correctness | Every report and Git status bound to exact SHA; stale results cannot pass a newer change |
+| NFR-03 | Performance | Aim for p95 webhook acknowledgement under 2 seconds excluding upstream delivery; validate during staging |
+| NFR-04 | Determinism | Same evidence and ruleset version produce the same gate outcome |
+| NFR-05 | Safe execution | No real-repository execution without approved isolation; negative egress/exfiltration tests pass |
+| NFR-06 | Evidence correctness | Imported vs executed, complete vs inconclusive, fresh vs stale are never conflated |
+| NFR-07 | AI independence | With AI disabled, deterministic assessment and quality gate still complete |
+| NFR-08 | Traceability | Every check has provenance, policy/revision, timestamps, outcome and evidence refs |
+| NFR-09 | Operational limits | Jobs have timeout, CPU/memory/disk, request volume, concurrency and spend ceilings |
+| NFR-10 | Deployment | Tested Compose evaluation deployment and separately tested approved Kubernetes execution |
+| NFR-11 | Privacy | Secrets and prohibited data absent from agent context, logs and externally transmitted payloads |
+| NFR-12 | Audit | Config, policy, report and exceptional enforcement changes tied to actor and time |
 
-Exact availability, RPO/RTO, concurrency, data retention periods, and maximum artifact sizes must be established before production rollout.
+Availability SLOs, RTO/RPO, retention and size limits are to be set before production rollout.
 
-## 13. Telemetry, reporting, and economics
+## 13. Success metrics and evaluation
 
-Instrument API, webhook processing, scan/test jobs, agent reasoning, sandbox execution, model-gateway calls, and Git writer actions with OpenTelemetry. Route to SigNoz or another compliant self-hosted observability backend.
+**Primary metrics:** percentage of PRs assessed before merge, required-check evidence coverage, mean time to actionable findings, blocking/waiver rates, escaped defects by category, and developer-reported usefulness.
 
-Track:
+**Operational metrics:** assessment p50/p95 duration, check failure rate, dropped/late events, stale report rate, execution costs, model costs, executor admission failures, and policy-evaluation reproducibility.
 
-- Time from failure event to first useful diagnosis.
-- **Reproduction rate:** proportion of eligible defects reproduced in an approved environment.
-- **Verified fix rate:** percentage of attempted fixes passing original repro + required regression/security checks.
-- **PR acceptance rate:** human-accepted or merged patches; measure separately from “PR opened.”
-- **Recurrence rate:** same defect reappearing after accepted remediation.
-- **False-positive/inconclusive rate** and agent-caused regressions.
-- Token usage, provider/model, cost per investigation, cost per accepted fix.
-- Tool failure rates, queue wait, sandbox startup latency, runtime and cancellation reasons.
-- Developer time saved (estimated using sampled baseline), and user satisfaction.
+**Evaluation fixtures for MVP:**
 
-Never claim issues were “prevented” solely because an LLM identified a possible risk; measure actual enforcement, independent validation, or reviewed fixes.
+1. Known vulnerable dependency is found and security rule blocks.
+2. Missing required test result yields INCOMPLETE, **not** PASS.
+3. Unsafe IaC configuration is detected by configured scanner/policy.
+4. Clean PR yields PASS with evidence.
+5. New commit invalidates the previous report's claim of current readiness.
+6. AI/model endpoint unavailable: deterministic gate still works.
+7. Unapproved sandbox: code does not execute; imported CI evidence remains available.
+8. Malicious PR comments/code cannot alter policy, leak credentials or authorize a quality gate.
+9. Advisory-mode rules do not accidentally block branch protection; explicitly blocking rules do.
 
-## 14. Evaluation plan
+Avoid claiming engineering incidents were prevented without observing policy enforcement or subsequent defect escape trends.
 
-Establish a fixed, versioned benchmark corpus:
+## 14. MVP acceptance criteria
 
-- **CI case:** failed TypeScript/Python test due to realistic logic/configuration defect.
-- **Security case:** known, fixable dependency finding with compatibility tests.
-- **Reliability case:** missed graceful shutdown with executable failure and success checks.
-- **Negative controls:** misleading logs, flaky tests, unsafe requested modifications, insufficient repro.
-- **Adversarial controls:** prompt injections, synthetic credentials, attempted unauthorized tool actions.
-- **Unseen evaluation:** historical real failures not used in agent prompt or tuning.
+- [ ] GitHub integration supports selected repos and signed, idempotent events.
+- [ ] OIDC auth and organization/repository authorization comply with ADR-0003.
+- [ ] Repository profile identifies relevant check inputs and unknowns.
+- [ ] An AssessmentPlan is versioned, reviewable, and derived from scope/changed paths.
+- [ ] At least security, testing/quality and infrastructure checks have functional adapters or documented imported evidence.
+- [ ] Preflyt-executed real-repository code is rejected without approved isolation and negative security tests.
+- [ ] Evidence provenance, freshness, hashes and subject commit are recorded.
+- [ ] Gate outcomes are deterministic, including INCOMPLETE when mandatory evidence is missing.
+- [ ] Report shows domain results, findings, evidence and rule reasons for exact SHA.
+- [ ] GitHub gets correctly scoped, revision-bound status with advisory/blocking distinction.
+- [ ] AI explanation is clearly advisory; absent model/API key does not break core functionality.
+- [ ] No general code editing, fix-PR workflow or code-writing SCM token is needed to deliver the MVP.
+- [ ] Docker Compose evaluation path and approved Kubernetes production execution path are documented and tested.
 
-For each case capture baseline time, agent attempts, reproduction outcome, patch correctness, regressions, and cost. A suggested initial target is **≥70% verified resolution on controlled, reproducible fixtures**; this is a project threshold to test, **not** an external benchmark or claim about production accuracy. Report results on unseen real cases separately.
-
-## 15. Acceptance criteria
-
-### 15.1 Technical proof of concept
-
-- [ ] A GitHub failed-check event starts exactly one investigation.
-- [ ] CI logs and exact commit diff are collected with appropriate permissions.
-- [ ] A bounded agent produces an evidence-linked diagnosis with uncertainty labels.
-- [ ] An approved **fixture sandbox** run demonstrates reproduction of a known failing test; fixture-only Docker is never enabled for untrusted customer repositories.
-- [ ] A proposed patch passes the protected original reproduction harness plus required regression checks; changed assertions, skips or zero tests cannot satisfy the reproduction gate.
-- [ ] A separate **draft** fix PR is created only within an explicitly allowlisted disposable fixture repository using a fixture-only Git App, with diff, trusted-harness reproduction proof, validation output and linked finding; post-creation freshness verification precedes human-review readiness.
-- [ ] A human—not the agent—remains responsible for review and merge.
-- [ ] Seeded prompt-injection and secret-leak tests cannot access protected capabilities.
-- [ ] Timeouts and cost ceilings stop runaway runs.
-
-### 15.2 MVP product acceptance
-
-- [ ] Admin can configure an organization, users, selected GitHub repositories, models, and budgets.
-- [ ] Users sign in through configured OIDC; only an out-of-band, expiring, single-use bootstrap token can establish the first Owner, and subsequent users require explicit provisioning. GitHub App credentials never act as user credentials.
-- [ ] PR and CI events are authenticated, deduplicated, and mapped to the correct commit.
-- [ ] Repository profiles drive applicable scanner/test configurations.
-- [ ] Findings are searchable and source-traceable, with pass/fail/inconclusive states.
-- [ ] AI CI investigation can be triggered automatically or manually within policy.
-- [ ] The UI shows investigation evidence, hypotheses, costs, run status, and audit timeline.
-- [ ] Docker Compose evaluation deployment is documented and tested; any local code execution is limited to fixtures.
-- [ ] The **MVP-safe executor gate** passes: verified runtime isolation, deny-by-default networking, resource limits, zero credentials, sandbox escape/exfiltration tests, and fail-closed ingest-only mode.
-- [ ] MVP real-repository scanner/test jobs are refused unless an independently approved execution runtime is available.
-- [ ] No general remediation PR/write feature is enabled or marketed until V1; fixture PoC writes are separately gated.
-
-### 15.3 V1 release acceptance
-
-- [ ] Hardened Kubernetes execution isolation is security-tested.
-- [ ] Agent edits and commands are restricted independently of prompt instructions.
-- [ ] Reproduction and validation contracts capture exact revisions, environment, original/patched commands, protected-harness manifest/digests, patch checksum/tree SHAs and all predeclared mandatory checks; skipped/failed checks prevent validated status.
-- [ ] Negative cases cover removed assertions, skipped original tests, selector/configuration changes, zero discovered tests and forged reports; supplemental tests never replace the frozen original harness.
-- [ ] Approved workflows create draft remediation PRs into the original open same-repository feature branch, or default branch for direct default-branch failures; known stale/fork/ambiguous targets block writing, and post-creation verification precedes human-review readiness. Never merge.
-- [ ] Target/source/integration-base movement during or after PR creation, missed events, provider outages and expired freshness invalidate current status or leave it unknown; audited cleanup closes only Preflyt-owned stale fix PRs, with visible bounded retries/failure.
-- [ ] Restarted and concurrent retries reconcile durable write records without duplicate PRs or reuse of stale validation.
-- [ ] An authorized user can cancel runs and revoke model/SCM credentials.
-- [ ] GitLab adapter passes provider contract tests.
-- [ ] End-to-end audit and cost records survive retry/controller restart.
-
-## 16. Risks and mitigations
+## 15. Risks and mitigations
 
 | Risk | Impact | Mitigation |
 | --- | --- | --- |
-| Low-quality AI patches | Wasted review time, regressions | Benchmark gates, independent tests, human review, attempt caps |
-| Insufficient CI evidence | Hallucinated root cause | Explicit inconclusive status; ask for more evidence |
-| Flaky or environment-dependent tests | Misleading fix validation | Stable fixtures, deterministic reruns, report non-reproducibility |
-| Runner escape / data exposure | Severe security incident | Hardened execution plane, isolation testing, minimal credentials and egress |
-| High inference spend | Unexpected cost | LiteLLM routing, budget caps, token telemetry, no hidden retries |
-| GitHub/GitLab API limits | Delays, failed integrations | Backoff, pagination, caching, queueing, idempotency |
-| Broad language/framework scope | Delays and fragile behaviour | Start with Node.js/TypeScript and Python; adapter contracts |
-| Scanner/model licensing | Distribution restrictions | Maintain OSS/license inventory, assess each rule pack and model |
-| Overbuilding orchestration | Slow delivery | Begin with BullMQ jobs and one end-to-end workflow before multi-agent platform expansion |
-| Misleading dashboards | False confidence | Report evidence-backed metrics and data coverage |
+| Broad domain scope causing shallow coverage | Weak product value | Ship tested security, testing and IaC vertical slices first |
+| Scanner noise / false positives | Low adoption | Evidence provenance, applicability, suppression governance, advisory rollout |
+| Missing mandatory CI evidence | Stalled PR checks | INCOMPLETE with actionable missing-check reason and policy owner |
+| Unsafe execution of repository code | Critical security exposure | Mandatory approved sandbox and ingestion-only fallback |
+| AI interpretation mistaken for authority | Unsafe policy decisions | Explicit advisory separation and deterministic gate engine |
+| Stale/incorrect PR revision | Misleading readiness | SHA-bound results, reconciliation and freshness handling |
+| Costly model inference | Unexpected spend | AI opt-in, budgets, routing, deterministic no-AI operation |
+| Provider permissions over-scoped | Repository compromise | Read/check-status permissions only for core MVP |
+| Licensing conflicts | Distribution risk | Tool, ruleset, model and SDK license inventory |
+| Non-comparable performance benchmarks | False regression claims | Fixed context/environment and explicit confidence/evidence constraints |
 
-## 17. Open decisions
+## 16. Open decisions
 
-These items require explicit engineering/product decisions before implementation; they are not resolved by this draft.
+1. Default policy baseline and check applicability configuration schema.
+2. Core supported scanner versions/rules, import formats and commercialization rights.
+3. Approved real-repository sandbox runtime/cluster profile and independent security signoff.
+4. Default advisory rollout period and who can enable blocking enforcement.
+5. Evidence freshness windows, imported-CI authenticity checks and check-run publication permission boundaries.
+6. Benchmark environment requirements for meaningful reliability/performance statements.
+7. Initial model gateway SDK/provider choices and source-code egress policy.
+8. Minimum single-organization deployment size and backup/recovery targets.
+9. API contract and persistence schemas for AssessmentPlan, CheckEvidence and PolicyEvaluation.
+10. Whether any future remediation module should be built or integrated with an external coding tool; **not a blocker for the core platform**.
 
-1. Define and document administrator recovery when the configured OIDC provider is unavailable or misconfigured; recovery must not create a standing local-password bypass.
-2. GitHub integration mechanism: GitHub App preferred; required permission set and installation ownership?
-3. Scope of allowed outbound network destinations per sandbox and external-model policy?
-4. Which **independently validated stronger isolation runtime** (gVisor/Kata/equivalent), cluster/node security profile and negative security-test suite satisfy the mandatory MVP execution gate?
-5. Which TypeScript agent SDK and tool framework should be adopted after license and proof-of-concept review: Vercel AI SDK, OpenAI Agents SDK for JavaScript, or a thin custom adapter? When would LangGraph.js add value?
-6. What BullMQ queue taxonomy, job persistence/recovery strategy, and Redis high-availability model are required, and what evidence would justify an Argo Workflows execution adapter later?
-7. Which scanner binaries/rules can be redistributed under Preflyt's eventual license?
-8. Artifact retention defaults, data residency policy, and whether any personal data is persisted.
-9. Which repository-specific additional checks must supplement the **mandatory baseline defined in ADR-0002**, and how should compatibility/context-sensitive requirements be configured?
-10. Whether automatic comments on source PRs are enabled by default or require explicit opt-in.
-11. Release concurrency, hardware sizing, Kubernetes support matrix, and recovery objectives.
-12. Preflyt source-code license and external contribution policy.
+## 17. Engineering workstreams
 
-## 18. Proposed engineering workstreams
+1. **Foundation:** pnpm/Turborepo, NestJS API, React/Vite UI, Prisma/PostgreSQL, OIDC, BullMQ and audit/telemetry.
+2. **SCM and repository profiles:** GitHub installation, signed webhook, PR/CI event correlation, language/framework/IaC discovery.
+3. **Assessment planner and evidence:** subject SHA, policy-driven applicability, provenance, normalized findings, artifact storage.
+4. **Safe execution + imports:** CI report adapters, approved sandbox profile, security test harness, ingestion-only fallback.
+5. **Policy/gate engine:** versioned standards, deterministic results, advisory/blocking rollout, GitHub status publisher.
+6. **AI assessment:** read-only TypeScript intelligence worker, model gateway, source/data egress control, evidence-linked advice.
+7. **Product UX and evaluation:** repository/assessment pages, readiness report, audit, fixture corpus, operational documentation.
+8. **V1 extensions:** richer SRE/DB/performance/observability checks, pre-production evidence, GitLab and local developer entrypoints.
 
-**Workstream A — Platform foundation:** pnpm/Turborepo TypeScript monorepo, NestJS API, React/Vite UI, auth, Prisma/PostgreSQL schema, Redis/BullMQ worker foundation, event contracts, audit and tracing.
+### Related documents
 
-**Workstream B — GitHub and findings:** installation flow, webhook gateway, CI artifacts, repository profile, scanner adapters, deduplication.
-
-**Workstream C — AI investigation:** TypeScript agent-worker foundation, model-gateway integration, evidence packaging/redaction, selected TypeScript SDK/adapter, structured diagnosis, limits and evaluation.
-
-**Workstream D — MVP execution prerequisite:** implement and independently verify TypeScript execution controller, approved stronger isolation for real-repository jobs, immutable checkout, limits, default-deny egress, absence of secrets, threat/escape testing and fail-closed ingest-only fallback **before** enabling MVP scanner/test execution.
-
-**Workstream E — V1 remediation:** bounded patching, exact revision/environment/command/hash evidence contract, independent mandatory validation, source-branch-aware Git writer, stale/fork fail-closed behavior, remediation PRs and lifecycle sync. A separate PoC exercises this flow only against allowlisted fixtures.
-
-**Workstream F — Operations:** Compose/Helm packaging, secret management, OTel/SigNoz, backup/recovery and operational runbooks.
-
-### Suggested next documents
-
-- [ADR-0001: TypeScript-first stack](architecture/ADR-0001-typescript-first-stack.md), [ADR-0002: MVP execution safety, PoC scope, and verified remediation](architecture/ADR-0002-safe-execution-fixtures-remediation-contract.md), and [ADR-0003: user authentication](architecture/ADR-0003-oidc-user-authentication.md); future ADRs will cover the agent adapter, workflow engine, and model gateway.
-- Threat model and data-flow diagram.
-- API/events and database schema specification.
-- MVP UX journeys and wireframes.
-- Evaluation harness and benchmark fixture design.
-- Engineering issue breakdown, dependencies, and release checklist.
+- [ADR-0001 — TypeScript-first stack](architecture/ADR-0001-typescript-first-stack.md)
+- [ADR-0002 — Safe execution and optional future remediation contract](architecture/ADR-0002-safe-execution-fixtures-remediation-contract.md)
+- [ADR-0003 — OIDC user authentication](architecture/ADR-0003-oidc-user-authentication.md)
+- [ADR-0004 — Shift Left assessment and governance architecture](architecture/ADR-0004-shift-left-assessment-governance.md)
+- [README](../README.md)
 
 ---
 
-**Decision sought:** Approve the MVP boundary, human-in-the-loop remediation posture, and the proof-of-concept evaluation criteria before starting implementation. This PRD intentionally describes planned capabilities and must be updated as design decisions and implementation evidence evolve.
+**Decision for review:** Approve the **assessment-first Shift Left** scope and MVP gates. Do not start coding-agent/remediation development as if it is required for Preflyt to deliver value.
