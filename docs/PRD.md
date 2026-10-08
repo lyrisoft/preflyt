@@ -444,7 +444,7 @@ flowchart TD
 
 ### Technology decisions (unchanged)
 
-- **Frontend:** React, Vite and TypeScript.
+- **Frontend:** React, Vite and TypeScript, using the **Shadcn Admin** open-source dashboard template as a UI foundation, Tailwind/shadcn/ui for components, a single compatible router, TanStack Query/Table for API-backed data, and Preflyt-owned OIDC/session authorization. See [ADR-0005](architecture/ADR-0005-shadcn-admin-frontend.md).
 - **API/control plane:** Node.js, NestJS and TypeScript.
 - **Background workers:** TypeScript with Redis/BullMQ for bounded durable work. Workers are separate from the API process.
 - **Database:** PostgreSQL + Prisma; large evidence/artifacts in scoped object storage.
@@ -601,6 +601,7 @@ A task can be developed behind a feature flag in parallel, but it cannot be coun
 - [ADR-0002 — Safe execution and optional future remediation contract](architecture/ADR-0002-safe-execution-fixtures-remediation-contract.md)
 - [ADR-0003 — OIDC user authentication](architecture/ADR-0003-oidc-user-authentication.md)
 - [ADR-0004 — Shift Left assessment and governance architecture](architecture/ADR-0004-shift-left-assessment-governance.md)
+- [ADR-0005 — Shadcn Admin frontend foundation](architecture/ADR-0005-shadcn-admin-frontend.md)
 - [Capabilities across the SDLC](product/sdlc-capabilities.md)
 - [Incremental delivery phases and task breakdown](roadmap/incremental-delivery.md)
 - [README](../README.md)
