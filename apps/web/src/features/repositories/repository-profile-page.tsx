@@ -17,6 +17,7 @@ import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
+import { RepositoryAssessments } from './repository-assessments'
 import { RepositoryCiEvidence } from './repository-ci-evidence'
 import { RepositoryEvents } from './repository-events'
 import { RepositoryStandards } from './repository-standards'
@@ -209,6 +210,14 @@ export function RepositoryProfilePage() {
             key={repositoryId}
             repositoryId={repositoryId}
             canManage={canDiscover}
+          />
+        )}
+        {result && (
+          <RepositoryAssessments
+            key={repositoryId}
+            repositoryId={repositoryId}
+            canCreate={canDiscover}
+            initialSha={profile?.sourceSha ?? ''}
           />
         )}
         {result && <RepositoryEvents repositoryId={repositoryId} />}

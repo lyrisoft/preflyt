@@ -154,6 +154,7 @@ model GitHubRepository {
   selected       Boolean           @default(false)
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
+  assessments    CommitAssessment[]
   standards      RepositoryStandardsSelection[]
   profiles       RepositoryProfile[]
   @@index([installationId, selected])
@@ -266,4 +267,23 @@ model RepositoryStandardsSelection {
   sourceSha         String?
   createdAt         DateTime @default(now())
   @@unique([repositoryId, revision])
+}
+
+// Immutable exact-SHA reports; administrative associations never establish trusted gates.
+model CommitAssessment {
+  id             String @id @default(cuid())
+  repositoryId   String
+  repository     GitHubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  sourceSha      String
+  selectionId    String
+  requestKey     String
+  inputHash      String
+  request        Json
+  plan           Json
+  report         Json
+  assessmentHash String
+  createdAt      DateTime @default(now())
+  @@unique([repositoryId, requestKey])
+  @@index([repositoryId, sourceSha, createdAt])
+  @@index([repositoryId, createdAt])
 }
