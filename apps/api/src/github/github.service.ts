@@ -6,6 +6,7 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common'
+import { resolveWebOrigin } from '../config/web-origin.js'
 import { PrismaService } from '../prisma/prisma.service.js'
 import {
   GitHubInstallationRevokedError,
@@ -408,9 +409,7 @@ export class GitHubService {
   }
 
   get frontendOrigin() {
-    const origin = process.env.WEB_ORIGIN
-    if (!origin) throw new Error('WEB_ORIGIN is not configured')
-    return new URL(origin).origin
+    return resolveWebOrigin()
   }
 
   private async findTransaction(

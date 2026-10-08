@@ -5,6 +5,7 @@ import {
   Injectable,
   ServiceUnavailableException,
 } from '@nestjs/common'
+import { resolveWebOrigin } from '../config/web-origin.js'
 import { PrismaService } from '../prisma/prisma.service.js'
 import { GitHubProviderService } from './github-provider.service.js'
 import { discoverRepositoryProfile } from './repository-profile.js'
@@ -64,8 +65,7 @@ export class RepositoryProfileService {
   }
 
   async discover(rawId: string, actorId: string, origin: string | undefined) {
-    const webOrigin = process.env.WEB_ORIGIN
-    if (!webOrigin || origin !== new URL(webOrigin).origin)
+    if (origin !== resolveWebOrigin())
       throw new ForbiddenException('Request origin is not allowed')
     const repository = await this.selectedRepository(rawId)
     if (this.inFlight.has(repository.id) || this.inFlight.size >= 4)
