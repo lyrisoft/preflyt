@@ -191,6 +191,10 @@ Preflyt uses OIDC identity with **NestJS-enforced organization and repository-sc
 
 Preflyt shall provide a **Contributors** item in the Engineering sidebar when implemented in P3. The list shows authorized GitHub contributors, activity metrics, charts, policy adherence and assessment coverage, with repository/time filters. Selecting a contributor opens a detail page with their repositories, commits, PRs, reviews, assessments, findings and policy evidence. P1 captures identity/activity metadata; P2 links revision-specific gate evidence; P3 ships the complete usable list and drill-down; P10/P11 add advanced trends. Missing evidence and private GitHub membership are explicitly represented. No opaque AI-generated employee productivity scores. See [Engineering Contributors](product/engineering-contributors.md).
 
+### MVP experience contract
+
+The [MVP Product Experience Contract](product/mvp-product-experience.md) is the authoritative target for navigation, enterprise dashboard, repository/assessment/finding/policy/contributor pages and role-aware states. The [Enterprise UI Guidelines](design/enterprise-ui-guidelines.md) and [Codex/Claude implementation guardrails](agents/product-implementation-guardrails.md) require API-backed, evidence-based, accessible, incremental implementation while preserving existing Shadcn Admin and P0–P11 order. These documents do not imply unimplemented pages already exist.
+
 ## 6. Supported SDLC stages and user journeys
 
 ### 6.1 Lifecycle coverage
