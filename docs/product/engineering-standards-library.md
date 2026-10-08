@@ -1,6 +1,6 @@
 # Preflyt Engineering Standards Library
 
-**Status:** Product specification; not yet implemented  
+**Status:** P0 catalogue and repository selection implemented in source; later evidence mapping and enforcement remain specified
 **Applies to:** Repository onboarding, assessments, CI/PR quality gates, and later SDLC stages  
 **Related:** [PRD](../PRD.md) · [Incremental delivery plan](../roadmap/incremental-delivery.md) · [ADR-0004](../architecture/ADR-0004-shift-left-assessment-governance.md)
 
@@ -128,4 +128,4 @@ A built-in profile recommends configuration; it must not silently enable blockin
 - [ ] Owners can preview affected repositories before adopting a new built-in pack version.
 - [ ] AI cannot enable enforcement, waive critical checks or forge evidence.
 
-**No code for this library has been implemented in the repository by this specification.**
+**P0 implementation:** five frozen packs, stack recommendations, authorized append-only repository selection and configuration-gap preview are available. See the [operations guide](../operations/engineering-standards.md) for supported capabilities, tests, deployment and limits. P1 evidence mapping, P2 enforcement, organization inheritance/overrides and later specialized packs remain unimplemented; P0 release acceptance is not implied.

@@ -19,6 +19,7 @@ import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { RepositoryCiEvidence } from './repository-ci-evidence'
 import { RepositoryEvents } from './repository-events'
+import { RepositoryStandards } from './repository-standards'
 
 const route = getRouteApi('/_authenticated/repositories/$repositoryId')
 type Signal = {
@@ -203,6 +204,13 @@ export function RepositoryProfilePage() {
             </Button>
           )}
         </div>
+        {result && (
+          <RepositoryStandards
+            key={repositoryId}
+            repositoryId={repositoryId}
+            canManage={canDiscover}
+          />
+        )}
         {result && <RepositoryEvents repositoryId={repositoryId} />}
         {result && (
           <RepositoryCiEvidence

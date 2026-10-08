@@ -154,6 +154,7 @@ model GitHubRepository {
   selected       Boolean           @default(false)
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
+  standards      RepositoryStandardsSelection[]
   profiles       RepositoryProfile[]
   @@index([installationId, selected])
 }
@@ -250,4 +251,19 @@ model CiArtifactImport {
   uploadedById  String
   createdAt     DateTime @default(now())
   @@unique([deliveryId, format, sha256])
+}
+
+// Append-only adopted pack versions; catalogue/profile changes never auto-upgrade selection.
+model RepositoryStandardsSelection {
+  id                String @id @default(cuid())
+  repositoryId      String
+  repository        GitHubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  revision          Int
+  profile           String
+  packs             Json
+  selectedById      String
+  profileSnapshotId String?
+  sourceSha         String?
+  createdAt         DateTime @default(now())
+  @@unique([repositoryId, revision])
 }
