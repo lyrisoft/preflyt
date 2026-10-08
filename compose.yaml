@@ -1,0 +1,120 @@
+name: preflyt
+
+services:
+  db:
+    image: postgres:16-bookworm@sha256:0ea6700a3b4f0ae6ce746519073558aed4d88a79d8d07622a9a644946c7319c4
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: preflyt_owner
+      POSTGRES_DB: preflyt
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in deploy/.env}
+      DATABASE_APP_PASSWORD: ${DATABASE_APP_PASSWORD:?Set DATABASE_APP_PASSWORD in deploy/.env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./deploy/postgres/01-runtime-role.sh:/docker-entrypoint-initdb.d/01-runtime-role.sh:ro
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    mem_limit: 1g
+    cpus: 1.0
+    networks: [backend]
+
+  migrate:
+    image: preflyt-api-migration:${PREFLYT_VERSION:-development}
+    build:
+      context: .
+      dockerfile: deploy/api.Dockerfile
+      target: migration
+    environment:
+      DATABASE_URL: postgresql://preflyt_owner:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@db:5432/${PREFLYT_DATABASE:-preflyt}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: 'no'
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 1g
+    cpus: 1.0
+    networks: [backend]
+
+  api:
+    image: preflyt-api:${PREFLYT_VERSION:-development}
+    build:
+      context: .
+      dockerfile: deploy/api.Dockerfile
+      target: runtime
+    init: true
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      API_HOST: 0.0.0.0
+      API_PORT: '3000'
+      DATABASE_URL: postgresql://preflyt_app:${DATABASE_APP_PASSWORD:?Set DATABASE_APP_PASSWORD}@db:5432/${PREFLYT_DATABASE:-preflyt}
+      WEB_ORIGIN: ${WEB_ORIGIN:?Set WEB_ORIGIN}
+      COOKIE_SECURE: 'true'
+      OIDC_ISSUER: ${OIDC_ISSUER:-}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
+      OIDC_REDIRECT_URI: ${OIDC_REDIRECT_URI:-}
+      BOOTSTRAP_TOKEN_SHA256: ${BOOTSTRAP_TOKEN_SHA256:-}
+      SUPER_ADMIN_USERNAME: ${SUPER_ADMIN_USERNAME:-}
+      SUPER_ADMIN_PASSWORD: ${SUPER_ADMIN_PASSWORD:-}
+      GITHUB_APP_ID: ${GITHUB_APP_ID:-}
+      GITHUB_APP_CLIENT_ID: ${GITHUB_APP_CLIENT_ID:-}
+      GITHUB_APP_CLIENT_SECRET: ${GITHUB_APP_CLIENT_SECRET:-}
+      GITHUB_APP_PRIVATE_KEY: ${GITHUB_APP_PRIVATE_KEY:-}
+      GITHUB_APP_OAUTH_CALLBACK_URL: ${WEB_ORIGIN:?Set WEB_ORIGIN}/api/github/oauth/callback
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: [CMD, node, -e, 'fetch("http://127.0.0.1:3000/health/ready",{signal:AbortSignal.timeout(3000)}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 1g
+    cpus: 1.0
+    networks: [backend, egress]
+
+  web:
+    image: preflyt-web:${PREFLYT_VERSION:-development}
+    build:
+      context: .
+      dockerfile: deploy/web.Dockerfile
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:${PREFLYT_HTTP_PORT:-8080}:8080'
+    depends_on:
+      api:
+        condition: service_healthy
+        restart: true
+    healthcheck:
+      test: [CMD, wget, -q, --spider, http://127.0.0.1:8080/healthz]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
+    cpus: 1.0
+    networks: [backend, ingress]
+
+volumes:
+  postgres_data:
+
+networks:
+  backend:
+    internal: true
+  egress:
+  ingress:

@@ -1,0 +1,6 @@
+# Loopback-only development: never use this override for an external deployment.
+services:
+  api:
+    environment:
+      NODE_ENV: development
+      COOKIE_SECURE: 'false'

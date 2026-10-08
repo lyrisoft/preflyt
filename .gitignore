@@ -11,3 +11,5 @@ apps/api/src/generated/
 .DS_Store
 
 /work/
+
+/backups/

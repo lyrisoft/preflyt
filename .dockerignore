@@ -1,0 +1,16 @@
+.git
+**/node_modules
+**/dist
+**/coverage
+**/.turbo
+**/*.tsbuildinfo
+**/.env
+**/.env.*
+**/*.pem
+**/*.key
+**/*.log
+apps/api/src/generated
+backups
+work
+docs
+.DS_Store
