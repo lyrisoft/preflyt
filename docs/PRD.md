@@ -298,7 +298,7 @@ The PoC does **not** need to generate a patch or remediation PR. If a future sep
 
 Deliver as separate working releases, not one all-or-nothing project:
 
-- **P5 Developer CLI:** locally initiated lint/types/secrets/dependencies and policy feedback, followed by local test/IaC/migration expansion.
+- **P5 Developer Experience:** independently usable P5.1 shared local engine/CLI, P5.2 OIDC/policy sync, P5.3 VS Code diagnostics, P5.4 AI explanation and PR gate visibility, P5.5 opt-in Git hooks/editor compatibility. See [developer CLI and IDE specification](product/developer-cli-ide-extension.md).
 - **P6 QA readiness:** import test suites and release candidate evidence, then add API-contract/database compatibility checks and QA gates.
 - **P7 Performance evidence:** import existing k6 result artifacts, apply performance budgets and publish comparable baseline reports **without needing a Preflyt-owned load generator**.
 - **P8 Managed performance:** authorized non-production k6 **smoke and load** tests using controlled execution, thresholds, results and cancellation.

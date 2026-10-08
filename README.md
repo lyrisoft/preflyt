@@ -216,6 +216,7 @@ turbo.json
 
 - [Product Requirements Document](docs/PRD.md): user journeys, validation domains, policy semantics, functional requirements and acceptance criteria.
 - [SDLC capabilities](docs/product/sdlc-capabilities.md): laptop, repository, PR/CI, QA, performance/staging, production-feedback experience.
+- [Developer CLI and IDE Extension](docs/product/developer-cli-ide-extension.md): P5 shared local engine, VS Code diagnostics, policy sync and developer automation.
 - [Engineering Standards Library](docs/product/engineering-standards-library.md): built-in versioned policy packs, adoption profiles and enforcement phases.
 - [Incremental delivery plan](docs/roadmap/incremental-delivery.md): **independently deployable P0–P11 vertical releases**, implementation tasks and acceptance gates.
 - [ADR-0001 — TypeScript-first application stack](docs/architecture/ADR-0001-typescript-first-stack.md)
