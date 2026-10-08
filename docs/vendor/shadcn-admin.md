@@ -28,3 +28,22 @@ The build reports large demo chunks; bundle reduction belongs to product adaptat
 ## Release boundary
 
 This is an upstream development baseline, not a usable Preflyt release or P0 completion. Demo dashboards, users, fake authentication and Clerk example routes are retained for the source import. They do not implement Preflyt authentication. Follow-up P0 work must replace them with ADR-0003 OIDC/server sessions, NestJS authorization and real GitHub repository data; review assets, accessibility, external requests and deployment packaging before release. No connected repository code execution or remediation is implemented.
+
+## Asset and redistribution audit
+
+This audit permits continued internal development from the pinned source. It does **not** clear the current branding and demo assets for redistribution as Preflyt. Replace or independently verify them before any public or customer release.
+
+| Asset or content | Observed source/status | Required release action |
+| --- | --- | --- |
+| Application source and upstream text | Covered by the retained upstream MIT `LICENSE`; preserve its notice | Keep license and attribution with redistributed portions |
+| Inline Tabler brand icons | Tabler Icons MIT notice is included in `apps/web/THIRD_PARTY_NOTICES.md` | Preserve notice; review each brand mark before using it to imply provider affiliation |
+| Dashboard preview images | `src/features/auth/sign-in/assets/dashboard-{light,dark}.png`; upstream product screenshots | Replace with Preflyt-owned images or verify a redistribution grant |
+| Upstream logo and favicons | `src/assets/logo.tsx`, `public/images/favicon*`; Shadcn Admin identity | Replace before Preflyt branding or external distribution; MIT code license does not establish trademark permission |
+| Open Graph preview | `public/images/shadcn-admin.png`; upstream product image; index metadata still points to the upstream Netlify URL | Replace image, title and metadata with Preflyt-owned content before release |
+| Inter and Manrope fonts | Loaded at runtime from Google Fonts in `index.html`; font files are not in the repository | Decide on remote-font policy; if self-hosted, record the exact font versions and include their license notices; if remote, review third-party browser requests/privacy |
+| Demo profile avatars | Demo chat JSON references `randomuser.me` image URLs; images are not bundled | Remove demo routes/data or replace with local neutral placeholders before release; avoid third-party requests from a self-hosted installation |
+| Dependency licenses | Installed package inventory is recorded in `shadcn-admin-dependency-licenses.json`; every package declares license metadata | Inventory is not a legal opinion; regenerate and review notices on dependency updates |
+
+No font binaries are bundled. Demo image URLs are external references, not redistributed image files. The source manifest is authoritative for the complete imported file list.
+
+**Audit outcome:** proceed with the pinned baseline for engineering development after the documented dependency fixes. Do not treat the current assets, branding, demo routes or external requests as release-cleared. P0 product adaptation must remove or replace them and verify the final asset set before packaging.
