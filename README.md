@@ -210,6 +210,8 @@ pnpm-workspace.yaml
 turbo.json
 ~~~
 
+**Access control:** Preflyt uses OIDC plus organization/repository-scoped RBAC. P0 ships predefined roles and repository access grants; later phases extend permissions for assessments, policy enforcement, secure execution, AI providers, QA and performance. See [RBAC and authorization](docs/product/rbac-and-authorization.md).
+
 ## Documents and decision records
 
 - [Product Requirements Document](docs/PRD.md): user journeys, validation domains, policy semantics, functional requirements and acceptance criteria.
