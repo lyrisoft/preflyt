@@ -1,6 +1,6 @@
 # Engineering Contributors: activity and policy evidence
 
-**Status:** Proposed feature specification; not implemented  
+**Status:** Activity capture, scoped directory and profile UI implemented; verified coverage, adherence, findings and advanced trends remain planned. See [implemented subset](../operations/scoped-access-contributors.md).  
 **Delivery:** P1 data capture → P2 policy attribution → P3 usable Contributors UI → P10/P11 advanced trends. **Existing phase order unchanged.**
 
 ## User experience and navigation

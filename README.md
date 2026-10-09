@@ -55,11 +55,13 @@ Its main output is an **Engineering Readiness Report**: a traceable account of w
 
 For detailed user journeys, triggers, check examples, stage contracts and performance workloads, see [Capabilities across the SDLC](docs/product/sdlc-capabilities.md).
 
-**GitHub organization ruleset management (P2):** Quality Gates → GitHub Rulesets provides safe-default Standard/Strict/Custom protection profiles, verified Preflyt check integration, preview/approval before deployment, and drift monitoring. GitHub remains the merge enforcement authority. See [GitHub Ruleset Management](docs/product/github-ruleset-management.md).
+**GitHub organization ruleset management (planned P2):** Quality Gates → GitHub Rulesets will provide safe-default Standard/Strict/Custom protection profiles, verified Preflyt check integration, preview/approval before deployment, and drift monitoring. GitHub remains the merge enforcement authority. See [GitHub Ruleset Management](docs/product/github-ruleset-management.md).
 
-## Engineering Contributors (planned)
+## Engineering Contributors
 
-A **Contributors** sidebar module will show authorized GitHub contributors, activity/assessment coverage/policy adherence metrics and charts. Each contributor opens a profile detailing repositories, PRs, commits, reviews, findings and evidence-backed policy outcomes. P1 captures identities/activity, P2 associates gate evidence, and P3 delivers the working UI; later phases add broader trends. See [Engineering Contributors](docs/product/engineering-contributors.md).
+The **Contributors** module provides an authorized directory, activity charts, repository/time filters and profiles with PR, commit, review and exact-revision assessment links. Organization/repository permissions are enforced server-side. Verified assessment coverage, policy adherence and confirmed findings remain unavailable pending their backend capabilities; later phases add broader trends. See [current implementation](docs/operations/scoped-access-contributors.md) and the [full Contributors specification](docs/product/engineering-contributors.md).
+
+**Quality Gates:** historical observe-only previews are available for immutable assessment snapshots. Trusted execution, current merge readiness, GitHub check publication and ruleset deployment remain pending. See [Quality Gate Preview](docs/operations/quality-gate-preview.md).
 
 ## MVP product experience and implementation guardrails
 
