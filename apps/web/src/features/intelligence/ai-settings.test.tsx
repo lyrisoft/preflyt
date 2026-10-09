@@ -31,16 +31,6 @@ vi.mock('@/components/layout/main', () => ({
 const configuration = () => ({
   enabled: true,
   executionAvailable: false,
-  endpoints: [
-    {
-      id: 'gateway',
-      name: 'Approved gateway',
-      baseUrl: 'https://gateway.example.invalid/v1',
-      locality: 'hosted',
-      requiresKey: true,
-      models: ['model-a'],
-    },
-  ],
   providers: [],
   routes: [],
   stages: ['pull_request'],
@@ -59,7 +49,7 @@ beforeEach(() => {
 })
 it('keeps connections and routing separate without promising inference', () => {
   const html = renderToStaticMarkup(<AiSettingsPage />)
-  expect(html).toContain('Connections')
+  expect(html).toContain('Models')
   expect(html).toContain('Model routing')
   expect(html).toContain('AI explanations are still being built')
   expect(html).not.toContain('Explain findings')
@@ -68,7 +58,7 @@ it('denies management views to developers', () => {
   state.role = 'DEVELOPER'
   const html = renderToStaticMarkup(<AiSettingsPage />)
   expect(html).toContain('Owner or Admin access is required')
-  expect(html).not.toContain('Add connection')
+  expect(html).not.toContain('Add model')
 })
 it('shows deployment-disabled and request-failure states without old settings', () => {
   state.query = { data: { ...configuration(), enabled: false } }
@@ -80,24 +70,26 @@ it('shows deployment-disabled and request-failure states without old settings', 
   }
   const html = renderToStaticMarkup(<AiSettingsPage />)
   expect(html).toContain('Access revoked')
-  expect(html).not.toContain('Add connection')
+  expect(html).not.toContain('Add model')
 })
 it('starts new provider connections disabled and keeps errors in the form', async () => {
   const view = await render(<AiSettingsPage />)
-  await view.getByRole('button', { name: 'Add connection' }).click()
+  await view.getByRole('button', { name: 'Add model' }).click()
   await expect
-    .element(view.getByRole('checkbox', { name: 'Enable connection' }))
+    .element(view.getByRole('checkbox', { name: 'Enable model' }))
     .not.toBeChecked()
+  await view.getByRole('textbox', { name: 'Display name' }).fill('Team model')
   await view
-    .getByRole('textbox', { name: 'Connection name' })
-    .fill('Team model')
+    .getByRole('textbox', { name: 'Endpoint URL' })
+    .fill('https://gateway.example.invalid/v1')
+  await view.getByRole('textbox', { name: 'Model ID' }).fill('model-a')
   await view.getByLabelText('Provider key').fill('fixture-key')
   state.save.mockRejectedValueOnce(
     new Error('Connection changed. Reload before saving.')
   )
-  await view.getByRole('button', { name: 'Save connection' }).click()
+  await view.getByRole('button', { name: 'Save model' }).click()
   await expect
-    .element(view.getByRole('textbox', { name: 'Connection name' }))
+    .element(view.getByRole('textbox', { name: 'Display name' }))
     .toHaveValue('Team model')
   expect(state.save).toHaveBeenCalledWith(
     '/ai/configuration/providers',
@@ -162,12 +154,61 @@ it('paginates connections and resets pagination when filtering', async () => {
     .element(view.getByRole('cell', { name: /^Connection 10/ }))
     .toBeVisible()
   await view
-    .getByRole('textbox', { name: 'Filter connections' })
+    .getByRole('textbox', { name: 'Filter models' })
     .fill('Connection 20')
   await expect
     .element(view.getByRole('cell', { name: /^Connection 20/ }))
     .toBeVisible()
   await expect
-    .element(view.getByRole('navigation', { name: 'Connection pages' }))
+    .element(view.getByRole('navigation', { name: 'Model pages' }))
     .not.toBeInTheDocument()
+})
+
+it('lets an admin approve a self-hosted model without a deployment allowlist or key', async () => {
+  const view = await render(<AiSettingsPage />)
+  await view.getByRole('button', { name: 'Add model' }).click()
+  await view
+    .getByRole('textbox', { name: 'Display name' })
+    .fill('Internal model')
+  await view
+    .getByRole('textbox', { name: 'Endpoint URL' })
+    .fill('http://model-server:4000/v1')
+  await view.getByRole('combobox', { name: 'Hosting' }).selectOptions('local')
+  await view.getByRole('textbox', { name: 'Model ID' }).fill('internal-model')
+  await view
+    .getByRole('checkbox', { name: 'Provider requires an API key' })
+    .click()
+  await view.getByRole('button', { name: 'Save model' }).click()
+  expect(state.save).toHaveBeenCalledWith(
+    '/ai/configuration/providers',
+    expect.objectContaining({
+      baseUrl: 'http://model-server:4000/v1',
+      locality: 'local',
+      requiresKey: false,
+      modelId: 'internal-model',
+      enabled: false,
+    })
+  )
+})
+it('shows organization-admin approval separately from connection testing', () => {
+  state.query = {
+    ...state.query,
+    data: {
+      ...configuration(),
+      providers: [
+        {
+          id: 'model',
+          name: 'Team model',
+          modelId: 'model-a',
+          endpoint: { baseUrl: 'https://model.example/v1' },
+          approved: true,
+          enabled: true,
+          testStatus: 'NOT_TESTED',
+        },
+      ],
+    },
+  }
+  const html = renderToStaticMarkup(<AiSettingsPage />)
+  expect(html).toContain('Approved')
+  expect(html).toContain('Not tested')
 })

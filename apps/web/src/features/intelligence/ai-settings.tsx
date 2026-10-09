@@ -39,10 +39,12 @@ type Provider = {
   id: string
   name: string
   endpointId: string
+  endpoint: Endpoint | null
   modelId: string
   enabled: boolean
   revision: number
   testStatus: string
+  approved: boolean
   apiKeySet: boolean
 }
 type StageRoute = {
@@ -59,7 +61,6 @@ type StageRoute = {
 type Configuration = {
   enabled: boolean
   executionAvailable: boolean
-  endpoints: Endpoint[]
   providers: Provider[]
   routes: StageRoute[]
   stages: string[]
@@ -85,9 +86,9 @@ const selectClass =
   'h-9 w-full min-w-0 rounded-md border bg-background px-3 text-sm focus-visible:outline-2 focus-visible:outline-ring'
 const help = [
   {
-    title: 'Connections',
+    title: 'Models',
     content:
-      'Choose a deployment-approved model endpoint. Keys are encrypted and write-only. Testing reads the model list; it does not send repository code or generate an explanation. Editing a connection requires another test.',
+      'Organization admins add and approve models directly in Preflyt. Use an OpenAI-compatible endpoint and the model ID it accepts. Hosted providers require HTTPS; select Self-hosted for a local model server. Keys are encrypted and write-only. Testing reads the model list; it does not send repository code or generate an explanation. Editing a connection requires another test.',
   },
   {
     title: 'Model routing',
@@ -180,7 +181,7 @@ function AiSettings({
             AI Intelligence
           </h1>
           <p className='mt-1 text-sm text-muted-foreground'>
-            Manage AI connections and model choices.
+            Manage approved models and model choices.
           </p>
         </div>
         <div className='flex items-center gap-2'>
@@ -216,8 +217,8 @@ function AiSettings({
         <section className='rounded-xl border p-6'>
           <h2 className='font-semibold'>AI is disabled for this deployment</h2>
           <p className='mt-2 text-sm text-muted-foreground'>
-            Your deployment administrator can enable AI settings and approve
-            model endpoints.
+            Your deployment administrator can enable AI settings. Organization
+            admins then add models here.
           </p>
         </section>
       )}
@@ -232,7 +233,7 @@ function AiSettings({
             <TabsList>
               <TabsTrigger value='connections'>
                 <Cable className='mr-2 size-4' />
-                Connections
+                Models
               </TabsTrigger>
               <TabsTrigger value='routing'>
                 <RouteIcon className='mr-2 size-4' />
@@ -242,8 +243,8 @@ function AiSettings({
             <TabsContent value='connections' className='mt-5 space-y-4'>
               <div className='flex flex-wrap justify-between gap-3'>
                 <Input
-                  aria-label='Filter connections'
-                  placeholder='Filter connections…'
+                  aria-label='Filter models'
+                  placeholder='Filter models…'
                   value={search}
                   onChange={(e) => {
                     setSearch(e.target.value)
@@ -252,30 +253,21 @@ function AiSettings({
                   className='max-w-xs'
                 />
                 <Button
-                  disabled={
-                    busy ||
-                    !data.endpoints.length ||
-                    data.providers.length >= 32
-                  }
+                  disabled={busy || data.providers.length >= 32}
                   onClick={() => {
                     setError('')
                     setEdit(null)
                   }}
                 >
                   <Plus className='size-4' />
-                  Add connection
+                  Add model
                 </Button>
               </div>
-              {!data.endpoints.length && (
-                <p className='text-sm text-muted-foreground'>
-                  No model endpoints have been approved for this deployment.
-                </p>
-              )}
               <div className='overflow-x-auto rounded-xl border'>
                 <table className='w-full text-left text-sm'>
                   <thead className='bg-muted/40 text-muted-foreground'>
                     <tr>
-                      {['Connection', 'Model', 'Status', 'Actions'].map((t) => (
+                      {['Model', 'Model ID', 'Status', 'Actions'].map((t) => (
                         <th key={t} className='px-4 py-3 font-medium'>
                           {t}
                         </th>
@@ -300,24 +292,33 @@ function AiSettings({
                         <tr key={p.id} className='border-t'>
                           <td className='px-4 py-4 font-medium'>
                             {p.name}
-                            <span className='mt-1 block text-xs font-normal text-muted-foreground'>
-                              {data.endpoints.find((e) => e.id === p.endpointId)
-                                ?.name ?? 'Endpoint no longer approved'}
+                            <span
+                              className='mt-1 block max-w-xs truncate text-xs font-normal text-muted-foreground'
+                              title={p.endpoint?.baseUrl}
+                            >
+                              {p.endpoint?.baseUrl ?? 'Endpoint setup required'}
                             </span>
                           </td>
                           <td className='px-4 py-4'>{p.modelId}</td>
                           <td className='px-4 py-4'>
-                            <StatusBadge
-                              tone={
-                                !p.enabled
-                                  ? 'neutral'
-                                  : p.testStatus === 'CONNECTED'
-                                    ? 'success'
-                                    : 'info'
-                              }
-                            >
-                              {!p.enabled ? 'Disabled' : testName(p.testStatus)}
-                            </StatusBadge>
+                            <div className='flex flex-wrap gap-2'>
+                              {p.approved && (
+                                <StatusBadge tone='info'>Approved</StatusBadge>
+                              )}
+                              <StatusBadge
+                                tone={
+                                  !p.enabled
+                                    ? 'neutral'
+                                    : p.testStatus === 'CONNECTED'
+                                      ? 'success'
+                                      : 'info'
+                                }
+                              >
+                                {!p.enabled
+                                  ? 'Disabled'
+                                  : testName(p.testStatus)}
+                              </StatusBadge>
+                            </div>
                           </td>
                           <td className='px-4 py-4'>
                             <div className='flex gap-2'>
@@ -358,7 +359,7 @@ function AiSettings({
                         >
                           {data.providers.length
                             ? 'No matching connections.'
-                            : 'Add your first model connection.'}
+                            : 'Add your first model.'}
                         </td>
                       </tr>
                     )}
@@ -367,7 +368,7 @@ function AiSettings({
               </div>
               {filtered.length > 10 && (
                 <nav
-                  aria-label='Connection pages'
+                  aria-label='Model pages'
                   className='flex items-center justify-end gap-3 text-sm'
                 >
                   <span>
@@ -393,8 +394,8 @@ function AiSettings({
                 </nav>
               )}
               <p className='text-xs text-muted-foreground'>
-                {filtered.length} of {data.providers.length} connections ·
-                Maximum 32 per organization
+                {filtered.length} of {data.providers.length} models · Maximum 32
+                per organization
               </p>
             </TabsContent>
             <TabsContent value='routing' className='mt-5'>
@@ -473,18 +474,16 @@ function AiSettings({
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>
-              {edit ? 'Edit connection' : 'Add connection'}
-            </DialogTitle>
+            <DialogTitle>{edit ? 'Edit model' : 'Add model'}</DialogTitle>
             <DialogDescription>
-              Choose an approved endpoint and model. Keys stay private.
+              Saving approves this model for your organization. Keys stay
+              private.
             </DialogDescription>
           </DialogHeader>
           {data && edit !== undefined && (
             <ProviderForm
               key={edit?.id ?? 'new'}
               provider={edit}
-              endpoints={data.endpoints}
               busy={busy}
               error={error}
               save={(body) =>
@@ -534,32 +533,36 @@ function AiSettings({
 }
 function ProviderForm({
   provider,
-  endpoints,
   busy,
   error,
   save,
 }: {
   provider: Provider | null
-  endpoints: Endpoint[]
   busy: boolean
   error: string
   save: (body: unknown) => void
 }) {
-  const [endpointId, setEndpointId] = useState(
-      provider?.endpointId ?? endpoints[0]?.id ?? ''
+  const [baseUrl, setBaseUrl] = useState(provider?.endpoint?.baseUrl ?? ''),
+    [locality, setLocality] = useState(
+      provider?.endpoint?.locality ?? 'hosted'
     ),
-    [model, setModel] = useState(
-      provider?.modelId ?? endpoints[0]?.models[0] ?? ''
+    [requiresKey, setRequiresKey] = useState(
+      provider?.endpoint?.requiresKey ?? true
     ),
     [apiKey, setApiKey] = useState('')
-  const endpoint = endpoints.find((e) => e.id === endpointId)
+  const changed =
+    baseUrl !== provider?.endpoint?.baseUrl ||
+    locality !== provider?.endpoint?.locality ||
+    requiresKey !== provider?.endpoint?.requiresKey
   function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const f = new FormData(e.currentTarget)
     save({
       name: f.get('name'),
-      endpointId,
-      modelId: model,
+      baseUrl,
+      locality,
+      requiresKey,
+      modelId: f.get('modelId'),
       enabled: f.get('enabled') === 'on',
       expectedRevision: provider?.revision ?? 0,
       ...(apiKey ? { apiKey } : {}),
@@ -568,7 +571,7 @@ function ProviderForm({
   return (
     <form onSubmit={submit} className='space-y-4'>
       <label className='block space-y-2 text-sm'>
-        <span>Connection name</span>
+        <span>Display name</span>
         <Input
           name='name'
           required
@@ -577,51 +580,51 @@ function ProviderForm({
         />
       </label>
       <label className='block space-y-2 text-sm'>
-        <span>Endpoint</span>
+        <span>Endpoint URL</span>
+        <Input
+          type='url'
+          value={baseUrl}
+          onChange={(e) => setBaseUrl(e.target.value)}
+          placeholder='https://api.example.com/v1'
+          required
+          maxLength={2048}
+        />
+      </label>
+      <label className='block space-y-2 text-sm'>
+        <span>Hosting</span>
         <select
           className={selectClass}
-          value={endpointId}
-          onChange={(e) => {
-            setEndpointId(e.target.value)
-            setModel(
-              endpoints.find((p) => p.id === e.target.value)?.models[0] ?? ''
-            )
-            setApiKey('')
-          }}
-          required
+          value={locality}
+          onChange={(e) => setLocality(e.target.value)}
         >
-          <option value='' disabled>
-            Select endpoint
-          </option>
-          {endpoints.map((e) => (
-            <option key={e.id} value={e.id}>
-              {e.name} · {e.locality}
-            </option>
-          ))}
+          <option value='hosted'>Hosted provider</option>
+          <option value='local'>Self-hosted model</option>
         </select>
       </label>
       <label className='block space-y-2 text-sm'>
-        <span>Model</span>
-        <select
-          className={selectClass}
-          value={model}
-          onChange={(e) => setModel(e.target.value)}
+        <span>Model ID</span>
+        <Input
+          name='modelId'
           required
-        >
-          <option value='' disabled>
-            Select model
-          </option>
-          {endpoint?.models.map((m) => (
-            <option key={m} value={m}>
-              {m}
-            </option>
-          ))}
-        </select>
+          maxLength={256}
+          placeholder='Model name accepted by your provider'
+          defaultValue={provider?.modelId}
+        />
+      </label>
+      <label className='flex items-center gap-2 text-sm'>
+        <input
+          type='checkbox'
+          checked={requiresKey}
+          onChange={(e) => setRequiresKey(e.target.checked)}
+        />
+        Provider requires an API key
       </label>
       <label className='block space-y-2 text-sm'>
         <span>
           Provider key{' '}
-          {provider?.apiKeySet ? '(leave blank to keep saved key)' : ''}
+          {provider?.apiKeySet && !changed
+            ? '(leave blank to keep saved key)'
+            : ''}
         </span>
         <Input
           type='password'
@@ -629,10 +632,7 @@ function ProviderForm({
           value={apiKey}
           onChange={(e) => setApiKey(e.target.value)}
           maxLength={4096}
-          required={
-            !!endpoint?.requiresKey &&
-            (!provider?.apiKeySet || provider.endpointId !== endpointId)
-          }
+          required={requiresKey && (!provider?.apiKeySet || changed)}
         />
       </label>
       <label className='flex items-center gap-2 text-sm'>
@@ -641,15 +641,15 @@ function ProviderForm({
           name='enabled'
           defaultChecked={provider?.enabled ?? false}
         />
-        Enable connection
+        Enable model
       </label>
       {error && (
         <p role='alert' className='text-sm text-destructive'>
           {error}
         </p>
       )}
-      <Button className='w-full' disabled={busy || !endpoint}>
-        {busy ? 'Saving…' : 'Save connection'}
+      <Button className='w-full' disabled={busy}>
+        {busy ? 'Saving…' : 'Save model'}
       </Button>
     </form>
   )

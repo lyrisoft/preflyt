@@ -40,7 +40,9 @@ const endpoint = {
 };
 const input = {
   name: "Primary",
-  endpointId: "reviewed",
+  baseUrl: endpoint.baseUrl,
+  locality: "hosted" as const,
+  requiresKey: true,
   modelId: "model-a",
   enabled: true,
   apiKey: "fixture-key",
@@ -68,7 +70,11 @@ const get = (actor = owner) =>
   http(app.getHttpServer())
     .get(root)
     .set("Cookie", `ai.sid=${actor.identityId}`);
-const fetchMock = vi.fn();
+const fetchMock = vi.hoisted(() => vi.fn());
+vi.mock("../src/intelligence/ai-http.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/intelligence/ai-http.js")>()),
+  aiHttpRequest: fetchMock,
+}));
 beforeAll(async () => {
   const url = new URL(process.env.DATABASE_URL!);
   if (!["127.0.0.1", "localhost"].includes(url.hostname))
@@ -142,8 +148,6 @@ afterAll(async () => {
 beforeEach(async () => {
   vi.stubEnv("AI_CONFIGURATION_ENABLED", "true");
   vi.stubEnv("AI_PROVIDER_ENCRYPTION_KEY", randomBytes(32).toString("base64"));
-  vi.stubEnv("AI_APPROVED_ENDPOINTS", JSON.stringify([endpoint]));
-  vi.stubGlobal("fetch", fetchMock);
   fetchMock.mockReset();
   fetchMock.mockImplementation(
     async () =>
@@ -222,7 +226,7 @@ it("enforces role, session, origin and strict DTO boundaries", async () => {
     .expect(403);
   await post(owner, "/providers", {
     ...input,
-    baseUrl: "https://attacker.invalid",
+    shellCommand: "arbitrary",
   }).expect(400);
   await post(
     owner,
@@ -256,27 +260,37 @@ it("rejects stale edits and invalidates connection tests after edits", async () 
   expect(updated.apiKeySet).toBe(true);
   await post(owner, "/routes/pull_request", route(p.id)).expect(400);
 });
-it("never sends an old key to a changed endpoint, even with the same endpoint id", async () => {
+it("requires a new key for an endpoint change and never sends the saved key there", async () => {
   const p = await connected();
   fetchMock.mockClear();
-  vi.stubEnv(
-    "AI_APPROVED_ENDPOINTS",
-    JSON.stringify([
-      { ...endpoint, baseUrl: "https://changed.example.invalid/v1" },
-    ]),
-  );
+  await post(owner, `/providers/${p.id}`, {
+    ...input,
+    apiKey: undefined,
+    baseUrl: "https://changed.example.invalid/v1",
+    expectedRevision: 1,
+  }).expect(400);
+  expect(fetchMock).not.toHaveBeenCalled();
+  const previous = await db.aiProviderConnection.findUniqueOrThrow({
+    where: { id: p.id },
+  });
+  await db.aiProviderConnection.update({
+    where: { id: p.id },
+    data: {
+      endpoint: {
+        ...(previous.endpoint as object),
+        baseUrl: "https://changed.example.invalid/v1",
+      },
+    },
+  });
   await post(owner, `/providers/${p.id}/test`, {}).expect(409);
   expect(fetchMock).not.toHaveBeenCalled();
   await post(owner, `/providers/${p.id}`, {
     ...input,
-    apiKey: undefined,
-    expectedRevision: 1,
-  }).expect(400);
-  await post(owner, `/providers/${p.id}`, {
-    ...input,
+    baseUrl: "https://changed.example.invalid/v1",
     expectedRevision: 1,
   }).expect(201);
 });
+
 it("requires ready connections and previews source, token and disabled-route limits without inference", async () => {
   const p = await connected();
   await post(owner, "/routes/pull_request", route(p.id)).expect(201);
@@ -360,7 +374,10 @@ it("redacts provider failures and detects endpoint removal during a test", async
     (await post(owner, `/providers/${p.id}/test`, {}).expect(201)).body.status,
   ).toBe("AUTH_REJECTED");
   fetchMock.mockImplementationOnce(async () => {
-    vi.stubEnv("AI_APPROVED_ENDPOINTS", "[]");
+    await db.aiProviderConnection.update({
+      where: { id: p.id },
+      data: { endpoint: {} },
+    });
     return new Response(JSON.stringify({ data: [{ id: "model-a" }] }));
   });
   await post(owner, `/providers/${p.id}/test`, {}).expect(409);
@@ -420,4 +437,39 @@ it("protects AI configuration from accidental organization deletion", async () =
       where: { organizationId: owner.organizationId! },
     }),
   ).toBe(1);
+});
+
+it("approves a model created by an organization admin without deployment endpoint configuration", async () => {
+  const model = (await post(owner, "/providers", input).expect(201)).body;
+  expect(model.approved).toBe(true);
+  expect(model.endpoint.baseUrl).toBe(input.baseUrl);
+  expect(model.testStatus).toBe("NOT_TESTED");
+  const saved = await db.auditEvent.findFirst({
+    where: { actorId: owner.identityId, event: "ai.model.approved" },
+  });
+  expect(saved).not.toBeNull();
+  const bad = { ...input, baseUrl: "https://169.254.169.254/latest" };
+  await post(owner, "/providers", bad).expect(400);
+});
+it("creates a keyless self-hosted model only through admin approval", async () => {
+  const p = (
+    await post(owner, "/providers", {
+      ...input,
+      baseUrl: "http://model-server:4000/v1",
+      locality: "local",
+      requiresKey: false,
+      apiKey: undefined,
+      enabled: false,
+    }).expect(201)
+  ).body;
+  expect(p.approved).toBe(true);
+  expect(p.apiKeySet).toBe(false);
+  expect(p.enabled).toBe(false);
+  await post(developer, "/providers", {
+    ...input,
+    baseUrl: "http://model-server:4000/v1",
+    locality: "local",
+    requiresKey: false,
+    apiKey: undefined,
+  }).expect(403);
 });

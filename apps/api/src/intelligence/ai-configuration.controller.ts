@@ -11,6 +11,7 @@ import {
 } from "@nestjs/common";
 import {
   IsBoolean,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -30,7 +31,9 @@ import {
 import { AiConfigurationService } from "./ai-configuration.service.js";
 class ProviderDto {
   @IsString() @MinLength(1) @MaxLength(120) name!: string;
-  @IsString() @MaxLength(64) endpointId!: string;
+  @IsString() @MaxLength(2048) baseUrl!: string;
+  @IsIn(["local", "hosted"]) locality!: "local" | "hosted";
+  @IsBoolean() requiresKey!: boolean;
   @IsString() @MaxLength(256) modelId!: string;
   @IsBoolean() enabled!: boolean;
   @IsOptional() @IsString() @MinLength(1) @MaxLength(4096) apiKey?: string;

@@ -61,7 +61,7 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 
 - **P0.AI1:** Multiple provider connections, encrypted write-only keys, local/compatible endpoints and connectivity testing.
 - **P0.AI2:** Primary/fallback model routing for laptop, repository, PR/CI, QA, performance/staging and production feedback, with egress, budget and RBAC restrictions.
-- **P0.AI3:** Working AI Intelligence → Connections / Model routing interface with audit and route preview. Preserve already completed P0 functionality.
+- **P0.AI3:** Working AI Intelligence → Models / Model routing interface with audit and route preview. Preserve already completed P0 functionality.
 
 ### P0 GitHub-first access update (partially implemented)
 
@@ -375,8 +375,14 @@ This is implementation evidence, not a live cluster release certificate. The ini
 
 ### P4 connection and routing increment (2026-10-09)
 
-Implemented organization-scoped provider setup and model routing behind a default-off flag. Owner/Admin users configure approved endpoints/models through AI Intelligence → Connections / Model routing. Keys are authenticated-encrypted, write-only and bound to endpoint transport definitions. Connection tests send metadata only; revisions, organization scope, access revocation, response bounds, throttling and freshness are enforced. Source sharing and new connections/routes start disabled. Unit, UUID-disposable-database API and Chromium interaction tests verify these boundaries. See [AI configuration](../operations/ai-configuration.md).
+Implemented organization-scoped provider setup and model routing behind a default-off flag. Owner/Admin users create and approve models through AI Intelligence → Models / Model routing. Keys are authenticated-encrypted, write-only and bound to endpoint transport definitions. Connection tests send metadata only; revisions, organization scope, access revocation, response bounds, throttling and freshness are enforced. Source sharing and new connections/routes start disabled. Unit, UUID-disposable-database API and Chromium interaction tests verify these boundaries. See [AI configuration](../operations/ai-configuration.md).
 
 This partially implements P0.AI1/P4.1/P4.RBAC. Inference remains unavailable; stored budgets are not spending enforcement. LiteLLM deployment, read-only intelligence dispatch, evidence validation, cancellation/usage telemetry, adversarial gate-independence tests and multi-skill review remain open. P4 is not complete.
 
 The additive `20261010004000_ai_configuration` migration was applied locally after a protected database snapshot; the Prisma client was regenerated. No execution/provider flags were enabled and no real model requests or repository code were run by these tests.
+
+### P4 admin model approval refinement (2026-10-09)
+
+Models are created and approved directly by organization Owner/Admin users in **AI Intelligence → Models**. Removed the deployment endpoint allowlist; the admin form accepts a model endpoint, hosting type, model ID and encrypted key. Saving records a revision-bound approval audit. Approval and a successful connection test are separate: enabled routes still require tested connections, and source sharing stays off. Hosted DNS/address validation and connection pinning prevent unintended private/metadata access; explicitly self-hosted servers remain supported. The additive endpoint migration preserves existing records. Model outages and AI output have no gate authority.
+
+Migration `20261010006000_admin_ai_models` was applied locally after a protected snapshot and the Prisma client regenerated. Verification passed: 59 API/transport tests, 8 Chromium tests, web/API type checks and focused UI lint. Generated HTTP fixtures and UUID disposable databases were used; no live model inference or connected repository execution occurred.

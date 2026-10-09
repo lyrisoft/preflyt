@@ -3,13 +3,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   aiConfigurationEnabled,
   aiCredentialKey,
-  aiEndpoints,
+  validateAiEndpoint,
   encryptAiCredential,
   decryptAiCredential,
   testAiEndpoint,
   endpointDigest,
   type AiEndpoint,
 } from "../src/intelligence/ai-configuration.js";
+const transport = vi.hoisted(() => vi.fn());
+vi.mock("../src/intelligence/ai-http.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/intelligence/ai-http.js")>()),
+  aiHttpRequest: transport,
+}));
 const endpoint = (): AiEndpoint => ({
   id: "gateway",
   name: "Model gateway",
@@ -29,9 +34,7 @@ afterEach(() => {
 describe("AI configuration safe defaults and encrypted credentials", () => {
   it("stays disabled until explicitly enabled and has no implicit external endpoints", () => {
     vi.stubEnv("AI_CONFIGURATION_ENABLED", undefined);
-    vi.stubEnv("AI_APPROVED_ENDPOINTS", undefined);
     expect(aiConfigurationEnabled()).toBe(false);
-    expect(aiEndpoints()).toEqual([]);
     vi.stubEnv("AI_CONFIGURATION_ENABLED", "true");
     expect(aiConfigurationEnabled()).toBe(true);
   });
@@ -114,54 +117,37 @@ describe("AI configuration safe defaults and encrypted credentials", () => {
       );
   });
 });
-describe("reviewed endpoints", () => {
-  it("normalizes only explicitly reviewed hosted and local endpoint definitions", () => {
-    vi.stubEnv(
-      "AI_APPROVED_ENDPOINTS",
-      JSON.stringify([
-        endpoint(),
-        {
-          ...endpoint(),
-          id: "local",
-          baseUrl: "http://local-gateway:4000/v1/",
-          locality: "local",
-          requiresKey: false,
-        },
-      ]),
-    );
-    const endpoints = aiEndpoints();
-    expect(endpoints[1].baseUrl).toBe("http://local-gateway:4000/v1");
-    expect(endpointDigest(endpoints[0])).not.toBe(
-      endpointDigest({ ...endpoints[0], models: ["other"] }),
+describe("admin-approved model endpoints", () => {
+  it("accepts admin hosted and self-hosted models without environment configuration", () => {
+    const hosted = validateAiEndpoint(endpoint()),
+      local = validateAiEndpoint({
+        ...endpoint(),
+        baseUrl: "http://model-server:4000/v1/",
+        locality: "local",
+        requiresKey: false,
+      });
+    expect(local.baseUrl).toBe("http://model-server:4000/v1");
+    expect(endpointDigest(hosted)).not.toBe(
+      endpointDigest({ ...hosted, models: ["other"] }),
     );
   });
   it.each([
     { baseUrl: "http://external.example" },
     { baseUrl: "https://user:password@external.example" },
-    { baseUrl: "https://reviewed.example?key=value" },
+    { baseUrl: "https://external.example?key=value" },
+    { baseUrl: "https://external.example#secret" },
     { baseUrl: "file:///secret" },
     { models: [] },
     { models: ["same", "same"] },
     { id: "invalid/id" },
     { extra: true },
-  ])("rejects invalid review input %j", (patch) => {
-    vi.stubEnv(
-      "AI_APPROVED_ENDPOINTS",
-      JSON.stringify([{ ...endpoint(), ...patch }]),
+    { baseUrl: "https://169.254.169.254/latest" },
+    { baseUrl: "https://127.0.0.1" },
+    { baseUrl: "https://[::ffff:a9fe:a9fe]" },
+  ])("rejects malformed or unsafe endpoint %j", (patch) => {
+    expect(() => validateAiEndpoint({ ...endpoint(), ...patch })).toThrow(
+      "valid model endpoint",
     );
-    expect(() => aiEndpoints()).toThrow("reviewed endpoint");
-  });
-  it("rejects duplicate endpoints and oversized inventories", () => {
-    for (const list of [
-      [endpoint(), endpoint()],
-      Array.from({ length: 33 }, (_, i) => ({
-        ...endpoint(),
-        id: "endpoint-" + i,
-      })),
-    ]) {
-      vi.stubEnv("AI_APPROVED_ENDPOINTS", JSON.stringify(list));
-      expect(() => aiEndpoints()).toThrow();
-    }
   });
 });
 describe("metadata-only connection testing", () => {
@@ -170,7 +156,7 @@ describe("metadata-only connection testing", () => {
       async () =>
         new Response(JSON.stringify({ data: [{ id: "reviewed-model" }] })),
     );
-    vi.stubGlobal("fetch", fetcher);
+    transport.mockImplementation(fetcher);
     expect(
       await testAiEndpoint(
         endpoint(),
@@ -178,10 +164,10 @@ describe("metadata-only connection testing", () => {
         "fixture-provider-key",
       ),
     ).toBe("CONNECTED");
-    const [url, options] = fetcher.mock.calls[0] as any;
-    expect(url).toBe("https://reviewed.example/v1/models");
+    const [url, locality, options] = fetcher.mock.calls[0] as any;
+    expect(locality).toBe("hosted");
+    expect(url.href).toBe("https://reviewed.example/v1/models");
     expect(options).toMatchObject({
-      redirect: "error",
       headers: {
         accept: "application/json",
         authorization: "Bearer fixture-provider-key",
@@ -197,8 +183,7 @@ describe("metadata-only connection testing", () => {
   ])(
     "reports upstream status %s without response details",
     async (status, expected) => {
-      vi.stubGlobal(
-        "fetch",
+      transport.mockImplementation(
         vi.fn(
           async () =>
             new Response("private upstream detail", { status: Number(status) }),
@@ -208,8 +193,7 @@ describe("metadata-only connection testing", () => {
     },
   );
   it("distinguishes unavailable models from a tested connection", async () => {
-    vi.stubGlobal(
-      "fetch",
+    transport.mockImplementation(
       vi.fn(
         async () => new Response(JSON.stringify({ data: [{ id: "other" }] })),
       ),
@@ -223,16 +207,12 @@ describe("metadata-only connection testing", () => {
       () => new Response("x".repeat(1048577)),
       () => new Response("invalid-json"),
     ]) {
-      vi.stubGlobal(
-        "fetch",
-        vi.fn(async () => response()),
-      );
+      transport.mockImplementation(vi.fn(async () => response()));
       await expect(
         testAiEndpoint(endpoint(), "reviewed-model"),
       ).rejects.toThrow();
     }
-    vi.stubGlobal(
-      "fetch",
+    transport.mockImplementation(
       vi.fn(async () => {
         throw new DOMException("fixture timeout", "TimeoutError");
       }),

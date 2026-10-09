@@ -1,4 +1,6 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import { aiHttpRequest, allowedAiAddress } from "./ai-http.js";
+import { isIP } from "node:net";
 import { digest } from "../assessments/assessment-digest.js";
 export const aiConfigurationEnabled = () =>
   process.env.AI_CONFIGURATION_ENABLED === "true";
@@ -31,56 +33,60 @@ export function aiCredentialKey() {
     );
   return key;
 }
-export function aiEndpoints(): AiEndpoint[] {
+export function validateAiEndpoint(input: unknown): AiEndpoint {
   try {
-    const items: unknown = JSON.parse(
-      process.env.AI_APPROVED_ENDPOINTS ?? "[]",
-    );
-    if (!Array.isArray(items) || items.length > 32) throw new Error();
-    const ids = new Set<string>();
-    return items.map((item: unknown) => {
-      if (!item || typeof item !== "object") throw new Error();
-      const value = item as Record<string, unknown>;
-      if (
-        Object.keys(value).sort().join(",") !==
-          "baseUrl,id,locality,models,name,requiresKey" ||
-        typeof value.id !== "string" ||
-        !/^[a-z][a-z0-9-]{0,63}$/.test(value.id) ||
-        ids.has(value.id) ||
-        typeof value.name !== "string" ||
-        !value.name.trim() ||
-        value.name.length > 120 ||
-        !["local", "hosted"].includes(String(value.locality)) ||
-        typeof value.requiresKey !== "boolean" ||
-        typeof value.baseUrl !== "string" ||
-        !Array.isArray(value.models) ||
-        !value.models.length ||
-        value.models.length > 100 ||
-        value.models.some(
-          (m) =>
-            typeof m !== "string" ||
-            !/^[a-zA-Z0-9][a-zA-Z0-9_.:/-]{0,255}$/.test(m),
-        ) ||
-        new Set(value.models).size !== value.models.length
-      )
-        throw new Error();
-      const url = new URL(value.baseUrl);
-      if (
-        url.username ||
-        url.password ||
-        url.search ||
-        url.hash ||
-        !["http:", "https:"].includes(url.protocol) ||
-        (value.locality === "hosted" && url.protocol !== "https:")
-      )
-        throw new Error();
-      ids.add(value.id);
-      return { ...value, baseUrl: url.href.replace(/\/$/, "") } as AiEndpoint;
-    });
+    if (!input || typeof input !== "object" || Array.isArray(input))
+      throw new Error();
+    const v = input as AiEndpoint;
+    if (
+      Object.keys(v).sort().join(",") !==
+        "baseUrl,id,locality,models,name,requiresKey" ||
+      typeof v.id !== "string" ||
+      !/^[a-zA-Z0-9-]{1,64}$/.test(v.id) ||
+      typeof v.name !== "string" ||
+      !v.name.trim() ||
+      v.name.length > 120 ||
+      !["local", "hosted"].includes(v.locality) ||
+      typeof v.requiresKey !== "boolean" ||
+      typeof v.baseUrl !== "string" ||
+      v.baseUrl.length > 2048 ||
+      !Array.isArray(v.models) ||
+      !v.models.length ||
+      v.models.length > 100 ||
+      v.models.some(
+        (m) =>
+          typeof m !== "string" ||
+          !/^[a-zA-Z0-9][a-zA-Z0-9_.:/-]{0,255}$/.test(m),
+      ) ||
+      new Set(v.models).size !== v.models.length
+    )
+      throw new Error();
+    const url = new URL(v.baseUrl);
+    const host = url.hostname.replace(/^\[|\]$/g, "");
+    if (
+      url.username ||
+      url.password ||
+      url.search ||
+      url.hash ||
+      !["http:", "https:"].includes(url.protocol) ||
+      (v.locality === "hosted" && url.protocol !== "https:") ||
+      (isIP(host) && !allowedAiAddress(host, v.locality)) ||
+      (v.locality === "hosted" &&
+        (host === "localhost" || host.endsWith(".localhost")))
+    )
+      throw new Error();
+    return { ...v, baseUrl: url.href.replace(/\/$/, "") };
   } catch {
-    throw new Error(
-      "AI_APPROVED_ENDPOINTS must contain valid reviewed endpoint definitions",
-    );
+    throw new Error("Enter a valid model endpoint and model name");
+  }
+}
+export function providerEndpoint(provider: {
+  endpoint: unknown;
+}): AiEndpoint | null {
+  try {
+    return validateAiEndpoint(provider.endpoint);
+  } catch {
+    return null;
   }
 }
 export const endpointDigest = (endpoint: AiEndpoint) => digest(endpoint);
@@ -166,14 +172,17 @@ export async function testAiEndpoint(
   key?: string,
 ) {
   const signal = AbortSignal.timeout(10000);
-  const response = await fetch(endpoint.baseUrl + "/models", {
-    headers: {
-      accept: "application/json",
-      ...(key ? { authorization: `Bearer ${key}` } : {}),
+  const response = await aiHttpRequest(
+    new URL(endpoint.baseUrl + "/models"),
+    endpoint.locality,
+    {
+      headers: {
+        accept: "application/json",
+        ...(key ? { authorization: `Bearer ${key}` } : {}),
+      },
+      signal,
     },
-    redirect: "error",
-    signal,
-  });
+  );
   if (!response.ok || !response.body)
     return response.status === 401 || response.status === 403
       ? "AUTH_REJECTED"

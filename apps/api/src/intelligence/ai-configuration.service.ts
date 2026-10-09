@@ -15,7 +15,8 @@ import type { AiProviderConnection } from "../generated/prisma/client.js";
 import {
   aiConfigurationEnabled,
   aiCredentialKey,
-  aiEndpoints,
+  validateAiEndpoint,
+  providerEndpoint,
   aiStages,
   encryptAiCredential,
   decryptAiCredential,
@@ -25,7 +26,9 @@ import {
 } from "./ai-configuration.js";
 export type ProviderInput = {
   name: string;
-  endpointId: string;
+  baseUrl: string;
+  locality: "local" | "hosted";
+  requiresKey: boolean;
   modelId: string;
   enabled: boolean;
   apiKey?: string;
@@ -43,7 +46,11 @@ export type RouteInput = {
 };
 export function publicProvider(p: AiProviderConnection) {
   const { encryptedCredential, credentialEndpointDigest, ...safe } = p;
-  return { ...safe, apiKeySet: !!encryptedCredential };
+  return {
+    ...safe,
+    apiKeySet: !!encryptedCredential,
+    approved: !!providerEndpoint(p),
+  };
 }
 @Injectable()
 export class AiConfigurationService {
@@ -54,7 +61,6 @@ export class AiConfigurationService {
   onModuleInit() {
     if (aiConfigurationEnabled()) {
       aiCredentialKey();
-      aiEndpoints();
     }
   }
   private available() {
@@ -72,7 +78,6 @@ export class AiConfigurationService {
       return {
         enabled: false,
         executionAvailable: false,
-        endpoints: [],
         providers: [],
         routes: [],
         stages: aiStages,
@@ -89,7 +94,6 @@ export class AiConfigurationService {
     return {
       enabled: true,
       executionAvailable: false,
-      endpoints: aiEndpoints(),
       providers: providers.map(publicProvider),
       routes,
       stages: aiStages,
@@ -106,16 +110,22 @@ export class AiConfigurationService {
       "ai.provider.manage",
       true,
     );
-    const endpoint = aiEndpoints().find((e) => e.id === input.endpointId);
-    if (
-      !endpoint ||
-      !endpoint.models.includes(input.modelId) ||
-      !input.name.trim()
-    )
-      throw new BadRequestException(
-        "Choose an approved endpoint, model and connection name",
-      );
     const providerId = id ?? randomUUID();
+    let endpoint;
+    try {
+      endpoint = validateAiEndpoint({
+        id: providerId,
+        name: input.name,
+        baseUrl: input.baseUrl,
+        locality: input.locality,
+        requiresKey: input.requiresKey,
+        models: [input.modelId],
+      });
+    } catch {
+      throw new BadRequestException(
+        "Enter a valid model endpoint and model name",
+      );
+    }
     let encrypted: string | undefined;
     if (input.apiKey !== undefined) {
       try {
@@ -156,7 +166,7 @@ export class AiConfigurationService {
             );
           const credential =
             encrypted ??
-            (previous?.endpointId === input.endpointId &&
+            (previous?.endpointId === providerId &&
             previous.credentialEndpointDigest ===
               aiCredentialEndpointDigest(endpoint)
               ? previous.encryptedCredential
@@ -167,7 +177,8 @@ export class AiConfigurationService {
             );
           const data = {
             name: input.name.trim(),
-            endpointId: input.endpointId,
+            endpointId: providerId,
+            endpoint,
             modelId: input.modelId,
             enabled: input.enabled,
             encryptedCredential: credential,
@@ -195,13 +206,14 @@ export class AiConfigurationService {
               });
           await tx.auditEvent.create({
             data: {
-              event: "ai.provider.saved",
+              event: "ai.model.approved",
               actorId: session.identityId,
               metadata: {
                 organizationId: member.organizationId,
                 providerId,
                 revision: result.revision,
-                endpointId: input.endpointId,
+                endpointId: providerId,
+                endpointDigest: endpointDigest(endpoint),
                 modelId: input.modelId,
                 enabled: input.enabled,
                 credentialChanged: input.apiKey !== undefined,
@@ -245,7 +257,7 @@ export class AiConfigurationService {
       where: { id, organizationId: member.organizationId },
     });
     if (!provider) throw new NotFoundException("Connection not found");
-    const endpoint = aiEndpoints().find((e) => e.id === provider.endpointId);
+    const endpoint = providerEndpoint(provider);
     if (!endpoint || !endpoint.models.includes(provider.modelId))
       throw new ConflictException(
         "The endpoint configuration changed. Edit this connection.",
@@ -301,7 +313,12 @@ export class AiConfigurationService {
       /* Never expose upstream details or credential errors. */
     }
     await this.access.requireOrganization(session, "ai.provider.manage", true);
-    const currentEndpoint = aiEndpoints().find((e) => e.id === endpoint.id);
+    const currentProvider = await this.db.aiProviderConnection.findFirst({
+      where: { id, organizationId: member.organizationId },
+    });
+    const currentEndpoint = currentProvider
+      ? providerEndpoint(currentProvider)
+      : null;
     if (
       !currentEndpoint ||
       endpointDigest(endpoint) !== endpointDigest(currentEndpoint)
@@ -348,7 +365,7 @@ export class AiConfigurationService {
     return { status, testedAt };
   }
   private ready(provider: AiProviderConnection | undefined) {
-    const endpoint = aiEndpoints().find((e) => e.id === provider?.endpointId);
+    const endpoint = provider ? providerEndpoint(provider) : null;
     return (
       !!provider &&
       !!endpoint &&
