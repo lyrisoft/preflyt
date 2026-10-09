@@ -384,3 +384,35 @@ it.each([
 ])('rejects unsafe or ambiguous branch %s', (ref) =>
   expect(validPolicyBranch(ref)).toBe(false),
 )
+
+it('allows an active scoped Super Admin to self-approve, audits it, and rechecks the role before publishing', async () => {
+  await db.membership.create({
+    data: { identityId: author, role: 'SUPER_ADMIN' },
+  })
+  const d = (await draft()).body
+  const approved = await post(author, `${base}/${d.id}/approve`, {
+    expectedHash: d.definitionHash,
+  }).expect(201)
+  expect(approved.body.approvalKind).toBe('SUPER_ADMIN_SELF_APPROVAL')
+  expect(
+    await db.auditEvent.findFirst({
+      where: { event: 'policy.super_admin_self_approved' },
+    }),
+  ).toMatchObject({ actorId: author })
+  await db.membership.update({
+    where: { identityId: author },
+    data: { active: false },
+  })
+  await post(author, `${base}/${d.id}/publish`, {
+    expectedHash: d.definitionHash,
+    expectedPublishedId: null,
+  }).expect(409)
+  await db.membership.update({
+    where: { identityId: author },
+    data: { active: true },
+  })
+  await post(author, `${base}/${d.id}/publish`, {
+    expectedHash: d.definitionHash,
+    expectedPublishedId: null,
+  }).expect(201)
+})

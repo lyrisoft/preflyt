@@ -1,3 +1,4 @@
+import { githubLoginEnabled } from './github-identity-provider.js'
 import {
   Body,
   Controller,
@@ -46,7 +47,11 @@ export class AuthController {
   @Get('methods')
   @Header('Cache-Control', 'no-store')
   methods() {
-    return { superAdmin: this.auth.superAdminEnabled }
+    return {
+      superAdmin: this.auth.superAdminEnabled,
+      oidc: this.auth.oidcEnabled,
+      github: githubLoginEnabled(),
+    }
   }
 
   @Get('login')

@@ -345,7 +345,7 @@ it('rejects foreign grants, forged organization context and self-escalation', as
       active: true,
       repositoryIds: ['21'],
     })
-    .expect(400)
+    .expect(403)
   await mutate(developer, `/organizations/${orgB}/activate`, {}).expect(403)
   await mutate(developer, '/organizations/members', {
     subject: 'developer',

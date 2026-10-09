@@ -23,6 +23,7 @@ import { App } from '@octokit/app'
 export type GitHubInstallationInfo = {
   id: bigint
   accountLogin: string
+  accountId?: bigint
   accountType: string
   repositorySelection: string
   permissions: Record<string, string>
@@ -187,6 +188,7 @@ export class GitHubProviderService {
     return {
       id: installationId,
       accountLogin: account.login,
+      accountId: account.id ? BigInt(account.id) : undefined,
       accountType: account.type,
       repositorySelection: data.repository_selection,
       permissions: data.permissions as Record<string, string>,

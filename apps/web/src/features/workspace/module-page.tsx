@@ -426,6 +426,7 @@ export function WorkspaceModule({ module }: { module: Module }) {
                                 repository.githubId
                               )}
                               actorId={session.data?.identityId}
+                              platformAdmin={session.data?.platformAdmin}
                             />
                           }
                           sourceBindings={

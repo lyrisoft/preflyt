@@ -103,11 +103,13 @@ export function GatePolicyPanel({
   canDraft,
   canPublish,
   actorId,
+  platformAdmin = false,
 }: {
   repositoryId: string
   canDraft: boolean
   canPublish: boolean
   actorId?: string
+  platformAdmin?: boolean
 }) {
   const [draftOpen, setDraftOpen] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -610,7 +612,16 @@ export function GatePolicyPanel({
               </div>
               <SheetFooter className='border-t bg-muted/10 p-6'>
                 {selected.state === 'DRAFT' &&
-                  actorId === selected.draftedById && (
+                  actorId === selected.draftedById &&
+                  platformAdmin && (
+                    <p className='text-xs text-muted-foreground'>
+                      Super Admin can approve this revision. This exception is
+                      recorded in the audit history.
+                    </p>
+                  )}
+                {selected.state === 'DRAFT' &&
+                  actorId === selected.draftedById &&
+                  !platformAdmin && (
                     <p className='flex items-start gap-2 text-xs text-muted-foreground'>
                       <Info
                         className='size-4 shrink-0 text-info'
@@ -638,7 +649,7 @@ export function GatePolicyPanel({
                     !stale &&
                     selected.state === 'DRAFT' &&
                     actorId &&
-                    actorId !== selected.draftedById && (
+                    (actorId !== selected.draftedById || platformAdmin) && (
                       <Button
                         disabled={mutation.isPending}
                         onClick={() =>

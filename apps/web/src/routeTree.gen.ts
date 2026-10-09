@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
+import { Route as GithubOnboardingRouteImport } from './routes/github-onboarding'
 import { Route as SetupRouteImport } from './routes/setup'
 import { Route as authSignInRouteImport } from './routes/(auth)/sign-in'
 import { Route as errors401RouteImport } from './routes/(errors)/401'
@@ -46,6 +47,11 @@ import { Route as AuthenticatedUsersIndexRouteImport } from './routes/_authentic
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GithubOnboardingRoute = GithubOnboardingRouteImport.update({
+  id: '/github-onboarding',
+  path: '/github-onboarding',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SetupRoute = SetupRouteImport.update({
@@ -233,6 +239,7 @@ const AuthenticatedUsersIndexRoute = AuthenticatedUsersIndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
+  '/github-onboarding': typeof GithubOnboardingRoute
   '/setup': typeof SetupRoute
   '/settings': typeof AuthenticatedSettingsRouteRouteWithChildren
   '/sign-in': typeof authSignInRoute
@@ -267,6 +274,7 @@ export interface FileRoutesByFullPath {
   '/users/': typeof AuthenticatedUsersIndexRoute
 }
 export interface FileRoutesByTo {
+  '/github-onboarding': typeof GithubOnboardingRoute
   '/setup': typeof SetupRoute
   '/sign-in': typeof authSignInRoute
   '/401': typeof errors401Route
@@ -303,6 +311,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
+  '/github-onboarding': typeof GithubOnboardingRoute
   '/setup': typeof SetupRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRouteRouteWithChildren
   '/(auth)/sign-in': typeof authSignInRoute
@@ -341,6 +350,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/github-onboarding'
     | '/setup'
     | '/settings'
     | '/sign-in'
@@ -375,6 +385,7 @@ export interface FileRouteTypes {
     | '/users/'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/github-onboarding'
     | '/setup'
     | '/sign-in'
     | '/401'
@@ -410,6 +421,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/_authenticated'
+    | '/github-onboarding'
     | '/setup'
     | '/_authenticated/settings'
     | '/(auth)/sign-in'
@@ -447,6 +459,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
+  GithubOnboardingRoute: typeof GithubOnboardingRoute
   SetupRoute: typeof SetupRoute
   authSignInRoute: typeof authSignInRoute
   errors401Route: typeof errors401Route
@@ -464,6 +477,13 @@ declare module '@tanstack/react-router' {
       path: ''
       fullPath: '/'
       preLoaderRoute: typeof AuthenticatedRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/github-onboarding': {
+      id: '/github-onboarding'
+      path: '/github-onboarding'
+      fullPath: '/github-onboarding'
+      preLoaderRoute: typeof GithubOnboardingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/setup': {
@@ -777,6 +797,7 @@ const AuthenticatedRouteRouteWithChildren =
 
 const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
+  GithubOnboardingRoute: GithubOnboardingRoute,
   SetupRoute: SetupRoute,
   authSignInRoute: authSignInRoute,
   errors401Route: errors401Route,

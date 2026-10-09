@@ -1,3 +1,4 @@
+import { githubLoginEnabled } from './github-identity-provider.js'
 import { rolePermissions } from './authorization.service.js'
 import {
   createHash,
@@ -134,9 +135,9 @@ export class AuthService implements OnModuleInit {
         'OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET and OIDC_REDIRECT_URI must be configured together'
       )
     }
-    if (!oidcIsConfigured && !this.superAdminEnabled) {
+    if (!oidcIsConfigured && !this.superAdminEnabled && !githubLoginEnabled()) {
       throw new Error(
-        'Configure OIDC or a Super Admin username and password to start Preflyt'
+        'Configure GitHub login, OIDC or a Super Admin username and password to start Preflyt'
       )
     }
 
@@ -351,7 +352,7 @@ export class AuthService implements OnModuleInit {
         const stored = parseScryptHash(existing.passwordHash)
         const configured = await deriveScryptKey(
           this.superAdminPassword!,
-          stored.salt,
+          stored.salt
         )
         if (timingSafeEqual(configured, stored.key)) return
       }
@@ -640,7 +641,8 @@ export class AuthService implements OnModuleInit {
       identityId: session.identity.id,
       subject: session.identity.subject,
       email: session.identity.email,
-      role: scopedMember?.role ??
+      role:
+        scopedMember?.role ??
         (session.identity.membership.role === 'SUPER_ADMIN'
           ? 'SUPER_ADMIN'
           : 'VIEWER'),
@@ -657,6 +659,10 @@ export class AuthService implements OnModuleInit {
       })
       if (result.count) await this.audit('logout', null, {})
     }
+  }
+
+  get oidcEnabled() {
+    return Boolean(this.issuer)
   }
 
   get sessionCookieName() {

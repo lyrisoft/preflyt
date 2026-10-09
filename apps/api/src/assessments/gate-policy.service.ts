@@ -250,17 +250,26 @@ export class GatePolicyService {
         )
         if (policy.state !== 'DRAFT')
           throw new ConflictException('Policy is not awaiting approval')
-        if (policy.draftedById === session.identityId)
+        const selfApproval = policy.draftedById === session.identityId
+        if (selfApproval && !(await this.isSuperAdmin(tx, session.identityId)))
           throw new ConflictException('Independent policy approval is required')
         const approved = await tx.gatePolicyRevision.update({
           where: { id },
           data: {
             state: 'APPROVED',
+            approvalKind: selfApproval
+              ? 'SUPER_ADMIN_SELF_APPROVAL'
+              : 'INDEPENDENT',
             approvedById: session.identityId,
             approvedAt: new Date(),
           },
         })
-        await this.audit(tx, session, 'policy.approved', approved)
+        await this.audit(
+          tx,
+          session,
+          selfApproval ? 'policy.super_admin_self_approved' : 'policy.approved',
+          approved,
+        )
         return approved
       },
     )
@@ -287,7 +296,9 @@ export class GatePolicyService {
         if (
           policy.state !== 'APPROVED' ||
           !policy.approvedById ||
-          policy.approvedById === policy.draftedById
+          (policy.approvedById === policy.draftedById &&
+            (policy.approvalKind !== 'SUPER_ADMIN_SELF_APPROVAL' ||
+              !(await this.isSuperAdmin(tx, policy.approvedById))))
         )
           throw new ConflictException(
             'Independent approval is required before publication',
@@ -333,6 +344,10 @@ export class GatePolicyService {
       },
     )
   }
+  private async isSuperAdmin(tx: any, identityId: string) {
+    const member = await tx.membership.findUnique({ where: { identityId } })
+    return !!member?.active && member.role === 'SUPER_ADMIN'
+  }
   private async current(
     tx: any,
     session: AuthenticatedSession,
@@ -376,6 +391,7 @@ export class GatePolicyService {
           revision: policy.revision,
           definitionHash: policy.definitionHash,
           approvedById: policy.approvedById,
+          approvalKind: policy.approvalKind,
         },
       },
     })

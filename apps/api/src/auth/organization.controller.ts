@@ -1,3 +1,5 @@
+import { githubLoginEnabled } from './github-identity-provider.js'
+import { GitHubUserAccessService } from './github-user-access.service.js'
 import {
   Body,
   Controller,
@@ -8,9 +10,11 @@ import {
   Patch,
   Post,
   Req,
+  Query,
   UseGuards,
   ForbiddenException,
   BadRequestException,
+  Optional,
 } from '@nestjs/common'
 import {
   ArrayMaxSize,
@@ -53,6 +57,15 @@ class MemberDto {
   @IsString({ each: true })
   repositoryIds!: string[]
 }
+class GitHubMemberDto {
+  @IsString() @MinLength(1) @MaxLength(39) username!: string
+  @IsIn(organizationRoles) role!: (typeof organizationRoles)[number]
+  @IsBoolean() active!: boolean
+  @IsArray()
+  @ArrayMaxSize(500)
+  @IsString({ each: true })
+  repositoryIds!: string[]
+}
 type R = Request & { preflytSession: AuthenticatedSession }
 @Controller('organizations')
 @UseGuards(SessionGuard)
@@ -61,6 +74,9 @@ export class OrganizationController {
     @Inject(PrismaService) private readonly db: PrismaService,
     @Inject(AuthorizationService) private readonly access: AuthorizationService,
     @Inject(AuthService) private readonly auth: AuthService,
+    @Optional()
+    @Inject(GitHubUserAccessService)
+    private readonly github?: GitHubUserAccessService
   ) {}
   @Get() @Header('Cache-Control', 'no-store') async list(@Req() req: R) {
     const memberships = await this.db.organizationMembership.findMany({
@@ -68,10 +84,24 @@ export class OrganizationController {
       include: { organization: true },
       orderBy: { createdAt: 'asc' },
     })
+    const verified = []
+    for (const m of memberships) {
+      try {
+        if (
+          await this.access.membership(
+            req.preflytSession.identityId,
+            m.organizationId
+          )
+        )
+          verified.push(m)
+      } catch (error) {
+        if (!(error instanceof ForbiddenException)) throw error
+      }
+    }
     return {
       activeOrganizationId: req.preflytSession.organizationId,
       platformAdmin: !!req.preflytSession.platformAdmin,
-      organizations: memberships.map((m) => ({
+      organizations: verified.map((m) => ({
         id: m.organizationId,
         name: m.organization.name,
         role: m.role,
@@ -84,7 +114,7 @@ export class OrganizationController {
       throw new BadRequestException('Organization name is required')
     if (!req.preflytSession.platformAdmin)
       throw new ForbiddenException(
-        'Platform administration permission required',
+        'Platform administration permission required'
       )
     return this.db.$transaction(async (tx) => {
       const org = await tx.organization.create({
@@ -113,7 +143,7 @@ export class OrganizationController {
   }
   @Post(':organizationId/activate') async activate(
     @Param('organizationId') id: string,
-    @Req() req: R,
+    @Req() req: R
   ) {
     this.auth.assertOrigin(req.headers.origin)
     if (!(await this.access.membership(req.preflytSession.identityId, id)))
@@ -131,23 +161,34 @@ export class OrganizationController {
     return { organizationId: id }
   }
   @Header('Cache-Control', 'no-store') @Get('access') async context(
-    @Req() req: R,
+    @Req() req: R
   ) {
     const session = req.preflytSession
     const member = await this.access.membership(
       session.identityId,
-      session.organizationId,
+      session.organizationId
     )
     const scope = await this.access.repositoryScope(
       session.identityId,
       session.organizationId,
       'repository.read',
-      false,
+      false
     )
     return {
       organization: member?.organization ?? null,
+      githubLoginEnabled: githubLoginEnabled(),
+      githubLinked: !!(
+        member &&
+        (await this.db.gitHubOrganizationLink.findUnique({
+          where: { organizationId: member.organizationId },
+        }))
+      ),
       role: member?.role ?? null,
       permissions: member ? rolePermissions[member.role] : [],
+      roles: Object.entries(rolePermissions).map(([id, permissions]) => ({
+        id,
+        permissions,
+      })),
       repositories: scope.map((r) => ({
         id: r.githubId.toString(),
         fullName: r.fullName,
@@ -157,17 +198,26 @@ export class OrganizationController {
     }
   }
   @Header('Cache-Control', 'no-store') @Get('members') async members(
-    @Req() req: R,
+    @Req() req: R
   ) {
     const actor = await this.access.requireOrganization(
       req.preflytSession,
-      'organization.members.manage',
+      'organization.members.manage'
     )
     const members = await this.db.organizationMembership.findMany({
       where: { organizationId: actor.organizationId },
       include: {
         identity: {
-          select: { id: true, subject: true, displayName: true, email: true },
+          select: {
+            id: true,
+            subject: true,
+            displayName: true,
+            email: true,
+            githubAccounts: {
+              select: { login: true, avatarUrl: true },
+              where: { host: 'github.com' },
+            },
+          },
         },
         grants: {
           include: {
@@ -209,22 +259,189 @@ export class OrganizationController {
       })),
     }
   }
+  @Get('github-directory')
+  @Header('Cache-Control', 'no-store')
+  async githubDirectory(
+    @Req() req: R,
+    @Query('search') search = '',
+    @Query('page') page = '1',
+    @Query('unassigned') unassigned = 'false'
+  ) {
+    if (
+      search.length > 100 ||
+      !/^[1-9]\d{0,3}$/.test(page) ||
+      !['true', 'false'].includes(unassigned)
+    )
+      throw new BadRequestException('Use a valid member search and page')
+    return this.directoryResponse(
+      req,
+      false,
+      search,
+      Number(page),
+      unassigned === 'true'
+    )
+  }
+  @Post('github-directory/sync')
+  @Header('Cache-Control', 'no-store')
+  async syncGitHubDirectory(@Req() req: R) {
+    this.auth.assertOrigin(req.headers.origin)
+    const result = await this.directoryResponse(req, true, '', 1)
+    await this.db.auditEvent.create({
+      data: {
+        event: 'github_members_synchronized',
+        actorId: req.preflytSession.identityId,
+        metadata: {
+          organizationId: req.preflytSession.organizationId,
+          memberCount: result.total,
+          syncedAt: result.syncedAt,
+        },
+      },
+    })
+    return result
+  }
+  private async directoryResponse(
+    req: R,
+    refresh: boolean,
+    search: string,
+    page: number,
+    unassigned = false
+  ) {
+    const actor = await this.access.requireOrganization(
+      req.preflytSession,
+      'organization.members.manage',
+      refresh
+    )
+    if (!this.github)
+      throw new BadRequestException('GitHub access is not configured')
+    const directory = await this.github.directory(
+      req.preflytSession.identityId,
+      actor.organizationId,
+      refresh
+    )
+    const grants = await this.db.organizationMembership.findMany({
+      where: { organizationId: actor.organizationId },
+      include: {
+        identity: {
+          select: {
+            githubAccounts: {
+              where: { host: 'github.com' },
+              select: { githubUserId: true },
+            },
+          },
+        },
+      },
+    })
+    const byAccount = new Map(
+      grants.flatMap((grant) =>
+        grant.identity.githubAccounts.map(
+          (account) => [account.githubUserId.toString(), grant] as const
+        )
+      )
+    )
+    const filtered = directory.members.filter(
+      (member) =>
+        member.login.toLowerCase().includes(search.trim().toLowerCase()) &&
+        (!unassigned || !byAccount.get(member.id)?.active)
+    )
+    const pageSize = 50
+    return {
+      syncedAt: directory.syncedAt,
+      total: filtered.length,
+      page,
+      pageSize,
+      hasMore: page * pageSize < filtered.length,
+      members: filtered
+        .slice((page - 1) * pageSize, page * pageSize)
+        .map((member) => {
+          const grant = byAccount.get(member.id)
+          return {
+            ...member,
+            membershipId: grant?.id ?? null,
+            role: grant?.role ?? null,
+            active: grant?.active ?? false,
+          }
+        }),
+    }
+  }
+  @Post('github-members') async addGitHub(
+    @Body() body: GitHubMemberDto,
+    @Req() req: R
+  ) {
+    this.auth.assertOrigin(req.headers.origin)
+    const actor = await this.access.requireOrganization(
+      req.preflytSession,
+      'organization.members.manage'
+    )
+    if (!this.github)
+      throw new BadRequestException('GitHub access is not configured')
+    const user = await this.github.resolveMember(
+      req.preflytSession.identityId,
+      actor.organizationId,
+      body.username
+    )
+    return this.save(
+      {
+        subject: user.id.toString(),
+        displayName: user.displayName ?? undefined,
+        role: body.role,
+        active: body.active,
+        repositoryIds: body.repositoryIds,
+      },
+      req,
+      undefined,
+      user
+    )
+  }
   @Post('members') async add(@Body() body: MemberDto, @Req() req: R) {
     return this.save(body, req)
   }
   @Patch('members/:membershipId') async edit(
     @Param('membershipId') id: string,
     @Body() body: MemberDto,
-    @Req() req: R,
+    @Req() req: R
   ) {
     return this.save(body, req, id)
   }
-  private async save(body: MemberDto, req: R, id?: string) {
+  private async save(
+    body: MemberDto,
+    req: R,
+    id?: string,
+    githubUser?: {
+      id: bigint
+      login: string
+      displayName: string | null
+      avatarUrl: string | null
+    }
+  ) {
     this.auth.assertOrigin(req.headers.origin)
     const actor = await this.access.requireOrganization(
       req.preflytSession,
-      'organization.members.manage',
+      'organization.members.manage'
     )
+    const allowedRepositories = await this.access.repositoryScope(
+      req.preflytSession.identityId,
+      actor.organizationId,
+      'repository.read',
+      false
+    )
+    if (
+      body.repositoryIds.some(
+        (id) => !allowedRepositories.some((r) => r.githubId.toString() === id)
+      )
+    )
+      throw new ForbiddenException(
+        'You can assign only repositories you are authorized to access'
+      )
+    if (
+      !id &&
+      !githubUser &&
+      (await this.db.gitHubOrganizationLink.findUnique({
+        where: { organizationId: actor.organizationId },
+      }))
+    )
+      throw new BadRequestException(
+        'Use a verified GitHub username to grant access in this organization'
+      )
     return this.db.$transaction(async (tx) => {
       // Serialize owner changes and grants in this organization.
       await tx.$queryRaw`SELECT id FROM "Organization" WHERE id = ${actor.organizationId} FOR UPDATE`
@@ -242,7 +459,7 @@ export class OrganizationController {
         throw new ForbiddenException('Membership is unavailable')
       if (previous?.identityId === req.preflytSession.identityId)
         throw new ForbiddenException(
-          'Use another Owner to change your own access',
+          'Use another Owner to change your own access'
         )
       if (
         liveActor.role !== 'OWNER' &&
@@ -250,7 +467,7 @@ export class OrganizationController {
           (previous && ['OWNER', 'ADMIN'].includes(previous.role)))
       )
         throw new ForbiddenException(
-          'Only Owners can assign or change administrative roles',
+          'Only Owners can assign or change administrative roles'
         )
       if (
         previous?.role === 'OWNER' &&
@@ -264,7 +481,7 @@ export class OrganizationController {
         })) <= 1
       )
         throw new BadRequestException(
-          'An organization must retain an active Owner',
+          'An organization must retain an active Owner'
         )
       const repositories = await tx.gitHubRepository.findMany({
         where: {
@@ -281,42 +498,89 @@ export class OrganizationController {
         repositories.length !== body.repositoryIds.length
       )
         throw new BadRequestException(
-          'Repository grants must belong to this organization',
+          'Repository grants must belong to this organization'
         )
-      const issuer = process.env.OIDC_ISSUER
-        ? new URL(process.env.OIDC_ISSUER).href
-        : null
+      const issuer = githubUser
+        ? 'https://github.com'
+        : process.env.OIDC_ISSUER
+          ? new URL(process.env.OIDC_ISSUER).href
+          : null
       if (!previous && !issuer)
         throw new BadRequestException(
-          'Configure organization OIDC before provisioning members',
+          'Configure organization OIDC before provisioning members'
         )
-      const identity = previous
+      const linked =
+        githubUser &&
+        (await tx.gitHubUserAccount.findUnique({
+          where: {
+            host_githubUserId: {
+              host: 'github.com',
+              githubUserId: githubUser.id,
+            },
+          },
+        }))
+      const identity = linked
         ? await tx.identity.findUniqueOrThrow({
-            where: { id: previous.identityId },
+            where: { id: linked.identityId },
           })
-        : await tx.identity.upsert({
-            where: {
-              issuer_subject: { issuer: issuer!, subject: body.subject },
-            },
-            create: {
-              issuer: issuer!,
-              subject: body.subject,
-              displayName: body.displayName,
-              membership: { create: { role: 'VIEWER' } },
-            },
-            update: {},
-          })
+        : previous
+          ? await tx.identity.findUniqueOrThrow({
+              where: { id: previous.identityId },
+            })
+          : await tx.identity.upsert({
+              where: {
+                issuer_subject: { issuer: issuer!, subject: body.subject },
+              },
+              create: {
+                issuer: issuer!,
+                subject: body.subject,
+                displayName: body.displayName,
+                membership: { create: { role: 'VIEWER' } },
+              },
+              update: {},
+            })
       if (previous && identity.subject !== body.subject)
         throw new BadRequestException(
-          'An existing identity subject cannot change',
+          'An existing identity subject cannot change'
         )
-      if (!previous && await tx.organizationMembership.findUnique({
-        where: { organizationId_identityId: {
-          organizationId: actor.organizationId,
-          identityId: identity.id,
-        } },
-      }))
-        throw new BadRequestException('Membership already exists; use its edit route')
+      if (githubUser)
+        await tx.gitHubUserAccount.upsert({
+          where: {
+            host_githubUserId: {
+              host: 'github.com',
+              githubUserId: githubUser.id,
+            },
+          },
+          create: {
+            host: 'github.com',
+            githubUserId: githubUser.id,
+            identityId: identity.id,
+            login: githubUser.login,
+            displayName: githubUser.displayName,
+            avatarUrl: githubUser.avatarUrl,
+            verifiedAt: new Date(),
+          },
+          update: {
+            login: githubUser.login,
+            displayName: githubUser.displayName,
+            avatarUrl: githubUser.avatarUrl,
+            verifiedAt: new Date(),
+          },
+        })
+      if (
+        !previous &&
+        (await tx.organizationMembership.findUnique({
+          where: {
+            organizationId_identityId: {
+              organizationId: actor.organizationId,
+              identityId: identity.id,
+            },
+          },
+        }))
+      )
+        throw new BadRequestException(
+          'Membership already exists; use its edit route'
+        )
       await tx.membership.upsert({
         where: { identityId: identity.id },
         create: { identityId: identity.id, role: 'VIEWER' },
@@ -339,7 +603,7 @@ export class OrganizationController {
       })
       if (member.identityId === req.preflytSession.identityId)
         throw new ForbiddenException(
-          'Use another Owner to change your own access',
+          'Use another Owner to change your own access'
         )
       await tx.repositoryGrant.deleteMany({
         where: { membershipId: member.id },

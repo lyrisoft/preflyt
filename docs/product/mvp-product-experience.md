@@ -53,7 +53,7 @@ Tabs must reflect available functionality and preserve deep links.
 | `/contributors` | Contributor overview | Authorized contributor list, search, filters, activity KPIs, assessment coverage, policy adherence, charts and freshness | P3; bots/private members/unlinked identities and incomplete evidence labeled |
 | `/contributors/:id` | Contributor detail | Repositories, commits, authored/merged PRs, reviews, assessments, findings and evidence-backed trends | Scoped source links; no opaque employee ranking |
 | `/integrations` | Integration health | GitHub App installation, permissions, selected repositories, webhook/CI evidence status and troubleshooting | Secret-safe, reconnect/disconnect RBAC |
-| `/access-control` | Member access management | Searchable connected-GitHub member directory, username selection, Preflyt roles, repo grants, audit and revocation | ADR-0007 target pending; current OIDC provisioning remains until migration; backend enforces |
+| `/access-control` | Member access management | Searchable connected-GitHub member directory, username selection, Preflyt roles, repo grants, audit and revocation | Implemented behind GitHub login flag; existing workspaces use explicit Owner-verified organization linking; backend enforces |
 | `/settings` | Workspace settings | Organization details, identity/session settings, supported AI provider/model routing controls when shipped, operational preferences | Do not show secrets; unavailable features hidden |
 | `/intelligence` | Evidence-linked AI findings analysis | Supported explanation and cited evidence, selected permitted model/route, usage and availability | Only if implemented; advisory, never gate authority |
 
@@ -115,3 +115,9 @@ Show sync time, partial directory results, verification errors and retry actions
 - [ ] Contributors list and individual drill-down work when P3 module is released.
 - [ ] Desktop/tablet/mobile navigation, keyboard focus, contrast and reduced-motion behaviour are tested.
 - [ ] Existing P0 features remain functional; no P0–P11 reordering.
+
+Access Control separates **People**, **GitHub members**, **Roles & permissions**, and **Activity**. People manages existing Preflyt access. GitHub members lists active organization users with search, pagination, **Sync members**, and **Assign role**. Role assignment opens a side panel with predefined permissions and repository scope. Sync alone never grants access.
+
+For GitHub-linked workspaces, **Grant access** uses a searchable member dropdown showing only users without active Preflyt access, including revoked members. Select the user, then choose a built-in role and repositories. Existing members are edited through their access record.
+
+If the App is already connected, the GitHub members tab offers **Link GitHub organization** to an existing workspace Owner when GitHub sign-in is enabled. This verifies GitHub organization ownership and reuses the current workspace and installation.

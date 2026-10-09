@@ -1,6 +1,6 @@
 # ADR-0007: GitHub-first login and organization onboarding
 
-**Status:** Accepted product decision; implementation and migration pending.
+**Status:** Accepted; GitHub login, owner onboarding and username grants implemented behind a deployment flag. Legacy identity merging and remaining provider synchronization are pending.
 **Date:** 2026-10-09
 **Decision owner:** Product / Engineering
 **Supersedes:** ADR-0003's OIDC-only routine login, manual member provisioning and first-owner onboarding for GitHub-connected workspaces. Existing OIDC deployments remain supported during migration; session security and separate local Super Admin recovery remain required.
@@ -10,7 +10,9 @@
 
 Preflyt's initial users already work in GitHub organizations. The current application requires a separately configured OIDC provider, manually created Preflyt organizations and user IDs copied from that provider. This creates unnecessary onboarding work.
 
-GitHub login and member selection are not implemented today. The additive storage foundation is implemented: explicit GitHub account/organization links, account-bound AES-256-GCM user-token encryption, and a migration that preserves existing identities, sessions, grants and audit history. No links are populated automatically, and these tables do not grant access. Login, verified linking, organization-owner onboarding, refresh locking and scoped provider authorization evidence remain pending. The current GitHub authorization callback verifies an installation connection for an already authenticated Preflyt administrator; it must not be treated as a general login endpoint.
+GitHub login, verified organization-owner onboarding, username-based access grants and repository authorization evidence are implemented behind `GITHUB_LOGIN_ENABLED`. The Access Control UI separates People, GitHub members, Roles & permissions and Activity. Organization roles are predefined and enforced by the API. Existing OIDC and local Super Admin sign-in remain supported.
+
+The current slice requires an existing organization installation and expiring user tokens. Sessions are capped at eight hours and the user-token expiry; expired tokens require sign-in again. Token refresh locking, signed user/membership revocation events, periodic reconciliation, owner recovery claims and legacy identity merging remain pending. Authorization evidence expires after five minutes, with fresh checks for privileged changes. Existing installation callbacks cannot create login sessions or move installations across organizations.
 
 ## Decision
 
@@ -48,7 +50,7 @@ Only a verified initial owner gets automatic bootstrap access. Other GitHub owne
 - The Access Control directory lists active members of the connected GitHub organization, with username/avatar, current Preflyt role, assigned repositories and access state. Search and pagination are backed by authorized provider data; partial or unavailable membership data must be visible.
 - Username entry resolves the current GitHub account ID and verifies active membership before saving an access grant. Pending GitHub invitations, non-members, bots and outside collaborators are not eligible in the initial flow. A pending Preflyt grant may exist before first login, but it belongs to the verified stable account ID and must be checked again at login.
 - “Grant access” means access to **Preflyt**. It does not create GitHub organization invitations, change GitHub membership, send GitHub messages or automatically send email. An admin may share the normal sign-in URL. Outbound invitation notifications are deferred until explicitly designed.
-- Retain existing Preflyt roles and independent policy approval. Owners/Admins manage members within their workspace; only Preflyt Owners assign/change Owner or Admin roles. Users cannot approve their own policy changes or grant themselves additional access.
+- Retain existing Preflyt roles and independent policy approval. Owners/Admins manage members within their workspace; only Preflyt Owners assign/change Owner or Admin roles. Users cannot grant themselves additional access. Policy definition approval requires another publisher, except an active local Super Admin may approve its own definition with an explicit audited approval marker; organization/repository permissions still apply. Exception and enforcement-bypass approval rules are unchanged.
 - A user's repository visibility and actions require the intersection of **their GitHub repository access**, **the installed/selected repository scope**, and **Preflyt permissions/grants**. Organization-wide Preflyt Owner/Admin roles do not expose private repositories the user cannot access in GitHub. Installation tokens used by workers cannot bypass this boundary in user-facing reads, summaries, downloads or writes.
 - Grant management, login denials, owner claims, organization links, permission changes and provider revocation are audited using stable identities, without secrets. Preserve historical actors on assessments and approvals when identities are linked.
 
@@ -66,7 +68,7 @@ See GitHub's [organization membership API](https://docs.github.com/en/rest/orgs/
 
 ## Migration and compatibility
 
-This is a docs-only decision, not permission to replace working authentication immediately.
+Existing deployments keep their authentication and organization records until explicitly migrated. Enabling GitHub login does not automatically link existing organizations or identities.
 
 1. Add provider account/organization links and encrypted token storage through additive migrations. Preserve existing organization IDs, grants, sessions, audit actors, installations and repository ownership.
 2. Enable GitHub login behind an explicit deployment feature setting. Keep the existing OIDC flow operational during the migration; enabling GitHub login must not require an OIDC provider on a new GitHub-only deployment.
@@ -75,7 +77,7 @@ This is a docs-only decision, not permission to replace working authentication i
 5. Switch the normal UI to GitHub login/member selection only after migration acceptance passes. Keep OIDC as an explicitly configured compatibility/enterprise option; the local Super Admin route remains separate. No automatic fallback or identity merging.
 6. Rollback may disable the new login UI, but must retain provider-linked data and enforce any provider revocations already recorded. It must not restore revoked or wider access through older authorization code.
 
-The existing “OIDC absent means Super Admin-only” startup rule applies to the current implementation. The GitHub-only target mode instead starts with valid GitHub auth configuration; partially configured enabled providers fail closed. Document configuration and operational rollback before release.
+The API supports GitHub-only startup with valid enabled GitHub configuration, OIDC compatibility and separate Super Admin recovery. Partially configured enabled providers fail closed. Disable the login flag to hide new GitHub sign-in; retain provider-linked data and authorization checks for existing accounts.
 
 ## Implementation order and acceptance
 
@@ -103,3 +105,7 @@ Required acceptance:
 ## Deferred
 
 GitHub organization invitations, automated email delivery, outside-collaborator access, team-to-role mapping, personal-account workspaces, GitHub Enterprise Server, and GitLab login/org onboarding. Existing OIDC compatibility is preserved; broader identity-provider policy requires its own review.
+
+The GitHub members tab loads the active organization member directory, supports search and pagination, and provides **Sync members** and **Assign role** actions. Directory snapshots are cached for up to five minutes in Redis with a bounded local fallback; sync does not create identities or grant access. Assignment verifies active membership again before saving.
+
+For a workspace that already has the GitHub App connected, use **Access Control → GitHub members → Link GitHub organization**. GitHub sign-in must be enabled and its callback registered first. The flow binds the request to the original authenticated workspace Owner session and verifies a GitHub organization owner before confirmation. It reuses the same internal organization and installation, preserves repositories, policies, grants and history, and grants that verified GitHub owner access with an audit record. It never moves an installation between workspaces or merges existing identities automatically.

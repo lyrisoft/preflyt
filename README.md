@@ -267,3 +267,24 @@ Workspace checks: `pnpm build`, `pnpm lint`, `pnpm typecheck`, `pnpm format:chec
 ## License
 
 **Preflyt's source license is not yet selected.** The licensing and redistribution requirements of third-party engines, rulesets, models and gateways must be reviewed before shipping or commercializing the platform.
+
+## GitHub sign-in and workspace access
+
+GitHub sign-in, verified first-Owner onboarding and username-based grants are implemented behind `GITHUB_LOGIN_ENABLED=true`. Existing OIDC and the separate local Super Admin route remain available. Access Control has **People**, **GitHub members**, **Roles & permissions**, and **Activity** tabs, with eight ready-to-use organization roles.
+
+Before enabling GitHub sign-in:
+
+1. Install the configured GitHub App in the organization and grant **Organization Members: Read-only**. Enable expiring user access tokens.
+2. Register the separate login callback: `http://localhost:3000/auth/github/callback` locally, or `<WEB_ORIGIN>/api/auth/github/callback` behind the Compose proxy. Set `GITHUB_LOGIN_CALLBACK_URL` accordingly. Installation setup uses its existing separate callback.
+3. Set the App ID, client ID, client secret and private key, plus a persistent `GITHUB_USER_TOKEN_ENCRYPTION_KEY` containing 32 random bytes encoded as base64. Keep this key server-side.
+4. Apply database migrations, enable the login flag and restart the API. A verified GitHub organization owner can then create the matching workspace through sign-in and grant members access by username.
+
+Existing workspaces can be linked through the Owner-verified Link GitHub organization flow. Identity merging remains separate; accounts are never matched by email or username. Signed membership/user revocation events, periodic reconciliation and automatic token refresh remain pending. Current access evidence expires after five minutes and privileged changes require fresh verification. GitHub sessions expire within eight hours and require sign-in again when their user token expires.
+
+Super Admin can approve its own policy definition with an audited exception. Other publishers still need another authorized approver; organization/repository permissions remain required.
+
+The GitHub members tab loads the active organization member directory, supports search and pagination, and provides **Sync members** and **Assign role** actions. Directory snapshots are cached for up to five minutes in Redis with a bounded local fallback; sync does not create identities or grant access. Assignment verifies active membership again before saving.
+
+For GitHub-linked workspaces, **Grant access** uses a searchable member dropdown showing only users without active Preflyt access, including revoked members. Select the user, then choose a built-in role and repositories. Existing members are edited through their access record.
+
+For a workspace that already has the GitHub App connected, use **Access Control → GitHub members → Link GitHub organization**. GitHub sign-in must be enabled and its callback registered first. The flow binds the request to the original authenticated workspace Owner session and verifies a GitHub organization owner before confirmation. It reuses the same internal organization and installation, preserves repositories, policies, grants and history, and grants that verified GitHub owner access with an audit record. It never moves an installation between workspaces or merges existing identities automatically.

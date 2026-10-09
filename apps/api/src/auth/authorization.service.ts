@@ -1,4 +1,10 @@
-import { ForbiddenException, Inject, Injectable } from '@nestjs/common'
+import { GitHubUserAccessService } from './github-user-access.service.js'
+import {
+  ForbiddenException,
+  Inject,
+  Injectable,
+  Optional,
+} from '@nestjs/common'
 import type { Request } from 'express'
 import { PrismaService } from '../prisma/prisma.service.js'
 import type { AuthenticatedSession } from './session.guard.js'
@@ -90,25 +96,42 @@ export const rolePermissions: Record<string, string[]> = {
 
 @Injectable()
 export class AuthorizationService {
-  constructor(@Inject(PrismaService) readonly prisma: PrismaService) {}
-  async membership(identityId: string, organizationId?: string | null) {
+  constructor(
+    @Inject(PrismaService) readonly prisma: PrismaService,
+    @Optional()
+    @Inject(GitHubUserAccessService)
+    private readonly github?: GitHubUserAccessService
+  ) {}
+  async membership(
+    identityId: string,
+    organizationId?: string | null,
+    fresh = false
+  ) {
     if (!organizationId) return null
-    return this.prisma.organizationMembership.findFirst({
+    const member = await this.prisma.organizationMembership.findFirst({
       where: { identityId, organizationId, active: true },
       include: { organization: true },
     })
+    if (member)
+      await this.github?.repositoryIds(identityId, organizationId, fresh)
+    return member
   }
   async repositoryScope(
     identityId: string,
     organizationId?: string | null,
     permission = 'repository.read',
-    selected = true,
+    selected = true
   ) {
     const member = await this.membership(identityId, organizationId)
     if (!member || !rolePermissions[member.role]?.includes(permission))
       return []
+    const githubIds = await this.github?.repositoryIds(
+      identityId,
+      member.organizationId
+    )
     return this.prisma.gitHubRepository.findMany({
       where: {
+        ...(githubIds ? { githubId: { in: githubIds } } : {}),
         ...(selected ? { selected: true } : {}),
         available: true,
         installation: { active: true, organizationId: member.organizationId },
@@ -118,10 +141,21 @@ export class AuthorizationService {
       },
     })
   }
-  async requireOrganization(session: AuthenticatedSession, permission: string) {
+  async requireOrganization(
+    session: AuthenticatedSession,
+    permission: string,
+    fresh?: boolean
+  ) {
     const member = await this.membership(
       session.identityId,
       session.organizationId,
+      fresh ??
+        [
+          'organization.members.manage',
+          'organization.settings.update',
+          'repository.connect',
+          'policy.publish',
+        ].includes(permission)
     )
     if (!member || !rolePermissions[member.role]?.includes(permission))
       await this.deny(session, permission)
@@ -131,7 +165,7 @@ export class AuthorizationService {
     session: AuthenticatedSession,
     id: string,
     permission: string,
-    selected = true,
+    selected = true
   ) {
     const member = await this.requireOrganization(session, permission)
     if (!/^[1-9]\d{0,15}$/.test(id)) await this.deny(session, permission)
@@ -146,7 +180,12 @@ export class AuthorizationService {
           : { repositoryGrants: { some: { membershipId: member.id } } }),
       },
     })
-    if (!repository) await this.deny(session, permission)
+    const githubIds = await this.github?.repositoryIds(
+      session.identityId,
+      member.organizationId
+    )
+    if (!repository || (githubIds && !githubIds.includes(repository.githubId)))
+      await this.deny(session, permission)
     return repository!
   }
   private async deny(session: AuthenticatedSession, permission: string) {
@@ -161,22 +200,27 @@ export class AuthorizationService {
       },
     })
     throw new ForbiddenException(
-      'This resource is outside your authorized scope',
+      'This resource is outside your authorized scope'
     )
   }
   // SessionGuard calls this after live session validation, before any controller or cache lookup.
   async authorizeRequest(request: Request, session: AuthenticatedSession) {
     const path = request.path.replace(/\/$/, '')
     const repo = /^\/github\/repositories\/([1-9]\d{0,15})(?:\/(.*))?$/.exec(
-      path,
+      path
     )
     if (repo) {
       const part = repo[2] ?? ''
       if (part === 'gate-policies' || part.startsWith('gate-policies/')) {
-        const action = /^gate-policies\/[^/]+\/(approve|publish)$/.exec(part)?.[1]
-        const permission = request.method === 'GET'
-          ? 'policy.read'
-          : action ? 'policy.publish' : 'policy.draft'
+        const action = /^gate-policies\/[^/]+\/(approve|publish)$/.exec(
+          part
+        )?.[1]
+        const permission =
+          request.method === 'GET'
+            ? 'policy.read'
+            : action
+              ? 'policy.publish'
+              : 'policy.draft'
         await this.requireRepository(session, repo[1], permission)
         return true
       }
@@ -201,7 +245,7 @@ export class AuthorizationService {
         session,
         repo[1],
         permission,
-        part !== 'selection',
+        part !== 'selection'
       )
       return true
     }

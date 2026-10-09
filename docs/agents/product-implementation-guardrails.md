@@ -13,7 +13,7 @@ If documents conflict with current code, **report the discrepancy and propose a 
 
 ## Mandatory behaviour
 
-- Extend the **already imported Shadcn Admin codebase**, preserving session security, Super Admin recovery, GitHub integration, repository profiles, theme, router and RBAC boundaries. [ADR-0007](../architecture/ADR-0007-github-first-identity-and-organizations.md) is the accepted GitHub-first access target; keep current OIDC operational during its explicit migration. Do not claim GitHub login/member sync already works or auto-link identities by email/username.
+- Extend the **already imported Shadcn Admin codebase**, preserving session security, Super Admin recovery, GitHub integration, repository profiles, theme, router and RBAC boundaries. [ADR-0007](../architecture/ADR-0007-github-first-identity-and-organizations.md) is the accepted GitHub-first access target; keep current OIDC operational during its explicit migration. GitHub login, owner onboarding and username grants are implemented behind a deployment flag; legacy identity merging remains pending. Never auto-link identities by email/username.
 - Implement the **smallest deployable usable vertical slice** for the current phase. Do not scaffold future pages with dummy analytics and call them complete.
 - Sidebar: Workspace (Overview, Repositories, Assessments, Findings, Contributors once P3 usable); Governance (Quality Gates, Engineering Standards, Policies); Intelligence (only if working); Administration (Integrations, Access Control, Settings).
 - Every shipped route must include authorized API-backed data, meaningful loading/empty/error/permission-denied states, responsive layout, keyboard support and links to evidence.
@@ -36,3 +36,8 @@ If documents conflict with current code, **report the discrepancy and propose a 
 ## MVP release verification
 
 Demonstrate new organization onboarding, selected repository profile, real CI assessment, deterministic policy gate and source-evidence drill-down; when Contributors P3 is shipped, verify list, charts and individual profiles. Verify no unimplemented later-stage modules masquerade as available.
+
+- Access Control separates People, GitHub members, Roles & permissions, and Activity into tabs. Use the API-defined role catalogue; do not require users to create roles or permission definitions.
+- Policy definition self-approval is permitted only for an active local Super Admin, with an explicit approval marker and audit event. Organization/repository authorization still applies. Other users require independent approval; waiver/enforcement bypass rules remain unchanged.
+
+For a workspace that already has the GitHub App connected, use **Access Control → GitHub members → Link GitHub organization**. GitHub sign-in must be enabled and its callback registered first. The flow binds the request to the original authenticated workspace Owner session and verifies a GitHub organization owner before confirmation. It reuses the same internal organization and installation, preserves repositories, policies, grants and history, and grants that verified GitHub owner access with an audit record. It never moves an installation between workspaces or merges existing identities automatically.

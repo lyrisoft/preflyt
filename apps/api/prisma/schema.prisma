@@ -383,6 +383,7 @@ model Organization {
   memberships   OrganizationMembership[]
   installations GitHubInstallation[]
   githubLink    GitHubOrganizationLink?
+  githubAccessEvidence GitHubUserAccessEvidence[]
 }
 
 model OrganizationMembership {
@@ -474,6 +475,7 @@ model GatePolicyRevision {
   publishedAt   DateTime?
   @@unique([repositoryId, branchRef, revision])
   @@index([organizationId, repositoryId, createdAt])
+  approvalKind String @default("INDEPENDENT")
 }
 
 // Provider links are explicit. Never populate these by matching usernames or emails.
@@ -493,6 +495,8 @@ model GitHubUserAccount {
 
   @@unique([host, githubUserId])
   @@unique([identityId, host])
+  onboardingChallenges GitHubOnboardingChallenge[]
+  accessEvidence GitHubUserAccessEvidence[]
 }
 
 // Existing internal organization IDs, installations and audit actors stay unchanged.
@@ -511,7 +515,7 @@ model GitHubOrganizationLink {
 }
 
 // AES-256-GCM envelope bound to the account ID; never store plaintext provider tokens.
-// Refresh ownership and authorization evidence will be added with the login flow.
+// Refresh ownership remains pending; authorization evidence is stored separately.
 model GitHubUserCredential {
   accountId        String @id
   account          GitHubUserAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
@@ -522,4 +526,55 @@ model GitHubUserCredential {
   updatedAt        DateTime @updatedAt
 
   @@index([refreshExpiresAt])
+}
+
+// Human login is distinct from authenticated App installation setup.
+model GitHubLoginTransaction {
+  id                 String   @id @default(cuid())
+  stateHash          String   @unique
+  browserBindingHash String
+  codeVerifier       String
+  returnPath         String
+  expiresAt          DateTime
+  createdAt          DateTime @default(now())
+
+  linkingOrganizationId String?
+  linkingOwnerId String?
+  linkingSessionHash String?
+
+  @@index([expiresAt])
+}
+
+// Restricted identity proof, not a WebSession or a workspace access grant.
+model GitHubOnboardingChallenge {
+  id         String            @id @default(cuid())
+  tokenHash  String            @unique
+  accountId  String
+  account    GitHubUserAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  returnPath String
+  expiresAt  DateTime
+  createdAt  DateTime          @default(now())
+
+  linkingOrganizationId String?
+  linkingOwnerId String?
+  linkingSessionHash String?
+
+  @@index([expiresAt])
+}
+
+// Provider authorization only; local Preflyt grants are checked on every request.
+model GitHubUserAccessEvidence {
+  id                  String            @id @default(cuid())
+  accountId           String
+  account             GitHubUserAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  organizationId      String
+  organization        Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  installationId      BigInt
+  accessRevision      Int
+  repositoryGithubIds BigInt[]
+  verifiedAt          DateTime
+  expiresAt           DateTime
+
+  @@unique([accountId, organizationId])
+  @@index([expiresAt])
 }

@@ -1,6 +1,6 @@
 # Preflyt RBAC and resource authorization
 
-**Status:** Organization memberships, predefined roles, repository grants and existing API resource checks implemented. Later enforcement/execution permissions remain pending. **P0 foundational**, extended within existing phases. GitHub-first identity, inherited organizations and member selection are accepted targets under [ADR-0007](../architecture/ADR-0007-github-first-identity-and-organizations.md), not shipped behavior. See [OIDC ADR](../architecture/ADR-0003-oidc-user-authentication.md) and [roadmap](../roadmap/incremental-delivery.md).
+**Status:** Organization memberships, predefined roles, repository grants and existing API resource checks implemented. Later enforcement/execution permissions remain pending. **P0 foundational**, extended within existing phases. GitHub login, inherited organizations, verified owner onboarding and username-based grants are implemented behind a deployment flag under [ADR-0007](../architecture/ADR-0007-github-first-identity-and-organizations.md); legacy identity merging remains pending. See [OIDC ADR](../architecture/ADR-0003-oidc-user-authentication.md) and [roadmap](../roadmap/incremental-delivery.md).
 
 ## Authorization model
 
@@ -62,3 +62,17 @@ Full login, bootstrap, revocation, migration and acceptance contracts: [ADR-0007
 ## Current implementation
 
 See [organization access and contributors](../operations/scoped-access-contributors.md) for shipped workflows, the explicit compatibility migration, live-request revocation behavior, contributor permission boundaries and remaining limitations. This slice does not implement team inheritance, policy enforcement/exception approval, independent sandbox admission or AI egress authorization.
+
+## Access Control interface
+
+- **People:** search/filter workspace members and grant or edit a predefined role plus repository access in a side panel. GitHub-linked workspaces verify the entered username against active organization membership.
+- **Roles & permissions:** inspect the eight built-in organization roles and their actual API permissions; choose a role without creating permission definitions.
+- **Activity:** inspect recorded membership and role changes separately from member management.
+
+An active local Super Admin may create and approve the same policy definition. The API records `SUPER_ADMIN_SELF_APPROVAL` and an audit event, and checks organization/repository permissions at approval and publication. This exception does not authorize self-approved policy waivers or enforcement bypass. All other publishers require independent definition approval.
+
+The GitHub members tab loads the active organization member directory, supports search and pagination, and provides **Sync members** and **Assign role** actions. Directory snapshots are cached for up to five minutes in Redis with a bounded local fallback; sync does not create identities or grant access. Assignment verifies active membership again before saving.
+
+For GitHub-linked workspaces, **Grant access** uses a searchable member dropdown showing only users without active Preflyt access, including revoked members. Select the user, then choose a built-in role and repositories. Existing members are edited through their access record.
+
+For a workspace that already has the GitHub App connected, use **Access Control → GitHub members → Link GitHub organization**. GitHub sign-in must be enabled and its callback registered first. The flow binds the request to the original authenticated workspace Owner session and verifies a GitHub organization owner before confirmation. It reuses the same internal organization and installation, preserves repositories, policies, grants and history, and grants that verified GitHub owner access with an audit record. It never moves an installation between workspaces or merges existing identities automatically.
