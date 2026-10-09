@@ -13,6 +13,7 @@ import { GitHubRateLimitError } from './github-rate-limit.js'
 import { RedisCacheService } from '../cache/redis-cache.service.js'
 import { resolveWebOrigin } from '../config/web-origin.js'
 import { PrismaService } from '../prisma/prisma.service.js'
+import { profileTechnologies } from '../dashboard/dashboard-summary.js'
 import {
   GitHubInstallationRevokedError,
   GitHubProviderService,
@@ -333,6 +334,13 @@ export class GitHubService {
           isPrivate: true,
           selected: true,
           installation: { select: { accountLogin: true } },
+          profiles: {
+            // Inventory is visible before selection; profile details are not.
+            where: { repository: { selected: true } },
+            orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+            take: 1,
+            select: { report: true, createdAt: true, sourceSha: true },
+          },
         },
         orderBy: [{ ownerLogin: 'asc' }, { name: 'asc' }],
       }),
@@ -357,10 +365,16 @@ export class GitHubService {
         accountLogin: installation.accountLogin,
         active: installation.active,
       })),
-      repositories: repositories.map((repository) => ({
-        ...repository,
-        githubId: repository.githubId.toString(),
-      })),
+      repositories: repositories.map(({ profiles, ...repository }) => {
+        const profile = repository.selected ? profiles[0] : undefined
+        return {
+          ...repository,
+          githubId: repository.githubId.toString(),
+          technologies: profileTechnologies(profile?.report),
+          profiledAt: profile?.createdAt ?? null,
+          profileSha: profile?.sourceSha ?? null,
+        }
+      }),
     }
   }
 

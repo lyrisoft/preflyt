@@ -50,6 +50,7 @@ import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { StatusBadge } from '@/components/status-badge'
 import { ThemeSwitch } from '@/components/theme-switch'
+import { TechIcon } from '@/features/repositories/tech-icon'
 import {
   canAdminister,
   useNavigationSession,
@@ -65,10 +66,135 @@ type Repository = {
   defaultBranch: string | null
   isPrivate: boolean
   selected: boolean
+  technologies?: string[]
+  profiledAt?: string | null
+  profileSha?: string | null
   installation: { accountLogin: string }
 }
 
 type Installation = { id: string; accountLogin: string; active: boolean }
+
+function RepositoryCardDetails({
+  repository,
+  canManage,
+  saving,
+}: {
+  repository: Repository
+  canManage: boolean
+  saving: boolean
+}) {
+  const technologies = repository.selected
+    ? [...new Set(repository.technologies ?? [])]
+    : []
+  return (
+    <div className='space-y-4'>
+      <div className='flex items-start justify-between gap-3'>
+        <span
+          className={cn(
+            'flex size-9 shrink-0 items-center justify-center rounded-lg border',
+            repository.selected
+              ? 'border-primary/20 bg-primary/10 text-primary'
+              : 'bg-muted/40 text-muted-foreground'
+          )}
+        >
+          <GitBranch aria-hidden='true' className='size-4.5' />
+        </span>
+        <div className={cn('flex items-center gap-2', canManage && 'pe-8')}>
+          <StatusBadge tone={repository.selected ? 'info' : 'neutral'}>
+            {repository.selected ? 'Selected' : 'Not selected'}
+          </StatusBadge>
+        </div>
+      </div>
+      <div className='min-w-0'>
+        <p className='truncate text-xs text-muted-foreground'>
+          {repository.ownerLogin}
+        </p>
+        <h3
+          className={cn(
+            'mt-1 flex items-center justify-between gap-2 text-base font-semibold',
+            repository.selected && 'text-primary'
+          )}
+        >
+          <span
+            className={cn(
+              'truncate',
+              repository.selected && 'group-hover:underline'
+            )}
+          >
+            {repository.name}
+          </span>
+          {repository.selected && (
+            <ArrowUpRight aria-hidden='true' className='size-4 shrink-0' />
+          )}
+        </h3>
+      </div>
+      <div className='flex flex-wrap gap-2'>
+        <Badge variant='neutral' className='gap-1.5 font-normal'>
+          <GitBranch aria-hidden='true' className='size-3' />
+          {repository.defaultBranch ?? 'No default branch'}
+        </Badge>
+        <Badge variant='neutral' className='gap-1.5 font-normal'>
+          {repository.isPrivate ? (
+            <LockKeyhole aria-hidden='true' className='size-3' />
+          ) : (
+            <Globe2 aria-hidden='true' className='size-3' />
+          )}
+          {repository.isPrivate ? 'Private' : 'Public'}
+        </Badge>
+      </div>
+      <div
+        className='flex min-h-9 flex-wrap items-center gap-1.5'
+        role='group'
+        aria-label={
+          repository.profileSha
+            ? `Last profiled languages and frameworks at commit ${repository.profileSha.slice(0, 7)}`
+            : 'Last profiled languages and frameworks'
+        }
+      >
+        {technologies.length > 0 ? (
+          <>
+            {technologies.map((name) => (
+              <TechIcon key={name} name={name} />
+            ))}
+            <span
+              id={`repository-stack-${repository.githubId}`}
+              className='sr-only group-has-[:focus-visible]:not-sr-only group-has-[:focus-visible]:w-full group-has-[:focus-visible]:text-xs group-has-[:focus-visible]:text-muted-foreground'
+            >
+              Last profiled stack: {technologies.join(', ')}
+            </span>
+          </>
+        ) : (
+          <span
+            id={`repository-stack-${repository.githubId}`}
+            className='text-xs text-muted-foreground'
+          >
+            {!repository.selected
+              ? 'Select to view stack'
+              : repository.profiledAt === undefined
+                ? 'Stack not loaded'
+                : repository.profiledAt
+                  ? 'Stack not detected'
+                  : 'Not profiled'}
+          </span>
+        )}
+      </div>
+      <div className='flex items-center justify-between gap-2 border-t pt-3 text-xs text-muted-foreground'>
+        <span className='flex min-w-0 items-center gap-1.5'>
+          <Plug aria-hidden='true' className='size-3.5 shrink-0' />
+          <span className='truncate'>
+            {repository.installation.accountLogin}
+          </span>
+        </span>
+        {saving && (
+          <span role='status' className='flex items-center gap-1.5'>
+            <LoaderCircle aria-hidden='true' className='size-3 animate-spin' />
+            Saving…
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
 
 export function Apps() {
   const { github, account } = route.useSearch()
@@ -169,9 +295,49 @@ export function Apps() {
       }
       setRepositories((current) =>
         current.map((item) =>
-          item.githubId === repository.githubId ? { ...item, selected } : item
+          item.githubId === repository.githubId
+            ? {
+                ...item,
+                selected,
+                technologies: selected ? undefined : [],
+                profiledAt: selected ? undefined : null,
+                profileSha: selected ? undefined : null,
+              }
+            : item
         )
       )
+      if (selected) {
+        // Read only the local inventory after adoption; do not refresh GitHub.
+        try {
+          const overview = await fetch(
+            `${API_BASE_URL}/github/repositories/overview`,
+            { credentials: 'include' }
+          )
+          if (overview.ok) {
+            const result = (await overview.json()) as {
+              repositories: Repository[]
+            }
+            const latest = result.repositories.find(
+              (item) => item.githubId === repository.githubId && item.selected
+            )
+            if (latest)
+              setRepositories((current) =>
+                current.map((item) =>
+                  item.githubId === latest.githubId && item.selected
+                    ? {
+                        ...item,
+                        technologies: latest.technologies,
+                        profiledAt: latest.profiledAt,
+                        profileSha: latest.profileSha,
+                      }
+                    : item
+                )
+              )
+          }
+        } catch {
+          // Selection already succeeded. The card retains an unknown stack state.
+        }
+      }
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -654,110 +820,48 @@ export function Apps() {
                   <Card
                     key={repository.githubId}
                     className={cn(
-                      'gap-4 py-5',
+                      'group relative gap-0 py-0',
                       repository.selected &&
-                        'border-blue-500/30 bg-blue-500/[0.025]'
+                        'border-primary/30 bg-primary/[0.025] hover:border-primary/70'
                     )}
                   >
-                    <CardContent className='space-y-4 px-5'>
-                      <div className='flex items-start justify-between gap-3'>
-                        <span
-                          className={cn(
-                            'flex size-9 shrink-0 items-center justify-center rounded-lg border',
-                            repository.selected
-                              ? 'border-blue-500/20 bg-blue-500/10 text-blue-500'
-                              : 'bg-muted/40 text-muted-foreground'
-                          )}
+                    <CardContent className='flex flex-1 px-0'>
+                      {repository.selected ? (
+                        <Link
+                          to='/repositories/$repositoryId'
+                          params={{ repositoryId: repository.githubId }}
+                          aria-label={`Open ${repository.fullName}`}
+                          aria-describedby={`repository-stack-${repository.githubId}`}
+                          className='block w-full rounded-xl p-5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
                         >
-                          <GitBranch aria-hidden='true' className='size-4.5' />
-                        </span>
-                        <div className='flex items-center gap-2'>
-                          <StatusBadge
-                            tone={repository.selected ? 'info' : 'neutral'}
-                          >
-                            {repository.selected ? 'Selected' : 'Not selected'}
-                          </StatusBadge>
-                          {canManage && (
-                            <Checkbox
-                              checked={repository.selected}
-                              disabled={savingRepository !== null}
-                              onCheckedChange={(checked) =>
-                                void setSelected(repository, checked === true)
-                              }
-                              aria-label={`Select ${repository.fullName}`}
-                            />
-                          )}
-                        </div>
-                      </div>
-                      <div className='min-w-0'>
-                        <p className='truncate text-xs text-muted-foreground'>
-                          {repository.ownerLogin}
-                        </p>
-                        {repository.selected ? (
-                          <Link
-                            className='mt-1 flex items-center justify-between gap-2 rounded text-base font-semibold text-blue-600 hover:underline focus-visible:outline-2 focus-visible:outline-ring dark:text-blue-400'
-                            to='/repositories/$repositoryId'
-                            params={{ repositoryId: repository.githubId }}
-                          >
-                            <span className='truncate'>{repository.name}</span>
-                            <ArrowUpRight
-                              aria-hidden='true'
-                              className='size-4 shrink-0'
-                            />
-                          </Link>
-                        ) : (
-                          <h3 className='mt-1 truncate text-base font-semibold'>
-                            {repository.name}
-                          </h3>
-                        )}
-                      </div>
-                      <div className='flex flex-wrap gap-2'>
-                        <Badge
-                          variant='neutral'
-                          className='gap-1.5 font-normal'
-                        >
-                          <GitBranch aria-hidden='true' className='size-3' />
-                          {repository.defaultBranch ?? 'No default branch'}
-                        </Badge>
-                        <Badge
-                          variant='neutral'
-                          className='gap-1.5 font-normal'
-                        >
-                          {repository.isPrivate ? (
-                            <LockKeyhole
-                              aria-hidden='true'
-                              className='size-3'
-                            />
-                          ) : (
-                            <Globe2 aria-hidden='true' className='size-3' />
-                          )}
-                          {repository.isPrivate ? 'Private' : 'Public'}
-                        </Badge>
-                      </div>
-                      <div className='flex items-center justify-between gap-2 border-t pt-3 text-xs text-muted-foreground'>
-                        <span className='flex min-w-0 items-center gap-1.5'>
-                          <Plug
-                            aria-hidden='true'
-                            className='size-3.5 shrink-0'
+                          <RepositoryCardDetails
+                            repository={repository}
+                            canManage={canManage}
+                            saving={savingRepository === repository.githubId}
                           />
-                          <span className='truncate'>
-                            {repository.installation.accountLogin}
-                          </span>
-                        </span>
-                        {savingRepository === repository.githubId && (
-                          <span
-                            role='status'
-                            className='flex items-center gap-1.5'
-                          >
-                            <LoaderCircle
-                              aria-hidden='true'
-                              className='size-3 animate-spin'
-                            />
-                            Saving…
-                          </span>
-                        )}
-                      </div>
+                        </Link>
+                      ) : (
+                        <div className='w-full p-5'>
+                          <RepositoryCardDetails
+                            repository={repository}
+                            canManage={canManage}
+                            saving={savingRepository === repository.githubId}
+                          />
+                        </div>
+                      )}
                     </CardContent>
+                    {canManage && (
+                      <label className='absolute end-3.5 top-3.5 z-10 flex size-8 cursor-pointer items-center justify-center rounded-lg has-[:disabled]:cursor-not-allowed'>
+                        <Checkbox
+                          checked={repository.selected}
+                          disabled={savingRepository !== null}
+                          onCheckedChange={(checked) =>
+                            void setSelected(repository, checked === true)
+                          }
+                          aria-label={`Select ${repository.fullName}`}
+                        />
+                      </label>
+                    )}
                   </Card>
                 ))}
               </div>

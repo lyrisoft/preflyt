@@ -54,3 +54,7 @@ Repositories uses selected/unselected distribution by GitHub account, inventory 
 The layout and authentication shell are preserved. Verification is scoped to the frontend changes and chart transformations; browser and whole-system tests remain skipped per project direction.
 
 Task #47 verification: 10 focused Node tests pass for UTC activity aggregation, configuration counts and CI chart semantics. Web TypeScript and the production bundle pass, together with ESLint and formatting checks limited to changed frontend files. Existing standards selection, binding approval and assessment creation editors were audited against their previous versions and remain intact.
+
+Repository cards display language and framework icons from the newest saved profile, with named tooltips and a keyboard-visible stack description. A selected card is a full-surface native link; the administrative selection checkbox remains a separate control. Inventory uses a bounded latest-profile projection from PostgreSQL, exposing only technology names and profile timestamp/revision. Unselected repositories omit profile data, and selection changes clear old hints or refresh the local stack summary without requesting GitHub.
+
+Card follow-up verification: eight focused mocked API tests pass for the stack projection, access boundary and absence of provider calls; API TypeScript and web TypeScript/production bundle checks pass. The touched card file passes lint and formatting. Browser interaction tests remain skipped.
