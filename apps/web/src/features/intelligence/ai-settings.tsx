@@ -574,6 +574,7 @@ function ProviderForm({
         <span>Display name</span>
         <Input
           name='name'
+          placeholder='Code review model'
           required
           maxLength={120}
           defaultValue={provider?.name}
@@ -607,7 +608,7 @@ function ProviderForm({
           name='modelId'
           required
           maxLength={256}
-          placeholder='Model name accepted by your provider'
+          placeholder='code-review-model'
           defaultValue={provider?.modelId}
         />
       </label>
@@ -628,6 +629,7 @@ function ProviderForm({
         </span>
         <Input
           type='password'
+          placeholder='sk-example-key'
           autoComplete='new-password'
           value={apiKey}
           onChange={(e) => setApiKey(e.target.value)}
