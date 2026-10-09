@@ -1,6 +1,6 @@
 # Preflyt Notification Engine
 
-**Status:** P1 assessment in-app inbox implemented behind `NOTIFICATIONS_ENABLED`; P2 policy-publication notices and opt-in SMTP delivery are implemented. Gate, ruleset and exception events remain planned. **Phase order unchanged:** P1 in-app, P2 email and governance, P3 security, P4 AI, later SDLC and channels.
+**Status:** P1 assessment in-app inbox implemented behind `NOTIFICATIONS_ENABLED`; P2 policy-publication notices and opt-in SMTP delivery are implemented. Confirmed automatic blocked/incomplete readiness checks and managed ruleset activation, rollback and detected drift now create durable notices. Exception events remain pending until an exception workflow is implemented. **Phase order unchanged:** P1 in-app, P2 email and governance, P3 security, P4 AI, later SDLC and channels.
 
 ## Purpose and channels
 
@@ -63,3 +63,10 @@ Assessment creation saves a redacted event in the same PostgreSQL transaction. T
 The bell, `/notifications` filters/pagination, individual and bulk mark-read, and optional per-user assessment notification preference are functional. Every inbox/count/read request rechecks current repository access, including the bounded GitHub user-access checks used elsewhere. Preferences suppress future assessment alerts; they do not delete existing alerts. Policy publication also saves a transactionally linked event. Owners/Admins and repository-scoped Policy Managers receive it when current policy access allows it, even if optional assessment alerts are muted. Opt-in email sends a generic inbox link to identities with valid email addresses, after fresh authorization and preference checks. Inbox entries show email status and attempt counts. Digests, quiet hours, other mandatory governance/security notices and an operator replay UI remain future work.
 
 Imported CI failure, missing required evidence, and a saved assessment are separate updates. None claims that tests ran successfully or that a PR may merge. Historical assessments are not backfilled and assessments created while the flag is off emit no events. See [setup and retry recovery](../operations/notifications.md).
+
+
+### Confirmed readiness and ruleset notices
+
+Automatic publication records blocked/incomplete notices in the same PostgreSQL transaction as the verified publication receipt and audit. IDs deduplicate repeated polling by repository, PR, commit, policy and outcome. Successful readiness checks do not create these alerts. Activation/rollback notices are committed with verified managed deployment receipts. Drift notices require a fresh GitHub read and deduplicate the same observed configuration hash. Unknown provider writes never emit a successful activation notice.
+
+Readiness notices use current assessment access, assigned leads and linked authors; assessment preferences apply. Governance notices use current policy access and authorized Owners/Admins or repository-scoped Policy Managers. Governance notices remain in-app even when optional assessment alerts are muted. Email remains opt-in, generic and freshly authorized. Notifications link to the selected repository's Readiness check or GitHub Rulesets tab. No notification changes a gate or bypasses GitHub protection. Manual refresh discovers drift; scheduled drift detection and exception notifications remain pending.

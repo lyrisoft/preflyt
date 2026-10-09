@@ -120,7 +120,7 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 
 - **P2.R5 Insights (first slice implemented):** Repository-scoped, paginated GitHub suite detail attribution, filtered history, current-page rule counts and failed-rule chart are available in the ruleset drawer. Active/evaluate/bypass semantics and repository permissions remain separate. Retained snapshots, background ingestion, broader comparisons and assessment links remain pending. Extend ruleset synchronization with GitHub Rule Suites ingestion, ruleset-ID-based detailed evaluation attribution, metrics/charts, filtered history and evidence drill-down. Separate GitHub evaluations from Preflyt gate outcomes; enforce RBAC and rate-limit-aware pagination. See [Ruleset Management](../product/github-ruleset-management.md).
 
-- **P2.N1 (partially implemented):** Policy-publication notices, opt-in SMTP delivery and per-recipient delivery status/retries are implemented. Remaining: notify blocked/incomplete PRs, policy/ruleset changes and exceptions through in-app and configured email delivery with retry/audit.
+- **P2.N1 (partially implemented):** Policy publication, confirmed automatic blocked/incomplete PR checks, managed activation/rollback and detected drift notices are implemented, with opt-in SMTP, scoped recipient authorization, deduplication and delivery status/retries. Exception notices remain pending until the exception workflow is implemented. Scheduled drift sync remains pending.
 
 ### P3 — Native Secure Validation
 

@@ -105,10 +105,13 @@ async function read<T>(path: string, signal: AbortSignal): Promise<T> {
 
 export function WorkspaceModule({ module }: { module: Module }) {
   const [integration, setIntegration] = useState<IntegrationId | null>(null)
-  const [gateView, setGateView] = useState('assessments')
   const config = modules[module]
   const ModuleIcon = config.icon
-  const search = useSearch({ strict: false }) as { repository?: string }
+  const search = useSearch({ strict: false }) as {
+    repository?: string
+    gate?: 'assessments' | 'rulesets' | 'checks'
+  }
+  const gateView = search.gate ?? 'assessments'
   const navigate = useNavigate()
   const inventory = useQuery({
     queryKey: ['workspace-repositories'],
@@ -125,7 +128,19 @@ export function WorkspaceModule({ module }: { module: Module }) {
     : repositories[0]
   const canManage = canPerform(session.data, 'repository.connect')
   return (
-    <Tabs value={gateView} onValueChange={setGateView} className='contents'>
+    <Tabs
+      value={gateView}
+      onValueChange={(value) =>
+        void navigate({
+          to: '/quality-gates',
+          search: {
+            repository: search.repository,
+            gate: value as 'assessments' | 'rulesets' | 'checks',
+          },
+        })
+      }
+      className='contents'
+    >
       <AppHeader breadcrumbs={[{ label: config.title }]} />
       <Main>
         <div

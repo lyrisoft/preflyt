@@ -31,6 +31,11 @@ type InboxData = {
 }
 export const titles: Record<string, string> = {
   POLICY_PUBLISHED: 'Policy published',
+  READINESS_BLOCKED: 'PR check blocked',
+  READINESS_INCOMPLETE: 'PR check needs more evidence',
+  RULESET_ACTIVATED: 'GitHub protection activated',
+  RULESET_ROLLED_BACK: 'Managed GitHub protection disabled',
+  RULESET_DRIFTED: 'GitHub protection changed outside Preflyt',
   ASSESSMENT_COMPLETED: 'Assessment saved',
   ASSESSMENT_FAILED: 'CI failure recorded',
   ASSESSMENT_INCOMPLETE: 'Assessment needs more evidence',

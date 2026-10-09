@@ -77,3 +77,6 @@ WHERE id = '<reviewed-delivery-id>' AND state = 'FAILED';
 ```
 
 The next reconciliation retries it with fresh authorization. Never replay unconfirmed deliveries without considering duplicate email. Outbox and inbox state stay intact when SMTP is unavailable.
+
+
+Confirmed automatic BLOCK/INCOMPLETE publication, managed activation/rollback and GitHub drift verification use the existing notification outbox and email worker. Repeated polling does not duplicate the same PR/head/policy/result notice. Unknown or failed deployment writes never appear as successful activation notices. Keep `NOTIFICATIONS_ENABLED=true` on API and worker for recording and delivery; optional SMTP configuration and opt-in still apply. The inbox links open the relevant Quality Gates tab. Manual **Verify GitHub** discovers drift; periodic governance drift synchronization remains pending.

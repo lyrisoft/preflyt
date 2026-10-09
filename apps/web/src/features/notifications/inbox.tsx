@@ -45,6 +45,18 @@ export function NotificationItem({
           >
             Policy published
           </Link>
+        ) : item.type.startsWith('READINESS_') ||
+          item.type.startsWith('RULESET_') ? (
+          <Link
+            to='/quality-gates'
+            search={{
+              repository: item.repositoryId,
+              gate: item.type.startsWith('READINESS_') ? 'checks' : 'rulesets',
+            }}
+            className='font-medium hover:underline'
+          >
+            {titles[item.type] ?? 'Quality gate update'}
+          </Link>
         ) : (
           <Link
             to='/repositories/$repositoryId'
