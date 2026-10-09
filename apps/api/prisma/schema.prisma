@@ -170,6 +170,7 @@ model GitHubRepository {
   ciBindings RepositoryCiBindings[]
   assessments    CommitAssessment[]
   standards      RepositoryStandardsSelection[]
+  gatePolicies   GatePolicyRevision[]
   profiles       RepositoryProfile[]
   @@index([installationId, selected])
 }
@@ -449,4 +450,26 @@ model ContributorObservation {
   @@unique([deliveryId, contributorId, relationship, sourceObjectId])
   @@index([repositoryId, observedAt])
   @@index([contributorId, observedAt])
+}
+
+// Immutable definitions; approval/publication transitions have independent audited actors.
+model GatePolicyRevision {
+  id            String @id @default(cuid())
+  repositoryId  String
+  repository    GitHubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  organizationId String
+  branchRef     String
+  revision      Int
+  selectionId   String
+  definition    Json
+  definitionHash String
+  state         String @default("DRAFT")
+  draftedById   String
+  approvedById  String?
+  publishedById String?
+  createdAt     DateTime @default(now())
+  approvedAt    DateTime?
+  publishedAt   DateTime?
+  @@unique([repositoryId, branchRef, revision])
+  @@index([organizationId, repositoryId, createdAt])
 }

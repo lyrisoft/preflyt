@@ -20,6 +20,7 @@ import { AppHeader } from '@/components/layout/app-header'
 import { Main } from '@/components/layout/main'
 import { RepositoryPicker } from '@/components/repository-picker'
 import { StatusBadge } from '@/components/status-badge'
+import { GatePolicyPanel } from '@/features/repositories/gate-policy-panel'
 import { RepositoryActivityPanel } from '@/features/repositories/repository-activity-panel'
 import { RepositoryAssessments } from '@/features/repositories/repository-assessments'
 import { RepositoryBindings } from '@/features/repositories/repository-bindings'
@@ -402,24 +403,41 @@ export function WorkspaceModule({ module }: { module: Module }) {
                       />
                     )}
                     {module === 'policies' && (
-                      <RepositoryStandards
-                        repositoryId={repository.githubId}
-                        canManage={canPerform(
-                          session.data,
-                          'policy.draft',
-                          repository.githubId
-                        )}
-                        sourceBindings={
-                          <RepositoryBindings
-                            repositoryId={repository.githubId}
-                            canManage={canPerform(
-                              session.data,
-                              'policy.draft',
-                              repository.githubId
-                            )}
-                          />
-                        }
-                      />
+                      <>
+                        <GatePolicyPanel
+                          key={repository.githubId}
+                          repositoryId={repository.githubId}
+                          canDraft={canPerform(
+                            session.data,
+                            'policy.draft',
+                            repository.githubId
+                          )}
+                          canPublish={canPerform(
+                            session.data,
+                            'policy.publish',
+                            repository.githubId
+                          )}
+                          actorId={session.data?.identityId}
+                        />
+                        <RepositoryStandards
+                          repositoryId={repository.githubId}
+                          canManage={canPerform(
+                            session.data,
+                            'policy.draft',
+                            repository.githubId
+                          )}
+                          sourceBindings={
+                            <RepositoryBindings
+                              repositoryId={repository.githubId}
+                              canManage={canPerform(
+                                session.data,
+                                'policy.draft',
+                                repository.githubId
+                              )}
+                            />
+                          }
+                        />
+                      </>
                     )}
                     {module === 'integrations' && (
                       <RepositoryCiEvidence

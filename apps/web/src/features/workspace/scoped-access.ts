@@ -1,4 +1,5 @@
 export type ScopedSession = {
+  identityId?: string
   role?: string
   platformAdmin?: boolean
   organizationId?: string

@@ -14,6 +14,7 @@ export const rolePermissions: Record<string, string[]> = {
     'assessment.run',
     'policy.read',
     'policy.draft',
+    'policy.publish',
     'evidence.manage',
     'contributors.read',
     'contributors.activity.read',
@@ -28,6 +29,7 @@ export const rolePermissions: Record<string, string[]> = {
     'assessment.run',
     'policy.read',
     'policy.draft',
+    'policy.publish',
     'evidence.manage',
     'contributors.read',
     'contributors.activity.read',
@@ -38,6 +40,7 @@ export const rolePermissions: Record<string, string[]> = {
     'assessment.read',
     'policy.read',
     'policy.draft',
+    'policy.publish',
     'contributors.read',
     'contributors.activity.read',
     'contributors.policy_evidence.read',
@@ -169,6 +172,14 @@ export class AuthorizationService {
     )
     if (repo) {
       const part = repo[2] ?? ''
+      if (part === 'gate-policies' || part.startsWith('gate-policies/')) {
+        const action = /^gate-policies\/[^/]+\/(approve|publish)$/.exec(part)?.[1]
+        const permission = request.method === 'GET'
+          ? 'policy.read'
+          : action ? 'policy.publish' : 'policy.draft'
+        await this.requireRepository(session, repo[1], permission)
+        return true
+      }
       const permission =
         request.method === 'GET'
           ? part.startsWith('assessments') ||
