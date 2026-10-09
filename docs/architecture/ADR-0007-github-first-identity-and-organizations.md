@@ -1,9 +1,9 @@
 # ADR-0007: GitHub-first login and organization onboarding
 
-**Status:** Accepted product decision; implementation and migration pending.  
-**Date:** 2026-10-09  
-**Decision owner:** Product / Engineering  
-**Supersedes:** ADR-0003's OIDC-only routine login, manual member provisioning and first-owner onboarding for GitHub-connected workspaces. Existing OIDC deployments remain supported during migration; session security and separate local Super Admin recovery remain required.  
+**Status:** Accepted product decision; implementation and migration pending.
+**Date:** 2026-10-09
+**Decision owner:** Product / Engineering
+**Supersedes:** ADR-0003's OIDC-only routine login, manual member provisioning and first-owner onboarding for GitHub-connected workspaces. Existing OIDC deployments remain supported during migration; session security and separate local Super Admin recovery remain required.
 **Related:** [PRD](../PRD.md), [RBAC](../product/rbac-and-authorization.md), [MVP experience](../product/mvp-product-experience.md), [delivery plan](../roadmap/incremental-delivery.md).
 
 ## Context
