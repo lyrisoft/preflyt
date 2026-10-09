@@ -27,7 +27,7 @@ The **primary entity is an Assessment**: evaluation of a design artifact, change
 
 **Automated code editing and remediation PRs are not the core product and are not required for MVP or V1.** A separately authorized future remediation module may use the previously designed evidence/reproduction contract in ADR-0002.
 
-The planned application stack is **Node.js + TypeScript, React + Vite, NestJS, PostgreSQL/Prisma, Redis/BullMQ**, and optionally LiteLLM for frontier or self-hosted models. Docker Compose packages the current release; Kubernetes with an approved hardened sandbox is the production execution target.
+The implemented application stack is **Node.js + TypeScript, React + Vite, NestJS, PostgreSQL/Prisma, Redis/BullMQ**, with LiteLLM proposed for frontier or self-hosted models. Docker Compose packages the current release; Kubernetes with an approved hardened sandbox is the production execution target.
 
 ## 2. Problem and opportunity
 

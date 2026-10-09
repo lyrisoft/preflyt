@@ -62,4 +62,4 @@ The central PR check remains authoritative: the extension shows the exact PR hea
 
 **Implementation status:** No CLI/extension source is introduced by this document.
 
-Authentication for organization synchronization follows [ADR-0007](../architecture/ADR-0007-github-first-identity-and-organizations.md). The accepted GitHub-first login is not implemented yet; CLI/IDE planning must preserve server session and repository authorization boundaries rather than treating App installation credentials as user credentials.
+Authentication for organization synchronization follows [ADR-0007](../architecture/ADR-0007-github-first-identity-and-organizations.md). GitHub-first login, verified organization linking and member grants are implemented behind `GITHUB_LOGIN_ENABLED=true`; legacy identity merging and provider reconciliation remain pending. The CLI/IDE itself remains unimplemented. Its future organization synchronization must preserve server session and repository authorization boundaries rather than treating App installation credentials as user credentials.

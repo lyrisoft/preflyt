@@ -1,6 +1,6 @@
 # ADR-0004: Shift Left assessment and governance architecture
 
-**Status:** Accepted product direction; implementation pending  
+**Status:** Accepted product direction; repository profiling, imported assessments, versioned policies and flag-gated GitHub governance are implemented in source. Native execution, AI intelligence and live enforcement acceptance remain pending.
 **Date:** 2026-10-08  
 **Decision owner:** Preflyt Product / Engineering  
 **Supersedes:** Remediation-first prioritization in the original product definition (not the safety rules in ADR-0002)  
@@ -190,4 +190,4 @@ Organizations configure multiple hosted/local providers, write-only encrypted cr
 - [ ] Imported k6 result assessment works before Preflyt-run load generation is enabled.
 - [ ] Production telemetry cannot autonomously alter gate enforcement or deploy changes.
 
-**Implementation status:** architecture decision only. This ADR does not claim any checks, control plane, UI, sandbox or source-control integration has shipped.
+**Implementation status:** This ADR defines the target architecture. Repository profiling, CI imports, immutable assessments, standards authoring, deterministic policy evaluation and flag-gated GitHub check publication/ruleset activation are implemented in source. Native requests remain blocked until dispatch and the approved execution runtime are complete. AI intelligence, exceptions and later lifecycle stages remain unfinished. See [current capabilities](../../README.md) and [release gates](../roadmap/incremental-delivery.md); source implementation does not establish live release acceptance.

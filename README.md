@@ -89,7 +89,7 @@ Preflyt will support GitHub-imported and Preflyt-managed teams, with versioned e
 
 
 
-Preflyt ships with versioned, first-party engineering policy packs so organizations can start with established rules rather than authoring policies from scratch. The initial library covers Baseline Engineering, Application Security, Backend Services, Frontend Applications and Infrastructure as Code; further packs cover API, database, production readiness, performance and compliance as their assessment adapters mature.
+Preflyt ships with versioned, first-party engineering policy packs so organizations can start with established rules rather than authoring policies from scratch. The initial library covers Baseline Engineering, Application Security, Backend Services, Frontend Applications and Infrastructure as Code. API, database, production-readiness, performance and compliance packs remain planned; they are not installed or executable today.
 
 During repository onboarding (P0), Preflyt recommends applicable packs based on detected technologies and allows an administrator to select Default, Recommended or Strict profiles. P1 maps existing CI evidence to the selected rules, P2 enforces deterministic policies through quality gates, and P3 introduces native approved scans. Unsupported and missing mandatory checks are never reported as passing.
 
@@ -97,7 +97,7 @@ See the [Engineering Standards Library](docs/product/engineering-standards-libra
 
 ## Example: a pull request assessment
 
-A developer opens a PR. Preflyt discovers changed paths and applicable organization standards, ingests CI evidence or executes eligible checks in an approved sandbox, then evaluates rules.
+A developer opens a PR. Preflyt records its exact revision, ingests supported CI evidence and evaluates the saved policy. The target workflow also includes approved native scans, but native execution remains blocked until dispatch and runtime acceptance are complete.
 
 ~~~text
 Preflyt / payment-api / PR #184

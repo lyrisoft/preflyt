@@ -46,7 +46,7 @@ This migration is additive. Apply it before enabling the flag. Disable the flag 
 
 ## Verification and limits
 
-Focused integration tests cover the actual assessment producer, duplicate/concurrent delivery, source-transaction rollback, recipient isolation, grant/member revocation, read persistence, filters, session/origin checks, preferences, bounded retries, queue outage and real Redis/BullMQ recovery after a transient error. Browser interactions and a live GitHub webhook were not verified. Policy publication, opt-in delivery and retry states are tested with PostgreSQL, Redis and local SMTP. A production SMTP provider has not been exercised. Gate/ruleset/exception event producers, subscriptions beyond default recipients, digests, quiet hours and a replay UI remain unimplemented.
+Focused integration tests cover the actual assessment producer, duplicate/concurrent delivery, source-transaction rollback, recipient isolation, grant/member revocation, read persistence, filters, session/origin checks, preferences, bounded retries, queue outage and real Redis/BullMQ recovery after a transient error. Browser interactions and a live GitHub webhook were not verified. Policy publication, opt-in delivery and retry states are tested with PostgreSQL, Redis and local SMTP. A production SMTP provider has not been exercised. Confirmed automatic blocked/incomplete readiness and managed ruleset activation/rollback/drift producers are implemented, as described below. Exception producers, subscriptions beyond default recipients, digests, quiet hours and a replay UI remain unimplemented.
 
 ## Optional email setup
 

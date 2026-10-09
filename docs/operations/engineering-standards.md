@@ -1,4 +1,6 @@
-# Engineering Standards Library (P0.4a)
+# Engineering Standards Library
+
+This guide describes the original configuration-posture workflow and its current extensions. Organization authoring and append-only versions are also available; see [authoring contracts and limits](../product/engineering-standards-library.md).
 
 ## User workflow
 
@@ -8,7 +10,7 @@ Owners, Admins and Super Admins can choose Default, Recommended or Strict, selec
 
 Default marks core CI, tests and secrets requirements. Recommended adds the broader selected-pack requirements. Strict adds backend resilience requirements. Pack details expose each rule's required profiles. Selecting a profile does not automatically select additional packs. Recommendations propose Baseline and Application Security for every repository; detected NestJS/Express/Fastify adds Backend, detected frontend frameworks add Frontend, and detected IaC/container hints add Infrastructure. Unknown stack signals never invent a detected framework. Recommendations are suggestions, not automatic adoption.
 
-Before saving, controls preview the recommended versions. After saving, controls represent the adopted versions/profile. Configuration hints are not executed checks: missing known configuration shows MISSING, absent/incomplete discovery shows UNKNOWN, and observed hints show HINT_DETECTED with path/blob evidence from the current pinned profile. Every assessment result and quality gate is null. `available` currently means configuration-posture inspection only; `import_only` means a raw report format is supported but trusted rule evidence is not mapped; `planned` means the adapter is not implemented. None imply compliance or PASS. Native scans, trusted coverage mapping and policy decisions remain subsequent phases. [Commit assessments](assessments.md) now freeze explicit administrator associations without granting trust or a gate verdict.
+Before saving, controls preview the recommended versions. After saving, controls represent the adopted versions/profile. Configuration hints are not executed checks: missing known configuration shows MISSING, absent/incomplete discovery shows UNKNOWN, and observed hints show HINT_DETECTED with path/blob evidence from the current pinned profile. The configuration-posture response itself does not produce an assessment verdict or quality-gate decision. `available` currently means configuration-posture inspection only; `import_only` means evidence must come from supported external CI rather than a Preflyt executor; importing a report alone does not establish trusted passing evidence; `planned` means the adapter is not implemented. None imply compliance or PASS. CI source associations, immutable [commit assessments](assessments.md) and deterministic [quality-gate evaluation](quality-gate-preview.md) are now implemented. Passing GitHub publication requires pinned contracts and verified signed evidence; see [publication setup and limits](github-check-publication.md). Native scans remain unfinished. Configuration hints and administrator associations alone never grant a passing verdict.
 
 ## Contracts and governance
 

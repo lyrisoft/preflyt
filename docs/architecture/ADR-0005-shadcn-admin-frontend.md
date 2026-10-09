@@ -1,6 +1,6 @@
 # ADR-0005: Build Preflyt on the Shadcn Admin source codebase
 
-**Status:** Source baseline imported and verified; Preflyt product integration pending
+**Status:** Pinned source baseline imported; Preflyt screens, session-aware navigation and API integration are implemented. Remaining product scope and release acceptance are tracked separately.
 **Date:** 2026-10-08  
 **Related:** [ADR-0001](ADR-0001-typescript-first-stack.md), [ADR-0003](ADR-0003-oidc-user-authentication.md), [ADR-0004](ADR-0004-shift-left-assessment-governance.md), [Incremental delivery plan](../roadmap/incremental-delivery.md)
 
@@ -103,4 +103,4 @@ Importing and rendering Shadcn Admin alone is **not P0 completion**.
 | Adopt a full React-admin management framework | Not selected; adds another application framework and more opinionated data/navigation architecture |
 | Rebuild dashboard from scratch | Rejected unless upstream audit proves the source unsuitable or insecure |
 
-**Implementation status:** The source at e16c87f213a5ba5e45964e9b67c792105ec74d26 is imported into apps/web with a pnpm/Turborepo workspace. See [provenance, dependency changes and verification](../vendor/shadcn-admin.md). OIDC sign-in, first-Owner bootstrap, protected routes and initial GitHub installation/repository selection are implemented. Repository profile screens, user provisioning, remaining real P0 screens, asset/accessibility review and deployment packaging remain pending. Source import alone does not complete P0.
+**Implementation status:** The source at e16c87f213a5ba5e45964e9b67c792105ec74d26 is imported into apps/web with a pnpm/Turborepo workspace. See [provenance, dependency changes and verification](../vendor/shadcn-admin.md). OIDC sign-in, first-Owner bootstrap, protected routes and initial GitHub installation/repository selection are implemented. Repository profiles, scoped access administration, contributors, standards, policies, assessments and notifications now have API-backed screens. Docker Compose packages the current application; Kubernetes packaging remains pending. Full asset/accessibility review and phase-level clean-deployment acceptance are separate release activities. See [current capabilities](../../README.md) and [delivery status](../roadmap/incremental-delivery.md). Source import alone does not complete P0.

@@ -1,6 +1,6 @@
 # Preflyt across the Software Development Lifecycle
 
-**Status:** Proposed product capabilities; not implemented  
+**Status:** Target capabilities across six lifecycle stages. Repository profiling, imported PR/CI assessments and flag-gated GitHub governance are implemented in source; native execution, AI intelligence and later lifecycle stages remain unfinished. See [current capabilities](../../README.md) for deployment limits.
 **Version:** 0.1 · **Date:** 2026-10-08  
 **Positioning:** AI-native Shift Left engineering assessment and governance platform, **not a coding agent**  
 **Related:** [PRD](../PRD.md) · [Incremental delivery plan](../roadmap/incremental-delivery.md) · [ADR-0004](../architecture/ADR-0004-shift-left-assessment-governance.md) · [ADR-0002](../architecture/ADR-0002-safe-execution-fixtures-remediation-contract.md)
