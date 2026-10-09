@@ -10,7 +10,7 @@
 
 Preflyt's initial users already work in GitHub organizations. The current application requires a separately configured OIDC provider, manually created Preflyt organizations and user IDs copied from that provider. This creates unnecessary onboarding work.
 
-GitHub login and member selection are not implemented today. The current GitHub authorization callback verifies an installation connection for an already authenticated Preflyt administrator; it must not be treated as a general login endpoint.
+GitHub login and member selection are not implemented today. The additive storage foundation is implemented: explicit GitHub account/organization links, account-bound AES-256-GCM user-token encryption, and a migration that preserves existing identities, sessions, grants and audit history. No links are populated automatically, and these tables do not grant access. Login, verified linking, organization-owner onboarding, refresh locking and scoped provider authorization evidence remain pending. The current GitHub authorization callback verifies an installation connection for an already authenticated Preflyt administrator; it must not be treated as a general login endpoint.
 
 ## Decision
 

@@ -35,6 +35,7 @@ model Identity {
   bootstrapChallenges BootstrapChallenge[]
   githubSetupTransactions GitHubSetupTransaction[]
   githubInstallations GitHubInstallation[]
+  githubAccounts GitHubUserAccount[]
   @@unique([issuer, subject])
 }
 
@@ -381,6 +382,7 @@ model Organization {
   createdAt     DateTime                 @default(now())
   memberships   OrganizationMembership[]
   installations GitHubInstallation[]
+  githubLink    GitHubOrganizationLink?
 }
 
 model OrganizationMembership {
@@ -472,4 +474,52 @@ model GatePolicyRevision {
   publishedAt   DateTime?
   @@unique([repositoryId, branchRef, revision])
   @@index([organizationId, repositoryId, createdAt])
+}
+
+// Provider links are explicit. Never populate these by matching usernames or emails.
+model GitHubUserAccount {
+  id           String @id @default(cuid())
+  host         String
+  githubUserId BigInt
+  identityId   String
+  identity     Identity @relation(fields: [identityId], references: [id], onDelete: Restrict)
+  login        String
+  displayName  String?
+  avatarUrl    String?
+  verifiedAt   DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  credential   GitHubUserCredential?
+
+  @@unique([host, githubUserId])
+  @@unique([identityId, host])
+}
+
+// Existing internal organization IDs, installations and audit actors stay unchanged.
+model GitHubOrganizationLink {
+  id                   String @id @default(cuid())
+  host                 String
+  githubOrganizationId BigInt
+  organizationId       String @unique
+  organization         Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  login                String
+  verifiedAt           DateTime
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@unique([host, githubOrganizationId])
+}
+
+// AES-256-GCM envelope bound to the account ID; never store plaintext provider tokens.
+// Refresh ownership and authorization evidence will be added with the login flow.
+model GitHubUserCredential {
+  accountId        String @id
+  account          GitHubUserAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  encryptedTokens  String
+  accessExpiresAt  DateTime
+  refreshExpiresAt DateTime
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([refreshExpiresAt])
 }
