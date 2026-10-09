@@ -27,7 +27,7 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 | **P1** | **CI Evidence Assessments** | GitHub PR/CI + UI | Import check/test results, view revision-bound assessment without executing repo code |
 | **P2** | **Policy Quality Gates** | PR/CI + UI | Apply mandatory/advisory policy, publish exact-SHA status and clear PASS/WARN/BLOCK/INCOMPLETE |
 | **P3** | **Native Secure Validation** | PR + approved executor | Execute security/testing/IaC scans safely and enrich findings beyond imported evidence |
-| **P4** | **AI Engineering Explanations** | Assessment UI | Optional model-backed, evidence-cited explanations; works without a configured model |
+| **P4** | **Advanced AI Engineering Intelligence** | SDLC assessments | Advanced model-routed investigations and recommendations; deterministic gates remain independent |
 | **P5** | **Developer Experience: CLI + IDE** | Laptop / VS Code | Shared local engine, CLI, policy sync, inline diagnostics, AI explanations and optional Git hooks |
 | **P6** | **QA Release Readiness** | QA/CI + UI | Import end-to-end/contract/regression evidence and validate release candidate readiness |
 | **P7** | **k6 Performance Evidence** | Existing k6/CI + UI | Import k6 results and gate comparable performance evidence against budgets |
@@ -36,7 +36,7 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 | **P10** | **Production Feedback Loop** | Read-only incident/deploy integration | Link escaped incidents to releases and earlier checks; propose human-approved improvements |
 | **P11** | **Operational Expansion** | GitLab / scheduled profiles | Expand providers, distributed k6, trends, observability correlations and cost/compliance checks |
 
-**P0–P3 form the first commercially meaningful MVP foundation.** P4 is optional but valuable; P5–P9 deepen Shift Left through local, QA and performance workflows; P10 moves production learnings earlier; P11 expands scale and integrations. The first deliverable is P0, **not** an empty architecture scaffold.
+**P0–P3 form the first commercially meaningful MVP foundation.** P4 expands the core AI intelligence capability; P5–P9 deepen Shift Left through local, QA and performance workflows; P10 moves production learnings earlier; P11 expands scale and integrations. The first deliverable is P0, **not** an empty architecture scaffold.
 
 ## 3. Detailed per-phase tasks and completion gates
 
@@ -57,6 +57,12 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 
 - **P0.RBAC:** Implement predefined organization roles, repository-scoped membership/grants, authorization-aware navigation and NestJS resource checks. Test cross-organization denial, assignment/revocation, audit and owner bootstrap. See [RBAC specification](../product/rbac-and-authorization.md).
 
+### P0 AI configuration extension (additive)
+
+- **P0.AI1:** Multiple provider connections, encrypted write-only keys, local/compatible endpoints and connectivity testing.
+- **P0.AI2:** Primary/fallback model routing for laptop, repository, PR/CI, QA, performance/staging and production feedback, with egress, budget and RBAC restrictions.
+- **P0.AI3:** Working Settings → AI Providers & Routing interface with audit and route preview. Preserve already completed P0 functionality.
+
 ### P1 — CI Evidence Assessments
 
 **User value:** A developer opens a PR or a CI run completes and can inspect an assessment with collected test/check status and provenance.
@@ -74,6 +80,8 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 - **P1.RBAC:** Restrict CI evidence, assessments and findings to authorized repository members; validate worker context and artifact access.
 
 - **P1.Contributors:** Capture GitHub contributor IDs, PR authors, reviewers and commit associations with signed-event provenance; show verified identities on PR/CI details. See [Contributors specification](../product/engineering-contributors.md).
+
+- **P1.AI1:** Evidence-linked CI explanation through PR/CI route; log provider/model and cost; never alter deterministic gates.
 
 ### P2 — Policy Quality Gates
 
@@ -113,7 +121,7 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 
 - **P3.Contributors:** Deliver a functional **Contributors** sidebar entry with searchable/paginated contributor list, activity/coverage/adherence metrics, charts, repository filters and individual detail pages (PRs, commits, reviews, findings, policy evidence). Include RBAC and source drill-down; see [Contributors specification](../product/engineering-contributors.md).
 
-### P4 — AI Engineering Explanations (optional)
+### P4 — Advanced AI Engineering Intelligence
 
 **User value:** A developer sees an evidence-linked explanation and recommended action for an assessment finding.
 
@@ -277,7 +285,7 @@ flowchart TD
     P9 --> P11["P11 Provider / Scale Expansion"]
 ~~~
 
-P4 AI explanation is **optional** and never a dependency for local, QA, performance or production-feedback stages. P7 (import k6 results) can be prioritized soon after P2 because it needs **no managed load generator**. P8 requires separately verified target/runner safety; P3 real-repository execution approval is not bypassed by test infrastructure.
+AI is a core product capability introduced in P0/P1; inference is optional at runtime, and deterministic checks remain functional without model access. P7 (import k6 results) can be prioritized soon after P2 because it needs **no managed load generator**. P8 requires separately verified target/runner safety; P3 real-repository execution approval is not bypassed by test infrastructure.
 
 P0 deployment is intentionally useful without a scanner, model or extensive policy framework. All subsequent releases **add** capability without requiring a full platform rewrite.
 

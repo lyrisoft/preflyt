@@ -15,7 +15,7 @@
 
 **Preflyt is a self-hosted, AI-native Shift Left engineering platform that helps organizations find and prevent security vulnerabilities, software defects, infrastructure misconfigurations, reliability failures, and other engineering risks earlier in the software development lifecycle (SDLC).**
 
-Preflyt does not replace Git hosting, CI/CD or software scanners. It combines engineering standards, deterministic technical checks, imported CI evidence, optional AI assessment and source-control feedback into a **continuous engineering assessment and quality-gate system**.
+Preflyt does not replace Git hosting, CI/CD or software scanners. It combines engineering standards, deterministic technical checks, imported CI evidence, AI-assisted engineering assessment and source-control feedback into a **continuous engineering assessment and quality-gate system**.
 
 Preflyt has three core engines:
 
@@ -201,6 +201,10 @@ Preflyt shall expose **Governance → Quality Gates → GitHub Rulesets** with S
 
 **Ruleset Insights (P2.R5):** each GitHub ruleset detail includes an Insights tab with source-backed evaluation counts, trend charts, failures by rule/repository, bypass events where attributable, filtered history and GitHub evidence links. Preflyt quality-gate outcomes are displayed separately. Attribution must use the detailed Rule Suites API's matching ruleset source ID, not suite-level results or fabricated totals. See [Ruleset Management](product/github-ruleset-management.md).
 
+### Core multi-provider AI and stage routing
+
+P0: administrators configure multiple providers, encrypted/write-only keys, hosted/local endpoints, connectivity tests, per-stage primary/fallback routes, egress restrictions and budgets. P1: evidence-linked AI interpretation of imported CI failures via PR/CI route. P4: advanced cross-domain intelligence. These requirements are additive and do not retroactively invalidate completed P0 development. Model failure never changes deterministic gate results.
+
 ## 6. Supported SDLC stages and user journeys
 
 ### 6.1 Lifecycle coverage
@@ -275,7 +279,7 @@ flowchart TD
 
 No phase is considered delivered merely because a database, frontend shell, queue, infrastructure module or model gateway exists. **Every phase must ship a complete, deployable, user-visible vertical slice**, with its own installation/upgrade path, auth/security and safe-execution controls, end-to-end success/failure tests, observability, configuration, supported limitations and tested rollback. Earlier phases must keep working after later upgrades.
 
-The sequence of independently useful releases is: **P0 Repository Posture → P1 CI Evidence → P2 Policy Gates → P3 Secure Native Validation → P4 optional AI Explanations → P5 Developer CLI → P6 QA Readiness → P7 k6 Evidence/Gates → P8 Managed k6 Smoke/Load → P9 Advanced Performance → P10 Production Feedback → P11 Provider/Scale Extensions**.
+The sequence of independently useful releases is: **P0 Repository Posture → P1 CI Evidence → P2 Policy Gates → P3 Secure Native Validation → P4 Advanced AI Engineering Intelligence → P5 Developer CLI → P6 QA Readiness → P7 k6 Evidence/Gates → P8 Managed k6 Smoke/Load → P9 Advanced Performance → P10 Production Feedback → P11 Provider/Scale Extensions**.
 
 Implementation tasks, dependencies, release criteria and rollback gates for every slice are in [docs/roadmap/incremental-delivery.md](roadmap/incremental-delivery.md). Do not treat the umbrella MVP/V1 labels below as excuses to defer a usable outcome until all their components are implemented.
 
@@ -386,7 +390,9 @@ Use **M** for MVP, **V1** for next stage and **V2** for expansion. Every require
 | ID | Stage | Requirement | Acceptance |
 | --- | --- | --- | --- |
 | FR-030 | M | Provide evidence-linked optional AI explanation and triage of findings | Distinguishes observed from inferred and cites check/evidence |
-| FR-031 | M | Use approved model gateway with external frontier keys and/or local endpoints | Routes to configured model with scope, budgets and egress policy |
+| FR-031 | P0 | Configure multiple providers with encrypted write-only credentials and connectivity tests | Two providers can be independently configured and tested |
+| FR-031A | P0 | Define stage-specific primary/fallback models, data-egress policy and budgets | Routing preview and restrictions verified |
+| FR-031B | P1 | Explain imported CI failures through approved PR/CI model route | Evidence-linked response and recorded model; gates unchanged |
 | FR-032 | M | Never delegate deterministic gate decision, authorization or waiver to AI | Adversarial AI response cannot set PASS or change policy |
 | FR-033 | M | Work normally without any model/API key | Scans, policy and readiness operate when inference is disabled |
 | FR-034 | V1 | Provide optional specialized domain advisory analysis | No automatic code edits or Git PR writes implied |

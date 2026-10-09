@@ -168,6 +168,10 @@ Every increment must include a working end-to-end user workflow, named trigger a
 
 The GitHub PR pipeline begins with imported evidence and does not wait for a sandbox; P3 enables native execution only after the mandatory ADR-0002 isolation approval. The k6 pathway starts with imported reports and budgets before Preflyt performs any load testing. Production evidence is read-only and requires human approval before policies change.
 
+## Organization AI provider and stage routing
+
+Organizations configure multiple hosted/local providers, write-only encrypted credentials, stage-specific primary/fallback models, privacy/egress and cost limits. P0 delivers configuration; P1 first CI explanation; P4 advanced intelligence. Backend routing is tenant-scoped, audited and cannot bypass policy. No provider keys enter browsers or untrusted sandboxes. Model outages do not change gate outcomes.
+
 ## Acceptance criteria for this decision
 
 - [ ] A GitHub PR change is assessed against a versioned ruleset with exact revision-bound, evidence-backed quality gate.
