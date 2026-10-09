@@ -1,0 +1,398 @@
+import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts'
+import { chartAnimation, chartTooltipAnimation } from '@/lib/chart-motion'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { StatusBadge } from '@/components/status-badge'
+import { governanceRequest } from './governance-api'
+
+type Suite = {
+  id: number
+  actor: string
+  ref: string
+  sourceSha: string
+  pushedAt: string
+  suiteResult: string
+  rules: {
+    type: string
+    result: string
+    enforcement: string
+    details: string | null
+  }[]
+}
+type Insights = {
+  suites: Suite[]
+  hasMore: boolean
+  fetchedAt: string
+  scannedSuites: number
+  repositoryName: string
+  summary: {
+    ruleEvaluations: number
+    activePass: number
+    activeFail: number
+    evaluateFail: number
+    attributedBypass: number
+    suiteBypassUnattributed: number
+    failureTypes: { type: string; count: number }[]
+  }
+}
+const label = (text: string) =>
+  text.replace(/_/g, ' ').replace(/^./, (letter) => letter.toUpperCase())
+export function RulesetInsights({
+  repositoryId,
+  actorId,
+  rulesetId,
+}: {
+  repositoryId: string
+  actorId?: string
+  rulesetId: number
+}) {
+  const [page, setPage] = useState(1),
+    [period, setPeriod] = useState('week'),
+    [result, setResult] = useState('all'),
+    [ref, setRef] = useState(''),
+    [actor, setActor] = useState(''),
+    [filters, setFilters] = useState({ ref: '', actor: '' })
+  const query = useQuery({
+    queryKey: [
+      'ruleset-insights',
+      actorId,
+      repositoryId,
+      rulesetId,
+      page,
+      period,
+      result,
+      filters,
+    ],
+    queryFn: ({ signal }) =>
+      governanceRequest<Insights>(
+        `/github/repositories/${repositoryId}/rulesets/${rulesetId}/insights?${new URLSearchParams({ page: String(page), period, result, ...filters })}`,
+        undefined,
+        signal
+      ),
+    retry: false,
+  })
+  const data = query.isError ? undefined : query.data
+  return (
+    <div className='space-y-5'>
+      <div className='grid gap-3 sm:grid-cols-2'>
+        <div className='space-y-2'>
+          <Label htmlFor='insight-period'>Period</Label>
+          <Select
+            value={period}
+            onValueChange={(value) => {
+              setPeriod(value)
+              setPage(1)
+            }}
+          >
+            <SelectTrigger id='insight-period' className='w-full'>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {[
+                ['hour', 'Last hour'],
+                ['day', 'Last day'],
+                ['week', 'Last week'],
+                ['month', 'Last month'],
+              ].map(([value, text]) => (
+                <SelectItem key={value} value={value}>
+                  {text}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className='space-y-2'>
+          <Label htmlFor='insight-result'>Rule result</Label>
+          <Select
+            value={result}
+            onValueChange={(value) => {
+              setResult(value)
+              setPage(1)
+            }}
+          >
+            <SelectTrigger id='insight-result' className='w-full'>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {['all', 'pass', 'fail', 'bypass'].map((value) => (
+                <SelectItem key={value} value={value}>
+                  {label(value)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <form
+        className='flex flex-wrap items-end gap-3'
+        onSubmit={(event) => {
+          event.preventDefault()
+          setFilters({ ref: ref.trim(), actor: actor.trim() })
+          setPage(1)
+        }}
+      >
+        <div className='min-w-0 flex-1 space-y-2'>
+          <Label htmlFor='insight-ref'>Branch ref</Label>
+          <Input
+            id='insight-ref'
+            placeholder='refs/heads/main (optional)'
+            value={ref}
+            onChange={(event) => setRef(event.target.value)}
+          />
+        </div>
+        <div className='min-w-0 flex-1 space-y-2'>
+          <Label htmlFor='insight-actor'>GitHub username</Label>
+          <Input
+            id='insight-actor'
+            placeholder='All users'
+            value={actor}
+            onChange={(event) => setActor(event.target.value)}
+          />
+        </div>
+        <Button type='submit' variant='outline' disabled={query.isFetching}>
+          Apply
+        </Button>
+      </form>
+      {query.isPending && (
+        <p role='status' className='text-sm'>
+          Loading GitHub evaluations…
+        </p>
+      )}
+      {query.isError && (
+        <div role='alert' className='space-y-3'>
+          <p className='text-sm text-destructive'>{query.error.message}</p>
+          <Button variant='outline' onClick={() => void query.refetch()}>
+            Try again
+          </Button>
+        </div>
+      )}
+      {data && (
+        <>
+          <div className='flex flex-wrap justify-between gap-2 text-xs text-muted-foreground'>
+            <span>GitHub rule evaluations · This page</span>
+            <span>Fetched {new Date(data.fetchedAt).toLocaleString()}</span>
+          </div>
+          <div className='grid grid-cols-2 gap-3'>
+            {[
+              {
+                name: 'Active rules passed',
+                count: data.summary.activePass,
+                tone: 'success' as const,
+              },
+              {
+                name: 'Active rules failed',
+                count: data.summary.activeFail,
+                tone: 'error' as const,
+              },
+              {
+                name: 'Evaluate mode failures',
+                count: data.summary.evaluateFail,
+                tone: 'warning' as const,
+              },
+              {
+                name: 'Confirmed rule bypasses',
+                count: data.summary.attributedBypass,
+                tone: 'info' as const,
+              },
+            ].map((metric) => (
+              <div
+                key={metric.name}
+                className='space-y-2 rounded-xl border p-4'
+              >
+                <p className='text-xs text-muted-foreground'>{metric.name}</p>
+                <StatusBadge tone={metric.tone}>{metric.count}</StatusBadge>
+              </div>
+            ))}
+          </div>
+          {!!data.summary.failureTypes.length && (
+            <section className='space-y-3 rounded-xl border p-4'>
+              <h3 className='text-sm font-semibold'>
+                Failed active rules · This page
+              </h3>
+              <div
+                className='h-48'
+                role='img'
+                aria-label={data.summary.failureTypes
+                  .map((item) => `${label(item.type)}: ${item.count}`)
+                  .join(', ')}
+              >
+                <ResponsiveContainer width='100%' height='100%'>
+                  <BarChart
+                    data={data.summary.failureTypes.map((item) => ({
+                      ...item,
+                      name: label(item.type),
+                    }))}
+                    accessibilityLayer
+                  >
+                    <CartesianGrid vertical={false} stroke='var(--border)' />
+                    <XAxis
+                      dataKey='name'
+                      tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
+                    />
+                    <YAxis
+                      allowDecimals={false}
+                      tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
+                      width={28}
+                    />
+                    <Tooltip
+                      {...chartTooltipAnimation}
+                      contentStyle={{
+                        background: 'var(--popover)',
+                        borderColor: 'var(--border)',
+                        borderRadius: 10,
+                        color: 'var(--foreground)',
+                      }}
+                    />
+                    <Bar
+                      dataKey='count'
+                      fill='var(--danger)'
+                      radius={[4, 4, 0, 0]}
+                      {...chartAnimation}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </section>
+          )}
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Evaluation</TableHead>
+                <TableHead>Rule results</TableHead>
+                <TableHead>Evidence</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {data.suites.map((suite) => (
+                <TableRow key={suite.id}>
+                  <TableCell>
+                    <p className='text-sm font-medium'>{suite.actor}</p>
+                    <p className='text-xs break-all text-muted-foreground'>
+                      {suite.ref}
+                    </p>
+                    <p className='text-xs text-muted-foreground'>
+                      {new Date(suite.pushedAt).toLocaleString()}
+                    </p>
+                    {suite.suiteResult === 'bypass' && (
+                      <p className='mt-1 text-xs text-warning'>
+                        Suite bypass reported
+                      </p>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <div className='space-y-3'>
+                      {suite.rules.map((rule, index) => (
+                        <div key={index} className='space-y-1'>
+                          <div className='flex flex-wrap gap-2'>
+                            <StatusBadge
+                              tone={
+                                rule.result === 'pass'
+                                  ? 'success'
+                                  : rule.result === 'fail'
+                                    ? 'error'
+                                    : 'info'
+                              }
+                            >
+                              {label(rule.result)}
+                            </StatusBadge>
+                            <span className='text-xs'>
+                              {label(rule.type)} · {label(rule.enforcement)}
+                            </span>
+                          </div>
+                          {rule.details && (
+                            <p className='max-w-xs text-xs break-words text-muted-foreground'>
+                              {rule.details}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Button variant='ghost' size='sm' asChild>
+                      <a
+                        href={`https://github.com/${data.repositoryName}/commit/${suite.sourceSha}`}
+                        target='_blank'
+                        rel='noreferrer'
+                      >
+                        Commit {suite.sourceSha.slice(0, 7)}
+                      </a>
+                    </Button>
+                    <code className='block text-xs text-muted-foreground'>
+                      Suite {suite.id}
+                    </code>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+          {!data.suites.length && (
+            <p className='rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground'>
+              No matching evaluations on this page.
+            </p>
+          )}
+          <p className='text-xs text-muted-foreground'>
+            Counts cover {data.summary.ruleEvaluations} matching rule results in{' '}
+            {data.scannedSuites} GitHub suites on this page. Preflyt readiness
+            checks are shown separately in the Readiness check tab.
+          </p>
+          <div className='flex items-center justify-between border-t pt-4'>
+            <span className='text-xs text-muted-foreground'>Page {page}</span>
+            <div className='flex gap-2'>
+              <Button
+                size='sm'
+                variant='outline'
+                disabled={page === 1 || query.isFetching}
+                onClick={() => setPage(page - 1)}
+              >
+                Previous
+              </Button>
+              <Button
+                size='sm'
+                variant='outline'
+                disabled={!data.hasMore || page >= 1000 || query.isFetching}
+                onClick={() => setPage(page + 1)}
+              >
+                Next
+              </Button>
+              <Button
+                size='sm'
+                variant='outline'
+                disabled={query.isFetching}
+                onClick={() => void query.refetch()}
+              >
+                Refresh
+              </Button>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}

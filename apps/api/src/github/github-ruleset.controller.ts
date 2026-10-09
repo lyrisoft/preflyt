@@ -34,6 +34,11 @@ export class GitHubRulesetController {
       page === undefined ? 1 : Number(page),
     )
   }
+  @Get(':rulesetId/insights')
+  @Header('Cache-Control','no-store')
+  insights(@Req() req:Request & {preflytSession:AuthenticatedSession},@Param('repositoryId') repositoryId:string,@Param('rulesetId') id:string,@Query('page') page?:string,@Query('period') period?:string,@Query('ref') ref?:string,@Query('actor') actor?:string,@Query('result') result?:string) {
+    return this.rulesets.insights(req.preflytSession,repositoryId,Number(id),{page:page===undefined?1:Number(page),period:period??'week',ref,actor,result})
+  }
   @Get(':rulesetId')
   @Header('Cache-Control', 'no-store')
   detail(

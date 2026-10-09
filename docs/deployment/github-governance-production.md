@@ -129,3 +129,16 @@ Retain audit/publication/attestation records and the additive database schema du
 The authorized local test may share assessment App `4585551`, installed in lyrisoft as `153542598`, only for `lyrisoft/preflyt-p2-acceptance`, with explicit `NODE_ENV=development` and `GITHUB_GOVERNANCE_LOCAL_ACCEPTANCE=true`. The governance configuration helper rejects this exception in production and for other repositories. The deployment endpoint checks this restriction before opening governance credentials.
 
 Do not copy these test identifiers, keys or the exception flag into production. Do not change a production deployment to development mode to bypass separation. A later production governance App must have a distinct App ID, key and verified organization installation.
+
+
+## GitHub Team private repositories
+
+GitHub-native private/internal artifact attestations require Enterprise Cloud.
+The current verifier has no organization-key/KMS proof adapter. A future adapter
+could support private Team repositories while keeping reports and keys private,
+but must verify exact report, repository, commit, workflow and run-attempt identity
+and keep signing authority separate from untrusted PR code. Until implemented and
+accepted, this is a deployment limitation, not a reason to turn off proof checks.
+See the [private repository proof alternatives](../operations/github-check-publication.md#private-repositories-on-github-team).
+
+Ruleset Insights additionally needs repository Administration: read on the assessment App. Insights uses a repository-limited read-only token and never uses the governance write connection.

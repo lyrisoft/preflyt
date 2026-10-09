@@ -39,7 +39,7 @@ Configure the existing offline attestation verifier and allowlist the signer wor
 
 Production requires distinct `GITHUB_GOVERNANCE_APP_ID` and `GITHUB_GOVERNANCE_PRIVATE_KEY`, plus its `GITHUB_GOVERNANCE_INSTALLATION_ID`. The explicit `GITHUB_GOVERNANCE_LOCAL_ACCEPTANCE=true` exception permits the assessment App only with `NODE_ENV=development`, exclusively for `lyrisoft/preflyt-p2-acceptance`. It is rejected for all other repositories and for production. This configuration does not itself activate a ruleset. The authorised local App is 4585551 and its lyrisoft installation is 153542598.
 
-GitHub Team supports native artifact attestations only for public repositories. The currently private acceptance repository cannot complete the signed-report test on that plan; changing its visibility requires explicit approval. Existing production repositories remain private and untouched. See [GitHub artifact attestation availability](https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations/use-artifact-attestations).
+GitHub Team supports native artifact attestations only for public repositories. The currently private acceptance repository cannot complete the signed-report test on that plan; it will remain private. Existing production repositories remain private and untouched. See [GitHub artifact attestation availability](https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations/use-artifact-attestations).
 
 ## Automatic checks and managed activation
 
@@ -52,3 +52,21 @@ In **Quality Gates → GitHub Rulesets → Deployments**, choose a saved draft, 
 Enable `GITHUB_RULESET_ACTIVATION_ENABLED=true` on the API and configure the separate governance App. Preflight requires current published policies for every target branch, fresh automatically verified passing checks bound to the assessment App, current PR impact, and no merge queue. Fork PRs are rejected. Activation creates a uniquely named organization ruleset targeted only at this repository; existing unmanaged protections are preserved. Legacy drafts need one explicit save to refresh canonical hashes.
 
 The deployment records desired JSON, preview/hash, proposer, approver, source App IDs, GitHub ruleset ID and read-back hash. Unknown creation outcomes recover by the same unique name before another POST. **Verify GitHub** compares the recorded definition with current GitHub state and reports drift. **Roll back** disables only this managed ruleset after checking its recorded observed hash. External changes are never blindly overwritten. Disabling automatic checks is rejected while managed enforcement remains active, unknown or drifted. Resolve or roll back protection first.
+
+
+### Private repositories on GitHub Team
+
+The current positive-execution verifier supports GitHub-native artifact attestations.
+Private/internal repositories need GitHub Enterprise Cloud for that native feature.
+This is a GitHub plan boundary, not an additional App permission. Ordinary Actions
+runs and artifact uploads do not replace cryptographically verified provenance.
+
+An alternative is organization-managed report signing, for example Cosign with a
+protected KMS key, plus a Preflyt verifier for that proof format. It would need to
+verify the original report digest, repository ID, exact commit, workflow identity,
+run ID/attempt and reviewed signer key; isolate signing from untrusted PR code;
+support key rotation/revocation; and reject unsigned, replayed or mismatched proofs.
+**That alternative is not implemented.** Do not disable provenance verification
+or treat ordinary artifact uploads as passing evidence to work around the plan.
+The local acceptance repository remains private; signed positive acceptance is
+pending until a supported private proof path is available.

@@ -30,6 +30,15 @@ export class GitHubRulesetService {
     await this.access.requireRepository(session, repositoryId, 'policy.read')
     return result
   }
+  async insights(session:AuthenticatedSession,repositoryId:string,id:number,options:{page:number;period:string;ref?:string;actor?:string;result?:string}) {
+    if(!Number.isSafeInteger(id)||id<1||!Number.isInteger(options.page)||options.page<1||options.page>1000||!['hour','day','week','month'].includes(options.period)||!['all','pass','fail','bypass'].includes(options.result??'all')|| (options.ref && (options.ref.length>255 || /[~*?\[\x00-\x20]/.test(options.ref))) || (options.actor && !/^[a-zA-Z0-9-]{1,39}$/.test(options.actor)))throw new BadRequestException('Invalid Insights filters')
+    const repository=await this.access.requireRepository(session,repositoryId,'policy.read')
+    // Verify this ruleset is actually accessible from the selected repository.
+    await this.provider.getRepositoryRuleset(repository.installationId,repository.githubId,id)
+    const result=await this.provider.readRulesetInsights(repository.installationId,repository.githubId,id,options)
+    await this.access.requireRepository(session,repositoryId,'policy.read')
+    return result
+  }
   async detail(
     session: AuthenticatedSession,
     repositoryId: string,

@@ -1,3 +1,4 @@
+import { attributedSuite, summarizeRulesetSuites, type RulesetSuite } from './ruleset-insights.js'
 import { rulesetSummary, rulesetDetail } from './github-ruleset.js'
 import { normalizeGitHubEvent } from '../github-events/github-event.js'
 import { createHash } from 'node:crypto'
@@ -72,7 +73,7 @@ export class GitHubProviderService {
   private async installationToken(
     installationId: bigint,
     repositoryId?: bigint,
-    permission: 'contents' | 'pull_requests' | 'metadata' | 'actions' = 'contents',
+    permission: 'contents' | 'pull_requests' | 'metadata' | 'actions' | 'administration' = 'contents',
   ) {
     const installation = await this.prisma?.gitHubInstallation.findUnique({
       where: { id: installationId },
@@ -857,6 +858,30 @@ export class GitHubProviderService {
     throw new ServiceUnavailableException('Protection inventory exceeds the safe activation limit')
   }
 
+  async readRulesetInsights(installationId:bigint,repositoryId:bigint,rulesetId:number,options:{page:number;period:string;ref?:string;actor?:string;result?:string}) {
+    const installation=await this.verifyInstallation(installationId)
+    if(!['read','write'].includes(installation.permissions.administration))throw new ForbiddenException('Ruleset Insights needs repository Administration: read permission on the assessment App')
+    const reader=await this.openRepository(installationId,repositoryId,'administration')
+    const root=`/repos/${encodeURIComponent(reader.metadata.owner.login)}/${encodeURIComponent(reader.metadata.name)}/rulesets/rule-suites`
+    const params=new URLSearchParams({per_page:'20',page:String(options.page),time_period:options.period,rule_suite_result:'all',evaluate_status:'all'})
+    if(options.ref)params.set('ref',options.ref)
+    if(options.actor)params.set('actor_name',options.actor)
+    const rows=await reader.request<Record<string,any>[]>(`${root}?${params}`)
+    if(!Array.isArray(rows)||rows.length>20||new Set(rows.map(row=>row.id)).size!==rows.length)throw new ServiceUnavailableException('Invalid GitHub evaluation history')
+    const suites:RulesetSuite[]=[]
+    for(const row of rows) {
+      if(!Number.isSafeInteger(row.id)||row.id<1||String(row.repository_id)!==repositoryId.toString())throw new ServiceUnavailableException('GitHub evaluation scope changed')
+      const detail=await reader.request<Record<string,any>>(`${root}/${row.id}`)
+      if(detail.id!==row.id)throw new ServiceUnavailableException('GitHub evaluation identity changed')
+      const match=attributedSuite(detail,repositoryId.toString(),rulesetId)
+      if(match) {
+        const rules=options.result&&options.result!=='all'?match.rules.filter(rule=>rule.result===options.result):match.rules
+        if(rules.length)suites.push({...match,rules})
+      }
+    }
+    return {source:'GITHUB_RULE_SUITES',scope:'CURRENT_GITHUB_PAGE',counting:'MATCHED_RULE_OCCURRENCES',page:options.page,period:options.period,hasMore:rows.length===20&&options.page<1000,scannedSuites:rows.length,suites,summary:summarizeRulesetSuites(suites),fetchedAt:new Date().toISOString(),repositoryName:reader.metadata.full_name,rulesetId}
+  }
+
   async verifyReadinessBranch(installationId: bigint, repositoryId: bigint, branch: string) {
     if(!validProfileBranch(branch))throw new BadRequestException('Invalid branch')
     const reader=await this.openRepository(installationId,repositoryId,'contents')
@@ -991,7 +1016,7 @@ export class GitHubProviderService {
   private async openRepository(
     installationId: bigint,
     repositoryId: bigint,
-    permission: 'contents' | 'pull_requests' | 'metadata' | 'actions' = 'contents',
+    permission: 'contents' | 'pull_requests' | 'metadata' | 'actions' | 'administration' = 'contents',
   ) {
     try {
       await this.verifyInstallation(installationId)

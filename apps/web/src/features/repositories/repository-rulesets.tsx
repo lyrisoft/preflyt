@@ -30,6 +30,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { StatusBadge } from '@/components/status-badge'
 import { RulesetDeployments } from './ruleset-deployments'
 import { RulesetDrafts } from './ruleset-drafts'
+import { RulesetInsights } from './ruleset-insights'
 
 type Summary = {
   id: number
@@ -92,6 +93,7 @@ function RulesetDrawer({
   id: number | null
   onClose: () => void
 }) {
+  const [view, setView] = useState('configuration')
   const detail = useQuery({
     queryKey: ['github-ruleset', actorId, repositoryId, id],
     queryFn: ({ signal }) =>
@@ -103,10 +105,10 @@ function RulesetDrawer({
     staleTime: 60_000,
     retry: false,
   })
-  const ruleset = detail.data?.ruleset
+  const ruleset = detail.isError ? undefined : detail.data?.ruleset
   return (
     <Sheet open={id !== null} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent className='w-full gap-0 sm:max-w-xl'>
+      <SheetContent className='w-full gap-0 sm:max-w-3xl'>
         <SheetHeader className='border-b p-6'>
           <SheetTitle>{ruleset?.name ?? 'GitHub ruleset'}</SheetTitle>
           <SheetDescription>
@@ -114,8 +116,23 @@ function RulesetDrawer({
           </SheetDescription>
         </SheetHeader>
         <div className='flex-1 space-y-6 overflow-y-auto p-6'>
-          {detail.isPending && <Skeleton className='h-48' />}
-          {detail.isError && (
+          <Tabs value={view} onValueChange={setView}>
+            <TabsList>
+              <TabsTrigger value='configuration'>Configuration</TabsTrigger>
+              <TabsTrigger value='insights'>Insights</TabsTrigger>
+            </TabsList>
+          </Tabs>
+          {view === 'insights' && id !== null && (
+            <RulesetInsights
+              repositoryId={repositoryId}
+              actorId={actorId}
+              rulesetId={id}
+            />
+          )}
+          {view === 'configuration' && detail.isPending && (
+            <Skeleton className='h-48' />
+          )}
+          {view === 'configuration' && detail.isError && (
             <div role='alert' className='space-y-3'>
               <p className='text-sm'>{detail.error.message}</p>
               <Button
@@ -127,7 +144,7 @@ function RulesetDrawer({
               </Button>
             </div>
           )}
-          {ruleset && (
+          {view === 'configuration' && !detail.isError && ruleset && (
             <>
               <div className='flex flex-wrap items-center justify-between gap-3'>
                 <StatusBadge tone={tone[ruleset.enforcement]}>
@@ -422,6 +439,7 @@ export function RepositoryRulesets({
         )}
       </TabsContent>
       <RulesetDrawer
+        key={selected ?? 'none'}
         repositoryId={repositoryId}
         actorId={actorId}
         id={selected}
