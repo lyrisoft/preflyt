@@ -134,7 +134,7 @@ const help = [
   {
     title: 'Review skills',
     content:
-      'Create a versioned skill or start from a first-party template. Review its instructions, source and license, then approve and enable it. Changes require a new version. Skills run only against their assigned stage and repository scope, with up to three skills per review. Model output is advisory and never changes deterministic checks. Third-party packages and scripts are not automatically imported or executed.',
+      'Create a versioned skill or start from a first-party template. Review its instructions, source and license, then approve and enable it. Changes require a new version. Add an AI check in Engineering Standards and assign this approved skill version to it. The check selects its review stages; up to three assigned checks can run per review. Model output is advisory and never changes deterministic checks. Third-party packages and scripts are not automatically imported or executed.',
   },
   {
     title: 'Current availability',
@@ -722,7 +722,10 @@ function ProviderForm({
             <select
               className={selectClass}
               value={locality}
-              onChange={(e) => setLocality(e.target.value)}
+              onChange={(e) => {
+                setLocality(e.target.value)
+                setRequiresKey(e.target.value !== 'local')
+              }}
             >
               <option value='hosted'>Hosted provider</option>
               <option value='local'>Self-hosted model</option>

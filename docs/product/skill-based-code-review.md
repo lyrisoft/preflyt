@@ -6,7 +6,11 @@
 
 ## Implemented first increment
 
-Intelligence → Skills supports organization-scoped drafts, immutable integer versions and content digests, reviewed approval, enable/disable/retire, stage/repository assignments and pagination. Repository assessment details expose explicit multi-skill evidence review using approved model routing, estimated daily budget reservations, cancellation and validated inferred suggestions. First-party evidence-review templates are included; candidate third-party skills are not imported. No source or PR diff is sent. See [setup, permissions and exact limits](../operations/review-skills.md). The semantic manifests, changed-line mapping, automatic dispatch and GitHub feedback below remain future requirements.
+Intelligence → Skills supports organization-scoped drafts, immutable integer versions and content digests, reviewed approval, enable/disable/retire, repository scope and pagination. Repository assessment details expose explicit AI-check evidence review using approved model routing, estimated daily budget reservations, cancellation and validated inferred suggestions. First-party evidence-review templates are included; candidate third-party skills are not imported. No source or PR diff is sent. See [setup, permissions and exact limits](../operations/review-skills.md). The semantic manifests, changed-line mapping, automatic dispatch and GitHub feedback below remain future requirements.
+
+## Check-to-skill assignment
+
+Each advisory AI check in an organization engineering standard has a name, review stages and a pinned approved skill ID/version/digest. Skill instructions explain how to perform that check; SDLC stages decide when it is applicable. Standard adoption freezes the assignment, policies include it in their reviewed definition, and assessments run only those saved assignments. A missing, disabled or revoked skill produces an unavailable review, not passing evidence. The catalogue stays reusable; skill versions do not independently schedule checks.
 
 ## Decision
 

@@ -33,6 +33,17 @@ const skill = {
   stages: ['repository'],
   repositories: ['123'],
 }
+const check = {
+  id: 'check',
+  title: 'Evidence review',
+  skillId: 'skill',
+  skillVersion: 1,
+  skillDigest: 'a'.repeat(64),
+  kind: 'AI_REVIEW' as const,
+  mode: 'ADVISORY' as const,
+  stages: ['repository' as const],
+  available: true,
+}
 const review = {
   id: 'review',
   state: 'SUCCEEDED',
@@ -40,10 +51,11 @@ const review = {
   reservedCents: 2,
   latencyMs: 1000,
   skills: [skill],
+  checks: [check],
   result: {
     findings: [
       {
-        skillId: 'skill',
+        checkId: 'check',
         summary: 'Missing secret scan evidence',
         recommendation: 'Run the configured check',
         evidenceRefs: ['check:0'],
@@ -57,7 +69,7 @@ const review = {
   },
 }
 beforeEach(() => {
-  state.reviews = { data: { enabled: true, reviews: [] } }
+  state.reviews = { data: { enabled: true, reviews: [], checks: [check] } }
   state.skills = [
     skill,
     { ...skill, id: 'other', name: 'Other repository', repositories: ['999'] },
@@ -80,11 +92,13 @@ it('runs only selected skills assigned to the assessment scope', async () => {
   await expect
     .element(view.getByText('Other repository · v1'))
     .not.toBeInTheDocument()
-  await view.getByRole('checkbox', { name: 'Evidence review · v1' }).click()
+  await view
+    .getByRole('checkbox', { name: 'Evidence review · skill v1' })
+    .click()
   await view.getByRole('button', { name: 'Run review' }).click()
   expect(state.save).toHaveBeenCalledWith(
     '/github/repositories/123/ai-reviews',
-    { assessmentId: 'assessment', skillIds: ['skill'] }
+    { assessmentId: 'assessment', checkIds: ['check'] }
   )
 })
 it('labels inferred suggestions and maps evidence references to known checks', async () => {
@@ -148,7 +162,7 @@ it('paginates history and hides review requests from viewers', async () => {
       reviews: Array.from({ length: 6 }, (_, i) => ({
         ...review,
         id: `r${i}`,
-        skills: [{ ...skill, name: `Skill ${i}` }],
+        checks: [{ ...check, title: `Skill ${i}` }],
       })),
     },
   }
@@ -164,9 +178,9 @@ it('paginates history and hides review requests from viewers', async () => {
     .not.toBeInTheDocument()
   await view.getByRole('button', { name: 'Next', exact: true }).click()
   await expect
-    .element(view.getByText('Skill 5 v1', { exact: true }))
+    .element(view.getByText('Skill 5 · skill v1', { exact: true }))
     .toBeVisible()
   await expect
-    .element(view.getByText('Skill 0 v1', { exact: true }))
+    .element(view.getByText('Skill 0 · skill v1', { exact: true }))
     .not.toBeInTheDocument()
 })

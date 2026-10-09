@@ -163,3 +163,8 @@ Each save creates an append-only version with a stable standard ID, definition d
 This authoring slice composes the existing supported check contracts. It supports editing the standard's name, description and included checks; it does not introduce arbitrary executable rules, scanner commands, capability claims, thresholds or automatic enforcement. Adding a new check type still requires a tested evidence adapter. Unavailable or missing required checks remain incomplete. Existing Default/Recommended/Strict requirements apply to each selected check.
 
 The server scopes all library versions to the active organization, validates check IDs, limits stored versions, rechecks mutation authority in a serializable transaction and records changes atomically with audit. Cross-tenant adoption, stale edits and altered definitions are rejected. Deploy migration `20261010003000_organization_standards` and regenerate Prisma. No worker or GitHub workflow changes are required.
+
+
+### Advisory AI checks (2026-10-09)
+
+Owners/Admins can add named AI checks to organization standard versions using approved enabled skills. The server pins skill ID, integer version and content digest; check stages select repository/PR applicability. Definitions are frozen by explicit repository adoption and policy review. AI checks remain advisory and outside required deterministic gate rules. The current runtime reviews saved check evidence only. The standard editor is a wide responsive dialog with details on the left and separate filtered/paginated deterministic and AI check tabs on the right. No new analyzer, shell command or AI waiver can be authored through this form. See [review skills](../operations/review-skills.md).

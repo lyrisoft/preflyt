@@ -69,8 +69,8 @@ class ReviewDto {
   @ArrayMinSize(1)
   @ArrayMaxSize(3)
   @ArrayUnique()
-  @IsUUID(undefined, { each: true })
-  skillIds!: string[];
+  @Matches(/^ai-review-[a-f0-9-]{36}$/, { each: true })
+  checkIds!: string[];
 }
 @Controller("ai/skills")
 @UseGuards(SessionGuard)
@@ -131,7 +131,7 @@ export class SkillReviewController {
       req.preflytSession,
       repo,
       body.assessmentId,
-      body.skillIds,
+      body.checkIds,
     );
   }
   @Post(":id/cancel") @Header("Cache-Control", "no-store") cancel(

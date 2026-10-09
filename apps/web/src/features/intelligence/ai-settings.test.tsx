@@ -64,7 +64,9 @@ it('keeps connections and routing separate without promising inference', () => {
   expect(html).toContain('Model routing')
   expect(html).toContain('Advisory reviews are disabled for this deployment')
   state.query = { data: { ...configuration(), executionAvailable: true } }
-  expect(renderToStaticMarkup(<AiSettingsPage />)).toContain('advisory assessment reviews are available')
+  expect(renderToStaticMarkup(<AiSettingsPage />)).toContain(
+    'advisory assessment reviews are available'
+  )
   expect(html).not.toContain('Explain findings')
 })
 it('shows read-only skills without model management to developers', () => {
@@ -188,9 +190,11 @@ it('lets an admin approve a self-hosted model without a deployment allowlist or 
     .fill('http://model-server:4000/v1')
   await view.getByRole('combobox', { name: 'Hosting' }).selectOptions('local')
   await view.getByRole('textbox', { name: 'Model name' }).fill('internal-model')
-  await view
-    .getByRole('checkbox', { name: 'Provider requires an API key' })
-    .click()
+  await expect
+    .element(
+      view.getByRole('checkbox', { name: 'Provider requires an API key' })
+    )
+    .not.toBeChecked()
   await view.getByRole('button', { name: 'Save model' }).click()
   expect(state.save).toHaveBeenCalledWith(
     '/ai/configuration/providers',

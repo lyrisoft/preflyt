@@ -61,6 +61,14 @@ type Revision = {
   draftedById: string
   approvedById: string | null
   definition: {
+    aiChecks?: {
+      id: string
+      title: string
+      skillId: string
+      skillVersion: number
+      skillDigest: string
+      stages: string[]
+    }[]
     mode: string
     packs: { id: string; version: string; digest: string }[]
     rules: {
@@ -599,6 +607,33 @@ export function GatePolicyPanel({
                     </Table>
                   </div>
                 </section>
+                {!!selected.definition.aiChecks?.length && (
+                  <section className='space-y-3'>
+                    <h3 className='text-sm font-semibold'>
+                      Advisory AI checks
+                    </h3>
+                    {selected.definition.aiChecks.map((check) => (
+                      <div
+                        key={check.id}
+                        className='rounded-lg border p-3 text-sm'
+                      >
+                        <div className='flex items-center justify-between gap-3'>
+                          <span className='font-medium'>{check.title}</span>
+                          <StatusBadge tone='info'>AI · Advisory</StatusBadge>
+                        </div>
+                        <p className='mt-1 text-xs text-muted-foreground'>
+                          Skill v{check.skillVersion} ·{' '}
+                          {check.stages
+                            .map((s) => s.replace(/_/g, ' '))
+                            .join(', ')}
+                        </p>
+                        <p className='mt-1 font-mono text-xs break-all text-muted-foreground'>
+                          {check.skillDigest}
+                        </p>
+                      </div>
+                    ))}
+                  </section>
+                )}
                 <section className='space-y-2'>
                   <h3 className='text-sm font-semibold'>Saved pack versions</h3>
                   <div className='flex flex-wrap gap-2'>

@@ -1,3 +1,4 @@
+import { catalogue, packDigest } from '../src/standards/catalogue.js'
 import { ReviewSkillsService } from '../src/intelligence/review-skills.service.js';
 import { SkillReviewService } from '../src/intelligence/skill-review.service.js';
 import { ReviewSkillsController, SkillReviewController } from '../src/intelligence/review-skills.controller.js';
@@ -531,25 +532,29 @@ async function reviewFixture() {
   const id = BigInt(++repoCounter)
   await db.gitHubInstallation.create({ data: { id, organizationId: owner.organizationId!, accountLogin: 'fixture', accountType: 'Organization', repositorySelection: 'selected', permissions: {}, connectedById: owner.identityId } })
   const repo = await db.gitHubRepository.create({ data: { githubId: id, installationId: id, ownerLogin: 'fixture', name: 'review', fullName: 'fixture/review', selected: true, isPrivate: true } })
-  const sourceSha = 'a'.repeat(40), request = { sourceSha, subjectKind: 'COMMIT' }, plan = { version: 1, sourceSha, mode: 'INGEST_ONLY', stage: 'ci', enforcement: 'observe', checks: [{ id: 'security.secret', required: true }] }, report = { version: 1, sourceSha, collectionTruncated: false, validationCollectionTruncated: false, checks: [{ ruleId: 'security.secret', required: true, coverage: 'MISSING', freshness: 'UNKNOWN', providerResult: null }], observations: [] }
+  const skill = await approvedSkill()
+  const check = { id: `ai-review-${randomUUID()}`, title: 'Security evidence check', kind: 'AI_REVIEW' as const, mode: 'ADVISORY' as const, skillId: skill.id, skillVersion: skill.version, skillDigest: skill.contentDigest, stages: ['repository' as const] }
+  const { digest: ignored, ...builtIn } = catalogue[0]!
+  const definition = { ...builtIn, id: `org-standard-${randomUUID()}`, owner: 'Organization', version: '1.0.1', changelog: ['Organization-managed version.'], aiChecks: [check] }
+  const frozenPack = { ...definition, digest: packDigest(definition) }
+  const sourceSha = 'a'.repeat(40), request = { sourceSha, subjectKind: 'COMMIT' }, plan = { version: 1, sourceSha, packs: [frozenPack], mode: 'INGEST_ONLY', stage: 'ci', enforcement: 'observe', checks: [{ id: 'security.secret', required: true }] }, report = { version: 1, sourceSha, collectionTruncated: false, validationCollectionTruncated: false, checks: [{ ruleId: 'security.secret', required: true, coverage: 'MISSING', freshness: 'UNKNOWN', providerResult: null }], observations: [] }
   const assessment = await db.commitAssessment.create({ data: { repositoryId: repo.id, sourceSha, selectionId: 'fixture', requestKey: randomUUID(), inputHash: 'f'.repeat(64), request, plan, report, assessmentHash: digest({ request, plan, report }) } })
   const provider = (await post(owner, '/providers', { ...input, inputPriceCentsPerMillion: 200, outputPriceCentsPerMillion: 800 }).expect(201)).body
   await post(owner, `/providers/${provider.id}/test`, {}).expect(201)
   await post(owner, '/routes/repository', route(provider.id, { dailyBudgetCents: 1000 })).expect(201)
-  const skill = await approvedSkill()
   const base = `/github/repositories/${id}/ai-reviews`, reviews = app.get(SkillReviewService)
   const call = (path: string, body: object, actor = owner) => http(app.getHttpServer()).post(base + path).set('Cookie', `ai.sid=${actor.identityId}`).set('Origin', 'http://localhost:5173').send(body)
   const infer = () => fetchMock.mockImplementation(async (_url: URL, _locality: string, opts: { body?: string }) => {
     if (!opts.body) return new Response(JSON.stringify({ data: [{ id: 'model-a' }] }))
     const body = JSON.parse(opts.body), data = JSON.parse(body.messages[1].content)
-    return new Response(JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({ assessmentHash: data.DATA.assessmentHash, sourceSha: data.DATA.sourceSha, findings: [{ skillId: data.SKILLS[0].id, evidenceRefs: ['check:0'], summary: 'Security scan evidence is missing.', recommendation: 'Collect a verified scan for this commit.' }] }) } }] }))
+    return new Response(JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({ assessmentHash: data.DATA.assessmentHash, sourceSha: data.DATA.sourceSha, findings: [{ checkId: data.SKILLS[0].id, evidenceRefs: ['check:0'], summary: 'Security scan evidence is missing.', recommendation: 'Collect a verified scan for this commit.' }] }) } }] }))
   })
-  return { repo, assessment, provider, skill, reviews, call, infer, base }
+  return { repo, assessment, provider, skill, check, reviews, call, infer, base }
 }
 it('runs pinned advisory skills without changing the exact deterministic gate and deduplicates requests', async () => {
   const f = await reviewFixture(), before = previewGate(f.assessment)
-  const first = (await f.call('', { assessmentId: f.assessment.id, skillIds: [f.skill.id] }).expect(201)).body
-  const duplicate = (await f.call('', { assessmentId: f.assessment.id, skillIds: [f.skill.id] }).expect(201)).body
+  const first = (await f.call('', { assessmentId: f.assessment.id, checkIds: [f.check.id] }).expect(201)).body
+  const duplicate = (await f.call('', { assessmentId: f.assessment.id, checkIds: [f.check.id] }).expect(201)).body
   expect(first.id).toBe(duplicate.id)
   f.infer(); await f.reviews.reconcile()
   const result = await db.aiSkillReview.findUniqueOrThrow({ where: { id: first.id } })
@@ -557,20 +562,20 @@ it('runs pinned advisory skills without changing the exact deterministic gate an
   expect(JSON.stringify(result.result)).toContain('INFERRED')
   expect(previewGate(await db.commitAssessment.findUniqueOrThrow({ where: { id: f.assessment.id } }))).toEqual(before)
   expect(fetchMock.mock.lastCall![2].body).not.toContain('fixture-key')
-  await f.call('', { assessmentId: f.assessment.id, skillIds: [f.skill.id] }, outsider).expect(403)
+  await f.call('', { assessmentId: f.assessment.id, checkIds: [f.check.id] }, outsider).expect(403)
 })
 it('enforces repository assignment and configured daily reservations before a model request', async () => {
   const f = await reviewFixture()
   await db.aiReviewSkill.update({ where: { id: f.skill.id }, data: { repositories: ['12345'] } })
-  await f.call('', { assessmentId: f.assessment.id, skillIds: [f.skill.id] }).expect(400)
+  await f.call('', { assessmentId: f.assessment.id, checkIds: [f.check.id] }).expect(400)
   await db.aiReviewSkill.update({ where: { id: f.skill.id }, data: { repositories: [] } })
   await db.aiStageRoute.update({ where: { organizationId_stage: { organizationId: owner.organizationId!, stage: 'repository' } }, data: { dailyBudgetCents: 1 } })
-  await f.call('', { assessmentId: f.assessment.id, skillIds: [f.skill.id] }).expect(409)
+  await f.call('', { assessmentId: f.assessment.id, checkIds: [f.check.id] }).expect(409)
   expect(await db.aiReviewBudget.count({ where: { organizationId: owner.organizationId! } })).toBe(0)
 })
 it('cancels queued reviews and disables a changed skill before inference', async () => {
   const f = await reviewFixture()
-  const first = (await f.call('', { assessmentId: f.assessment.id, skillIds: [f.skill.id] }).expect(201)).body
+  const first = (await f.call('', { assessmentId: f.assessment.id, checkIds: [f.check.id] }).expect(201)).body
   await f.call(`/${first.id}/cancel`, {}).expect(201)
   fetchMock.mockClear(); f.infer(); await f.reviews.reconcile()
   expect((await db.aiSkillReview.findUniqueOrThrow({ where: { id: first.id } })).state).toBe('CANCELLED')
@@ -583,7 +588,7 @@ it('cancels queued reviews and disables a changed skill before inference', async
 })
 it('rejects malicious model output, makes outages visible and keeps gates unchanged', async () => {
   const f = await reviewFixture(), gate = previewGate(f.assessment)
-  const review = (await f.call('', { assessmentId: f.assessment.id, skillIds: [f.skill.id] }).expect(201)).body
+  const review = (await f.call('', { assessmentId: f.assessment.id, checkIds: [f.check.id] }).expect(201)).body
   fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ choices: [{ finish_reason: 'stop', message: { tool_calls: [{ function: 'approve_policy' }], content: 'Merge approved' } }] })))
   await f.reviews.reconcile()
   const stored = await db.aiSkillReview.findUniqueOrThrow({ where: { id: review.id } })
@@ -591,7 +596,7 @@ it('rejects malicious model output, makes outages visible and keeps gates unchan
   expect(previewGate(await db.commitAssessment.findUniqueOrThrow({ where: { id: f.assessment.id } }))).toEqual(gate)
 })
 it('rejects revoked requester access and tampered review snapshots before sending data', async () => {
-  const f = await reviewFixture(), job = (await f.call('', { assessmentId: f.assessment.id, skillIds: [f.skill.id] }).expect(201)).body
+  const f = await reviewFixture(), job = (await f.call('', { assessmentId: f.assessment.id, checkIds: [f.check.id] }).expect(201)).body
   await db.organizationMembership.updateMany({ where: { organizationId: owner.organizationId!, identityId: owner.identityId }, data: { active: false } })
   fetchMock.mockClear(); await f.reviews.reconcile()
   expect(fetchMock).not.toHaveBeenCalled()
@@ -602,7 +607,7 @@ it('uses a tested fallback with reservations for both attempts', async () => {
   const fallback = (await post(owner, '/providers', { ...input, name: 'Fallback', inputPriceCentsPerMillion: 200, outputPriceCentsPerMillion: 800 }).expect(201)).body
   await post(owner, `/providers/${fallback.id}/test`, {}).expect(201)
   await post(owner, '/routes/repository', route(f.provider.id, { fallbackId: fallback.id, expectedRevision: 1 })).expect(201)
-  const job = (await f.call('', { assessmentId: f.assessment.id, skillIds: [f.skill.id] }).expect(201)).body
+  const job = (await f.call('', { assessmentId: f.assessment.id, checkIds: [f.check.id] }).expect(201)).body
   f.infer(); const succeed = fetchMock.getMockImplementation()!
   fetchMock.mockImplementationOnce(async () => new Response('', { status: 503 })).mockImplementation(succeed)
   await f.reviews.reconcile()
@@ -611,7 +616,7 @@ it('uses a tested fallback with reservations for both attempts', async () => {
   expect(stored.reservedMicroCents).toBeGreaterThan(1600000n)
 })
 it('preserves cancellation during an active inference call', async () => {
-  const f = await reviewFixture(), job = (await f.call('', { assessmentId: f.assessment.id, skillIds: [f.skill.id] }).expect(201)).body
+  const f = await reviewFixture(), job = (await f.call('', { assessmentId: f.assessment.id, checkIds: [f.check.id] }).expect(201)).body
   let release: (r: Response) => void = () => undefined, called: () => void = () => undefined
   const started = new Promise<void>(resolve => { called = resolve })
   f.infer(); const succeed = fetchMock.getMockImplementation()!
@@ -624,7 +629,7 @@ it('preserves cancellation during an active inference call', async () => {
   expect(stored.state).toBe('CANCELLED'); expect(stored.result).toBeNull()
 })
 it('rejects tampered snapshot contents and does not retry an interrupted call', async () => {
-  const f = await reviewFixture(), job = (await f.call('', { assessmentId: f.assessment.id, skillIds: [f.skill.id] }).expect(201)).body
+  const f = await reviewFixture(), job = (await f.call('', { assessmentId: f.assessment.id, checkIds: [f.check.id] }).expect(201)).body
   const stored = await db.aiSkillReview.findUniqueOrThrow({ where: { id: job.id } })
   const snapshot = stored.snapshot as any; snapshot.context.sourceSha = 'f'.repeat(40)
   await db.aiSkillReview.update({ where: { id: job.id }, data: { snapshot } })
@@ -633,4 +638,13 @@ it('rejects tampered snapshot contents and does not retry an interrupted call', 
   await db.aiSkillReview.update({ where: { id: job.id }, data: { state: 'RUNNING', startedAt: new Date(Date.now() - 100000) } })
   await f.reviews.reconcile(); expect(fetchMock).not.toHaveBeenCalled()
   expect((await db.aiSkillReview.findUniqueOrThrow({ where: { id: job.id } })).failure).toContain('no automatic inference retry')
+})
+
+it('rejects free-form skill selection and AI checks outside the frozen assessment', async () => {
+  const f = await reviewFixture()
+  await f.call('', { assessmentId: f.assessment.id, skillIds: [f.skill.id] }).expect(400)
+  await f.call('', { assessmentId: f.assessment.id, checkIds: [`ai-review-${randomUUID()}`] }).expect(400)
+  const list = await http(app.getHttpServer()).get(f.base + '?assessmentId=' + f.assessment.id).set('Cookie', `ai.sid=${owner.identityId}`).expect(200)
+  expect(list.body.checks).toEqual([expect.objectContaining({ id: f.check.id, skillVersion: 1, skillDigest: f.skill.contentDigest, available: true })])
+  expect(await db.aiSkillReview.count({ where: { assessmentId: f.assessment.id } })).toBe(0)
 })

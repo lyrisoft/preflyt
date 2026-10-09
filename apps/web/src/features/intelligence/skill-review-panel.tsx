@@ -4,8 +4,8 @@ import { Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { StatusBadge } from '@/components/status-badge'
 import { governanceRequest } from '../repositories/governance-api'
+import type { AiCheck } from '../repositories/repository-queries'
 import { useNavigationSession } from '../workspace/navigation-session'
-import type { ReviewSkill } from './skills-catalogue'
 
 type Review = {
   id: string
@@ -13,10 +13,11 @@ type Review = {
   failure: string | null
   reservedCents: number
   latencyMs: number | null
+  checks?: AiCheck[]
   skills: { id: string; name: string; version: number; digest: string }[]
   result?: {
     findings: {
-      skillId: string
+      checkId: string
       summary: string
       recommendation: string
       evidenceRefs: string[]
@@ -50,7 +51,11 @@ export function SkillReviewPanel({
   const query = useQuery({
     queryKey: key,
     queryFn: ({ signal }) =>
-      governanceRequest<{ enabled: boolean; reviews: Review[] }>(
+      governanceRequest<{
+        enabled: boolean
+        reviews: Review[]
+        checks: (AiCheck & { available: boolean })[]
+      }>(
         `/github/repositories/${repositoryId}/ai-reviews?assessmentId=${encodeURIComponent(assessmentId)}`,
         undefined,
         signal
@@ -61,29 +66,13 @@ export function SkillReviewPanel({
         ? 2000
         : false,
   })
-  const skills = useQuery({
-    queryKey: ['review-skills', ...scope],
-    queryFn: ({ signal }) =>
-      governanceRequest<{ skills: ReviewSkill[] }>(
-        '/ai/skills',
-        undefined,
-        signal
-      ),
-    retry: false,
-  })
   const [selected, setSelected] = useState<string[]>([]),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(''),
     [page, setPage] = useState(1)
-  const eligible = skills.isError
+  const eligible = query.isError
     ? []
-    : (skills.data?.skills.filter(
-        (s) =>
-          s.enabled &&
-          s.status === 'APPROVED' &&
-          s.stages.includes(stage) &&
-          (!s.repositories.length || s.repositories.includes(repositoryId))
-      ) ?? [])
+    : (query.data?.checks ?? []).filter((c) => c.stages.includes(stage))
   const data = query.isError ? undefined : query.data,
     pages = Math.max(1, Math.ceil((data?.reviews.length ?? 0) / 5)),
     current = Math.min(page, pages)
@@ -133,7 +122,9 @@ export function SkillReviewPanel({
                   type='checkbox'
                   checked={selected.includes(s.id)}
                   disabled={
-                    busy || (!selected.includes(s.id) && selected.length >= 3)
+                    busy ||
+                    !s.available ||
+                    (!selected.includes(s.id) && selected.length >= 3)
                   }
                   onChange={(e) =>
                     setSelected(
@@ -143,21 +134,30 @@ export function SkillReviewPanel({
                     )
                   }
                 />
-                {s.name} · v{s.version}
+                {s.title} · skill v{s.skillVersion}
+                {!s.available ? ' · Unavailable' : ''}
               </label>
             ))}
           </div>
           {!eligible.length && (
             <p className='text-sm text-muted-foreground'>
-              An organization admin must approve and enable an assigned skill.
+              No AI checks are assigned in this assessment. Add them to
+              Engineering Standards, adopt the version and create a new
+              assessment.
             </p>
           )}
           <div className='flex justify-end'>
             <Button
               size='sm'
-              disabled={busy || !selected.length || skills.isError}
+              disabled={
+                busy ||
+                !selected.length ||
+                selected.some(
+                  (id) => !eligible.some((c) => c.id === id && c.available)
+                )
+              }
               onClick={() =>
-                void action('', { assessmentId, skillIds: selected })
+                void action('', { assessmentId, checkIds: selected })
               }
             >
               Run review
@@ -174,7 +174,11 @@ export function SkillReviewPanel({
         <article key={r.id} className='space-y-3 rounded-lg border p-4'>
           <div className='flex flex-wrap items-center justify-between gap-2'>
             <p className='text-sm font-medium'>
-              {r.skills.map((s) => `${s.name} v${s.version}`).join(' · ')}
+              {r.checks?.length
+                ? r.checks
+                    .map((c) => `${c.title} · skill v${c.skillVersion}`)
+                    .join(' · ')
+                : r.skills.map((s) => `${s.name} v${s.version}`).join(' · ')}
             </p>
             <StatusBadge
               tone={
@@ -195,7 +199,7 @@ export function SkillReviewPanel({
             <div key={i} className='space-y-1 border-t pt-3 text-sm'>
               <div className='flex items-center gap-2'>
                 <StatusBadge tone='info'>AI suggestion</StatusBadge>
-                <span>{r.skills.find((s) => s.id === f.skillId)?.name}</span>
+                <span>{r.checks?.find((c) => c.id === f.checkId)?.title}</span>
               </div>
               <p>{f.summary}</p>
               <p className='text-muted-foreground'>{f.recommendation}</p>

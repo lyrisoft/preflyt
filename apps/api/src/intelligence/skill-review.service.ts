@@ -30,10 +30,23 @@ import type {
   AiStageRoute,
   AiProviderConnection,
 } from "../generated/prisma/client.js";
+import { assessmentAiChecks, type AiCheck } from "../standards/catalogue.js";
+const reviewTasks = (checks: AiCheck[], skills: AiReviewSkill[]) =>
+  checks.map((check) => {
+    const skill = skills.find((s) => s.id === check.skillId);
+    if (!skill) throw new Error("Assigned skill unavailable");
+    return {
+      id: check.id,
+      version: skill.version,
+      instructions: skill.instructions,
+      checkTitle: check.title,
+    };
+  });
 export const skillReviewsEnabled = aiReviewsEnabled;
 type Snapshot = {
   context: ReviewContext;
   skills: AiReviewSkill[];
+  checks: AiCheck[];
   route: { id: string; revision: number };
   providers: { id: string; revision: number; endpointDigest: string }[];
   inputTokens: number;
@@ -50,6 +63,7 @@ const publicReview = (r: any) => ({
   reservedCents: Number(r.reservedMicroCents) / 1000000,
   createdAt: r.createdAt,
   finishedAt: r.finishedAt,
+  checks: (r.snapshot as Snapshot).checks ?? [],
   skills: (r.snapshot as Snapshot).skills.map((s) => ({
     id: s.id,
     name: s.name,
@@ -88,6 +102,32 @@ export class SkillReviewService {
       repoId,
       "assessment.read",
     );
+    const assessment = await this.assessments.get(repoId, assessmentId);
+    const stage =
+      (assessment.request as { subjectKind?: string }).subjectKind ===
+      "PULL_REQUEST"
+        ? "pull_request"
+        : "repository";
+    const assigned = assessmentAiChecks(assessment.plan, stage);
+    const live = await this.db.aiReviewSkill.findMany({
+      where: {
+        organizationId: session.organizationId!,
+        id: { in: assigned.map((c) => c.skillId) },
+        status: "APPROVED",
+        enabled: true,
+      },
+    });
+    const checks = assigned.map((c) => ({
+      ...c,
+      available: live.some(
+        (s) =>
+          s.id === c.skillId &&
+          s.version === c.skillVersion &&
+          s.contentDigest === c.skillDigest &&
+          skillDigest(s) === c.skillDigest &&
+          (!s.repositories.length || s.repositories.includes(repoId)),
+      ),
+    }));
     const records = await this.db.aiSkillReview.findMany({
       where: {
         organizationId: session.organizationId!,
@@ -101,13 +141,14 @@ export class SkillReviewService {
     return {
       enabled: skillReviewsEnabled(),
       reviews: records.map(publicReview),
+      checks,
     };
   }
   async request(
     session: AuthenticatedSession,
     repoId: string,
     assessmentId: string,
-    skillIds: string[],
+    checkIds: string[],
   ) {
     if (!skillReviewsEnabled())
       throw new ServiceUnavailableException(
@@ -125,6 +166,20 @@ export class SkillReviewService {
       "PULL_REQUEST"
         ? "pull_request"
         : "repository";
+    const assigned = assessmentAiChecks(record.plan, stage);
+    const checks = assigned
+      .filter((c) => checkIds.includes(c.id))
+      .sort((a, b) => a.id.localeCompare(b.id));
+    if (
+      !checks.length ||
+      checks.length > 3 ||
+      checks.length !== checkIds.length ||
+      new Set(checkIds).size !== checkIds.length
+    )
+      throw new BadRequestException(
+        "Choose up to three AI checks from this assessment’s saved standards",
+      );
+    const skillIds = [...new Set(checks.map((c) => c.skillId))];
     const skills = await this.db.aiReviewSkill.findMany({
       where: {
         organizationId: session.organizationId!,
@@ -140,13 +195,18 @@ export class SkillReviewService {
       skillIds.length !== skills.length ||
       skills.some(
         (s) =>
-          !s.stages.includes(stage) ||
           (s.repositories.length && !s.repositories.includes(repoId)) ||
-          s.contentDigest !== skillDigest(s),
+          s.contentDigest !== skillDigest(s) ||
+          checks.some(
+            (c) =>
+              c.skillId === s.id &&
+              (c.skillVersion !== s.version ||
+                c.skillDigest !== s.contentDigest),
+          ),
       )
     )
       throw new BadRequestException(
-        "Choose up to three approved, enabled skills assigned to this repository and stage",
+        "An assigned skill version is unavailable. Ask an admin to check its approval and enablement",
       );
     skills.sort((a, b) => a.id.localeCompare(b.id));
     const route = await this.db.aiStageRoute.findUnique({
@@ -161,7 +221,7 @@ export class SkillReviewService {
       throw new ConflictException(
         "Configure an enabled model route for this stage",
       );
-    const prompt = reviewPrompt(skills, context),
+    const prompt = reviewPrompt(reviewTasks(checks, skills), context),
       inputTokens = Buffer.byteLength(prompt.system + prompt.user) + 1024;
     if (inputTokens > route.maxInputTokens)
       throw new BadRequestException(
@@ -191,6 +251,7 @@ export class SkillReviewService {
     const snapshot: Snapshot = {
       context,
       skills,
+      checks,
       route: { id: route.id, revision: route.revision },
       providers: providers.map((p) => ({
         id: p.id,
@@ -300,6 +361,7 @@ export class SkillReviewService {
                 assessmentId,
                 fingerprint,
                 skillIds,
+                checkIds,
               },
             },
           });
@@ -363,6 +425,17 @@ export class SkillReviewService {
       digest(reviewContext(assessment)) !== digest(snapshot.context)
     )
       throw new Error("Assessment changed");
+    const assigned = assessmentAiChecks(
+      assessment.plan,
+      (assessment.request as { subjectKind?: string }).subjectKind ===
+        "PULL_REQUEST"
+        ? "pull_request"
+        : "repository",
+    )
+      .filter((c) => snapshot.checks.some((s) => s.id === c.id))
+      .sort((a, b) => a.id.localeCompare(b.id));
+    if (digest(assigned) !== digest(snapshot.checks))
+      throw new Error("AI check assignment changed");
     const route = await this.db.aiStageRoute.findFirst({
       where: {
         id: snapshot.route.id,
@@ -493,7 +566,7 @@ export class SkillReviewService {
         try {
           findings = await runSkillInference(
             provider,
-            snapshot.skills,
+            reviewTasks(snapshot.checks, snapshot.skills),
             snapshot.context,
             snapshot.maxOutputTokens,
             signal,

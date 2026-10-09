@@ -30,7 +30,7 @@ const output = JSON.stringify({
   sourceSha: context.sourceSha,
   findings: [
     {
-      skillId: "skill",
+      checkId: "skill",
       evidenceRefs: ["check:0"],
       summary: "Build evidence is missing.",
       recommendation: "Collect a verified build result.",

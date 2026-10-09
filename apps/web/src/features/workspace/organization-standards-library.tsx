@@ -27,7 +27,7 @@ import {
   SheetTitle,
   SheetDescription,
 } from '@/components/ui/sheet'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PageHelpDrawer } from '@/components/page-help-drawer'
 import { StatusBadge } from '@/components/status-badge'
 import { governanceRequest } from '../repositories/governance-api'
@@ -36,7 +36,11 @@ import { useNavigationSession } from './navigation-session'
 import { canPerform } from './scoped-access'
 
 type Version = Pack & { versionId: string; createdAt: string }
-type Library = { builtIn: Pack[]; versions: Version[] }
+type Library = {
+  builtIn: Pack[]
+  versions: Version[]
+  reviewSkills?: { id: string; name: string; version: number }[]
+}
 export function OrganizationStandardsLibrary() {
   const session = useNavigationSession()
   const allowed = canPerform(session.data, 'standards.manage')
@@ -120,7 +124,7 @@ export function OrganizationStandardsLibrary() {
               {
                 title: 'Supported checks',
                 content:
-                  'A standard groups existing supported check definitions. It does not add a new scanner, executable command or passing result. Missing required evidence still means incomplete. New check types require a tested adapter.',
+                  'Standards group deterministic checks and advisory AI checks. Each AI check pins an approved skill version and chooses when it runs. AI suggestions cannot satisfy required deterministic checks. Source-code review is not yet available; the current runtime reviews saved check evidence.',
               },
             ]}
           />
@@ -313,6 +317,21 @@ export function OrganizationStandardsLibrary() {
                   </p>
                 </article>
               ))}
+            {details?.aiChecks?.map((check) => (
+              <article
+                key={check.id}
+                className='space-y-2 rounded-lg border p-4'
+              >
+                <div className='flex items-center justify-between gap-3'>
+                  <h3 className='text-sm font-semibold'>{check.title}</h3>
+                  <StatusBadge tone='info'>AI · Advisory</StatusBadge>
+                </div>
+                <p className='text-xs text-muted-foreground'>
+                  Skill v{check.skillVersion} ·{' '}
+                  {check.stages.map((s) => s.replace(/_/g, ' ')).join(', ')}
+                </p>
+              </article>
+            ))}
           </div>
         </SheetContent>
       </Sheet>
@@ -337,6 +356,17 @@ function StandardEditor({
   const [selected, setSelected] = useState(
     (pack ?? library.builtIn[0])?.rules.map((r) => r.id) ?? []
   )
+  const [checkSearch, setCheckSearch] = useState('')
+  const [checkPage, setCheckPage] = useState(1)
+  const [aiPage, setAiPage] = useState(1)
+  const [aiChecks, setAiChecks] = useState(
+    (pack?.aiChecks ?? []).map((c) => ({
+      id: c.id,
+      title: c.title,
+      skillId: c.skillId,
+      stages: c.stages as string[],
+    }))
+  )
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const rules = [
@@ -344,6 +374,11 @@ function StandardEditor({
       library.builtIn.flatMap((p) => p.rules).map((r) => [r.id, r])
     ).values(),
   ]
+  const filteredRules = rules.filter((r) =>
+    r.title.toLowerCase().includes(checkSearch.toLowerCase())
+  )
+  const checkPages = Math.max(1, Math.ceil(filteredRules.length / 6))
+  const aiPages = Math.max(1, Math.ceil(aiChecks.length / 2))
   async function save() {
     setBusy(true)
     setError('')
@@ -356,6 +391,7 @@ function StandardEditor({
           title,
           description,
           ruleIds: selected,
+          ...(aiChecks.length ? { aiChecks } : {}),
           expectedVersionId: edit ? (pack as Version).versionId : null,
         }
       )
@@ -372,7 +408,7 @@ function StandardEditor({
         if (!open && !busy) onClose()
       }}
     >
-      <DialogContent className='max-h-[85svh] overflow-y-auto sm:max-w-xl'>
+      <DialogContent className='max-h-[85svh] overflow-y-auto sm:max-w-5xl'>
         <DialogHeader>
           <DialogTitle>
             {edit
@@ -393,66 +429,304 @@ function StandardEditor({
             void save()
           }}
         >
-          <label className='block space-y-2 text-sm'>
-            <span>Name</span>
-            <Input
-              required
-              maxLength={120}
-              value={title}
-              disabled={busy}
-              onChange={(e) => setTitle(e.target.value)}
-            />
-          </label>
-          <label className='block space-y-2 text-sm'>
-            <span>Description</span>
-            <textarea
-              maxLength={2000}
-              value={description}
-              disabled={busy}
-              onChange={(e) => setDescription(e.target.value)}
-              className='min-h-20 w-full rounded-md border bg-background p-3'
-            />
-          </label>
-          <fieldset disabled={busy}>
-            <legend className='mb-3 text-sm font-semibold'>Checks</legend>
-            <div className='space-y-2'>
-              {rules.map((rule) => (
-                <label
-                  key={rule.id}
-                  className='flex items-start gap-3 rounded-lg border p-3 text-sm'
-                >
-                  <input
-                    type='checkbox'
-                    className='mt-0.5 size-4 shrink-0 accent-primary'
-                    checked={selected.includes(rule.id)}
-                    onChange={(event) =>
-                      setSelected((old) =>
-                        event.target.checked
-                          ? [...old, rule.id]
-                          : old.filter((id) => id !== rule.id)
-                      )
-                    }
-                  />
-                  <span className='flex-1'>{rule.title}</span>
-                  <StatusBadge
-                    tone={rule.capability === 'planned' ? 'neutral' : 'info'}
-                  >
-                    {rule.capability === 'planned'
-                      ? 'Planned'
-                      : rule.capability === 'available'
-                        ? 'Configuration'
-                        : 'CI report'}
-                  </StatusBadge>
-                </label>
-              ))}
+          <div className='grid items-start gap-6 md:grid-cols-[260px_minmax(0,1fr)]'>
+            <div className='space-y-4 md:border-r md:pr-6'>
+              <label className='block space-y-2 text-sm'>
+                <span>Name</span>
+                <Input
+                  required
+                  maxLength={120}
+                  value={title}
+                  disabled={busy}
+                  onChange={(e) => setTitle(e.target.value)}
+                />
+              </label>
+              <label className='block space-y-2 text-sm'>
+                <span>Description</span>
+                <textarea
+                  maxLength={2000}
+                  value={description}
+                  disabled={busy}
+                  onChange={(e) => setDescription(e.target.value)}
+                  className='min-h-20 w-full rounded-md border bg-background p-3'
+                />
+              </label>
+              <div className='flex flex-wrap gap-2 text-xs'>
+                <StatusBadge tone='neutral'>
+                  {selected.length} deterministic checks
+                </StatusBadge>
+                <StatusBadge tone='info'>
+                  {aiChecks.length} AI checks
+                </StatusBadge>
+              </div>
             </div>
-          </fieldset>
+            <Tabs defaultValue='checks' className='min-w-0'>
+              <TabsList>
+                <TabsTrigger value='checks'>Deterministic checks</TabsTrigger>
+                <TabsTrigger value='ai'>AI checks</TabsTrigger>
+              </TabsList>
+              <TabsContent value='checks' className='mt-4 space-y-3'>
+                <Input
+                  aria-label='Filter available checks'
+                  placeholder='Filter checks…'
+                  value={checkSearch}
+                  onChange={(e) => {
+                    setCheckSearch(e.target.value)
+                    setCheckPage(1)
+                  }}
+                />
+                <fieldset disabled={busy}>
+                  <legend className='sr-only'>Deterministic checks</legend>
+                  <div className='grid gap-2 sm:grid-cols-2'>
+                    {filteredRules
+                      .slice((checkPage - 1) * 6, checkPage * 6)
+                      .map((rule) => (
+                        <label
+                          key={rule.id}
+                          className='flex items-start gap-3 rounded-lg border p-3 text-sm'
+                        >
+                          <input
+                            type='checkbox'
+                            className='mt-0.5 size-4 shrink-0 accent-primary'
+                            checked={selected.includes(rule.id)}
+                            onChange={(event) =>
+                              setSelected((old) =>
+                                event.target.checked
+                                  ? [...old, rule.id]
+                                  : old.filter((id) => id !== rule.id)
+                              )
+                            }
+                          />
+                          <span className='flex-1'>{rule.title}</span>
+                          <StatusBadge
+                            tone={
+                              rule.capability === 'planned' ? 'neutral' : 'info'
+                            }
+                          >
+                            {rule.capability === 'planned'
+                              ? 'Planned'
+                              : rule.capability === 'available'
+                                ? 'Configuration'
+                                : 'CI report'}
+                          </StatusBadge>
+                        </label>
+                      ))}
+                  </div>
+                </fieldset>
+                {!filteredRules.length && (
+                  <p className='py-8 text-center text-sm text-muted-foreground'>
+                    No matching checks
+                  </p>
+                )}
+                {checkPages > 1 && (
+                  <nav
+                    aria-label='Available check pages'
+                    className='flex items-center justify-end gap-2'
+                  >
+                    <Button
+                      type='button'
+                      size='sm'
+                      variant='outline'
+                      disabled={checkPage === 1}
+                      onClick={() => setCheckPage((p) => p - 1)}
+                    >
+                      Previous checks
+                    </Button>
+                    <span className='text-xs'>
+                      {checkPage} / {checkPages}
+                    </span>
+                    <Button
+                      type='button'
+                      size='sm'
+                      variant='outline'
+                      disabled={checkPage === checkPages}
+                      onClick={() => setCheckPage((p) => p + 1)}
+                    >
+                      Next checks
+                    </Button>
+                  </nav>
+                )}
+              </TabsContent>
+              <TabsContent value='ai' className='mt-4'>
+                <fieldset disabled={busy} className='space-y-3'>
+                  <div className='flex items-center justify-between gap-3'>
+                    <span className='text-sm font-semibold'>AI checks</span>
+                    <Button
+                      type='button'
+                      size='sm'
+                      variant='outline'
+                      disabled={
+                        !library.reviewSkills?.length || aiChecks.length >= 12
+                      }
+                      onClick={() => {
+                        const skill = library.reviewSkills?.[0]
+                        if (skill) {
+                          setAiPage(Math.ceil((aiChecks.length + 1) / 2))
+                          setAiChecks((old) => [
+                            ...old,
+                            {
+                              id: `ai-review-${crypto.randomUUID()}`,
+                              title: skill.name,
+                              skillId: skill.id,
+                              stages: ['pull_request'],
+                            },
+                          ])
+                        }
+                      }}
+                    >
+                      Add AI check
+                    </Button>
+                  </div>
+                  {!library.reviewSkills?.length && (
+                    <p className='text-xs text-muted-foreground'>
+                      Approve and enable a skill in Intelligence → Skills first.
+                    </p>
+                  )}
+                  {aiChecks
+                    .slice(
+                      (Math.min(aiPage, aiPages) - 1) * 2,
+                      Math.min(aiPage, aiPages) * 2
+                    )
+                    .map((check, index) => (
+                      <div
+                        key={check.id}
+                        className='space-y-3 rounded-lg border p-3'
+                      >
+                        <div className='flex items-center justify-between'>
+                          <StatusBadge tone='info'>AI · Advisory</StatusBadge>
+                          <Button
+                            type='button'
+                            size='sm'
+                            variant='ghost'
+                            aria-label={`Remove AI check ${index + 1}`}
+                            onClick={() =>
+                              setAiChecks((old) =>
+                                old.filter((c) => c.id !== check.id)
+                              )
+                            }
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                        <label className='block space-y-1 text-sm'>
+                          <span>AI check name</span>
+                          <Input
+                            required
+                            maxLength={120}
+                            value={check.title}
+                            onChange={(e) =>
+                              setAiChecks((old) =>
+                                old.map((c) =>
+                                  c.id === check.id
+                                    ? { ...c, title: e.target.value }
+                                    : c
+                                )
+                              )
+                            }
+                          />
+                        </label>
+                        <label className='block space-y-1 text-sm'>
+                          <span>Approved skill version</span>
+                          <select
+                            required
+                            className='h-9 w-full rounded-md border bg-background px-3'
+                            value={check.skillId}
+                            onChange={(e) =>
+                              setAiChecks((old) =>
+                                old.map((c) =>
+                                  c.id === check.id
+                                    ? { ...c, skillId: e.target.value }
+                                    : c
+                                )
+                              )
+                            }
+                          >
+                            {!(library.reviewSkills ?? []).some(
+                              (s) => s.id === check.skillId
+                            ) && (
+                              <option value={check.skillId}>
+                                Previously assigned version is unavailable
+                              </option>
+                            )}
+                            {(library.reviewSkills ?? []).map((skill) => (
+                              <option key={skill.id} value={skill.id}>
+                                {skill.name} · v{skill.version}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <div className='flex gap-4 text-sm'>
+                          {['repository', 'pull_request'].map((stage) => (
+                            <label
+                              key={stage}
+                              className='flex items-center gap-2'
+                            >
+                              <input
+                                type='checkbox'
+                                checked={check.stages.includes(stage)}
+                                onChange={(e) =>
+                                  setAiChecks((old) =>
+                                    old.map((c) =>
+                                      c.id === check.id
+                                        ? {
+                                            ...c,
+                                            stages: e.target.checked
+                                              ? [...c.stages, stage]
+                                              : c.stages.filter(
+                                                  (s) => s !== stage
+                                                ),
+                                          }
+                                        : c
+                                    )
+                                  )
+                                }
+                              />
+                              {stage === 'repository'
+                                ? 'Repository assessment'
+                                : 'Pull request assessment'}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                </fieldset>
+                {aiPages > 1 && (
+                  <nav
+                    aria-label='AI check pages'
+                    className='mt-3 flex items-center justify-end gap-2'
+                  >
+                    <Button
+                      type='button'
+                      size='sm'
+                      variant='outline'
+                      disabled={aiPage <= 1}
+                      onClick={() => setAiPage((p) => p - 1)}
+                    >
+                      Previous AI checks
+                    </Button>
+                    <span className='text-xs'>
+                      {Math.min(aiPage, aiPages)} / {aiPages}
+                    </span>
+                    <Button
+                      type='button'
+                      size='sm'
+                      variant='outline'
+                      disabled={aiPage >= aiPages}
+                      onClick={() => setAiPage((p) => p + 1)}
+                    >
+                      Next AI checks
+                    </Button>
+                  </nav>
+                )}
+              </TabsContent>
+            </Tabs>
+          </div>
           {error && (
             <p role='alert' className='text-sm text-destructive'>
               {error}
             </p>
           )}
-          <div className='flex justify-end gap-2'>
+          <div className='sticky bottom-0 flex justify-end gap-2 border-t bg-background pt-4'>
             <Button
               type='button'
               variant='outline'
@@ -463,7 +737,17 @@ function StandardEditor({
             </Button>
             <Button
               type='submit'
-              disabled={busy || !title.trim() || !selected.length}
+              disabled={
+                busy ||
+                !title.trim() ||
+                !selected.length ||
+                aiChecks.some(
+                  (c) =>
+                    !c.title.trim() ||
+                    !c.stages.length ||
+                    !library.reviewSkills?.some((s) => s.id === c.skillId)
+                )
+              }
             >
               {busy ? 'Saving…' : 'Save standard'}
             </Button>
@@ -558,6 +842,7 @@ export function StandardLibraryCard({
           onClick={onDetails}
         >
           {pack.rules.length} checks
+          {pack.aiChecks?.length ? ` · ${pack.aiChecks.length} AI reviews` : ''}
           <ChevronRight className='size-3.5' aria-hidden />
         </Button>
         <div className='flex gap-1'>

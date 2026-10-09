@@ -188,13 +188,11 @@ export function SkillsCatalogue() {
             <table className='w-full text-left text-sm'>
               <thead className='bg-muted/40 text-muted-foreground'>
                 <tr>
-                  {['Skill', 'Version', 'Stages', 'Status', 'Actions'].map(
-                    (t) => (
-                      <th key={t} className='px-4 py-3 font-medium'>
-                        {t}
-                      </th>
-                    )
-                  )}
+                  {['Skill', 'Version', 'Status', 'Actions'].map((t) => (
+                    <th key={t} className='px-4 py-3 font-medium'>
+                      {t}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
@@ -207,9 +205,7 @@ export function SkillsCatalogue() {
                       </p>
                     </td>
                     <td className='px-4 py-3'>v{s.version}</td>
-                    <td className='px-4 py-3'>
-                      {s.stages.map((v) => v.replace(/_/g, ' ')).join(', ')}
-                    </td>
+
                     <td className='px-4 py-3'>
                       <StatusBadge
                         tone={
@@ -465,9 +461,7 @@ function SkillForm({
   error: string
   save: (body: unknown) => void
 }) {
-  const [stages, setStages] = useState(
-      skill?.stages ?? ['repository', 'pull_request']
-    ),
+  const [stages] = useState(skill?.stages ?? ['repository', 'pull_request']),
     [ids, setIds] = useState(skill?.repositories ?? []),
     [filter, setFilter] = useState('')
   function submit(e: FormEvent<HTMLFormElement>) {
@@ -540,25 +534,7 @@ function SkillForm({
           />
         </label>
       </div>
-      <fieldset className='space-y-2 text-sm'>
-        <legend className='mb-2 font-medium'>Assigned stages</legend>
-        {['repository', 'pull_request'].map((stage) => (
-          <label key={stage} className='mr-4 inline-flex items-center gap-2'>
-            <input
-              type='checkbox'
-              checked={stages.includes(stage)}
-              onChange={(e) =>
-                setStages(
-                  e.target.checked
-                    ? [...stages, stage]
-                    : stages.filter((v) => v !== stage)
-                )
-              }
-            />
-            {stage === 'repository' ? 'Repository' : 'Pull requests'}
-          </label>
-        ))}
-      </fieldset>
+
       <fieldset className='space-y-2 text-sm'>
         <legend className='mb-2 font-medium'>Repository scope</legend>
         <label className='flex items-center gap-2'>

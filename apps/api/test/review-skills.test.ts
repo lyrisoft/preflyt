@@ -26,7 +26,7 @@ const context = reviewContext({
   },
 });
 const finding = {
-  skillId: "skill",
+  checkId: "skill",
   evidenceRefs: ["check:0"],
   summary: "Security evidence is missing.",
   recommendation: "Collect a verified scan for this commit.",
@@ -83,7 +83,7 @@ it("requires matching revision and evidence, labels findings inferred and dedupl
     { sourceSha: "c".repeat(40) },
     { gate: "PASS" },
     { findings: [{ ...finding, evidenceRefs: ["invented"] }] },
-    { findings: [{ ...finding, skillId: "unapproved" }] },
+    { findings: [{ ...finding, checkId: "unapproved" }] },
     { findings: [{ ...finding, severity: "critical" }] },
   ])
     expect(() =>

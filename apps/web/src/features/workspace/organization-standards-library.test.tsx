@@ -1,7 +1,8 @@
+import '@/styles/index.css'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { render } from 'vitest-browser-react'
-import { userEvent } from 'vitest/browser'
+import { userEvent, page } from 'vitest/browser'
 import {
   OrganizationStandardsLibrary,
   StandardLibraryCard,
@@ -131,4 +132,92 @@ it('preserves the editor after a save conflict and presents a useful error', asy
   await expect
     .element(view.getByRole('textbox', { name: 'Name' }))
     .toHaveValue('Team standard')
+})
+
+it('authors an AI check with an approved pinned skill in the wide tabbed editor', async () => {
+  state.query = {
+    data: {
+      builtIn: [pack],
+      versions: [],
+      reviewSkills: [{ id: 'skill', name: 'Security review', version: 2 }],
+    },
+  }
+  const view = await render(<OrganizationStandardsLibrary />)
+  await view.getByRole('button', { name: 'New standard' }).click()
+  await view
+    .getByRole('textbox', { name: 'Name', exact: true })
+    .fill('Service standard')
+  await view.getByRole('tab', { name: 'AI checks', exact: true }).click()
+  await view.getByRole('button', { name: 'Add AI check' }).click()
+  await view
+    .getByRole('textbox', { name: 'AI check name' })
+    .fill('Review security evidence')
+  await view.getByRole('button', { name: 'Save standard' }).click()
+  expect(state.save).toHaveBeenCalledWith(
+    '/standards/library',
+    expect.objectContaining({
+      aiChecks: [
+        expect.objectContaining({
+          title: 'Review security evidence',
+          skillId: 'skill',
+          stages: ['pull_request'],
+        }),
+      ],
+    })
+  )
+})
+
+it('keeps the desktop editor rectangular with visible actions and paginated checks', async () => {
+  await page.viewport(1280, 800)
+  state.query = {
+    data: {
+      builtIn: [
+        {
+          ...pack,
+          rules: Array.from({ length: 14 }, (_, i) => ({
+            ...pack.rules[i % 2]!,
+            id: `check-${i}`,
+            title: `Engineering check ${i}`,
+          })),
+        },
+      ],
+      versions: [],
+    },
+  }
+  const view = await render(<OrganizationStandardsLibrary />)
+  await view.getByRole('button', { name: 'New standard' }).click()
+  await expect
+    .poll(() => {
+      const dialog = document.querySelector('[role="dialog"]') as HTMLElement
+      const rect = dialog.getBoundingClientRect()
+      return (
+        rect.width > rect.height &&
+        dialog.scrollHeight <= dialog.clientHeight + 1
+      )
+    })
+    .toBe(true)
+  await expect
+    .element(view.getByRole('button', { name: 'Save standard' }))
+    .toBeVisible()
+  await expect
+    .element(view.getByText('Engineering check 6', { exact: true }))
+    .not.toBeInTheDocument()
+  await view.getByRole('button', { name: 'Next checks' }).click()
+  await expect
+    .element(view.getByText('Engineering check 6', { exact: true }))
+    .toBeVisible()
+  await view
+    .getByRole('textbox', { name: 'Filter available checks' })
+    .fill('check 13')
+  await expect
+    .element(view.getByText('Engineering check 13', { exact: true }))
+    .toBeVisible()
+  await view.getByRole('textbox', { name: 'Filter available checks' }).fill('')
+  await page.screenshot({
+    path: '__screenshots__/standard-editor-wide.png',
+  })
+  await page.viewport(390, 844)
+  await expect
+    .poll(() => document.documentElement.scrollWidth <= window.innerWidth)
+    .toBe(true)
 })

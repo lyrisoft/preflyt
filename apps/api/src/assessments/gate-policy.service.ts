@@ -1,4 +1,4 @@
-import { executionContracts } from './execution-contract.js';
+import { executionContracts } from "./execution-contract.js";
 import { recordPolicyNotification } from "../notifications/notification-event.js";
 import {
   BadRequestException,
@@ -12,6 +12,7 @@ import { AuthorizationService } from "../auth/authorization.service.js";
 import type { AuthenticatedSession } from "../auth/session.guard.js";
 import {
   adoptionProfiles,
+  assessmentAiChecks,
   posture,
   resolvePacks,
   type AdoptionProfile,
@@ -91,7 +92,15 @@ export function composeGatePolicy(
   // This increment permits strengthening advisory rules only. Weakening/waivers need their own authority.
   for (const rule of rules)
     if (requiredRules.includes(rule.id)) rule.required = true;
+  const aiChecks = [
+    ...new Map(
+      ["repository", "pull_request"]
+        .flatMap((stage) => assessmentAiChecks({ packs }, stage))
+        .map((c) => [c.id, c]),
+    ).values(),
+  ].sort((a, b) => a.id.localeCompare(b.id));
   return {
+    ...(aiChecks.length ? { aiChecks } : {}),
     version: 1,
     mode: "ADVISORY",
     branchRef,
