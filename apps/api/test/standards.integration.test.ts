@@ -1,3 +1,4 @@
+import { AuthorizationService } from '../src/auth/authorization.service.js'
 import 'reflect-metadata'
 import { ForbiddenException, ValidationPipe } from '@nestjs/common'
 import { NestFactory } from '@nestjs/core'
@@ -44,6 +45,20 @@ beforeAll(async () => {
       providers: [
         StandardsService,
         SessionGuard,
+        {
+          provide: AuthorizationService,
+          useValue: {
+            authorizeRequest: async () => false,
+            repositoryScope: async () =>
+              prisma.gitHubRepository.findMany({
+                where: {
+                  selected: true,
+                  available: true,
+                  installation: { active: true },
+                },
+              }),
+          },
+        },
         OwnerAdminGuard,
         { provide: PrismaService, useValue: prisma },
         {

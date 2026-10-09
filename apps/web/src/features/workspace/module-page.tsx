@@ -31,7 +31,8 @@ import { RepositoryBindings } from '@/features/repositories/repository-bindings'
 import { RepositoryCiEvidence } from '@/features/repositories/repository-ci-evidence'
 import { RepositoryPullRequests } from '@/features/repositories/repository-pull-requests'
 import { RepositoryStandards } from '@/features/repositories/repository-standards'
-import { canAdminister, useNavigationSession } from './navigation-session'
+import { useNavigationSession } from './navigation-session'
+import { canPerform } from './scoped-access'
 
 type Module = 'assessments' | 'standards' | 'policies' | 'integrations'
 const modules = {
@@ -106,7 +107,7 @@ export function WorkspaceModule({ module }: { module: Module }) {
   const repository = search.repository
     ? repositories.find((repo) => repo.githubId === search.repository)
     : repositories[0]
-  const canManage = canAdminister(session.data?.role)
+  const canManage = canPerform(session.data, 'repository.connect')
   return (
     <>
       <Header fixed>
@@ -382,7 +383,11 @@ export function WorkspaceModule({ module }: { module: Module }) {
                         />
                         <RepositoryAssessments
                           repositoryId={repository.githubId}
-                          canCreate={canManage}
+                          canCreate={canPerform(
+                            session.data,
+                            'assessment.run',
+                            repository.githubId
+                          )}
                           initialSha=''
                         />
                       </>
@@ -396,11 +401,19 @@ export function WorkspaceModule({ module }: { module: Module }) {
                     {module === 'policies' && (
                       <RepositoryStandards
                         repositoryId={repository.githubId}
-                        canManage={canManage}
+                        canManage={canPerform(
+                          session.data,
+                          'policy.draft',
+                          repository.githubId
+                        )}
                         sourceBindings={
                           <RepositoryBindings
                             repositoryId={repository.githubId}
-                            canManage={canManage}
+                            canManage={canPerform(
+                              session.data,
+                              'policy.draft',
+                              repository.githubId
+                            )}
                           />
                         }
                       />
@@ -408,7 +421,11 @@ export function WorkspaceModule({ module }: { module: Module }) {
                     {module === 'integrations' && (
                       <RepositoryCiEvidence
                         repositoryId={repository.githubId}
-                        canImport={canManage}
+                        canImport={canPerform(
+                          session.data,
+                          'evidence.manage',
+                          repository.githubId
+                        )}
                       />
                     )}
                   </div>

@@ -274,17 +274,20 @@ export function RepositoryAssessments({
   repositoryId,
   canCreate,
   initialSha,
+  initialAssessmentId,
 }: {
   repositoryId: string
   canCreate: boolean
   initialSha: string
+  initialAssessmentId?: string
 }) {
   const client = useQueryClient()
   const [selected, setSelected] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [inputFilter, setInputFilter] = useState('all')
   const history = useAssessmentList(repositoryId)
-  const current = selected ?? history.data?.assessments[0]?.id
+  const current =
+    selected ?? initialAssessmentId ?? history.data?.assessments[0]?.id
   const detail = useQuery({
     queryKey: ['assessment', repositoryId, current],
     retry: false,

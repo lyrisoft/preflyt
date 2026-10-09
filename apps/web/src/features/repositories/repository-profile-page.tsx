@@ -35,6 +35,7 @@ import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { StatusBadge } from '@/components/status-badge'
 import { ThemeSwitch } from '@/components/theme-switch'
+import { canPerform, type ScopedSession } from '../workspace/scoped-access'
 import { EvidenceDialog } from './evidence-dialog'
 import {
   PostureSummary,
@@ -239,7 +240,7 @@ function ReadingGuide({ limitations }: { limitations: string[] }) {
 
 export function RepositoryProfilePage() {
   const { repositoryId } = route.useParams()
-  const { tab = 'overview' } = route.useSearch()
+  const { tab = 'overview', assessment } = route.useSearch()
   const navigate = route.useNavigate()
   const queryClient = useQueryClient()
   const [filter, setFilter] = useState<ControlFilter>('all')
@@ -266,13 +267,13 @@ export function RepositoryProfilePage() {
     queryKey: ['profile-view-session'],
     retry: false,
     staleTime: 0,
-    queryFn: async ({ signal }): Promise<{ role?: string }> => {
+    queryFn: async ({ signal }): Promise<ScopedSession> => {
       const response = await fetch(`${API_BASE_URL}/auth/session`, {
         credentials: 'include',
         signal,
       })
       if (!response.ok) throw new Error('Could not check account permissions')
-      return response.json() as Promise<{ role?: string }>
+      return response.json() as Promise<ScopedSession>
     },
   })
   const discovery = useMutation({
@@ -316,8 +317,10 @@ export function RepositoryProfilePage() {
       ? undefined
       : profileQuery.data
   const error = mutationError?.message ?? profileQuery.error?.message ?? ''
-  const canDiscover = ['OWNER', 'ADMIN', 'SUPER_ADMIN'].includes(
-    sessionQuery.data?.role ?? ''
+  const canDiscover = canPerform(
+    sessionQuery.data,
+    'repository.manage',
+    repositoryId
   )
   function selectTab(value: string) {
     void navigate({
@@ -518,11 +521,19 @@ export function RepositoryProfilePage() {
                 <RepositoryStandards
                   key={repositoryId}
                   repositoryId={repositoryId}
-                  canManage={canDiscover}
+                  canManage={canPerform(
+                    sessionQuery.data,
+                    'policy.draft',
+                    repositoryId
+                  )}
                   sourceBindings={
                     <RepositoryBindings
                       repositoryId={repositoryId}
-                      canManage={canDiscover}
+                      canManage={canPerform(
+                        sessionQuery.data,
+                        'policy.draft',
+                        repositoryId
+                      )}
                     />
                   }
                 />
@@ -531,15 +542,24 @@ export function RepositoryProfilePage() {
                 <RepositoryActivityPanel repositoryId={repositoryId} />
                 <RepositoryPullRequests repositoryId={repositoryId} />
                 <RepositoryAssessments
-                  key={repositoryId}
+                  initialAssessmentId={assessment}
+                  key={`${repositoryId}:${assessment ?? ''}`}
                   repositoryId={repositoryId}
-                  canCreate={canDiscover}
+                  canCreate={canPerform(
+                    sessionQuery.data,
+                    'assessment.run',
+                    repositoryId
+                  )}
                   initialSha={profile?.sourceSha ?? ''}
                 />
               </TabsContent>
               <TabsContent value='activity' className='space-y-5'>
                 <RepositoryCiEvidence
-                  canImport={canDiscover}
+                  canImport={canPerform(
+                    sessionQuery.data,
+                    'evidence.manage',
+                    repositoryId
+                  )}
                   key={repositoryId}
                   repositoryId={repositoryId}
                 />

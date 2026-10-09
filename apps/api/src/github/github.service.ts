@@ -37,7 +37,9 @@ export class GitHubService {
     private readonly cache?: RedisCacheService,
   ) {}
 
-  async beginInstallation(identityId: string) {
+  async beginInstallation(identityId: string,
+    organizationId = 'preflyt-default',
+  ) {
     const state = opaque()
     const browserBinding = opaque()
     await this.prisma.gitHubSetupTransaction.deleteMany({
@@ -48,6 +50,7 @@ export class GitHubService {
         stateHash: digest(state),
         browserBindingHash: digest(browserBinding),
         identityId,
+        organizationId,
         expiresAt: new Date(Date.now() + transactionTtlMs),
       },
     })
@@ -183,6 +186,28 @@ export class GitHubService {
       transaction.installationId,
     )
     await this.prisma.$transaction(async (tx) => {
+      const member = await tx.organizationMembership.findFirst({
+        where: {
+          identityId: transaction.identityId,
+          organizationId: transaction.organizationId,
+          active: true,
+          role: { in: ['OWNER', 'ADMIN'] },
+        },
+      })
+      if (!member)
+        throw new ForbiddenException(
+          'Organization connection permission was revoked',
+        )
+      const existingInstallation = await tx.gitHubInstallation.findUnique({
+        where: { id: installation.id },
+      })
+      if (
+        existingInstallation &&
+        existingInstallation.organizationId !== transaction.organizationId
+      )
+        throw new ForbiddenException(
+          'Installation belongs to another organization',
+        )
       if (beforeAccess) {
         const locked = await tx.gitHubInstallation.updateMany({
           where: {
@@ -208,6 +233,7 @@ export class GitHubService {
         where: { id: installation.id },
         create: {
           id: installation.id,
+          organizationId: transaction.organizationId,
           accountLogin: installation.accountLogin,
           accountType: installation.accountType,
           repositorySelection: installation.repositorySelection,
@@ -299,9 +325,14 @@ export class GitHubService {
     }
   }
 
-  async listRepositories(refresh = false) {
-    if (!refresh) return this.repositoryOverview()
+  async listRepositories(refresh = false,
+    scope?: bigint[],
+    organizationId?: string,
+    organizationAdmin = false,
+  ) {
+    if (!refresh) return this.repositoryOverview(scope, organizationId, organizationAdmin)
     const installations = await this.prisma.gitHubInstallation.findMany({
+      where: { ...(organizationId ? { organizationId } : {}) },
       select: { id: true },
     })
     const sync = new GitHubSyncService(this.prisma, this.provider)
@@ -317,14 +348,21 @@ export class GitHubService {
       }
     }
 
-    return this.repositoryOverview()
+    return this.repositoryOverview(scope, organizationId, organizationAdmin)
   }
 
   // Last-synced display data only. No upstream calls and no permission grants.
-  async repositoryOverview() {
+  async repositoryOverview(scope?: bigint[],
+    organizationId?: string,
+    organizationAdmin = false,
+  ) {
     const [repositories, allInstallations] = await Promise.all([
       this.prisma.gitHubRepository.findMany({
-        where: { available: true, installation: { active: true } },
+        where: { ...(scope ? { githubId: { in: scope } } : {}),
+          available: true, installation: { active: true ,
+            ...(organizationId ? { organizationId } : {}),
+          },
+        },
         select: {
           githubId: true,
           name: true,
@@ -345,6 +383,12 @@ export class GitHubService {
         orderBy: [{ ownerLogin: 'asc' }, { name: 'asc' }],
       }),
       this.prisma.gitHubInstallation.findMany({
+        where: {
+          ...(organizationId ? { organizationId } : {}),
+          ...(scope && !organizationAdmin
+            ? { repositories: { some: { githubId: { in: scope } } } }
+            : {}),
+        },
         select: {
           id: true,
           accountLogin: true,

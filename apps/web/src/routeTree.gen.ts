@@ -31,6 +31,8 @@ import { Route as AuthenticatedStandardsRouteImport } from './routes/_authentica
 import { Route as authSuperAdminLoginRouteImport } from './routes/(auth)/super-admin/login'
 import { Route as AuthenticatedAppsIndexRouteImport } from './routes/_authenticated/apps/index'
 import { Route as AuthenticatedChatsIndexRouteImport } from './routes/_authenticated/chats/index'
+import { Route as AuthenticatedContributorsIndexRouteImport } from './routes/_authenticated/contributors/index'
+import { Route as AuthenticatedContributorsContributorIdRouteImport } from './routes/_authenticated/contributors/$contributorId'
 import { Route as AuthenticatedErrorsErrorRouteImport } from './routes/_authenticated/errors/$error'
 import { Route as AuthenticatedHelpCenterIndexRouteImport } from './routes/_authenticated/help-center/index'
 import { Route as AuthenticatedRepositoriesRepositoryIdRouteImport } from './routes/_authenticated/repositories/$repositoryId'
@@ -158,6 +160,18 @@ const AuthenticatedChatsIndexRoute = AuthenticatedChatsIndexRouteImport.update({
   path: '/chats/',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedContributorsIndexRoute =
+  AuthenticatedContributorsIndexRouteImport.update({
+    id: '/contributors/',
+    path: '/contributors/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedContributorsContributorIdRoute =
+  AuthenticatedContributorsContributorIdRouteImport.update({
+    id: '/contributors/$contributorId',
+    path: '/contributors/$contributorId',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedErrorsErrorRoute =
   AuthenticatedErrorsErrorRouteImport.update({
     id: '/errors/$error',
@@ -237,6 +251,7 @@ export interface FileRoutesByFullPath {
   '/quality-gates': typeof AuthenticatedQualityGatesRoute
   '/standards': typeof AuthenticatedStandardsRoute
   '/super-admin/login': typeof authSuperAdminLoginRoute
+  '/contributors/$contributorId': typeof AuthenticatedContributorsContributorIdRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/repositories/$repositoryId': typeof AuthenticatedRepositoriesRepositoryIdRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
@@ -245,6 +260,7 @@ export interface FileRoutesByFullPath {
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/apps/': typeof AuthenticatedAppsIndexRoute
   '/chats/': typeof AuthenticatedChatsIndexRoute
+  '/contributors/': typeof AuthenticatedContributorsIndexRoute
   '/help-center/': typeof AuthenticatedHelpCenterIndexRoute
   '/settings/': typeof AuthenticatedSettingsIndexRoute
   '/tasks/': typeof AuthenticatedTasksIndexRoute
@@ -269,6 +285,7 @@ export interface FileRoutesByTo {
   '/standards': typeof AuthenticatedStandardsRoute
   '/': typeof AuthenticatedIndexRoute
   '/super-admin/login': typeof authSuperAdminLoginRoute
+  '/contributors/$contributorId': typeof AuthenticatedContributorsContributorIdRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/repositories/$repositoryId': typeof AuthenticatedRepositoriesRepositoryIdRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
@@ -277,6 +294,7 @@ export interface FileRoutesByTo {
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/apps': typeof AuthenticatedAppsIndexRoute
   '/chats': typeof AuthenticatedChatsIndexRoute
+  '/contributors': typeof AuthenticatedContributorsIndexRoute
   '/help-center': typeof AuthenticatedHelpCenterIndexRoute
   '/settings': typeof AuthenticatedSettingsIndexRoute
   '/tasks': typeof AuthenticatedTasksIndexRoute
@@ -304,6 +322,7 @@ export interface FileRoutesById {
   '/_authenticated/standards': typeof AuthenticatedStandardsRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/(auth)/super-admin/login': typeof authSuperAdminLoginRoute
+  '/_authenticated/contributors/$contributorId': typeof AuthenticatedContributorsContributorIdRoute
   '/_authenticated/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/_authenticated/repositories/$repositoryId': typeof AuthenticatedRepositoriesRepositoryIdRoute
   '/_authenticated/settings/account': typeof AuthenticatedSettingsAccountRoute
@@ -312,6 +331,7 @@ export interface FileRoutesById {
   '/_authenticated/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/_authenticated/apps/': typeof AuthenticatedAppsIndexRoute
   '/_authenticated/chats/': typeof AuthenticatedChatsIndexRoute
+  '/_authenticated/contributors/': typeof AuthenticatedContributorsIndexRoute
   '/_authenticated/help-center/': typeof AuthenticatedHelpCenterIndexRoute
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
   '/_authenticated/tasks/': typeof AuthenticatedTasksIndexRoute
@@ -339,6 +359,7 @@ export interface FileRouteTypes {
     | '/quality-gates'
     | '/standards'
     | '/super-admin/login'
+    | '/contributors/$contributorId'
     | '/errors/$error'
     | '/repositories/$repositoryId'
     | '/settings/account'
@@ -347,6 +368,7 @@ export interface FileRouteTypes {
     | '/settings/notifications'
     | '/apps/'
     | '/chats/'
+    | '/contributors/'
     | '/help-center/'
     | '/settings/'
     | '/tasks/'
@@ -371,6 +393,7 @@ export interface FileRouteTypes {
     | '/standards'
     | '/'
     | '/super-admin/login'
+    | '/contributors/$contributorId'
     | '/errors/$error'
     | '/repositories/$repositoryId'
     | '/settings/account'
@@ -379,6 +402,7 @@ export interface FileRouteTypes {
     | '/settings/notifications'
     | '/apps'
     | '/chats'
+    | '/contributors'
     | '/help-center'
     | '/settings'
     | '/tasks'
@@ -405,6 +429,7 @@ export interface FileRouteTypes {
     | '/_authenticated/standards'
     | '/_authenticated/'
     | '/(auth)/super-admin/login'
+    | '/_authenticated/contributors/$contributorId'
     | '/_authenticated/errors/$error'
     | '/_authenticated/repositories/$repositoryId'
     | '/_authenticated/settings/account'
@@ -413,6 +438,7 @@ export interface FileRouteTypes {
     | '/_authenticated/settings/notifications'
     | '/_authenticated/apps/'
     | '/_authenticated/chats/'
+    | '/_authenticated/contributors/'
     | '/_authenticated/help-center/'
     | '/_authenticated/settings/'
     | '/_authenticated/tasks/'
@@ -587,6 +613,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedChatsIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/contributors/': {
+      id: '/_authenticated/contributors/'
+      path: '/contributors'
+      fullPath: '/contributors/'
+      preLoaderRoute: typeof AuthenticatedContributorsIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/contributors/$contributorId': {
+      id: '/_authenticated/contributors/$contributorId'
+      path: '/contributors/$contributorId'
+      fullPath: '/contributors/$contributorId'
+      preLoaderRoute: typeof AuthenticatedContributorsContributorIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/errors/$error': {
       id: '/_authenticated/errors/$error'
       path: '/errors/$error'
@@ -695,10 +735,12 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedQualityGatesRoute: typeof AuthenticatedQualityGatesRoute
   AuthenticatedStandardsRoute: typeof AuthenticatedStandardsRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
+  AuthenticatedContributorsContributorIdRoute: typeof AuthenticatedContributorsContributorIdRoute
   AuthenticatedErrorsErrorRoute: typeof AuthenticatedErrorsErrorRoute
   AuthenticatedRepositoriesRepositoryIdRoute: typeof AuthenticatedRepositoriesRepositoryIdRoute
   AuthenticatedAppsIndexRoute: typeof AuthenticatedAppsIndexRoute
   AuthenticatedChatsIndexRoute: typeof AuthenticatedChatsIndexRoute
+  AuthenticatedContributorsIndexRoute: typeof AuthenticatedContributorsIndexRoute
   AuthenticatedHelpCenterIndexRoute: typeof AuthenticatedHelpCenterIndexRoute
   AuthenticatedTasksIndexRoute: typeof AuthenticatedTasksIndexRoute
   AuthenticatedUsersIndexRoute: typeof AuthenticatedUsersIndexRoute
@@ -717,11 +759,14 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedQualityGatesRoute: AuthenticatedQualityGatesRoute,
   AuthenticatedStandardsRoute: AuthenticatedStandardsRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
+  AuthenticatedContributorsContributorIdRoute:
+    AuthenticatedContributorsContributorIdRoute,
   AuthenticatedErrorsErrorRoute: AuthenticatedErrorsErrorRoute,
   AuthenticatedRepositoriesRepositoryIdRoute:
     AuthenticatedRepositoriesRepositoryIdRoute,
   AuthenticatedAppsIndexRoute: AuthenticatedAppsIndexRoute,
   AuthenticatedChatsIndexRoute: AuthenticatedChatsIndexRoute,
+  AuthenticatedContributorsIndexRoute: AuthenticatedContributorsIndexRoute,
   AuthenticatedHelpCenterIndexRoute: AuthenticatedHelpCenterIndexRoute,
   AuthenticatedTasksIndexRoute: AuthenticatedTasksIndexRoute,
   AuthenticatedUsersIndexRoute: AuthenticatedUsersIndexRoute,

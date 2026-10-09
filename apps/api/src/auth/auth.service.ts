@@ -1,3 +1,4 @@
+import { rolePermissions } from './authorization.service.js'
 import {
   createHash,
   randomBytes,
@@ -556,6 +557,13 @@ export class AuthService implements OnModuleInit {
           await tx.membership.create({
             data: { identityId: challenge.identityId, role: 'OWNER' },
           })
+          await tx.organizationMembership.create({
+            data: {
+              organizationId: 'preflyt-default',
+              identityId: challenge.identityId,
+              role: 'OWNER',
+            },
+          })
           await tx.bootstrapChallenge.delete({ where: { id: challenge.id } })
           await tx.webSession.create({
             data: {
@@ -601,12 +609,43 @@ export class AuthService implements OnModuleInit {
     if (!session?.identity.membership) {
       return { authenticated: false as const }
     }
+    const activeOrganizationId =
+      session.activeOrganizationId ??
+      (
+        await this.prisma.organizationMembership.findFirst({
+          where: { identityId: session.identity.id, active: true },
+          orderBy: { createdAt: 'asc' },
+        })
+      )?.organizationId ??
+      null
+    const scopedMember = activeOrganizationId
+      ? await this.prisma.organizationMembership.findFirst({
+          where: {
+            identityId: session.identity.id,
+            organizationId: activeOrganizationId ?? undefined,
+            active: true,
+          },
+          include: {
+            grants: { include: { repository: { select: { githubId: true } } } },
+          },
+        })
+      : null
     return {
       authenticated: true as const,
+      permissions: scopedMember ? rolePermissions[scopedMember.role] : [],
+      organizationWide:
+        !!scopedMember && ['OWNER', 'ADMIN'].includes(scopedMember.role),
+      repositoryGrants:
+        scopedMember?.grants.map((g) => g.repository.githubId.toString()) ?? [],
       identityId: session.identity.id,
       subject: session.identity.subject,
       email: session.identity.email,
-      role: session.identity.membership.role,
+      role: scopedMember?.role ??
+        (session.identity.membership.role === 'SUPER_ADMIN'
+          ? 'SUPER_ADMIN'
+          : 'VIEWER'),
+      organizationId: activeOrganizationId,
+      platformAdmin: session.identity.membership.role === 'SUPER_ADMIN',
     }
   }
 

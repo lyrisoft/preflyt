@@ -17,6 +17,7 @@ import { GitHubService } from './github.service.js'
     RepositoryProfileController,
     DashboardController,
   ],
+  exports: [GitHubProviderService],
   providers: [
     GitHubProviderService,
     GitHubService,

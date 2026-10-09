@@ -17,6 +17,7 @@ type Session = {
   authenticated: boolean
   email?: string | null
   role?: string
+  platformAdmin?: boolean
 }
 
 export function ProfileDropdown() {
@@ -39,7 +40,9 @@ export function ProfileDropdown() {
     return () => controller.abort()
   }, [])
 
-  const role = session?.role?.replace(/_/g, ' ') ?? 'Account'
+  const role = session?.platformAdmin
+    ? 'Super Admin'
+    : (session?.role?.replace(/_/g, ' ') ?? 'Account')
   const email = session?.email || 'Signed-in Preflyt user'
 
   return (

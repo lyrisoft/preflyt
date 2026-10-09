@@ -1,3 +1,5 @@
+import { normalizeContributorEvent } from './contributor-event.js'
+import { captureContributors } from '../contributors/capture.js'
 import { artifactSummarySelect } from './ci-artifact.service.js'
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
 import {
@@ -60,6 +62,18 @@ export class GitHubWebhookService {
         access,
       )
     const normalized = normalizeGitHubEvent(event, body)
+    const contributorEvent = normalizeContributorEvent(event, body)
+    if (contributorEvent) {
+      const captured = await captureContributors(
+        this.prisma,
+        deliveryId.toLowerCase(),
+        createHash('sha256').update(event).update(raw).digest('hex'),
+        contributorEvent.installationId,
+        contributorEvent.repositoryGithubId,
+        contributorEvent.activities,
+      )
+      if (!normalized || !captured.accepted) return captured
+    }
     if (!normalized) return { accepted: false, reason: 'unsupported_event' }
     const id = deliveryId.toLowerCase()
     const payloadHash = createHash('sha256')

@@ -1,3 +1,4 @@
+import { AuthorizationService } from '../src/auth/authorization.service.js'
 import 'reflect-metadata'
 import {
   afterAll,
@@ -53,6 +54,20 @@ beforeAll(async () => {
       providers: [
         RepositoryProfileService,
         SessionGuard,
+        {
+          provide: AuthorizationService,
+          useValue: {
+            authorizeRequest: async () => false,
+            repositoryScope: async () =>
+              prisma.gitHubRepository.findMany({
+                where: {
+                  selected: true,
+                  available: true,
+                  installation: { active: true },
+                },
+              }),
+          },
+        },
         OwnerAdminGuard,
         { provide: PrismaService, useValue: prisma },
         { provide: GitHubProviderService, useValue: provider },

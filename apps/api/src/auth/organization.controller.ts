@@ -1,0 +1,370 @@
+import {
+  Body,
+  Controller,
+  Get,
+  Header,
+  Inject,
+  Param,
+  Patch,
+  Post,
+  Req,
+  UseGuards,
+  ForbiddenException,
+  BadRequestException,
+} from '@nestjs/common'
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsBoolean,
+  IsIn,
+  IsOptional,
+  IsString,
+  MaxLength,
+  MinLength,
+} from 'class-validator'
+import { PrismaService } from '../prisma/prisma.service.js'
+import { AuthService } from './auth.service.js'
+import {
+  AuthorizationService,
+  rolePermissions,
+} from './authorization.service.js'
+import { SessionGuard, type AuthenticatedSession } from './session.guard.js'
+import type { Request } from 'express'
+export const organizationRoles = [
+  'OWNER',
+  'ADMIN',
+  'POLICY_MANAGER',
+  'SECURITY_ENGINEER',
+  'ENGINEERING_LEAD',
+  'DEVELOPER',
+  'AUDITOR',
+  'VIEWER',
+] as const
+class CreateOrganizationDto {
+  @IsString() @MinLength(1) @MaxLength(120) name!: string
+}
+class MemberDto {
+  @IsString() @MinLength(1) @MaxLength(320) subject!: string
+  @IsOptional() @IsString() @MaxLength(120) displayName?: string
+  @IsIn(organizationRoles) role!: (typeof organizationRoles)[number]
+  @IsBoolean() active!: boolean
+  @IsArray()
+  @ArrayMaxSize(500)
+  @IsString({ each: true })
+  repositoryIds!: string[]
+}
+type R = Request & { preflytSession: AuthenticatedSession }
+@Controller('organizations')
+@UseGuards(SessionGuard)
+export class OrganizationController {
+  constructor(
+    @Inject(PrismaService) private readonly db: PrismaService,
+    @Inject(AuthorizationService) private readonly access: AuthorizationService,
+    @Inject(AuthService) private readonly auth: AuthService,
+  ) {}
+  @Get() @Header('Cache-Control', 'no-store') async list(@Req() req: R) {
+    const memberships = await this.db.organizationMembership.findMany({
+      where: { identityId: req.preflytSession.identityId, active: true },
+      include: { organization: true },
+      orderBy: { createdAt: 'asc' },
+    })
+    return {
+      activeOrganizationId: req.preflytSession.organizationId,
+      platformAdmin: !!req.preflytSession.platformAdmin,
+      organizations: memberships.map((m) => ({
+        id: m.organizationId,
+        name: m.organization.name,
+        role: m.role,
+      })),
+    }
+  }
+  @Post() async create(@Body() body: CreateOrganizationDto, @Req() req: R) {
+    this.auth.assertOrigin(req.headers.origin)
+    if (!body.name.trim())
+      throw new BadRequestException('Organization name is required')
+    if (!req.preflytSession.platformAdmin)
+      throw new ForbiddenException(
+        'Platform administration permission required',
+      )
+    return this.db.$transaction(async (tx) => {
+      const org = await tx.organization.create({
+        data: {
+          name: body.name.trim(),
+          memberships: {
+            create: {
+              identityId: req.preflytSession.identityId,
+              role: 'OWNER',
+            },
+          },
+        },
+      })
+      await tx.auditEvent.create({
+        data: {
+          event: 'organization_created_with_explicit_owner',
+          actorId: req.preflytSession.identityId,
+          metadata: {
+            organizationId: org.id,
+            ownerId: req.preflytSession.identityId,
+          },
+        },
+      })
+      return org
+    })
+  }
+  @Post(':organizationId/activate') async activate(
+    @Param('organizationId') id: string,
+    @Req() req: R,
+  ) {
+    this.auth.assertOrigin(req.headers.origin)
+    if (!(await this.access.membership(req.preflytSession.identityId, id)))
+      throw new ForbiddenException('Active organization membership required')
+    // Update this browser's session only; other sessions retain their organization context.
+    const { createHash } = await import('node:crypto')
+    await this.db.webSession.update({
+      where: {
+        tokenHash: createHash('sha256')
+          .update(req.cookies[this.auth.sessionCookieName])
+          .digest('hex'),
+      },
+      data: { activeOrganizationId: id },
+    })
+    return { organizationId: id }
+  }
+  @Header('Cache-Control', 'no-store') @Get('access') async context(
+    @Req() req: R,
+  ) {
+    const session = req.preflytSession
+    const member = await this.access.membership(
+      session.identityId,
+      session.organizationId,
+    )
+    const scope = await this.access.repositoryScope(
+      session.identityId,
+      session.organizationId,
+      'repository.read',
+      false,
+    )
+    return {
+      organization: member?.organization ?? null,
+      role: member?.role ?? null,
+      permissions: member ? rolePermissions[member.role] : [],
+      repositories: scope.map((r) => ({
+        id: r.githubId.toString(),
+        fullName: r.fullName,
+      })),
+      organizationWide: !!member && ['OWNER', 'ADMIN'].includes(member.role),
+      platformAdmin: !!session.platformAdmin,
+    }
+  }
+  @Header('Cache-Control', 'no-store') @Get('members') async members(
+    @Req() req: R,
+  ) {
+    const actor = await this.access.requireOrganization(
+      req.preflytSession,
+      'organization.members.manage',
+    )
+    const members = await this.db.organizationMembership.findMany({
+      where: { organizationId: actor.organizationId },
+      include: {
+        identity: {
+          select: { id: true, subject: true, displayName: true, email: true },
+        },
+        grants: {
+          include: {
+            repository: { select: { githubId: true, fullName: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    })
+    const audit = await this.db.auditEvent.findMany({
+      where: {
+        event: {
+          in: [
+            'organization_membership_changed',
+            'organization_created_with_explicit_owner',
+          ],
+        },
+        metadata: { path: ['organizationId'], equals: actor.organizationId },
+      },
+      select: {
+        id: true,
+        event: true,
+        actorId: true,
+        metadata: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+    })
+    return {
+      audit,
+      roles: organizationRoles,
+      members: members.map((m) => ({
+        id: m.id,
+        identity: m.identity,
+        role: m.role,
+        active: m.active,
+        repositoryIds: m.grants.map((g) => g.repository.githubId.toString()),
+      })),
+    }
+  }
+  @Post('members') async add(@Body() body: MemberDto, @Req() req: R) {
+    return this.save(body, req)
+  }
+  @Patch('members/:membershipId') async edit(
+    @Param('membershipId') id: string,
+    @Body() body: MemberDto,
+    @Req() req: R,
+  ) {
+    return this.save(body, req, id)
+  }
+  private async save(body: MemberDto, req: R, id?: string) {
+    this.auth.assertOrigin(req.headers.origin)
+    const actor = await this.access.requireOrganization(
+      req.preflytSession,
+      'organization.members.manage',
+    )
+    return this.db.$transaction(async (tx) => {
+      // Serialize owner changes and grants in this organization.
+      await tx.$queryRaw`SELECT id FROM "Organization" WHERE id = ${actor.organizationId} FOR UPDATE`
+      const liveActor = await tx.organizationMembership.findUnique({
+        where: { id: actor.id },
+      })
+      if (!liveActor?.active || !['OWNER', 'ADMIN'].includes(liveActor.role))
+        throw new ForbiddenException('Membership administration was revoked')
+      const previous = id
+        ? await tx.organizationMembership.findFirst({
+            where: { id, organizationId: actor.organizationId },
+          })
+        : null
+      if (id && !previous)
+        throw new ForbiddenException('Membership is unavailable')
+      if (previous?.identityId === req.preflytSession.identityId)
+        throw new ForbiddenException(
+          'Use another Owner to change your own access',
+        )
+      if (
+        liveActor.role !== 'OWNER' &&
+        (['OWNER', 'ADMIN'].includes(body.role) ||
+          (previous && ['OWNER', 'ADMIN'].includes(previous.role)))
+      )
+        throw new ForbiddenException(
+          'Only Owners can assign or change administrative roles',
+        )
+      if (
+        previous?.role === 'OWNER' &&
+        (!body.active || body.role !== 'OWNER') &&
+        (await tx.organizationMembership.count({
+          where: {
+            organizationId: actor.organizationId,
+            active: true,
+            role: 'OWNER',
+          },
+        })) <= 1
+      )
+        throw new BadRequestException(
+          'An organization must retain an active Owner',
+        )
+      const repositories = await tx.gitHubRepository.findMany({
+        where: {
+          githubId: {
+            in: body.repositoryIds
+              .filter((s) => /^[1-9]\d{0,15}$/.test(s))
+              .map((s) => BigInt(s)),
+          },
+          installation: { organizationId: actor.organizationId },
+        },
+      })
+      if (
+        new Set(body.repositoryIds).size !== body.repositoryIds.length ||
+        repositories.length !== body.repositoryIds.length
+      )
+        throw new BadRequestException(
+          'Repository grants must belong to this organization',
+        )
+      const issuer = process.env.OIDC_ISSUER
+        ? new URL(process.env.OIDC_ISSUER).href
+        : null
+      if (!previous && !issuer)
+        throw new BadRequestException(
+          'Configure organization OIDC before provisioning members',
+        )
+      const identity = previous
+        ? await tx.identity.findUniqueOrThrow({
+            where: { id: previous.identityId },
+          })
+        : await tx.identity.upsert({
+            where: {
+              issuer_subject: { issuer: issuer!, subject: body.subject },
+            },
+            create: {
+              issuer: issuer!,
+              subject: body.subject,
+              displayName: body.displayName,
+              membership: { create: { role: 'VIEWER' } },
+            },
+            update: {},
+          })
+      if (previous && identity.subject !== body.subject)
+        throw new BadRequestException(
+          'An existing identity subject cannot change',
+        )
+      if (!previous && await tx.organizationMembership.findUnique({
+        where: { organizationId_identityId: {
+          organizationId: actor.organizationId,
+          identityId: identity.id,
+        } },
+      }))
+        throw new BadRequestException('Membership already exists; use its edit route')
+      await tx.membership.upsert({
+        where: { identityId: identity.id },
+        create: { identityId: identity.id, role: 'VIEWER' },
+        update: {},
+      })
+      const member = await tx.organizationMembership.upsert({
+        where: {
+          organizationId_identityId: {
+            organizationId: actor.organizationId,
+            identityId: identity.id,
+          },
+        },
+        create: {
+          organizationId: actor.organizationId,
+          identityId: identity.id,
+          role: body.role,
+          active: body.active,
+        },
+        update: { role: body.role, active: body.active },
+      })
+      if (member.identityId === req.preflytSession.identityId)
+        throw new ForbiddenException(
+          'Use another Owner to change your own access',
+        )
+      await tx.repositoryGrant.deleteMany({
+        where: { membershipId: member.id },
+      })
+      if (body.repositoryIds.length)
+        await tx.repositoryGrant.createMany({
+          data: repositories.map((r) => ({
+            membershipId: member.id,
+            repositoryId: r.id,
+          })),
+        })
+      await tx.auditEvent.create({
+        data: {
+          event: 'organization_membership_changed',
+          actorId: req.preflytSession.identityId,
+          metadata: {
+            organizationId: actor.organizationId,
+            membershipId: member.id,
+            role: body.role,
+            active: body.active,
+            repositoryIds: body.repositoryIds,
+          },
+        },
+      })
+      return { id: member.id }
+    })
+  }
+}

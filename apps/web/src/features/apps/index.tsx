@@ -52,10 +52,8 @@ import { Search } from '@/components/search'
 import { StatusBadge } from '@/components/status-badge'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { TechIcon } from '@/features/repositories/tech-icon'
-import {
-  canAdminister,
-  useNavigationSession,
-} from '@/features/workspace/navigation-session'
+import { useNavigationSession } from '@/features/workspace/navigation-session'
+import { canPerform } from '../workspace/scoped-access'
 
 const route = getRouteApi('/_authenticated/apps/')
 
@@ -200,7 +198,7 @@ function RepositoryCardDetails({
 export function Apps() {
   const { github, account } = route.useSearch()
   const session = useNavigationSession()
-  const canManage = canAdminister(session.data?.role)
+  const canManage = canPerform(session.data, 'repository.manage')
   const [search, setSearch] = useState('')
   const [selectionFilter, setSelectionFilter] = useState('all')
   const [visibilityFilter, setVisibilityFilter] = useState('all')

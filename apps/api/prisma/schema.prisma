@@ -28,6 +28,7 @@ model Identity {
   email       String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  organizationMemberships OrganizationMembership[]
   membership  Membership?
   superAdminCredential SuperAdminCredential?
   sessions    WebSession[]
@@ -68,6 +69,7 @@ model LoginTransaction {
 }
 
 model WebSession {
+  activeOrganizationId String?
   id           String   @id @default(cuid())
   tokenHash    String   @unique
   identityId   String
@@ -113,6 +115,7 @@ model AuthThrottle {
 }
 
 model GitHubSetupTransaction {
+  organizationId String @default("preflyt-default")
   id                  String          @id @default(cuid())
   stateHash           String          @unique
   browserBindingHash  String
@@ -127,6 +130,8 @@ model GitHubSetupTransaction {
 }
 
 model GitHubInstallation {
+  organizationId String @default("preflyt-default")
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   id                  BigInt             @id
   accountLogin        String
   accountType         String
@@ -159,6 +164,8 @@ model GitHubRepository {
   selected       Boolean           @default(false)
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
+  repositoryGrants RepositoryGrant[]
+  contributorObservations ContributorObservation[]
   pullRequests RepositoryPullRequest[]
   ciBindings RepositoryCiBindings[]
   assessments    CommitAssessment[]
@@ -353,4 +360,93 @@ model CiArtifactAttestation {
   verifiedById String
   createdAt DateTime @default(now())
   @@unique([artifactId, policyDigest])
+}
+
+
+enum OrganizationRole {
+  OWNER
+  ADMIN
+  POLICY_MANAGER
+  SECURITY_ENGINEER
+  ENGINEERING_LEAD
+  DEVELOPER
+  AUDITOR
+  VIEWER
+}
+
+model Organization {
+  id            String                   @id @default(cuid())
+  name          String
+  createdAt     DateTime                 @default(now())
+  memberships   OrganizationMembership[]
+  installations GitHubInstallation[]
+}
+
+model OrganizationMembership {
+  id             String            @id @default(cuid())
+  organizationId String
+  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  identityId     String
+  identity       Identity          @relation(fields: [identityId], references: [id], onDelete: Cascade)
+  role           OrganizationRole
+  active         Boolean           @default(true)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  grants         RepositoryGrant[]
+
+  @@unique([organizationId, identityId])
+}
+
+model RepositoryGrant {
+  id           String                 @id @default(cuid())
+  membershipId String
+  membership   OrganizationMembership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  repositoryId String
+  repository   GitHubRepository       @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  createdAt    DateTime               @default(now())
+
+  @@unique([membershipId, repositoryId])
+}
+
+// Stable provider identity is installation-scoped; Git author names are never identity keys.
+model Contributor {
+  id             String                   @id @default(cuid())
+  installationId BigInt
+  githubUserId   String
+  login          String
+  kind           String
+  lastObservedAt DateTime
+  observations   ContributorObservation[]
+
+  @@unique([installationId, githubUserId])
+}
+
+// Immutable signed observations. Raw payload, email, review body and commit messages are omitted.
+model ContributorDelivery {
+  id           String   @id
+  payloadHash  String
+  repositoryId String
+  observedAt   DateTime
+  receivedAt   DateTime @default(now())
+}
+
+model ContributorObservation {
+  id                String           @id @default(cuid())
+  deliveryId        String
+  repositoryId      String
+  repository        GitHubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  contributorId     String
+  contributor       Contributor      @relation(fields: [contributorId], references: [id], onDelete: Cascade)
+  relationship      String
+  sourceObjectId    String
+  sourceSha         String
+  pullRequestNumber Int?
+  action            String
+  state             String?
+  merged            Boolean          @default(false)
+  observedAt        DateTime
+
+  @@unique([deliveryId, contributorId, relationship, sourceObjectId])
+  @@index([repositoryId, observedAt])
+  @@index([contributorId, observedAt])
 }

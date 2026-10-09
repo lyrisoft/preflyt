@@ -12,6 +12,7 @@ import {
   SessionGuard,
   type AuthenticatedSession,
 } from '../auth/session.guard.js'
+import { AuthorizationService } from '../auth/authorization.service.js'
 import { DashboardService } from './dashboard.service.js'
 
 @Controller('github/dashboard')
@@ -19,10 +20,11 @@ import { DashboardService } from './dashboard.service.js'
 export class DashboardController {
   constructor(
     @Inject(DashboardService) private readonly dashboard: DashboardService,
+  @Inject(AuthorizationService) private readonly access: AuthorizationService,
   ) {}
   @Get()
   @Header('Cache-Control', 'no-store')
-  overview(
+  async overview(
     @Query('days') days: unknown,
     @Query('repository') repository: unknown,
     @Req() request: Request & { preflytSession?: AuthenticatedSession },
@@ -31,6 +33,12 @@ export class DashboardController {
       request.preflytSession!.identityId,
       days,
       repository,
+    (
+        await this.access.repositoryScope(
+          request.preflytSession!.identityId,
+          request.preflytSession!.organizationId,
+        )
+      ).map((r) => r.id),
     )
   }
 }

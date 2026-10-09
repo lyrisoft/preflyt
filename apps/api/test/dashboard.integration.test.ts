@@ -1,3 +1,4 @@
+import { AuthorizationService } from '../src/auth/authorization.service.js'
 import 'reflect-metadata'
 import { beforeAll, afterAll, beforeEach, expect, it, vi } from 'vitest'
 import { NestFactory } from '@nestjs/core'
@@ -47,6 +48,20 @@ beforeAll(async () => {
       providers: [
         DashboardService,
         SessionGuard,
+        {
+          provide: AuthorizationService,
+          useValue: {
+            authorizeRequest: async () => false,
+            repositoryScope: async () =>
+              prisma.gitHubRepository.findMany({
+                where: {
+                  selected: true,
+                  available: true,
+                  installation: { active: true },
+                },
+              }),
+          },
+        },
         { provide: PrismaService, useValue: prisma },
         { provide: RedisCacheService, useValue: cache },
         {

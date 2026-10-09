@@ -1,17 +1,18 @@
 import { useQuery } from '@tanstack/react-query'
 import { API_BASE_URL } from '@/lib/api'
+import type { ScopedSession } from './scoped-access'
 
 export function useNavigationSession() {
   return useQuery({
     queryKey: ['profile-view-session'],
-    queryFn: async ({ signal }): Promise<{ role?: string }> => {
+    queryFn: async ({ signal }): Promise<ScopedSession> => {
       const response = await fetch(`${API_BASE_URL}/auth/session`, {
         credentials: 'include',
         cache: 'no-store',
         signal,
       })
       if (!response.ok) throw new Error('Session details are unavailable.')
-      return response.json() as Promise<{ role?: string }>
+      return response.json() as Promise<ScopedSession>
     },
     retry: false,
   })

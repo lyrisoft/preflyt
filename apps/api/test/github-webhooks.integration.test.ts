@@ -1,3 +1,4 @@
+import { AuthorizationService } from '../src/auth/authorization.service.js'
 import 'reflect-metadata'
 import { ForbiddenException, ValidationPipe } from '@nestjs/common'
 import { CiArtifactController } from '../src/github-events/ci-artifact.controller.js'
@@ -38,7 +39,7 @@ beforeAll(async () => {
   await prisma.$connect()
   app = await NestFactory.create<NestExpressApplication>({
     module: class TestModule {}, controllers: [GitHubWebhookController, CiArtifactController],
-    providers: [GitHubWebhookService, CiArtifactService, OwnerAdminGuard, SessionGuard, { provide: PrismaService, useValue: prisma },
+    providers: [{ provide: AuthorizationService, useValue: { authorizeRequest: async () => false } }, GitHubWebhookService, CiArtifactService, OwnerAdminGuard, SessionGuard, { provide: PrismaService, useValue: prisma },
       { provide: AuthService, useValue: {
         sessionCookieName: 'test.sid', assertOrigin: (origin?: string) => { if (origin !== 'http://localhost:5173') throw new ForbiddenException() },
         currentSession: async (token?: string) => ['VIEWER', 'OWNER', 'SUPER_ADMIN'].includes(token ?? '')

@@ -57,6 +57,14 @@ beforeEach(async () => {
     },
   })
   identityId = identity.id
+  await prisma.organization.upsert({
+    where: { id: 'preflyt-default' },
+    create: { id: 'preflyt-default', name: 'Test workspace' },
+    update: {},
+  })
+  await prisma.organizationMembership.create({
+    data: { organizationId: 'preflyt-default', identityId, role: 'OWNER' },
+  })
   provider = {
     createInstallationUrl: vi.fn(
       async (state: string) =>

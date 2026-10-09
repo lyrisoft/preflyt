@@ -13,6 +13,7 @@ import { IsBoolean } from 'class-validator'
 import type { Request, Response } from 'express'
 import { OwnerAdminGuard, SessionGuard } from '../auth/session.guard.js'
 import type { AuthenticatedSession } from '../auth/session.guard.js'
+import { AuthorizationService } from '../auth/authorization.service.js'
 import { GitHubService } from './github.service.js'
 
 class RepositorySelectionDto {
@@ -32,13 +33,17 @@ const cookieOptions = (secure: boolean, maxAge: number) => ({
 
 @Controller('github')
 export class GitHubController {
-  constructor(@Inject(GitHubService) private readonly github: GitHubService) {}
+  constructor(@Inject(GitHubService) private readonly github: GitHubService,
+    @Inject(AuthorizationService) private readonly access: AuthorizationService,
+  ) {}
 
   @Get('install')
   @UseGuards(SessionGuard, OwnerAdminGuard)
   async install(@Req() req: AuthenticatedRequest, @Res() res: Response) {
     const session = req.preflytSession!
-    const result = await this.github.beginInstallation(session.identityId)
+    const result = await this.github.beginInstallation(session.identityId,
+      session.organizationId!,
+    )
     res.cookie(
       this.github.setupCookieName,
       result.browserBinding,
@@ -50,7 +55,7 @@ export class GitHubController {
   @Get('setup/callback')
   async setupCallback(@Req() req: Request, @Res() res: Response) {
     const binding = req.cookies?.[this.github.setupCookieName] as
-      | string
+      string
       | undefined
     try {
       const authorizationUrl = await this.github.beginUserAuthorization(
@@ -73,7 +78,7 @@ export class GitHubController {
   @Get('oauth/callback')
   async oauthCallback(@Req() req: Request, @Res() res: Response) {
     const binding = req.cookies?.[this.github.setupCookieName] as
-      | string
+      string
       | undefined
     try {
       const result = await this.github.completeUserAuthorization(
@@ -94,14 +99,37 @@ export class GitHubController {
 
   @Get('repositories')
   @UseGuards(SessionGuard)
-  repositories(@Req() req: Request) {
-    return this.github.listRepositories(req.query.refresh === 'true')
+  async repositories(@Req() req: AuthenticatedRequest) {
+    const session = req.preflytSession!
+    if (req.query.refresh === 'true')
+      await this.access.requireOrganization(session, 'repository.connect')
+    const scope = await this.access.repositoryScope(
+      session.identityId,
+      session.organizationId,
+      'repository.read',
+      false,
+    )
+    return this.github.listRepositories(req.query.refresh === 'true',
+      scope.map((r) => r.githubId),
+      session.organizationId!,
+      ['OWNER', 'ADMIN'].includes(session.role),
+    )
   }
 
   @Get('repositories/overview')
   @UseGuards(SessionGuard)
-  overview() {
-    return this.github.repositoryOverview()
+  async overview(@Req() req: AuthenticatedRequest) {
+    const session = req.preflytSession!
+    const scope = await this.access.repositoryScope(
+      session.identityId,
+      session.organizationId,
+      'repository.read',
+      false,
+    )
+    return this.github.repositoryOverview(scope.map((r) => r.githubId),
+      session.organizationId!,
+      ['OWNER', 'ADMIN'].includes(session.role),
+    )
   }
 
   @Patch('repositories/:repositoryId/selection')

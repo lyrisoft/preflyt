@@ -1,6 +1,6 @@
 # Preflyt RBAC and resource authorization
 
-**Status:** Required architecture; implementation pending. **P0 foundational**, extended within existing phases. See [OIDC ADR](../architecture/ADR-0003-oidc-user-authentication.md) and [roadmap](../roadmap/incremental-delivery.md).
+**Status:** Organization memberships, predefined roles, repository grants and existing API resource checks implemented. Later enforcement/execution permissions remain pending. **P0 foundational**, extended within existing phases. See [OIDC ADR](../architecture/ADR-0003-oidc-user-authentication.md) and [roadmap](../roadmap/incremental-delivery.md).
 
 ## Authorization model
 
@@ -46,3 +46,7 @@ Use OIDC for authentication and Preflyt-owned, **server-enforced organization-sc
 7. Deployment and rollback preserve membership/grant integrity.
 
 **Later:** custom role designer, enterprise IdP group sync and environment-granular inheritance only after explicit design/security review.
+
+## Current implementation
+
+See [organization access and contributors](../operations/scoped-access-contributors.md) for shipped workflows, the explicit compatibility migration, live-request revocation behavior, contributor permission boundaries and remaining limitations. This slice does not implement team inheritance, policy enforcement/exception approval, independent sandbox admission or AI egress authorization.

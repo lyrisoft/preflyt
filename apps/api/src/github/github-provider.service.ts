@@ -517,6 +517,85 @@ export class GitHubProviderService {
     }
   }
 
+  /** Explicit bounded backfill; every request uses the existing installation limiter and scoped token. */
+  async readContributorBackfill(installationId: bigint, repositoryId: bigint) {
+    const repository = await this.openRepository(
+      installationId,
+      repositoryId,
+      'pull_requests',
+    )
+    const path = `/repos/${repository.metadata.full_name.split('/').map(encodeURIComponent).join('/')}`
+    const prs = await repository.request<any[]>(
+      `${path}/pulls?state=all&sort=updated&direction=desc&per_page=30&page=1`,
+    )
+    const observations: { event: string; body: any }[] = prs.map((p) => ({
+      event: 'pull_request',
+      body: {
+        installation: { id: Number(installationId) },
+        repository: { id: Number(repositoryId) },
+        action: p.state === 'closed' ? 'closed' : 'edited',
+        pull_request: p,
+      },
+    }))
+    let reviewsTruncated = false
+    for (const p of prs.slice(0, 10)) {
+      const reviews = await repository.request<any[]>(
+        `${path}/pulls/${p.number}/reviews?per_page=30&page=1`,
+      )
+      reviewsTruncated ||= reviews.length === 30
+      for (const review of reviews)
+        if (review.submitted_at)
+          observations.push({
+            event: 'pull_request_review',
+            body: {
+              installation: { id: Number(installationId) },
+              repository: { id: Number(repositoryId) },
+              action: review.state === 'DISMISSED' ? 'dismissed' : 'submitted',
+              pull_request: p,
+              review,
+            },
+          })
+    }
+    const contents = await this.openRepository(
+      installationId,
+      repositoryId,
+      'contents',
+    )
+    const commits = await contents.request<any[]>(
+      `${path}/commits?per_page=30&page=1`,
+    )
+    for (const c of commits)
+      observations.push({
+        event: 'push',
+        body: {
+          installation: { id: Number(installationId) },
+          repository: { id: Number(repositoryId) },
+          commits: [
+            {
+              id: c.sha,
+              author: c.author,
+              committer: c.committer,
+              timestamp: c.commit?.author?.date ?? c.commit?.committer?.date,
+            },
+          ],
+        },
+      })
+    return {
+      observations,
+      truncated:
+        prs.length === 30 ||
+        prs.length > 10 ||
+        reviewsTruncated ||
+        commits.length === 30,
+      limits: {
+        pullRequests: 30,
+        reviewedPullRequests: 10,
+        reviewsPerPr: 30,
+        commits: 30,
+      },
+    }
+  }
+
   private async openRepository(
     installationId: bigint,
     repositoryId: bigint,

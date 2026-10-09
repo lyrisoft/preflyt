@@ -23,6 +23,7 @@ export class DashboardService {
     actorId: string,
     rawDays: unknown = '180',
     rawRepository?: unknown,
+    authorizedIds?: string[],
   ) {
     if (
       !['7', '30', '90', '180'].includes(String(rawDays)) ||
@@ -44,6 +45,7 @@ export class DashboardService {
     // Always read live selection/access before consulting a cached display summary.
     const scope = await this.prisma.gitHubRepository.findMany({
       where: {
+        ...(authorizedIds ? { id: { in: authorizedIds } } : {}),
         selected: true,
         available: true,
         installation: { active: true },

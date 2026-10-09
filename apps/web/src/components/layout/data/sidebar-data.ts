@@ -48,6 +48,7 @@ export const sidebarData: SidebarData = {
           icon: ShieldAlert,
           badge: 'Planned',
         },
+        { title: 'Contributors', url: '/contributors', icon: UsersRound },
       ],
     },
     {
@@ -83,7 +84,6 @@ export const sidebarData: SidebarData = {
           url: '/access-control',
           icon: UsersRound,
           adminOnly: true,
-          badge: 'Planned',
         },
         {
           title: 'Settings',

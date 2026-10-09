@@ -30,6 +30,7 @@ type NavUserProps = {
 type Session = {
   email?: string | null
   role?: string
+  platformAdmin?: boolean
 }
 
 export function NavUser({ user }: NavUserProps) {
@@ -50,7 +51,9 @@ export function NavUser({ user }: NavUserProps) {
       })
     return () => controller.abort()
   }, [])
-  const accountName = session?.role?.replace(/_/g, ' ') ?? user.name
+  const accountName = session?.platformAdmin
+    ? 'Super Admin'
+    : (session?.role?.replace(/_/g, ' ') ?? user.name)
   const accountEmail = session?.email || user.email
   const [open, setOpen] = useDialogState()
 

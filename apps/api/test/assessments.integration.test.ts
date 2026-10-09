@@ -1,3 +1,4 @@
+import { AuthorizationService } from '../src/auth/authorization.service.js'
 import { CiAttestationController } from '../src/github-events/ci-attestation.controller.js'
 import { CiAttestationService } from '../src/github-events/ci-attestation.service.js'
 import { CiAttestationVerifier } from '../src/github-events/ci-attestation-verifier.js'
@@ -81,6 +82,20 @@ beforeAll(async () => {
         StandardsService,
         AssessmentService,
         SessionGuard,
+        {
+          provide: AuthorizationService,
+          useValue: {
+            authorizeRequest: async () => false,
+            repositoryScope: async () =>
+              prisma.gitHubRepository.findMany({
+                where: {
+                  selected: true,
+                  available: true,
+                  installation: { active: true },
+                },
+              }),
+          },
+        },
         OwnerAdminGuard,
         { provide: PrismaService, useValue: prisma },
         {
@@ -620,7 +635,9 @@ describe('atomic automatic CI assessment snapshots', () => {
     })
     for (let index = 0; index < 101; index++) {
       const newer = await incoming()
-      await prisma.importedCiEvidence.create({ data: importCiEvidence(newer)! })
+      await prisma.importedCiEvidence.create({
+        data: importCiEvidence(newer)!,
+      })
       await prisma.gitHubWebhookDelivery.update({
         where: { id: newer.id },
         data: { state: 'PROCESSED' },
@@ -958,7 +975,9 @@ it('does not borrow an approved source observation from a different SHA', async 
 it('prefers the newest workflow attempt without superseding it with a delayed old success', async () => {
   const { selection, delivery } = await ready()
   const identity = { kind: 'workflow_run', workflowId: '7', runAttempt: 1 }
-  await prisma.importedCiEvidence.delete({ where: { deliveryId: delivery.id } })
+  await prisma.importedCiEvidence.delete({
+    where: { deliveryId: delivery.id },
+  })
   const old = await prisma.gitHubWebhookDelivery.update({
     where: { id: delivery.id },
     data: {
