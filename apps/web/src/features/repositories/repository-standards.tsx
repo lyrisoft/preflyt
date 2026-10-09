@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   AlertTriangle,
@@ -12,6 +12,7 @@ import {
   Server,
   ShieldCheck,
   SlidersHorizontal,
+  Workflow,
 } from 'lucide-react'
 import { API_BASE_URL } from '@/lib/api'
 import { cn } from '@/lib/utils'
@@ -50,6 +51,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '@/components/ui/sheet'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { StatusBadge } from '@/components/status-badge'
 import { RelativeTime } from './relative-time'
 import {
@@ -420,9 +422,11 @@ function PackCard({
 export function RepositoryStandards({
   repositoryId,
   canManage,
+  sourceBindings,
 }: {
   repositoryId: string
   canManage: boolean
+  sourceBindings?: ReactNode
 }) {
   const query = useStandards(repositoryId)
   const [editing, setEditing] = useState(false)
@@ -449,7 +453,7 @@ export function RepositoryStandards({
     data?.catalogue.filter((pack) =>
       selectedIds.has(`${pack.id}@${pack.version}`)
     ).length ?? 0
-  return (
+  const standardsContent = (
     <div className='space-y-5'>
       {data && !data.selectionIntegrity && (
         <div
@@ -647,5 +651,26 @@ export function RepositoryStandards({
         </section>
       )}
     </div>
+  )
+  return sourceBindings ? (
+    <Tabs defaultValue='standards' className='space-y-5'>
+      <TabsList
+        aria-label='Repository policy sections'
+        className='h-auto flex-wrap justify-start gap-1'
+      >
+        <TabsTrigger value='standards' className='gap-2'>
+          <Layers aria-hidden='true' className='size-4' />
+          Standards
+        </TabsTrigger>
+        <TabsTrigger value='bindings' className='gap-2'>
+          <Workflow aria-hidden='true' className='size-4' />
+          CI source bindings
+        </TabsTrigger>
+      </TabsList>
+      <TabsContent value='standards'>{standardsContent}</TabsContent>
+      <TabsContent value='bindings'>{sourceBindings}</TabsContent>
+    </Tabs>
+  ) : (
+    standardsContent
   )
 }

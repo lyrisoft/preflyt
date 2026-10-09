@@ -411,16 +411,16 @@ export function WorkspaceModule({ module }: { module: Module }) {
                       />
                     )}
                     {module === 'policies' && (
-                      <>
-                        <RepositoryStandards
-                          repositoryId={repository.githubId}
-                          canManage={canManage}
-                        />
-                        <RepositoryBindings
-                          repositoryId={repository.githubId}
-                          canManage={canManage}
-                        />
-                      </>
+                      <RepositoryStandards
+                        repositoryId={repository.githubId}
+                        canManage={canManage}
+                        sourceBindings={
+                          <RepositoryBindings
+                            repositoryId={repository.githubId}
+                            canManage={canManage}
+                          />
+                        }
+                      />
                     )}
                     {module === 'integrations' && (
                       <RepositoryCiEvidence

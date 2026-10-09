@@ -519,10 +519,12 @@ export function RepositoryProfilePage() {
                   key={repositoryId}
                   repositoryId={repositoryId}
                   canManage={canDiscover}
-                />
-                <RepositoryBindings
-                  repositoryId={repositoryId}
-                  canManage={canDiscover}
+                  sourceBindings={
+                    <RepositoryBindings
+                      repositoryId={repositoryId}
+                      canManage={canDiscover}
+                    />
+                  }
                 />
               </TabsContent>
               <TabsContent value='assessments' className='space-y-5'>
