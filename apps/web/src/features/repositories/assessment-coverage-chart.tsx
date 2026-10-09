@@ -1,4 +1,5 @@
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts'
+import { chartAnimation, chartTooltipAnimation } from '@/lib/chart-motion'
 import { cn } from '@/lib/utils'
 
 /** These categories describe available inputs; they never imply passed checks. */
@@ -51,7 +52,7 @@ export function AssessmentCoverageChart({
           aria-label={`Inputs for ${total} controls: ${linked} with CI results, ${configuration} configuration only, ${missing} without linked inputs`}
         >
           <ResponsiveContainer width='100%' height='100%'>
-            <PieChart accessibilityLayer>
+            <PieChart className='chart-motion' accessibilityLayer>
               <Pie
                 data={chartData}
                 dataKey='value'
@@ -64,7 +65,7 @@ export function AssessmentCoverageChart({
                 cornerRadius={4}
                 stroke='var(--card)'
                 strokeWidth={2}
-                isAnimationActive={false}
+                {...chartAnimation}
                 className='cursor-pointer'
                 onClick={(_, index) => {
                   const segment = chartData[index]
@@ -83,6 +84,7 @@ export function AssessmentCoverageChart({
                 ))}
               </Pie>
               <Tooltip
+                {...chartTooltipAnimation}
                 formatter={(value, name) => [
                   `${value} controls · ${total ? Math.round((Number(value) / total) * 100) : 0}%`,
                   name,

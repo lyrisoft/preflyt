@@ -12,6 +12,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import { chartAnimation, chartTooltipAnimation } from '@/lib/chart-motion'
 import { Button } from '@/components/ui/button'
 import { ciResultOrder, summarizeCiActivity } from './ci-activity-model'
 import type { CiObservation } from './repository-queries'
@@ -60,7 +61,7 @@ export function CiActivityCharts({
               .join(', ')}
           >
             <ResponsiveContainer width='100%' height='100%'>
-              <PieChart accessibilityLayer>
+              <PieChart className='chart-motion' accessibilityLayer>
                 <Pie
                   data={resultData}
                   dataKey='value'
@@ -73,13 +74,14 @@ export function CiActivityCharts({
                   cornerRadius={4}
                   stroke='var(--card)'
                   strokeWidth={2}
-                  isAnimationActive={false}
+                  {...chartAnimation}
                 >
                   {resultData.map((result) => (
                     <Cell key={result.key} fill={result.color} />
                   ))}
                 </Pie>
                 <Tooltip
+                  {...chartTooltipAnimation}
                   formatter={(value, name) => [
                     `${value} results · ${observations.length ? Math.round((Number(value) / observations.length) * 100) : 0}%`,
                     name,
@@ -153,6 +155,7 @@ export function CiActivityCharts({
         >
           <ResponsiveContainer width='100%' height='100%'>
             <BarChart
+              className='chart-motion'
               data={summary.days}
               margin={{ top: 5, right: 0, left: -25, bottom: 0 }}
               accessibilityLayer
@@ -183,6 +186,7 @@ export function CiActivityCharts({
                 tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }}
               />
               <Tooltip
+                {...chartTooltipAnimation}
                 cursor={{ fill: 'var(--muted)', opacity: 0.3 }}
                 contentStyle={{
                   background: 'var(--popover)',
@@ -200,7 +204,7 @@ export function CiActivityCharts({
                   stackId='results'
                   fill={colors[result]}
                   maxBarSize={28}
-                  isAnimationActive={false}
+                  {...chartAnimation}
                 />
               ))}
             </BarChart>

@@ -93,13 +93,13 @@
     transform-origin: right;
   }
   @media (prefers-reduced-motion: no-preference) {
-    animation: mark-grow-x 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation: mark-grow-x 280ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
   }
 }
 @utility mark-grow-y {
   transform-origin: bottom;
   @media (prefers-reduced-motion: no-preference) {
-    animation: mark-grow-y 600ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation: mark-grow-y 180ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
   }
 }
 @keyframes mark-grow-x {
@@ -125,6 +125,74 @@
       width: max(100%, 2.75rem);
       height: max(100%, 2.75rem);
       translate: -50% -50%;
+    }
+  }
+}
+
+/* Graph-only motion: data labels and surrounding layouts remain immediate. */
+@utility chart-reveal {
+  @media (prefers-reduced-motion: no-preference) {
+    animation: chart-reveal 180ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  }
+}
+@keyframes chart-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+}
+
+@utility chart-scale-motion {
+  @media (prefers-reduced-motion: no-preference) {
+    transition:
+      transform 280ms cubic-bezier(0.16, 1, 0.3, 1),
+      background-color 150ms ease;
+  }
+}
+
+@utility chart-mark-motion {
+  @media (prefers-reduced-motion: no-preference) {
+    transition:
+      opacity 150ms ease,
+      background-color 150ms ease;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    &:hover {
+      opacity: 0.85;
+    }
+  }
+}
+
+@utility chart-cell-motion {
+  @media (prefers-reduced-motion: no-preference) {
+    transition:
+      background-color 150ms ease,
+      box-shadow 150ms ease,
+      opacity 150ms ease;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    &:hover {
+      opacity: 0.8;
+    }
+  }
+}
+
+.chart-motion :is(.recharts-sector, .recharts-rectangle) {
+  @media (prefers-reduced-motion: no-preference) {
+    transition: opacity 150ms ease;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    &:hover {
+      opacity: 0.85;
+    }
+  }
+}
+
+.chart-ring-motion {
+  @media (prefers-reduced-motion: no-preference) {
+    transition: stroke-dashoffset 280ms cubic-bezier(0.16, 1, 0.3, 1);
+    @starting-style {
+      stroke-dashoffset: 100;
     }
   }
 }

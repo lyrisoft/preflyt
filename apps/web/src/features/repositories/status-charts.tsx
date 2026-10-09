@@ -44,13 +44,13 @@ export function StackedBar({
                 >
                   <div
                     className={cn(
-                      'h-2.5 w-full rounded-sm',
+                      'h-2.5 w-full rounded-sm chart-mark-motion',
                       toneFill[segment.tone]
                     )}
                   />
                 </div>
               </TooltipTrigger>
-              <TooltipContent>
+              <TooltipContent className='motion-reduce:animate-none motion-reduce:transition-none'>
                 {segment.label}: {segment.value} of {total} (
                 {Math.round((segment.value / total) * 100)}%)
               </TooltipContent>
@@ -134,8 +134,11 @@ export function Meter({
       className={cn('h-2.5 w-full overflow-hidden rounded-sm', toneTrack[tone])}
     >
       <div
-        className={cn('h-full mark-grow-x rounded-sm', toneFill[tone])}
-        style={{ width: `${percent}%` }}
+        className={cn(
+          'h-full w-full mark-grow-x rounded-sm chart-scale-motion',
+          toneFill[tone]
+        )}
+        style={{ transform: `scaleX(${percent / 100})` }}
       />
     </div>
   )
@@ -160,17 +163,19 @@ export function RunStrip({ runs, label }: { runs: Run[]; label: string }) {
               <div className='flex h-8 w-2 shrink-0 items-end'>
                 <div
                   className={cn(
-                    'w-full mark-grow-y rounded-sm',
+                    'h-full w-full mark-grow-y rounded-sm chart-scale-motion',
                     toneFill[run.tone]
                   )}
                   style={{
-                    height: `${Math.round(run.weight * 100)}%`,
-                    animationDelay: `${index * 18}ms`,
+                    transform: `scaleY(${run.weight})`,
+                    animationDelay: `${Math.min(index * 12, 100)}ms`,
                   }}
                 />
               </div>
             </TooltipTrigger>
-            <TooltipContent>{run.label}</TooltipContent>
+            <TooltipContent className='motion-reduce:animate-none motion-reduce:transition-none'>
+              {run.label}
+            </TooltipContent>
           </TooltipPrimitive.Root>
         ))}
       </div>

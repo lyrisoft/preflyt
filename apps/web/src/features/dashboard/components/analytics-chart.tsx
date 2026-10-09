@@ -1,4 +1,5 @@
 import { Area, AreaChart, ResponsiveContainer, XAxis, YAxis } from 'recharts'
+import { chartAnimation } from '@/lib/chart-motion'
 
 const data = [
   {
@@ -41,7 +42,7 @@ const data = [
 export function AnalyticsChart() {
   return (
     <ResponsiveContainer width='100%' height={300}>
-      <AreaChart data={data}>
+      <AreaChart className='chart-motion' data={data}>
         <XAxis
           dataKey='name'
           stroke='#888888'
@@ -56,6 +57,7 @@ export function AnalyticsChart() {
           axisLine={false}
         />
         <Area
+          {...chartAnimation}
           type='monotone'
           dataKey='clicks'
           stroke='currentColor'
@@ -64,6 +66,7 @@ export function AnalyticsChart() {
           fillOpacity={0.15}
         />
         <Area
+          {...chartAnimation}
           type='monotone'
           dataKey='uniques'
           stroke='currentColor'

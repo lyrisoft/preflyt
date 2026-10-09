@@ -1,4 +1,5 @@
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis } from 'recharts'
+import { chartAnimation } from '@/lib/chart-motion'
 
 const data = [
   {
@@ -54,7 +55,7 @@ const data = [
 export function Overview() {
   return (
     <ResponsiveContainer width='100%' height={350}>
-      <BarChart data={data}>
+      <BarChart className='chart-motion' data={data}>
         <XAxis
           dataKey='name'
           stroke='#888888'
@@ -71,6 +72,7 @@ export function Overview() {
           tickFormatter={(value) => `$${value}`}
         />
         <Bar
+          {...chartAnimation}
           dataKey='total'
           fill='currentColor'
           radius={[4, 4, 0, 0]}

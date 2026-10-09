@@ -75,7 +75,8 @@ export function ActivityHeatmap({
               return (
                 <div
                   key={index}
-                  className='grid grid-rows-[1rem_repeat(7,1.5rem)] gap-1'
+                  className='grid chart-reveal grid-rows-[1rem_repeat(7,1.5rem)] gap-1'
+                  style={{ animationDelay: `${Math.min(index * 8, 100)}ms` }}
                 >
                   <span
                     aria-hidden='true'
@@ -98,14 +99,14 @@ export function ActivityHeatmap({
                             aria-label={`${dateLabel(day.date)}: ${day.count} assessment snapshots`}
                             aria-pressed={selected?.date === day.date}
                             className={cn(
-                              'size-6 rounded-[3px] outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring',
+                              'size-6 rounded-[3px] chart-cell-motion outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring',
                               tones[activityLevel(day.count)],
                               selected?.date === day.date &&
                                 'ring-2 ring-ring ring-offset-1 ring-offset-card'
                             )}
                           />
                         </TooltipTrigger>
-                        <TooltipContent>
+                        <TooltipContent className='motion-reduce:animate-none motion-reduce:transition-none'>
                           {dateLabel(day.date)} · {day.count} snapshot
                           {day.count === 1 ? '' : 's'}
                         </TooltipContent>

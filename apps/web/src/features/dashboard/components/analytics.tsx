@@ -164,7 +164,7 @@ function SimpleBarList({
   return (
     <ul className='space-y-3'>
       {items.map((i) => {
-        const width = `${Math.round((i.value / max) * 100)}%`
+        const ratio = i.value / max
         return (
           <li key={i.name} className='flex items-center justify-between gap-3'>
             <div className='min-w-0 flex-1'>
@@ -173,8 +173,8 @@ function SimpleBarList({
               </div>
               <div className='h-2.5 w-full rounded-full bg-muted'>
                 <div
-                  className={`h-2.5 rounded-full ${barClass}`}
-                  style={{ width }}
+                  className={`h-2.5 w-full mark-grow-x rounded-full chart-scale-motion ${barClass}`}
+                  style={{ transform: `scaleX(${ratio})` }}
                 />
               </div>
             </div>

@@ -23,6 +23,7 @@ import {
   YAxis,
 } from 'recharts'
 import { API_BASE_URL } from '@/lib/api'
+import { chartAnimation, chartTooltipAnimation } from '@/lib/chart-motion'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -563,6 +564,7 @@ export function Apps() {
                     >
                       <ResponsiveContainer width='100%' height='100%'>
                         <BarChart
+                          className='chart-motion'
                           data={chartData}
                           layout='vertical'
                           margin={{ top: 8, right: 16, bottom: 0, left: 0 }}
@@ -601,6 +603,7 @@ export function Apps() {
                             }
                           />
                           <Tooltip
+                            {...chartTooltipAnimation}
                             cursor={{ fill: 'var(--muted)', opacity: 0.35 }}
                             contentStyle={{
                               background: 'var(--popover)',
@@ -620,7 +623,7 @@ export function Apps() {
                             name='Selected for Preflyt'
                             stackId='inventory'
                             fill='var(--chart-2)'
-                            isAnimationActive={false}
+                            {...chartAnimation}
                           />
                           <Bar
                             dataKey='available'
@@ -628,7 +631,7 @@ export function Apps() {
                             stackId='inventory'
                             fill='var(--chart-1)'
                             radius={[0, 4, 4, 0]}
-                            isAnimationActive={false}
+                            {...chartAnimation}
                           />
                         </BarChart>
                       </ResponsiveContainer>

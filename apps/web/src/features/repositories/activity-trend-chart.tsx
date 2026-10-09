@@ -9,6 +9,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import { chartAnimation, chartTooltipAnimation } from '@/lib/chart-motion'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -138,6 +139,7 @@ export function ActivityTrendChart({
         >
           <ResponsiveContainer width='100%' height='100%'>
             <AreaChart
+              className='chart-motion'
               data={summary.points}
               margin={{ top: 10, right: 12, left: -20, bottom: 0 }}
               accessibilityLayer
@@ -178,6 +180,7 @@ export function ActivityTrendChart({
                 tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
               />
               <Tooltip
+                {...chartTooltipAnimation}
                 contentStyle={{
                   background: 'var(--popover)',
                   border: '1px solid var(--border)',
@@ -210,7 +213,7 @@ export function ActivityTrendChart({
                     : false
                 }
                 activeDot={{ r: 5, stroke: 'var(--card)', strokeWidth: 2 }}
-                isAnimationActive={false}
+                {...chartAnimation}
               />
             </AreaChart>
           </ResponsiveContainer>

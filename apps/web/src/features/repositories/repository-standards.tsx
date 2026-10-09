@@ -293,7 +293,6 @@ function PackAdoption({
   selected: number
   total: number
 }) {
-  const circumference = 2 * Math.PI * 40
   const ratio = total ? Math.min(selected / total, 1) : 0
   return (
     <div
@@ -318,9 +317,11 @@ function PackAdoption({
           fill='none'
           stroke='currentColor'
           strokeWidth='8'
-          strokeDasharray={`${circumference * ratio} ${circumference}`}
+          pathLength='100'
+          strokeDasharray='100 100'
+          strokeDashoffset={100 * (1 - ratio)}
           transform='rotate(-90 50 50)'
-          className='text-chart-1'
+          className='chart-ring-motion text-chart-1'
         />
       </svg>
       <div className='absolute inset-0 flex flex-col items-center justify-center'>

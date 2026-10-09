@@ -17,6 +17,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import { chartAnimation, chartTooltipAnimation } from '@/lib/chart-motion'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -235,7 +236,7 @@ export function PostureSummary({
                     .join(', ')}
                 >
                   <ResponsiveContainer width='100%' height='100%'>
-                    <PieChart>
+                    <PieChart className='chart-motion'>
                       <Pie
                         data={distribution}
                         dataKey='value'
@@ -244,13 +245,16 @@ export function PostureSummary({
                         outerRadius={78}
                         paddingAngle={2}
                         stroke='var(--card)'
-                        isAnimationActive={false}
+                        {...chartAnimation}
                       >
                         {distribution.map((s) => (
                           <Cell key={s.key} fill={s.color} />
                         ))}
                       </Pie>
-                      <Tooltip contentStyle={tooltip} />
+                      <Tooltip
+                        {...chartTooltipAnimation}
+                        contentStyle={tooltip}
+                      />
                     </PieChart>
                   </ResponsiveContainer>
                   <div className='pointer-events-none absolute inset-0 flex flex-col items-center justify-center'>
@@ -301,6 +305,7 @@ export function PostureSummary({
                 >
                   <ResponsiveContainer width='100%' height='100%'>
                     <BarChart
+                      className='chart-motion'
                       data={summary.requirements}
                       layout='vertical'
                       margin={{ left: 0, right: 12, top: 12, bottom: 0 }}
@@ -327,6 +332,7 @@ export function PostureSummary({
                         tickLine={false}
                       />
                       <Tooltip
+                        {...chartTooltipAnimation}
                         contentStyle={tooltip}
                         cursor={{ fill: 'var(--muted)', opacity: 0.3 }}
                       />
@@ -336,14 +342,14 @@ export function PostureSummary({
                         stackId='config'
                         fill='var(--chart-2)'
                         barSize={22}
-                        isAnimationActive={false}
+                        {...chartAnimation}
                       />
                       <Bar
                         dataKey='unknown'
                         name='Unknown'
                         stackId='config'
                         fill='var(--neutral-mark)'
-                        isAnimationActive={false}
+                        {...chartAnimation}
                       />
                       <Bar
                         dataKey='missing'
@@ -351,7 +357,7 @@ export function PostureSummary({
                         stackId='config'
                         fill='var(--warning)'
                         radius={[0, 4, 4, 0]}
-                        isAnimationActive={false}
+                        {...chartAnimation}
                       />
                     </BarChart>
                   </ResponsiveContainer>
