@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, useNavigate, useSearch } from '@tanstack/react-router'
 import {
@@ -27,6 +28,10 @@ import { RepositoryBindings } from '@/features/repositories/repository-bindings'
 import { RepositoryCiEvidence } from '@/features/repositories/repository-ci-evidence'
 import { RepositoryPullRequests } from '@/features/repositories/repository-pull-requests'
 import { RepositoryStandards } from '@/features/repositories/repository-standards'
+import {
+  IntegrationCatalogue,
+  type IntegrationId,
+} from './integration-catalogue'
 import { useNavigationSession } from './navigation-session'
 import { canPerform } from './scoped-access'
 
@@ -96,6 +101,7 @@ async function read<T>(path: string, signal: AbortSignal): Promise<T> {
 }
 
 export function WorkspaceModule({ module }: { module: Module }) {
+  const [integration, setIntegration] = useState<IntegrationId | null>(null)
   const config = modules[module]
   const ModuleIcon = config.icon
   const search = useSearch({ strict: false }) as { repository?: string }
@@ -181,6 +187,15 @@ export function WorkspaceModule({ module }: { module: Module }) {
         ) : (
           <div className='space-y-6'>
             {module === 'integrations' && (
+              <IntegrationCatalogue
+                connected={inventory.data.installations.some(
+                  (item) => item.active
+                )}
+                selected={integration}
+                onSelect={setIntegration}
+              />
+            )}
+            {module === 'integrations' && integration === 'github' && (
               <Card className='gap-4 overflow-hidden border-chart-2/20'>
                 <CardHeader className='flex flex-wrap items-center justify-between gap-3'>
                   <div className='flex items-center gap-3'>
@@ -288,182 +303,188 @@ export function WorkspaceModule({ module }: { module: Module }) {
                 </CardContent>
               </Card>
             )}
-            {repositories.length === 0 ? (
-              <Card>
-                <CardContent className='flex flex-wrap items-center justify-between gap-4 pt-1'>
-                  <div className='flex items-start gap-3'>
-                    <span className={cn('rounded-lg p-2.5', config.iconAccent)}>
-                      <GitBranch className='size-5' aria-hidden='true' />
-                    </span>
-                    <div>
-                      <h2 className='text-sm font-semibold'>
-                        Select a repository to get started
-                      </h2>
-                      <p className='mt-1 text-xs text-muted-foreground'>
-                        Connect GitHub and select repositories to review{' '}
-                        {config.title.toLowerCase()}.
-                      </p>
-                    </div>
-                  </div>
-                  <Button variant='outline' size='sm' asChild>
-                    <Link to='/apps'>
-                      View repositories{' '}
-                      <ArrowUpRight className='size-3.5' aria-hidden='true' />
-                    </Link>
-                  </Button>
-                </CardContent>
-              </Card>
-            ) : (
-              <>
-                <div className='flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card px-4 py-3'>
-                  <div className='flex min-w-0 flex-wrap items-center gap-3'>
-                    <div className='flex items-center gap-2 text-sm'>
-                      <GitBranch
-                        className='size-4 text-chart-1'
-                        aria-hidden='true'
-                      />
-                      <label
-                        id='workspace-repository-label'
-                        className='font-medium'
+            {(module !== 'integrations' || integration === 'ci') &&
+              (repositories.length === 0 ? (
+                <Card>
+                  <CardContent className='flex flex-wrap items-center justify-between gap-4 pt-1'>
+                    <div className='flex items-start gap-3'>
+                      <span
+                        className={cn('rounded-lg p-2.5', config.iconAccent)}
                       >
-                        Repository scope
-                      </label>
+                        <GitBranch className='size-5' aria-hidden='true' />
+                      </span>
+                      <div>
+                        <h2 className='text-sm font-semibold'>
+                          Select a repository to get started
+                        </h2>
+                        <p className='mt-1 text-xs text-muted-foreground'>
+                          Connect GitHub and select repositories to review{' '}
+                          {config.title.toLowerCase()}.
+                        </p>
+                      </div>
                     </div>
-                    <RepositoryPicker
-                      repositories={repositories}
-                      value={repository?.githubId ?? ''}
-                      aria-labelledby='workspace-repository-label'
-                      className='w-full sm:w-80'
-                      onValueChange={(value) =>
-                        void navigate({
-                          to: `/${module}`,
-                          search: { repository: value },
-                        })
-                      }
-                    />
-                  </div>
-                  <div className='flex flex-wrap items-center gap-2'>
-                    <Badge variant='outline' className='text-muted-foreground'>
-                      {repositories.length} selected{' '}
-                      {repositories.length === 1
-                        ? 'repository'
-                        : 'repositories'}
-                    </Badge>
-                    {repository && (
-                      <Button variant='ghost' size='sm' asChild>
-                        <Link
-                          to='/repositories/$repositoryId'
-                          params={{ repositoryId: repository.githubId }}
+                    <Button variant='outline' size='sm' asChild>
+                      <Link to='/apps'>
+                        View repositories{' '}
+                        <ArrowUpRight className='size-3.5' aria-hidden='true' />
+                      </Link>
+                    </Button>
+                  </CardContent>
+                </Card>
+              ) : (
+                <>
+                  <div className='flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card px-4 py-3'>
+                    <div className='flex min-w-0 flex-wrap items-center gap-3'>
+                      <div className='flex items-center gap-2 text-sm'>
+                        <GitBranch
+                          className='size-4 text-chart-1'
+                          aria-hidden='true'
+                        />
+                        <label
+                          id='workspace-repository-label'
+                          className='font-medium'
                         >
-                          Open repository{' '}
-                          <ArrowUpRight
-                            className='size-3.5'
-                            aria-hidden='true'
-                          />
-                        </Link>
-                      </Button>
-                    )}
+                          Repository scope
+                        </label>
+                      </div>
+                      <RepositoryPicker
+                        repositories={repositories}
+                        value={repository?.githubId ?? ''}
+                        aria-labelledby='workspace-repository-label'
+                        className='w-full sm:w-80'
+                        onValueChange={(value) =>
+                          void navigate({
+                            to: `/${module}`,
+                            search: { repository: value },
+                          })
+                        }
+                      />
+                    </div>
+                    <div className='flex flex-wrap items-center gap-2'>
+                      <Badge
+                        variant='outline'
+                        className='text-muted-foreground'
+                      >
+                        {repositories.length} selected{' '}
+                        {repositories.length === 1
+                          ? 'repository'
+                          : 'repositories'}
+                      </Badge>
+                      {repository && (
+                        <Button variant='ghost' size='sm' asChild>
+                          <Link
+                            to='/repositories/$repositoryId'
+                            params={{ repositoryId: repository.githubId }}
+                          >
+                            Open repository{' '}
+                            <ArrowUpRight
+                              className='size-3.5'
+                              aria-hidden='true'
+                            />
+                          </Link>
+                        </Button>
+                      )}
+                    </div>
                   </div>
-                </div>
-                {repository ? (
-                  <div
-                    key={`${module}-${repository.githubId}`}
-                    className='space-y-5'
-                  >
-                    {module === 'assessments' && (
-                      <>
-                        <RepositoryActivityPanel
-                          repositoryId={repository.githubId}
-                        />
-                        <RepositoryPullRequests
-                          repositoryId={repository.githubId}
-                        />
+                  {repository ? (
+                    <div
+                      key={`${module}-${repository.githubId}`}
+                      className='space-y-5'
+                    >
+                      {module === 'assessments' && (
+                        <>
+                          <RepositoryActivityPanel
+                            repositoryId={repository.githubId}
+                          />
+                          <RepositoryPullRequests
+                            repositoryId={repository.githubId}
+                          />
+                          <RepositoryAssessments
+                            repositoryId={repository.githubId}
+                            canCreate={canPerform(
+                              session.data,
+                              'assessment.run',
+                              repository.githubId
+                            )}
+                            initialSha=''
+                          />
+                        </>
+                      )}
+                      {module === 'quality-gates' && (
                         <RepositoryAssessments
                           repositoryId={repository.githubId}
-                          canCreate={canPerform(
-                            session.data,
-                            'assessment.run',
-                            repository.githubId
-                          )}
+                          canCreate={false}
                           initialSha=''
                         />
-                      </>
-                    )}
-                    {module === 'quality-gates' && (
-                      <RepositoryAssessments
-                        repositoryId={repository.githubId}
-                        canCreate={false}
-                        initialSha=''
-                      />
-                    )}
-                    {module === 'standards' && (
-                      <RepositoryStandards
-                        repositoryId={repository.githubId}
-                        canManage={false}
-                      />
-                    )}
-                    {module === 'policies' && (
-                      <>
+                      )}
+                      {module === 'standards' && (
                         <RepositoryStandards
                           repositoryId={repository.githubId}
-                          canManage={canPerform(
+                          canManage={false}
+                        />
+                      )}
+                      {module === 'policies' && (
+                        <>
+                          <RepositoryStandards
+                            repositoryId={repository.githubId}
+                            canManage={canPerform(
+                              session.data,
+                              'policy.draft',
+                              repository.githubId
+                            )}
+                            policyRevisions={
+                              <GatePolicyPanel
+                                key={repository.githubId}
+                                repositoryId={repository.githubId}
+                                canDraft={canPerform(
+                                  session.data,
+                                  'policy.draft',
+                                  repository.githubId
+                                )}
+                                canPublish={canPerform(
+                                  session.data,
+                                  'policy.publish',
+                                  repository.githubId
+                                )}
+                                actorId={session.data?.identityId}
+                                platformAdmin={session.data?.platformAdmin}
+                              />
+                            }
+                            sourceBindings={
+                              <RepositoryBindings
+                                repositoryId={repository.githubId}
+                                canManage={canPerform(
+                                  session.data,
+                                  'policy.draft',
+                                  repository.githubId
+                                )}
+                              />
+                            }
+                          />
+                        </>
+                      )}
+                      {module === 'integrations' && (
+                        <RepositoryCiEvidence
+                          repositoryId={repository.githubId}
+                          canImport={canPerform(
                             session.data,
-                            'policy.draft',
+                            'evidence.manage',
                             repository.githubId
                           )}
-                          policyRevisions={
-                            <GatePolicyPanel
-                              key={repository.githubId}
-                              repositoryId={repository.githubId}
-                              canDraft={canPerform(
-                                session.data,
-                                'policy.draft',
-                                repository.githubId
-                              )}
-                              canPublish={canPerform(
-                                session.data,
-                                'policy.publish',
-                                repository.githubId
-                              )}
-                              actorId={session.data?.identityId}
-                              platformAdmin={session.data?.platformAdmin}
-                            />
-                          }
-                          sourceBindings={
-                            <RepositoryBindings
-                              repositoryId={repository.githubId}
-                              canManage={canPerform(
-                                session.data,
-                                'policy.draft',
-                                repository.githubId
-                              )}
-                            />
-                          }
                         />
-                      </>
-                    )}
-                    {module === 'integrations' && (
-                      <RepositoryCiEvidence
-                        repositoryId={repository.githubId}
-                        canImport={canPerform(
-                          session.data,
-                          'evidence.manage',
-                          repository.githubId
-                        )}
-                      />
-                    )}
-                  </div>
-                ) : (
-                  <div
-                    role='alert'
-                    className='rounded-lg border border-warning/20 bg-warning/5 px-4 py-3 text-sm'
-                  >
-                    This repository is no longer selected or accessible. Choose
-                    another repository.
-                  </div>
-                )}
-              </>
-            )}
+                      )}
+                    </div>
+                  ) : (
+                    <div
+                      role='alert'
+                      className='rounded-lg border border-warning/20 bg-warning/5 px-4 py-3 text-sm'
+                    >
+                      This repository is no longer selected or accessible.
+                      Choose another repository.
+                    </div>
+                  )}
+                </>
+              ))}
           </div>
         )}
       </Main>
