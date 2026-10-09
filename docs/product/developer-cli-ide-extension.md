@@ -13,7 +13,7 @@ Build **one shared TypeScript local assessment engine** used by a Preflyt CLI an
 | Increment | User-visible deliverable | Completion demonstration |
 | --- | --- | --- |
 | **P5.1 — Local engine + CLI** | Install CLI, detect Git working tree, run approved fast checks, display file/line findings and machine-readable results | Seeded secret or lint violation detected; offline local check works |
-| **P5.2 — Organization integration** | OIDC browser login, repository linking, authorized policy download/cache and offline freshness display | Authorized repo sync works; revoked membership denies new sync; offline cached policy visibly aged |
+| **P5.2 — Organization integration** | Authenticated browser login (GitHub-first target under ADR-0007; OIDC compatibility during migration), repository linking, authorized policy download/cache and offline freshness display | Authorized repo sync works; revoked membership denies new sync; offline cached policy visibly aged |
 | **P5.3 — VS Code extension** | Install VSIX, run shared checks on demand/save, render Diagnostics/Problems and status bar | Real finding appears at correct file/line; workspace trust blocks unsafe execution |
 | **P5.4 — Intelligent developer feedback** | Extension sidebar, evidence-linked AI explanation using organization SDLC model routing, central PR gate status | Findings and current PR status display with SHA/freshness; no provider key stored in extension |
 | **P5.5 — Developer automation** | Explicit opt-in pre-commit/pre-push hooks, bounded incremental scheduling, compatibility testing for Cursor/Windsurf | Hook detects seeded issue; uninstall restores hooks; supported editors pass compatibility suite |
@@ -25,7 +25,7 @@ Each increment must be **packaged, installable, tested and usable without waitin
 - `packages/local-engine`: TypeScript check contracts, applicability, deterministic local policy evaluator, tool adapters, cancellation and normalized findings. No UI or provider secrets.
 - `apps/cli`: commands `preflyt check [--changed|--staged|--all]`, `login`, `init`, `status`, `explain` and `hooks install/remove` as each increment ships. Publish a versioned package and reproducible binaries where supported.
 - `apps/vscode-extension`: VS Code extension API commands, `DiagnosticCollection`, Problems, TreeView/sidebar, status bar, SecretStorage, workspace-trust handling and optional webview. Never duplicate check logic.
-- `apps/api`: server-managed OIDC sessions, scoped policy synchronization, read-only finding explanations, stage-specific AI routing and revision-bound GitHub status lookup.
+- `apps/api`: server-managed sessions (GitHub-first target; current OIDC retained during migration), scoped policy synchronization, read-only finding explanations, stage-specific AI routing and revision-bound GitHub status lookup.
 
 ### Local execution trust
 
@@ -61,3 +61,5 @@ The central PR check remains authoritative: the extension shows the exact PR hea
 - [ ] Each increment includes release instructions, telemetry with redaction, success/failure tests and rollback.
 
 **Implementation status:** No CLI/extension source is introduced by this document.
+
+Authentication for organization synchronization follows [ADR-0007](../architecture/ADR-0007-github-first-identity-and-organizations.md). The accepted GitHub-first login is not implemented yet; CLI/IDE planning must preserve server session and repository authorization boundaries rather than treating App installation credentials as user credentials.

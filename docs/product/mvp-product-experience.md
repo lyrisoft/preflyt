@@ -8,7 +8,7 @@
 
 The MVP is an **engineering assurance control center**, not a generic GitHub dashboard. It helps organizations connect repositories, discover engineering posture, collect trusted CI/security/testing/IaC evidence, apply deterministic policies, and prevent inadequately validated PRs from merging via GitHub required checks.
 
-**Preserve the existing imported Shadcn Admin application, OIDC session, Super Admin recovery flow, GitHub App integration and working repository profile UI.** Extend them incrementally. Do not rebuild the application shell or remove already working functionality.
+**Preserve the existing imported Shadcn Admin application, session security, Super Admin recovery flow, GitHub App integration and working repository profile UI.** GitHub-first login and organization/member onboarding are the accepted target in [ADR-0007](../architecture/ADR-0007-github-first-identity-and-organizations.md); keep current OIDC working until the explicit migration passes. Extend them incrementally. Do not rebuild the application shell or remove already working functionality.
 
 The **MVP** is P0–P3. Contributor analytics is specified as a P3 additive capability. AI provider management and stage routing have a separate proposed change; only expose features actually implemented, and do not invent provider results. Advanced AI investigations, local CLI/IDE, QA orchestration, k6 performance testing and production feedback are later-stage capabilities and **must not be shown as working MVP modules**.
 
@@ -53,7 +53,7 @@ Tabs must reflect available functionality and preserve deep links.
 | `/contributors` | Contributor overview | Authorized contributor list, search, filters, activity KPIs, assessment coverage, policy adherence, charts and freshness | P3; bots/private members/unlinked identities and incomplete evidence labeled |
 | `/contributors/:id` | Contributor detail | Repositories, commits, authored/merged PRs, reviews, assessments, findings and evidence-backed trends | Scoped source links; no opaque employee ranking |
 | `/integrations` | Integration health | GitHub App installation, permissions, selected repositories, webhook/CI evidence status and troubleshooting | Secret-safe, reconnect/disconnect RBAC |
-| `/access-control` | RBAC management | Organization membership, predefined roles, repo grants, audit and revocation | Only permitted actions; backend enforces |
+| `/access-control` | Member access management | Searchable connected-GitHub member directory, username selection, Preflyt roles, repo grants, audit and revocation | ADR-0007 target pending; current OIDC provisioning remains until migration; backend enforces |
 | `/settings` | Workspace settings | Organization details, identity/session settings, supported AI provider/model routing controls when shipped, operational preferences | Do not show secrets; unavailable features hidden |
 | `/intelligence` | Evidence-linked AI findings analysis | Supported explanation and cited evidence, selected permitted model/route, usage and availability | Only if implemented; advisory, never gate authority |
 
@@ -84,9 +84,17 @@ No large marketing hero, decorative globe or fake percentage. Charts should have
 
 **GitHub Ruleset Details → Insights (P2.R5):** display GitHub rule-suite evaluation metrics and charts for the selected ruleset, most frequently failing rules, affected repositories, filtered evaluation history, and drill-down. Keep Preflyt quality-gate analytics in a separately labeled panel. Show source, time window, attribution completeness, permission and sync status. See [Ruleset Insights](github-ruleset-management.md#ruleset-detail-insights-tab-p2r5).
 
+## GitHub login and Access Control target
+
+The sign-in page uses **Continue with GitHub**. A connected workspace inherits the GitHub organization's identity and name; no separate “Create organization” step is shown. The switcher lists only connected organizations the user may access. Local Super Admin recovery remains on its separate route; OIDC may remain as an explicitly enabled compatibility option.
+
+Access Control shows a searchable, paginated GitHub member directory: avatar, username, Preflyt access state, role and assigned repositories. Admins can select a member or enter a GitHub username, review the resolved account, assign a role/repositories, and choose **Grant access**. Explain that this grants Preflyt access, not GitHub membership; no notification is claimed sent. Users with a grant sign in with GitHub. Users without a grant see a clear “Ask your administrator for access” state.
+
+Show sync time, partial directory results, verification errors and retry actions. Do not treat a missing public membership as proof of non-membership. Role/grant editing must respect live organization permissions and the user's GitHub repository access. GitHub removal disables corresponding Preflyt access, including cached data. Rename-safe identity, first-owner verification and migration acceptance are required by ADR-0007; this UX is not implemented yet.
+
 ## End-to-end MVP journeys
 
-**New organization:** OIDC/owner bootstrap → connect GitHub App → select repository → discover profile → recommend and select policy packs → show missing controls and next steps. The Overview should be an onboarding state until real assessments exist.
+**New organization (GitHub-first target):** Continue with GitHub → connect/verify the organization App installation → verify GitHub organization ownership and create the matching workspace automatically → select repository → discover profile → recommend and select policy packs → show missing controls and next steps. The Overview should be an onboarding state until real assessments exist.
 
 **Developer PR:** signed webhook → pin SHA → import trusted CI evidence or approved isolated scan → normalize checks/findings → deterministic policy decision → publish exact-SHA GitHub check → show readiness and required corrective action. A missing required check is INCOMPLETE, not PASS.
 

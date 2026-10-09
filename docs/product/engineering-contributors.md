@@ -13,6 +13,8 @@ Add **Contributors** as a sidebar item under **Engineering**, adjacent to Reposi
 
 ## Data and identity contracts
 
+The accepted [GitHub-first access design](../architecture/ADR-0007-github-first-identity-and-organizations.md) uses separately verified GitHub login and organization membership. Contributor observations do not authenticate people or grant access. A link to a Preflyt account must use the same verified host/account ID; never infer it from email, Git author name or username. Member-directory selection and access grants belong in Access Control, not contributor analytics. This identity-linking change is pending implementation.
+
 Capture installation-scoped stable GitHub user IDs, login/display name, bot classification, membership visibility, repository scope and timestamps. Store separate author, committer, PR author, reviewer, co-author and merge actor relationships. Identity matching must not conflate same-name Git authors, private membership, bots or former organization members. GitHub App access bounds what can be reported; never claim complete organization membership or activity outside installed repositories.
 
 Ingest signed PR/review/push/check events with idempotency and revision correctness. Use bounded GitHub API backfill for existing data, installation-level rate-limit budgets, retries and incremental aggregation. Store provenance and last sync; no unbounded historical scraping.

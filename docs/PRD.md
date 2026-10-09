@@ -5,9 +5,9 @@
 **Tagline:** Engineering confidence before production  
 **Owner:** Lyrisoft Technologies  
 **Status:** Product roadmap for engineering and product review; implemented capabilities and remaining scope are tracked in README and the incremental delivery plan
-**Version:** 0.4 — SDLC lifecycle capabilities and deployable vertical slices  
-**Date:** 2026-10-08  
-**Source of architectural decisions:** [ADR-0001](architecture/ADR-0001-typescript-first-stack.md) · [ADR-0002](architecture/ADR-0002-safe-execution-fixtures-remediation-contract.md) · [ADR-0003](architecture/ADR-0003-oidc-user-authentication.md) · [ADR-0004](architecture/ADR-0004-shift-left-assessment-governance.md)
+**Version:** 0.5 — GitHub-first identity and inherited organization onboarding
+**Date:** 2026-10-09
+**Source of architectural decisions:** [ADR-0001](architecture/ADR-0001-typescript-first-stack.md) · [ADR-0002](architecture/ADR-0002-safe-execution-fixtures-remediation-contract.md) · [ADR-0003](architecture/ADR-0003-oidc-user-authentication.md) · [ADR-0004](architecture/ADR-0004-shift-left-assessment-governance.md) · [ADR-0007](architecture/ADR-0007-github-first-identity-and-organizations.md)
 
 ---
 
@@ -185,7 +185,7 @@ Preflyt ships first-party versioned policy packs for baseline engineering, appli
 
 ### RBAC and resource authorization requirements
 
-Preflyt uses OIDC identity with **NestJS-enforced organization and repository-scoped RBAC**, predefined roles and least-privilege action permissions. **P0** includes owner bootstrap, membership, roles, repository grants, server-side checks and audit; **P1** scopes assessment/evidence access; **P2** separates policy publishing/enforcement/exception approvals; **P3** requires independent execution admission; **P4** scopes AI provider/model management; later phases add QA, performance and production permissions. No self-approved policy waivers, implicit cross-organization access or frontend-only enforcement. See [RBAC specification](product/rbac-and-authorization.md).
+Preflyt targets GitHub identity and inherited GitHub organizations under [ADR-0007](architecture/ADR-0007-github-first-identity-and-organizations.md), with current OIDC retained during migration, plus **NestJS-enforced organization and repository-scoped RBAC**, predefined roles and least-privilege action permissions. **P0** includes verified GitHub owner onboarding, member selection, roles, repository grants, server-side checks and audit; preserve legacy OIDC bootstrap until migration; **P1** scopes assessment/evidence access; **P2** separates policy publishing/enforcement/exception approvals; **P3** requires independent execution admission; **P4** scopes AI provider/model management; later phases add QA, performance and production permissions. No self-approved policy waivers, implicit cross-organization access or frontend-only enforcement. See [RBAC specification](product/rbac-and-authorization.md).
 
 ### Engineering Contributors module
 
@@ -224,12 +224,13 @@ Requirements/design artifact validation is a later optional entrypoint alongside
 
 ### 6.2 User journey A: GitHub onboarding and baseline
 
-1. Administrator authenticates using the approved OIDC provider and installs GitHub App with selected repository access.
+1. Administrator chooses Continue with GitHub, connects the organization App installation, and proves active GitHub organization ownership. Preflyt creates the matching workspace automatically and establishes its first Owner; no separate organization creation is required. This is the accepted target in ADR-0007; existing OIDC onboarding remains in use until migration.
 2. Preflyt discovers languages, manifests and CI/infra signals and drafts a Repository Engineering Profile.
 3. Administrator reviews the profile and selects the applicable policy baseline.
 4. Preflyt explains which checks are imported, which run in approved sandboxes, and which remain unavailable.
 5. Initial read-only baseline assessment is triggered.
 6. Repository detail displays findings, missing evidence, policy coverage and current readiness.
+7. An authorized Preflyt Owner/Admin selects existing GitHub organization members or enters a GitHub username, verifies the account, and grants a Preflyt role and repository access. Those users sign in with GitHub; neither contributor activity nor organization membership alone grants Preflyt access.
 
 ### 6.3 User journey B: Pull request assessment (MVP primary flow)
 
@@ -297,7 +298,7 @@ The PoC does **not** need to generate a patch or remediation PR. If a future sep
 
 **MVP target outcomes, delivered incrementally by P0–P3:**
 
-- Self-hosted initial single-organization installation, OIDC user auth, authorization and audit.
+- Self-hosted initial organization onboarding inherited from a verified GitHub organization installation, GitHub user login, scoped authorization and audit; retain current OIDC as a compatibility option during migration. GitHub-first onboarding is accepted but not yet implemented.
 - GitHub integration, selected-repository onboarding, webhook signatures and idempotent PR/CI event ingestion.
 - Repository Engineering Profile and changed-path applicability detection.
 - Versioned baseline engineering policy with inherited repo scope, mandatory/advisory checks, enforcement mode.
@@ -316,7 +317,7 @@ The PoC does **not** need to generate a patch or remediation PR. If a future sep
 
 Deliver as separate working releases, not one all-or-nothing project:
 
-- **P5 Developer Experience:** independently usable P5.1 shared local engine/CLI, P5.2 OIDC/policy sync, P5.3 VS Code diagnostics, P5.4 AI explanation and PR gate visibility, P5.5 opt-in Git hooks/editor compatibility. See [developer CLI and IDE specification](product/developer-cli-ide-extension.md).
+- **P5 Developer Experience:** independently usable P5.1 shared local engine/CLI, P5.2 authenticated organization/policy sync, P5.3 VS Code diagnostics, P5.4 AI explanation and PR gate visibility, P5.5 opt-in Git hooks/editor compatibility. See [developer CLI and IDE specification](product/developer-cli-ide-extension.md).
 - **P6 QA readiness:** import test suites and release candidate evidence, then add API-contract/database compatibility checks and QA gates.
 - **P7 Performance evidence:** import existing k6 result artifacts, apply performance budgets and publish comparable baseline reports **without needing a Preflyt-owned load generator**.
 - **P8 Managed performance:** authorized non-production k6 **smoke and load** tests using controlled execution, thresholds, results and cancellation.
@@ -344,7 +345,11 @@ Use **M** for MVP, **V1** for next stage and **V2** for expansion. Every require
 
 | ID | Stage | Requirement | Acceptance |
 | --- | --- | --- | --- |
-| FR-001 | M | Authenticate human users via OIDC; establish server-owned session and mapped organization roles | Token/session and authorization tests pass per ADR-0003 |
+| FR-001 | M | Authenticate users with GitHub; establish server-owned sessions, verified organization membership and explicitly assigned Preflyt roles; preserve OIDC during migration | Login, identity-linking, session, revocation and authorization tests pass per ADR-0007; legacy OIDC remains secure |
+| FR-ID-01 | M | Create workspace identity from a verified GitHub organization installation; no separate manual organization creation | Verified GitHub owner initializes one workspace; non-owner/duplicate/foreign-installation claims are rejected |
+| FR-ID-02 | M | Select active GitHub organization members or resolve usernames to stable account IDs and grant scoped Preflyt access | Only authorized admins can grant access; non-members, bots, pending invitations and unassigned accounts are denied |
+| FR-ID-03 | M | Limit access to user GitHub rights, installation/selected repositories and Preflyt grants | Private evidence and cached summaries cannot escape the intersection; role changes apply on the next request |
+| FR-ID-04 | M | Revoke access using verified provider events and reconciliation, with authorization evidence at most five minutes old | Provider removals disable affected access; stale/unavailable verification fails closed without treating a transient outage as logout |
 | FR-002 | M | Connect explicitly selected GitHub repositories with least-privilege permissions | No access to unselected repositories; no code-write scope required |
 | FR-003 | M | Verify webhooks and process events idempotently and revision-aware | Duplicate/out-of-order deliveries cannot overwrite newer assessment |
 | FR-004 | M | Discover repository languages, manifest/test/CI/IaC signals with unknown-state reporting | Profile links to observed evidence and supports authorized corrections |
@@ -483,7 +488,7 @@ flowchart TD
 
 ### Technology decisions (unchanged)
 
-- **Frontend:** **Pull the [Shadcn Admin](https://github.com/satnaing/shadcn-admin) source at a reviewed, pinned full Git commit SHA and build Preflyt directly on that dashboard codebase in `apps/web`**, adapting its React + Vite + TypeScript structure, layout, navigation, router and components. The upstream README explicitly calls it **not a starter template**, but this does not prevent using its source as a foundation after license/security review. Preserve audited license notices/source provenance, remove unwanted demo pages/data, and replace Clerk/mock authentication with Preflyt OIDC/server-managed sessions. Integrate into pnpm/Turborepo and use compatible Tailwind/shadcn/ui, TanStack Query/Table and validated forms. See [ADR-0005](architecture/ADR-0005-shadcn-admin-frontend.md).
+- **Frontend:** **Pull the [Shadcn Admin](https://github.com/satnaing/shadcn-admin) source at a reviewed, pinned full Git commit SHA and build Preflyt directly on that dashboard codebase in `apps/web`**, adapting its React + Vite + TypeScript structure, layout, navigation, router and components. The upstream README explicitly calls it **not a starter template**, but this does not prevent using its source as a foundation after license/security review. Preserve audited license notices/source provenance, remove unwanted demo pages/data, and replace Clerk/mock authentication with Preflyt server-managed sessions and the GitHub-first target, preserving OIDC compatibility during migration. Integrate into pnpm/Turborepo and use compatible Tailwind/shadcn/ui, TanStack Query/Table and validated forms. See [ADR-0005](architecture/ADR-0005-shadcn-admin-frontend.md).
 - **API/control plane:** Node.js, NestJS and TypeScript.
 - **Background workers:** TypeScript with Redis/BullMQ for bounded durable work. Workers are separate from the API process.
 - **Caching:** optional Redis/Valkey metadata cache with bounded TTLs and deployment-scoped keys. Cached data must never authorize access; Redis outages fall back to authoritative sources. Cache storage must be separate from durable BullMQ queue storage/eviction policy.
@@ -515,8 +520,8 @@ If no safe execution runtime is available, Preflyt is **INGEST_ONLY**: use exter
 
 ### Security and authentication
 
-- OIDC human auth for routine users plus the deployment-configured, separate local Super Admin break-glass path; server-managed sessions and role/organization scoping per [ADR-0003](architecture/ADR-0003-oidc-user-authentication.md).
-- When OIDC settings are entirely absent and Super Admin credentials are configured, the API may start in Super Admin-only mode; regular OIDC login and initial-owner bootstrap remain unavailable until valid OIDC configuration is restored. Partial OIDC configuration or failed discovery must fail closed.
+- GitHub login and inherited organization/member onboarding are the accepted routine-access target under [ADR-0007](architecture/ADR-0007-github-first-identity-and-organizations.md). Retain server-managed sessions, explicitly scoped Preflyt roles, OIDC compatibility during migration and the separate deployment-configured local Super Admin recovery path.
+- Current implementation: absent OIDC settings permit only configured Super Admin recovery; partial OIDC configuration or failed discovery fails closed. GitHub-first target: valid configured GitHub login can operate without OIDC, with no implicit fallback; disabled/misconfigured providers cannot bypass authentication. Implementation and configuration changes are required before this mode is available.
 - Signed webhook validation, idempotency, replay handling and exact revision association.
 - Least-privilege Git installation access: read repository/CI data plus authorized check-run/status publishing; no general branch write needed.
 - Encryption/rotation of model credentials; source-code egress policy; model tools cannot access CI/SCM secrets or grant themselves new rights.
@@ -593,7 +598,7 @@ Avoid claiming engineering incidents were prevented without observing policy enf
 ## 14. MVP acceptance criteria
 
 - [ ] GitHub integration supports selected repos and signed, idempotent events.
-- [ ] OIDC auth and organization/repository authorization comply with ADR-0003.
+- [ ] GitHub login, inherited organization onboarding, member grants, repository isolation, provider revocation and migration comply with ADR-0007; existing OIDC compatibility and local Super Admin recovery remain protected.
 - [ ] Repository profile identifies relevant check inputs and unknowns.
 - [ ] An AssessmentPlan is versioned, reviewable, and derived from scope/changed paths.
 - [ ] At least security, testing/quality and infrastructure checks have functional adapters or documented imported evidence.
@@ -650,7 +655,8 @@ A task can be developed behind a feature flag in parallel, but it cannot be coun
 
 - [ADR-0001 — TypeScript-first stack](architecture/ADR-0001-typescript-first-stack.md)
 - [ADR-0002 — Safe execution and optional future remediation contract](architecture/ADR-0002-safe-execution-fixtures-remediation-contract.md)
-- [ADR-0003 — OIDC user authentication](architecture/ADR-0003-oidc-user-authentication.md)
+- [ADR-0003 — Legacy OIDC authentication](architecture/ADR-0003-oidc-user-authentication.md)
+- [ADR-0007 — GitHub-first identity and organizations](architecture/ADR-0007-github-first-identity-and-organizations.md)
 - [ADR-0004 — Shift Left assessment and governance architecture](architecture/ADR-0004-shift-left-assessment-governance.md)
 - [ADR-0005 — Pinned Shadcn Admin source import](architecture/ADR-0005-shadcn-admin-frontend.md)
 - [Capabilities across the SDLC](product/sdlc-capabilities.md)

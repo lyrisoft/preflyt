@@ -111,7 +111,7 @@ Quality-gate **enforcement** may start advisory before an authorized policy owne
 
 ## Planned user journey
 
-1. An administrator signs in with the configured OIDC identity provider and connects selected GitHub repositories.
+1. An administrator signs in with GitHub and connects the organization App installation. Preflyt verifies organization ownership and creates the matching workspace automatically; admins then grant existing GitHub members Preflyt roles and repository access. This GitHub-first journey is accepted design, not implemented yet; current deployments still use OIDC onboarding.
 2. Preflyt constructs a **Repository Engineering Profile** from languages, test tools, manifests, CI, IaC and deployment evidence.
 3. A policy owner chooses a **versioned engineering baseline** and configures check applicability and enforcement mode.
 4. Every relevant PR/CI event creates a **revision-bound AssessmentPlan**.
@@ -226,7 +226,7 @@ pnpm-workspace.yaml
 turbo.json
 ~~~
 
-**Access control:** Preflyt uses OIDC plus organization/repository-scoped RBAC. P0 ships predefined roles and repository access grants; later phases extend permissions for assessments, policy enforcement, secure execution, AI providers, QA and performance. See [RBAC and authorization](docs/product/rbac-and-authorization.md).
+**Access control:** Current Preflyt uses OIDC plus organization/repository-scoped RBAC. The accepted [GitHub-first design](docs/architecture/ADR-0007-github-first-identity-and-organizations.md) adds GitHub login, workspaces inherited from connected organizations and member selection/username grants. Implementation and safe migration are pending; local Super Admin recovery and explicit Preflyt roles remain. P0 ships predefined roles and repository access grants; later phases extend permissions for assessments, policy enforcement, secure execution, AI providers, QA and performance. See [RBAC and authorization](docs/product/rbac-and-authorization.md).
 
 ## Documents and decision records
 
@@ -237,7 +237,8 @@ turbo.json
 - [Incremental delivery plan](docs/roadmap/incremental-delivery.md): **independently deployable P0–P11 vertical releases**, implementation tasks and acceptance gates.
 - [ADR-0001 — TypeScript-first application stack](docs/architecture/ADR-0001-typescript-first-stack.md)
 - [ADR-0002 — MVP safe execution and optional remediation contract](docs/architecture/ADR-0002-safe-execution-fixtures-remediation-contract.md)
-- [ADR-0003 — OIDC human authentication](docs/architecture/ADR-0003-oidc-user-authentication.md)
+- [ADR-0003 — Legacy OIDC authentication](docs/architecture/ADR-0003-oidc-user-authentication.md)
+- [ADR-0007 — GitHub-first identity and organization onboarding](docs/architecture/ADR-0007-github-first-identity-and-organizations.md)
 - [ADR-0004 — Assessment and governance architecture](docs/architecture/ADR-0004-shift-left-assessment-governance.md)
 - [ADR-0005 — Build Preflyt on the pinned Shadcn Admin source codebase](docs/architecture/ADR-0005-shadcn-admin-frontend.md)
 

@@ -13,7 +13,7 @@ If documents conflict with current code, **report the discrepancy and propose a 
 
 ## Mandatory behaviour
 
-- Extend the **already imported Shadcn Admin codebase**, preserving working OIDC, Super Admin recovery, GitHub integration, repository profiles, theme, router and RBAC boundaries.
+- Extend the **already imported Shadcn Admin codebase**, preserving session security, Super Admin recovery, GitHub integration, repository profiles, theme, router and RBAC boundaries. [ADR-0007](../architecture/ADR-0007-github-first-identity-and-organizations.md) is the accepted GitHub-first access target; keep current OIDC operational during its explicit migration. Do not claim GitHub login/member sync already works or auto-link identities by email/username.
 - Implement the **smallest deployable usable vertical slice** for the current phase. Do not scaffold future pages with dummy analytics and call them complete.
 - Sidebar: Workspace (Overview, Repositories, Assessments, Findings, Contributors once P3 usable); Governance (Quality Gates, Engineering Standards, Policies); Intelligence (only if working); Administration (Integrations, Access Control, Settings).
 - Every shipped route must include authorized API-backed data, meaningful loading/empty/error/permission-denied states, responsive layout, keyboard support and links to evidence.

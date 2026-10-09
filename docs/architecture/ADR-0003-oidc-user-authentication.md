@@ -1,6 +1,6 @@
 # ADR-0003: OIDC user authentication for self-hosted Preflyt
 
-**Status:** Accepted; initial API and web authentication slice implemented, full acceptance criteria pending
+**Status:** Implemented legacy OIDC design; partially superseded by [ADR-0007](ADR-0007-github-first-identity-and-organizations.md) for GitHub-first routine login and organization/member onboarding. Migration is pending; current OIDC behavior remains operational.
 **Date:** 2026-10-08  
 **Decision owner:** Product / Engineering  
 **Related:** [Product Requirements](../PRD.md), [TypeScript-first architecture](ADR-0001-typescript-first-stack.md)
@@ -10,6 +10,8 @@
 The PRD left the first-deployment human authentication mechanism unresolved. Preflyt's MVP is a self-hosted, single-organization installation with Owner, Admin, Developer and Viewer roles. Repository authorization already uses a separate GitHub App installation. Human identity and SCM integration identity must remain distinct.
 
 ## Decision
+
+The OIDC-only decision below records the current implementation. ADR-0007 defines the accepted GitHub-first target; statements excluding GitHub login apply to the legacy mode, not the new target. Session protection and local Super Admin recovery remain required.
 
 Use the installation's configured OpenID Connect (OIDC) provider for routine human sign-in in MVP. Permit one deployment-configured local **Super Admin** credential as a separate break-glass path. This is not a general local-password system, an OIDC fallback for regular users, or a GitHub login.
 
@@ -61,7 +63,7 @@ The initial implementation covers OIDC Authorization Code + PKCE, signature/issu
 - [ ] The first Owner can be created only with a valid out-of-band, expiring, single-use token while no Owner exists; successful use consumes it and permanently disables bootstrap.
 - [ ] GitHub login cannot authenticate a Preflyt user, and GitHub App credentials cannot be used as an interactive user session.
 - [ ] The configured Super Admin can authenticate only through the separate local route; invalid attempts are rate-limited, audited, and do not reveal whether the username exists.
-- [ ] Super Admin credentials are seeded from deployment-managed settings, only the scrypt password hash is stored in the database, and login produces a one-hour hashed server-side session.
+- [ ] Super Admin credentials are seeded from deployment-managed settings, only the scrypt password hash is stored in the database, and login produces a 24-hour hashed server-side session.
 - [ ] IdP outage/misconfiguration never falls back to local credentials for regular users. Super Admin-only mode is enabled only when all OIDC settings are explicitly absent and the deployment has configured the local account.
 - [ ] Partial OIDC configuration and failed discovery remain fail-closed. Organization sign-in and owner bootstrap remain unavailable in Super Admin-only mode.
 

@@ -46,22 +46,26 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 
 **Tasks:**
 - P0.1 Set up pnpm/Turborepo, NestJS API, Prisma/PostgreSQL and minimum health/telemetry; **pull the existing Shadcn Admin source at a reviewed, pinned full upstream Git SHA, build it, then integrate its React/Vite code into `apps/web`** as Preflyt's frontend foundation, rather than independently scaffolding the dashboard. Preserve source/license attribution and audit dependencies/customized components.
-- P0.2 Implement OIDC login, first-owner bootstrap, RBAC and scoped organization membership per ADR-0003.
+- P0.2 Implement GitHub-first login, verified organization-owner onboarding, inherited organization identity and GitHub member selection per [ADR-0007](../architecture/ADR-0007-github-first-identity-and-organizations.md). Current OIDC login/bootstrap and scoped RBAC remain operational during additive migration; this target is not yet implemented.
 - P0.3 Implement GitHub App installation and repository selection with least-privilege *read* permissions, store secrets server-side.
 - P0.4 Discover pinned-commit profile: language/framework, manifest/lockfiles, CI, tests, Docker/IaC, migration hints; evidence and unknown labels.
 - **P0.4a:** Ship a browsable, versioned first-party Engineering Standards Library (baseline, security, backend, frontend, IaC); recommend applicable packs based on detected stack and allow authorized Default/Recommended/Strict profile selection. Mark unsupported checks clearly.
-- P0.5 **Refactor the imported Shadcn Admin layout, routing and navigation** into Preflyt-branded functional screens; remove unrelated demos and mock data, replace upstream Clerk/demo auth with OIDC-guarded routes, implement the actual repository list/detail/profile with loading/empty/error states, basic audit and missing-control report. No AI, fake future-feature pages or repository code execution.
+- P0.5 **Refactor the imported Shadcn Admin layout, routing and navigation** into Preflyt-branded functional screens; remove unrelated demos and mock data, replace upstream Clerk/demo auth with server-session-guarded routes, implement the actual repository list/detail/profile with loading/empty/error states, basic audit and missing-control report. No AI, fake future-feature pages or repository code execution.
 - P0.6 Package versioned prebuilt images and **complete Docker Compose deployment** (frontend, API, PostgreSQL, Redis, required workers, model gateway and evidence storage as applicable), with a root `.env.example`, DB migrations, health checks, persistent volumes, backup and safe upgrade/rollback. **All current-release services start through `docker compose up -d` after configuration; no host-side application dependency installation.** Include standard OpenTelemetry exporter environment variables for any OTLP-compatible APM, per-service names, and an optional collector profile; see [OTel deployment contract](../deployment/opentelemetry-env.md).
 
 **Done when:** On a clean deployment an authorized user logs in, selects a GitHub repo and sees a correct profile and missing-control report; an unauthorized user cannot view it. Deleting/losing a provider token gives a visible, non-misleading error. Rollback preserves repository/profile records.
 
-- **P0.RBAC:** Implement predefined organization roles, repository-scoped membership/grants, authorization-aware navigation and NestJS resource checks. Test cross-organization denial, assignment/revocation, audit and owner bootstrap. See [RBAC specification](../product/rbac-and-authorization.md).
+- **P0.RBAC:** Implement predefined organization roles, repository-scoped membership/grants, authorization-aware navigation and NestJS resource checks. Test cross-organization denial, assignment/revocation, audit, verified GitHub owner onboarding and legacy owner-bootstrap protection. See [RBAC specification](../product/rbac-and-authorization.md).
 
 ### P0 AI configuration extension (additive)
 
 - **P0.AI1:** Multiple provider connections, encrypted write-only keys, local/compatible endpoints and connectivity testing.
 - **P0.AI2:** Primary/fallback model routing for laptop, repository, PR/CI, QA, performance/staging and production feedback, with egress, budget and RBAC restrictions.
 - **P0.AI3:** Working Settings → AI Providers & Routing interface with audit and route preview. Preserve already completed P0 functionality.
+
+### P0 GitHub-first access update (implementation pending)
+
+**Accepted foundational access update:** Deliver ADR-0007 within P0 access-control scope without adding/reordering phases. Build additive provider links and migration first, then GitHub login/organization-owner onboarding, member-directory and username grants, repository access intersection, revocation/reconciliation and bounded authorization caching. Demonstrate renamed usernames, unassigned/non-member denial, owner-claim races, private-repository isolation, provider outage handling, OIDC migration and safe rollback before making GitHub login the default. This does not mark current P2 enforcement work complete.
 
 ### P1 — CI Evidence Assessments
 
@@ -137,7 +141,7 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 
 ### P5 — Developer Experience: CLI and IDE Extension
 
-**Incremental release contract:** P5.1 shared local engine and installable CLI; P5.2 OIDC repository link and cached policy; P5.3 installable VS Code extension with inline diagnostics; P5.4 AI explanation and revision-bound PR gate visibility; P5.5 opt-in Git hooks and tested compatible editors. Each is independently usable and deployable. See [developer CLI and IDE specification](../product/developer-cli-ide-extension.md).
+**Incremental release contract:** P5.1 shared local engine and installable CLI; P5.2 authenticated repository link and cached policy; P5.3 installable VS Code extension with inline diagnostics; P5.4 AI explanation and revision-bound PR gate visibility; P5.5 opt-in Git hooks and tested compatible editors. Each is independently usable and deployable. See [developer CLI and IDE specification](../product/developer-cli-ide-extension.md).
 
 
 **User value:** A developer runs fast local checks and gets actionable feedback before pushing code.
@@ -298,7 +302,7 @@ The platform should demonstrate improvements at the earliest stage practical, wh
 ## 8. Existing architectural decisions retained
 
 - Node.js / TypeScript / React, NestJS, Prisma/PostgreSQL, BullMQ/Redis, LiteLLM as optional inference gateway.
-- OIDC user authentication and role-scoped GitHub App identity.
+- GitHub-first user authentication and role-scoped GitHub App identity per ADR-0007, with OIDC compatibility preserved during migration.
 - Real-repository code execution requires independently approved isolation; evidence-only mode works without it.
 - AI analysis is advisory. Coding-agent and automated remediation PRs are **not a prerequisite or default part of the core release plan**.
 - All changes go through reviewable PRs and normal human merge controls.
