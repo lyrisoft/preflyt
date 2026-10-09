@@ -424,10 +424,12 @@ export function RepositoryStandards({
   repositoryId,
   canManage,
   sourceBindings,
+  policyRevisions,
 }: {
   repositoryId: string
   canManage: boolean
   sourceBindings?: ReactNode
+  policyRevisions?: ReactNode
 }) {
   const query = useStandards(repositoryId)
   const [editing, setEditing] = useState(false)
@@ -626,6 +628,7 @@ export function RepositoryStandards({
           </Card>
         )}
       </div>
+      {policyRevisions}
       {data && (
         <section aria-labelledby='pack-catalogue-title' className='space-y-3'>
           <div className='flex items-center justify-between gap-3'>

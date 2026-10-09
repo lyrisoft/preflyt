@@ -404,21 +404,6 @@ export function WorkspaceModule({ module }: { module: Module }) {
                     )}
                     {module === 'policies' && (
                       <>
-                        <GatePolicyPanel
-                          key={repository.githubId}
-                          repositoryId={repository.githubId}
-                          canDraft={canPerform(
-                            session.data,
-                            'policy.draft',
-                            repository.githubId
-                          )}
-                          canPublish={canPerform(
-                            session.data,
-                            'policy.publish',
-                            repository.githubId
-                          )}
-                          actorId={session.data?.identityId}
-                        />
                         <RepositoryStandards
                           repositoryId={repository.githubId}
                           canManage={canPerform(
@@ -426,6 +411,23 @@ export function WorkspaceModule({ module }: { module: Module }) {
                             'policy.draft',
                             repository.githubId
                           )}
+                          policyRevisions={
+                            <GatePolicyPanel
+                              key={repository.githubId}
+                              repositoryId={repository.githubId}
+                              canDraft={canPerform(
+                                session.data,
+                                'policy.draft',
+                                repository.githubId
+                              )}
+                              canPublish={canPerform(
+                                session.data,
+                                'policy.publish',
+                                repository.githubId
+                              )}
+                              actorId={session.data?.identityId}
+                            />
+                          }
                           sourceBindings={
                             <RepositoryBindings
                               repositoryId={repository.githubId}
