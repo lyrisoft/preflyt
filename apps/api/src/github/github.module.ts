@@ -1,3 +1,5 @@
+import { GitHubRulesetController } from './github-ruleset.controller.js'
+import { GitHubRulesetService } from './github-ruleset.service.js'
 import { DashboardController } from '../dashboard/dashboard.controller.js'
 import { DashboardService } from '../dashboard/dashboard.service.js'
 import { Module } from '@nestjs/common'
@@ -14,10 +16,11 @@ import { GitHubService } from './github.service.js'
   imports: [AuthModule, PrismaModule, CacheModule, GitHubProviderModule],
   controllers: [
     GitHubController,
+    GitHubRulesetController,
     RepositoryProfileController,
     DashboardController,
   ],
   exports: [GitHubProviderModule],
-  providers: [GitHubService, RepositoryProfileService, DashboardService],
+  providers: [GitHubRulesetService, GitHubService, RepositoryProfileService, DashboardService],
 })
 export class GitHubModule {}

@@ -1,0 +1,26 @@
+# Read-only GitHub rulesets
+
+Quality Gates → GitHub Rulesets shows rulesets GitHub returns for the selected repository, including applicable parent organization/enterprise rulesets. Choose a repository, open a ruleset, and inspect its branch patterns, rule types, approval count and required status-check names/source App IDs.
+
+This is the first **P2.R1** slice. It uses the existing GitHub App with a repository-limited **Metadata: read** token; no organization administration permission is added. There are no create, update, activate, adopt or delete actions. Preflyt does not publish a required check in this slice.
+
+## Access and data
+
+- `GET /github/repositories/:repositoryId/rulesets?page=1`: 20 entries per page, with `hasMore`, `page` and `fetchedAt`.
+- `GET /github/repositories/:repositoryId/rulesets/:rulesetId`: normalized read-only detail. Required-check App IDs are GitHub integration IDs, not installation IDs.
+- Both require an active session and `policy.read` for a selected, available repository in the current organization. Authorization is checked before and after the GitHub operation.
+- Lists and details are cached in Redis for up to 60 seconds, keyed by GitHub App, installation, access revision, repository, page/detail ID. Without Redis, fresh GitHub data is read. Installation and upstream repository access are checked even before cached results are served.
+- Existing shared GitHub request pacing, cooldowns, bounded retries and single-flight handling apply. Refresh may return the same snapshot within the one-minute cache window; fetched time remains the time of the source read.
+- Pagination is deliberately bounded at 1,000 pages. A full page indicates that another page may exist; the next page can be empty. Pages do not form an atomic GitHub snapshot.
+
+## Interpretation and limits
+
+**Active** is GitHub enforcement; **Disabled** is not enforced; **Evaluate** is GitHub evaluation without blocking. These states are not Preflyt PASS/BLOCK/INCOMPLETE decisions. Unknown states or malformed responses fail rather than appearing as empty results.
+
+Branch patterns remain GitHub patterns, including `~DEFAULT_BRANCH` and `~ALL`. The view lists rulesets associated with a repository; it does not resolve effective protection for each branch. Legacy branch protection is not included. No rulesets returned therefore does not prove a branch is unprotected.
+
+The detail response intentionally omits organization repository-target lists, bypass actors and full rule parameters. It is not the complete deployable JSON. Organization-wide discovery, target previews, governance connection, preflight, deployment, drift, rollback and Insights remain pending.
+
+Plan/permission/provider failures are shown as errors. An empty result is displayed only after a successful list response. GitHub remains the authority for merge protection.
+
+See [GitHub repository rules API](https://docs.github.com/en/rest/repos/rules) and [the product specification](../product/github-ruleset-management.md).

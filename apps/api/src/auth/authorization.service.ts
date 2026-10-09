@@ -231,7 +231,9 @@ export class AuthorizationService {
             part.startsWith('pull-requests') ||
             part === 'events'
             ? 'assessment.read'
-            : part.startsWith('standards') || part.startsWith('ci-bindings')
+            : part.startsWith('standards') ||
+              part.startsWith('ci-bindings') ||
+              part.startsWith('rulesets')
               ? 'policy.read'
               : 'repository.read'
           : part === 'assessments'

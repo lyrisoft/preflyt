@@ -55,7 +55,9 @@ Its main output is an **Engineering Readiness Report**: a traceable account of w
 
 For detailed user journeys, triggers, check examples, stage contracts and performance workloads, see [Capabilities across the SDLC](docs/product/sdlc-capabilities.md).
 
-**GitHub organization ruleset management (planned P2):** Quality Gates → GitHub Rulesets will provide safe-default Standard/Strict/Custom protection profiles, verified Preflyt check integration, preview/approval before deployment, and drift monitoring. GitHub remains the merge enforcement authority. See [GitHub Ruleset Management](docs/product/github-ruleset-management.md).
+**GitHub rulesets (P2 read-only slice available):** Quality Gates → GitHub Rulesets lists repository and inherited rulesets, their GitHub state, branch patterns and required-check sources. See [setup and limits](docs/operations/github-rulesets.md). Organization-wide discovery, effective branch protection and management remain pending.
+
+**GitHub organization ruleset management (remaining P2):** Quality Gates → GitHub Rulesets will provide safe-default Standard/Strict/Custom protection profiles, verified Preflyt check integration, preview/approval before deployment, and drift monitoring. GitHub remains the merge enforcement authority. See [GitHub Ruleset Management](docs/product/github-ruleset-management.md).
 
 ## Engineering Contributors
 

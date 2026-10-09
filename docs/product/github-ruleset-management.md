@@ -1,6 +1,8 @@
 # GitHub Ruleset Management and Preflyt Quality Gate Integration
 
-**Status:** P2 product requirement; not implemented. **No phase reorder.**  
+**Status:** P2 product requirement; first P2.R1 repository-scoped read-only slice implemented. Organization-wide discovery and R2–R5 remain pending. **No phase reorder.**
+
+See [current ruleset setup and limits](../operations/github-rulesets.md).
 **Related:** [MVP Experience](mvp-product-experience.md), [Engineering Standards](engineering-standards-library.md), [RBAC](rbac-and-authorization.md), [Roadmap](../roadmap/incremental-delivery.md).
 
 ## Purpose

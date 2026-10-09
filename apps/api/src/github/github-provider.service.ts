@@ -1,3 +1,4 @@
+import { rulesetSummary, rulesetDetail } from './github-ruleset.js'
 import { normalizeGitHubEvent } from '../github-events/github-event.js'
 import { createHash } from 'node:crypto'
 import {
@@ -70,13 +71,13 @@ export class GitHubProviderService {
   private async installationToken(
     installationId: bigint,
     repositoryId?: bigint,
-    permission: 'contents' | 'pull_requests' = 'contents',
+    permission: 'contents' | 'pull_requests' | 'metadata' = 'contents',
   ) {
     const installation = await this.prisma?.gitHubInstallation.findUnique({
       where: { id: installationId },
       select: { accessRevision: true },
     })
-    const key = `${installationId}:${repositoryId ?? 'inventory'}:${installation?.accessRevision ?? 0}${permission === 'pull_requests' ? ':pull_requests' : ''}`
+    const key = `${installationId}:${repositoryId ?? 'inventory'}:${installation?.accessRevision ?? 0}${permission !== 'contents' ? ':' + permission : ''}`
     for (const [entry, value] of this.tokens)
       if (value.expiresAt <= Date.now() + 60000) this.tokens.delete(entry)
     const cached = this.tokens.get(key)
@@ -354,6 +355,90 @@ export class GitHubProviderService {
       fullName: reader.metadata.full_name,
       branch: reader.metadata.default_branch,
     }
+  }
+
+  private async readRulesets<T>(
+    installationId: bigint,
+    repositoryId: bigint,
+    suffix: string,
+    load: (
+      reader: Awaited<ReturnType<GitHubProviderService['openRepository']>>,
+    ) => Promise<T>,
+  ) {
+    // Even cached responses require current installation and repository access.
+    const reader = await this.openRepository(
+      installationId,
+      repositoryId,
+      'metadata',
+    )
+    const access = await this.prisma?.gitHubInstallation.findUnique({
+      where: { id: installationId },
+      select: { accessRevision: true },
+    })
+    const key = `github-rulesets:v1:${this.requireAppId()}:${installationId}:${repositoryId}:${access?.accessRevision ?? 0}:${suffix}`
+    const cached = await this.cache?.get(key)
+    if (cached) {
+      try {
+        return JSON.parse(cached) as T
+      } catch {
+        /* Re-read malformed cache. */
+      }
+    }
+    return this.limiter.singleFlight(key, async () => {
+      const result = await load(reader)
+      await this.cache?.set(key, JSON.stringify(result), 60)
+      return result
+    })
+  }
+  async listRepositoryRulesets(
+    installationId: bigint,
+    repositoryId: bigint,
+    page = 1,
+  ) {
+    if (!Number.isInteger(page) || page < 1 || page > 1000)
+      throw new BadRequestException('Invalid ruleset page')
+    return this.readRulesets(
+      installationId,
+      repositoryId,
+      `list:${page}`,
+      async ({ metadata, request }) => {
+        const rows = await request<unknown>(
+          `/repos/${encodeURIComponent(metadata.owner.login)}/${encodeURIComponent(metadata.name)}/rulesets?includes_parents=true&per_page=20&page=${page}`,
+        )
+        if (!Array.isArray(rows) || rows.length > 20)
+          throw new ServiceUnavailableException(
+            'GitHub returned an invalid ruleset list',
+          )
+        return {
+          rulesets: rows.map((row) => rulesetSummary(row, metadata.full_name)),
+          page,
+          hasMore: rows.length === 20 && page < 1000,
+          fetchedAt: new Date().toISOString(),
+        }
+      },
+    )
+  }
+  async getRepositoryRuleset(
+    installationId: bigint,
+    repositoryId: bigint,
+    id: number,
+  ) {
+    if (!Number.isSafeInteger(id) || id < 1)
+      throw new BadRequestException('Invalid ruleset ID')
+    return this.readRulesets(
+      installationId,
+      repositoryId,
+      `detail:${id}`,
+      async ({ metadata, request }) => {
+        const row = await request<unknown>(
+          `/repos/${encodeURIComponent(metadata.owner.login)}/${encodeURIComponent(metadata.name)}/rulesets/${id}?includes_parents=true`,
+        )
+        return {
+          ruleset: rulesetDetail(row, metadata.full_name, id),
+          fetchedAt: new Date().toISOString(),
+        }
+      },
+    )
   }
 
   async listRepositoryBranches(
@@ -692,7 +777,7 @@ export class GitHubProviderService {
   private async openRepository(
     installationId: bigint,
     repositoryId: bigint,
-    permission: 'contents' | 'pull_requests' = 'contents',
+    permission: 'contents' | 'pull_requests' | 'metadata' = 'contents',
   ) {
     try {
       await this.verifyInstallation(installationId)

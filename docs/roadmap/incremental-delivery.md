@@ -106,6 +106,8 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 
 - **P2.Contributors:** Attribute deterministic gate outcomes and evidence completeness to PR authors and revisions, with first-pass and final assessment status; do not conflate missing evidence with compliance.
 
+- **P2.R1 first slice (implemented):** Quality Gates → GitHub Rulesets displays paginated repository rulesets and inherited parent rulesets, branch patterns and required-check sources using Metadata read. Organization-wide discovery and resolved effective branch protection remain pending; see [current limits](../operations/github-rulesets.md).
+
 - **P2.R1–R5 — GitHub Ruleset Management:** read organization rulesets; Standard/Strict/Custom safe-default wizard; publish and preflight stable Preflyt PR check; authorized diff/approval/deploy; sync, drift and rollback. Each increment independently usable; never require a check before publishing is verified. See [GitHub Ruleset Management](../product/github-ruleset-management.md).
 
 - **P2.R5 Insights:** Extend ruleset synchronization with GitHub Rule Suites ingestion, ruleset-ID-based detailed evaluation attribution, metrics/charts, filtered history and evidence drill-down. Separate GitHub evaluations from Preflyt gate outcomes; enforce RBAC and rate-limit-aware pagination. See [Ruleset Management](../product/github-ruleset-management.md).

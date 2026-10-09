@@ -17,8 +17,10 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { AppHeader } from '@/components/layout/app-header'
 import { Main } from '@/components/layout/main'
+import { PageHelpDrawer } from '@/components/page-help-drawer'
 import { RepositoryPicker } from '@/components/repository-picker'
 import { StatusBadge } from '@/components/status-badge'
 import { GatePolicyPanel } from '@/features/repositories/gate-policy-panel'
@@ -27,6 +29,7 @@ import { RepositoryAssessments } from '@/features/repositories/repository-assess
 import { RepositoryBindings } from '@/features/repositories/repository-bindings'
 import { RepositoryCiEvidence } from '@/features/repositories/repository-ci-evidence'
 import { RepositoryPullRequests } from '@/features/repositories/repository-pull-requests'
+import { RepositoryRulesets } from '@/features/repositories/repository-rulesets'
 import { RepositoryStandards } from '@/features/repositories/repository-standards'
 import {
   IntegrationCatalogue,
@@ -42,8 +45,7 @@ const modules = {
     title: 'Quality Gates',
     section: 'Governance',
     icon: ClipboardCheck,
-    description:
-      'Review saved check results for a specific commit. Preflyt does not publish GitHub checks or block merges yet.',
+    description: 'Review saved gate results and GitHub branch rules.',
     accent: 'border-info/20 bg-info/5',
     iconAccent: 'bg-info/15 text-info',
   },
@@ -102,6 +104,7 @@ async function read<T>(path: string, signal: AbortSignal): Promise<T> {
 
 export function WorkspaceModule({ module }: { module: Module }) {
   const [integration, setIntegration] = useState<IntegrationId | null>(null)
+  const [gateView, setGateView] = useState('assessments')
   const config = modules[module]
   const ModuleIcon = config.icon
   const search = useSearch({ strict: false }) as { repository?: string }
@@ -121,7 +124,7 @@ export function WorkspaceModule({ module }: { module: Module }) {
     : repositories[0]
   const canManage = canPerform(session.data, 'repository.connect')
   return (
-    <>
+    <Tabs value={gateView} onValueChange={setGateView} className='contents'>
       <AppHeader breadcrumbs={[{ label: config.title }]} />
       <Main>
         <div
@@ -151,12 +154,41 @@ export function WorkspaceModule({ module }: { module: Module }) {
               </p>
             </div>
           </div>
-          <Button variant='outline' size='sm' asChild>
-            <Link to='/apps'>
-              <GitBranch className='size-3.5' aria-hidden='true' />
-              Manage repositories
-            </Link>
-          </Button>
+          <div className='flex items-center gap-2'>
+            <Button variant='outline' size='sm' asChild>
+              <Link to='/apps'>
+                <GitBranch className='size-3.5' aria-hidden='true' />
+                Manage repositories
+              </Link>
+            </Button>
+            {module === 'quality-gates' && (
+              <PageHelpDrawer
+                title='Quality Gates'
+                sections={[
+                  {
+                    title: 'Saved gate results',
+                    content:
+                      'Assessment previews use saved evidence for an exact commit. They do not publish GitHub checks or block merges.',
+                  },
+                  {
+                    title: 'GitHub rulesets',
+                    content:
+                      'Rulesets come from GitHub for the selected repository, including inherited organization or enterprise rules. Active rules are enforced by GitHub; Evaluate records evaluations without blocking, and Disabled rules are not enforced. This view does not report legacy branch protection or deploy rulesets.',
+                  },
+                  {
+                    title: 'Scope and freshness',
+                    content:
+                      'Lists show 20 rulesets per page. Open a ruleset to see branch patterns, rule types and required check sources. GitHub patterns such as ~DEFAULT_BRANCH and ~ALL retain their GitHub meaning. Data is cached for up to one minute; the fetched time reflects the source read. Ruleset absence does not prove the branch is unprotected.',
+                  },
+                  {
+                    title: 'Access and limitations',
+                    content:
+                      'Only authorized, selected repositories are shown. This uses read-only repository metadata permission. Organization-wide management, bypass actors, full rule parameters, legacy protection, effective branch evaluation and deployment are not included. Unavailable access, plans or throttled requests are reported as errors.',
+                  },
+                ]}
+              />
+            )}
+          </div>
         </div>
         {inventory.isPending ? (
           <div
@@ -186,6 +218,14 @@ export function WorkspaceModule({ module }: { module: Module }) {
           </div>
         ) : (
           <div className='space-y-6'>
+            {module === 'quality-gates' && (
+              <TabsList>
+                <TabsTrigger value='assessments'>
+                  Assessment previews
+                </TabsTrigger>
+                <TabsTrigger value='rulesets'>GitHub Rulesets</TabsTrigger>
+              </TabsList>
+            )}
             {module === 'integrations' && (
               <IntegrationCatalogue
                 connected={inventory.data.installations.some(
@@ -410,13 +450,31 @@ export function WorkspaceModule({ module }: { module: Module }) {
                           />
                         </>
                       )}
-                      {module === 'quality-gates' && (
-                        <RepositoryAssessments
-                          repositoryId={repository.githubId}
-                          canCreate={false}
-                          initialSha=''
-                        />
-                      )}
+                      {module === 'quality-gates' &&
+                        gateView === 'assessments' && (
+                          <TabsContent value='assessments'>
+                            <RepositoryAssessments
+                              repositoryId={repository.githubId}
+                              canCreate={false}
+                              initialSha=''
+                            />
+                          </TabsContent>
+                        )}
+                      {module === 'quality-gates' &&
+                        gateView === 'rulesets' && (
+                          <TabsContent value='rulesets'>
+                            <RepositoryRulesets
+                              key={repository.githubId}
+                              repositoryId={repository.githubId}
+                              actorId={session.data?.identityId}
+                              canRead={canPerform(
+                                session.data,
+                                'policy.read',
+                                repository.githubId
+                              )}
+                            />
+                          </TabsContent>
+                        )}
                       {module === 'standards' && (
                         <RepositoryStandards
                           repositoryId={repository.githubId}
@@ -488,6 +546,6 @@ export function WorkspaceModule({ module }: { module: Module }) {
           </div>
         )}
       </Main>
-    </>
+    </Tabs>
   )
 }
