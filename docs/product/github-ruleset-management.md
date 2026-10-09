@@ -44,6 +44,30 @@ Rulesets tab lists name, GitHub org, target repositories/branches, profile, GitH
 - Distinguish GitHub check `success`, `failure`, `neutral`, `skipped`, `queued/in_progress`; map Preflyt PASS/WARN/BLOCK/INCOMPLETE so **only eligible passing decisions satisfy the required gate**. WARN can pass only if policy explicitly permits it; INCOMPLETE stays non-passing.
 - GitHub rulesets remain the enforcement authority; Preflyt does not merge PRs or bypass other required reviews/checks.
 
+## Ruleset detail: Insights tab (P2.R5)
+
+Under **Governance → Quality Gates → GitHub Rulesets → [Ruleset] → Insights**, show **real GitHub rule-suite evaluations** and, separately, linked **Preflyt Engineering Readiness** assessments. The two sources must never be silently combined into one pass percentage.
+
+**GitHub API:** `GET /orgs/{org}/rulesets/rule-suites` lists organization rule suites; `GET /orgs/{org}/rulesets/rule-suites/{rule_suite_id}` returns individual rule evaluations with `rule_source.type`, `rule_source.id`, `enforcement`, `result`, `rule_type` and details when available. The list supports `ref`, `repository_name`, `time_period` (hour/day/week/month), `actor_name`, `rule_suite_result`, `evaluate_status`, and pagination. **It does not offer a ruleset-ID filter.** Associate a suite to this ruleset only through the matching detailed `rule_evaluations[].rule_source.id`; a suite may contain multiple rulesets or branch protection evaluations. Exclude unrelated evaluations from this ruleset's counts. Organization endpoints require GitHub App **Organization Administration: write**. Repository rule-suite endpoints can instead be used with repository Administration: read for authorized per-repository views. Detect permissions and GitHub plan limitations.
+
+**Overview metrics:** rule-specific evaluation count, passed, failed, bypassed, and **evaluation-mode failures separately**. Show time window, repository scope, last synchronized time and source. Do not assume suite-level `result` equals this particular ruleset's result. For ruleset-specific totals, aggregate matching rule evaluations and document whether counting unique suites or rule occurrences; do not sum both. Bypass classification requires care: preserve suite-level bypass and individual rule outcomes, avoid falsely attributing bypass to a ruleset if the detailed response cannot establish it. Mark unknown/unattributable rather than inventing counts.
+
+**Visualizations:** evaluation trend by day/week, most frequently failing rule types, repositories with most matched failures, bypass/exception activity when attributable, and linked Preflyt gate outcome trends in a **separate labeled panel**. Provide filterable/paginated evaluation history with repository, branch, actor, commit, rule type, result, details, timestamp and a source link. Drill into raw evidence and related Preflyt PR assessment only where an exact repository/revision association exists.
+
+**Data lifecycle:** bounded, rate-limit-aware incremental ingestion with idempotent suite ID + rule-source IDs, raw provenance, fetched-at and freshness; API windows extend only through month, so longer historical charts require Preflyt-owned retained snapshots and a documented retention policy. Respect organization/repository RBAC and avoid leaking private actor/repository information in aggregates.
+
+**Empty/error states:** no evaluations in selected period, ruleset disabled, evaluate mode only, permission denied, API throttled, partial pagination, stale sync and insufficient attribution. Do not render zero evaluations as 100% compliance.
+
+**P2.R5 acceptance:**
+- [ ] Matching evaluations from two rulesets in the same rule suite are attributed correctly, without double counting.
+- [ ] Rule-specific metrics reconcile to the visible filtered history and selected time window.
+- [ ] Pass/fail/bypass and evaluate-mode semantics remain distinct; unsupported attribution is labeled unknown.
+- [ ] An evaluation drills down to its specific failed rules and GitHub evidence; Preflyt quality-gate metrics remain separate.
+- [ ] GitHub permissions/rate limits and incomplete sync are handled with explicit freshness/coverage warnings.
+- [ ] An unauthorized user cannot access ruleset evaluations for private repositories.
+
+**References:** https://docs.github.com/en/rest/orgs/rule-suites and https://docs.github.com/en/rest/repos/rule-suites
+
 ## P2 independently usable increments
 
 | Increment | Deliverable |
@@ -52,7 +76,7 @@ Rulesets tab lists name, GitHub org, target repositories/branches, profile, GitH
 | **P2.R2** | Standard/Strict/Custom profiles and repository/branch targeting wizard |
 | **P2.R3** | Stable Preflyt check publisher and preflight verification against real PR/Actions evidence |
 | **P2.R4** | Authorized preview, approval and deployment through GitHub organization ruleset API |
-| **P2.R5** | Sync status, drift detection, audit and safe rollback |
+| **P2.R5** | Sync status, drift detection, audit, safe rollback and **ruleset-specific Insights** using GitHub Rule Suites |
 
 Each increment must be deployable and useful independently. R1 works with read access permitted by GitHub; privileged deployment requires explicit GitHub organization Administration write permission. R3 must be operational **before** requiring the check in R4.
 
