@@ -1,6 +1,6 @@
 # Engineering evidence UI
 
-The repository page retains its existing Shadcn sidebar, header and tab layout. Blue and teal accents now distinguish actions, inventory and configuration; status colors retain their own meaning in light and dark themes.
+The repository page retains its existing Shadcn sidebar, header and tab layout. A restrained navy primary with slate accents distinguishes actions, inventory and configuration; status colors retain their own meaning in light and dark themes.
 
 ## Standards
 
@@ -70,3 +70,7 @@ Bar, area and pie series use shared 280ms easing for entry and data changes, wit
 The activity calendar retains its six-month period, square cells and left alignment. Week columns reveal in 180ms with a stagger capped at 100ms; day colors and selection highlights transition in 150ms. Hover effects require a fine pointer. Native graph movement and transitions are enabled only when reduced motion is not requested. Counts, evidence labels and data queries remain immediate; no timers, artificial data or animation dependencies are added.
 
 Verification: web TypeScript, the production bundle and lint/format checks for all changed graph files pass. Animation settings and reduced-motion paths were audited in source. Browser playback, visual timing and touch-device checks remain unverified because browser checks are skipped by user instruction.
+
+### Primary palette
+
+Primary actions and links use navy (`#29465b`) in the light theme and a muted slate blue (`#a3bacb`) in the dark theme. Focus rings, selected navigation accents and the primary chart series follow the same palette. Semantic status colors remain separate. Primary button text and accent text meet WCAG AA contrast in both themes. Verified with token contrast calculations, scoped CSS formatting and a production web build.
