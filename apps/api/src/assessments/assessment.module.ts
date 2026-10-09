@@ -1,3 +1,5 @@
+import { NativeRequestController } from '../execution/native-request.controller.js'
+import { NativeRequestService } from '../execution/native-request.service.js'
 import { NativePlanService } from '../execution/native-plan.service.js'
 import { NativeStatusController } from '../execution/native-status.controller.js'
 import { NativeStatusService } from '../execution/native-status.service.js'
@@ -22,6 +24,7 @@ import { AssessmentService } from './assessment.service.js'
 @Module({
   imports: [AuthModule, PrismaModule, GitHubProviderModule],
   controllers: [
+    NativeRequestController,
     NativeStatusController,
     RulesetDeploymentController,
     ReadinessAutomationController,
@@ -32,6 +35,7 @@ import { AssessmentService } from './assessment.service.js'
     PullRequestController,
   ],
   providers: [
+    NativeRequestService,
     NativePlanService,
     NativeStatusService,
     RulesetDeploymentService,

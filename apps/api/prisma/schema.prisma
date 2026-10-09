@@ -179,6 +179,7 @@ model GitHubRepository {
   rulesetDeployments GitHubRulesetDeployment[]
   ruleSuiteSnapshots GitHubRuleSuiteSnapshot[]
   insightsSync GitHubInsightsSync?
+  nativeRequests NativeExecutionRequest[]
   profiles       RepositoryProfile[]
   @@index([installationId, selected])
 }
@@ -789,4 +790,48 @@ model GitHubInsightsSync {
   lastSweepAt DateTime?
   error Boolean @default(false)
   @@index([nextRunAt])
+}
+
+// Durable native attempts; blocked requests never become passing assessment evidence.
+enum NativeExecutionState {
+  BLOCKED
+  QUEUED
+  PREPARING
+  RUNNING
+  CANCEL_REQUESTED
+  SUCCEEDED
+  FAILED
+  CANCELLED
+  TIMED_OUT
+}
+model NativeExecutionRequest {
+  id String @id @default(uuid())
+  organizationId String
+  repositoryId String
+  repository GitHubRepository @relation(fields:[repositoryId],references:[id],onDelete:Cascade)
+  repositoryGithubId String
+  actorId String
+  requestKey String
+  inputHash String
+  sourceSha String
+  selectionId String
+  planHash String
+  plan Json
+  ruleIds Json
+  state NativeExecutionState @default(BLOCKED)
+  reason String?
+  runtimeApprovalHash String?
+  sourceHash String?
+  environmentId String?
+  controllerJobId String?
+  leaseUntil DateTime?
+  attempts Int @default(0)
+  requestedAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  cancelledById String?
+  finishedAt DateTime?
+  receiptHash String?
+  @@unique([repositoryId,requestKey])
+  @@index([organizationId,repositoryId,requestedAt,id])
+  @@index([state,leaseUntil,requestedAt])
 }

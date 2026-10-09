@@ -117,7 +117,7 @@ export function NativeExecutionStatus({
               {
                 title: 'Current support',
                 content:
-                  'The preflight controller is read-only. The check plan lists saved rules against the recorded commit. Tool versions, image digests and configuration must be reviewed before execution. Job dispatch, source checkout and native result collection are still being built. Preflyt does not run repository commands on the API or integration worker.',
+                  'The preflight controller is read-only. The check plan lists saved rules against the recorded commit. Tool versions, image digests and configuration must be reviewed before execution. Requests are recorded with the exact commit and saved standards. Source export verifies Git objects without running repository code. Requests remain blocked until a reviewed execution service is available; a recorded request is not a completed check. Job dispatch and native result collection are still being built. Preflyt does not run repository commands on the API or integration worker.',
               },
             ]}
           />

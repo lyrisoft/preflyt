@@ -5,16 +5,18 @@ import { Button } from '@/components/ui/button'
 import { StatusBadge } from '@/components/status-badge'
 import { useNavigationSession } from '../workspace/navigation-session'
 import { governanceRequest } from './governance-api'
+import { NativeCheckRequests } from './native-check-requests'
 
 type Step = {
   ruleId: string
   title: string
   required: boolean
+  adapterSupported?: boolean
   reason: string
   image?: string
   toolVersion?: string
 }
-type Plan = {
+export type NativePlan = {
   sourceSha: string
   branch: string
   recordedAt: string
@@ -43,13 +45,24 @@ export function NativeCheckPlan({ repositoryId }: { repositoryId: string }) {
     staleTime: 0,
     refetchOnWindowFocus: false,
     queryFn: ({ signal }) =>
-      governanceRequest<Plan>(
+      governanceRequest<NativePlan>(
         `/github/repositories/${repositoryId}/native-execution/plan`,
         undefined,
         signal
       ),
   })
-  return <NativeCheckPlanView open={open} setOpen={setOpen} query={query} />
+  return (
+    <>
+      <NativeCheckPlanView open={open} setOpen={setOpen} query={query} />
+      {open && !query.isError && query.data && (
+        <NativeCheckRequests
+          key={`${repositoryId}:${query.data.planHash}`}
+          repositoryId={repositoryId}
+          plan={query.data}
+        />
+      )}
+    </>
+  )
 }
 export function NativeCheckPlanView({
   open,
@@ -62,7 +75,7 @@ export function NativeCheckPlanView({
     isError: boolean
     isPending: boolean
     isFetching: boolean
-    data?: Plan
+    data?: NativePlan
     error: Error | null
     refetch: () => unknown
   }

@@ -207,6 +207,7 @@ export function buildNativePlan(
             : 'DISPATCHER_REQUIRED'
     return {
       ruleId: rule.id,
+      adapterSupported: !!adapter,
       title: rule.title,
       required: rule.required,
       reason,

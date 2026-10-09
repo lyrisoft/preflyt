@@ -18,6 +18,7 @@ export const rolePermissions: Record<string, string[]> = {
     'repository.manage',
     'assessment.read',
     'assessment.run',
+    'execution.run',
     'policy.read',
     'policy.draft',
     'policy.publish',
@@ -35,6 +36,7 @@ export const rolePermissions: Record<string, string[]> = {
     'repository.manage',
     'assessment.read',
     'assessment.run',
+    'execution.run',
     'policy.read',
     'policy.draft',
     'policy.publish',
@@ -56,6 +58,7 @@ export const rolePermissions: Record<string, string[]> = {
     'contributors.policy_evidence.read',
   ],
   SECURITY_ENGINEER: [
+    'execution.run',
     'repository.read',
     'assessment.read',
     'policy.read',
@@ -161,6 +164,7 @@ export class AuthorizationService {
           'policy.publish',
           'github.ruleset.manage',
           'policy.enforcement.manage',
+          'execution.run',
         ].includes(permission)
     )
     if (!member || !rolePermissions[member.role]?.includes(permission))
@@ -217,6 +221,10 @@ export class AuthorizationService {
     )
     if (repo) {
       const part = repo[2] ?? ''
+      if (part === 'native-execution/requests' || part.startsWith('native-execution/requests/')) {
+        await this.requireRepository(session, repo[1], request.method === 'GET' ? 'assessment.read' : 'execution.run')
+        return true
+      }
       if (part === 'check-publications' || part.startsWith('check-publications/') || part === 'check-automation') {
         await this.requireRepository(session, repo[1], request.method === 'GET' ? 'policy.read' : 'policy.publish')
         return true

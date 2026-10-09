@@ -1,3 +1,4 @@
+import { readPinnedNativeSource } from '../execution/native-source.js'
 import { attributedSuite, summarizeRulesetSuites, type RulesetSuite } from './ruleset-insights.js'
 import { rulesetSummary, rulesetDetail } from './github-ruleset.js'
 import { normalizeGitHubEvent } from '../github-events/github-event.js'
@@ -349,6 +350,15 @@ export class GitHubProviderService {
       if (pageRepositories.length < 100) return repositories
     }
     throw new Error('GitHub repository list exceeded the safe pagination limit')
+  }
+
+  /** Internal checkout broker only; tokens never appear in the returned source bundle. */
+  async readNativeSource(installationId: bigint, repositoryId: bigint, sourceSha: string, signal?: AbortSignal) {
+    if (!/^[a-f0-9]{40}$/.test(sourceSha)) throw new BadRequestException('Use an exact source commit for native checks')
+    signal?.throwIfAborted()
+    const reader = await this.openRepository(installationId, repositoryId, 'contents', signal)
+    const base = `/repos/${encodeURIComponent(reader.metadata.owner.login)}/${encodeURIComponent(reader.metadata.name)}`
+    return readPinnedNativeSource(reader.request, base, repositoryId.toString(), sourceSha, signal)
   }
 
   async verifyRepositoryAccess(installationId: bigint, repositoryId: bigint) {
@@ -1027,6 +1037,7 @@ export class GitHubProviderService {
     installationId: bigint,
     repositoryId: bigint,
     permission: 'contents' | 'pull_requests' | 'metadata' | 'actions' | 'administration' = 'contents',
+    externalSignal?: AbortSignal,
   ) {
     try {
       await this.verifyInstallation(installationId)
@@ -1055,7 +1066,9 @@ export class GitHubProviderService {
         'Unable to authorize repository inspection',
       )
     }
-    const signal = AbortSignal.timeout(60_000)
+    const timeout = AbortSignal.timeout(60_000)
+    const signal = externalSignal ? AbortSignal.any([externalSignal, timeout]) : timeout
+    signal.throwIfAborted()
     const request = async <T>(path: string): Promise<T> => {
       const response = await this.apiFetch(
         `installation:${installationId}`,

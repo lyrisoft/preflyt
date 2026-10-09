@@ -334,3 +334,7 @@ The platform should demonstrate improvements at the earliest stage practical, wh
 - All changes go through reviewable PRs and normal human merge controls.
 
 See [ADR-0004](../architecture/ADR-0004-shift-left-assessment-governance.md) for the core assessment semantics and [SDLC capabilities](../product/sdlc-capabilities.md) for user-facing behaviours.
+
+### P3 increment: verified source export and durable requests
+
+Implemented exact-commit Git object verification with bounded credential-free bundles, scoped native request/cancellation APIs, atomic audit and idempotency, and a paginated assessment request interface. Supported required checks are preselected; optional checks remain explicit. Migration `20261010002000_native_execution_requests` is applied locally and Prisma regenerated. Requests remain BLOCKED; no native execution or result publication is enabled by this increment. Effective independent sandbox acceptance, authenticated source delivery/volume materialization, dispatcher leases/deadlines/cleanup, reviewed scanner fixture runs and native gate receipts remain pending. See [native execution](../operations/native-execution.md). P3/P4 are not complete.
