@@ -99,6 +99,8 @@ Show sync time, partial directory results, verification errors and retry actions
 
 **Assessment → Code Quality:** show verified lint/typecheck/coverage/static-analysis results, changed-file findings, evidence freshness, severity, policy outcomes and source links. Clearly separate verified findings from AI hypotheses. Display reviewed skill provenance and output only when available; advanced multi-skill review/inline comments belong to P4. See [Code Quality Review](code-quality-review.md) and [Skill-Based Review](skill-based-code-review.md).
 
+**Administration → Teams:** when implemented, provide local team creation and GitHub team import/sync, member and repository-association views, assigned standards/policies and a team detail page. Show GitHub-accessible repositories separately from approved team policy scope. Policy assignment supports Organization / Team / Repository with effective-impact preview and conflict explanations. See [Teams and Policy Inheritance](teams-and-policy-inheritance.md).
+
 ## End-to-end MVP journeys
 
 **New organization (GitHub-first target):** Continue with GitHub → connect/verify the organization App installation → verify GitHub organization ownership and create the matching workspace automatically → select repository → discover profile → recommend and select policy packs → show missing controls and next steps. The Overview should be an onboarding state until real assessments exist.
