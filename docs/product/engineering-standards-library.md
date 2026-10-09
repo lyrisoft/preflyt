@@ -65,6 +65,10 @@ rules:
     capability: import_only
 ~~~
 
+## Code Quality policy pack
+
+Add a versioned `code-quality` pack with lint, typecheck, build, complexity, duplication and changed-code coverage requirements **only where supported by trusted evidence**. P1 maps CI results; P2 enables deterministic enforcement; P3 expands native adapters. AI review skills may recommend improvements but are advisory and cannot independently determine PASS/BLOCK. Missing required coverage or unavailable analyzers must produce INCOMPLETE rather than invented compliance. See [Code Quality Review](code-quality-review.md) and [Skill-Based Review](skill-based-code-review.md).
+
 ## Built-in adoption profiles
 
 | Profile | Intent | Behaviour |
