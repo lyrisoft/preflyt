@@ -27,7 +27,14 @@ import {
   canAdminister,
 } from '../workspace/navigation-session'
 
+type Preset = {
+  id: string
+  name: string
+  baseUrl: string
+  exampleModel: string
+}
 type Endpoint = {
+  preset?: string
   id: string
   name: string
   baseUrl: string
@@ -64,6 +71,7 @@ type Configuration = {
   providers: Provider[]
   routes: StageRoute[]
   stages: string[]
+  presets?: Preset[]
 }
 const stageName = (stage: string) =>
   ({
@@ -88,7 +96,7 @@ const help = [
   {
     title: 'Models',
     content:
-      'Organization admins add and approve models directly in Preflyt. Use an OpenAI-compatible endpoint and the model ID it accepts. Hosted providers require HTTPS; select Self-hosted for a local model server. Keys are encrypted and write-only. Testing reads the model list; it does not send repository code or generate an explanation. Editing a connection requires another test.',
+      'Organization admins add and approve models directly in Preflyt. Choose a built-in provider or add an OpenAI-compatible endpoint. Model name means the exact API identifier your provider accepts. Hosted providers require HTTPS; select Self-hosted for a local model server. Keys are encrypted and write-only. Testing reads model metadata; it does not send repository code or generate an explanation. Editing a connection requires another test.',
   },
   {
     title: 'Model routing',
@@ -146,7 +154,8 @@ function AiSettings({
       staleTime: 0,
       refetchOnWindowFocus: false,
     })
-  const [edit, setEdit] = useState<Provider | null | undefined>(),
+  const [preset, setPreset] = useState<Preset>(),
+    [edit, setEdit] = useState<Provider | null | undefined>(),
     [routing, setRouting] = useState<StageRoute | undefined>(),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(''),
@@ -241,6 +250,46 @@ function AiSettings({
               </TabsTrigger>
             </TabsList>
             <TabsContent value='connections' className='mt-5 space-y-4'>
+              <div className='grid gap-4 sm:grid-cols-2 xl:grid-cols-4'>
+                {data.presets?.map((p) => {
+                  const connection = data.providers.find(
+                    (c) => c.endpoint?.preset === p.id
+                  )
+                  return (
+                    <section
+                      key={p.id}
+                      className='flex flex-col gap-4 rounded-xl border p-5'
+                    >
+                      <div className='flex items-start justify-between gap-2'>
+                        <h2 className='font-semibold'>{p.name}</h2>
+                        <StatusBadge
+                          tone={connection?.enabled ? 'success' : 'neutral'}
+                        >
+                          {connection?.enabled ? 'Active' : 'Inactive'}
+                        </StatusBadge>
+                      </div>
+                      <p className='min-h-10 text-sm text-muted-foreground'>
+                        {connection?.modelId ??
+                          'Enter your model name and API key.'}
+                      </p>
+                      <Button
+                        variant='outline'
+                        className='mt-auto'
+                        disabled={
+                          busy || (!connection && data.providers.length >= 32)
+                        }
+                        onClick={() => {
+                          setError('')
+                          setPreset(p)
+                          setEdit(connection ?? null)
+                        }}
+                      >
+                        {connection ? 'Configure' : 'Activate'}
+                      </Button>
+                    </section>
+                  )
+                })}
+              </div>
               <div className='flex flex-wrap justify-between gap-3'>
                 <Input
                   aria-label='Filter models'
@@ -256,6 +305,7 @@ function AiSettings({
                   disabled={busy || data.providers.length >= 32}
                   onClick={() => {
                     setError('')
+                    setPreset(undefined)
                     setEdit(null)
                   }}
                 >
@@ -267,7 +317,7 @@ function AiSettings({
                 <table className='w-full text-left text-sm'>
                   <thead className='bg-muted/40 text-muted-foreground'>
                     <tr>
-                      {['Model', 'Model ID', 'Status', 'Actions'].map((t) => (
+                      {['Model', 'Model name', 'Status', 'Actions'].map((t) => (
                         <th key={t} className='px-4 py-3 font-medium'>
                           {t}
                         </th>
@@ -328,6 +378,11 @@ function AiSettings({
                                 disabled={busy}
                                 onClick={() => {
                                   setError('')
+                                  setPreset(
+                                    data.presets?.find(
+                                      (v) => v.id === p.endpoint?.preset
+                                    )
+                                  )
                                   setEdit(p)
                                 }}
                               >
@@ -474,7 +529,13 @@ function AiSettings({
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{edit ? 'Edit model' : 'Add model'}</DialogTitle>
+            <DialogTitle>
+              {preset
+                ? `${edit ? 'Configure' : 'Activate'} ${preset.name}`
+                : edit
+                  ? 'Edit model'
+                  : 'Add model'}
+            </DialogTitle>
             <DialogDescription>
               Saving approves this model for your organization. Keys stay
               private.
@@ -482,6 +543,7 @@ function AiSettings({
           </DialogHeader>
           {data && edit !== undefined && (
             <ProviderForm
+              preset={preset}
               key={edit?.id ?? 'new'}
               provider={edit}
               busy={busy}
@@ -532,11 +594,13 @@ function AiSettings({
   )
 }
 function ProviderForm({
+  preset,
   provider,
   busy,
   error,
   save,
 }: {
+  preset?: Preset
   provider: Provider | null
   busy: boolean
   error: string
@@ -551,78 +615,86 @@ function ProviderForm({
     ),
     [apiKey, setApiKey] = useState('')
   const changed =
-    baseUrl !== provider?.endpoint?.baseUrl ||
-    locality !== provider?.endpoint?.locality ||
-    requiresKey !== provider?.endpoint?.requiresKey
+    !preset &&
+    (baseUrl !== provider?.endpoint?.baseUrl ||
+      locality !== provider?.endpoint?.locality ||
+      requiresKey !== provider?.endpoint?.requiresKey)
   function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const f = new FormData(e.currentTarget)
     save({
-      name: f.get('name'),
-      baseUrl,
-      locality,
-      requiresKey,
+      name: preset?.name ?? f.get('name'),
+      baseUrl: preset?.baseUrl ?? baseUrl,
+      locality: preset ? 'hosted' : locality,
+      requiresKey: preset ? true : requiresKey,
+      ...(preset ? { preset: preset.id } : {}),
       modelId: f.get('modelId'),
-      enabled: f.get('enabled') === 'on',
+      enabled: preset && !provider ? true : f.get('enabled') === 'on',
       expectedRevision: provider?.revision ?? 0,
       ...(apiKey ? { apiKey } : {}),
     })
   }
   return (
     <form onSubmit={submit} className='space-y-4'>
+      {!preset && (
+        <>
+          <label className='block space-y-2 text-sm'>
+            <span>Display name</span>
+            <Input
+              name='name'
+              placeholder='Code review model'
+              required
+              maxLength={120}
+              defaultValue={provider?.name}
+            />
+          </label>
+          <label className='block space-y-2 text-sm'>
+            <span>Endpoint URL</span>
+            <Input
+              type='url'
+              value={baseUrl}
+              onChange={(e) => setBaseUrl(e.target.value)}
+              placeholder='https://api.example.com/v1'
+              required
+              maxLength={2048}
+            />
+          </label>
+          <label className='block space-y-2 text-sm'>
+            <span>Hosting</span>
+            <select
+              className={selectClass}
+              value={locality}
+              onChange={(e) => setLocality(e.target.value)}
+            >
+              <option value='hosted'>Hosted provider</option>
+              <option value='local'>Self-hosted model</option>
+            </select>
+          </label>
+        </>
+      )}
       <label className='block space-y-2 text-sm'>
-        <span>Display name</span>
-        <Input
-          name='name'
-          placeholder='Code review model'
-          required
-          maxLength={120}
-          defaultValue={provider?.name}
-        />
-      </label>
-      <label className='block space-y-2 text-sm'>
-        <span>Endpoint URL</span>
-        <Input
-          type='url'
-          value={baseUrl}
-          onChange={(e) => setBaseUrl(e.target.value)}
-          placeholder='https://api.example.com/v1'
-          required
-          maxLength={2048}
-        />
-      </label>
-      <label className='block space-y-2 text-sm'>
-        <span>Hosting</span>
-        <select
-          className={selectClass}
-          value={locality}
-          onChange={(e) => setLocality(e.target.value)}
-        >
-          <option value='hosted'>Hosted provider</option>
-          <option value='local'>Self-hosted model</option>
-        </select>
-      </label>
-      <label className='block space-y-2 text-sm'>
-        <span>Model ID</span>
+        <span>Model name</span>
         <Input
           name='modelId'
           required
           maxLength={256}
-          placeholder='code-review-model'
+          placeholder={preset?.exampleModel ?? 'code-review-model'}
           defaultValue={provider?.modelId}
         />
       </label>
-      <label className='flex items-center gap-2 text-sm'>
-        <input
-          type='checkbox'
-          checked={requiresKey}
-          onChange={(e) => setRequiresKey(e.target.checked)}
-        />
-        Provider requires an API key
-      </label>
+      {!preset && (
+        <label className='flex items-center gap-2 text-sm'>
+          <input
+            type='checkbox'
+            checked={requiresKey}
+            onChange={(e) => setRequiresKey(e.target.checked)}
+          />
+          Provider requires an API key
+        </label>
+      )}
       <label className='block space-y-2 text-sm'>
         <span>
-          Provider key{' '}
+          API key{' '}
           {provider?.apiKeySet && !changed
             ? '(leave blank to keep saved key)'
             : ''}
@@ -634,24 +706,32 @@ function ProviderForm({
           value={apiKey}
           onChange={(e) => setApiKey(e.target.value)}
           maxLength={4096}
-          required={requiresKey && (!provider?.apiKeySet || changed)}
+          required={
+            (!!preset || requiresKey) && (!provider?.apiKeySet || changed)
+          }
         />
       </label>
-      <label className='flex items-center gap-2 text-sm'>
-        <input
-          type='checkbox'
-          name='enabled'
-          defaultChecked={provider?.enabled ?? false}
-        />
-        Enable model
-      </label>
+      {(!preset || provider) && (
+        <label className='flex items-center gap-2 text-sm'>
+          <input
+            type='checkbox'
+            name='enabled'
+            defaultChecked={provider?.enabled ?? false}
+          />
+          Enable model
+        </label>
+      )}
       {error && (
         <p role='alert' className='text-sm text-destructive'>
           {error}
         </p>
       )}
       <Button className='w-full' disabled={busy}>
-        {busy ? 'Saving…' : 'Save model'}
+        {busy
+          ? 'Saving…'
+          : preset && !provider
+            ? 'Activate model'
+            : 'Save model'}
       </Button>
     </form>
   )

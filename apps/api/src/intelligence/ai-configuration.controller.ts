@@ -30,6 +30,7 @@ import {
 } from "../auth/session.guard.js";
 import { AiConfigurationService } from "./ai-configuration.service.js";
 class ProviderDto {
+  @IsOptional() @IsIn(["openai", "anthropic", "gemini", "deepseek"]) preset?: string;
   @IsString() @MinLength(1) @MaxLength(120) name!: string;
   @IsString() @MaxLength(2048) baseUrl!: string;
   @IsIn(["local", "hosted"]) locality!: "local" | "hosted";

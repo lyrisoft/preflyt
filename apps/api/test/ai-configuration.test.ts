@@ -2,6 +2,8 @@ import { randomBytes } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   aiConfigurationEnabled,
+  aiProviderPresets,
+  aiCredentialEndpointDigest,
   aiCredentialKey,
   validateAiEndpoint,
   encryptAiCredential,
@@ -221,4 +223,46 @@ describe("metadata-only connection testing", () => {
       "fixture timeout",
     );
   });
+});
+
+describe("built-in provider metadata checks", () => {
+  it.each(aiProviderPresets)("uses correct authentication for $id", async (preset) => {
+    const endpoint = validateAiEndpoint({ id: "fixture", name: preset.name, baseUrl: preset.baseUrl, locality: "hosted", requiresKey: true, models: [preset.exampleModel], preset: preset.id });
+    const body = preset.id === "gemini" ? { name: "models/" + preset.exampleModel } : preset.id === "anthropic" ? { id: preset.exampleModel, type: "model" } : { data: [{ id: preset.exampleModel }] };
+    transport.mockResolvedValueOnce(new Response(JSON.stringify(body)));
+    expect(await testAiEndpoint(endpoint, preset.exampleModel, "fixture-key")).toBe("CONNECTED");
+    const [url, locality, options] = transport.mock.lastCall!;
+    expect(url.origin).toBe(new URL(preset.baseUrl).origin);
+    expect(url.search).toBe("");
+    expect(locality).toBe("hosted");
+    expect(options.headers[preset.id === "gemini" ? "x-goog-api-key" : preset.id === "anthropic" ? "x-api-key" : "authorization"]).toBe(preset.id === "gemini" || preset.id === "anthropic" ? "fixture-key" : "Bearer fixture-key");
+    if (preset.id === "anthropic") expect(options.headers["anthropic-version"]).toBe("2023-06-01");
+  });
+  it("rejects preset endpoint overrides and separates credential bindings", () => {
+    const preset = aiProviderPresets[0];
+    const value = { ...endpoint(), baseUrl: preset.baseUrl, preset: preset.id };
+    expect(() => validateAiEndpoint({ ...value, baseUrl: "https://other.example" })).toThrow();
+    expect(() => validateAiEndpoint({ ...value, requiresKey: false })).toThrow();
+    expect(() => validateAiEndpoint({ ...value, preset: "unknown" })).toThrow();
+    const { preset: ignored, ...custom } = value;
+    expect(aiCredentialEndpointDigest(value)).not.toBe(aiCredentialEndpointDigest(custom));
+  });
+  it("handles rejected keys and unknown native models", async () => {
+    const preset = aiProviderPresets[2];
+    const value = { ...endpoint(), baseUrl: preset.baseUrl, preset: preset.id };
+    transport.mockResolvedValueOnce(new Response("", { status: 403 }));
+    expect(await testAiEndpoint(value, "gemini-example", "fixture-key")).toBe("AUTH_REJECTED");
+    transport.mockResolvedValueOnce(new Response("", { status: 404 }));
+    expect(await testAiEndpoint(value, "gemini-example", "fixture-key")).toBe("MODEL_UNAVAILABLE");
+  });
+});
+
+it("accepts a Claude alias resolved by its metadata endpoint", async () => {
+  const preset = aiProviderPresets[1];
+  const value = { ...endpoint(), baseUrl: preset.baseUrl, preset: preset.id };
+  transport.mockResolvedValueOnce(new Response(JSON.stringify({ type: "model", id: "claude-example-20261009" })));
+  expect(await testAiEndpoint(value, "claude-example", "fixture-key")).toBe("CONNECTED");
+  expect(transport.mock.lastCall![0].pathname).toBe("/v1/models/claude-example");
+  transport.mockResolvedValueOnce(new Response(JSON.stringify({ type: "model", id: "claude-example", lifecycle: "retired" })));
+  expect(await testAiEndpoint(value, "claude-example", "fixture-key")).toBe("MODEL_UNAVAILABLE");
 });

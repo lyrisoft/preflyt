@@ -34,6 +34,14 @@ const configuration = () => ({
   providers: [],
   routes: [],
   stages: ['pull_request'],
+  presets: [
+    {
+      id: 'openai',
+      name: 'OpenAI (ChatGPT)',
+      baseUrl: 'https://api.openai.com/v1',
+      exampleModel: 'gpt-4.1',
+    },
+  ],
 })
 beforeEach(() => {
   state.role = 'OWNER'
@@ -82,8 +90,8 @@ it('starts new provider connections disabled and keeps errors in the form', asyn
   await view
     .getByRole('textbox', { name: 'Endpoint URL' })
     .fill('https://gateway.example.invalid/v1')
-  await view.getByRole('textbox', { name: 'Model ID' }).fill('model-a')
-  await view.getByLabelText('Provider key').fill('fixture-key')
+  await view.getByRole('textbox', { name: 'Model name' }).fill('model-a')
+  await view.getByLabelText('API key', { exact: true }).fill('fixture-key')
   state.save.mockRejectedValueOnce(
     new Error('Connection changed. Reload before saving.')
   )
@@ -174,7 +182,7 @@ it('lets an admin approve a self-hosted model without a deployment allowlist or 
     .getByRole('textbox', { name: 'Endpoint URL' })
     .fill('http://model-server:4000/v1')
   await view.getByRole('combobox', { name: 'Hosting' }).selectOptions('local')
-  await view.getByRole('textbox', { name: 'Model ID' }).fill('internal-model')
+  await view.getByRole('textbox', { name: 'Model name' }).fill('internal-model')
   await view
     .getByRole('checkbox', { name: 'Provider requires an API key' })
     .click()
@@ -211,4 +219,29 @@ it('shows organization-admin approval separately from connection testing', () =>
   const html = renderToStaticMarkup(<AiSettingsPage />)
   expect(html).toContain('Approved')
   expect(html).toContain('Not tested')
+})
+
+it('activates a built-in provider with only model name and key', async () => {
+  const view = await render(<AiSettingsPage />)
+  await view.getByRole('button', { name: 'Activate', exact: true }).click()
+  await expect
+    .element(view.getByRole('textbox', { name: 'Endpoint URL' }))
+    .not.toBeInTheDocument()
+  await expect
+    .element(view.getByRole('textbox', { name: 'Display name' }))
+    .not.toBeInTheDocument()
+  await view.getByRole('textbox', { name: 'Model name' }).fill('gpt-4.1')
+  await view.getByLabelText('API key', { exact: true }).fill('fixture-key')
+  await view.getByRole('button', { name: 'Activate model' }).click()
+  expect(state.save).toHaveBeenCalledWith(
+    '/ai/configuration/providers',
+    expect.objectContaining({
+      preset: 'openai',
+      enabled: true,
+      modelId: 'gpt-4.1',
+      apiKey: 'fixture-key',
+      baseUrl: 'https://api.openai.com/v1',
+      requiresKey: true,
+    })
+  )
 })

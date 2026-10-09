@@ -18,6 +18,7 @@ import {
   validateAiEndpoint,
   providerEndpoint,
   aiStages,
+  aiProviderPresets,
   encryptAiCredential,
   decryptAiCredential,
   endpointDigest,
@@ -25,6 +26,7 @@ import {
   testAiEndpoint,
 } from "./ai-configuration.js";
 export type ProviderInput = {
+  preset?: string;
   name: string;
   baseUrl: string;
   locality: "local" | "hosted";
@@ -97,6 +99,7 @@ export class AiConfigurationService {
       providers: providers.map(publicProvider),
       routes,
       stages: aiStages,
+      presets: aiProviderPresets,
     };
   }
   async saveProvider(
@@ -110,6 +113,11 @@ export class AiConfigurationService {
       "ai.provider.manage",
       true,
     );
+    if (input.preset !== undefined) {
+      const preset = aiProviderPresets.find((p) => p.id === input.preset);
+      if (!preset) throw new BadRequestException("Choose a supported provider");
+      input = { ...input, name: preset.name, baseUrl: preset.baseUrl, locality: "hosted", requiresKey: true };
+    }
     const providerId = id ?? randomUUID();
     let endpoint;
     try {
@@ -120,6 +128,7 @@ export class AiConfigurationService {
         locality: input.locality,
         requiresKey: input.requiresKey,
         models: [input.modelId],
+        ...(input.preset ? { preset: input.preset } : {}),
       });
     } catch {
       throw new BadRequestException(

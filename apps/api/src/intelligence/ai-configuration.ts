@@ -12,7 +12,14 @@ export const aiStages = [
   "performance",
   "production",
 ] as const;
+export const aiProviderPresets = [
+  { id: "openai", name: "OpenAI (ChatGPT)", baseUrl: "https://api.openai.com/v1", exampleModel: "gpt-4.1" },
+  { id: "anthropic", name: "Anthropic (Claude)", baseUrl: "https://api.anthropic.com/v1", exampleModel: "claude-opus-5" },
+  { id: "gemini", name: "Google (Gemini)", baseUrl: "https://generativelanguage.googleapis.com/v1beta", exampleModel: "gemini-3.8-flash" },
+  { id: "deepseek", name: "DeepSeek", baseUrl: "https://api.deepseek.com", exampleModel: "deepseek-flash" },
+] as const;
 export type AiEndpoint = {
+  preset?: string;
   id: string;
   name: string;
   baseUrl: string;
@@ -39,7 +46,7 @@ export function validateAiEndpoint(input: unknown): AiEndpoint {
       throw new Error();
     const v = input as AiEndpoint;
     if (
-      Object.keys(v).sort().join(",") !==
+      Object.keys(v).filter((k) => k !== "preset").sort().join(",") !==
         "baseUrl,id,locality,models,name,requiresKey" ||
       typeof v.id !== "string" ||
       !/^[a-zA-Z0-9-]{1,64}$/.test(v.id) ||
@@ -61,6 +68,11 @@ export function validateAiEndpoint(input: unknown): AiEndpoint {
       new Set(v.models).size !== v.models.length
     )
       throw new Error();
+    if (v.preset !== undefined) {
+      const preset = aiProviderPresets.find((p) => p.id === v.preset);
+      if (!preset || v.baseUrl !== preset.baseUrl || v.locality !== "hosted" || !v.requiresKey)
+        throw new Error();
+    }
     const url = new URL(v.baseUrl);
     const host = url.hostname.replace(/^\[|\]$/g, "");
     if (
@@ -96,6 +108,7 @@ export const aiCredentialEndpointDigest = (endpoint: AiEndpoint) =>
     baseUrl: endpoint.baseUrl,
     locality: endpoint.locality,
     requiresKey: endpoint.requiresKey,
+    ...(endpoint.preset ? { preset: endpoint.preset } : {}),
   });
 const aad = (org: string, id: string, endpointHash: string) =>
   Buffer.from(
@@ -172,13 +185,21 @@ export async function testAiEndpoint(
   key?: string,
 ) {
   const signal = AbortSignal.timeout(10000);
+  const model = endpoint.preset === "gemini" ? modelId.replace(/^models\//, "") : modelId;
+  if ((endpoint.preset === "gemini" || endpoint.preset === "anthropic") && !/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,255}$/.test(model))
+    return "MODEL_UNAVAILABLE";
+  const direct = endpoint.preset === "gemini" || endpoint.preset === "anthropic";
   const response = await aiHttpRequest(
-    new URL(endpoint.baseUrl + "/models"),
+    new URL(endpoint.baseUrl + "/models" + (direct ? "/" + encodeURIComponent(model) : "")),
     endpoint.locality,
     {
       headers: {
         accept: "application/json",
-        ...(key ? { authorization: `Bearer ${key}` } : {}),
+        ...(endpoint.preset === "anthropic"
+          ? { "anthropic-version": "2023-06-01", ...(key ? { "x-api-key": key } : {}) }
+          : endpoint.preset === "gemini"
+            ? (key ? { "x-goog-api-key": key } : {})
+            : (key ? { authorization: `Bearer ${key}` } : {})),
       },
       signal,
     },
@@ -186,7 +207,7 @@ export async function testAiEndpoint(
   if (!response.ok || !response.body)
     return response.status === 401 || response.status === 403
       ? "AUTH_REJECTED"
-      : "UNAVAILABLE";
+      : response.status === 404 ? "MODEL_UNAVAILABLE" : "UNAVAILABLE";
   const reader = response.body.getReader(),
     chunks: Uint8Array[] = [];
   let size = 0;
@@ -200,6 +221,11 @@ export async function testAiEndpoint(
       chunks.push(part.value);
     }
     const value: unknown = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    if (direct) {
+      const record = value as { name?: string; id?: string; type?: string; lifecycle?: string };
+      return (endpoint.preset === "gemini" ? record?.name === "models/" + model : (record?.type === "model" && typeof record.id === "string" && /^claude-[a-zA-Z0-9_.-]+$/.test(record.id) && record.lifecycle !== "retired"))
+        ? "CONNECTED" : "MODEL_UNAVAILABLE";
+    }
     const data = (value as { data?: unknown })?.data;
     if (!Array.isArray(data) || data.length > 10000) return "UNAVAILABLE";
     return data.some(

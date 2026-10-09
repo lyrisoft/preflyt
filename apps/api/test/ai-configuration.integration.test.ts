@@ -473,3 +473,22 @@ it("creates a keyless self-hosted model only through admin approval", async () =
     apiKey: undefined,
   }).expect(403);
 });
+
+it("lists inactive built-ins without creating records or making network requests", async () => {
+  const response = await get().expect(200);
+  expect(response.body.presets.map((p: { id: string }) => p.id)).toEqual(["openai", "anthropic", "gemini", "deepseek"]);
+  expect(response.body.providers).toEqual([]);
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+it("resolves built-in endpoints on the server and requires keys before activation", async () => {
+  const body = { ...input, preset: "gemini", name: "Overridden", baseUrl: "https://other.example/v1", requiresKey: false, modelId: "gemini-example" };
+  const { apiKey, ...withoutKey } = body;
+  await post(owner, "/providers", withoutKey).expect(400);
+  const response = await post(owner, "/providers", body).expect(201);
+  expect(response.body.name).toBe("Google (Gemini)");
+  expect(response.body.endpoint).toMatchObject({ preset: "gemini", baseUrl: "https://generativelanguage.googleapis.com/v1beta", requiresKey: true, locality: "hosted" });
+  expect(response.body.apiKeySet).toBe(true);
+  expect(response.body.testStatus).toBe("NOT_TESTED");
+  expect(JSON.stringify(response.body)).not.toContain("fixture-key");
+  await post(owner, "/providers", { ...body, preset: "unknown" }).expect(400);
+});
