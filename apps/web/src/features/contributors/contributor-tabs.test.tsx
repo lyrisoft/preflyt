@@ -1,0 +1,155 @@
+import { renderToStaticMarkup } from 'react-dom/server'
+import { expect, it, vi } from 'vitest'
+import { ContributorsPage } from './contributors-page'
+
+const state = vi.hoisted(() => ({ tab: 'activity', page: 1 }))
+const data = vi.hoisted(() => ({
+  choices: [{ githubId: '11', fullName: 'fixture/repo' }],
+  scope: [{ githubId: '11', fullName: 'fixture/repo' }],
+  period: { days: 30, from: '2026-09-10', to: '2026-10-09' },
+  summary: {},
+  activity: [],
+  assessmentActivity: [],
+  contributionActivity: [],
+  permissions: { activity: true, policyEvidence: true },
+  page: 1,
+  pageSize: 20,
+  total: 1,
+  truncated: false,
+  collectionEnabled: true,
+  lastReceivedAt: null,
+  limitations: [],
+  contributors: [
+    {
+      id: 'person',
+      login: 'developer',
+      kind: 'HUMAN',
+      avatarUrl: '',
+      profileUrl: 'https://github.com/developer',
+      authoredPrs: 31,
+      mergedPrs: 0,
+      reviews: 0,
+      commits: 0,
+    },
+  ],
+  observations: Array.from({ length: 31 }, (_, i) => ({
+    id: `event-${i}`,
+    relationship: 'PR_AUTHOR',
+    repositoryId: '11',
+    repository: 'fixture/repo',
+    sourceSha: 'a'.repeat(40),
+    sourceObjectId: `pr-${i + 1}`,
+    pullRequestNumber: i + 1,
+    action: 'opened',
+    merged: false,
+    observedAt: '2026-10-09T00:00:00Z',
+    sourceUrl: `https://github.com/fixture/repo/pull/${i + 1}`,
+    assessments: [],
+  })),
+  policyCompliance: {
+    eligiblePrs: 31,
+    completePrs: 0,
+    passingPrs: 0,
+    blockedPrs: 0,
+    incompletePrs: 0,
+    unassessedPrs: 31,
+    stalePrs: 0,
+    passRate: null,
+    coverage: 0,
+    mixedBaselines: false,
+    truncated: false,
+    rowsTruncated: false,
+    repositories: [],
+    baselines: [],
+    rows: [],
+  },
+}))
+vi.mock('@tanstack/react-router', () => ({
+  useSearch: () => ({
+    days: '30',
+    repository: 'all',
+    kind: 'all',
+    relationship: 'all',
+    q: '',
+    page: state.page,
+    tab: state.tab,
+  }),
+  useNavigate: () => vi.fn(),
+  getRouteApi: () => ({ useParams: () => ({ contributorId: 'person' }) }),
+  Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a>,
+}))
+vi.mock('@tanstack/react-query', () => ({
+  useQuery: () => ({
+    data,
+    isPending: false,
+    isError: false,
+    isFetching: false,
+    refetch: vi.fn(),
+  }),
+  useQueryClient: () => ({ invalidateQueries: vi.fn() }),
+  useMutation: () => ({
+    isPending: false,
+    isError: false,
+    isSuccess: false,
+    mutate: vi.fn(),
+  }),
+}))
+vi.mock('@/features/workspace/navigation-session', () => ({
+  useNavigationSession: () => ({
+    isSuccess: true,
+    data: { identityId: 'person', organizationId: 'org' },
+  }),
+}))
+vi.mock('@/features/workspace/scoped-access', () => ({
+  canPerform: () => false,
+}))
+vi.mock('@/components/layout/app-header', () => ({
+  AppHeader: () => <header>Profile header</header>,
+}))
+vi.mock('@/components/repository-picker', () => ({
+  RepositoryPicker: () => <span>Repository picker</span>,
+}))
+it.each([
+  'repositories',
+  'pull-requests',
+  'reviews',
+  'policy-evidence',
+  'activity',
+])(
+  'puts %s content immediately below tabs without repeating the dashboard',
+  (tab) => {
+    state.tab = tab
+    state.page = 1
+    const html = renderToStaticMarkup(
+      <ContributorsPage contributorId='person' />
+    )
+    expect(html).not.toContain('Contribution activity')
+    expect(html).not.toContain('Engineering policy compliance')
+    expect(html).toContain('role="tablist"')
+  }
+)
+it('keeps the dashboard inside Overview and the navigation before it', () => {
+  state.tab = 'overview'
+  state.page = 1
+  const html = renderToStaticMarkup(<ContributorsPage contributorId='person' />)
+  expect(html).toContain('Engineering policy compliance')
+  expect(html.indexOf('role="tablist"')).toBeLessThan(
+    html.indexOf('Contribution activity')
+  )
+})
+it('pages Activity content and does not render later rows on page one', () => {
+  state.tab = 'activity'
+  state.page = 1
+  const first = renderToStaticMarkup(
+    <ContributorsPage contributorId='person' />
+  )
+  expect(first).toContain('Page 1 of 2')
+  expect(first).not.toContain('>PR #31')
+  state.page = 2
+  const second = renderToStaticMarkup(
+    <ContributorsPage contributorId='person' />
+  )
+  expect(second).toContain('Page 2 of 2')
+  expect(second).toContain('>PR #31')
+  expect(second).not.toContain('>PR #1<')
+})

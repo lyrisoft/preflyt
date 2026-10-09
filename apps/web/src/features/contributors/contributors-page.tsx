@@ -48,8 +48,12 @@ import {
   PolicyComplianceEvidence,
   type Compliance,
 } from './policy-compliance'
-import { paginatePullRequests } from './pull-request-pagination'
+import {
+  paginateCollection,
+  paginatePullRequests,
+} from './pull-request-pagination'
 import type { ContributorSearch } from './search-schema'
+import { TabPagination } from './tab-pagination'
 
 type Contributor = {
   id: string
@@ -313,6 +317,21 @@ export function ContributorsPage({
     c = data?.contributors[0],
     rows = data?.observations ?? []
   const pullRequests = paginatePullRequests(rows, page)
+  const tabRows =
+    tab === 'pull-requests'
+      ? pullRequests
+      : paginateCollection(
+          rows.filter((row) =>
+            tab === 'reviews' ? row.relationship === 'REVIEWER' : true
+          ),
+          page
+        )
+  const repositoryRows = paginateCollection(
+    (data?.scope ?? []).filter((repo) =>
+      rows.some((row) => row.repositoryId === repo.githubId)
+    ),
+    page
+  )
   function filter(action: () => void) {
     action()
   }
@@ -481,6 +500,28 @@ export function ContributorsPage({
             </label>
           )}
         </div>
+        {contributorId && (
+          <Tabs value={tab} onValueChange={setTab}>
+            <TabsList className='flex h-auto flex-wrap justify-start'>
+              {[
+                'overview',
+                'repositories',
+                'pull-requests',
+                'reviews',
+                'policy-evidence',
+                'activity',
+              ].map((t) => (
+                <TabsTrigger key={t} value={t}>
+                  {t === 'policy-evidence'
+                    ? 'Policy evidence'
+                    : t
+                        .replace(/-/g, ' ')
+                        .replace(/^./, (letter) => letter.toUpperCase())}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+        )}
         {query.isPending ? (
           <div
             role='status'
@@ -501,8 +542,8 @@ export function ContributorsPage({
         ) : (
           data && (
             <>
-              {contributorId && c ? (
-                <div className='grid items-stretch gap-4 xl:grid-cols-[minmax(0,7fr)_minmax(0,3fr)]'>
+              {contributorId && c && tab === 'overview' ? (
+                <div className='grid items-start gap-4 xl:grid-cols-[minmax(0,7fr)_minmax(0,3fr)]'>
                   <ContributorActivitySummary
                     series={data.contributionActivity ?? []}
                     metrics={c}
@@ -515,7 +556,7 @@ export function ContributorsPage({
                     onEvidence={() => setTab('policy-evidence')}
                   />
                 </div>
-              ) : (
+              ) : !contributorId ? (
                 <div className='grid gap-4 sm:grid-cols-2 xl:grid-cols-4'>
                   {metrics.map((m, i) => (
                     <Card key={m.label} className='gap-3'>
@@ -536,7 +577,7 @@ export function ContributorsPage({
                     </Card>
                   ))}
                 </div>
-              )}
+              ) : null}
               <div className='flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground'>
                 <p>
                   {data.lastReceivedAt
@@ -601,24 +642,6 @@ export function ContributorsPage({
                       </a>
                     )}
                   </div>
-                  <Tabs value={tab} onValueChange={setTab}>
-                    <TabsList className='flex h-auto flex-wrap justify-start'>
-                      {[
-                        'overview',
-                        'repositories',
-                        'pull-requests',
-                        'reviews',
-                        'policy-evidence',
-                        'activity',
-                      ].map((t) => (
-                        <TabsTrigger key={t} value={t}>
-                          {t === 'policy-evidence'
-                            ? 'Findings & policy evidence'
-                            : t.replace(/-/g, ' ')}
-                        </TabsTrigger>
-                      ))}
-                    </TabsList>
-                  </Tabs>
                 </>
               )}
               {!contributorId && (
@@ -890,22 +913,25 @@ export function ContributorsPage({
                   <CardHeader>
                     <CardTitle>Contributed repositories</CardTitle>
                   </CardHeader>
-                  <CardContent className='grid gap-3 sm:grid-cols-2'>
-                    {data.scope
-                      .filter((r) =>
-                        rows.some((o) => o.repositoryId === r.githubId)
-                      )
-                      .map((r) => (
+                  <CardContent>
+                    <div className='grid gap-3 sm:grid-cols-2'>
+                      {repositoryRows.items.map((repo) => (
                         <Link
-                          key={r.githubId}
+                          key={repo.githubId}
                           to='/repositories/$repositoryId'
-                          params={{ repositoryId: r.githubId }}
+                          params={{ repositoryId: repo.githubId }}
                           className='rounded-lg border p-4 text-sm font-medium text-primary hover:bg-accent'
                         >
                           <GitBranch className='mb-2 size-4' />
-                          {r.fullName}
+                          {repo.fullName}
                         </Link>
                       ))}
+                    </div>
+                    <TabPagination
+                      pagination={repositoryRows}
+                      label='repositories'
+                      onPageChange={(next) => setPage(() => next)}
+                    />
                   </CardContent>
                 </Card>
               )}
@@ -920,7 +946,7 @@ export function ContributorsPage({
                     <CardHeader>
                       <CardTitle>
                         {tab === 'policy-evidence'
-                          ? 'Revision-bound policy evidence'
+                          ? 'Policy evidence'
                           : tab.replace(/-/g, ' ')}
                       </CardTitle>
                       {tab === 'policy-evidence' && (
@@ -935,70 +961,28 @@ export function ContributorsPage({
                       {tab === 'policy-evidence' ? (
                         <PolicyComplianceEvidence
                           data={data.policyCompliance ?? null}
+                          page={page}
+                          onPageChange={(next) => setPage(() => next)}
                         />
                       ) : !data.permissions.activity ? (
                         <p className='text-sm text-muted-foreground'>
                           Policy evidence permission is required.
                         </p>
-                      ) : tab === 'pull-requests' ? (
-                        <>
-                          <SourceRows rows={pullRequests.items} />
-                          {pullRequests.total > 0 && (
-                            <div className='mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-4 text-xs text-muted-foreground'>
-                              <p>
-                                {(pullRequests.page - 1) *
-                                  pullRequests.pageSize +
-                                  1}
-                                –
-                                {Math.min(
-                                  pullRequests.page * pullRequests.pageSize,
-                                  pullRequests.total
-                                )}{' '}
-                                of {pullRequests.total} pull requests · Latest
-                                recorded activity per PR
-                              </p>
-                              <nav
-                                aria-label='Pull request pagination'
-                                className='flex items-center gap-2'
-                              >
-                                <Button
-                                  size='sm'
-                                  variant='outline'
-                                  disabled={pullRequests.page === 1}
-                                  onClick={() =>
-                                    setPage(() => pullRequests.page - 1)
-                                  }
-                                >
-                                  Previous
-                                </Button>
-                                <span aria-live='polite'>
-                                  Page {pullRequests.page} of{' '}
-                                  {pullRequests.pages}
-                                </span>
-                                <Button
-                                  size='sm'
-                                  variant='outline'
-                                  disabled={
-                                    pullRequests.page === pullRequests.pages
-                                  }
-                                  onClick={() =>
-                                    setPage(() => pullRequests.page + 1)
-                                  }
-                                >
-                                  Next
-                                </Button>
-                              </nav>
-                            </div>
-                          )}
-                        </>
                       ) : (
-                        <SourceRows
-                          rows={rows.filter((r) =>
-                            tab === 'reviews'
-                              ? r.relationship === 'REVIEWER'
-                              : true
-                          )}
-                        />
+                        <>
+                          <SourceRows rows={tabRows.items} />
+                          <TabPagination
+                            pagination={tabRows}
+                            label={
+                              tab === 'pull-requests'
+                                ? 'pull requests'
+                                : tab === 'reviews'
+                                  ? 'reviews'
+                                  : 'activity records'
+                            }
+                            onPageChange={(next) => setPage(() => next)}
+                          />
+                        </>
                       )}
                     </CardContent>
                   </Card>

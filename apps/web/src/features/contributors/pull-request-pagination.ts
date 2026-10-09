@@ -20,12 +20,18 @@ export function paginatePullRequests<T extends PullRequestObservation>(
     const key = `${row.repositoryId}:${row.pullRequestNumber}`
     if (!unique.has(key)) unique.set(key, row)
   }
-  const all = [...unique.values()],
-    total = all.length
-  const pages = Math.max(1, Math.ceil(total / pageSize)),
-    page = Math.max(1, Math.min(requestedPage, pages))
+  return paginateCollection([...unique.values()], requestedPage, pageSize)
+}
+export function paginateCollection<T>(
+  items: T[],
+  requestedPage: number,
+  pageSize = 20
+) {
+  const total = items.length,
+    pages = Math.max(1, Math.ceil(total / pageSize))
+  const page = Math.max(1, Math.min(requestedPage, pages))
   return {
-    items: all.slice((page - 1) * pageSize, page * pageSize),
+    items: items.slice((page - 1) * pageSize, page * pageSize),
     total,
     page,
     pages,

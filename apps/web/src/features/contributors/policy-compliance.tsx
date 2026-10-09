@@ -9,6 +9,8 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { paginateCollection } from './pull-request-pagination'
+import { TabPagination } from './tab-pagination'
 
 export type Compliance = {
   eligiblePrs: number
@@ -101,7 +103,7 @@ export function PolicyComplianceSummary({
     ? data.incompletePrs + data.unassessedPrs + data.stalePrs
     : 0
   return (
-    <Card className='h-full min-w-0 gap-4 border-primary/20'>
+    <Card className='min-w-0 gap-3 border-primary/20'>
       <CardHeader className='flex flex-row flex-wrap items-start justify-between gap-3'>
         <div className='space-y-1'>
           <CardTitle className='flex items-center gap-2'>
@@ -126,7 +128,7 @@ export function PolicyComplianceSummary({
           </p>
         </div>
         <Button size='sm' variant='outline' onClick={onEvidence}>
-          View PR evidence
+          View evidence
           <ArrowRight className='size-3.5' />
         </Button>
       </CardHeader>
@@ -145,30 +147,32 @@ export function PolicyComplianceSummary({
             <div className='grid grid-cols-2 gap-3'>
               {[
                 {
-                  label: 'Required-check pass rate',
+                  label: 'Pass rate',
                   value: data.mixedBaselines
                     ? 'By version'
-                    : percent(data.passRate),
-                  detail: `${data.passingPrs} of ${data.completePrs} fully assessed PRs`,
+                    : data.passRate === null
+                      ? '—'
+                      : percent(data.passRate),
+                  detail: `${data.passingPrs}/${data.completePrs} fully assessed PRs`,
                   icon: CheckCircle2,
                   color: 'text-teal-600 dark:text-teal-400',
                 },
                 {
-                  label: 'Assessment coverage',
+                  label: 'Coverage',
                   value: percent(data.coverage),
-                  detail: `${data.completePrs} of ${data.eligiblePrs} authored PRs fully assessed`,
+                  detail: `${data.completePrs}/${data.eligiblePrs} PRs assessed`,
                   icon: ShieldCheck,
                   color: 'text-primary',
                 },
                 {
-                  label: 'PRs with failed checks',
+                  label: 'Failed checks',
                   value: String(data.blockedPrs),
-                  detail: 'At least one required check failed',
+                  detail: 'Known required-check failures',
                   icon: CircleAlert,
                   color: 'text-red-600 dark:text-red-400',
                 },
                 {
-                  label: 'PRs needing evidence',
+                  label: 'Missing evidence',
                   value: String(gaps),
                   detail: `${data.unassessedPrs} not assessed · ${data.stalePrs} older assessments`,
                   icon: FileQuestion,
@@ -177,7 +181,7 @@ export function PolicyComplianceSummary({
               ].map((metric) => (
                 <div
                   key={metric.label}
-                  className='rounded-lg border bg-muted/15 p-4'
+                  className='rounded-lg border bg-muted/15 p-3'
                 >
                   <div className='flex items-center justify-between gap-2'>
                     <p className='text-xs text-muted-foreground'>
@@ -188,7 +192,8 @@ export function PolicyComplianceSummary({
                     />
                   </div>
                   <p
-                    className={`mt-3 text-lg font-semibold tabular-nums 2xl:text-xl ${metric.value === 'Not available' || metric.value === 'By version' ? 'text-muted-foreground' : metric.color}`}
+                    aria-label={`${metric.label}: ${metric.value === '—' ? 'Not available' : metric.value}`}
+                    className={`mt-2 text-lg font-semibold tabular-nums 2xl:text-xl ${metric.value === '—' || metric.value === 'By version' ? 'text-muted-foreground' : metric.color}`}
                   >
                     {metric.value}
                   </p>
@@ -223,14 +228,9 @@ export function PolicyComplianceSummary({
                   }}
                 />
               </div>
-              <p className='text-xs text-muted-foreground'>
-                Required checks met: {data.passingPrs} · Failed checks:{' '}
-                {data.blockedPrs} · Missing or older evidence:{' '}
-                {data.eligiblePrs - data.passingPrs - data.blockedPrs}
-              </p>
             </div>
             {data.completePrs === 0 && (
-              <p className='rounded-lg border border-amber-500/25 bg-amber-500/5 p-3 text-sm'>
+              <p className='text-xs text-amber-700 dark:text-amber-400'>
                 Not enough evidence to calculate compliance.
               </p>
             )}
@@ -300,7 +300,7 @@ export function PolicyComplianceSummary({
         )}
         <details className='text-xs text-muted-foreground'>
           <summary className='cursor-pointer'>
-            How compliance is calculated · Observe mode
+            Metric definitions · Observe mode
           </summary>{' '}
           <p className='mt-2'>
             Based on saved engineering standards in observe mode, not
@@ -316,8 +316,12 @@ export function PolicyComplianceSummary({
 }
 export function PolicyComplianceEvidence({
   data,
+  page = 1,
+  onPageChange,
 }: {
   data: Compliance | null
+  page?: number
+  onPageChange: (page: number) => void
 }) {
   if (!data)
     return (
@@ -331,6 +335,7 @@ export function PolicyComplianceEvidence({
         No authored PR evidence in this period.
       </p>
     )
+  const pagination = paginateCollection(data.rows, page)
   return (
     <div className='space-y-3'>
       {data.rowsTruncated && (
@@ -350,7 +355,7 @@ export function PolicyComplianceEvidence({
             </tr>
           </thead>
           <tbody>
-            {data.rows.map((row) => {
+            {pagination.items.map((row) => {
               const repo = data.repositories.find(
                 (r) => r.id === row.repositoryId
               )!
@@ -411,6 +416,11 @@ export function PolicyComplianceEvidence({
           </tbody>
         </table>
       </div>
+      <TabPagination
+        pagination={pagination}
+        label='PR evidence records'
+        onPageChange={onPageChange}
+      />
     </div>
   )
 }

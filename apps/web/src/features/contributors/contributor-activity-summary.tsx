@@ -54,7 +54,7 @@ export function ContributorActivitySummary({
     },
   ]
   return (
-    <Card className='h-full min-w-0 gap-4'>
+    <Card className='min-w-0 gap-3'>
       <CardHeader>
         <CardTitle>Contribution activity</CardTitle>
         <p className='text-xs text-muted-foreground'>
