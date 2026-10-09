@@ -32,6 +32,7 @@ export type SourceIdentity = {
 }
 export type Binding = Omit<SourceIdentity, 'runAttempt'> & { ruleId: string }
 export type BindingResult = {
+  supportedRuleIds?: string[]
   active: boolean
   binding: null | {
     id: string

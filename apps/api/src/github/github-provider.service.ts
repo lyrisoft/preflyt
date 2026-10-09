@@ -71,7 +71,7 @@ export class GitHubProviderService {
   private async installationToken(
     installationId: bigint,
     repositoryId?: bigint,
-    permission: 'contents' | 'pull_requests' | 'metadata' = 'contents',
+    permission: 'contents' | 'pull_requests' | 'metadata' | 'actions' = 'contents',
   ) {
     const installation = await this.prisma?.gitHubInstallation.findUnique({
       where: { id: installationId },
@@ -659,6 +659,14 @@ export class GitHubProviderService {
     }
   }
 
+  async readReadinessWorkflowRun(installationId: bigint, repositoryId: bigint, runId: string) {
+    if(!/^[1-9]\d{0,15}$/.test(runId) || !Number.isSafeInteger(Number(runId)))throw new BadRequestException('Invalid workflow run')
+    const reader=await this.openRepository(installationId,repositoryId,'actions')
+    const root=`/repos/${encodeURIComponent(reader.metadata.owner.login)}/${encodeURIComponent(reader.metadata.name)}`
+    const run=await reader.request<Record<string,any>>(`${root}/actions/runs/${runId}`)
+    if(String(run.id)!==runId || String(run.repository?.id)!==repositoryId.toString() || String(run.head_repository?.id)!==repositoryId.toString() || !Number.isSafeInteger(run.run_attempt) || run.run_attempt<1 || !Number.isSafeInteger(run.workflow_id) || run.workflow_id<1 || !/^[a-f0-9]{40}$/.test(run.head_sha))throw new ServiceUnavailableException('Workflow run identity could not be verified')
+    return {sourceSha:run.head_sha,runAttempt:run.run_attempt,status:run.status,conclusion:run.conclusion,workflowId:String(run.workflow_id)}
+  }
   async checkPublicationAccess(installationId: bigint) {
     const installation = await this.verifyInstallation(installationId)
     if (installation.permissions.checks !== 'write')
@@ -676,15 +684,16 @@ export class GitHubProviderService {
       head_sha: string
       external_id: string
       status: 'completed'
-      conclusion: 'failure' | 'action_required'
+      conclusion: 'failure' | 'action_required' | 'success'
       output: { title: string; summary: string }
     },
+    verifiedPolicy = false,
   ) {
     const { appId } = await this.checkPublicationAccess(installationId)
-    // Defense in depth: this foundation cannot ever publish success/neutral/skipped.
+    // Observe previews cannot publish success; only a verified published-policy evaluation can.
     if (
       payload.name !== 'Preflyt / Engineering Readiness' ||
-      !['failure', 'action_required'].includes(payload.conclusion) ||
+      !(['failure', 'action_required', ...(verifiedPolicy ? ['success'] : [])]).includes(payload.conclusion) ||
       !/^[a-f0-9]{40}$/.test(payload.head_sha) ||
       !/^[a-f0-9]{64}$/.test(payload.external_id)
     )
@@ -931,7 +940,7 @@ export class GitHubProviderService {
   private async openRepository(
     installationId: bigint,
     repositoryId: bigint,
-    permission: 'contents' | 'pull_requests' | 'metadata' = 'contents',
+    permission: 'contents' | 'pull_requests' | 'metadata' | 'actions' = 'contents',
   ) {
     try {
       await this.verifyInstallation(installationId)

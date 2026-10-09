@@ -1,3 +1,4 @@
+import { evaluatePublishedPolicy } from './published-policy-evaluation.js'
 import { randomUUID } from 'node:crypto'
 import {
   BadRequestException,
@@ -40,7 +41,7 @@ export class CheckPublicationService {
     await this.access.requireRepository(session, githubId, 'policy.read')
     return {
       enabled: process.env.GITHUB_CHECK_PUBLICATION_ENABLED === 'true',
-      publicationMode: 'OBSERVE_NON_PASSING',
+      publicationMode: 'POLICY_AWARE',
       activationAvailable: false,
       page,
       hasMore: rows.length > 20,
@@ -73,8 +74,16 @@ export class CheckPublicationService {
       gateStatus: plan.gate.status,
       output: plan.payload.output,
       enabled: process.env.GITHUB_CHECK_PUBLICATION_ENABLED === 'true',
-      publicationMode: 'OBSERVE_NON_PASSING',
       activationAvailable: false,
+      policy: plan.policy
+        ? {
+            id: plan.policy.id,
+            revision: plan.policy.revision,
+            definitionHash: plan.policy.definitionHash,
+          }
+        : null,
+      evaluationHash: plan.policyEvaluation?.evaluationHash ?? null,
+      publicationMode: plan.policy ? 'PUBLISHED_POLICY' : 'OBSERVE_NON_PASSING',
     }
   }
   private async plan(
@@ -159,14 +168,69 @@ export class CheckPublicationService {
     const { appId } = await this.github.checkPublicationAccess(
       repo.installationId,
     )
+    const policy = await this.prisma.gatePolicyRevision.findFirst({
+      where: {
+        repositoryId: repo.id,
+        organizationId: session.organizationId!,
+        branchRef: `refs/heads/${context.base.ref}`,
+        state: 'PUBLISHED',
+      },
+      orderBy: [{ publishedAt: 'desc' }, { id: 'desc' }],
+    })
+    const report = assessment.report as Record<string, any>
+    const liveRuns: Record<
+      string,
+      Awaited<ReturnType<GitHubProviderService['readReadinessWorkflowRun']>>
+    > = {}
+    if (policy) {
+      const runIds = [
+        ...new Set<string>(
+          (report.observations ?? [])
+            .filter(
+              (o: any) =>
+                o.sourceKind === 'workflow_run' &&
+                report.checks?.some((c: any) => c.deliveryId === o.deliveryId),
+            )
+            .map((o: any) => o.sourceObjectId),
+        ),
+      ]
+      if (runIds.length > 32)
+        throw new ConflictException(
+          'Too many CI sources. Review the source mappings before publication.',
+        )
+      for (const runId of runIds)
+        liveRuns[runId] = await this.github.readReadinessWorkflowRun(
+          repo.installationId,
+          repo.githubId,
+          runId,
+        )
+    }
+    const policyEvaluation = policy
+      ? evaluatePublishedPolicy(
+          assessment,
+          policy,
+          `refs/heads/${context.base.ref}`,
+          liveRuns,
+        )
+      : undefined
     const id = digest({
       repositoryId: repo.id,
       installationId: repo.installationId.toString(),
       assessmentHash: assessment.assessmentHash,
       prNumber,
       context,
+      ...(policyEvaluation
+        ? {
+            policyHash: policy!.definitionHash,
+            evaluationHash: policyEvaluation.evaluationHash,
+          }
+        : {}),
     })
-    const { gate, payload } = publicationPayload(assessment, id)
+    const { gate, payload } = publicationPayload(
+      assessment,
+      id,
+      policyEvaluation,
+    )
     const previewHash = digest({
       id,
       context,
@@ -179,6 +243,8 @@ export class CheckPublicationService {
     return {
       repo,
       assessment,
+      policy,
+      policyEvaluation,
       context,
       prNumber,
       appId,
@@ -258,6 +324,9 @@ export class CheckPublicationService {
                   sourceSha: plan.assessment.sourceSha,
                   installationId: plan.repo.installationId.toString(),
                   previewHash: plan.previewHash,
+                  policyId: plan.policy?.id ?? null,
+                  policyHash: plan.policy?.definitionHash ?? null,
+                  evaluationHash: plan.policyEvaluation?.evaluationHash ?? null,
                   conclusion: plan.payload.conclusion,
                 },
               })
@@ -268,6 +337,9 @@ export class CheckPublicationService {
               metadata: {
                 publicationId: plan.id,
                 previewHash: plan.previewHash,
+                policyId: plan.policy?.id ?? null,
+                policyHash: plan.policy?.definitionHash ?? null,
+                evaluationHash: plan.policyEvaluation?.evaluationHash ?? null,
                 repositoryGithubId: githubId,
                 sourceSha: row.sourceSha,
                 conclusion: row.conclusion,
@@ -306,6 +378,7 @@ export class CheckPublicationService {
         plan.repo.installationId,
         plan.repo.githubId,
         plan.payload,
+        !!plan.policyEvaluation,
       )
       const result = await this.prisma.$transaction(async (tx) => {
         const updated = await tx.gitHubCheckPublication.updateMany({

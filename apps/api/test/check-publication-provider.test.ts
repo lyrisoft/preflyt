@@ -128,3 +128,43 @@ it('rejects duplicate matching publications instead of creating another', async 
   expect(fetch).toHaveBeenCalledTimes(1)
   provider.close()
 })
+
+it('reads the current run using Actions read and checks repository identity', async () => {
+  const { provider } = setup()
+  const request = vi
+    .fn()
+    .mockResolvedValue({
+      id: 42,
+      repository: { id: 501 },
+      head_repository: { id: 501 },
+      run_attempt: 2,
+      workflow_id: 77,
+      head_sha: 'a'.repeat(40),
+      status: 'completed',
+      conclusion: 'success',
+    })
+  vi.mocked(provider.openRepository).mockResolvedValue({
+    metadata: { owner: { login: 'fixture' }, name: 'app' },
+    request,
+  })
+  expect(
+    await provider.readReadinessWorkflowRun(500n, 501n, '42'),
+  ).toMatchObject({
+    sourceSha: 'a'.repeat(40),
+    runAttempt: 2,
+    workflowId: '77',
+  })
+  expect(provider.openRepository).toHaveBeenCalledWith(500n, 501n, 'actions')
+  request.mockResolvedValue({
+    id: 42,
+    repository: { id: 501 },
+    head_repository: { id: 999 },
+    run_attempt: 2,
+    workflow_id: 77,
+    head_sha: 'a'.repeat(40),
+  })
+  await expect(
+    provider.readReadinessWorkflowRun(500n, 501n, '42'),
+  ).rejects.toThrow('identity')
+  provider.close()
+})

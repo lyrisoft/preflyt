@@ -1,3 +1,4 @@
+import { executionContracts } from './execution-contract.js';
 import { recordPolicyNotification } from "../notifications/notification-event.js";
 import {
   BadRequestException,
@@ -102,6 +103,7 @@ export function composeGatePolicy(
     overrides: [...requiredRules].sort(),
     githubPublication: "DISABLED",
     enforcement: "DISABLED",
+    executionContractDigest: executionContracts()?.digest ?? null,
   };
 }
 

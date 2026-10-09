@@ -66,7 +66,10 @@ function BindingEditor({
     saved.binding?.bindings ?? []
   )
   const evidence = useCiEvidence(repositoryId)
-  const rules = standards.controls.filter((r) => r.capability === 'import_only')
+  const rules = standards.controls.filter(
+    (r) =>
+      saved.supportedRuleIds?.includes(r.id) ?? r.capability === 'import_only'
+  )
   const observed = Array.from(
     new Map(
       (evidence.data?.observations ?? []).flatMap((row) => {
@@ -304,7 +307,9 @@ export function RepositoryBindings({
   const mappings = saved?.binding?.bindings ?? []
   const importRules =
     standards.data?.controls.filter(
-      (rule) => rule.capability === 'import_only'
+      (rule) =>
+        saved?.supportedRuleIds?.includes(rule.id) ??
+        rule.capability === 'import_only'
     ) ?? []
   const mappedRules = mappings.filter((mapping) =>
     importRules.some((rule) => rule.id === mapping.ruleId)

@@ -148,7 +148,7 @@ export function CheckPublications({
         assessmentId: preview.assessmentId,
         expectedPreviewHash: preview.previewHash,
       })
-      setMessage('The non-passing check was published and verified on GitHub.')
+      setMessage('The readiness check was published and verified on GitHub.')
       setPreview(null)
       setPage(1)
       void history.refetch()
@@ -200,8 +200,9 @@ export function CheckPublications({
             <StatusBadge tone='neutral'>Activation unavailable</StatusBadge>
           </div>
           <p className='rounded-lg border border-info/20 bg-info/5 p-3 text-sm'>
-            These checks always stay non-passing. Current assessments do not
-            establish verified merge readiness.
+            Passing checks require a published policy, verified reports, and
+            current GitHub workflow results. Missing evidence keeps the check
+            incomplete.
           </p>
           {history.data && !history.data.enabled && (
             <p role='status' className='text-sm text-muted-foreground'>
@@ -307,11 +308,19 @@ export function CheckPublications({
               <div className='flex flex-wrap items-center justify-between gap-3'>
                 <h3 className='text-sm font-semibold'>{preview.name}</h3>
                 <StatusBadge
-                  tone={preview.conclusion === 'failure' ? 'error' : 'warning'}
+                  tone={
+                    preview.conclusion === 'success'
+                      ? 'success'
+                      : preview.conclusion === 'failure'
+                        ? 'error'
+                        : 'warning'
+                  }
                 >
-                  {preview.conclusion === 'failure'
-                    ? 'Failure'
-                    : 'Action required'}
+                  {preview.conclusion === 'success'
+                    ? 'Passed'
+                    : preview.conclusion === 'failure'
+                      ? 'Failure'
+                      : 'Action required'}
                 </StatusBadge>
               </div>
               <dl className='grid gap-4 text-sm sm:grid-cols-3'>
@@ -338,7 +347,7 @@ export function CheckPublications({
                   disabled={busy || !preview.enabled}
                   onClick={() => void publish()}
                 >
-                  {busy ? 'Publishing…' : 'Publish non-passing check'}
+                  {busy ? 'Publishing…' : 'Publish readiness check'}
                 </Button>
               ) : (
                 <p className='text-sm text-muted-foreground'>
@@ -402,14 +411,18 @@ export function CheckPublications({
                         <TableCell>
                           <StatusBadge
                             tone={
-                              item.conclusion === 'failure'
-                                ? 'error'
-                                : 'warning'
+                              item.conclusion === 'success'
+                                ? 'success'
+                                : item.conclusion === 'failure'
+                                  ? 'error'
+                                  : 'warning'
                             }
                           >
-                            {item.conclusion === 'failure'
-                              ? 'Failure'
-                              : 'Action required'}
+                            {item.conclusion === 'success'
+                              ? 'Passed'
+                              : item.conclusion === 'failure'
+                                ? 'Failure'
+                                : 'Action required'}
                           </StatusBadge>
                         </TableCell>
                         <TableCell className='text-xs text-muted-foreground'>

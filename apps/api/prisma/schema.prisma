@@ -656,7 +656,7 @@ model GitHubRulesetDraft {
   @@index([organizationId, repositoryId, updatedAt])
 }
 
-// Durable publication intent and read-back receipt. No successful conclusions in this increment.
+// Durable publication intent and read-back receipt, including published-policy evidence hashes.
 model GitHubCheckPublication {
   id String @id
   repositoryId String
@@ -667,6 +667,9 @@ model GitHubCheckPublication {
   sourceSha String
   installationId String
   previewHash String
+  policyId String?
+  policyHash String?
+  evaluationHash String?
   conclusion String
   state String @default("PUBLISHING")
   leaseToken String

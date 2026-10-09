@@ -1,3 +1,4 @@
+import { executionContracts } from './execution-contract.js'
 import type { validatedProvenance } from '../github-events/ci-attestation-policy.js'
 import { createHash } from 'node:crypto'
 import { digest } from './assessment-digest.js'
@@ -18,6 +19,8 @@ export type ReportValidation = {
   reportedResult: string
   provenance?: ReturnType<typeof validatedProvenance>
   executedTests: number | null
+  tools?: { nameHash: string; versionHash: string }[]
+  findings?: number
 }
 export type ObservationValidation = {
   observationIntegrity: boolean
@@ -117,7 +120,23 @@ export function validateReport(artifact: {
         : summary.failures + summary.errors > 0
           ? 'REPORTED_FAILURE'
           : 'REPORTED_SUCCESS'
-  } else result.reportedResult = summary.execution
+  } else {
+    result.reportedResult = summary.execution
+    const sarif = JSON.parse(
+      Buffer.from(artifact.content)
+        .toString('utf8')
+        .replace(/^\uFEFF/, ''),
+    )
+    result.tools = sarif.runs.map((run: any) => ({
+      nameHash: digest(run.tool.driver.name),
+      versionHash: digest(
+        run.tool.driver.version ?? run.tool.driver.semanticVersion ?? '',
+      ),
+    }))
+    result.findings = summary.results
+    if (summary.suppressed || summary.partial)
+      result.reasons.push('REPORT_COVERAGE_INCOMPLETE')
+  }
   // Hashes, schema validity and mutable labels cannot establish CI provenance.
   result.reasons.push(
     ...(result.provenance ? [] : ['REPORT_PROVENANCE_UNVERIFIED']),
@@ -147,12 +166,15 @@ export function validateRuleEvidence(
   if (superseded) reasons.add('CI_OBSERVATION_SUPERSEDED')
   if (providerResult !== 'SUCCEEDED') reasons.add('CI_SUCCESS_NOT_ESTABLISHED')
   if (truncated) reasons.add('VALIDATION_COLLECTION_TRUNCATED')
+  const contracts = executionContracts()
+  const contract = contracts?.contracts.find((c) => c.ruleId === ruleId)
   const expectedFormat =
-    ruleId === 'tests.required'
+    contract?.format ??
+    (ruleId === 'tests.required'
       ? 'junit'
       : ruleId === 'security.sast'
         ? 'sarif'
-        : null
+        : null)
   const reports =
     observation?.reports.filter((r) => r.format === expectedFormat) ?? []
   if (!expectedFormat) reasons.add('RULE_ADAPTER_UNSUPPORTED')
@@ -169,16 +191,48 @@ export function validateRuleEvidence(
   }
   if (reports.length !== 1 || !reports[0].provenance)
     reasons.add('REPORT_PROVENANCE_UNVERIFIED')
-  reasons.add('TOOL_IDENTITY_UNVERIFIED')
-  reasons.add('EXECUTION_ENVIRONMENT_UNVERIFIED')
-  reasons.add('RULE_COVERAGE_UNVERIFIED')
+  const report = reports.length === 1 ? reports[0] : undefined
+  const provenance = report?.provenance
+  const trusted =
+    !!contract &&
+    !!contracts &&
+    !!provenance &&
+    provenance.signerWorkflow === contract.signerWorkflow &&
+    provenance.signerDigest === contract.signerDigest &&
+    report?.integrity === 'VALID' &&
+    report.reportedResult === 'REPORTED_SUCCESS' &&
+    (contract.format === 'junit'
+      ? (report.executedTests ?? 0) >= 1
+      : report.tools?.length === 1 &&
+        report.tools[0].nameHash === digest(contract.tool) &&
+        report.tools[0].versionHash === digest(contract.toolVersion) &&
+        report.findings === 0 &&
+        !report.reasons.includes('REPORT_COVERAGE_INCOMPLETE'))
+  if (trusted) {
+    for (const reason of [
+      'TOOL_IDENTITY_UNVERIFIED',
+      'EXECUTION_ENVIRONMENT_UNVERIFIED',
+      'RULE_COVERAGE_UNVERIFIED',
+    ])
+      reasons.delete(reason)
+  } else {
+    reasons.add('TOOL_IDENTITY_UNVERIFIED')
+    reasons.add('EXECUTION_ENVIRONMENT_UNVERIFIED')
+    reasons.add('RULE_COVERAGE_UNVERIFIED')
+    if (contract) reasons.add('EXECUTION_CONTRACT_NOT_MET')
+  }
   const invalid =
     observation?.observationIntegrity === false ||
     reports.some((r) => r.integrity === 'INVALID')
   return {
     version: VALIDATOR_VERSION,
-    status: invalid ? 'INVALID' : 'INCOMPLETE',
-    trustedExecuted: false,
+    status: invalid
+      ? 'INVALID'
+      : trusted && !reasons.size
+        ? 'VERIFIED'
+        : 'INCOMPLETE',
+    trustedExecuted: trusted && !reasons.size,
+    executionContractDigest: trusted ? contracts!.digest : null,
     sourceApproved,
     observationIntegrity: observation?.observationIntegrity ?? null,
     expectedFormat,

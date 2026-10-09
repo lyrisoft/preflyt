@@ -1,3 +1,4 @@
+import { executionContracts } from './execution-contract.js'
 import {
   BadRequestException,
   ConflictException,
@@ -42,7 +43,23 @@ export class CiBindingService {
         orderBy: { revision: 'desc' },
       }),
     ])
+    const contracts = executionContracts()
     return {
+      supportedRuleIds: selection
+        ? posture(
+            selection.packs as unknown as PackRef[],
+            selection.profile as AdoptionProfile,
+            [],
+          )
+            .filter(
+              (c) =>
+                c.capability === 'import_only' ||
+                contracts?.contracts.some(
+                  (contract) => contract.ruleId === c.id,
+                ),
+            )
+            .map((c) => c.id)
+        : [],
       binding,
       active: !!binding && binding.selectionId === selection?.id,
       trust: 'APPROVED_SOURCE_IDENTITY_ONLY',
@@ -123,7 +140,12 @@ export class CiBindingService {
         input.bindings.some(
           (b) =>
             !controls.some(
-              (c) => c.id === b.ruleId && c.capability === 'import_only',
+              (c) =>
+                c.id === b.ruleId &&
+                (c.capability === 'import_only' ||
+                  executionContracts()?.contracts.some(
+                    (contract) => contract.ruleId === c.id,
+                  )),
             ),
         )
       )

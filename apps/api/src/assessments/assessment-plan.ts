@@ -227,7 +227,7 @@ export function buildAssessment(input: {
                     : 'UNVERIFIED'
     }
     const evidenceValidation =
-      control.capability === 'import_only'
+      control.operator === 'verified_check_succeeded'
         ? validateRuleEvidence(
             control.id,
             mapping?.bindingApproved === true,
