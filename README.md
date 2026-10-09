@@ -69,6 +69,10 @@ The **Contributors** module provides an authorized directory, activity charts, r
 
 The [MVP Product Experience Contract](docs/product/mvp-product-experience.md) defines the enterprise sidebar, top navigation, overview/dashboard, every MVP page, contributors drill-down, states and acceptance. The [Enterprise UI Guidelines](docs/design/enterprise-ui-guidelines.md) specify design consistency, and [Agent Implementation Guardrails](docs/agents/product-implementation-guardrails.md) guide Codex/Claude. These are **target specifications**, not claims that every page is already implemented.
 
+## PR Code Quality and Skill-Based Review
+
+Preflyt's PR assessment design includes code-quality evidence, a deterministic Code Quality policy pack and optional read-only AI reviews using **approved, pinned review skills**. Candidate methodologies include Ponytail and Thermo-Nuclear Code Quality Review, subject to third-party license/security review. AI cannot override quality gates. See [Code Quality Review](docs/product/code-quality-review.md) and [Skill-Based Review](docs/product/skill-based-code-review.md). These are phased requirements, not claims of shipped skill execution.
+
 ## Built-in Engineering Standards Library
 
 Preflyt ships with versioned, first-party engineering policy packs so organizations can start with established rules rather than authoring policies from scratch. The initial library covers Baseline Engineering, Application Security, Backend Services, Frontend Applications and Infrastructure as Code; further packs cover API, database, production readiness, performance and compliance as their assessment adapters mature.
