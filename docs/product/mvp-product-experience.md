@@ -55,6 +55,7 @@ Tabs must reflect available functionality and preserve deep links.
 | `/integrations` | Integration health | GitHub App installation, permissions, selected repositories, webhook/CI evidence status and troubleshooting | Secret-safe, reconnect/disconnect RBAC |
 | `/access-control` | Member access management | Searchable connected-GitHub member directory, username selection, Preflyt roles, repo grants, audit and revocation | Implemented behind GitHub login flag; existing workspaces use explicit Owner-verified organization linking; backend enforces |
 | `/settings` | Workspace settings | Organization details, identity/session settings, supported AI provider/model routing controls when shipped, operational preferences | Do not show secrets; unavailable features hidden |
+| `/intelligence/skills` | Review skill catalogue and management | Approved and pinned skills, provenance, enablement, stage/model routing, budgets, security review and audit | Only when functional; organization permissions required |
 | `/intelligence` | Evidence-linked AI findings analysis | Supported explanation and cited evidence, selected permitted model/route, usage and availability | Only if implemented; advisory, never gate authority |
 
 Routes are a design contract; existing implemented paths may differ. Prefer backwards-compatible routing/redirects and review actual router before changes.
