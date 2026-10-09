@@ -24,7 +24,7 @@ Its main output is an **Engineering Readiness Report**: a traceable account of w
 | --- | --- |
 | **Engineering Validation Engine** | Discover repository context, select applicable scanners/tests, import CI results or run approved checks, and normalize evidence |
 | **Engineering Governance Engine** | Define engineering policies, apply required checks, evaluate deterministic quality gates and audit exceptions |
-| **Engineering Intelligence Engine** | Explain findings, correlate risks and recommend improvements using optional AI; **AI never determines the gate result** |
+| **Engineering Intelligence Engine** | Explain findings, correlate risks and recommend improvements using organization-configured, SDLC-stage-routed AI; **AI never determines the gate result** |
 
 ### Shift Left coverage
 
@@ -166,6 +166,10 @@ flowchart TD
 
 **Provider-neutral OpenTelemetry:** the root `.env.example` includes standard OTEL resource, endpoint/protocol, headers, traces, metrics, logs and sampling variables. Pass them to all app containers and override `OTEL_SERVICE_NAME` per service. Operators may send data to **any compatible OTLP APM**, with an optional self-hosted collector profile; SigNoz is not mandatory. See [OpenTelemetry environment contract](docs/deployment/opentelemetry-env.md).
 
+### Organization AI providers and SDLC routing
+
+P0 adds organization-managed multiple AI providers, encrypted write-only credentials, connectivity tests and stage-specific primary/fallback routing with privacy and cost controls. P1 adds evidence-linked PR/CI explanations; P4 extends advanced intelligence. Model outages never alter deterministic gates. These are additive requirements, not claims of implementation.
+
 ## Security and execution safety
 
 **Safe execution is an MVP prerequisite, not an advanced V1 feature.** Running package installation, test hooks, scanners, builds or other commands against a connected repository can execute untrusted code.
@@ -189,7 +193,7 @@ See [ADR-0002](docs/architecture/ADR-0002-safe-execution-fixtures-remediation-co
 | **V2** | Engineering intelligence at scale | More domain coverage, historical trend analysis, recurring issue patterns, organizational standards and integrations |
 | **Optional future module** | Separately approved | AI-assisted code remediation or fix PRs; not required for Preflyt to deliver Shift Left value |
 
-**Every engineering phase must be deployable and usable on its own.** The first usable release is a GitHub-connected **Repository Posture** view, not an empty backend. Subsequent slices add CI evidence, deterministic quality gates, approved scans, optional AI explanations, a local CLI, QA readiness, performance testing and production feedback, with each existing capability preserved.
+**Every engineering phase must be deployable and usable on its own.** The first usable release is a GitHub-connected **Repository Posture** view, not an empty backend. Subsequent slices add CI evidence, deterministic quality gates, approved scans, AI-assisted CI explanations, a local CLI, QA readiness, performance testing and production feedback, with each existing capability preserved.
 
 The roadmap is directional, not a delivery promise. See the [phase-by-phase vertical-slice delivery plan](docs/roadmap/incremental-delivery.md) for P0–P11, implementation tasks, acceptance demonstrations, operations and rollback requirements; the [PRD](docs/PRD.md) defines product acceptance criteria.
 
