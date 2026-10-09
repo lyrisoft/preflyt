@@ -39,3 +39,11 @@ GitHub request and response-body timeouts during human sign-in return a retryabl
 503. They do not grant access or consume an organization-link challenge before
 verification succeeds. An unreachable API is shown separately from an unconfigured
 Super Admin account.
+
+
+Organization linking runs inside Access Control. GitHub authorization returns to a
+confirmation drawer in the GitHub members tab; cancellation or callback failure
+returns to that same tab with a retry action. Failed confirmation never clears or
+replaces the administrator session. Cancel clears only the pending link proof.
+Super Admin sessions with an inferred workspace persist that verified workspace
+scope when linking starts, so the final ownership check sees the same scope.

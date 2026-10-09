@@ -71,6 +71,8 @@ import { Main } from '@/components/layout/main'
 import { StatusBadge } from '@/components/status-badge'
 import { useNavigationSession } from '../workspace/navigation-session'
 import { canPerform } from '../workspace/scoped-access'
+import { beginOrganizationLink } from './github-link-request'
+import { GitHubOrganizationLink } from './github-organization-link'
 
 type Member = {
   id: string
@@ -200,10 +202,10 @@ export function AccessControlPage() {
     queryFn: ({ signal }) => read<Access>('access', signal),
     retry: false,
   })
-  const { tab: initialTab } = useSearch({
+  const { tab: initialTab, githubLink } = useSearch({
     from: '/_authenticated/access-control',
   })
-  const [tab, setTab] = useState(initialTab),
+  const [tab, setTab] = useState<string>(initialTab),
     [search, setSearch] = useState(''),
     [roleFilter, setRoleFilter] = useState('all'),
     [statusFilter, setStatusFilter] = useState('all')
@@ -708,14 +710,7 @@ export function AccessControlPage() {
                     </p>
                     {session.data?.role === 'OWNER' &&
                     access.data?.githubLoginEnabled ? (
-                      <Button
-                        onClick={() =>
-                          window.location.assign(
-                            API_BASE_URL +
-                              '/auth/github/login?link=workspace&redirect=%2Faccess-control%3Ftab%3Dgithub'
-                          )
-                        }
-                      >
+                      <Button onClick={beginOrganizationLink}>
                         <svg
                           aria-hidden='true'
                           viewBox='0 0 24 24'
@@ -1348,6 +1343,7 @@ export function AccessControlPage() {
             </form>
           </DialogContent>
         </Dialog>
+        <GitHubOrganizationLink status={githubLink} />
       </Main>
     </>
   )

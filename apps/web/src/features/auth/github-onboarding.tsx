@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from '@tanstack/react-router'
+import { Link, useNavigate } from '@tanstack/react-router'
 import { Building2, ArrowRight, LoaderCircle } from 'lucide-react'
 import { API_BASE_URL } from '@/lib/api'
 import { Button } from '@/components/ui/button'
@@ -24,6 +24,7 @@ type Organization = {
     | 'unavailable'
 }
 export function GitHubOnboarding() {
+  const navigate = useNavigate()
   const [data, setData] = useState<{
     login: string
     linkingWorkspace: boolean
@@ -47,12 +48,20 @@ export function GitHubOnboarding() {
           )
         return r.json()
       })
-      .then(setData)
+      .then((result) => {
+        if (result.linkingWorkspace) {
+          void navigate({
+            to: '/access-control',
+            search: { tab: 'github', githubLink: 'confirm' },
+            replace: true,
+          })
+        } else setData(result)
+      })
       .catch((e) => {
         if (!controller.signal.aborted) setError(e.message)
       })
     return () => controller.abort()
-  }, [])
+  }, [navigate])
   async function enter(org: Organization) {
     setBusy(org.installationId)
     setError('')

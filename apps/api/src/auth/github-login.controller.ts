@@ -56,7 +56,13 @@ export class GitHubLoginController {
       this.login.transactionCookie,
       options(this.auth.secureCookie, 0),
     )
+    let linking = !!req.cookies?.[this.auth.sessionCookieName]
     try {
+      linking =
+        (await this.login.isWorkspaceLinkCallback(
+          typeof req.query.state === 'string' ? req.query.state : '',
+          binding,
+        )) || linking
       const result = await this.login.complete(
         typeof req.query.state === 'string' ? req.query.state : '',
         binding,
@@ -68,7 +74,12 @@ export class GitHubLoginController {
         options(this.auth.secureCookie, 600000),
       )
       return res.redirect(
-        new URL('/github-onboarding', this.auth.frontendOrigin).href,
+        new URL(
+          result.linkingWorkspace
+            ? '/access-control?tab=github&githubLink=confirm'
+            : '/github-onboarding',
+          this.auth.frontendOrigin,
+        ).href,
       )
     } catch {
       res.clearCookie(
@@ -76,14 +87,37 @@ export class GitHubLoginController {
         options(this.auth.secureCookie, 0),
       )
       return res.redirect(
-        new URL('/sign-in?error=github', this.auth.frontendOrigin).href,
+        new URL(
+          linking
+            ? '/access-control?tab=github&githubLink=failed'
+            : '/sign-in?error=github',
+          this.auth.frontendOrigin,
+        ).href,
       )
     }
   }
   @Get('organizations') @Header('Cache-Control', 'no-store') organizations(
     @Req() req: Request,
   ) {
-    return this.login.organizations(req.cookies?.[this.login.onboardingCookie])
+    return this.login.organizations(
+      req.cookies?.[this.login.onboardingCookie],
+      req.cookies?.[this.auth.sessionCookieName],
+    )
+  }
+  @Post('link/cancel') @Header('Cache-Control', 'no-store') async cancelLink(
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    this.auth.assertOrigin(req.headers.origin)
+    await this.login.cancelWorkspaceLink(
+      req.cookies?.[this.login.onboardingCookie],
+      req.cookies?.[this.auth.sessionCookieName],
+    )
+    res.clearCookie(
+      this.login.onboardingCookie,
+      options(this.auth.secureCookie, 0),
+    )
+    return res.json({ cancelled: true })
   }
   @Post('organizations') @Header('Cache-Control', 'no-store') async enter(
     @Body() body: EnterOrganizationDto,

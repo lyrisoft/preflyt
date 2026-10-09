@@ -529,7 +529,7 @@ async function linkingCallback(sessionToken: string) {
 it('links the existing installed organization with both owner proofs and preserves repositories and identities', async () => {
   const legacy = await legacyWorkspace(),
     result = await linkingCallback(legacy.sessionToken)
-  expect(await login.organizations(result.challengeToken)).toMatchObject({
+  expect(await login.organizations(result.challengeToken, legacy.sessionToken)).toMatchObject({
     linkingWorkspace: true,
     organizations: [{ state: 'link_existing' }],
   })
@@ -572,7 +572,7 @@ it('rejects linking when GitHub ownership, original session, or local ownership 
       'http://localhost:5173',
       'other-session',
     ),
-  ).rejects.toThrow('browser session')
+  ).rejects.toThrow('another session')
   provider.verify.mockResolvedValueOnce({
     ...(await provider.verify()),
     owner: false,
@@ -599,4 +599,49 @@ it('rejects linking when GitHub ownership, original session, or local ownership 
     ),
   ).rejects.toThrow('ownership')
   expect(await db.gitHubOrganizationLink.count()).toBe(0)
+})
+
+it('pins an inferred Super Admin workspace and keeps its session after failed linking', async () => {
+  const legacy = await legacyWorkspace()
+  await db.membership.update({ where: { identityId: legacy.identity.id }, data: { role: 'SUPER_ADMIN' } })
+  await db.webSession.update({ where: { tokenHash: hash(legacy.sessionToken) }, data: { activeOrganizationId: null } })
+  const before = await db.webSession.findUniqueOrThrow({ where: { tokenHash: hash(legacy.sessionToken) } })
+  expect(await auth.currentSession(legacy.sessionToken)).toMatchObject({ authenticated: true, platformAdmin: true, organizationId: legacy.organization.id })
+  const result = await linkingCallback(legacy.sessionToken)
+  expect(await db.webSession.findUnique({ where: { tokenHash: hash(legacy.sessionToken) } })).toMatchObject({ activeOrganizationId: legacy.organization.id, expiresAt: before.expiresAt })
+  provider.verify.mockRejectedValueOnce(new ForbiddenException('The GitHub App needs Members: Read-only'))
+  await expect(login.enter(result.challengeToken, '41', 'http://localhost:5173', legacy.sessionToken)).rejects.toThrow('Members: Read-only')
+  expect(await auth.currentSession(legacy.sessionToken)).toMatchObject({ authenticated: true, identityId: legacy.identity.id, platformAdmin: true })
+  expect(await db.gitHubOrganizationLink.count()).toBe(0)
+  expect(await db.gitHubOnboardingChallenge.count()).toBe(1)
+  const entered = await login.enter(result.challengeToken, '41', 'http://localhost:5173', legacy.sessionToken)
+  expect(entered.returnPath).toBe('/access-control?tab=github')
+  const linkedSession = await auth.currentSession(entered.sessionToken)
+  if (!linkedSession.authenticated || !linkedSession.organizationId) throw new Error('Linked session missing')
+  expect(await userAccess.directory(linkedSession.identityId, linkedSession.organizationId, true)).toMatchObject({ members: [{ login: 'developer' }] })
+})
+it('cancels only the bound link challenge and leaves administrator sessions active', async () => {
+  const legacy = await legacyWorkspace(), result = await linkingCallback(legacy.sessionToken)
+  await expect(login.organizations(result.challengeToken, 'wrong-session')).rejects.toThrow('another session')
+  await login.cancelWorkspaceLink(result.challengeToken, 'wrong-session')
+  expect(await db.gitHubOnboardingChallenge.count()).toBe(1)
+  await login.cancelWorkspaceLink(result.challengeToken, legacy.sessionToken)
+  expect(await db.gitHubOnboardingChallenge.count()).toBe(0)
+  expect(await auth.currentSession(legacy.sessionToken)).toMatchObject({ authenticated: true, identityId: legacy.identity.id })
+})
+it('recognizes link callbacks only with the original browser proof', async () => {
+  const legacy = await legacyWorkspace()
+  const begun = await login.begin('callback-context-ip', '/access-control', legacy.sessionToken)
+  const state = new URL(begun.url).searchParams.get('state')!
+  expect(await login.isWorkspaceLinkCallback(state, begun.browserBinding)).toBe(true)
+  expect(await login.isWorkspaceLinkCallback(state, 'wrong-browser')).toBe(false)
+  expect(await login.isWorkspaceLinkCallback('unknown-state', begun.browserBinding)).toBe(false)
+})
+
+it('accepts the same verified workspace fallback for a link proof started before session scope pinning', async () => {
+  const legacy = await legacyWorkspace(), result = await linkingCallback(legacy.sessionToken)
+  await db.webSession.update({ where: { tokenHash: hash(legacy.sessionToken) }, data: { activeOrganizationId: null } })
+  const entered = await login.enter(result.challengeToken, '41', 'http://localhost:5173', legacy.sessionToken)
+  expect(entered.returnPath).toBe('/access-control?tab=github')
+  expect(await db.gitHubOrganizationLink.findUnique({ where: { organizationId: legacy.organization.id } })).not.toBeNull()
 })

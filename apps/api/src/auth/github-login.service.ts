@@ -105,6 +105,19 @@ export class GitHubLoginService implements OnModuleInit {
         throw new ForbiddenException(
           'A Preflyt workspace Owner must start organization linking',
         )
+      // Super Admin sessions resolve a workspace through membership until a scope is chosen.
+      // Persist that verified scope before binding the OAuth request to this session.
+      const pinned = await this.db.webSession.updateMany({
+        where: {
+          tokenHash: hash(linkingSessionToken),
+          identityId: owner.identityId,
+          expiresAt: { gt: new Date() },
+          OR: [{ activeOrganizationId: null }, { activeOrganizationId: owner.organizationId }],
+        },
+        data: { activeOrganizationId: owner.organizationId },
+      })
+      if (pinned.count !== 1)
+        throw new ForbiddenException('Your workspace changed. Start linking again from Access Control.')
       linking = {
         linkingOrganizationId: owner.organizationId,
         linkingOwnerId: owner.identityId,
@@ -274,7 +287,30 @@ export class GitHubLoginService implements OnModuleInit {
         },
       })
     })
-    return { challengeToken }
+    return { challengeToken, linkingWorkspace: !!transaction.linkingOrganizationId }
+  }
+  async isWorkspaceLinkCallback(state: string, binding?: string) {
+    if (!state || state.length > 512 || !binding || binding.length > 512) return false
+    const transaction = await this.db.gitHubLoginTransaction.findUnique({
+      where: { stateHash: hash(state) },
+    })
+    return !!transaction?.linkingOrganizationId && transaction.browserBindingHash === hash(binding)
+  }
+  async cancelWorkspaceLink(raw: string | undefined, sessionToken: string | undefined) {
+    if (!raw || raw.length > 512 || !sessionToken) return
+    await this.db.gitHubOnboardingChallenge.deleteMany({
+      where: { tokenHash: hash(raw), linkingSessionHash: hash(sessionToken), linkingOrganizationId: { not: null } },
+    })
+  }
+  private async assertLinkSession(
+    challenge: { linkingOrganizationId: string | null; linkingOwnerId: string | null; linkingSessionHash: string | null },
+    sessionToken?: string,
+  ) {
+    if (!sessionToken || hash(sessionToken) !== challenge.linkingSessionHash)
+      throw new ForbiddenException('This link request belongs to another session. Start linking again from Access Control.')
+    const current = await this.auth.currentSession(sessionToken)
+    if (!current.authenticated || current.identityId !== challenge.linkingOwnerId || current.organizationId !== challenge.linkingOrganizationId || current.role !== 'OWNER')
+      throw new ForbiddenException('Workspace ownership changed. Start linking again from Access Control.')
   }
   private async challenge(raw?: string) {
     this.requireEnabled()
@@ -299,8 +335,9 @@ export class GitHubLoginService implements OnModuleInit {
       ).accessToken,
     }
   }
-  async organizations(raw?: string) {
+  async organizations(raw?: string, existingSessionToken?: string) {
     const { challenge, token } = await this.challenge(raw)
+    if (challenge.linkingOrganizationId) await this.assertLinkSession(challenge, existingSessionToken)
     const installations = await this.provider.installations(token)
     return {
       login: challenge.account.login,
@@ -360,24 +397,7 @@ export class GitHubLoginService implements OnModuleInit {
     if (!/^[1-9]\d{0,15}$/.test(installationId))
       throw new ForbiddenException('Invalid GitHub installation')
     const { challenge, token } = await this.challenge(raw)
-    if (challenge.linkingOrganizationId) {
-      if (
-        !existingSessionToken ||
-        hash(existingSessionToken) !== challenge.linkingSessionHash
-      )
-        throw new ForbiddenException(
-          'Return to the browser session that started linking',
-        )
-      const current = await this.auth.currentSession(existingSessionToken)
-      if (
-        !current.authenticated ||
-        current.identityId !== challenge.linkingOwnerId ||
-        current.organizationId !== challenge.linkingOrganizationId
-      )
-        throw new ForbiddenException(
-          'Sign in to the original workspace to complete linking',
-        )
-    }
+    if (challenge.linkingOrganizationId) await this.assertLinkSession(challenge, existingSessionToken)
     const verified = await this.provider.verify(
       token,
       BigInt(installationId),
@@ -434,12 +454,18 @@ export class GitHubLoginService implements OnModuleInit {
           const boundSession = await tx.webSession.findUnique({
             where: { tokenHash: challenge.linkingSessionHash! },
           })
+          const boundOrganizationId = boundSession?.activeOrganizationId ?? (
+            boundSession && await tx.organizationMembership.findFirst({
+              where: { identityId: boundSession.identityId, active: true },
+              orderBy: { createdAt: 'asc' },
+            })
+          )?.organizationId
           if (
             !localOwner?.active ||
             localOwner.role !== 'OWNER' ||
             !boundSession ||
             boundSession.identityId !== localOwner.identityId ||
-            boundSession.activeOrganizationId !== localOwner.organizationId ||
+            boundOrganizationId !== localOwner.organizationId ||
             boundSession.expiresAt <= new Date()
           )
             throw new ForbiddenException(
