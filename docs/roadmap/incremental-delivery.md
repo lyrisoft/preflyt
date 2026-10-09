@@ -87,6 +87,8 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 
 - **P1.AI1:** Evidence-linked CI explanation through PR/CI route; log provider/model and cost; never alter deterministic gates.
 
+- **P1.N1:** Deliver durable notification events/outbox, RBAC-aware recipients and a working in-app inbox for assessment activity; see [Notification Engine](../product/notification-engine.md).
+
 ### P2 — Policy Quality Gates
 
 **User value:** A policy owner defines a simple standard and a developer sees an accurate advisory or blocking GitHub quality check.
