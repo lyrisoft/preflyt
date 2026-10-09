@@ -21,6 +21,7 @@ import {
 import { createNativeWorkspace } from '../src/execution/native-workspace.js'
 import { digest } from '../src/assessments/assessment-digest.js'
 import { nativeCheckOutcome } from '../src/execution/native-result.js'
+if (process.env.NATIVE_FIXTURE_TOOL && !['node','gitleaks','semgrep','trivy'].includes(process.env.NATIVE_FIXTURE_TOOL)) throw new Error('Choose an installed fixture tool')
 const root = await mkdtemp(join(tmpdir(), 'preflyt-p3-fixtures-'))
 const git = (args: string[], input?: Buffer | string) =>
   execFileSync('git', args, {
@@ -139,7 +140,7 @@ const fixtures: Array<{
 const results: unknown[] = []
 try {
   git(['-c', 'init.templateDir=', 'init', '--bare', '--quiet'])
-  for (const fixture of fixtures) {
+  for (const fixture of fixtures.filter(f => !process.env.NATIVE_FIXTURE_TOOL || f.tool === process.env.NATIVE_FIXTURE_TOOL)) {
     const entries = Object.entries(fixture.files)
       .sort()
       .map(([path, text]) => {
@@ -261,6 +262,8 @@ try {
         (await dockerCommand(['wait', invocation.jobId])).toString().trim(),
       )
       const envelope = JSON.parse(output.toString())
+      assert.equal(envelope.version, 2)
+      assert.equal(envelope.sourceHash, bundle.sourceHash)
       assert.equal(envelope.exitCode, exit)
       const report = envelope.report
         ? Buffer.from(envelope.report, 'base64')

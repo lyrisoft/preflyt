@@ -1,3 +1,6 @@
+import { NativeDispatchService } from './execution/native-dispatch.service.js'
+import { NativeResultService } from './execution/native-result.service.js'
+import { NativeStatusService } from './execution/native-status.service.js'
 import { RulesetDeploymentService } from './github/ruleset-deployment.service.js'
 import { RulesetHistoryService } from './github/ruleset-history.service.js'
 import { ReadinessAutomationService } from './assessments/readiness-automation.service.js'
@@ -113,6 +116,8 @@ async function start() {
     await telemetryOperation('preflyt.notification.email', { 'notification.delivery.id': job.data.deliveryId }, () => deliverNotificationEmail(prisma, emailAuthorization, mail, job.data.deliveryId))
   }, { ...consumerConfig, connection: consumer, concurrency: 2, autorun: notificationsEnabled() && emailNotificationsEnabled() })
   const assessments = new AssessmentService(prisma)
+  const native = new NativeDispatchService(prisma, emailAuthorization, githubProvider, new NativeStatusService(emailAuthorization), new NativeResultService(prisma, emailAuthorization, assessments))
+  let nativeRun: Promise<void> | undefined
   const checks = new CheckPublicationService(prisma, emailAuthorization, githubProvider, assessments)
   const deployments = new RulesetDeploymentService(prisma, emailAuthorization, githubProvider, checks)
   let driftRun: Promise<void> | undefined
@@ -172,6 +177,7 @@ async function start() {
             syncRun = undefined
           })
       }
+      if (!nativeRun) nativeRun = native.reconcile().catch(warn).finally(() => { nativeRun = undefined })
       if (!automationRun) automationRun = automation.reconcile().catch(warn).finally(() => { automationRun = undefined })
       if (!historyRun) historyRun = rulesetHistory.reconcile().catch(warn).finally(() => { historyRun = undefined })
       if (!driftRun) driftRun = deployments.reconcile().catch(warn).finally(() => { driftRun = undefined })
@@ -192,6 +198,7 @@ async function start() {
     if (closing) return
     closing = true
     clearInterval(timer)
+    native.close()
     sync.close()
     prSync.close()
     rulesetHistory.close()
@@ -211,6 +218,7 @@ async function start() {
     await queue.close()
     producer.disconnect()
     consumer.disconnect()
+    await nativeRun
     await syncRun
     await automationRun
     await historyRun

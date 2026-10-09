@@ -26,6 +26,11 @@ const tool = {
 const source = '/tmp/preflyt-native-fixture/source'
 const inspection = () => ({
   Config: {
+    Env: [
+      'PREFLYT_SOURCE_REPOSITORY=' + scope.repositoryId,
+      'PREFLYT_SOURCE_SHA=' + scope.sourceSha,
+      'PREFLYT_SOURCE_HASH=' + scope.sourceHash,
+    ],
     Image: tool.image,
     User: '65532:65532',
     WorkingDir: '/workspace',

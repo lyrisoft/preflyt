@@ -6,7 +6,7 @@ Preflyt supports a common check contract for Docker and Kubernetes deployments: 
 
 The Docker launcher and image-owned report wrapper have passed disposable fixtures for Gitleaks secret detection, the bundled JavaScript/TypeScript Semgrep rule, unsafe Kubernetes configuration, and Node's built-in test runner. Clean scans and tests pass; zero or skipped tests remain incomplete. These fixtures use ordinary Docker with generated source only. They do not approve execution against connected repositories, establish broad SAST coverage, verify dependency database freshness or prove end-to-end policy-gate integration.
 
-The Kubernetes controller currently supplies runtime preflight, not completed native job dispatch. Durable dispatch, signed result ingestion and policy-gate integration remain P3 work. Local Docker availability must not enable production execution by itself.
+The Kubernetes controller currently supplies runtime preflight, not completed native job dispatch. Durable Docker dispatch, signed result ingestion and policy-gate integration are implemented and fixture-tested. Complete adapter coverage and independently reviewed live acceptance remain P3 work. Local Docker availability must not enable production execution by itself.
 
 ## Shared defaults
 
@@ -52,4 +52,10 @@ Set `NATIVE_RUNTIME_BACKEND=docker` on the API status client and the dedicated c
 
 Copy `controller.env.example` to a protected `controller.env`. Place your dedicated engine's client certificate, private key and CA certificate in protected `docker-tls` files named `cert.pem`, `key.pem` and `ca.pem`, readable only by the controller's deployment identity. The engine must enforce mutual TLS. Use a dedicated Docker engine; this connection grants trusted controller authority over that engine. Do not share the application host engine. TLS client settings are available to the controller's Docker CLI only and are never passed to scanner containers.
 
-Run `docker compose -f controller.compose.yaml up -d` from this directory with `PREFLYT_NATIVE_CONTROLLER_IMAGE` set to a reviewed immutable controller digest. Put an HTTPS proxy in front of the loopback controller port and use that origin in the signed runtime approval. Liveness confirms the process, not runtime approval. This target currently provides verified preflight only; it does not claim completed job dispatch. Production rollout requires published images, engine/runtime review and live acceptance.
+Run `docker compose -f controller.compose.yaml up -d` from this directory with `PREFLYT_NATIVE_CONTROLLER_IMAGE` set to a reviewed immutable controller digest. Put an HTTPS proxy in front of the loopback controller port and use that origin in the signed runtime approval. Liveness confirms the process, not runtime approval. With explicit execution opt-in this target provides reviewed Docker admission and signed results; see the [dispatch runbook](../../operations/native-execution.md#durable-docker-dispatch) for durable state, identical engine paths and cleanup. The Kubernetes-native Job adapter remains unavailable. Production rollout requires published images, engine/runtime review and live acceptance.
+
+### Source-binding upgrade
+
+Scanner images now include `source-verification.mjs`. The trusted wrapper verifies the actual mounted files, Git tree structure and executable modes against the controller source hash before and after the command; the child receives no controller metadata/credentials. Report envelopes use version 2 and include the verified source hash. Old wrapper images cannot supply accepted receipts. Rebuild/publish/review all scanner digests and update the independently signed tool-inventory/runtime review before enabling execution. Generated fixture harnesses verify the same envelope.
+
+For a storage-limited development machine, build only the Node fixture image and run `NATIVE_FIXTURE_TOOL=node pnpm --filter @preflyt/api exec tsx scripts/native-check-fixtures.mts`. This runs four generated outcomes (passing, failing, empty and skipped tests); it does not authorize real-repository execution.

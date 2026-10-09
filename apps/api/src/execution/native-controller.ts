@@ -26,6 +26,14 @@ export type NativePreflightAdapter = {
 export function createNativeController(
   observer = observeNativeRuntime,
   adapter?: NativePreflightAdapter,
+  jobs?: {
+    available: boolean
+    call: (
+      action: 'admit' | 'status' | 'cancel',
+      expected: any,
+      source?: unknown,
+    ) => Promise<unknown>
+  },
 ) {
   const secret = process.env.NATIVE_CONTROLLER_API_KEY ?? ''
   if (secret.length < 32 || secret.length > 256)
@@ -38,7 +46,13 @@ export function createNativeController(
       reply(res, 200, { status: 'ok' })
       return
     }
-    if (req.url !== '/preflight' || req.method !== 'POST') {
+    const action = /^\/jobs\/(admit|status|cancel)$/.exec(
+      req.url ?? '',
+    )?.[1] as 'admit' | 'status' | 'cancel' | undefined
+    if (
+      (req.url !== '/preflight' && !(jobs && action)) ||
+      req.method !== 'POST'
+    ) {
       reply(res, 404, { message: 'Unavailable' })
       return
     }
@@ -49,6 +63,30 @@ export function createNativeController(
       )
     ) {
       reply(res, 401, { message: 'Controller authentication required' })
+      return
+    }
+    if (action && jobs) {
+      try {
+        const limit = action === 'admit' ? 30 * 1024 * 1024 : 65536
+        let bytes = 0
+        const chunks: Buffer[] = []
+        for await (const chunk of req) {
+          bytes += chunk.length
+          if (bytes > limit) throw new Error('Request exceeds bounds')
+          chunks.push(Buffer.from(chunk))
+        }
+        const input = JSON.parse(Buffer.concat(chunks).toString())
+        if (
+          Object.keys(input).sort().join(',') !==
+          (action === 'admit' ? 'expected,source' : 'expected')
+        )
+          throw new Error('Invalid job request')
+        reply(res, 200, await jobs.call(action, input.expected, input.source))
+      } catch {
+        reply(res, 409, {
+          message: 'Native job could not be admitted or reconciled',
+        })
+      }
       return
     }
     if (busy) {
@@ -104,7 +142,7 @@ export function createNativeController(
         }
         /* Never expose runtime credentials or errors. */
       }
-      // No jobs or repository code execute in this read-only preflight controller.
+      // This preflight route only observes configuration; job admission is a separate authenticated route.
       const signature = signNativeProbe(
         {
           ...input,
@@ -112,6 +150,9 @@ export function createNativeController(
           environmentId: reviewed.approval.environmentId,
           checkedAt: new Date().toISOString(),
           ...result,
+          ...(jobs
+            ? { executionAvailable: result.verified && jobs.available }
+            : {}),
         },
         process.env.NATIVE_CONTROLLER_SIGNING_KEY ?? '',
         reviewed.approval,

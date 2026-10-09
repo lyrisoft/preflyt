@@ -65,3 +65,17 @@ it('exposes a loading status and disables duplicate checks', () => {
   expect(html).toContain('Checking the execution environment')
   expect(html).toContain('disabled=""')
 })
+
+it('distinguishes an enabled reviewed runner from imported-only mode without claiming passing checks', () => {
+  state.query.data = {
+    ...(state.query.data as object),
+    executionAvailable: true,
+    preflightVerified: true,
+    mode: 'HYBRID',
+    message: 'Preflyt can run reviewed checks for this repository.',
+  }
+  const html = render()
+  expect(html).toContain('Run checks available')
+  expect(html).not.toContain('Imported CI only')
+  expect(html).not.toContain('Checks passed')
+})

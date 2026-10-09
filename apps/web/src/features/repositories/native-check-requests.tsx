@@ -22,6 +22,14 @@ type History = {
 }
 const reasons: Record<string, string> = {
   DISPATCHER_REQUIRED: 'Execution service is not available yet.',
+  EVIDENCE_INCOMPLETE:
+    'Checks ran, but their coverage is incomplete. Open the assessment to review results.',
+  CLEANUP_UNCONFIRMED:
+    'Cleanup could not be confirmed. Check the execution service.',
+  EXECUTION_UNAVAILABLE:
+    'Checks could not run. Check access and the execution service.',
+  CURRENT_NATIVE_EXECUTION_NOT_VERIFIED:
+    'Results could not be verified. Review the execution environment.',
   TOOL_REVIEW_REQUIRED: 'The selected tools need a security review.',
   APPROVAL_REQUIRED: 'The sandbox needs an independent security review.',
 }
@@ -59,6 +67,14 @@ export function NativeCheckRequests({
     enabled: !!session.data?.identityId,
     retry: false,
     staleTime: 0,
+    refetchInterval: (query) =>
+      query.state.data?.items.some((row) =>
+        ['QUEUED', 'PREPARING', 'RUNNING', 'CANCEL_REQUESTED'].includes(
+          row.state
+        )
+      )
+        ? 5000
+        : false,
   })
   async function act(id?: string) {
     setBusy(true)

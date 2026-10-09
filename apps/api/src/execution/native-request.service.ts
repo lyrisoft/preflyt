@@ -131,7 +131,7 @@ export class NativeRequestService {
         )
       return this.verify(prior)
     }
-    const plan = await this.plans.get(session, repositoryId)
+    const plan = await this.plans.get(session, repositoryId, false)
     if (
       plan.sourceSha !== input.expectedSourceSha ||
       plan.selectionId !== input.expectedSelectionId ||
@@ -150,8 +150,13 @@ export class NativeRequestService {
       ? native.reason
       : missingTool
         ? 'TOOL_REVIEW_REQUIRED'
-        : 'DISPATCHER_REQUIRED'
-    const { planHash, recordedAt, branch, ...storedPlan } = plan
+        : native.executionAvailable &&
+            process.env.NATIVE_EXECUTION_ENABLED === 'true'
+          ? null
+          : 'DISPATCHER_REQUIRED'
+    const { planHash, recordedAt, branch, executionAvailable, ...contract } =
+      plan
+    const storedPlan = { ...contract, executionAvailable: false }
     const result = await this.change(async (tx) => {
       const live = await new AuthorizationService(
         tx as PrismaService,
@@ -214,14 +219,16 @@ export class NativeRequestService {
           planHash,
           plan: storedPlan as unknown as Prisma.InputJsonValue,
           ruleIds: input.ruleIds,
-          state: 'BLOCKED',
+          state: reason ? 'BLOCKED' : 'QUEUED',
           reason,
-          finishedAt: new Date(),
+          finishedAt: reason ? new Date() : null,
         },
       })
       await tx.auditEvent.create({
         data: {
-          event: 'native.execution.blocked',
+          event: reason
+            ? 'native.execution.blocked'
+            : 'native.execution.queued',
           actorId: session.identityId,
           metadata: {
             organizationId: session.organizationId,

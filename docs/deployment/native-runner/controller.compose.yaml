@@ -1,4 +1,4 @@
-# Dedicated preflight process. Job dispatch remains disabled pending P3 completion.
+# Dedicated reviewed controller. Execution stays disabled by default.
 name: preflyt-native-docker-controller
 services:
   controller:
@@ -16,6 +16,12 @@ services:
     ports: ['127.0.0.1:3010:3010']
     volumes:
       - ./docker-tls:/run/docker-tls:ro
+      # Precreate as controller uid 1000, mode 0700; the dedicated engine must see this identical path.
+      - type: bind
+        source: ${NATIVE_CONTROLLER_STATE_DIRECTORY:-/var/lib/preflyt/native-jobs}
+        target: ${NATIVE_CONTROLLER_STATE_DIRECTORY:-/var/lib/preflyt/native-jobs}
+        bind:
+          create_host_path: false
     healthcheck:
       test: [CMD, node, -e, 'fetch("http://127.0.0.1:3010/health/live",{signal:AbortSignal.timeout(3000)}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))']
       interval: 30s

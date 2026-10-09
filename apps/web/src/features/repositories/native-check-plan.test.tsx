@@ -55,7 +55,8 @@ beforeEach(() => {
 it('shows recorded source and blocked checks without claiming results', () => {
   const html = render()
   expect(html).toContain('Recorded commit')
-  expect(html).toContain('No checks have run')
+  expect(html).not.toContain('No checks have run')
+  expect(html).not.toContain('Checks passed')
   expect(html).toContain('Tool review required')
   expect(html).toContain('not supported yet')
   expect(html).not.toContain('Run checks')
@@ -91,4 +92,14 @@ it('exposes loading and empty states', () => {
     },
   }
   expect(render()).toContain('No checks in the saved standards selection')
+})
+
+it('shows reviewed execution readiness without presenting a plan as a passing result', () => {
+  const data = state.query.data as any
+  data.executionAvailable = true
+  data.steps[0].reason = 'DISPATCHER_REQUIRED'
+  const html = render()
+  expect(html).toContain('Ready to run')
+  expect(html).toContain('Native check not supported yet')
+  expect(html).not.toContain('Checks passed')
 })

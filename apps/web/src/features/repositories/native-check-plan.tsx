@@ -22,6 +22,7 @@ export type NativePlan = {
   recordedAt: string
   selectionId: string
   planHash: string
+  executionAvailable?: boolean
   steps: Step[]
 }
 const labels: Record<string, string> = {
@@ -125,7 +126,7 @@ export function NativeCheckPlanView({
             <>
               <p className='text-xs text-muted-foreground'>
                 Recorded commit <code>{plan.sourceSha.slice(0, 7)}</code> on{' '}
-                {plan.branch}. No checks have run.
+                {plan.branch}.
               </p>
               <ul className='divide-y rounded-lg border'>
                 {plan.steps.map((step) => (
@@ -146,7 +147,10 @@ export function NativeCheckPlanView({
                         {step.required ? 'Required' : 'Optional'}
                       </StatusBadge>
                       <span className='text-xs text-muted-foreground'>
-                        {labels[step.reason] ?? 'Unavailable'}
+                        {plan.executionAvailable &&
+                        step.reason === 'DISPATCHER_REQUIRED'
+                          ? 'Ready to run'
+                          : (labels[step.reason] ?? 'Unavailable')}
                       </span>
                     </div>
                   </li>

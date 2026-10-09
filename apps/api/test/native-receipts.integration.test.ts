@@ -416,3 +416,36 @@ it('a newer queued attempt prevents reuse of a passing receipt', async () => {
   expect((await gate()).status).toBe('INCOMPLETE')
   expect(freezeNativeEvidence(newer.record).state).toBe('RUNNING')
 })
+
+it('queues only reviewed tools after signed execution capability and explicit opt-in', async () => {
+  vi.stubEnv('NATIVE_EXECUTION_ENABLED', 'true')
+  const access = new AuthorizationService(db)
+  const queuedRequests = new NativeRequestService(db, access, plans, {
+    status: async () => ({ preflightVerified: true, executionAvailable: true }),
+  } as any)
+  const plan = await plans.get(actor, '51', false)
+  const input = {
+    requestKey: randomUUID(),
+    expectedSourceSha: plan.sourceSha,
+    expectedSelectionId: plan.selectionId,
+    expectedPlanHash: plan.planHash,
+    ruleIds: ['secrets.scan'],
+  }
+  const queued = await queuedRequests.request(actor, '51', input)
+  expect(queued.state).toBe('QUEUED')
+  expect(queued.finishedAt).toBeNull()
+  expect((await queuedRequests.list(actor, '51')).items[0].id).toBe(queued.id)
+  expect(
+    await db.auditEvent.count({ where: { event: 'native.execution.queued' } }),
+  ).toBe(1)
+  expect(await db.commitAssessment.count()).toBe(0)
+  vi.stubEnv('NATIVE_EXECUTION_ENABLED', 'false')
+  expect(
+    (
+      await queuedRequests.request(actor, '51', {
+        ...input,
+        requestKey: randomUUID(),
+      })
+    ).state,
+  ).toBe('BLOCKED')
+})

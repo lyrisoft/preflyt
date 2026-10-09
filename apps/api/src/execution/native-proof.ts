@@ -12,6 +12,7 @@ export type NativeProbeInput = {
 }
 export type NativeProbeResult = NativeProbeInput & {
   version: 1
+  executionAvailable?: boolean
   environmentId: string
   checkedAt: string
   verified: boolean
@@ -84,8 +85,14 @@ export function verifyNativeProbe(
       return null
     const value = JSON.parse(Buffer.from(parts[1], 'base64url').toString())
     if (
-      Object.keys(value).sort().join(',') !==
+      Object.keys(value)
+        .filter((k) => k !== 'executionAvailable')
+        .sort()
+        .join(',') !==
         'approvalHash,checkedAt,controlsHash,environmentId,failed,nonce,organizationId,repositoryId,verified,version' ||
+      (value.executionAvailable !== undefined &&
+        typeof value.executionAvailable !== 'boolean') ||
+      (value.executionAvailable === true && value.verified !== true) ||
       value.version !== 1 ||
       value.environmentId !== approval.environmentId ||
       Object.entries(expected).some(([key, v]) => value[key] !== v)

@@ -151,6 +151,12 @@ export function nativeDockerArgs(
       'SEMGREP_SEND_METRICS=off',
       '--env',
       'SEMGREP_ENABLE_VERSION_CHECK=0',
+      '--env',
+      'PREFLYT_SOURCE_REPOSITORY=' + scope.repositoryId,
+      '--env',
+      'PREFLYT_SOURCE_SHA=' + scope.sourceSha,
+      '--env',
+      'PREFLYT_SOURCE_HASH=' + scope.sourceHash,
       '--entrypoint',
       '/usr/local/bin/node',
       tool.image,
@@ -174,6 +180,25 @@ export function verifyNativeDockerInspection(
   const security = new Set(host?.SecurityOpt ?? [])
   const mounts = info?.Mounts ?? []
   const ulimits = host?.Ulimits ?? []
+  const env = config?.Env ?? []
+  const sourceEnv = {
+    PREFLYT_SOURCE_REPOSITORY: scope.repositoryId,
+    PREFLYT_SOURCE_SHA: scope.sourceSha,
+    PREFLYT_SOURCE_HASH: scope.sourceHash,
+  }
+  if (
+    !Array.isArray(env) ||
+    Object.entries(sourceEnv).some(
+      ([key, value]) =>
+        env
+          .filter(
+            (v: unknown) => typeof v === 'string' && v.startsWith(key + '='),
+          )
+          .join(',') !==
+        key + '=' + value,
+    )
+  )
+    throw new Error('Native source scope changed')
   if (
     config?.Image !== tool.image ||
     config?.User !== '65532:65532' ||
@@ -336,8 +361,10 @@ export async function runNativeDockerCheck(
     exitCode = Number(exit)
     const envelope = JSON.parse(output.toString('utf8'))
     if (
-      Object.keys(envelope).sort().join(',') !== 'exitCode,report,version' ||
-      envelope.version !== 1 ||
+      Object.keys(envelope).sort().join(',') !==
+        'exitCode,report,sourceHash,version' ||
+      envelope.version !== 2 ||
+      envelope.sourceHash !== scope.sourceHash ||
       envelope.exitCode !== exitCode ||
       !(
         envelope.report === null ||

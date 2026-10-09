@@ -65,7 +65,13 @@ export function NativeExecutionStatus({
           {data && (
             <>
               <div className='flex flex-wrap gap-2'>
-                <StatusBadge tone='info'>Imported CI only</StatusBadge>
+                <StatusBadge
+                  tone={data.executionAvailable ? 'success' : 'info'}
+                >
+                  {data.executionAvailable
+                    ? 'Run checks available'
+                    : 'Imported CI only'}
+                </StatusBadge>
                 {data.preflightVerified && (
                   <StatusBadge tone='info'>
                     Sandbox preflight verified
@@ -117,7 +123,7 @@ export function NativeExecutionStatus({
               {
                 title: 'Current support',
                 content:
-                  'The preflight controller is read-only. The check plan lists saved rules against the recorded commit. Tool versions, image digests and configuration must be reviewed before execution. Requests are recorded with the exact commit and saved standards. Source export verifies Git objects without running repository code. Requests remain blocked until a reviewed execution service is available; a recorded request is not a completed check. Job dispatch and native result collection are still being built. Preflyt does not run repository commands on the API or integration worker.',
+                  'The check plan lists saved rules against the recorded commit. Tool versions, image digests and configuration must be reviewed before execution. Requests are recorded with the exact commit and saved standards. Source export verifies Git objects without running repository code. Requests remain blocked until a reviewed execution service is available; a recorded request is not a completed check. A reviewed dedicated Docker controller can run supported checks and return signed results. Unsupported or partial coverage remains incomplete. Kubernetes-native job execution is not available yet; a Kubernetes application deployment can use the separate reviewed Docker controller. Preflyt does not run repository commands on the API or integration worker.',
               },
             ]}
           />

@@ -2,14 +2,21 @@
 import { spawn } from 'node:child_process'
 import { constants } from 'node:fs'
 import { open } from 'node:fs/promises'
+import { verifyMountedNativeSource } from './source-verification.mjs'
 import adapters from './adapters.json' with { type: 'json' }
 const adapter = Object.hasOwn(adapters, process.argv[2]) ? adapters[process.argv[2]] : null
+let verifiedSourceHash = null
 const reply = (exitCode, report) => {
-  process.stdout.write(JSON.stringify({ version: 1, exitCode, report }) + '\n')
+  process.stdout.write(JSON.stringify({ version: 2, sourceHash: verifiedSourceHash, exitCode, report }) + '\n')
   process.exitCode = [0, 1].includes(exitCode) ? exitCode : 2
 }
 if (!adapter || process.argv.length !== 3) reply(2, null)
 else {
+  try { verifiedSourceHash = await verifyMountedNativeSource('/workspace', {
+    repositoryId: process.env.PREFLYT_SOURCE_REPOSITORY, sourceSha: process.env.PREFLYT_SOURCE_SHA,
+    sourceHash: process.env.PREFLYT_SOURCE_HASH,
+  }) } catch { reply(2,null) }
+  if (verifiedSourceHash) {
   const child = spawn(adapter.command[0], adapter.args, {
     cwd: '/workspace', stdio: ['ignore', 'ignore', 'ignore'],
     env: { PATH: '/usr/local/bin:/usr/bin:/bin', HOME: '/scratch', TMPDIR: '/scratch', LANG: 'C.UTF-8', SEMGREP_SEND_METRICS: 'off', SEMGREP_ENABLE_VERSION_CHECK: '0' },
@@ -20,6 +27,10 @@ else {
   child.once('close', async code => {
     clearTimeout(timer)
     if (responded) return
+    try { await verifyMountedNativeSource('/workspace', {
+      repositoryId: process.env.PREFLYT_SOURCE_REPOSITORY, sourceSha: process.env.PREFLYT_SOURCE_SHA,
+      sourceHash: process.env.PREFLYT_SOURCE_HASH,
+    }) } catch { verifiedSourceHash = null; reply(2,null); return }
     let report = null
     try {
       const handle = await open(adapter.format === 'junit' ? '/reports/report.xml' : '/reports/report.sarif', constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK)
@@ -35,4 +46,6 @@ else {
     } catch { /* Missing, symlinked, special, oversized or changing reports are incomplete. */ }
     reply(code, report)
   })
+}
+
 }

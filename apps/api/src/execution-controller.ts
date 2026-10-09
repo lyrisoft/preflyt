@@ -1,4 +1,5 @@
 // This dedicated entry point never loads API/worker credentials or the default kube context.
+import { NativeControllerJobs } from './execution/native-controller-jobs.js'
 import { createNativeController } from './execution/native-controller.js'
 import {
   nativeDockerApproval,
@@ -37,6 +38,14 @@ if (!Number.isInteger(port) || port < 1 || port > 65535)
 const backend = process.env.NATIVE_RUNTIME_BACKEND ?? 'kubernetes'
 if (!['docker', 'kubernetes'].includes(backend))
   throw new Error('Invalid native runtime backend')
+const jobs =
+  backend === 'docker' && process.env.NATIVE_EXECUTION_ENABLED === 'true'
+    ? new NativeControllerJobs(
+        process.env.NATIVE_CONTROLLER_STATE_DIRECTORY ??
+          '/var/lib/preflyt/native-jobs',
+      )
+    : undefined
+if (jobs) await jobs.initialize()
 const server = createNativeController(
   undefined,
   backend === 'docker'
@@ -68,14 +77,16 @@ const server = createNativeController(
         },
       }
     : undefined,
+  jobs,
 )
 server.listen(port, process.env.NATIVE_CONTROLLER_HOST ?? '0.0.0.0', () =>
   console.info(
-    'Native execution preflight controller started; repository execution is disabled',
+    'Native controller started; execution requires current independent review and explicit opt-in',
   ),
 )
 for (const signal of ['SIGTERM', 'SIGINT'])
-  process.once(signal, () => {
+  process.once(signal, async () => {
     server.close()
     server.closeAllConnections()
+    await jobs?.close()
   })

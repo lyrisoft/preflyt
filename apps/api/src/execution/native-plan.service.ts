@@ -7,6 +7,7 @@ import {
   type PackRef,
   type AdoptionProfile,
 } from '../standards/catalogue.js'
+import { NativeStatusService } from './native-status.service.js'
 import { buildNativePlan } from './native-plan.js'
 @Injectable()
 export class NativePlanService {
@@ -14,7 +15,11 @@ export class NativePlanService {
     @Inject(AuthorizationService) private readonly access: AuthorizationService,
     @Inject(PrismaService) private readonly prisma: PrismaService,
   ) {}
-  async get(session: AuthenticatedSession, repositoryId: string) {
+  async get(
+    session: AuthenticatedSession,
+    repositoryId: string,
+    includeReadiness = true,
+  ) {
     const repo = await this.access.requireRepository(
       session,
       repositoryId,
@@ -53,6 +58,14 @@ export class NativePlanService {
     // A plan is tied to the displayed recorded commit; it never claims current branch HEAD or a check outcome.
     return {
       ...plan,
+      executionAvailable:
+        includeReadiness &&
+        (
+          await new NativeStatusService(this.access).status(
+            session,
+            repositoryId,
+          )
+        ).executionAvailable,
       recordedAt: profile.createdAt.toISOString(),
       branch: profile.branch,
     }

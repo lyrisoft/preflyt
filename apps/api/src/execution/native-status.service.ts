@@ -88,16 +88,26 @@ export class NativeStatusService {
       )
       if (nativeRuntimeApproval()?.approvalHash !== reviewed.approvalHash)
         throw new Error('Review changed')
+      const available =
+        process.env.NATIVE_EXECUTION_ENABLED === 'true' &&
+        proof.verified &&
+        proof.executionAvailable === true
       return {
         ...base,
+        executionAvailable: available,
+        mode: available ? 'HYBRID' : 'INGEST_ONLY',
         checkedAt: proof.checkedAt,
         preflightVerified: proof.verified,
-        reason: proof.verified
-          ? 'DISPATCHER_REQUIRED'
-          : 'RUNTIME_CONTROLS_CHANGED',
-        message: proof.verified
-          ? 'Sandbox review and current controls are verified. Running checks is not enabled yet.'
-          : 'Sandbox controls changed or could not be verified. Imported CI remains available.',
+        reason: available
+          ? 'READY'
+          : proof.verified
+            ? 'DISPATCHER_REQUIRED'
+            : 'RUNTIME_CONTROLS_CHANGED',
+        message: available
+          ? 'Preflyt can run reviewed checks for this repository.'
+          : proof.verified
+            ? 'Sandbox review and current controls are verified. Running checks is not enabled yet.'
+            : 'Sandbox controls changed or could not be verified. Imported CI remains available.',
         failed: proof.failed,
       }
     } catch {
