@@ -1,6 +1,6 @@
 import { recordAssessmentNotification } from '../notifications/notification-event.js'
 import {
-  attestationPolicy,
+  reportProofPolicy,
   validatedProvenance,
 } from '../github-events/ci-attestation-policy.js'
 import { runAttempt } from './ci-binding.js'
@@ -378,7 +378,7 @@ export class AssessmentService {
         artifactId: {
           in: artifacts.slice(0, MAX_VALIDATION_ARTIFACTS).map((a) => a.id),
         },
-        policyDigest: attestationPolicy()?.digest ?? '',
+        policyDigest: reportProofPolicy()?.digest ?? '',
       },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: MAX_VALIDATION_ARTIFACTS,

@@ -109,8 +109,8 @@ export function CiProvenance({
               )}
               {!query.data.configured && (
                 <p>
-                  Ask your administrator to configure the signature verification
-                  tool, trusted certificates and approved signing workflows.
+                  Ask your administrator to configure the report signature
+                  verification and approved signing workflows.
                 </p>
               )}
               {canVerify && query.data.configured && (
@@ -133,7 +133,7 @@ export function CiProvenance({
                     />
                   </label>
                   <label className='block'>
-                    Signed Sigstore bundle (JSON, up to 512 KiB)
+                    Signed report proof (JSON, up to 512 KiB)
                     <Input
                       type='file'
                       accept='.json,.jsonl'

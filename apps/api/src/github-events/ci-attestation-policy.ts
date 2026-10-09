@@ -1,3 +1,4 @@
+import { organizationProofPolicy, approvedOrganizationClaims } from './organization-report-proof.js'
 import { createHash } from 'node:crypto'
 import { isAbsolute } from 'node:path'
 import { digest } from '../assessments/assessment-digest.js'
@@ -44,6 +45,14 @@ export function attestationPolicy() {
     predicateType: 'https://slsa.dev/provenance/v1',
   }
   return { ...projection, binary, root, digest: digest(projection) }
+}
+/** Unknown modes fail closed; selecting a mode never falls back to weaker proof. */
+export function reportProofPolicy() {
+  const mode=process.env.CI_REPORT_PROOF_MODE ?? 'github-native'
+  if(mode==='organization-key')return organizationProofPolicy()
+  if(mode!=='github-native')return null
+  const policy=attestationPolicy()
+  return policy ? {...policy,mode:'github-native' as const} : null
 }
 export type AttestationContext = {
   artifactId: string
@@ -110,8 +119,8 @@ export function validatedProvenance(
   context: Omit<AttestationContext, 'signerWorkflow'>,
 ) {
   if (!receipt) return null
-  const policy = attestationPolicy()
-  const claims = receipt.claims as ReturnType<typeof attestationClaims>
+  const policy = reportProofPolicy()
+  const claims = receipt.claims as ReturnType<typeof attestationClaims> & {signerKeyId?:string}
   if (
     !claims ||
     typeof claims !== 'object' ||
@@ -130,11 +139,14 @@ export function validatedProvenance(
   if (
     !policy ||
     policy.digest !== receipt.policyDigest ||
-    !policy.workflows.includes(claims.signerWorkflow)
+    !policy.workflows.includes(claims.signerWorkflow) ||
+    (policy.mode === 'organization-key' && !approvedOrganizationClaims(claims,policy)) ||
+    (policy.mode === 'github-native' && claims.issuer !== 'https://token.actions.githubusercontent.com')
   )
     return null
   return {
     status: 'VERIFIED_ATTESTATION',
+    proofSource: policy.mode,
     receiptId: receipt.id,
     receiptHash: receipt.receiptHash,
     bundleSha256: receipt.bundleSha256,

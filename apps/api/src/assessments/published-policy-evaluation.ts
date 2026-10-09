@@ -1,7 +1,7 @@
 import { ConflictException } from '@nestjs/common'
 import { digest } from './assessment-digest.js'
 import { previewGate } from './gate-preview.js'
-import { attestationPolicy } from '../github-events/ci-attestation-policy.js'
+import { reportProofPolicy } from '../github-events/ci-attestation-policy.js'
 import { executionContracts } from './execution-contract.js'
 export function evaluatePublishedPolicy(
   snapshot: Parameters<typeof previewGate>[0],
@@ -84,7 +84,7 @@ export function evaluatePublishedPolicy(
   }
   const base = previewGate(adjusted)
   const contracts = executionContracts()
-  const currentAttestationPolicy = attestationPolicy()
+  const currentAttestationPolicy = reportProofPolicy()
   const rules = base.rules.map((rule: any) => {
     const requirement = definition.rules.find((r: any) => r.id === rule.ruleId)
     const check = report.checks.find((r: any) => r.ruleId === rule.ruleId)

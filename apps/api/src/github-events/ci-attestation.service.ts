@@ -12,7 +12,7 @@ import { CiAttestationVerifier } from './ci-attestation-verifier.js'
 import {
   ATTESTATION_VERSION,
   MAX_BUNDLE_BYTES,
-  attestationPolicy,
+  reportProofPolicy,
   sha256,
   validatedProvenance,
 } from './ci-attestation-policy.js'
@@ -84,7 +84,7 @@ export class CiAttestationService {
       artifactId,
     )
     const receipt = await this.prisma.ciArtifactAttestation.findFirst({
-      where: { artifactId, policyDigest: attestationPolicy()?.digest ?? '' },
+      where: { artifactId, policyDigest: reportProofPolicy()?.digest ?? '' },
       orderBy: { createdAt: 'desc' },
     })
     const provenance = validatedProvenance(receipt ?? undefined, {
@@ -97,7 +97,7 @@ export class CiAttestationService {
       runAttempt: runAttempt(evidence.sourceIdentity),
     })
     return {
-      configured: !!attestationPolicy(),
+      configured: !!reportProofPolicy(),
       provenance,
       executionTrusted: false,
     }
@@ -117,7 +117,7 @@ export class CiAttestationService {
       if (!json || Array.isArray(json) || typeof json !== 'object')
         throw Error()
     } catch {
-      throw new BadRequestException('A single JSON Sigstore bundle is required')
+      throw new BadRequestException('A single signed JSON proof is required')
     }
     const before = await this.context(repositoryId, deliveryId, artifactId)
     const { repository, evidence, artifact } = before
@@ -174,8 +174,8 @@ export class CiAttestationService {
     }
     const proof = await this.verifier.verify(artifact.content, bundle, context)
     if (
-      !attestationPolicy() ||
-      proof.policyDigest !== attestationPolicy()!.digest
+      !reportProofPolicy() ||
+      proof.policyDigest !== reportProofPolicy()!.digest
     )
       throw new ConflictException('Attestation policy changed; retry')
     const bundleSha256 = sha256(bundle)

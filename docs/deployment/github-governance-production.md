@@ -40,7 +40,7 @@ GitHub-native artifact attestations for private/internal repositories require **
 
 For private production repositories on GitHub Team, this signed-report path cannot establish verified passing execution. Keep results incomplete and production required-check activation unavailable. Do not make production repositories public, weaken proof validation, or treat an administrator upload as verified evidence to bypass the plan limitation. A public disposable test validates only that test environment; it does not demonstrate private-repository support on Team.
 
-The workflow must execute the test/scanner and attest the exact original JUnit/SARIF report bytes. Pin third-party Actions and signing workflow code to reviewed commit SHAs. Attestation generation requires workflow `id-token: write`, `attestations: write` and `contents: read`; these belong to the workflow's GitHub token and are distinct from Preflyt App permissions. No repository workflow editing permission is required by the current Preflyt publisher.
+In native mode, the workflow must execute the test/scanner and attest the exact original JUnit/SARIF report bytes. Organization-key mode has its own separately isolated signer contract documented below. Pin third-party Actions and signing workflow code to reviewed commit SHAs. Attestation generation requires workflow `id-token: write`, `attestations: write` and `contents: read`; these belong to the workflow's GitHub token and are distinct from Preflyt App permissions. No repository workflow editing permission is required by the current Preflyt publisher.
 
 The proof must match the observation repository, commit, workflow run, attempt and signer. A merge-ref SHA is not a PR head SHA. The current attestation importer does not support cross-repository reusable signing; do not promise central reusable-workflow coverage until that path is implemented and tested. Self-hosted runner attestations are rejected by the current verifier.
 
@@ -61,7 +61,7 @@ Obtain the CLI and trusted roots through a reviewed administration process, veri
 
 API and worker must use the same workflow allowlist, trust-root/binary hashes and execution contracts when collecting assessments. The API verifies uploaded bundles; the worker freezes receipt validation in event-triggered assessments. Mismatched configuration leaves evidence incomplete.
 
-The root `.env` file is used for Compose interpolation; arbitrary new keys are **not automatically passed into containers**. The current `docker-compose.yaml` forwards the publication flag, but does not forward the attestation, execution-contract or governance settings. Supply a reviewed production override that explicitly maps the values to API/worker and mounts the verifier files read-only. Do not pass governance credentials to the web, worker or migration service. Validate the combined Compose configuration without printing resolved secrets. An environment template is not proof that the deployed runtime received the variables.
+The root `.env` file is used for Compose interpolation; arbitrary new keys are **not automatically passed into containers**. The current `docker-compose.yaml` forwards publication flags, proof mode, organization public keys and execution contracts. Native verifier paths/trust settings and governance credentials still require the reviewed override. Supply a reviewed production override that explicitly maps the values to API/worker and mounts the verifier files read-only. Do not pass governance credentials to the web, worker or migration service. Validate the combined Compose configuration without printing resolved secrets. An environment template is not proof that the deployed runtime received the variables.
 
 A [reviewable Compose override example](github-evidence.compose.example.yaml) forwards the evidence configuration to both API and worker, mounts a reviewed host directory read-only at `/opt/preflyt-attestation`, and forces production mode with the local exception off. It forwards governance credentials only to the API for the reviewed deployment endpoint. Set `PREFLYT_ATTESTATION_DIR` to the protected absolute host directory containing `gh` and `trusted-root.json`, with permissions allowing the non-root runtime to read/execute them. This example fixes the container paths shown in the table; for a derived image, adjust paths and mounts together.
 
@@ -134,11 +134,7 @@ Do not copy these test identifiers, keys or the exception flag into production. 
 ## GitHub Team private repositories
 
 GitHub-native private/internal artifact attestations require Enterprise Cloud.
-The current verifier has no organization-key/KMS proof adapter. A future adapter
-could support private Team repositories while keeping reports and keys private,
-but must verify exact report, repository, commit, workflow and run-attempt identity
-and keep signing authority separate from untrusted PR code. Until implemented and
-accepted, this is a deployment limitation, not a reason to turn off proof checks.
+The organization-key/KMS-compatible adapter is implemented; see [private report setup](../operations/organization-signed-ci-reports.md). Deploy and independently validate a trusted signer isolated from untrusted PR code before enabling passing checks. No signer or IAM resources are automatically installed.
 See the [private repository proof alternatives](../operations/github-check-publication.md#private-repositories-on-github-team).
 
 Ruleset Insights additionally needs repository Administration: read on the assessment App. Insights uses a repository-limited read-only token and never uses the governance write connection.

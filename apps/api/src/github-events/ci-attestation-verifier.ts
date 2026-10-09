@@ -1,3 +1,4 @@
+import { organizationProofPolicy, verifyOrganizationReport } from './organization-report-proof.js'
 import {
   Injectable,
   ServiceUnavailableException,
@@ -24,6 +25,16 @@ export class CiAttestationVerifier {
     bundle: Uint8Array,
     context: AttestationContext,
   ) {
+    if (process.env.CI_REPORT_PROOF_MODE === 'organization-key') {
+      const policy=organizationProofPolicy()
+      if(!policy)throw new ServiceUnavailableException('Organization report signature verification is not configured')
+      if(this.busy)throw new HttpException('Report signature verifier is busy; retry later',429)
+      this.busy=true
+      try {return await verifyOrganizationReport(content,bundle,context,policy)}
+      catch {throw new BadRequestException('Report signature could not be verified against the approved repository, commit and workflow run')}
+      finally {this.busy=false}
+    }
+    if (process.env.CI_REPORT_PROOF_MODE && process.env.CI_REPORT_PROOF_MODE !== 'github-native') throw new ServiceUnavailableException('Unknown report signature verification mode')
     const policy = attestationPolicy()
     if (!policy)
       throw new ServiceUnavailableException(

@@ -56,7 +56,7 @@ The deployment records desired JSON, preview/hash, proposer, approver, source Ap
 
 ### Private repositories on GitHub Team
 
-The current positive-execution verifier supports GitHub-native artifact attestations.
+The positive-execution verifier supports GitHub-native attestations or explicitly configured organization-key proofs.
 Private/internal repositories need GitHub Enterprise Cloud for that native feature.
 This is a GitHub plan boundary, not an additional App permission. Ordinary Actions
 runs and artifact uploads do not replace cryptographically verified provenance.
@@ -66,7 +66,6 @@ protected KMS key, plus a Preflyt verifier for that proof format. It would need 
 verify the original report digest, repository ID, exact commit, workflow identity,
 run ID/attempt and reviewed signer key; isolate signing from untrusted PR code;
 support key rotation/revocation; and reject unsigned, replayed or mismatched proofs.
-**That alternative is not implemented.** Do not disable provenance verification
+The organization-key adapter is now implemented; see [private report setup](../operations/organization-signed-ci-reports.md). The protected signing service and live acceptance still need deployment. Do not disable provenance verification
 or treat ordinary artifact uploads as passing evidence to work around the plan.
-The local acceptance repository remains private; signed positive acceptance is
-pending until a supported private proof path is available.
+The local acceptance repository remains private; live positive acceptance is pending until its trusted signer and CI workflow are configured.

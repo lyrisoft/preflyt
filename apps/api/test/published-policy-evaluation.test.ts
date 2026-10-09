@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import { digest } from '../src/assessments/assessment-digest.js'
-import { attestationPolicy } from '../src/github-events/ci-attestation-policy.js'
+import { attestationPolicy, reportProofPolicy } from '../src/github-events/ci-attestation-policy.js'
+import { generateKeyPairSync } from 'node:crypto'
 import { executionContracts } from '../src/assessments/execution-contract.js'
 import { evaluatePublishedPolicy } from '../src/assessments/published-policy-evaluation.js'
 const sha = 'a'.repeat(40)
@@ -196,4 +197,15 @@ it('does not reuse trust after the attestation configuration changes', () => {
   const value = fixture()
   vi.stubEnv('CI_ATTESTATION_ROOT_SHA256', 'c'.repeat(64))
   expect(evaluate(value).status).toBe('INCOMPLETE')
+})
+
+it('supports organization-key evidence without relaxing frozen policy, workflow freshness or key revocation',()=>{
+ const f=fixture()
+ const pair=generateKeyPairSync('rsa',{modulusLength:2048,publicKeyEncoding:{type:'spki',format:'pem'}})
+ vi.stubEnv('CI_REPORT_PROOF_MODE','organization-key')
+ vi.stubEnv('CI_ORGANIZATION_SIGNER_KEYS',JSON.stringify([{kid:'test',algorithm:'RS256',publicKeyPem:pair.publicKey,repositoryIds:['501'],workflows:[{path:'lyrisoft/preflyt-p2-acceptance/.github/workflows/tests.yml',sha}]}]))
+ f.snapshot.report.checks[0].evidenceValidation.reports[0].provenance.policyDigest=reportProofPolicy()!.digest
+ expect(evaluate(f).status).toBe('PASS')
+ vi.stubEnv('CI_ORGANIZATION_SIGNER_KEYS','[]')
+ expect(evaluate(f).status).toBe('INCOMPLETE')
 })
