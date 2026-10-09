@@ -1,39 +1,39 @@
-import { recordPolicyNotification } from '../notifications/notification-event.js'
+import { recordPolicyNotification } from "../notifications/notification-event.js";
 import {
   BadRequestException,
   ConflictException,
   Inject,
   Injectable,
   NotFoundException,
-} from '@nestjs/common'
-import { PrismaService } from '../prisma/prisma.service.js'
-import { AuthorizationService } from '../auth/authorization.service.js'
-import type { AuthenticatedSession } from '../auth/session.guard.js'
+} from "@nestjs/common";
+import { PrismaService } from "../prisma/prisma.service.js";
+import { AuthorizationService } from "../auth/authorization.service.js";
+import type { AuthenticatedSession } from "../auth/session.guard.js";
 import {
   adoptionProfiles,
   posture,
   resolvePacks,
   type AdoptionProfile,
   type PackRef,
-} from '../standards/catalogue.js'
-import { digest } from './assessment-digest.js'
+} from "../standards/catalogue.js";
+import { digest } from "./assessment-digest.js";
 
 export function validPolicyBranch(ref: string) {
   return (
-    typeof ref === 'string' &&
+    typeof ref === "string" &&
     ref.length <= 255 &&
-    ref.startsWith('refs/heads/') &&
+    ref.startsWith("refs/heads/") &&
     ref.length > 11 &&
     !/[\x00-\x20\x7f~^:?*\[\\]/.test(ref) &&
-    !ref.includes('..') &&
-    !ref.includes('@{') &&
-    !ref.includes('//') &&
-    !ref.endsWith('/') &&
-    !ref.endsWith('.') &&
+    !ref.includes("..") &&
+    !ref.includes("@{") &&
+    !ref.includes("//") &&
+    !ref.endsWith("/") &&
+    !ref.endsWith(".") &&
     !ref
-      .split('/')
-      .some((part) => part.startsWith('.') || part.endsWith('.lock'))
-  )
+      .split("/")
+      .some((part) => part.startsWith(".") || part.endsWith(".lock"))
+  );
 }
 
 export function composeGatePolicy(
@@ -42,31 +42,31 @@ export function composeGatePolicy(
   requiredRules: string[],
 ) {
   if (!validPolicyBranch(branchRef))
-    throw new BadRequestException('Choose one explicit refs/heads/ branch')
+    throw new BadRequestException("Choose one explicit refs/heads/ branch");
   if (
     !adoptionProfiles.includes(selection.profile as AdoptionProfile) ||
     !Array.isArray(selection.packs) ||
     !selection.packs.length ||
     selection.packs.length > 5
   )
-    throw new ConflictException('Standards baseline is unsupported')
+    throw new ConflictException("Standards baseline is unsupported");
   if (
     selection.packs.some(
       (ref) =>
         !ref ||
-        typeof ref !== 'object' ||
-        typeof ref.id !== 'string' ||
-        typeof ref.version !== 'string' ||
-        !/^[a-f0-9]{64}$/.test(ref.digest ?? ''),
+        typeof ref !== "object" ||
+        typeof ref.id !== "string" ||
+        typeof ref.version !== "string" ||
+        !/^[a-f0-9]{64}$/.test(ref.digest ?? ""),
     ) ||
     new Set(selection.packs.map((ref) => ref.id)).size !==
       selection.packs.length
   )
-    throw new ConflictException('Standards baseline integrity failed')
-  const refs = selection.packs as (PackRef & { digest: string })[]
-  const packs = resolvePacks(refs)
+    throw new ConflictException("Standards baseline integrity failed");
+  const refs = selection.packs as (PackRef & { digest: string })[];
+  const packs = resolvePacks(refs);
   if (packs.some((p, i) => !p || p.digest !== refs[i].digest))
-    throw new ConflictException('Standards baseline integrity failed')
+    throw new ConflictException("Standards baseline integrity failed");
   const rules = posture(refs, selection.profile as AdoptionProfile, [])
     .map(
       ({
@@ -77,7 +77,7 @@ export function composeGatePolicy(
         ...rule
       }) => rule,
     )
-    .sort((a, b) => a.id.localeCompare(b.id))
+    .sort((a, b) => a.id.localeCompare(b.id));
   if (
     !Array.isArray(requiredRules) ||
     requiredRules.length > 64 ||
@@ -85,24 +85,24 @@ export function composeGatePolicy(
     requiredRules.some((id) => !rules.some((rule) => rule.id === id))
   )
     throw new BadRequestException(
-      'Required overrides must name unique rules in the baseline',
-    )
+      "Required overrides must name unique rules in the baseline",
+    );
   // This increment permits strengthening advisory rules only. Weakening/waivers need their own authority.
   for (const rule of rules)
-    if (requiredRules.includes(rule.id)) rule.required = true
+    if (requiredRules.includes(rule.id)) rule.required = true;
   return {
     version: 1,
-    mode: 'ADVISORY',
+    mode: "ADVISORY",
     branchRef,
     selectionId: selection.id,
     adoptionProfile: selection.profile,
     packs: refs,
     rules,
-    applicability: 'EXACT_BRANCH',
+    applicability: "EXACT_BRANCH",
     overrides: [...requiredRules].sort(),
-    githubPublication: 'DISABLED',
-    enforcement: 'DISABLED',
-  }
+    githubPublication: "DISABLED",
+    enforcement: "DISABLED",
+  };
 }
 
 @Injectable()
@@ -116,29 +116,29 @@ export class GatePolicyService {
     const repo = await this.authorization.requireRepository(
       session,
       githubId,
-      'policy.read',
-    )
+      "policy.read",
+    );
     const [selection, revisions] = await Promise.all([
       this.prisma.repositoryStandardsSelection.findFirst({
         where: { repositoryId: repo.id },
-        orderBy: { revision: 'desc' },
+        orderBy: { revision: "desc" },
       }),
       this.prisma.gatePolicyRevision.findMany({
         where: {
           repositoryId: repo.id,
           organizationId: session.organizationId!,
         },
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
         take: 51,
       }),
-    ])
+    ]);
     return {
       currentSelectionId: selection?.id ?? null,
       revisions: revisions.slice(0, 50),
       truncated: revisions.length > 50,
-      githubPublication: 'DISABLED',
-      enforcement: 'DISABLED',
-    }
+      githubPublication: "DISABLED",
+      enforcement: "DISABLED",
+    };
   }
   private async change<T>(
     session: AuthenticatedSession,
@@ -146,27 +146,27 @@ export class GatePolicyService {
     permission: string,
     operation: (tx: any, repositoryId: string) => Promise<T>,
   ) {
-    await this.authorization.requireRepository(session, githubId, permission)
+    await this.authorization.requireRepository(session, githubId, permission);
     try {
       return await this.prisma.$transaction(
         async (tx) => {
           const repo = await new AuthorizationService(
             tx as PrismaService,
-          ).requireRepository(session, githubId, permission)
-          return operation(tx, repo.id)
+          ).requireRepository(session, githubId, permission);
+          return operation(tx, repo.id);
         },
-        { isolationLevel: 'Serializable' },
-      )
+        { isolationLevel: "Serializable" },
+      );
     } catch (error: any) {
       const status =
-        typeof error?.getStatus === 'function' ? error.getStatus() : null
+        typeof error?.getStatus === "function" ? error.getStatus() : null;
       if (
         [400, 403, 404, 409].includes(status) ||
-        ['P2034', 'P2002'].includes(error?.code)
+        ["P2034", "P2002"].includes(error?.code)
       )
         await this.prisma.auditEvent.create({
           data: {
-            event: 'policy.transition_rejected',
+            event: "policy.transition_rejected",
             actorId: session.identityId,
             metadata: {
               organizationId: session.organizationId,
@@ -175,45 +175,45 @@ export class GatePolicyService {
               status: status ?? 409,
             },
           },
-        })
-      if (['P2034', 'P2002'].includes(error?.code))
+        });
+      if (["P2034", "P2002"].includes(error?.code))
         throw new ConflictException(
-          'Policy changed concurrently; reload before retrying',
-        )
-      throw error
+          "Policy changed concurrently; reload before retrying",
+        );
+      throw error;
     }
   }
   async draft(
     session: AuthenticatedSession,
     githubId: string,
     body: {
-      expectedSelectionId: string
-      branchRef: string
-      requiredRules: string[]
+      expectedSelectionId: string;
+      branchRef: string;
+      requiredRules: string[];
     },
   ) {
     return this.change(
       session,
       githubId,
-      'policy.draft',
+      "policy.draft",
       async (tx, repositoryId) => {
         const selection = await tx.repositoryStandardsSelection.findFirst({
           where: { repositoryId },
-          orderBy: { revision: 'desc' },
-        })
+          orderBy: { revision: "desc" },
+        });
         if (!selection || selection.id !== body.expectedSelectionId)
           throw new ConflictException(
-            'Adopt or reload the current standards baseline first',
-          )
+            "Adopt or reload the current standards baseline first",
+          );
         const definition = {
           ...composeGatePolicy(selection, body.branchRef, body.requiredRules),
           organizationId: session.organizationId!,
           repositoryGithubId: githubId,
-        }
+        };
         const latest = await tx.gatePolicyRevision.findFirst({
           where: { repositoryId, branchRef: body.branchRef },
-          orderBy: { revision: 'desc' },
-        })
+          orderBy: { revision: "desc" },
+        });
         const policy = await tx.gatePolicyRevision.create({
           data: {
             repositoryId,
@@ -225,11 +225,92 @@ export class GatePolicyService {
             definitionHash: digest(definition),
             draftedById: session.identityId,
           },
-        })
-        await this.audit(tx, session, 'policy.drafted', policy)
-        return policy
+        });
+        await this.audit(tx, session, "policy.drafted", policy);
+        return policy;
       },
-    )
+    );
+  }
+  async editDraft(
+    session: AuthenticatedSession,
+    githubId: string,
+    id: string,
+    body: {
+      expectedHash: string;
+      expectedSelectionId: string;
+      branchRef: string;
+      requiredRules: string[];
+    },
+  ) {
+    return this.change(
+      session,
+      githubId,
+      "policy.draft",
+      async (tx, repositoryId) => {
+        const policy = await tx.gatePolicyRevision.findFirst({
+          where: { id, repositoryId, organizationId: session.organizationId! },
+        });
+        if (!policy) throw new NotFoundException("Policy is unavailable");
+        if (policy.state !== "DRAFT")
+          throw new ConflictException("Only draft policies can be edited");
+        if (
+          policy.definitionHash !== body.expectedHash ||
+          digest(policy.definition) !== policy.definitionHash
+        )
+          throw new ConflictException(
+            "The draft changed. Reload before editing it.",
+          );
+        if (policy.branchRef !== body.branchRef)
+          throw new BadRequestException(
+            "Create a new policy to target a different branch",
+          );
+        const selection = await tx.repositoryStandardsSelection.findFirst({
+          where: { repositoryId },
+          orderBy: { revision: "desc" },
+        });
+        if (!selection || selection.id !== body.expectedSelectionId)
+          throw new ConflictException(
+            "Standards changed. Reload before saving the draft.",
+          );
+        const definition = {
+          ...composeGatePolicy(selection, policy.branchRef, body.requiredRules),
+          organizationId: session.organizationId!,
+          repositoryGithubId: githubId,
+        };
+        const updated = await tx.gatePolicyRevision.update({
+          where: { id },
+          data: {
+            selectionId: selection.id,
+            definition,
+            definitionHash: digest(definition),
+            draftedById: session.identityId,
+            approvedById: null,
+            approvedAt: null,
+            approvalKind: "INDEPENDENT",
+          },
+        });
+        await tx.auditEvent.create({
+          data: {
+            event: "policy.draft_updated",
+            actorId: session.identityId,
+            metadata: {
+              organizationId: session.organizationId,
+              repositoryId,
+              policyId: id,
+              revision: policy.revision,
+              branchRef: policy.branchRef,
+              previousDefinition: policy.definition,
+              previousHash: policy.definitionHash,
+              definitionHash: updated.definitionHash,
+              previousSelectionId: policy.selectionId,
+              selectionId: selection.id,
+              previousDraftedById: policy.draftedById,
+            },
+          },
+        });
+        return updated;
+      },
+    );
   }
   async approve(
     session: AuthenticatedSession,
@@ -240,7 +321,7 @@ export class GatePolicyService {
     return this.change(
       session,
       githubId,
-      'policy.publish',
+      "policy.publish",
       async (tx, repositoryId) => {
         const policy = await this.current(
           tx,
@@ -248,32 +329,34 @@ export class GatePolicyService {
           repositoryId,
           id,
           expectedHash,
-        )
-        if (policy.state !== 'DRAFT')
-          throw new ConflictException('Policy is not awaiting approval')
-        const selfApproval = policy.draftedById === session.identityId
+        );
+        if (policy.state !== "DRAFT")
+          throw new ConflictException("Policy is not awaiting approval");
+        const selfApproval = policy.draftedById === session.identityId;
         if (selfApproval && !(await this.isSuperAdmin(tx, session.identityId)))
-          throw new ConflictException('Independent policy approval is required')
+          throw new ConflictException(
+            "Independent policy approval is required",
+          );
         const approved = await tx.gatePolicyRevision.update({
           where: { id },
           data: {
-            state: 'APPROVED',
+            state: "APPROVED",
             approvalKind: selfApproval
-              ? 'SUPER_ADMIN_SELF_APPROVAL'
-              : 'INDEPENDENT',
+              ? "SUPER_ADMIN_SELF_APPROVAL"
+              : "INDEPENDENT",
             approvedById: session.identityId,
             approvedAt: new Date(),
           },
-        })
+        });
         await this.audit(
           tx,
           session,
-          selfApproval ? 'policy.super_admin_self_approved' : 'policy.approved',
+          selfApproval ? "policy.super_admin_self_approved" : "policy.approved",
           approved,
-        )
-        return approved
+        );
+        return approved;
       },
-    )
+    );
   }
   async publish(
     session: AuthenticatedSession,
@@ -285,7 +368,7 @@ export class GatePolicyService {
     return this.change(
       session,
       githubId,
-      'policy.publish',
+      "policy.publish",
       async (tx, repositoryId) => {
         const policy = await this.current(
           tx,
@@ -293,62 +376,62 @@ export class GatePolicyService {
           repositoryId,
           id,
           expectedHash,
-        )
+        );
         if (
-          policy.state !== 'APPROVED' ||
+          policy.state !== "APPROVED" ||
           !policy.approvedById ||
           (policy.approvedById === policy.draftedById &&
-            (policy.approvalKind !== 'SUPER_ADMIN_SELF_APPROVAL' ||
+            (policy.approvalKind !== "SUPER_ADMIN_SELF_APPROVAL" ||
               !(await this.isSuperAdmin(tx, policy.approvedById))))
         )
           throw new ConflictException(
-            'Independent approval is required before publication',
-          )
+            "Independent approval is required before publication",
+          );
         await new AuthorizationService(tx as PrismaService).requireRepository(
           {
             ...session,
             identityId: policy.approvedById,
           },
           githubId,
-          'policy.publish',
-        )
+          "policy.publish",
+        );
         const previous = await tx.gatePolicyRevision.findFirst({
           where: {
             repositoryId,
             branchRef: policy.branchRef,
-            state: 'PUBLISHED',
+            state: "PUBLISHED",
           },
-          orderBy: { publishedAt: 'desc' },
-        })
+          orderBy: { publishedAt: "desc" },
+        });
         if (
           (previous?.id ?? null) !== expectedPublishedId ||
           (previous && previous.revision >= policy.revision)
         )
           throw new ConflictException(
-            'Published policy changed; review the current version',
-          )
+            "Published policy changed; review the current version",
+          );
         if (previous)
           await tx.gatePolicyRevision.update({
             where: { id: previous.id },
-            data: { state: 'SUPERSEDED' },
-          })
+            data: { state: "SUPERSEDED" },
+          });
         const published = await tx.gatePolicyRevision.update({
           where: { id },
           data: {
-            state: 'PUBLISHED',
+            state: "PUBLISHED",
             publishedById: session.identityId,
             publishedAt: new Date(),
           },
-        })
-        await this.audit(tx, session, 'policy.published', published)
-        await recordPolicyNotification(tx, published, session.identityId)
-        return published
+        });
+        await this.audit(tx, session, "policy.published", published);
+        await recordPolicyNotification(tx, published, session.identityId);
+        return published;
       },
-    )
+    );
   }
   private async isSuperAdmin(tx: any, identityId: string) {
-    const member = await tx.membership.findUnique({ where: { identityId } })
-    return !!member?.active && member.role === 'SUPER_ADMIN'
+    const member = await tx.membership.findUnique({ where: { identityId } });
+    return !!member?.active && member.role === "SUPER_ADMIN";
   }
   private async current(
     tx: any,
@@ -359,21 +442,21 @@ export class GatePolicyService {
   ) {
     const policy = await tx.gatePolicyRevision.findFirst({
       where: { id, repositoryId, organizationId: session.organizationId! },
-    })
-    if (!policy) throw new NotFoundException('Policy is unavailable')
+    });
+    if (!policy) throw new NotFoundException("Policy is unavailable");
     const selection = await tx.repositoryStandardsSelection.findFirst({
       where: { repositoryId },
-      orderBy: { revision: 'desc' },
-    })
+      orderBy: { revision: "desc" },
+    });
     if (
       policy.definitionHash !== expectedHash ||
       digest(policy.definition) !== policy.definitionHash ||
       selection?.id !== policy.selectionId
     )
       throw new ConflictException(
-        'Policy or standards baseline changed; draft and review a new version',
-      )
-    return policy
+        "Policy or standards baseline changed; draft and review a new version",
+      );
+    return policy;
   }
   private audit(
     tx: any,
@@ -396,6 +479,6 @@ export class GatePolicyService {
           approvalKind: policy.approvalKind,
         },
       },
-    })
+    });
   }
 }

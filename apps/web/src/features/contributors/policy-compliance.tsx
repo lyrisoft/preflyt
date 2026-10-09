@@ -203,37 +203,6 @@ export function PolicyComplianceSummary({
                 </div>
               ))}
             </div>
-            <div className='space-y-2'>
-              <div
-                role='img'
-                aria-label={`${data.passingPrs} passing, ${data.blockedPrs} with failed checks, ${data.eligiblePrs - data.passingPrs - data.blockedPrs} with missing or older evidence`}
-                className='flex h-2 overflow-hidden rounded-full bg-muted'
-              >
-                <span
-                  className='bg-teal-500 transition-[width] duration-300 motion-reduce:transition-none'
-                  style={{
-                    width: `${(data.passingPrs / data.eligiblePrs) * 100}%`,
-                  }}
-                />
-                <span
-                  className='bg-red-500 transition-[width] duration-300 motion-reduce:transition-none'
-                  style={{
-                    width: `${(data.blockedPrs / data.eligiblePrs) * 100}%`,
-                  }}
-                />
-                <span
-                  className='bg-amber-500/60 transition-[width] duration-300 motion-reduce:transition-none'
-                  style={{
-                    width: `${((data.eligiblePrs - data.passingPrs - data.blockedPrs) / data.eligiblePrs) * 100}%`,
-                  }}
-                />
-              </div>
-            </div>
-            {data.completePrs === 0 && (
-              <p className='text-xs text-amber-700 dark:text-amber-400'>
-                Not enough evidence to calculate compliance.
-              </p>
-            )}
             {data.truncated && (
               <p className='text-sm text-amber-600 dark:text-amber-400'>
                 Collection limit reached. Percentages are hidden; narrow the

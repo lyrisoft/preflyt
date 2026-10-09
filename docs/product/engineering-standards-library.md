@@ -129,3 +129,10 @@ A built-in profile recommends configuration; it must not silently enable blockin
 - [ ] AI cannot enable enforcement, waive critical checks or forge evidence.
 
 **P0 implementation:** five frozen packs, stack recommendations, authorized append-only repository selection and configuration-gap preview are available. See the [operations guide](../operations/engineering-standards.md) for supported capabilities, tests, deployment and limits. P1 evidence mapping, P2 enforcement, organization inheritance/overrides and later specialized packs remain unimplemented; P0 release acceptance is not implied.
+
+
+### Editing draft branch policies
+
+Users with repository-scoped `policy.draft` permission can edit a DRAFT policy from its review panel, including after the saved standards change. Editing uses the latest saved standards and allows optional rules to be made required. The target branch and policy version stay the same; use a new policy for another branch. Approved, published, and replaced revisions are locked.
+
+Saving checks both the expected draft hash and the current standards selection in a serializable transaction. Concurrent edits or standards changes require a reload. The editor becomes the draft author, so independent approval applies to the edited definition (with the existing audited local Super Admin exception). The audit history retains the previous definition, hash, standards selection and author. Editing does not activate GitHub enforcement.

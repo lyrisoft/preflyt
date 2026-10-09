@@ -8,6 +8,7 @@ import {
   Layers,
   ListChecks,
   Plus,
+  Pencil,
   ShieldCheck,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -112,6 +113,7 @@ export function GatePolicyPanel({
   platformAdmin?: boolean
 }) {
   const [draftOpen, setDraftOpen] = useState(false)
+  const [editing, setEditing] = useState<Revision | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [branch, setBranch] = useState('')
   const [required, setRequired] = useState<string[]>([])
@@ -149,7 +151,7 @@ export function GatePolicyPanel({
     },
     onSuccess: async (_result, { path }) => {
       await client.invalidateQueries({ queryKey: key })
-      if (!path) {
+      if (!path || path.endsWith('/edit')) {
         setDraftOpen(false)
         setBranch('')
         setRequired([])
@@ -159,7 +161,9 @@ export function GatePolicyPanel({
           ? 'Policy draft created'
           : path.endsWith('/approve')
             ? 'Policy approved'
-            : 'Non-blocking policy published'
+            : path.endsWith('/edit')
+              ? 'Policy draft updated'
+              : 'Non-blocking policy published'
       )
     },
   })
@@ -176,6 +180,9 @@ export function GatePolicyPanel({
     standards.data?.controls.filter((rule) => !rule.required) ?? []
   const openDraft = () => {
     mutation.reset()
+    setEditing(null)
+    setBranch('')
+    setRequired([])
     setDraftOpen(true)
   }
   const openReview = (id: string) => {
@@ -361,9 +368,12 @@ export function GatePolicyPanel({
       >
         <DialogContent className='sm:max-w-lg'>
           <DialogHeader>
-            <DialogTitle>New branch policy</DialogTitle>
+            <DialogTitle>
+              {editing ? 'Edit policy draft' : 'New branch policy'}
+            </DialogTitle>
             <DialogDescription>
-              Create a draft using this repository’s saved standards.
+              Use the latest saved standards. Optional rules can be made
+              required.
             </DialogDescription>
           </DialogHeader>
           <form
@@ -372,8 +382,9 @@ export function GatePolicyPanel({
               event.preventDefault()
               const name = branch.trim()
               mutation.mutate({
-                path: '',
+                path: editing ? `/${encodeURIComponent(editing.id)}/edit` : '',
                 body: {
+                  ...(editing ? { expectedHash: editing.definitionHash } : {}),
                   expectedSelectionId: query.data?.currentSelectionId,
                   branchRef: name.startsWith('refs/heads/')
                     ? name
@@ -392,6 +403,7 @@ export function GatePolicyPanel({
               </label>
               <Input
                 id={`policy-branch-${repositoryId}`}
+                disabled={!!editing}
                 placeholder='development'
                 value={branch}
                 maxLength={255}
@@ -474,7 +486,11 @@ export function GatePolicyPanel({
                   standards.isError
                 }
               >
-                {mutation.isPending ? 'Creating…' : 'Create draft'}
+                {mutation.isPending
+                  ? 'Saving…'
+                  : editing
+                    ? 'Save draft'
+                    : 'Create draft'}
               </Button>
             </DialogFooter>
           </form>
@@ -604,8 +620,9 @@ export function GatePolicyPanel({
                 </details>
                 {stale && (
                   <p className='rounded-lg border border-warning/20 bg-warning/5 p-3 text-sm text-warning'>
-                    The selected standards changed. Create a new version before
-                    approval or publication.
+                    {selected.state === 'DRAFT'
+                      ? 'Standards changed. Edit this draft to use the latest saved standards before approval.'
+                      : 'Standards changed. Create a new version before approval or publication.'}
                   </p>
                 )}
                 {failure}
@@ -645,6 +662,38 @@ export function GatePolicyPanel({
                   >
                     Close
                   </Button>
+                  {canDraft && selected.state === 'DRAFT' && (
+                    <Button
+                      variant='outline'
+                      disabled={
+                        mutation.isPending ||
+                        standards.isPending ||
+                        standards.isError ||
+                        !query.data?.currentSelectionId
+                      }
+                      onClick={() => {
+                        mutation.reset()
+                        setEditing(selected)
+                        setBranch(branchName(selected.branchRef))
+                        setRequired(
+                          selected.definition.rules
+                            .filter(
+                              (rule) =>
+                                rule.required &&
+                                optionalRules.some(
+                                  (optional) => optional.id === rule.id
+                                )
+                            )
+                            .map((rule) => rule.id)
+                        )
+                        setSelectedId(null)
+                        setDraftOpen(true)
+                      }}
+                    >
+                      <Pencil className='size-4' aria-hidden='true' />
+                      Edit draft
+                    </Button>
+                  )}
                   {canPublish &&
                     !stale &&
                     selected.state === 'DRAFT' &&

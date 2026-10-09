@@ -36,7 +36,9 @@ it('shows the compliance section and unknown state immediately instead of an inv
     />
   )
   expect(html).toContain('Engineering policy compliance')
-  expect(html).toContain('Not enough evidence')
+  expect(html).not.toContain('Not enough evidence')
+  expect(html).not.toContain('with missing or older evidence')
+  expect(html).toContain('Missing evidence')
   expect(html).toContain('Not available')
   expect(html).not.toContain('>100%</p>')
 })
