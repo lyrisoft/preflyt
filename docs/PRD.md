@@ -187,6 +187,20 @@ Preflyt ships first-party versioned policy packs for baseline engineering, appli
 
 Preflyt uses OIDC identity with **NestJS-enforced organization and repository-scoped RBAC**, predefined roles and least-privilege action permissions. **P0** includes owner bootstrap, membership, roles, repository grants, server-side checks and audit; **P1** scopes assessment/evidence access; **P2** separates policy publishing/enforcement/exception approvals; **P3** requires independent execution admission; **P4** scopes AI provider/model management; later phases add QA, performance and production permissions. No self-approved policy waivers, implicit cross-organization access or frontend-only enforcement. See [RBAC specification](product/rbac-and-authorization.md).
 
+### Engineering Contributors module
+
+Preflyt shall provide a **Contributors** item in the Engineering sidebar when implemented in P3. The list shows authorized GitHub contributors, activity metrics, charts, policy adherence and assessment coverage, with repository/time filters. Selecting a contributor opens a detail page with their repositories, commits, PRs, reviews, assessments, findings and policy evidence. P1 captures identity/activity metadata; P2 links revision-specific gate evidence; P3 ships the complete usable list and drill-down; P10/P11 add advanced trends. Missing evidence and private GitHub membership are explicitly represented. No opaque AI-generated employee productivity scores. See [Engineering Contributors](product/engineering-contributors.md).
+
+### MVP experience contract
+
+The [MVP Product Experience Contract](product/mvp-product-experience.md) is the authoritative target for navigation, enterprise dashboard, repository/assessment/finding/policy/contributor pages and role-aware states. The [Enterprise UI Guidelines](design/enterprise-ui-guidelines.md) and [Codex/Claude implementation guardrails](agents/product-implementation-guardrails.md) require API-backed, evidence-based, accessible, incremental implementation while preserving existing Shadcn Admin and P0–P11 order. These documents do not imply unimplemented pages already exist.
+
+### GitHub organization ruleset governance (P2)
+
+Preflyt shall expose **Governance → Quality Gates → GitHub Rulesets** with Standard, Strict and Custom safe-default profiles, repository/branch targeting, exact Preflyt Check Run source mapping, preflight, preview/diff, explicit authorization, deploy, drift and rollback. GitHub Actions supplies CI evidence; Preflyt's deterministic gate publishes a stable check; GitHub enforces it. Use a separately authorized organization Administration-write integration; never silently change unmanaged rulesets or activate an unverified required check. See [GitHub Ruleset Management](product/github-ruleset-management.md).
+
+**Ruleset Insights (P2.R5):** each GitHub ruleset detail includes an Insights tab with source-backed evaluation counts, trend charts, failures by rule/repository, bypass events where attributable, filtered history and GitHub evidence links. Preflyt quality-gate outcomes are displayed separately. Attribution must use the detailed Rule Suites API's matching ruleset source ID, not suite-level results or fabricated totals. See [Ruleset Management](product/github-ruleset-management.md).
+
 ## 6. Supported SDLC stages and user journeys
 
 ### 6.1 Lifecycle coverage
@@ -480,6 +494,10 @@ Open-source component/rule/model license checks are mandatory before redistribut
 Every release must publish images and a **complete single-command Docker Compose install** for its current services (frontend, NestJS API, PostgreSQL, Redis, workers, LiteLLM and object store where needed), with versioned `.env.example`, startup/health checks, safe migrations, durable volumes, upgrade and rollback instructions. Configured users should start all required services via `docker compose up -d` with no host application dependency installation. Optional OTEL Collector and local model services may be separate Compose profiles.
 
 **OpenTelemetry must be vendor-neutral.** The root example environment declares standard OTEL exporter endpoint, protocol, header, traces/metrics/logs exporters, resource metadata, propagation and sampling; Compose injects shared settings and distinct `OTEL_SERVICE_NAME` values into first-party services. Users can configure any compatible OTLP endpoint without editing code. Failures of telemetry exporters must not make core application requests fail. See [OTel contract](deployment/opentelemetry-env.md). **Current implementation:** root `.env.example`, complete Compose services, optional collector and API/worker OTLP traces, metrics and structured logs are implemented. Published images require the release workflow to succeed; future model gateway/evidence storage and Kubernetes execution remain planned.
+
+### Kubernetes deployment architecture
+
+**Selected mode:** Docker Compose for standalone self-hosting; **Helm-bootstrapped Preflyt Operator and CRDs for Kubernetes**. Helm installs the controller and CRDs, and a Preflyt custom resource describes the application desired state. Helm's standard CRD packaging cannot be toggled with ordinary chart values; `--skip-crds` is supported when administrators manage CRDs separately. Operator lifecycle management must cover readiness, secrets references, safe upgrades, stateful dependency ownership and drift. A direct Helm application chart is an optional fallback. Kubernetes implementation is **planned** and must not block existing Compose releases. See [ADR-0006](architecture/ADR-0006-kubernetes-operator-deployment.md).
 
 ### Execution trust boundary: mandatory in MVP
 

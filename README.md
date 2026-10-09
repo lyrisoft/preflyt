@@ -55,6 +55,16 @@ Its main output is an **Engineering Readiness Report**: a traceable account of w
 
 For detailed user journeys, triggers, check examples, stage contracts and performance workloads, see [Capabilities across the SDLC](docs/product/sdlc-capabilities.md).
 
+**GitHub organization ruleset management (P2):** Quality Gates → GitHub Rulesets provides safe-default Standard/Strict/Custom protection profiles, verified Preflyt check integration, preview/approval before deployment, and drift monitoring. GitHub remains the merge enforcement authority. See [GitHub Ruleset Management](docs/product/github-ruleset-management.md).
+
+## Engineering Contributors (planned)
+
+A **Contributors** sidebar module will show authorized GitHub contributors, activity/assessment coverage/policy adherence metrics and charts. Each contributor opens a profile detailing repositories, PRs, commits, reviews, findings and evidence-backed policy outcomes. P1 captures identities/activity, P2 associates gate evidence, and P3 delivers the working UI; later phases add broader trends. See [Engineering Contributors](docs/product/engineering-contributors.md).
+
+## MVP product experience and implementation guardrails
+
+The [MVP Product Experience Contract](docs/product/mvp-product-experience.md) defines the enterprise sidebar, top navigation, overview/dashboard, every MVP page, contributors drill-down, states and acceptance. The [Enterprise UI Guidelines](docs/design/enterprise-ui-guidelines.md) specify design consistency, and [Agent Implementation Guardrails](docs/agents/product-implementation-guardrails.md) guide Codex/Claude. These are **target specifications**, not claims that every page is already implemented.
+
 ## Built-in Engineering Standards Library
 
 Preflyt ships with versioned, first-party engineering policy packs so organizations can start with established rules rather than authoring policies from scratch. The initial library covers Baseline Engineering, Application Security, Backend Services, Frontend Applications and Infrastructure as Code; further packs cover API, database, production readiness, performance and compliance as their assessment adapters mature.
@@ -243,7 +253,7 @@ An optional local Super Admin break-glass login is available at `/super-admin/lo
 
 To enable repository onboarding, configure the GitHub App ID, client ID/secret and private key in that API environment. Set the GitHub App **Setup URL** to `<API_ORIGIN>/github/setup/callback` and its OAuth callback URL to the exact `GITHUB_APP_OAUTH_CALLBACK_URL`. Leave “Request user authorization during installation” disabled; Preflyt starts a separate state/PKCE-bound authorization step and verifies that the installing GitHub user can access the returned installation. The API creates short-lived tokens limited to `metadata:read` and `contents:read` and never stores them.
 
-For container deployment, use the [Docker Compose runbook](docs/operations/docker-compose.md).
+For container deployment, use the [Docker Compose runbook](docs/operations/docker-compose.md). **Kubernetes direction:** Helm bootstraps the Preflyt CRDs and Operator; the Operator reconciles the application from a Preflyt custom resource. A direct application Helm chart may be offered as a fallback. This Kubernetes packaging is planned, **not implemented**. See [ADR-0006](docs/architecture/ADR-0006-kubernetes-operator-deployment.md).
 
 Workspace checks: `pnpm build`, `pnpm lint`, `pnpm typecheck`, `pnpm format:check`, `pnpm test`, and `pnpm audit`. Track work in GitHub issues; development work is completed, audited and committed on `development`.
 

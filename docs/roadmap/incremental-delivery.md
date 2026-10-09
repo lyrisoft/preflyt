@@ -73,6 +73,8 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 
 - **P1.RBAC:** Restrict CI evidence, assessments and findings to authorized repository members; validate worker context and artifact access.
 
+- **P1.Contributors:** Capture GitHub contributor IDs, PR authors, reviewers and commit associations with signed-event provenance; show verified identities on PR/CI details. See [Contributors specification](../product/engineering-contributors.md).
+
 ### P2 — Policy Quality Gates
 
 **User value:** A policy owner defines a simple standard and a developer sees an accurate advisory or blocking GitHub quality check.
@@ -88,6 +90,12 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 
 - **P2.RBAC:** Separate policy drafting, publication, enforcement and exception approval permissions; reject self-approval.
 
+- **P2.Contributors:** Attribute deterministic gate outcomes and evidence completeness to PR authors and revisions, with first-pass and final assessment status; do not conflate missing evidence with compliance.
+
+- **P2.R1–R5 — GitHub Ruleset Management:** read organization rulesets; Standard/Strict/Custom safe-default wizard; publish and preflight stable Preflyt PR check; authorized diff/approval/deploy; sync, drift and rollback. Each increment independently usable; never require a check before publishing is verified. See [GitHub Ruleset Management](../product/github-ruleset-management.md).
+
+- **P2.R5 Insights:** Extend ruleset synchronization with GitHub Rule Suites ingestion, ruleset-ID-based detailed evaluation attribution, metrics/charts, filtered history and evidence drill-down. Separate GitHub evaluations from Preflyt gate outcomes; enforce RBAC and rate-limit-aware pagination. See [Ruleset Management](../product/github-ruleset-management.md).
+
 ### P3 — Native Secure Validation
 
 **User value:** Preflyt can perform useful code/security/IaC validation itself, rather than depending exclusively on existing CI.
@@ -102,6 +110,8 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 **Done when:** A seeded vulnerability, failing test and unsafe IaC config are caught on pinned repos in an approved sandbox and affect the P2 gate; no untrusted job runs if approval/egress/security preflight fails. An ingest-only installation remains usable.
 
 - **P3.RBAC:** Enforce separate execution admission and least-privilege worker identities; repository access alone never authorizes unsafe execution.
+
+- **P3.Contributors:** Deliver a functional **Contributors** sidebar entry with searchable/paginated contributor list, activity/coverage/adherence metrics, charts, repository filters and individual detail pages (PRs, commits, reviews, findings, policy evidence). Include RBAC and source drill-down; see [Contributors specification](../product/engineering-contributors.md).
 
 ### P4 — AI Engineering Explanations (optional)
 
@@ -225,6 +235,10 @@ These subphases map to the global deployment phases above and may be tracked as 
 | Production | O1 incidents/deploy mapping (P10) | O2 correlation to missed checks (P10) | O3 policy proposal and approval (P10) | Outcome trends later |
 
 Built-in pack lifecycle: **P0 catalogue and recommendations → P1 evidence mapping → P2 deterministic enforcement → P3 native checks → P6–P9 specialized QA/performance packs → P10 owner-approved policy improvements**. See [Engineering Standards Library](../product/engineering-standards-library.md).
+
+## Kubernetes packaging decision
+
+**Preferred Kubernetes mode:** Helm installs Preflyt CRDs and the Preflyt Operator; a Preflyt custom resource causes the Operator to reconcile the application. Docker Compose remains the fully supported standalone path. P0 records the CRD/operator configuration and packaging design without delaying current implementation; P1–P3 add a usable minimal Operator as an independently tested Kubernetes deployment slice; later phases expand lifecycle support. Helm `--skip-crds` permits externally managed CRDs; packaged CRDs are not automatically upgraded/deleted. The direct application Helm chart is an optional fallback. See [ADR-0006](../architecture/ADR-0006-kubernetes-operator-deployment.md).
 
 ## 5. Definition of deployable and usable: mandatory phase checklist
 
