@@ -4,7 +4,7 @@ import {
   Inject,
   Injectable,
   Optional,
-  ServiceUnavailableException,
+  ServiceUnavailableException
 } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service.js'
 import { GitHubIdentityProvider } from './github-identity-provider.js'
@@ -38,26 +38,29 @@ export class GitHubUserAccessService {
     await this.repositoryIds(identityId, organizationId, refresh)
     const account = await this.db.gitHubUserAccount.findUnique({
       where: { identityId_host: { identityId, host: 'github.com' } },
-      include: { credential: true },
+      include: { credential: true }
     })
     const link = await this.db.gitHubOrganizationLink.findUnique({
-      where: { organizationId },
+      where: { organizationId }
     })
     const installation = await this.db.gitHubInstallation.findFirst({
-      where: { organizationId, active: true },
+      where: { organizationId, active: true }
     })
-    if (!account?.credential || !link || !installation)
+    if (!link || !installation)
       throw new ForbiddenException(
-        'Sign in with GitHub in a linked organization to sync members'
+        'Link this workspace to an active GitHub organization before syncing members'
       )
-    const key = `github-member-directory:${organizationId}:${link.githubOrganizationId}:${account.id}:${installation.id}:${installation.accessRevision}`
+    if (!account) await this.requireDirectoryAdmin(identityId, organizationId)
+    const key = `github-member-directory:${organizationId}:${link.githubOrganizationId}:${account?.id ?? `installation-admin-${identityId}`}:${installation.id}:${installation.accessRevision}`
     let snapshot = this.directories.get(key)
     if (!snapshot) {
       const cached = await this.cache?.get(key)
       if (cached) {
         try {
           snapshot = JSON.parse(cached)
-        } catch {}
+        } catch {
+          snapshot = undefined
+        }
       }
     }
     if (
@@ -65,20 +68,47 @@ export class GitHubUserAccessService {
       snapshot &&
       Array.isArray(snapshot.members) &&
       Date.parse(snapshot.syncedAt) > Date.now() - 300000
-    )
-      return snapshot
-    const pending = this.directoryRefreshes.get(key)
-    if (pending) return pending
-    const request = (async () => {
-      const members = await this.provider.members(
-        decryptGitHubUserTokens(account.id, account.credential!.encryptedTokens)
-          .accessToken,
-        link.login
+    ) {
+      await this.assertDirectoryContext(
+        identityId,
+        organizationId,
+        link.githubOrganizationId,
+        installation.id,
+        installation.accessRevision,
+        !account
       )
+      return snapshot
+    }
+    const pending = this.directoryRefreshes.get(key)
+    if (pending) {
+      const result = await pending
+      await this.assertDirectoryContext(
+        identityId,
+        organizationId,
+        link.githubOrganizationId,
+        installation.id,
+        installation.accessRevision,
+        !account
+      )
+      return result
+    }
+    const request = (async () => {
+      const members = account
+        ? await this.provider.members(
+            decryptGitHubUserTokens(
+              account.id,
+              account.credential!.encryptedTokens
+            ).accessToken,
+            link.login
+          )
+        : await this.provider.installationMembers(
+            installation.id,
+            link.githubOrganizationId
+          )
       // Membership/installation checks still protect provider data fetched during a concurrent revocation.
       await this.repositoryIds(identityId, organizationId, true)
       const current = await this.db.gitHubInstallation.findUnique({
-        where: { id: installation.id },
+        where: { id: installation.id }
       })
       if (
         !current?.active ||
@@ -88,6 +118,14 @@ export class GitHubUserAccessService {
         throw new ForbiddenException(
           'GitHub access changed during sync. Try again.'
         )
+      await this.assertDirectoryContext(
+        identityId,
+        organizationId,
+        link.githubOrganizationId,
+        installation.id,
+        installation.accessRevision,
+        !account
+      )
       const result = { syncedAt: new Date().toISOString(), members }
       if (this.directories.size >= 128) this.directories.clear()
       this.directories.set(key, result)
@@ -105,14 +143,38 @@ export class GitHubUserAccessService {
     await this.repositoryIds(identityId, organizationId, true)
     const account = await this.db.gitHubUserAccount.findUnique({
       where: { identityId_host: { identityId, host: 'github.com' } },
-      include: { credential: true },
+      include: { credential: true }
     })
     const link = await this.db.gitHubOrganizationLink.findUnique({
-      where: { organizationId },
+      where: { organizationId }
     })
-    if (!account?.credential || !link)
+    const installation = await this.db.gitHubInstallation.findFirst({
+      where: { organizationId, active: true }
+    })
+    if (!link || !installation)
       throw new ForbiddenException(
-        'Sign in with GitHub to grant GitHub member access'
+        'Link this workspace to an active GitHub organization before assigning members'
+      )
+    if (!account) {
+      await this.requireDirectoryAdmin(identityId, organizationId)
+      const user = await this.provider.resolveInstallationMember(
+        installation.id,
+        link.githubOrganizationId,
+        username
+      )
+      await this.assertDirectoryContext(
+        identityId,
+        organizationId,
+        link.githubOrganizationId,
+        installation.id,
+        installation.accessRevision,
+        true
+      )
+      return user
+    }
+    if (!account.credential)
+      throw new ServiceUnavailableException(
+        'Your GitHub authorization has expired. Sign in with GitHub again.'
       )
     return this.provider.resolveMember(
       decryptGitHubUserTokens(account.id, account.credential.encryptedTokens)
@@ -121,6 +183,43 @@ export class GitHubUserAccessService {
       link.githubOrganizationId,
       username
     )
+  }
+  private async requireDirectoryAdmin(
+    identityId: string,
+    organizationId: string
+  ) {
+    const member = await this.db.organizationMembership.findUnique({
+      where: { organizationId_identityId: { organizationId, identityId } }
+    })
+    if (!member?.active || !['OWNER', 'ADMIN'].includes(member.role))
+      throw new ForbiddenException(
+        'An active workspace Owner or Admin role is required to manage GitHub members'
+      )
+  }
+  private async assertDirectoryContext(
+    identityId: string,
+    organizationId: string,
+    githubOrganizationId: bigint,
+    installationId: bigint,
+    accessRevision: number,
+    admin: boolean
+  ) {
+    if (admin) await this.requireDirectoryAdmin(identityId, organizationId)
+    const link = await this.db.gitHubOrganizationLink.findUnique({
+      where: { organizationId }
+    })
+    const installation = await this.db.gitHubInstallation.findUnique({
+      where: { id: installationId }
+    })
+    if (
+      link?.githubOrganizationId !== githubOrganizationId ||
+      !installation?.active ||
+      installation.organizationId !== organizationId ||
+      installation.accessRevision !== accessRevision
+    )
+      throw new ForbiddenException(
+        'GitHub access changed during sync. Try again.'
+      )
   }
   async repositoryIds(
     identityId: string,

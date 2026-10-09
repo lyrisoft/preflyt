@@ -57,6 +57,8 @@ const provider = {
       permissions: { members: 'read' },
     },
   })),
+  installationMembers: vi.fn(async () => [{ id: '102', login: 'developer', avatarUrl: null }]),
+  resolveInstallationMember: vi.fn(async () => ({ id: 102n, login: 'developer', displayName: 'Developer', avatarUrl: null })),
   members: vi.fn(async () => [
     { id: '102', login: 'developer', avatarUrl: null },
   ]),
@@ -644,4 +646,20 @@ it('accepts the same verified workspace fallback for a link proof started before
   const entered = await login.enter(result.challengeToken, '41', 'http://localhost:5173', legacy.sessionToken)
   expect(entered.returnPath).toBe('/access-control?tab=github')
   expect(await db.gitHubOrganizationLink.findUnique({ where: { organizationId: legacy.organization.id } })).not.toBeNull()
+})
+
+it('lets the original recovery admin sync and assign linked GitHub members without replacing the session', async () => {
+  const legacy = await legacyWorkspace()
+  await db.membership.update({ where: { identityId: legacy.identity.id }, data: { role: 'SUPER_ADMIN' } })
+  const result = await linkingCallback(legacy.sessionToken)
+  await login.enter(result.challengeToken, '41', 'http://localhost:5173', legacy.sessionToken)
+  const current = await auth.currentSession(legacy.sessionToken)
+  expect(current).toMatchObject({ authenticated: true, identityId: legacy.identity.id, platformAdmin: true })
+  expect(await db.gitHubUserAccount.findFirst({ where: { identityId: legacy.identity.id } })).toBeNull()
+  const controller = new OrganizationController(db, access, auth, userAccess)
+  const req = { preflytSession: current, headers: { origin: 'http://localhost:5173' } } as Parameters<typeof controller.syncGitHubDirectory>[0]
+  expect(await controller.syncGitHubDirectory(req)).toMatchObject({ members: [{ login: 'developer' }] })
+  await controller.addGitHub({ username: 'developer', role: 'DEVELOPER', active: true, repositoryIds: [] }, req)
+  expect(await db.organizationMembership.count({ where: { organizationId: legacy.organization.id, role: 'DEVELOPER', active: true } })).toBe(1)
+  expect(await auth.currentSession(legacy.sessionToken)).toMatchObject({ authenticated: true, identityId: legacy.identity.id })
 })

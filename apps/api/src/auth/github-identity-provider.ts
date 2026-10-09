@@ -222,6 +222,25 @@ export class GitHubIdentityProvider {
       'GitHub organization list is too large. Contact your administrator.',
     )
   }
+  async installationMembers(installationId: bigint, organizationId: bigint) {
+    return this.app.withOrganizationMembers(
+      installationId,
+      organizationId,
+      (token, login) => this.members(token, login),
+    )
+  }
+  async resolveInstallationMember(
+    installationId: bigint,
+    organizationId: bigint,
+    username: string,
+  ) {
+    return this.app.withOrganizationMembers(
+      installationId,
+      organizationId,
+      (token, login) =>
+        this.resolveMember(token, login, organizationId, username),
+    )
+  }
   async members(token: string, organizationLogin: string) {
     const members = new Map<
       string,

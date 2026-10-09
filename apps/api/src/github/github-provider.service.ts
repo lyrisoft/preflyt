@@ -74,7 +74,7 @@ export class GitHubProviderService {
   private async installationToken(
     installationId: bigint,
     repositoryId?: bigint,
-    permission: 'contents' | 'pull_requests' | 'metadata' | 'actions' | 'administration' = 'contents',
+    permission: 'contents' | 'pull_requests' | 'metadata' | 'actions' | 'administration' | 'members' = 'contents',
   ) {
     const installation = await this.prisma?.gitHubInstallation.findUnique({
       where: { id: installationId },
@@ -157,6 +157,20 @@ export class GitHubProviderService {
     return this.limiter.singleFlight(`verify:${installationId}`, () =>
       this.loadInstallation(installationId),
     )
+  }
+  /** Internal organization directory access; never return the token to a client. */
+  async withOrganizationMembers<T>(
+    installationId: bigint,
+    organizationId: bigint,
+    read: (token: string, login: string) => Promise<T>,
+  ): Promise<T> {
+    const installation = await this.verifyInstallation(installationId)
+    if (installation.accountType !== 'Organization' || installation.accountId !== organizationId)
+      throw new ForbiddenException('The GitHub installation does not match this linked organization')
+    if (!['read', 'write'].includes(installation.permissions.members))
+      throw new ForbiddenException('The GitHub App needs Organization Members: Read-only. Approve the updated installation permissions, then retry sync.')
+    const token = await this.installationToken(installationId, undefined, 'members')
+    return read(token, installation.accountLogin)
   }
   private async loadInstallation(installationId: bigint) {
     let data
