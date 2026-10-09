@@ -15,19 +15,13 @@ import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ConfigDrawer } from '@/components/config-drawer'
 import { AppBreadcrumbs } from '@/components/layout/app-breadcrumbs'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
+import { RepositoryPicker } from '@/components/repository-picker'
 import { Search } from '@/components/search'
 import { StatusBadge } from '@/components/status-badge'
 import { ThemeSwitch } from '@/components/theme-switch'
@@ -337,29 +331,18 @@ export function WorkspaceModule({ module }: { module: Module }) {
                         Repository scope
                       </label>
                     </div>
-                    <Select
+                    <RepositoryPicker
+                      repositories={repositories}
                       value={repository?.githubId ?? ''}
+                      aria-labelledby='workspace-repository-label'
+                      className='w-full sm:w-80'
                       onValueChange={(value) =>
                         void navigate({
                           to: `/${module}`,
                           search: { repository: value },
                         })
                       }
-                    >
-                      <SelectTrigger
-                        aria-labelledby='workspace-repository-label'
-                        className='w-full sm:w-80'
-                      >
-                        <SelectValue placeholder='Select a repository' />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {repositories.map((repo) => (
-                          <SelectItem key={repo.githubId} value={repo.githubId}>
-                            {repo.fullName}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    />
                   </div>
                   <div className='flex flex-wrap items-center gap-2'>
                     <Badge variant='outline' className='text-muted-foreground'>

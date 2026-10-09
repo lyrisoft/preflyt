@@ -38,6 +38,7 @@ import { AppBreadcrumbs } from '@/components/layout/app-breadcrumbs'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
+import { RepositoryPicker } from '@/components/repository-picker'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { RelativeTime } from '@/features/repositories/relative-time'
@@ -131,24 +132,15 @@ export function Dashboard() {
             </p>
           </div>
           <div className='flex flex-wrap items-center gap-2'>
-            <Select
+            <RepositoryPicker
+              repositories={data?.choices ?? []}
               value={repository ?? 'all'}
+              allowAll
+              aria-label='Filter repositories'
               onValueChange={(value) =>
                 filters({ repository: value === 'all' ? undefined : value })
               }
-            >
-              <SelectTrigger className='w-52' aria-label='Filter repositories'>
-                <SelectValue placeholder='Repository' />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value='all'>All repositories</SelectItem>
-                {data?.choices.map((repo) => (
-                  <SelectItem key={repo.githubId} value={repo.githubId}>
-                    {repo.fullName}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            />
             <Select
               value={days}
               onValueChange={(value) =>
@@ -258,8 +250,8 @@ export function Dashboard() {
                       </Card>
                     ))}
                   </div>
-                  <div className='grid gap-4 xl:grid-cols-3'>
-                    <div className='min-w-0 xl:col-span-2'>
+                  <div className='grid gap-4 xl:grid-cols-2'>
+                    <div className='min-w-0'>
                       <ActivityHeatmap
                         key={`${days}-${repository}`}
                         from={data.period.from}

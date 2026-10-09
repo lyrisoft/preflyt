@@ -54,7 +54,7 @@ export function ActivityHeatmap({
       </CardHeader>
       <CardContent>
         <div className='overflow-x-auto pb-2'>
-          <div className='flex w-max gap-2'>
+          <div className='mx-auto flex w-max gap-2'>
             <div
               aria-hidden='true'
               className='grid grid-rows-8 gap-1 text-[10px] leading-4 text-muted-foreground'
