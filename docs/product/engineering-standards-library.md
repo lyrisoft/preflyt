@@ -100,7 +100,11 @@ A built-in profile recommends configuration; it must not silently enable blockin
 - **AI:** recommends pack selection, explains findings, may propose a draft policy change; cannot select/activate enforce mode, grant exceptions, or modify a quality gate.
 - **Licensing:** license/rulepack distribution rights must be reviewed for included third-party rules; built-in metadata does not imply redistribution permission for all external scanner rule sets.
 
-## Phased deliverables
+## Team-scoped policy inheritance
+
+Organizations can assign versioned standards at organization, **team** or individual repository scope. A GitHub-imported team's accessible repositories are **not** automatically its policy scope: an administrator explicitly approves repository associations. Effective policies compose mandatory organization baseline, all applicable approved team assignments and repository rules, with branch/stage applicability, source provenance, deterministic deduplication and explicit conflict resolution. Repository overrides cannot silently weaken inherited mandatory requirements. Preview affected repositories and require approval for enforced scope expansion. See [Teams and Policy Inheritance](teams-and-policy-inheritance.md).
+
+## Phased deliverables## Phased deliverables
 
 **P0 — catalogue and recommendations:** deliver actual browsable pack details, supported-vs-planned tags, deterministic stack-based recommendations and authorized organization/repository selection stored by version. This adds usable value to repository posture **even before policy enforcement**.
 
