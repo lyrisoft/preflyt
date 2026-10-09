@@ -7,14 +7,14 @@ import {
   Query,
   Req,
   UseGuards,
-} from '@nestjs/common'
-import type { Request } from 'express'
+} from "@nestjs/common";
+import type { Request } from "express";
 import {
   SessionGuard,
   type AuthenticatedSession,
-} from '../auth/session.guard.js'
-import { GitHubRulesetService } from './github-ruleset.service.js'
-@Controller('github/repositories/:repositoryId/rulesets')
+} from "../auth/session.guard.js";
+import { GitHubRulesetService } from "./github-ruleset.service.js";
+@Controller("github/repositories/:repositoryId/rulesets")
 @UseGuards(SessionGuard)
 export class GitHubRulesetController {
   constructor(
@@ -22,30 +22,52 @@ export class GitHubRulesetController {
     private readonly rulesets: GitHubRulesetService,
   ) {}
   @Get()
-  @Header('Cache-Control', 'no-store')
+  @Header("Cache-Control", "no-store")
   list(
     @Req() req: Request & { preflytSession?: AuthenticatedSession },
-    @Param('repositoryId') repositoryId: string,
-    @Query('page') page?: string,
+    @Param("repositoryId") repositoryId: string,
+    @Query("page") page?: string,
   ) {
     return this.rulesets.list(
       req.preflytSession!,
       repositoryId,
       page === undefined ? 1 : Number(page),
-    )
+    );
   }
-  @Get(':rulesetId/insights')
-  @Header('Cache-Control','no-store')
-  insights(@Req() req:Request & {preflytSession:AuthenticatedSession},@Param('repositoryId') repositoryId:string,@Param('rulesetId') id:string,@Query('page') page?:string,@Query('period') period?:string,@Query('ref') ref?:string,@Query('actor') actor?:string,@Query('result') result?:string) {
-    return this.rulesets.insights(req.preflytSession,repositoryId,Number(id),{page:page===undefined?1:Number(page),period:period??'week',ref,actor,result})
+  @Get(":rulesetId/insights")
+  @Header("Cache-Control", "no-store")
+  insights(
+    @Req() req: Request & { preflytSession: AuthenticatedSession },
+    @Param("repositoryId") repositoryId: string,
+    @Param("rulesetId") id: string,
+    @Query("page") page?: string,
+    @Query("period") period?: string,
+    @Query("ref") ref?: string,
+    @Query("actor") actor?: string,
+    @Query("result") result?: string,
+    @Query("source") source?: string,
+  ) {
+    return this.rulesets.insights(
+      req.preflytSession,
+      repositoryId,
+      Number(id),
+      {
+        page: page === undefined ? 1 : Number(page),
+        period: period ?? "week",
+        ref,
+        actor,
+        result,
+        source,
+      },
+    );
   }
-  @Get(':rulesetId')
-  @Header('Cache-Control', 'no-store')
+  @Get(":rulesetId")
+  @Header("Cache-Control", "no-store")
   detail(
     @Req() req: Request & { preflytSession?: AuthenticatedSession },
-    @Param('repositoryId') repositoryId: string,
-    @Param('rulesetId') id: string,
+    @Param("repositoryId") repositoryId: string,
+    @Param("rulesetId") id: string,
   ) {
-    return this.rulesets.detail(req.preflytSession!, repositoryId, Number(id))
+    return this.rulesets.detail(req.preflytSession!, repositoryId, Number(id));
   }
 }

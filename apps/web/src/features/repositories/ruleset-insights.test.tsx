@@ -49,3 +49,22 @@ it('hides cached evaluation rows on permission/provider errors', () => {
   expect(html).not.toContain('Active rules passed')
   expect(html).not.toContain('No matching evaluations')
 })
+
+it('shows disabled or failed saved-history collection without claiming complete coverage', () => {
+  state.query.data = {
+    ...(state.query.data as object),
+    fetchedAt: null,
+    collection: {
+      enabled: false,
+      error: false,
+      lastSweepAt: null,
+      retentionDays: 90,
+    },
+  }
+  const html = render()
+  expect(html).toContain('Saved GitHub evaluations')
+  expect(html).toContain('History collection is disabled')
+  expect(html).toContain('No history collected yet')
+  expect(html).toContain('first collection sweep has not finished')
+  expect(html).toContain('Retention: 90 days')
+})

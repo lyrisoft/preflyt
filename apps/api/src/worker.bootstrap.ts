@@ -1,3 +1,4 @@
+import { RulesetHistoryService } from './github/ruleset-history.service.js'
 import { ReadinessAutomationService } from './assessments/readiness-automation.service.js'
 import { AssessmentService } from './assessments/assessment.service.js'
 import { CheckPublicationService } from './assessments/check-publication.service.js'
@@ -48,6 +49,8 @@ async function start() {
   const githubProvider = new GitHubProviderService(cache, prisma)
   const sync = new GitHubSyncService(prisma, githubProvider)
   const prSync = new GitHubPrSyncService(prisma, githubProvider)
+  const rulesetHistory = new RulesetHistoryService(prisma, githubProvider)
+  let historyRun: Promise<void> | undefined
   const processor = new GitHubEventProcessor(prisma)
   const dispatcher = new GitHubEventDispatcher(prisma, queue)
   const worker = new Worker(
@@ -167,6 +170,7 @@ async function start() {
           })
       }
       if (!automationRun) automationRun = automation.reconcile().catch(warn).finally(() => { automationRun = undefined })
+      if (!historyRun) historyRun = rulesetHistory.reconcile().catch(warn).finally(() => { historyRun = undefined })
       // Test Redis even when the inbox is empty; readiness is not a stale process flag.
       await queue.getJobCounts('wait')
       if (!closing)
@@ -186,6 +190,7 @@ async function start() {
     clearInterval(timer)
     sync.close()
     prSync.close()
+    rulesetHistory.close()
     githubProvider.close()
     const force = consumer.status !== 'ready'
     if (force) {
@@ -203,6 +208,7 @@ async function start() {
     consumer.disconnect()
     await syncRun
     await automationRun
+    await historyRun
     cache.onModuleDestroy()
     await prisma.$disconnect()
     await unlink(heartbeat).catch(() => undefined)

@@ -858,7 +858,8 @@ export class GitHubProviderService {
     throw new ServiceUnavailableException('Protection inventory exceeds the safe activation limit')
   }
 
-  async readRulesetInsights(installationId:bigint,repositoryId:bigint,rulesetId:number,options:{page:number;period:string;ref?:string;actor?:string;result?:string}) {
+  async readRepositoryRuleSuites(installationId:bigint,repositoryId:bigint,options:{page:number;period:string;ref?:string;actor?:string}) {
+    if(!Number.isInteger(options.page)||options.page<1||options.page>1000||!['hour','day','week','month'].includes(options.period))throw new BadRequestException('Invalid evaluation history page')
     const installation=await this.verifyInstallation(installationId)
     if(!['read','write'].includes(installation.permissions.administration))throw new ForbiddenException('Ruleset Insights needs repository Administration: read permission on the assessment App')
     const reader=await this.openRepository(installationId,repositoryId,'administration')
@@ -868,18 +869,27 @@ export class GitHubProviderService {
     if(options.actor)params.set('actor_name',options.actor)
     const rows=await reader.request<Record<string,any>[]>(`${root}?${params}`)
     if(!Array.isArray(rows)||rows.length>20||new Set(rows.map(row=>row.id)).size!==rows.length)throw new ServiceUnavailableException('Invalid GitHub evaluation history')
-    const suites:RulesetSuite[]=[]
+    const details:Record<string,any>[]=[]
     for(const row of rows) {
       if(!Number.isSafeInteger(row.id)||row.id<1||String(row.repository_id)!==repositoryId.toString())throw new ServiceUnavailableException('GitHub evaluation scope changed')
       const detail=await reader.request<Record<string,any>>(`${root}/${row.id}`)
       if(detail.id!==row.id)throw new ServiceUnavailableException('GitHub evaluation identity changed')
+      details.push(detail)
+    }
+    return {details,hasMore:rows.length===20&&options.page<1000,fetchedAt:new Date().toISOString(),repositoryName:reader.metadata.full_name}
+  }
+
+  async readRulesetInsights(installationId:bigint,repositoryId:bigint,rulesetId:number,options:{page:number;period:string;ref?:string;actor?:string;result?:string}) {
+    const page=await this.readRepositoryRuleSuites(installationId,repositoryId,options)
+    const suites:RulesetSuite[]=[]
+    for(const detail of page.details) {
       const match=attributedSuite(detail,repositoryId.toString(),rulesetId)
       if(match) {
         const rules=options.result&&options.result!=='all'?match.rules.filter(rule=>rule.result===options.result):match.rules
         if(rules.length)suites.push({...match,rules})
       }
     }
-    return {source:'GITHUB_RULE_SUITES',scope:'CURRENT_GITHUB_PAGE',counting:'MATCHED_RULE_OCCURRENCES',page:options.page,period:options.period,hasMore:rows.length===20&&options.page<1000,scannedSuites:rows.length,suites,summary:summarizeRulesetSuites(suites),fetchedAt:new Date().toISOString(),repositoryName:reader.metadata.full_name,rulesetId}
+    return {source:'GITHUB_RULE_SUITES',scope:'CURRENT_GITHUB_PAGE',counting:'MATCHED_RULE_OCCURRENCES',page:options.page,period:options.period,hasMore:page.hasMore,scannedSuites:page.details.length,suites,summary:summarizeRulesetSuites(suites),fetchedAt:page.fetchedAt,repositoryName:page.repositoryName,rulesetId}
   }
 
   async verifyReadinessBranch(installationId: bigint, repositoryId: bigint, branch: string) {

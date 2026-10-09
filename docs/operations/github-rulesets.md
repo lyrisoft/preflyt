@@ -98,8 +98,18 @@ an error rather than partial or misleading counts. Responses are `no-store`.
 Shared GitHub pacing, cooldowns and bounded read retries apply. Each page needs
 up to 21 upstream calls plus access verification; no unbounded period scan runs.
 
-This first slice fetches GitHub data on demand. **Retained historical snapshots,
-background ingestion, organization-wide comparisons, long-term trends and exact
-links to Preflyt assessments are not implemented yet.** Period totals must not be
-inferred from page counts. No browser or live GitHub acceptance is claimed by the
-local regression tests. See [GitHub Rule Suites API](https://docs.github.com/en/rest/repos/rule-suites).
+### Saved history and collection
+
+Select **Saved GitHub history** in Insights for retained evaluations. The API accepts `source=retained`, the same repository/ruleset/filter/page parameters, and an additional `period=quarter` (90 days). Counts remain page-scoped. Collection freshness and failures appear alongside the saved results. No collected history means no known results, not a passing repository.
+
+Deploy the additive migration `20261010000000_ruleset_insights_history`, regenerate the Prisma client, and restart the API/worker during your deployment. Enable `RULESET_INSIGHTS_SYNC_ENABLED=true` on the worker and API. Both services use `RULESET_INSIGHTS_RETENTION_DAYS` (default 90, accepted range 30–365). Compose forwards both settings. The feature defaults off; enabling it needs repository Administration: read on the assessment App, not privileged governance credentials.
+
+The worker reads at most five due selected, available repositories per reconciliation, at most 20 suites plus their details per repository page. It uses shared provider pacing/retry limits, a five-minute database lease, and a persisted page cursor. Further pages become due after five seconds; a finished sweep or failure waits five minutes. Access is rechecked transactionally against the current installation revision and repository selection before committing evidence. A stopped worker or expired lease cannot persist results. Native execution is not involved.
+
+Snapshots retain the stable repository ID, suite ID, matched ruleset IDs, source SHA, actor/ref, provider timestamp, fetch timestamp, original detail JSON and canonical SHA-256 digest. Duplicate IDs do not create extra results. An existing suite with different provider details leaves the original record intact, records a collection error and retries later; operators must investigate instead of silently replacing history. Reads verify the payload digest and indexed identity before attribution. Collection state and all page writes commit atomically.
+
+Enabled reconciliation deletes evaluations whose provider timestamp is older than the configured retention, including history from repositories that were deselected. History is unavailable to users without current repository `policy.read`, even if it was collected while they had access. Lowering retention permanently removes older snapshot data on the next reconciliation; audits and assessment records are separate. Disabled collection does not run retention cleanup; operators should retain the worker schedule or use their database retention procedure when decommissioning the feature.
+
+**Coverage is collected evaluations only.** Each sweep queries GitHub's month window; it cannot recover older history that was never collected. Provider pagination is a changing list, not an atomic historical snapshot. Sweeps overlap and deduplicate, but a completed sweep is not proof of complete period coverage. A full 1,000th page stops the sweep with a collection error instead of claiming a completed sweep. The page limit, access failures, missed runs and upstream availability can leave gaps. The UI shows these observations without claiming all PRs or all period totals.
+
+Organization-wide comparisons, longer trend charts and exact links to Preflyt assessments remain pending. No browser or live GitHub acceptance is claimed by the local regression tests. See [GitHub Rule Suites API](https://docs.github.com/en/rest/repos/rule-suites).

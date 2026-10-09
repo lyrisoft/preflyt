@@ -48,7 +48,13 @@ type Suite = {
 type Insights = {
   suites: Suite[]
   hasMore: boolean
-  fetchedAt: string
+  fetchedAt: string | null
+  collection?: {
+    enabled: boolean
+    error: boolean
+    lastSweepAt: string | null
+    retentionDays: number
+  }
   scannedSuites: number
   repositoryName: string
   summary: {
@@ -74,6 +80,7 @@ export function RulesetInsights({
 }) {
   const [page, setPage] = useState(1),
     [period, setPeriod] = useState('week'),
+    [source, setSource] = useState('live'),
     [result, setResult] = useState('all'),
     [ref, setRef] = useState(''),
     [actor, setActor] = useState(''),
@@ -86,12 +93,13 @@ export function RulesetInsights({
       rulesetId,
       page,
       period,
+      source,
       result,
       filters,
     ],
     queryFn: ({ signal }) =>
       governanceRequest<Insights>(
-        `/github/repositories/${repositoryId}/rulesets/${rulesetId}/insights?${new URLSearchParams({ page: String(page), period, result, ...filters })}`,
+        `/github/repositories/${repositoryId}/rulesets/${rulesetId}/insights?${new URLSearchParams({ page: String(page), period, source, result, ...filters })}`,
         undefined,
         signal
       ),
@@ -100,6 +108,25 @@ export function RulesetInsights({
   const data = query.isError ? undefined : query.data
   return (
     <div className='space-y-5'>
+      <div className='space-y-2'>
+        <Label htmlFor='insight-source'>History source</Label>
+        <Select
+          value={source}
+          onValueChange={(value) => {
+            setSource(value)
+            setPage(1)
+            if (value === 'live' && period === 'quarter') setPeriod('month')
+          }}
+        >
+          <SelectTrigger id='insight-source' className='w-full'>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value='live'>Current GitHub history</SelectItem>
+            <SelectItem value='retained'>Saved GitHub history</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
       <div className='grid gap-3 sm:grid-cols-2'>
         <div className='space-y-2'>
           <Label htmlFor='insight-period'>Period</Label>
@@ -119,6 +146,7 @@ export function RulesetInsights({
                 ['day', 'Last day'],
                 ['week', 'Last week'],
                 ['month', 'Last month'],
+                ...(source === 'retained' ? [['quarter', 'Last 90 days']] : []),
               ].map(([value, text]) => (
                 <SelectItem key={value} value={value}>
                   {text}
@@ -195,9 +223,34 @@ export function RulesetInsights({
       {data && (
         <>
           <div className='flex flex-wrap justify-between gap-2 text-xs text-muted-foreground'>
-            <span>GitHub rule evaluations · This page</span>
-            <span>Fetched {new Date(data.fetchedAt).toLocaleString()}</span>
+            <span>
+              {data.collection
+                ? 'Saved GitHub evaluations'
+                : 'GitHub rule evaluations'}{' '}
+              · This page
+            </span>
+            <span>
+              {data.fetchedAt
+                ? `Fetched ${new Date(data.fetchedAt).toLocaleString()}`
+                : 'No history collected yet'}
+            </span>
           </div>
+          {data.collection && (
+            <div
+              role='status'
+              className='rounded-xl border p-3 text-xs text-muted-foreground'
+            >
+              {!data.collection.enabled
+                ? 'History collection is disabled. '
+                : data.collection.error
+                  ? 'The last collection failed. Saved results may be outdated. '
+                  : 'Showing evaluations collected by Preflyt. '}
+              {data.collection.lastSweepAt
+                ? `Last collection sweep: ${new Date(data.collection.lastSweepAt).toLocaleString()}. `
+                : 'The first collection sweep has not finished. '}
+              Retention: {data.collection.retentionDays} days.
+            </div>
+          )}
           <div className='grid grid-cols-2 gap-3'>
             {[
               {

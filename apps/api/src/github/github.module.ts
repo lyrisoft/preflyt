@@ -1,3 +1,4 @@
+import { RulesetHistoryService } from './ruleset-history.service.js'
 import { RulesetDraftController } from './ruleset-draft.controller.js'
 import { RulesetDraftService } from './ruleset-draft.service.js'
 import { GitHubRulesetController } from './github-ruleset.controller.js'
@@ -24,6 +25,6 @@ import { GitHubService } from './github.service.js'
     DashboardController,
   ],
   exports: [GitHubProviderModule],
-  providers: [RulesetDraftService, GitHubRulesetService, GitHubService, RepositoryProfileService, DashboardService],
+  providers: [RulesetHistoryService, RulesetDraftService, GitHubRulesetService, GitHubService, RepositoryProfileService, DashboardService],
 })
 export class GitHubModule {}
