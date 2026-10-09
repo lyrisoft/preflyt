@@ -1,3 +1,4 @@
+import { nativeRunnerReport } from './native-runner-report.js'
 import { execFile } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { constants } from 'node:fs'
@@ -359,27 +360,7 @@ export async function runNativeDockerCheck(
       .trim()
     if (!/^\d{1,3}$/.test(exit)) throw new Error('Invalid native exit status')
     exitCode = Number(exit)
-    const envelope = JSON.parse(output.toString('utf8'))
-    if (
-      Object.keys(envelope).sort().join(',') !==
-        'exitCode,report,sourceHash,version' ||
-      envelope.version !== 2 ||
-      envelope.sourceHash !== scope.sourceHash ||
-      envelope.exitCode !== exitCode ||
-      !(
-        envelope.report === null ||
-        (typeof envelope.report === 'string' &&
-          envelope.report.length <= 349528 &&
-          /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(
-            envelope.report,
-          ))
-      )
-    )
-      throw new Error('Invalid runner report')
-    report =
-      envelope.report === null ? null : Buffer.from(envelope.report, 'base64')
-    if (report && report.toString('base64') !== envelope.report)
-      throw new Error('Invalid report encoding')
+    report = nativeRunnerReport(output, scope.sourceHash, exitCode)
     await verifyRuntime()
   } catch {
     reason = deadline.aborted

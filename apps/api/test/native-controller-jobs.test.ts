@@ -64,6 +64,7 @@ afterEach(async () => {
 async function fixture(
   ruleId:
     'tests.required' | 'secrets.scan' | 'lint.required' = 'tests.required',
+  backend: 'docker' | 'kubernetes' = 'docker',
 ) {
   directory = await mkdtemp(join(tmpdir(), 'preflyt-controller-contract-'))
   const now = Date.now(),
@@ -95,7 +96,7 @@ async function fixture(
     toolReviewHash: tools.reviewHash,
   }
   vi.mocked(nativeRuntimeApproval).mockReturnValue({
-    backend: 'docker',
+    backend,
     approval,
     approvalHash: 'f'.repeat(64),
   } as any)
@@ -193,9 +194,15 @@ async function fixture(
       finishedAt: new Date().toISOString(),
     }
   })
-  jobs = new NativeControllerJobs(directory, runner as any)
+  const recover = vi.fn(async () => {})
+  jobs = new NativeControllerJobs(
+    directory,
+    runner as any,
+    backend === 'kubernetes' ? recover : undefined,
+    backend,
+  )
   await jobs.initialize()
-  return { expected, source, runner }
+  return { expected, source, runner, recover }
 }
 describe('durable native controller admission and signed results', () => {
   it('materializes verified source, executes once, redacts reports, signs the admission attempt and removes source', async () => {
@@ -242,6 +249,60 @@ describe('durable native controller admission and signed results', () => {
     const step = expected.plan.steps[0]
     expect(step.args).toContain('/opt/preflyt/config/lint.yaml')
     expect(step.args).not.toContain('/workspace/eslint.config.js')
+  })
+  it('uses the same durable admission and signed receipt contract for Kubernetes source delivery', async () => {
+    const { expected, source, runner } = await fixture(
+      'secrets.scan',
+      'kubernetes',
+    )
+    await jobs!.call('admit', expected, source)
+    const result = await wait(() => jobs!.call('status', expected))
+    expect(
+      verifyNativeReceipt(result.signature, expected)?.checks[0],
+    ).toMatchObject({
+      state: 'PASS',
+      coverage: 'FULL_RULE',
+      cleanupConfirmed: true,
+    })
+    expect((runner.mock.calls[0] as any)[4].sourceHash).toBe(source.sourceHash)
+  })
+  it('runs only scoped Kubernetes cleanup after restart, never source execution', async () => {
+    const { expected, runner, recover } = await fixture(
+      'secrets.scan',
+      'kubernetes',
+    )
+    await jobs!.close()
+    await mkdir(join(directory, expected.attemptId), { mode: 0o700 })
+    await writeFile(
+      join(directory, expected.attemptId, 'state.json'),
+      JSON.stringify({
+        expected,
+        scopeHash: digest(expected),
+        state: 'RUNNING',
+        startedAt: new Date().toISOString(),
+        workspaceRoot: null,
+      }),
+      { mode: 0o600 },
+    )
+    jobs = new NativeControllerJobs(
+      directory,
+      runner as any,
+      recover,
+      'kubernetes',
+    )
+    await jobs.initialize()
+    const result = await jobs.call('status', expected)
+    expect(recover).toHaveBeenCalledExactlyOnceWith(expected)
+    expect(runner).not.toHaveBeenCalled()
+    expect(verifyNativeReceipt(result.signature!, expected)).toMatchObject({
+      cancelled: true,
+      checks: [
+        expect.objectContaining({
+          state: 'INCOMPLETE',
+          cleanupConfirmed: true,
+        }),
+      ],
+    })
   })
   it('blocks source/plan/scope changes before executing', async () => {
     const { expected, source, runner } = await fixture()

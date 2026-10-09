@@ -6,7 +6,7 @@ Preflyt supports a common check contract for Docker and Kubernetes deployments: 
 
 The Docker launcher and image-owned report wrapper have passed disposable fixtures for Gitleaks secret detection, the bundled JavaScript/TypeScript and Python Semgrep rules, fixed JavaScript/TypeScript and Python lint rules, unsafe Terraform and Kubernetes configuration, and Node's built-in test runner. Clean scans and tests pass; zero or skipped tests remain incomplete. These fixtures use ordinary Docker with generated source only. They do not approve execution against connected repositories, establish broad SAST coverage, verify dependency database freshness or prove end-to-end policy-gate integration.
 
-The Kubernetes controller currently supplies runtime preflight, not completed native job dispatch. Durable Docker dispatch, signed result ingestion and policy-gate integration are implemented and fixture-tested. Complete adapter coverage and independently reviewed live acceptance remain P3 work. Local Docker availability must not enable production execution by itself.
+Docker and Kubernetes job dispatch, signed result ingestion and policy-gate integration are implemented and fixture-tested. Kubernetes lifecycle tests use a simulated API; live cluster acceptance remains outstanding. Complete adapter coverage and independently reviewed live acceptance remain P3 work. Local Docker availability must not enable production execution by itself.
 
 ## Shared defaults
 
@@ -28,7 +28,7 @@ The deployment must keep signing and application credentials outside scanner con
 
 ## Kubernetes deployment
 
-Use the same application images, scanner images, source verification and result format. Launch ephemeral Jobs on the dedicated reviewed runtime class. Kubernetes service-account authority stays with the launcher; scanner pods receive no service-account token. Apply the existing isolation review, network policies and resource controls. The job pod must never be able to reach the application database or publish authoritative results directly.
+Use the same application images, scanner images, source verification and result format. Launch ephemeral Jobs on the dedicated reviewed runtime class. Pods stay behind a scheduling gate while the controller checks their effective controls, then the controller releases only the unchanged Pod. Kubernetes service-account authority stays with the launcher; scanner pods receive no service-account token. Apply the existing isolation review, network policies and resource controls. The job pod must never be able to reach the application database or publish authoritative results directly.
 
 ## Build and verify disposable fixtures
 
@@ -59,3 +59,13 @@ Run `docker compose -f controller.compose.yaml up -d` from this directory with `
 Scanner images now include `source-verification.mjs`. The trusted wrapper verifies the actual mounted files, Git tree structure and executable modes against the controller source hash before and after the command; the child receives no controller metadata/credentials. Report envelopes use version 2 and include the verified source hash. Old wrapper images cannot supply accepted receipts. Rebuild/publish/review all scanner digests and update the independently signed tool-inventory/runtime review before enabling execution. Generated fixture harnesses verify the same envelope.
 
 For a storage-limited development machine, build only the Node fixture image and run `NATIVE_FIXTURE_TOOL=node pnpm --filter @preflyt/api exec tsx scripts/native-check-fixtures.mts`. This runs four generated outcomes (passing, failing, empty and skipped tests); it does not authorize real-repository execution.
+
+### Opt-in Kubernetes launcher
+
+Keep the base `../native-preflight/compose.yaml` deployment observation-only. Use `kubernetes-launcher-rbac.yaml` only in the independently reviewed sandbox namespace, after replacing the exact namespace, service-account and RuntimeClass names. The launcher identity can create/read/delete Jobs and immutable source ConfigMaps, inspect Pods/logs, and remove a Pod scheduling gate. It cannot read Secrets, exec/attach into Pods, create Pods directly or change protections. API/worker identities receive none of this authority.
+
+The optional `kubernetes-controller.execution.yaml` override mounts a protected launcher token and an owned 0700 journal directory. Relative paths resolve beside the base Compose file; put `launcher-token` there and set `NATIVE_KUBERNETES_JOURNAL_DIRECTORY` to the pre-created absolute journal path. Use the same API image by immutable digest, with the image-owned source initializer bundled into all reviewed scanner images. Explicitly enable application execution only after its signed preflight verifies the current review and controller capability.
+
+Source delivery initially uses one immutable ConfigMap limited to 512 KiB of serialized verified source. Larger repositories fail closed; use Docker execution or imported CI evidence until a separately reviewed larger-source delivery adapter exists. The initializer verifies binary bytes, paths, modes and the whole source hash before the check container starts. Job and ConfigMap deletion uses ownership annotations and UID preconditions; passing results require confirmed removal of both the Pod and source object. Cluster scheduling-gate support is required.
+
+A restarted controller cancels and cleans up its known attempts instead of rerunning code. Recovery requires the original valid cluster review; expired/changed reviews leave the controller unavailable and results incomplete until an operator performs scoped cleanup or restores the matching review. The fixture tests do not authorize deployment, certify CNI/runtime isolation, or replace independently reviewed live acceptance.

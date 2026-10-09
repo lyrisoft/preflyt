@@ -27,7 +27,13 @@ import {
   type NativeReceiptCheck,
   type NativeReceiptExpected,
 } from './native-receipt.js'
-export type NativeJobRunner = typeof runNativeDockerCheck
+export type NativeJobRunner = (
+  scope: DockerJobScope,
+  ruleId: NativeRuleId,
+  sourcePath: string,
+  signal?: AbortSignal,
+  source?: unknown,
+) => ReturnType<typeof runNativeDockerCheck>
 export type JobRecord = {
   expected: NativeReceiptExpected
   scopeHash: string
@@ -48,7 +54,10 @@ export class NativeControllerJobs {
   private admitting = false
   constructor(
     private directory: string,
-    private runner: NativeJobRunner = runNativeDockerCheck,
+    private runner: NativeJobRunner = (scope, ruleId, path, signal) =>
+      runNativeDockerCheck(scope, ruleId, path, signal),
+    private recover?: (expected: NativeReceiptExpected) => Promise<void>,
+    private backend: 'docker' | 'kubernetes' = 'docker',
   ) {}
   get available() {
     return this.ready
@@ -238,47 +247,50 @@ export class NativeControllerJobs {
         if (!Object.hasOwn(nativeAdapters, id))
           throw new Error('Recovery adapter changed')
       }
-      for (const ruleId of record.expected.ruleIds as NativeRuleId[]) {
-        const name =
-          'preflyt-native-' +
-          record.expected.requestId +
-          '-' +
-          ruleId.replace(/\./g, '-')
-        const matches = (
-          await dockerCommand([
-            'ps',
-            '-a',
-            '--filter',
-            'name=^/' + name + '$',
-            '--format',
-            '{{.ID}}',
-          ])
-        )
-          .toString()
-          .trim()
-        if (!matches) continue
-        const container = JSON.parse(
-          (await dockerCommand(['inspect', name])).toString(),
-        )[0]
-        const step = plan.steps.find((s: any) => s.ruleId === ruleId)
-        if (!step) throw new Error('Recovery tool changed')
-        const tool = {
-          ruleId,
-          image: step.image,
-          toolVersion: step.toolVersion,
-          license: step.license,
-          configHash: step.configHash,
-          reviewDigest: step.reviewDigest,
-          expiresAt: step.reviewExpiresAt,
-          databaseBuiltAt: step.databaseBuiltAt,
+      if (this.recover) await this.recover(record.expected)
+      else {
+        for (const ruleId of record.expected.ruleIds as NativeRuleId[]) {
+          const name =
+            'preflyt-native-' +
+            record.expected.requestId +
+            '-' +
+            ruleId.replace(/\./g, '-')
+          const matches = (
+            await dockerCommand([
+              'ps',
+              '-a',
+              '--filter',
+              'name=^/' + name + '$',
+              '--format',
+              '{{.ID}}',
+            ])
+          )
+            .toString()
+            .trim()
+          if (!matches) continue
+          const container = JSON.parse(
+            (await dockerCommand(['inspect', name])).toString(),
+          )[0]
+          const step = plan.steps.find((s: any) => s.ruleId === ruleId)
+          if (!step) throw new Error('Recovery tool changed')
+          const tool = {
+            ruleId,
+            image: step.image,
+            toolVersion: step.toolVersion,
+            license: step.license,
+            configHash: step.configHash,
+            reviewDigest: step.reviewDigest,
+            expiresAt: step.reviewExpiresAt,
+            databaseBuiltAt: step.databaseBuiltAt,
+          }
+          if (
+            !/^[a-f0-9]{64}$/.test(container?.Id) ||
+            container?.Config?.Labels?.['preflyt.scope'] !==
+              digest({ scope: this.scope(record.expected), ruleId, tool })
+          )
+            throw new Error('Container cleanup ownership could not be verified')
+          await dockerCommand(['rm', '--force', container.Id])
         }
-        if (
-          !/^[a-f0-9]{64}$/.test(container?.Id) ||
-          container?.Config?.Labels?.['preflyt.scope'] !==
-            digest({ scope: this.scope(record.expected), ruleId, tool })
-        )
-          throw new Error('Container cleanup ownership could not be verified')
-        await dockerCommand(['rm', '--force', container.Id])
       }
       if (!record.workspaceRoot) {
         for (const name of await readdir(this.path(id)))
@@ -338,8 +350,11 @@ export class NativeControllerJobs {
   private async admit(expected: NativeReceiptExpected, source: unknown) {
     const hash = digest(expected)
     const { reviewed } = nativeAdmission(expected)
-    if (reviewed.backend !== 'docker')
-      throw new Error('Docker runner review required')
+    if (
+      reviewed.backend !== this.backend ||
+      (this.backend === 'kubernetes' && !this.recover)
+    )
+      throw new Error('Matching runner review required')
     try {
       const existing = await this.read(expected.attemptId)
       if (existing.scopeHash !== hash) throw new Error('Attempt scope changed')
@@ -408,6 +423,7 @@ export class NativeControllerJobs {
           ruleId,
           workspace.workspace,
           signal,
+          bundle,
         )
         const safe = {
           ruleId,

@@ -1,3 +1,10 @@
+import {
+  runNativeKubernetesCheck,
+  cleanupNativeKubernetesJob,
+} from './execution/native-kubernetes-job.js'
+import { nativeKubernetesClient } from './execution/native-kubernetes-client.js'
+import { nativeRuntimeApproval } from './execution/native-runtime.js'
+import type { NativeRuleId, NativeToolReview } from './execution/native-plan.js'
 // This dedicated entry point never loads API/worker credentials or the default kube context.
 import { NativeControllerJobs } from './execution/native-controller-jobs.js'
 import { createNativeController } from './execution/native-controller.js'
@@ -38,13 +45,70 @@ if (!Number.isInteger(port) || port < 1 || port > 65535)
 const backend = process.env.NATIVE_RUNTIME_BACKEND ?? 'kubernetes'
 if (!['docker', 'kubernetes'].includes(backend))
   throw new Error('Invalid native runtime backend')
+const directory =
+  process.env.NATIVE_CONTROLLER_STATE_DIRECTORY ??
+  '/var/lib/preflyt/native-jobs'
 const jobs =
-  backend === 'docker' && process.env.NATIVE_EXECUTION_ENABLED === 'true'
-    ? new NativeControllerJobs(
-        process.env.NATIVE_CONTROLLER_STATE_DIRECTORY ??
-          '/var/lib/preflyt/native-jobs',
-      )
-    : undefined
+  process.env.NATIVE_EXECUTION_ENABLED !== 'true'
+    ? undefined
+    : backend === 'docker'
+      ? new NativeControllerJobs(directory)
+      : new NativeControllerJobs(
+          directory,
+          (scope, ruleId, _path, signal, source) =>
+            runNativeKubernetesCheck(scope, ruleId, source, signal),
+          async (expected) => {
+            const reviewed = nativeRuntimeApproval()
+            if (
+              !reviewed ||
+              reviewed.backend !== 'kubernetes' ||
+              reviewed.approvalHash !== expected.approvalHash
+            )
+              throw new Error(
+                'Original Kubernetes review required for recovery',
+              )
+            const client = await nativeKubernetesClient(reviewed.approval)
+            const {
+              requestId,
+              organizationId,
+              repositoryId,
+              sourceSha,
+              sourceHash,
+              planHash,
+            } = expected
+            for (const ruleId of expected.ruleIds as NativeRuleId[]) {
+              const step = (expected.plan as any).steps.find(
+                (s: any) => s.ruleId === ruleId,
+              )
+              if (!step) throw new Error('Recovery tool unavailable')
+              const tool: NativeToolReview = {
+                ruleId,
+                image: step.image,
+                toolVersion: step.toolVersion,
+                license: step.license,
+                configHash: step.configHash,
+                reviewDigest: step.reviewDigest,
+                expiresAt: step.reviewExpiresAt,
+                databaseBuiltAt: step.databaseBuiltAt,
+              }
+              await cleanupNativeKubernetesJob(
+                client,
+                reviewed.approval,
+                {
+                  requestId,
+                  organizationId,
+                  repositoryId,
+                  sourceSha,
+                  sourceHash,
+                  planHash,
+                },
+                ruleId,
+                tool,
+              )
+            }
+          },
+          'kubernetes',
+        )
 if (jobs) await jobs.initialize()
 const server = createNativeController(
   undefined,

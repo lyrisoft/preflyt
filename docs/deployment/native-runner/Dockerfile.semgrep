@@ -3,7 +3,7 @@ FROM semgrep/semgrep@sha256:93963d9295a366f59e4850127b1550400ee7b388f04fe144e4a1
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
 COPY --from=node /usr/lib/libstdc++.so.6 /usr/lib/libstdc++.so.6
 COPY --from=node /usr/lib/libgcc_s.so.1 /usr/lib/libgcc_s.so.1
-COPY runner.mjs source-verification.mjs adapters.json /opt/preflyt/
+COPY runner.mjs source-verification.mjs source-initializer.mjs adapters.json /opt/preflyt/
 COPY config /opt/preflyt/config
 RUN ln -s /usr/bin/semgrep /usr/local/bin/semgrep
 USER 65532:65532

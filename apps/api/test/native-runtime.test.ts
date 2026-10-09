@@ -56,6 +56,9 @@ describe('deployment runtime selection', () => {
       'execution/native-controller.ts',
       'execution/native-docker-job.ts',
       'execution/native-observer.ts',
+      'execution/native-kubernetes-client.ts',
+      'execution/native-kubernetes-job.ts',
+      'execution/native-controller-jobs.ts',
     ])
       expect(visited.has(resolve(source, name)), name).toBe(false)
   })

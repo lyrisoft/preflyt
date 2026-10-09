@@ -1,7 +1,7 @@
 // Explicit disposable fixtures only. This script cannot select a connected repository or publish GitHub checks.
 import { execFileSync } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile, mkdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import assert from 'node:assert/strict'
@@ -250,6 +250,66 @@ try {
       ).toString(),
     ) as string
     assert.match(image, /^sha256:[a-f0-9]{64}$/)
+    if (fixture.id === 'test-clean') {
+      const delivery = join(workspace.root, 'source-bundle')
+      await mkdir(delivery, { mode: 0o755 })
+      await writeFile(join(delivery, 'bundle.json'), JSON.stringify(bundle), {
+        mode: 0o444,
+      })
+      let initId: string | undefined
+      try {
+        initId = (
+          await dockerCommand([
+            'create',
+            '--runtime',
+            'runc',
+            '--network',
+            'none',
+            '--user',
+            '65532:65532',
+            '--read-only',
+            '--cap-drop',
+            'ALL',
+            '--security-opt',
+            'no-new-privileges=true',
+            '--pids-limit',
+            '128',
+            '--cpus',
+            '1',
+            '--memory',
+            '2g',
+            '--memory-swap',
+            '2g',
+            '--mount',
+            `type=bind,source=${delivery},target=/source-bundle,readonly`,
+            '--tmpfs',
+            '/source-workspace:rw,nosuid,nodev,noexec,size=33554432,mode=1777',
+            '--env',
+            'PREFLYT_SOURCE_REPOSITORY=' + bundle.repositoryId,
+            '--env',
+            'PREFLYT_SOURCE_SHA=' + bundle.sourceSha,
+            '--env',
+            'PREFLYT_SOURCE_HASH=' + bundle.sourceHash,
+            '--entrypoint',
+            '/usr/local/bin/node',
+            image,
+            '/opt/preflyt/source-initializer.mjs',
+          ])
+        )
+          .toString()
+          .trim()
+        assert.match(initId, /^[a-f0-9]{64}$/)
+        await dockerCommand(['start', '--attach', initId], { timeoutMs: 60000 })
+        assert.equal(
+          (await dockerCommand(['wait', initId])).toString().trim(),
+          '0',
+          'Non-root Kubernetes source initialization must succeed',
+        )
+        console.log('kubernetes-source-init: PASS')
+      } finally {
+        if (initId) await dockerCommand(['rm', '--force', initId])
+      }
+    }
     const review = {
       ruleId: fixture.ruleId,
       image: 'docker.io/preflyt/fixture@' + image,
