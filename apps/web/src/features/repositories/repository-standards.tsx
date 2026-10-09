@@ -629,6 +629,10 @@ export function RepositoryStandards({
         )}
       </div>
       {policyRevisions}
+    </div>
+  )
+  const catalogueContent = (
+    <>
       {data && (
         <section aria-labelledby='pack-catalogue-title' className='space-y-3'>
           <div className='flex items-center justify-between gap-3'>
@@ -654,7 +658,7 @@ export function RepositoryStandards({
           </div>
         </section>
       )}
-    </div>
+    </>
   )
   return sourceBindings ? (
     <Tabs defaultValue='standards' className='space-y-5'>
@@ -670,11 +674,19 @@ export function RepositoryStandards({
           <Workflow aria-hidden='true' className='size-4' />
           CI source bindings
         </TabsTrigger>
+        <TabsTrigger value='catalogue' className='gap-2'>
+          <Layers aria-hidden='true' className='size-4' />
+          Pack catalogue
+        </TabsTrigger>
       </TabsList>
       <TabsContent value='standards'>{standardsContent}</TabsContent>
       <TabsContent value='bindings'>{sourceBindings}</TabsContent>
+      <TabsContent value='catalogue'>{catalogueContent}</TabsContent>
     </Tabs>
   ) : (
-    standardsContent
+    <div className='space-y-5'>
+      {standardsContent}
+      {catalogueContent}
+    </div>
   )
 }
