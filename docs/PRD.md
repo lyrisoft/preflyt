@@ -205,6 +205,10 @@ Preflyt shall expose **Governance → Quality Gates → GitHub Rulesets** with S
 
 P0: administrators configure multiple providers, encrypted/write-only keys, hosted/local endpoints, connectivity tests, per-stage primary/fallback routes, egress restrictions and budgets. P1: evidence-linked AI interpretation of imported CI failures via PR/CI route. P4: advanced cross-domain intelligence. These requirements are additive and do not retroactively invalidate completed P0 development. Model failure never changes deterministic gate results.
 
+### Notification Engine
+
+Preflyt requires tenant- and repository-scoped notifications driven by durable events. P1 provides a working in-app inbox and top-bar bell for assessment activity; P2 adds quality-gate/policy/exception events and configured email delivery; P3 adds security findings; P4 adds AI availability/budget alerts; later phases add QA/performance/production events and Slack/Teams/webhooks. Recipient resolution uses RBAC; deduplication, retries, preferences and audit are mandatory. Notifications do not determine gate results. See [Notification Engine](product/notification-engine.md).
+
 ## 6. Supported SDLC stages and user journeys
 
 ### 6.1 Lifecycle coverage
