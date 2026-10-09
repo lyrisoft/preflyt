@@ -322,7 +322,7 @@ function PackAdoption({
           strokeDasharray='100 100'
           strokeDashoffset={100 * (1 - ratio)}
           transform='rotate(-90 50 50)'
-          className='chart-ring-motion text-chart-1'
+          className='chart-ring-motion text-chart-2'
         />
       </svg>
       <div className='absolute inset-0 flex flex-col items-center justify-center'>
