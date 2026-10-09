@@ -291,4 +291,4 @@ For a workspace that already has the GitHub App connected, use **Access Control 
 
 ### Assessment notifications
 
-A persistent in-app assessment inbox is available behind `NOTIFICATIONS_ENABLED=true`. It includes the unread bell, repository/event/severity/date filters, read actions, and optional assessment alerts. Both API and worker need the same flag, the database migration, and the worker's Redis connection. See [notification setup and recovery](docs/operations/notifications.md). Policy/gate email alerts remain planned.
+A persistent in-app assessment inbox is available behind `NOTIFICATIONS_ENABLED=true`. It includes the unread bell, repository/event/severity/date filters, read actions, and optional assessment alerts. Both API and worker need the same flag, the database migration, and the worker's Redis connection. See [notification setup and recovery](docs/operations/notifications.md). Policy-publication notices and opt-in SMTP email are available; email requires separate server configuration. Gate, ruleset and exception alerts remain planned.

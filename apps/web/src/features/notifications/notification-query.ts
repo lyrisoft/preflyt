@@ -10,8 +10,16 @@ export type Item = {
   severity: string
   repository: string
   repositoryId: string
-  assessmentId: string
-  sourceSha: string
+  assessmentId: string | null
+  policyId?: string | null
+  emailDelivery?: {
+    state: string
+    attempts: number
+    failureCode: string | null
+    sentAt: string | null
+    nextAttemptAt: string
+  } | null
+  sourceSha: string | null
 }
 type InboxData = {
   enabled: boolean
@@ -22,6 +30,7 @@ type InboxData = {
   repositories: { repositoryGithubId: string; repositoryName: string }[]
 }
 export const titles: Record<string, string> = {
+  POLICY_PUBLISHED: 'Policy published',
   ASSESSMENT_COMPLETED: 'Assessment saved',
   ASSESSMENT_FAILED: 'CI failure recorded',
   ASSESSMENT_INCOMPLETE: 'Assessment needs more evidence',

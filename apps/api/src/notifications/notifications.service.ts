@@ -1,3 +1,4 @@
+import { validNotificationEmail } from './notification-mail.js'
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service.js'
 import { AuthorizationService } from '../auth/authorization.service.js'
@@ -11,10 +12,14 @@ export class NotificationsService {
   constructor(@Inject(PrismaService) private readonly db: PrismaService,
     @Inject(AuthorizationService) private readonly authorization: AuthorizationService) {}
   private async scope(session: AuthenticatedSession): Promise<Prisma.InboxNotificationWhereInput> {
-    const repos = await this.authorization.repositoryScope(session.identityId, session.organizationId, 'assessment.read')
-    return { identityId: session.identityId, event: {
-      organizationId: session.organizationId ?? '', repositoryId: { in: repos.map((r) => r.id) },
-    } }
+    const [assessments, policies] = await Promise.all([
+      this.authorization.repositoryScope(session.identityId, session.organizationId, 'assessment.read'),
+      this.authorization.repositoryScope(session.identityId, session.organizationId, 'policy.read'),
+    ])
+    return { identityId: session.identityId, event: { organizationId: session.organizationId ?? '', OR: [
+      { type: { in: ['ASSESSMENT_COMPLETED', 'ASSESSMENT_FAILED', 'ASSESSMENT_INCOMPLETE'] }, repositoryId: { in: assessments.map((r) => r.id) } },
+      { type: 'POLICY_PUBLISHED', repositoryId: { in: policies.map((r) => r.id) } },
+    ] } }
   }
   async list(session: AuthenticatedSession, filters: InboxFilters) {
     if (!notificationsEnabled()) return { enabled: false, items: [], unreadCount: 0, total: 0, page: 1, repositories: [] }
@@ -23,7 +28,7 @@ export class NotificationsService {
     if (!Number.isInteger(page) || page < 1 || page > 10000 ||
       (filters.unread !== undefined && !['true', 'false'].includes(filters.unread)) ||
       (filters.severity && !['info', 'warning', 'error'].includes(filters.severity)) ||
-      (filters.type && !['ASSESSMENT_COMPLETED', 'ASSESSMENT_FAILED', 'ASSESSMENT_INCOMPLETE'].includes(filters.type)) ||
+      (filters.type && !['ASSESSMENT_COMPLETED', 'ASSESSMENT_FAILED', 'ASSESSMENT_INCOMPLETE', 'POLICY_PUBLISHED'].includes(filters.type)) ||
       (filters.repository && !/^[1-9]\d{0,15}$/.test(filters.repository))) throw new BadRequestException('Choose valid notification filters')
     const date = (value?: string) => {
       if (!value) return undefined
@@ -43,7 +48,7 @@ export class NotificationsService {
       },
     }] }
     const [items, total, unreadCount, repositories] = await Promise.all([
-      this.db.inboxNotification.findMany({ where, include: { event: true }, orderBy: [{ deliveredAt: 'desc' }, { id: 'desc' }], take: 25, skip: (page - 1) * 25 }),
+      this.db.inboxNotification.findMany({ where, include: { event: true, emailDelivery: { select: { state: true, attempts: true, sentAt: true, nextAttemptAt: true, failureCode: true } } }, orderBy: [{ deliveredAt: 'desc' }, { id: 'desc' }], take: 25, skip: (page - 1) * 25 }),
       this.db.inboxNotification.count({ where }),
       this.db.inboxNotification.count({ where: { AND: [scope, { readAt: null }] } }),
       this.db.notificationEvent.findMany({ where: { notifications: { some: scope } }, distinct: ['repositoryGithubId'], select: { repositoryGithubId: true, repositoryName: true } }),
@@ -52,21 +57,22 @@ export class NotificationsService {
       id: row.id, readAt: row.readAt, createdAt: row.event.createdAt,
       type: row.event.type, severity: row.event.severity, repository: row.event.repositoryName,
       repositoryId: row.event.repositoryGithubId, sourceSha: row.event.sourceSha,
-      assessmentId: row.event.assessmentId,
+      assessmentId: row.event.assessmentId, policyId: row.event.policyId, emailDelivery: row.emailDelivery,
     })) }
   }
   async preferences(session: AuthenticatedSession) {
     await this.authorization.requireOrganization(session, 'assessment.read')
     const preference = await this.db.notificationPreference.findUnique({ where: { identityId_organizationId: { identityId: session.identityId, organizationId: session.organizationId! } } })
-    return { assessments: preference?.assessments ?? true }
+    return { assessments: preference?.assessments ?? true, email: preference?.email ?? false, emailEnabled: process.env.NOTIFICATION_EMAIL_ENABLED === 'true', emailAddressAvailable: validNotificationEmail((await this.db.identity.findUnique({ where: { id: session.identityId }, select: { email: true } }))?.email) }
   }
-  async savePreferences(session: AuthenticatedSession, assessments: unknown) {
+  async savePreferences(session: AuthenticatedSession, assessments: unknown, email?: unknown) {
     if (typeof assessments !== 'boolean') throw new BadRequestException('Choose whether to receive assessment updates')
+    if (email !== undefined && typeof email !== 'boolean') throw new BadRequestException('Choose whether to receive email')
     await this.authorization.requireOrganization(session, 'assessment.read')
     const key = { identityId: session.identityId, organizationId: session.organizationId! }
     return this.db.$transaction(async (tx) => {
-      await tx.notificationPreference.upsert({ where: { identityId_organizationId: key }, create: { ...key, assessments }, update: { assessments } })
-      await tx.auditEvent.create({ data: { event: 'notification.preferences.updated', actorId: session.identityId, metadata: { organizationId: session.organizationId!, assessments } } })
+      await tx.notificationPreference.upsert({ where: { identityId_organizationId: key }, create: { ...key, assessments, ...(email !== undefined ? { email: email as boolean } : {}) }, update: { assessments, ...(email !== undefined ? { email: email as boolean } : {}) } })
+      await tx.auditEvent.create({ data: { event: 'notification.preferences.updated', actorId: session.identityId, metadata: { organizationId: session.organizationId!, assessments, ...(email !== undefined ? { email: email as boolean } : {}) } } })
       return { assessments }
     })
   }

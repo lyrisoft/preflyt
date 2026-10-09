@@ -15,8 +15,9 @@ export async function deliverNotification(db: PrismaService, eventId: string) {
       installation: { active: true, organizationId: event.organizationId },
     } })
     if (repo) {
+      const policy = event.type === 'POLICY_PUBLISHED'
       const observations = await tx.contributorObservation.findMany({
-        where: { repositoryId: repo.id, sourceSha: event.sourceSha, relationship: 'PR_AUTHOR' },
+        where: { repositoryId: repo.id, sourceSha: event.sourceSha ?? '', relationship: 'PR_AUTHOR' },
         select: { contributor: { select: { githubUserId: true } } },
       })
       const authorIds = observations.map((o) => BigInt(o.contributor.githubUserId))
@@ -31,13 +32,19 @@ export async function deliverNotification(db: PrismaService, eventId: string) {
       const preferences = await tx.notificationPreference.findMany({ where: { organizationId: event.organizationId, assessments: false } })
       const muted = new Set(preferences.map((p) => p.identityId))
       const recipients = members.filter((m) =>
-        !muted.has(m.identityId) && rolePermissions[m.role]?.includes('assessment.read') &&
+        (policy || !muted.has(m.identityId)) && rolePermissions[m.role]?.includes(policy ? 'policy.read' : 'assessment.read') &&
         (['OWNER', 'ADMIN'].includes(m.role) || m.grants.some((g) => g.repositoryId === repo.id)) &&
-        (['OWNER', 'ADMIN', 'ENGINEERING_LEAD'].includes(m.role) || authors.has(m.identityId)),
+        (policy ? ['OWNER', 'ADMIN', 'POLICY_MANAGER'].includes(m.role) : ['OWNER', 'ADMIN', 'ENGINEERING_LEAD'].includes(m.role) || authors.has(m.identityId)),
       )
       await tx.inboxNotification.createMany({ data: recipients.map((m) => ({
         id: randomUUID(), eventId: event.id, identityId: m.identityId,
       })), skipDuplicates: true })
+    }
+    if (process.env.NOTIFICATION_EMAIL_ENABLED === 'true') {
+      const inbox = await tx.inboxNotification.findMany({ where: { eventId: event.id } })
+      const optedIn = await tx.notificationPreference.findMany({ where: { organizationId: event.organizationId, email: true } })
+      const enabled = new Set(optedIn.map((p) => p.identityId))
+      await tx.notificationEmailDelivery.createMany({ data: inbox.filter((n) => enabled.has(n.identityId)).map((n) => ({ id: randomUUID(), inboxId: n.id })), skipDuplicates: true })
     }
     await tx.auditEvent.create({ data: { event: 'notification.in_app.delivered', actorId: null, metadata: { eventId: event.id, organizationId: event.organizationId, repositoryId: event.repositoryGithubId } } })
     await tx.notificationEvent.update({ where: { id: event.id }, data: { deliveredAt: new Date() } })

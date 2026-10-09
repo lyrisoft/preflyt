@@ -16,3 +16,14 @@ export async function recordDeliveryFailure(db: PrismaService, eventId: string) 
     await tx.notificationEvent.updateMany({ where: { id: eventId, deliveredAt: null, attempts: { gte: notificationJobOptions.attempts } }, data: { failedAt: new Date() } })
   })
 }
+
+export async function dispatchNotificationEmails(db: PrismaService, queue: Pick<Queue, 'add' | 'getJob'>) {
+  const now = new Date()
+  await db.notificationEmailDelivery.updateMany({ where: { state: 'PENDING', attempts: { gte: 5 }, OR: [{ leaseUntil: null }, { leaseUntil: { lt: now } }] }, data: { state: 'FAILED', failureCode: 'DELIVERY_UNCONFIRMED', leaseUntil: null } })
+  const pending = await db.notificationEmailDelivery.findMany({ where: { state: 'PENDING', attempts: { lt: 5 }, nextAttemptAt: { lte: now }, OR: [{ leaseUntil: null }, { leaseUntil: { lt: now } }] }, orderBy: { createdAt: 'asc' }, take: 100 })
+  for (const delivery of pending) {
+    const previous = await queue.getJob(delivery.id)
+    if (previous && ['completed', 'failed'].includes(await previous.getState())) await previous.remove()
+    await queue.add('email', { deliveryId: delivery.id }, { jobId: delivery.id, attempts: 1, removeOnComplete: true, removeOnFail: 1000 })
+  }
+}

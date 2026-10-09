@@ -1,4 +1,9 @@
-import { dispatchNotifications, recordDeliveryFailure } from './notifications/notification-queue.js'
+import { AuthorizationService } from './auth/authorization.service.js'
+import { GitHubIdentityProvider } from './auth/github-identity-provider.js'
+import { GitHubUserAccessService } from './auth/github-user-access.service.js'
+import { NotificationMailer, emailNotificationsEnabled } from './notifications/notification-mail.js'
+import { deliverNotificationEmail } from './notifications/notification-email-delivery.js'
+import { dispatchNotifications, dispatchNotificationEmails, recordDeliveryFailure } from './notifications/notification-queue.js'
 import { deliverNotification } from './notifications/notification-delivery.js'
 import { notificationsEnabled } from './notifications/notification-event.js'
 import { GitHubPrSyncService } from './github/github-pr-sync.service.js'
@@ -93,6 +98,13 @@ async function start() {
       }
     })
   }, { ...consumerConfig, connection: consumer, concurrency: 2, autorun: notificationsEnabled() })
+  const mail = new NotificationMailer()
+  const emailAuthorization = new AuthorizationService(prisma, new GitHubUserAccessService(prisma, new GitHubIdentityProvider(githubProvider, cache), cache))
+  const emailQueue = new Queue('notification-email', { ...producerConfig, connection: producer })
+  const emailWorker = new Worker('notification-email', async (job) => {
+    if (typeof job.data?.deliveryId !== 'string' || !/^[a-zA-Z0-9-]{1,80}$/.test(job.data.deliveryId)) throw new Error('Invalid email delivery job')
+    await telemetryOperation('preflyt.notification.email', { 'notification.delivery.id': job.data.deliveryId }, () => deliverNotificationEmail(prisma, emailAuthorization, mail, job.data.deliveryId))
+  }, { ...consumerConfig, connection: consumer, concurrency: 2, autorun: notificationsEnabled() && emailNotificationsEnabled() })
   let lastWarning = 0
   const warn = () => {
     if (Date.now() - lastWarning > 5000) {
@@ -109,6 +121,8 @@ async function start() {
   worker.on('error', warn)
   notificationQueue.on('error', warn)
   notificationWorker.on('error', warn)
+  emailQueue.on('error', warn)
+  emailWorker.on('error', warn)
   worker.on('failed', (job) => {
     if (job && job.attemptsMade >= 5) {
       const args = {
@@ -134,6 +148,7 @@ async function start() {
       await dispatcher.reconcile()
       if (notificationsEnabled()) {
         await dispatchNotifications(prisma, notificationQueue)
+        if (emailNotificationsEnabled()) await dispatchNotificationEmails(prisma, emailQueue)
       }
       if (!syncRun) {
         syncRun = sync
@@ -169,6 +184,9 @@ async function start() {
       producer.disconnect()
       consumer.disconnect()
     }
+    await emailWorker.close(force)
+    await emailQueue.close()
+    mail.close()
     await notificationWorker.close(force)
     await notificationQueue.close()
     await worker.close(force)

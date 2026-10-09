@@ -1,3 +1,6 @@
+import { GatePolicyService } from '../src/assessments/gate-policy.service.js'
+import { deliverNotificationEmail } from '../src/notifications/notification-email-delivery.js'
+import { dispatchNotificationEmails } from '../src/notifications/notification-queue.js'
 import { Queue, Worker } from 'bullmq'
 import { Redis } from 'ioredis'
 import { queueConfig } from '../src/github-events/github-event-queue.js'
@@ -43,6 +46,7 @@ beforeAll(async () => {
 afterAll(async () => { await app?.close(); await db?.$disconnect(); vi.unstubAllEnvs() })
 beforeEach(async () => {
   vi.stubEnv('NOTIFICATIONS_ENABLED', 'true')
+  vi.stubEnv('NOTIFICATION_EMAIL_ENABLED', 'false')
   await db.notificationPreference.deleteMany(); await db.auditEvent.deleteMany();
   await db.inboxNotification.deleteMany(); await db.notificationEvent.deleteMany()
   await db.gitHubRepository.deleteMany(); await db.gitHubInstallation.deleteMany()
@@ -178,4 +182,80 @@ it.skipIf(!process.env.NOTIFICATION_TEST_REDIS_URL)('delivers through real Redis
   } finally {
     await worker.close(); await queue.obliterate({ force: true }); await queue.close(); producer.disconnect(); consumer.disconnect()
   }
+})
+
+it('records actual policy publication and sends mandatory in-app notices despite assessment opt-out', async () => {
+  const authorization = new AuthorizationService(db), policies = new GatePolicyService(db, authorization)
+  const selection = await new StandardsService(db).assign(repo.githubId.toString(), { profile: 'RECOMMENDED', packs: [{ id: 'baseline-engineering', version: '1.0.0' }], expectedSelectionId: null }, owner)
+  await db.membership.create({ data: { identityId: owner, role: 'SUPER_ADMIN', active: true } })
+  await service.savePreferences(session(), false)
+  const draft = await policies.draft(session(), repo.githubId.toString(), { expectedSelectionId: selection.id, branchRef: 'refs/heads/main', requiredRules: [] })
+  await policies.approve(session(), repo.githubId.toString(), draft.id, draft.definitionHash)
+  await policies.publish(session(), repo.githubId.toString(), draft.id, draft.definitionHash, null)
+  const event = await db.notificationEvent.findUniqueOrThrow({ where: { policyId: draft.id } })
+  expect(event.assessmentId).toBeNull(); expect(event.sourceSha).toBeNull()
+  await deliverNotification(db, event.id)
+  expect((await service.list(session(), { type: 'POLICY_PUBLISHED' })).total).toBe(1)
+  expect((await service.list(session(developer), {})).total).toBe(0)
+  await expect(policies.publish(session(), repo.githubId.toString(), draft.id, draft.definitionHash, null)).rejects.toThrow()
+  expect(await db.notificationEvent.count()).toBe(1)
+})
+const email = async () => {
+  vi.stubEnv('NOTIFICATION_EMAIL_ENABLED', 'true')
+  await db.identity.update({ where: { id: owner }, data: { email: 'owner@example.test' } })
+  await service.savePreferences(session(), true, true)
+  const event = await create(); await deliverNotification(db, event.id)
+  return db.notificationEmailDelivery.findFirstOrThrow()
+}
+it('queues only opted-in email recipients and persists sent status without changing assessments', async () => {
+  const delivery = await email(), mail = { send: vi.fn().mockResolvedValue(undefined) }
+  expect(await db.notificationEmailDelivery.count()).toBe(1)
+  await deliverNotificationEmail(db, new AuthorizationService(db), mail, delivery.id)
+  await deliverNotificationEmail(db, new AuthorizationService(db), mail, delivery.id)
+  expect(mail.send).toHaveBeenCalledTimes(1)
+  const inbox = await service.list(session(), {})
+  expect(inbox.items[0].emailDelivery?.state).toBe('SENT')
+  expect(await db.notificationEvent.count()).toBe(1)
+})
+it('skips email after opt-out or membership revocation at send time', async () => {
+  const delivery = await email(), mail = { send: vi.fn() }
+  await service.savePreferences(session(), true, false)
+  await deliverNotificationEmail(db, new AuthorizationService(db), mail, delivery.id)
+  expect(mail.send).not.toHaveBeenCalled()
+  expect((await db.notificationEmailDelivery.findUniqueOrThrow({ where: { id: delivery.id } })).state).toBe('SKIPPED')
+  await email()
+  const pending = await db.notificationEmailDelivery.findFirstOrThrow({ where: { state: 'PENDING' } })
+  await db.organizationMembership.updateMany({ where: { identityId: owner }, data: { active: false } })
+  await deliverNotificationEmail(db, new AuthorizationService(db), mail, pending.id)
+  expect(mail.send).not.toHaveBeenCalled()
+})
+it('records bounded email retries and failures while the in-app event remains delivered', async () => {
+  const delivery = await email(), mail = { send: vi.fn().mockRejectedValue(new Error('private transport detail')) }
+  for (let i = 0; i < 5; i++) {
+    await db.notificationEmailDelivery.update({ where: { id: delivery.id }, data: { nextAttemptAt: new Date(0) } })
+    await deliverNotificationEmail(db, new AuthorizationService(db), mail, delivery.id)
+  }
+  const failed = await db.notificationEmailDelivery.findUniqueOrThrow({ where: { id: delivery.id } })
+  expect(failed.state).toBe('FAILED'); expect(failed.attempts).toBe(5)
+  expect(failed.failureCode).toBe('DELIVERY_UNAVAILABLE')
+  expect((await service.list(session(), {})).items).toHaveLength(1)
+})
+it('recovers expired email leases and classifies exhausted unconfirmed deliveries', async () => {
+  const delivery = await email()
+  await db.notificationEmailDelivery.update({ where: { id: delivery.id }, data: { attempts: 5, leaseUntil: new Date(0) } })
+  const add = vi.fn(), getJob = vi.fn()
+  await dispatchNotificationEmails(db, { add, getJob })
+  expect(add).not.toHaveBeenCalled()
+  expect((await db.notificationEmailDelivery.findUniqueOrThrow({ where: { id: delivery.id } })).failureCode).toBe('DELIVERY_UNCONFIRMED')
+})
+
+it('does not resend a known accepted email when persisting its acknowledgement fails', async () => {
+  const delivery = await email(), mail = { send: vi.fn().mockResolvedValue(undefined) }
+  const transaction = vi.spyOn(db, '$transaction').mockRejectedValueOnce(new Error('Acknowledgement unavailable'))
+  await deliverNotificationEmail(db, new AuthorizationService(db), mail, delivery.id)
+  transaction.mockRestore()
+  const failed = await db.notificationEmailDelivery.findUniqueOrThrow({ where: { id: delivery.id } })
+  expect(failed.state).toBe('FAILED'); expect(failed.failureCode).toBe('DELIVERY_UNCONFIRMED')
+  await deliverNotificationEmail(db, new AuthorizationService(db), mail, delivery.id)
+  expect(mail.send).toHaveBeenCalledTimes(1)
 })

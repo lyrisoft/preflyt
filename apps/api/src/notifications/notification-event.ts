@@ -24,3 +24,17 @@ export async function recordAssessmentNotification(
     sourceSha: assessment.sourceSha, actorId, ...assessmentNotification(assessment.report),
   } })
 }
+
+export async function recordPolicyNotification(
+  tx: Prisma.TransactionClient,
+  policy: { id: string; repositoryId: string; organizationId: string },
+  actorId: string,
+) {
+  if (!notificationsEnabled()) return
+  const repo = await tx.gitHubRepository.findUniqueOrThrow({ where: { id: policy.repositoryId } })
+  await tx.notificationEvent.create({ data: {
+    policyId: policy.id, organizationId: policy.organizationId, repositoryId: repo.id,
+    repositoryGithubId: repo.githubId.toString(), repositoryName: repo.fullName,
+    sourceSha: null, actorId, type: 'POLICY_PUBLISHED', severity: 'info',
+  } })
+}

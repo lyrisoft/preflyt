@@ -1,3 +1,4 @@
+import { recordPolicyNotification } from '../notifications/notification-event.js'
 import {
   BadRequestException,
   ConflictException,
@@ -340,6 +341,7 @@ export class GatePolicyService {
           },
         })
         await this.audit(tx, session, 'policy.published', published)
+        await recordPolicyNotification(tx, published, session.identityId)
         return published
       },
     )

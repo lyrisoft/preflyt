@@ -37,18 +37,54 @@ export function NotificationItem({
         aria-label={item.severity}
       />
       <div className='min-w-0 flex-1'>
-        <Link
-          to='/repositories/$repositoryId'
-          params={{ repositoryId: item.repositoryId }}
-          search={{ tab: 'assessments', assessment: item.assessmentId }}
-          className='font-medium hover:underline'
-        >
-          {titles[item.type] ?? 'Assessment updated'}
-        </Link>
+        {item.policyId ? (
+          <Link
+            to='/policies'
+            search={{ repository: item.repositoryId }}
+            className='font-medium hover:underline'
+          >
+            Policy published
+          </Link>
+        ) : (
+          <Link
+            to='/repositories/$repositoryId'
+            params={{ repositoryId: item.repositoryId }}
+            search={{
+              tab: 'assessments',
+              assessment: item.assessmentId ?? undefined,
+            }}
+            className='font-medium hover:underline'
+          >
+            {titles[item.type] ?? 'Engineering update'}
+          </Link>
+        )}
         <p className='mt-1 text-sm break-words text-muted-foreground'>
-          {item.repository} ·{' '}
-          <span className='font-mono'>{item.sourceSha.slice(0, 7)}</span>
+          {item.repository}
+          {item.sourceSha ? ' · ' : ''}
+          <span className='font-mono'>{item.sourceSha?.slice(0, 7)}</span>
         </p>
+        {item.emailDelivery && (
+          <span
+            className={cn(
+              'mt-2 inline-flex rounded-md px-2 py-0.5 text-xs font-medium',
+              item.emailDelivery.state === 'SENT'
+                ? 'bg-teal-500/10 text-teal-600 dark:text-teal-400'
+                : item.emailDelivery.state === 'FAILED'
+                  ? 'bg-red-500/10 text-red-600 dark:text-red-400'
+                  : 'bg-muted text-muted-foreground'
+            )}
+            title={`Email attempts: ${item.emailDelivery.attempts}`}
+          >
+            {(
+              {
+                SENT: 'Email sent',
+                PENDING: 'Email queued',
+                FAILED: 'Email failed',
+                SKIPPED: 'Email skipped',
+              } as Record<string, string>
+            )[item.emailDelivery.state] ?? 'Email pending'}
+          </span>
+        )}
         <time
           dateTime={item.createdAt}
           className='mt-1 block text-xs text-muted-foreground'
@@ -70,8 +106,7 @@ export function NotificationItem({
   )
 }
 export function NotificationBell() {
-  const { query, read } = useInbox({ unread: 'true' })
-  if (!query.data?.enabled && !query.isError) return null
+  const { query, read, session } = useInbox({ unread: 'true' })
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -80,7 +115,7 @@ export function NotificationBell() {
           size='icon'
           className='relative'
           aria-label={
-            query.isError
+            query.isError || session.isError
               ? 'Notifications unavailable'
               : `Notifications, ${query.data?.unreadCount ?? 0} unread`
           }
@@ -106,12 +141,29 @@ export function NotificationBell() {
             View inbox
           </Link>
         </div>
-        {query.isError ? (
+        {query.isError || session.isError ? (
           <p role='alert' className='text-sm text-destructive'>
-            {query.error.message}{' '}
-            <Button variant='link' onClick={() => void query.refetch()}>
+            {query.error?.message ?? 'Could not load your session. Try again.'}{' '}
+            <Button
+              variant='link'
+              onClick={() =>
+                void (session.isError ? session.refetch() : query.refetch())
+              }
+            >
               Retry
             </Button>
+          </p>
+        ) : query.isPending ? (
+          <p
+            role='status'
+            className='py-6 text-center text-sm text-muted-foreground'
+          >
+            Loading notifications…
+          </p>
+        ) : query.data?.enabled === false ? (
+          <p className='py-4 text-sm text-muted-foreground'>
+            Notifications are turned off for this deployment. Your administrator
+            needs to enable them and restart the API and worker.
           </p>
         ) : !query.data?.items.length ? (
           <p className='py-6 text-center text-sm text-muted-foreground'>

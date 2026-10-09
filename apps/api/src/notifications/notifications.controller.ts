@@ -12,7 +12,7 @@ export class NotificationsController {
   @Get('preferences') @Header('Cache-Control', 'no-store')
   preferences(@Req() req: SessionRequest) { return this.inbox.preferences(req.preflytSession) }
   @Post('preferences') @Header('Cache-Control', 'no-store')
-  savePreferences(@Req() req: SessionRequest, @Body() body: { assessments?: unknown }) { this.auth.assertOrigin(req.headers.origin); return this.inbox.savePreferences(req.preflytSession, body?.assessments) }
+  savePreferences(@Req() req: SessionRequest, @Body() body: { assessments?: unknown; email?: unknown }) { this.auth.assertOrigin(req.headers.origin); return this.inbox.savePreferences(req.preflytSession, body?.assessments, body?.email) }
   @Get() @Header('Cache-Control', 'no-store')
   list(@Req() req: SessionRequest, @Query() filters: InboxFilters) { return this.inbox.list(req.preflytSession, filters) }
   @Post('read-all') @Header('Cache-Control', 'no-store')

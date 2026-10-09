@@ -28,7 +28,7 @@ export function NotificationsPage() {
               Notifications
             </h1>
             <p className='mt-1 text-sm text-muted-foreground'>
-              Assessment updates from repositories you can access.
+              Assessment and policy updates from repositories you can access.
             </p>
           </div>
           <div className='flex gap-2'>
@@ -79,10 +79,7 @@ export function NotificationsPage() {
             label='Event'
             value={filters.type ?? ''}
             onChange={(v) => change('type', v)}
-            options={[
-              ['', 'All assessment updates'],
-              ...Object.entries(titles),
-            ]}
+            options={[['', 'All updates'], ...Object.entries(titles)]}
           />
           <label className='space-y-1 text-xs text-muted-foreground'>
             From
@@ -126,7 +123,7 @@ export function NotificationsPage() {
             <Inbox className='mx-auto mb-3 size-8 text-teal-500' />
             <h2 className='font-semibold'>No notifications here</h2>
             <p className='mt-2 text-sm text-muted-foreground'>
-              New assessment updates will appear here. Try changing your
+              New engineering updates will appear here. Try changing your
               filters.
             </p>
           </div>

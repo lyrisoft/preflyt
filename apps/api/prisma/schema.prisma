@@ -582,12 +582,14 @@ model GitHubUserAccessEvidence {
 // Durable, redacted assessment outbox. Delivery is independent of gate decisions.
 model NotificationEvent {
   id String @id @default(cuid())
-  assessmentId String @unique
+  assessmentId String? @unique
+  policyId String? @unique
+  schemaVersion Int @default(1)
   organizationId String
   repositoryId String
   repositoryGithubId String
   repositoryName String
-  sourceSha String
+  sourceSha String?
   actorId String?
   type String
   severity String
@@ -605,6 +607,7 @@ model InboxNotification {
   identityId String
   readAt DateTime?
   deliveredAt DateTime @default(now())
+  emailDelivery NotificationEmailDelivery?
   @@unique([eventId, identityId])
   @@index([identityId, readAt, deliveredAt])
 }
@@ -613,6 +616,21 @@ model NotificationPreference {
   identityId String
   organizationId String
   assessments Boolean @default(true)
+  email Boolean @default(false)
   updatedAt DateTime @updatedAt
   @@id([identityId, organizationId])
+}
+
+model NotificationEmailDelivery {
+  id String @id @default(cuid())
+  inboxId String @unique
+  inbox InboxNotification @relation(fields: [inboxId], references: [id], onDelete: Cascade)
+  state String @default("PENDING")
+  attempts Int @default(0)
+  nextAttemptAt DateTime @default(now())
+  leaseUntil DateTime?
+  sentAt DateTime?
+  failureCode String?
+  createdAt DateTime @default(now())
+  @@index([state, nextAttemptAt, leaseUntil])
 }
