@@ -195,6 +195,10 @@ Preflyt shall provide a **Contributors** item in the Engineering sidebar when im
 
 The [MVP Product Experience Contract](product/mvp-product-experience.md) is the authoritative target for navigation, enterprise dashboard, repository/assessment/finding/policy/contributor pages and role-aware states. The [Enterprise UI Guidelines](design/enterprise-ui-guidelines.md) and [Codex/Claude implementation guardrails](agents/product-implementation-guardrails.md) require API-backed, evidence-based, accessible, incremental implementation while preserving existing Shadcn Admin and P0–P11 order. These documents do not imply unimplemented pages already exist.
 
+### GitHub organization ruleset governance (P2)
+
+Preflyt shall expose **Governance → Quality Gates → GitHub Rulesets** with Standard, Strict and Custom safe-default profiles, repository/branch targeting, exact Preflyt Check Run source mapping, preflight, preview/diff, explicit authorization, deploy, drift and rollback. GitHub Actions supplies CI evidence; Preflyt's deterministic gate publishes a stable check; GitHub enforces it. Use a separately authorized organization Administration-write integration; never silently change unmanaged rulesets or activate an unverified required check. See [GitHub Ruleset Management](product/github-ruleset-management.md).
+
 ## 6. Supported SDLC stages and user journeys
 
 ### 6.1 Lifecycle coverage
