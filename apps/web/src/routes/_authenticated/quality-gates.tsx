@@ -1,6 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { CapabilityPage } from '@/features/workspace/capability-page'
+import { WorkspaceModule } from '@/features/workspace/module-page'
+import { workspaceSearchSchema } from '@/features/workspace/search-schema'
 
 export const Route = createFileRoute('/_authenticated/quality-gates')({
-  component: () => <CapabilityPage capability='quality-gates' />,
+  validateSearch: workspaceSearchSchema,
+  component: () => <WorkspaceModule module='quality-gates' />,
 })

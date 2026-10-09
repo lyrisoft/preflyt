@@ -1881,3 +1881,20 @@ it('fails before verification for unsupported check sources, absent attempts and
   expect((await f.proof()).status).toBe(400)
   expect(verifyProof).not.toHaveBeenCalled()
 })
+
+
+describe('historical gate preview API', () => {
+  it('uses integrity-checked exact-revision policy and preserves the immutable snapshot', async () => {
+    const {selection,delivery}=await ready()
+    const created=await create(assessmentBody(selection.id,delivery.id))
+    expect(created.status).toBe(201)
+    const path=`/github/repositories/501/assessments/${created.body.assessment.id}/gate-preview`
+    const preview=await request(app.getHttpServer()).get(path).set('Cookie','test.sid=VIEWER').expect(200)
+    expect(preview.body).toMatchObject({status:'INCOMPLETE',publication:'DISABLED',sourceSha:'a'.repeat(40)})
+    expect((await readAssessment(created.body.assessment.id)).body.assessmentHash).toBe(created.body.assessment.assessmentHash)
+    await request(app.getHttpServer()).get(path).expect(401)
+    await request(app.getHttpServer()).get(path.replace('/501/','/999/')).set('Cookie','test.sid=VIEWER').expect(403)
+    await prisma.commitAssessment.update({where:{id:created.body.assessment.id},data:{report:{qualityGate:'PASS'}}})
+    await request(app.getHttpServer()).get(path).set('Cookie','test.sid=VIEWER').expect(409)
+  })
+})

@@ -53,6 +53,7 @@ import {
   EvidenceValidationPanel,
   type EvidenceValidation,
 } from './evidence-validation-panel'
+import { GatePreviewPanel } from './gate-preview-panel'
 import { RelativeTime } from './relative-time'
 import {
   useAssessmentList,
@@ -531,6 +532,10 @@ export function RepositoryAssessments({
               data &&
               coverage && (
                 <>
+                  <GatePreviewPanel
+                    repositoryId={repositoryId}
+                    assessmentId={data.id}
+                  />
                   <div className='grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]'>
                     <AssessmentCoverageChart
                       total={data.report.checks.length}

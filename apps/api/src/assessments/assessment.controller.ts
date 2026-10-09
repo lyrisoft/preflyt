@@ -27,6 +27,7 @@ import {
   SessionGuard,
   type AuthenticatedSession,
 } from '../auth/session.guard.js'
+import { previewGate } from './gate-preview.js'
 import { AssessmentService } from './assessment.service.js'
 class MappingDto {
   @IsString() @MaxLength(80) ruleId!: string
@@ -58,6 +59,11 @@ export class AssessmentController {
   @Header('Cache-Control', 'no-store')
   get(@Param('repositoryId') repo: string, @Param('assessmentId') id: string) {
     return this.assessments.get(repo, id)
+  }
+  @Get(':assessmentId/gate-preview')
+  @Header('Cache-Control', 'no-store')
+  async preview(@Param('repositoryId') repo: string, @Param('assessmentId') id: string) {
+    return previewGate(await this.assessments.get(repo, id))
   }
   @Post()
   @UseGuards(OwnerAdminGuard)

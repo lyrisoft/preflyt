@@ -34,8 +34,18 @@ import { RepositoryStandards } from '@/features/repositories/repository-standard
 import { useNavigationSession } from './navigation-session'
 import { canPerform } from './scoped-access'
 
-type Module = 'assessments' | 'standards' | 'policies' | 'integrations'
+type Module =
+  'quality-gates' | 'assessments' | 'standards' | 'policies' | 'integrations'
 const modules = {
+  'quality-gates': {
+    title: 'Quality Gates',
+    section: 'Governance',
+    icon: ClipboardCheck,
+    description:
+      'Preview frozen policy outcomes at an exact revision. Publication and blocking are disabled.',
+    accent: 'border-info/20 bg-info/5',
+    iconAccent: 'bg-info/15 text-info',
+  },
   assessments: {
     title: 'Assessments',
     section: 'Workspace',
@@ -391,6 +401,13 @@ export function WorkspaceModule({ module }: { module: Module }) {
                           initialSha=''
                         />
                       </>
+                    )}
+                    {module === 'quality-gates' && (
+                      <RepositoryAssessments
+                        repositoryId={repository.githubId}
+                        canCreate={false}
+                        initialSha=''
+                      />
                     )}
                     {module === 'standards' && (
                       <RepositoryStandards

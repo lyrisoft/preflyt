@@ -58,7 +58,7 @@ export const sidebarData: SidebarData = {
           title: 'Quality Gates',
           url: '/quality-gates',
           icon: ShieldCheck,
-          badge: 'Planned',
+          badge: 'Preview',
         },
         { title: 'Engineering Standards', url: '/standards', icon: BookOpen },
         { title: 'Policies', url: '/policies', icon: SlidersHorizontal },

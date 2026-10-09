@@ -44,7 +44,7 @@ describe('enterprise navigation permissions and scope', () => {
     const items = sidebarData.navGroups.flatMap((group) => group.items)
     expect(
       items.filter((item) => item.badge === 'Planned').map((item) => item.title)
-    ).toEqual(['Findings', 'Quality Gates', 'AI Intelligence', 'Settings'])
+    ).toEqual(['Findings', 'AI Intelligence', 'Settings'])
     for (const route of ['/tasks', '/chats', '/users', '/settings']) {
       expect(items.map((item) => item.url)).not.toContain(route)
     }

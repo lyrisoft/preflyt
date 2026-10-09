@@ -9,6 +9,8 @@ import { PrismaService } from '../src/prisma/prisma.service.js'
 import { AuthorizationService } from '../src/auth/authorization.service.js'
 import { AuthService } from '../src/auth/auth.service.js'
 import { SessionGuard, OwnerAdminGuard } from '../src/auth/session.guard.js'
+import { AssessmentController } from '../src/assessments/assessment.controller.js'
+import { AssessmentService } from '../src/assessments/assessment.service.js'
 import { OrganizationController } from '../src/auth/organization.controller.js'
 import { ContributorsController } from '../src/contributors/contributors.controller.js'
 import { ContributorsService } from '../src/contributors/contributors.service.js'
@@ -80,6 +82,7 @@ beforeAll(async () => {
       module: class TestModule {},
       controllers: [
         OrganizationController,
+        AssessmentController,
         ContributorsController,
         GitHubController,
         GitHubWebhookController,
@@ -89,6 +92,7 @@ beforeAll(async () => {
         SessionGuard,
         OwnerAdminGuard,
         ContributorsService,
+        AssessmentService,
         GitHubService,
         GitHubWebhookService,
         DashboardService,
@@ -290,6 +294,8 @@ it('allows assigned Developers to run assessments but not manage repositories or
   await expect(
     access.requireRepository(session, '12', 'assessment.run'),
   ).rejects.toThrow()
+  await actor(developer, '/github/repositories/12/assessments/foreign/gate-preview').expect(403)
+  await actor(developer, '/github/repositories/21/assessments/foreign/gate-preview').expect(403)
   await mutate(developer, '/contributors/repositories/11/sync', {}).expect(403)
   await mutate(viewer, '/organizations/members', {
     subject: 'new',

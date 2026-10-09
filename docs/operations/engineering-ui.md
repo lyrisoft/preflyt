@@ -1,5 +1,7 @@
 # Engineering evidence UI
 
+Current additions: [Contributors and scoped Access Control](scoped-access-contributors.md) are available with organization switching. [Quality Gates](quality-gate-preview.md) provides a historical observe-only preview with exact-SHA evidence drill-down; publication and merge blocking remain pending. The milestone notes below describe their original delivery stages.
+
 The repository page retains its existing Shadcn sidebar, header and tab layout. A restrained navy primary with slate accents distinguishes actions, inventory and configuration; status colors retain their own meaning in light and dark themes.
 
 ## Standards
