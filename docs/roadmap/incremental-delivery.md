@@ -147,6 +147,8 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 
 - **P3.N1:** Notify authorized security owners of critical findings and assessment execution failures.
 
+- **P3.CQ:** Integrate tested code-quality analyzers in the approved isolation boundary and correlate verified findings with skill-based review; do not execute untrusted skill scripts.
+
 ### P4 — Advanced AI Engineering Intelligence
 
 **User value:** A developer sees an evidence-linked explanation and recommended action for an assessment finding.
