@@ -12,6 +12,7 @@ import type { AuthenticatedSession } from '../auth/session.guard.js'
 import { GitHubProviderService } from '../github/github-provider.service.js'
 import { normalizeContributorEvent } from '../github-events/contributor-event.js'
 import { captureContributors } from './capture.js'
+import { contributorCompliance } from './policy-compliance.js'
 
 @Injectable()
 export class ContributorsService {
@@ -119,19 +120,21 @@ export class ContributorsService {
       }
       return result
     }
-    const assessmentAllowed =
-      !!member &&
-      (
-        await this.access.repositoryScope(
+    const evidenceScope = member
+      ? await this.access.repositoryScope(
           session.identityId,
           session.organizationId,
           'contributors.policy_evidence.read',
         )
-      ).length > 0
+      : []
+    const evidenceRepositories = repositories.filter((r) =>
+      evidenceScope.some((allowed) => allowed.id === r.id),
+    )
+    const assessmentAllowed = evidenceRepositories.length > 0
     const assessments = assessmentAllowed
       ? await this.db.commitAssessment.findMany({
           where: {
-            repositoryId: { in: repositories.map((r) => r.id) },
+            repositoryId: { in: evidenceRepositories.map((r) => r.id) },
             sourceSha: {
               in: [
                 ...new Set(
@@ -149,8 +152,11 @@ export class ContributorsService {
             createdAt: true,
             selectionId: true,
             request: true,
+            plan: !!contributorId,
+            report: !!contributorId,
+            assessmentHash: !!contributorId,
           },
-          orderBy: { createdAt: 'desc' },
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
           take: 5001,
         })
       : []
@@ -193,6 +199,57 @@ export class ContributorsService {
       const ids = activity.get(day) ?? new Set()
       ids.add(`${r.repositoryId}:${r.relationship}:${r.sourceObjectId}`)
       activity.set(day, ids)
+    }
+    const contributionDays = new Map<
+      string,
+      {
+        date: string
+        authoredPrs: number
+        mergedPrs: number
+        reviews: number
+        commits: number
+      }
+    >()
+    const addContribution = (
+      row: (typeof observations)[number],
+      key: 'authoredPrs' | 'mergedPrs' | 'reviews' | 'commits',
+    ) => {
+      const date = row.observedAt.toISOString().slice(0, 10)
+      const day = contributionDays.get(date) ?? {
+        date,
+        authoredPrs: 0,
+        mergedPrs: 0,
+        reviews: 0,
+        commits: 0,
+      }
+      day[key]++
+      contributionDays.set(date, day)
+    }
+    for (const row of allPrs.values()) {
+      addContribution(row, 'authoredPrs')
+      if (row.merged) addContribution(row, 'mergedPrs')
+    }
+    for (const row of unique(observations, 'REVIEWER').values())
+      addContribution(row, 'reviews')
+    for (const row of unique(observations, 'COMMIT_AUTHOR').values())
+      addContribution(row, 'commits')
+    // Zero-fill the selected UTC window; series totals reconcile with the activity cards.
+    const contributionActivity = []
+    for (
+      let day = new Date(from);
+      day <= now;
+      day.setUTCDate(day.getUTCDate() + 1)
+    ) {
+      const date = day.toISOString().slice(0, 10)
+      contributionActivity.push(
+        contributionDays.get(date) ?? {
+          date,
+          authoredPrs: 0,
+          mergedPrs: 0,
+          reviews: 0,
+          commits: 0,
+        },
+      )
     }
     const snapshotPrs = [...allPrs.values()].filter(
       (r) => associated(r).length,
@@ -239,6 +296,7 @@ export class ContributorsService {
             .sort(([a], [b]) => a.localeCompare(b))
             .map(([date, ids]) => ({ date, count: ids.size }))
         : [],
+      contributionActivity: activityAllowed ? contributionActivity : [],
       assessmentActivity: assessmentAllowed
         ? [
             { name: 'Snapshot recorded', count: snapshotPrs },
@@ -257,7 +315,9 @@ export class ContributorsService {
         ? data
         : data.slice((page - 1) * 20, page * 20),
       lastReceivedAt: receipt?.receivedAt.toISOString() ?? null,
-      collectionEnabled: process.env.GITHUB_EVENTS_ENABLED === 'true' && (process.env.GITHUB_WEBHOOK_SECRET?.length ?? 0) >= 32,
+      collectionEnabled:
+        process.env.GITHUB_EVENTS_ENABLED === 'true' &&
+        (process.env.GITHUB_WEBHOOK_SECRET?.length ?? 0) >= 32,
       limitations: [
         'Counts describe observed activity, not employee productivity.',
         'Only selected, authorized installed repositories are included.',
@@ -265,10 +325,30 @@ export class ContributorsService {
         'Identities are installation-scoped; an account seen in multiple installations may appear more than once.',
         'Historical backfill is bounded; coverage can be partial. Push author names are not stable identities.',
         'Co-authors are not inferred from commit messages.',
-        'Policy gates and confirmed findings are not implemented; adherence and complete-evidence coverage are unavailable.',
+        'Compliance uses historical saved standards previews, not published-policy enforcement or current merge readiness. Confirmed findings are unavailable.',
       ],
       ...(contributorId
         ? {
+            policyCompliance: assessmentAllowed
+              ? {
+                  ...contributorCompliance(
+                    observations.filter(
+                      (r) =>
+                        r.relationship === 'PR_AUTHOR' &&
+                        evidenceRepositories.some(
+                          (allowed) => allowed.id === r.repositoryId,
+                        ),
+                    ),
+                    assessments.slice(0, 5000),
+                    truncated || assessments.length > 5000,
+                  ),
+                  repositories: evidenceRepositories.map((r) => ({
+                    id: r.id,
+                    githubId: r.githubId.toString(),
+                    fullName: r.fullName,
+                  })),
+                }
+              : null,
             observations: observations.map((r) => ({
               id: r.id,
               relationship: r.relationship,

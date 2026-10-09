@@ -39,6 +39,16 @@ import { Main } from '@/components/layout/main'
 import { RepositoryPicker } from '@/components/repository-picker'
 import { useNavigationSession } from '../workspace/navigation-session'
 import { canPerform } from '../workspace/scoped-access'
+import {
+  ContributorActivitySummary,
+  type ContributionDay,
+} from './contributor-activity-summary'
+import {
+  PolicyComplianceSummary,
+  PolicyComplianceEvidence,
+  type Compliance,
+} from './policy-compliance'
+import { paginatePullRequests } from './pull-request-pagination'
 import type { ContributorSearch } from './search-schema'
 
 type Contributor = {
@@ -86,6 +96,7 @@ type Result = {
     authoredPrs: number | null
     prsWithSnapshots: number | null
   }
+  contributionActivity: ContributionDay[]
   activity: { date: string; count: number }[]
   assessmentActivity: { name: string; count: number }[]
   permissions: { activity: boolean; policyEvidence: boolean }
@@ -97,6 +108,7 @@ type Result = {
   lastReceivedAt: string | null
   collectionEnabled: boolean
   limitations: string[]
+  policyCompliance?: Compliance | null
   observations?: Observation[]
 }
 const value = (n: number | null | undefined) => n ?? 'Unavailable'
@@ -252,7 +264,7 @@ export function ContributorsPage({
   const setPage = (update: (page: number) => number) =>
     patch({ page: update(page) })
   const setTab = (tab: string) =>
-    patch({ tab: tab as ContributorSearch['tab'] })
+    patch({ tab: tab as ContributorSearch['tab'], page: 1 })
   const session = useNavigationSession(),
     client = useQueryClient()
   const params = new URLSearchParams({
@@ -267,6 +279,7 @@ export function ContributorsPage({
     queryKey: [
       'contributors',
       session.data?.organizationId,
+      session.data?.identityId,
       contributorId,
       params.toString(),
     ],
@@ -276,6 +289,7 @@ export function ContributorsPage({
         signal
       ),
     retry: false,
+    gcTime: 0,
     enabled: session.isSuccess,
   })
   const sync = useMutation({
@@ -298,6 +312,7 @@ export function ContributorsPage({
   const data = query.data,
     c = data?.contributors[0],
     rows = data?.observations ?? []
+  const pullRequests = paginatePullRequests(rows, page)
   function filter(action: () => void) {
     action()
   }
@@ -486,26 +501,42 @@ export function ContributorsPage({
         ) : (
           data && (
             <>
-              <div className='grid gap-4 sm:grid-cols-2 xl:grid-cols-4'>
-                {metrics.map((m, i) => (
-                  <Card key={m.label} className='gap-3'>
-                    <CardContent className='pt-1'>
-                      <div className='flex items-center justify-between'>
-                        <p className='text-xs text-muted-foreground'>
-                          {m.label}
+              {contributorId && c ? (
+                <div className='grid items-stretch gap-4 xl:grid-cols-[minmax(0,7fr)_minmax(0,3fr)]'>
+                  <ContributorActivitySummary
+                    series={data.contributionActivity ?? []}
+                    metrics={c}
+                    allowed={data.permissions.activity}
+                    truncated={data.truncated}
+                  />
+                  <PolicyComplianceSummary
+                    data={data.policyCompliance ?? null}
+                    period={data.period}
+                    onEvidence={() => setTab('policy-evidence')}
+                  />
+                </div>
+              ) : (
+                <div className='grid gap-4 sm:grid-cols-2 xl:grid-cols-4'>
+                  {metrics.map((m, i) => (
+                    <Card key={m.label} className='gap-3'>
+                      <CardContent className='pt-1'>
+                        <div className='flex items-center justify-between'>
+                          <p className='text-xs text-muted-foreground'>
+                            {m.label}
+                          </p>
+                          <m.icon
+                            className='size-4'
+                            style={{ color: `var(--chart-${i + 1})` }}
+                          />
+                        </div>
+                        <p className='mt-3 text-2xl font-semibold tabular-nums'>
+                          {value(m.n)}
                         </p>
-                        <m.icon
-                          className='size-4'
-                          style={{ color: `var(--chart-${i + 1})` }}
-                        />
-                      </div>
-                      <p className='mt-3 text-2xl font-semibold tabular-nums'>
-                        {value(m.n)}
-                      </p>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
               <div className='flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground'>
                 <p>
                   {data.lastReceivedAt
@@ -590,7 +621,7 @@ export function ContributorsPage({
                   </Tabs>
                 </>
               )}
-              {(!contributorId || tab === 'overview') && (
+              {!contributorId && (
                 <div className='grid gap-4 lg:grid-cols-3'>
                   <Card className='lg:col-span-2'>
                     <CardHeader>
@@ -692,7 +723,7 @@ export function ContributorsPage({
                   </Card>
                 </div>
               )}
-              {(!contributorId || tab === 'overview') &&
+              {!contributorId &&
                 data.permissions.activity &&
                 data.activity.length > 0 && (
                   <details className='rounded-lg border p-3 text-xs'>
@@ -894,27 +925,78 @@ export function ContributorsPage({
                       </CardTitle>
                       {tab === 'policy-evidence' && (
                         <p className='text-sm text-muted-foreground'>
-                          First-pass adherence, final adherence and confirmed
-                          findings are unavailable. Missing evidence never
-                          indicates compliance.
+                          Required-check results for the latest recorded PR
+                          revisions. Open an assessment to inspect its standards
+                          and evidence. Confirmed findings are not available.
                         </p>
                       )}
                     </CardHeader>
                     <CardContent>
-                      {tab === 'policy-evidence' &&
-                      !data.permissions.policyEvidence ? (
+                      {tab === 'policy-evidence' ? (
+                        <PolicyComplianceEvidence
+                          data={data.policyCompliance ?? null}
+                        />
+                      ) : !data.permissions.activity ? (
                         <p className='text-sm text-muted-foreground'>
                           Policy evidence permission is required.
                         </p>
+                      ) : tab === 'pull-requests' ? (
+                        <>
+                          <SourceRows rows={pullRequests.items} />
+                          {pullRequests.total > 0 && (
+                            <div className='mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-4 text-xs text-muted-foreground'>
+                              <p>
+                                {(pullRequests.page - 1) *
+                                  pullRequests.pageSize +
+                                  1}
+                                –
+                                {Math.min(
+                                  pullRequests.page * pullRequests.pageSize,
+                                  pullRequests.total
+                                )}{' '}
+                                of {pullRequests.total} pull requests · Latest
+                                recorded activity per PR
+                              </p>
+                              <nav
+                                aria-label='Pull request pagination'
+                                className='flex items-center gap-2'
+                              >
+                                <Button
+                                  size='sm'
+                                  variant='outline'
+                                  disabled={pullRequests.page === 1}
+                                  onClick={() =>
+                                    setPage(() => pullRequests.page - 1)
+                                  }
+                                >
+                                  Previous
+                                </Button>
+                                <span aria-live='polite'>
+                                  Page {pullRequests.page} of{' '}
+                                  {pullRequests.pages}
+                                </span>
+                                <Button
+                                  size='sm'
+                                  variant='outline'
+                                  disabled={
+                                    pullRequests.page === pullRequests.pages
+                                  }
+                                  onClick={() =>
+                                    setPage(() => pullRequests.page + 1)
+                                  }
+                                >
+                                  Next
+                                </Button>
+                              </nav>
+                            </div>
+                          )}
+                        </>
                       ) : (
                         <SourceRows
-                          policy={tab === 'policy-evidence'}
                           rows={rows.filter((r) =>
-                            tab === 'pull-requests' || tab === 'policy-evidence'
-                              ? r.relationship === 'PR_AUTHOR'
-                              : tab === 'reviews'
-                                ? r.relationship === 'REVIEWER'
-                                : true
+                            tab === 'reviews'
+                              ? r.relationship === 'REVIEWER'
+                              : true
                           )}
                         />
                       )}

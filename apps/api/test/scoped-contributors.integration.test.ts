@@ -22,6 +22,7 @@ import { GitHubWebhookService } from '../src/github-events/github-webhook.servic
 import { GitHubWebhookController } from '../src/github-events/github-webhook.controller.js'
 import { DashboardService } from '../src/dashboard/dashboard.service.js'
 import { DashboardController } from '../src/dashboard/dashboard.controller.js'
+import { digest } from '../src/assessments/assessment-digest.js'
 import { RedisCacheService } from '../src/cache/redis-cache.service.js'
 let db: PrismaService, app: INestApplication, access: AuthorizationService
 let orgA: string,
@@ -519,4 +520,37 @@ it('organization creation assigns an explicit Owner without granting other organ
  const created=await mutate(platform,'/organizations',{name:'New customer'}).expect(201)
  expect(await db.organizationMembership.findFirst({where:{organizationId:created.body.id,identityId:platform}})).toMatchObject({role:'OWNER',active:true})
  expect(await access.repositoryScope(platform,orgA)).toEqual([])
+})
+
+async function complianceFixture() {
+  const contributor = await db.contributor.findFirstOrThrow({ where: { githubUserId: '11', installationId: 1n } })
+  const observation = await db.contributorObservation.findFirstOrThrow({ where: { contributorId: contributor.id } })
+  const input = {
+    sourceSha: sha, selectionId: 'fixture-selection', selectionRevision: 1,
+    pullRequest: { number: 11, objectId: observation.sourceObjectId, head: { sha } },
+    profileSnapshot: { sourceSha: sha, complete: true },
+  }
+  const plan = { version: 1, sourceSha: sha, mode: 'INGEST_ONLY', stage: 'ci', enforcement: 'observe', checks: [{ id: 'ci', required: true, operator: 'configuration_hint_present', capability: 'available' }] }
+  const report = { version: 1, sourceSha: sha, collectionTruncated: false, validationCollectionTruncated: false, checks: [{ ruleId: 'ci', required: true, coverage: 'CONFIGURATION_OBSERVED', configurationEvidence: [{ path: '.github/workflows/ci.yml', blobSha: 'b'.repeat(40) }] }] }
+  const assessment = await db.commitAssessment.create({ data: { repositoryId: observation.repositoryId, sourceSha: sha, selectionId: input.selectionId, requestKey: randomUUID(), inputHash: 'fixture', request: input, plan, report, assessmentHash: digest({ request: input, plan, report }) } })
+  return { contributor, observation, assessment }
+}
+it('returns authorized contributor compliance with exact PR evidence and preserves filters', async () => {
+  const { contributor, assessment } = await complianceFixture()
+  const profile = await actor(developer, `/contributors/${contributor.id}`).expect(200)
+  expect(profile.body.policyCompliance).toMatchObject({ eligiblePrs: 1, completePrs: 1, passingPrs: 1, passRate: 100, coverage: 100, rows: [{ assessmentId: assessment.id, number: 11 }] })
+  expect(profile.body.policyCompliance.repositories.map((r: any) => r.githubId)).toEqual(['11'])
+  expect(profile.body.contributionActivity.reduce((total: number, day: any) => total + day.authoredPrs, 0)).toBe(profile.body.contributors[0].authoredPrs)
+  expect(profile.body.contributionActivity.reduce((total: number, day: any) => total + day.mergedPrs, 0)).toBe(profile.body.contributors[0].mergedPrs)
+  expect(profile.body.contributionActivity).toHaveLength(30)
+  await actor(developer, `/contributors/${contributor.id}?relationship=REVIEWER`).expect(403)
+  await actor(developer, `/contributors/${contributor.id}?repository=12`).expect(403)
+})
+it('hides compliance after permission/grant revocation and excludes tampered evidence', async () => {
+  const { contributor, assessment } = await complianceFixture()
+  await db.commitAssessment.update({ where: { id: assessment.id }, data: { assessmentHash: 'changed' } })
+  const profile = await actor(developer, `/contributors/${contributor.id}`).expect(200)
+  expect(profile.body.policyCompliance).toMatchObject({ completePrs: 0, passRate: null, rows: [{ status: 'INVALID' }] })
+  await db.repositoryGrant.deleteMany({ where: { membershipId: memberId } })
+  await actor(developer, `/contributors/${contributor.id}`).expect(403)
 })

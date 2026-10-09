@@ -27,8 +27,14 @@ List/detail aggregation is bounded to 5,000 observations (plus a sentinel), with
 
 ## Explicitly pending
 
-Deterministic gate outcomes, first-pass/final adherence, verified required-evidence coverage, confirmed findings, team inheritance, per-organization identity providers, comprehensive historical backfill, retention/deletion administration and identity linking are not implemented by this slice. Policy versions remain available in the linked immutable assessment details. No passing outcome, external-member classification, complete organization coverage or employee ranking is inferred.
+Published-policy enforcement attribution, lifetime first-pass/final adherence, confirmed findings, team inheritance, per-organization identity providers, comprehensive historical backfill, retention/deletion administration and identity linking are not implemented by this slice. Policy versions remain available in the linked immutable assessment details. No passing outcome, external-member classification, complete organization coverage or employee ranking is inferred.
 
 ## Verification
 
 The migration is deployed through the existing Compose migration service; no extra runtime or queue is required. Local upgrade verification checks existing memberships, grants, installations and sessions. Focused integration tests cover cross-organization/repository access, direct API bypass, revoked grants/memberships, Super Admin isolation, role administration, signed event replay and hashes, consistent metrics, real persisted-session authorization and backfill throttling. Existing affected authentication/repository domain integration fixtures mock the authorizer; the new scoped integration tests use its real database implementation. Web unit checks cover permissions and URL filters; API/web TypeScript, scoped lint and production bundling verify the source. Browser/device checks remain skipped by user instruction.
+
+## Contributor profile compliance
+
+Profiles now show a saved-standards compliance summary above activity metrics. Rates use integrity-checked historical gate previews and exact authored PR revisions. Complete coverage and missing/older evidence appear alongside the passing fraction. Different standards versions remain separate; limited collection hides percentages. See [metric definitions and limits](../product/engineering-contributors.md#implemented-profile-compliance). Policy evidence permission and current repository scope are checked independently. No new database migration or upstream GitHub calls are required.
+
+The Pull Requests tab deduplicates PRs by repository/number, displays the latest recorded activity, and pages 20 PRs at a time within the bounded local observation collection. Page/filter state remains in the URL; changing tabs or filters resets pagination.

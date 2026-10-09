@@ -1,6 +1,6 @@
 # Engineering Contributors: activity and policy evidence
 
-**Status:** Activity capture, scoped directory and profile UI implemented; verified coverage, adherence, findings and advanced trends remain planned. See [implemented subset](../operations/scoped-access-contributors.md).  
+**Status:** Activity capture, scoped directory/profile UI and historical saved-standards compliance summaries are implemented. Published-policy adherence, confirmed findings and advanced trends remain planned. See [implemented subset](../operations/scoped-access-contributors.md).
 **Delivery:** P1 data capture → P2 policy attribution → P3 usable Contributors UI → P10/P11 advanced trends. **Existing phase order unchanged.**
 
 ## User experience and navigation
@@ -46,3 +46,13 @@ Ingest signed PR/review/push/check events with idempotency and revision correctn
 | **P10–P11** | Add authorized team-level aggregates, historical trends, advanced policy comparisons and engineering improvement reporting |
 
 **P3 acceptance:** a connected repository with seeded contributor/PR/check fixtures shows correct list, charts and profile drill-down; filtering changes all metrics consistently; unauthorized repository activity never appears; missing evidence is not treated as compliant; bots and private/unlinked identities are labeled accurately; activity metrics are reproducible from source records. Existing P0–P3 release workflows must remain usable.
+
+## Implemented profile compliance
+
+The contributor profile opens with a 70/30 desktop layout: daily contribution graph and four activity cards on the left, **Engineering policy compliance** in a 2×2 card grid on the right. The panels stack on smaller screens. Detailed calculation notes and standards-version breakdowns are expandable. It reports required-check pass rate, complete-assessment coverage, PRs with failed required checks, and PRs needing evidence, within the selected period and authorized repository scope. The Pull Requests tab lists each PR once using its latest recorded activity, with URL-backed Previous/Next controls and 20 PRs per page.
+
+The current evaluator is a historical **saved engineering standards preview** in observe mode, not published-policy enforcement, current merge readiness or an individual performance score. It verifies each assessment hash and binds the contributor's authored PR to its stable object ID, number, repository and exact commit. Missing, unsupported, altered and ambiguous evidence never counts as passing. If the latest recorded head has no assessment, older results are shown as stale and excluded from the rate.
+
+The pass-rate denominator is PRs whose latest recorded revision has results for every required rule (including known failures). Coverage divides this fully assessed count by all observed authored PRs in scope. Required-check failure and missing evidence can coexist; the card shows both. Percentages are unavailable when no complete assessment exists or collection limits are reached. Different saved standards selections are reported separately. The first-recorded metric uses the earliest complete assessment available for observed revisions in this window, only when it shares the latest assessment's standards selection; it is not verified lifetime first-pass adherence.
+
+Evidence drill-down lists each PR, commit, required-rule counts, result and exact assessment link. No GitHub API calls are added to profile reads. Backend checks `contributors.policy_evidence.read` separately from activity access, and audits profile access. Existing collection/backfill bounds still apply; narrow filters when partial. Published-policy attribution, verified first-pass/final enforcement compliance and confirmed findings remain pending.
