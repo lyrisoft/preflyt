@@ -1,0 +1,70 @@
+# Review and replace the exact names before deployment to the approved cluster.
+# This observer identity cannot create jobs, read secrets, exec into pods, or change protections.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: preflyt-native-observer
+  namespace: preflyt-controller
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: preflyt-native-observer
+  namespace: preflyt-sandbox-reviewed
+rules:
+  - apiGroups: [""]
+    resources: [resourcequotas]
+    resourceNames: [bounded]
+    verbs: [get]
+  - apiGroups: [""]
+    resources: [limitranges]
+    resourceNames: [container]
+    verbs: [get]
+  - apiGroups: [""]
+    resources: [serviceaccounts]
+    resourceNames: [sandbox]
+    verbs: [get]
+  - apiGroups: [networking.k8s.io]
+    resources: [networkpolicies]
+    verbs: [list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: preflyt-native-observer
+  namespace: preflyt-sandbox-reviewed
+subjects:
+  - kind: ServiceAccount
+    name: preflyt-native-observer
+    namespace: preflyt-controller
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: preflyt-native-observer
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: preflyt-native-observer-reviewed
+rules:
+  - apiGroups: [""]
+    resources: [namespaces]
+    resourceNames: [preflyt-sandbox-reviewed]
+    verbs: [get]
+  - apiGroups: [node.k8s.io]
+    resources: [runtimeclasses]
+    resourceNames: [preflyt-runsc]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: preflyt-native-observer-reviewed
+subjects:
+  - kind: ServiceAccount
+    name: preflyt-native-observer
+    namespace: preflyt-controller
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: preflyt-native-observer-reviewed

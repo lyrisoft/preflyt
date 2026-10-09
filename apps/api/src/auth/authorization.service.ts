@@ -241,6 +241,7 @@ export class AuthorizationService {
       const permission =
         request.method === 'GET'
           ? part.startsWith('assessments') ||
+            part === 'native-execution/status' ||
             part.startsWith('ci-evidence') ||
             part.startsWith('pull-requests') ||
             part === 'events'

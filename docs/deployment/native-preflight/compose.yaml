@@ -1,0 +1,25 @@
+# Optional read-only preflight controller. Native repository execution remains unavailable.
+# Run from this directory with a dedicated controller.env and mounted read-only observer files.
+name: preflyt-native-preflight
+services:
+  controller:
+    image: ${PREFLYT_API_IMAGE:?Set the reviewed Preflyt API image digest}
+    command: [node, dist/execution-controller.js]
+    env_file: controller.env
+    user: "1000:1000"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    mem_limit: 512m
+    cpus: 0.5
+    restart: unless-stopped
+    ports: ["127.0.0.1:3010:3010"]
+    volumes:
+      - ./observer-token:/run/native/observer-token:ro
+      - ./cluster-ca.crt:/run/native/cluster-ca.crt:ro
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3010/health/live').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

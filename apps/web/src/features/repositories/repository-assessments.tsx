@@ -54,6 +54,7 @@ import {
   type EvidenceValidation,
 } from './evidence-validation-panel'
 import { GatePreviewPanel } from './gate-preview-panel'
+import { NativeExecutionStatus } from './native-execution-status'
 import { RelativeTime } from './relative-time'
 import {
   useAssessmentList,
@@ -392,6 +393,7 @@ export function RepositoryAssessments({
         </CardAction>
       </CardHeader>
       <CardContent className='space-y-4'>
+        <NativeExecutionStatus repositoryId={repositoryId} />
         {history.isPending ? (
           <p role='status' className='text-sm text-muted-foreground'>
             Loading assessments…

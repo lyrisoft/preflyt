@@ -127,6 +127,7 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 **User value:** Preflyt can perform useful code/security/IaC validation itself, rather than depending exclusively on existing CI.
 
 **Tasks:**
+- **P3 admission preflight (implemented, not execution):** A separate read-only TypeScript controller verifies independent signed review and current named runtime controls. Scoped assessment UI reports imported-only, missing review, changed controls and verified preflight. All native jobs remain disabled; live independent sandbox acceptance and dispatch/adapters are still required. See [Native execution](../operations/native-execution.md).
 - P3.1 Approved isolated executor with non-root, no privileged/container socket/host access, quotas, short-lived jobs, default-deny egress, no platform/model/Git-write credentials.
 - P3.2 Independently test effective sandbox isolation and prohibit all real-repository tasks until the approved stronger runtime passes review; retain INGEST_ONLY mode.
 - P3.3 Pin repository SHA, tool/container digest, command, environment, outcome and evidence hashes; add artifact collection/reconciliation.

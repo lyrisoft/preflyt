@@ -1,3 +1,5 @@
+import { NativeStatusController } from '../execution/native-status.controller.js'
+import { NativeStatusService } from '../execution/native-status.service.js'
 import { RulesetDeploymentController } from '../github/ruleset-deployment.controller.js'
 import { RulesetDeploymentService } from '../github/ruleset-deployment.service.js'
 import { ReadinessAutomationController } from './readiness-automation.controller.js'
@@ -18,7 +20,9 @@ import { AssessmentController } from './assessment.controller.js'
 import { AssessmentService } from './assessment.service.js'
 @Module({
   imports: [AuthModule, PrismaModule, GitHubProviderModule],
-  controllers: [RulesetDeploymentController,
+  controllers: [
+    NativeStatusController,
+    RulesetDeploymentController,
     ReadinessAutomationController,
     CheckPublicationController,
     GatePolicyController,
@@ -26,6 +30,15 @@ import { AssessmentService } from './assessment.service.js'
     CiBindingController,
     PullRequestController,
   ],
-  providers: [RulesetDeploymentService,ReadinessAutomationService, CheckPublicationService, GatePolicyService, AssessmentService, CiBindingService, PullRequestService],
+  providers: [
+    NativeStatusService,
+    RulesetDeploymentService,
+    ReadinessAutomationService,
+    CheckPublicationService,
+    GatePolicyService,
+    AssessmentService,
+    CiBindingService,
+    PullRequestService,
+  ],
 })
 export class AssessmentModule {}
