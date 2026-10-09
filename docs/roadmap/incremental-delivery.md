@@ -133,7 +133,9 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 
 - **P2.CQ:** Deliver a versioned Code Quality policy pack, deterministic check evaluation, and a reviewed skill catalogue/enablement workflow. AI findings remain advisory.
 
-### P3 — Native Secure Validation
+- **P2.Teams:** Support organization/team/repository policy assignments, approved team repository scope, deterministic effective-policy composition, conflict handling, preview, audit and enforcement impact. No silent weakening of inherited controls.
+
+### P3 — Native Secure Validation### P3 — Native Secure Validation
 
 **User value:** Preflyt can perform useful code/security/IaC validation itself, rather than depending exclusively on existing CI.
 
