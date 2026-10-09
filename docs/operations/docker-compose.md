@@ -2,6 +2,8 @@
 
 This packages the current Preflyt UI, authentication, GitHub onboarding and repository profiles, webhook ingestion, a queue worker, separate cache/queue services, and vendor-neutral OpenTelemetry. It does not add repository execution, scanners, agents or Kubernetes deployment. The frontend theme is unchanged.
 
+For production policy-aware checks, also follow the [GitHub governance runbook](../deployment/github-governance-production.md). Attestation binaries/roots and the additional runtime variables require an explicit reviewed container override; root dotenv values alone do not enable them.
+
 ## Configuration and first start
 
 Requirements: Docker Engine/Desktop with Compose v2 or later; Node 24 for the optional HTTP smoke utility. Commands run from the repository root. Use a dedicated deployment checkout and retain the same Compose project name on every upgrade; the default is `preflyt`.

@@ -1,8 +1,8 @@
 # GitHub Ruleset Management and Preflyt Quality Gate Integration
 
-**Status:** P2 product requirement; first P2.R1 repository-scoped read-only slice and P2.R2 single-repository draft wizard implemented. The first P2.R3 manual non-passing check publisher is also implemented; see [publication limits](../operations/github-check-publication.md). Organization-wide discovery, broader target/exclusion controls, verified passing checks and the remainder of R3–R5 remain pending. **No phase reorder.**
+**Status:** P2 product requirement; first P2.R1 repository-scoped read-only slice and P2.R2 single-repository draft wizard implemented. The P2.R3 manual policy-aware publisher supports passing checks only with pinned execution contracts and verified signed evidence; see [publication limits](../operations/github-check-publication.md). Organization-wide discovery, broader target/exclusion controls, automatic publication, live acceptance and the remainder of R3–R5 remain pending. **No phase reorder.**
 
-See [current ruleset setup and limits](../operations/github-rulesets.md).
+See [current ruleset setup and limits](../operations/github-rulesets.md) and the [production deployment contract](../deployment/github-governance-production.md).
 **Related:** [MVP Experience](mvp-product-experience.md), [Engineering Standards](engineering-standards-library.md), [RBAC](rbac-and-authorization.md), [Roadmap](../roadmap/incremental-delivery.md).
 
 ## Purpose

@@ -1,0 +1,34 @@
+# Optional production evidence override. Review and copy before deploying.
+# Applies to docker-compose.yaml; the base verifier image does not bundle gh/roots.
+# Host directory contains reviewed gh and trusted-root.json, readable/executable by UID 1000.
+x-evidence-environment: &evidence-environment
+  CI_ATTESTATION_GH_PATH: /opt/preflyt-attestation/gh
+  CI_ATTESTATION_GH_SHA256: ${CI_ATTESTATION_GH_SHA256:?Set reviewed binary SHA-256}
+  CI_ATTESTATION_ROOT_PATH: /opt/preflyt-attestation/trusted-root.json
+  CI_ATTESTATION_ROOT_SHA256: ${CI_ATTESTATION_ROOT_SHA256:?Set reviewed root SHA-256}
+  CI_ATTESTATION_WORKFLOWS: ${CI_ATTESTATION_WORKFLOWS:?Set exact workflow allowlist JSON}
+  CI_EXECUTION_CONTRACTS: ${CI_EXECUTION_CONTRACTS:?Set reviewed execution contracts JSON}
+x-evidence-mount: &evidence-mount
+  type: bind
+  source: ${PREFLYT_ATTESTATION_DIR:?Set absolute reviewed verifier directory}
+  target: /opt/preflyt-attestation
+  read_only: true
+services:
+  api:
+    environment:
+      <<: *evidence-environment
+      NODE_ENV: production
+      GITHUB_GOVERNANCE_LOCAL_ACCEPTANCE: 'false'
+      # Preparation only: current release has no activation endpoint.
+      GITHUB_GOVERNANCE_APP_ID: ${GITHUB_GOVERNANCE_APP_ID:-}
+      GITHUB_GOVERNANCE_PRIVATE_KEY: ${GITHUB_GOVERNANCE_PRIVATE_KEY:-}
+      GITHUB_GOVERNANCE_INSTALLATION_ID: ${GITHUB_GOVERNANCE_INSTALLATION_ID:-}
+    volumes:
+      - *evidence-mount
+  worker:
+    environment:
+      <<: *evidence-environment
+      NODE_ENV: production
+      GITHUB_GOVERNANCE_LOCAL_ACCEPTANCE: 'false'
+    volumes:
+      - *evidence-mount

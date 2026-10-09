@@ -63,7 +63,7 @@ For detailed user journeys, triggers, check examples, stage contracts and perfor
 
 The **Contributors** module provides an authorized directory, activity charts, repository/time filters and profiles with PR, commit, review and exact-revision assessment links. Organization/repository permissions are enforced server-side. Verified assessment coverage, policy adherence and confirmed findings remain unavailable pending their backend capabilities; later phases add broader trends. See [current implementation](docs/operations/scoped-access-contributors.md) and the [full Contributors specification](docs/product/engineering-contributors.md).
 
-**Quality Gates:** historical observe-only previews are available for immutable assessment snapshots. Manual reviewed non-passing GitHub check publication and read-back receipts are available; see [publication setup](docs/operations/github-check-publication.md). Trusted execution, verified passing checks, current merge readiness and ruleset deployment remain pending. See [Quality Gate Preview](docs/operations/quality-gate-preview.md).
+**Quality Gates:** historical observe-only previews are available for immutable assessment snapshots. Manual reviewed policy-aware GitHub check publication and read-back receipts are available; see [publication setup](docs/operations/github-check-publication.md). Passing publication requires reviewed pinned contracts and verified signed execution evidence. Automatic publication, live acceptance, current merge readiness and ruleset deployment remain pending. See [Quality Gate Preview](docs/operations/quality-gate-preview.md).
 
 ## MVP product experience and implementation guardrails
 
@@ -163,6 +163,8 @@ flowchart TD
 **AI is optional for core operation.** Preflyt can import checks, enforce policies and publish readiness without any frontier-model keys or local LLM.
 
 ## Deployment and OpenTelemetry configuration
+
+**Production GitHub checks and governance:** follow the [production deployment guide](docs/deployment/github-governance-production.md) for separate App permissions, secret handling, GitHub plan requirements, signed reports, container configuration, migrations, acceptance and recovery. The local shared-App exception must never be used in production. Automatic enforcement remains unreleased.
 
 **Self-hosted installation:** root `.env.example` and complete Docker Compose services are implemented for the released feature set. Build source images once, then start with `docker compose up -d`. A release workflow publishes versioned API/migration/web images; publication and package access must be verified before using the prebuilt-image path. The current stack includes frontend, API, PostgreSQL, cache, queue and the GitHub event worker. Future gateways/stores are added with their feature releases. No Node.js, pnpm, Redis or PostgreSQL host installation is needed to run available images. External services such as GitHub, OIDC and frontier models still require configured credentials/endpoints; do not claim a working deployment before manifests/images exist.
 

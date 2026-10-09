@@ -1,5 +1,7 @@
 # Signed CI report provenance
 
+See the [production deployment contract](../deployment/github-governance-production.md) for plan requirements, separate Apps, reviewed runtime configuration and release limits.
+
 ## Setup
 
 Apply additive migration `20261009060000_ci_attestations` and regenerate the Prisma client. Back up PostgreSQL before upgrading. No repository write permission, background job, new Redis key or Preflyt runner is added.
@@ -29,3 +31,7 @@ Validated provenance removes only `REPORT_PROVENANCE_UNVERIFIED` for a unique va
 Scoped tests cover signed identity, tampered bytes/signatures, policy pins, revocation, API authorization/Origin, replay, quotas, concurrent verifier admission, audit rollback and immutable assessments. The adapter also enforces runtime/output limits; timeout and output-overflow behavior were not induced in the live CLI smoke check. The real cryptographic test requires `PREFLYT_TEST_GH_PATH=/absolute/path/to/gh`; run `pnpm --filter @preflyt/api exec vitest run test/ci-attestation.test.ts test/evidence-validation.test.ts test/assessment-plan.test.ts test/assessments.integration.test.ts` against a disposable PostgreSQL database. Frontend typecheck and touched-file lint/format cover controls; browser tests remain skipped.
 
 Unset provenance configuration to disable new verification. Retain the additive table when rolling back application code; no reset or destructive migration is needed. Automatic provider artifact retrieval and independent tool/environment/coverage verification remain later work.
+
+## Policy-aware publication extension
+
+Provenance alone still does not prove rule coverage. The policy-aware publisher additionally requires deployment-reviewed pinned execution contracts, rule-specific report checks and live workflow-run verification. A matching contract can establish execution trust in a new assessment; it does not rewrite historical snapshots. Automatic retrieval/publication, cross-repository reusable signing and ruleset activation remain pending. See the [check publication guide](github-check-publication.md).

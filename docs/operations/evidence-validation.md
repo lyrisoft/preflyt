@@ -21,3 +21,7 @@ Next prerequisite: obtain independently verifiable CI report provenance bound to
 ## Deployment and verification
 
 No migration, new service or environment variable is required. API validation uses local PostgreSQL evidence without calling GitHub. Run the scoped evidence-validation, assessment-plan and assessment integration tests against a disposable database; frontend typecheck and touched-file lint/format cover the UI. Browser tests remain skipped.
+
+## Policy-aware execution contracts
+
+The baseline limitations above apply when no reviewed execution contract is configured. The policy-aware extension can mark supported rule evidence `VERIFIED` only when a pinned signing workflow contract, current cryptographically verified provenance, report integrity, source approval and rule-specific execution checks agree. Mutable upload labels remain insufficient. The published-policy evaluator separately rechecks the current workflow run and policy/contract hashes before allowing manual success. Historical previews are unchanged. See [production deployment](../deployment/github-governance-production.md); automatic publication and ruleset activation remain unreleased.

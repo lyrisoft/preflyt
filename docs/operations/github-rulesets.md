@@ -1,5 +1,7 @@
 # GitHub rulesets: discovery and local drafts
 
+See the [production governance deployment guide](../deployment/github-governance-production.md) for separate credentials, permissions and activation release gates. Configuring credentials does not enable deployment or activation in this release.
+
 Quality Gates → GitHub Rulesets shows rulesets GitHub returns for the selected repository, including applicable parent organization/enterprise rulesets. Choose a repository, open a ruleset, and inspect its branch patterns, rule types, approval count and required status-check names/source App IDs.
 
 This is the first **P2.R1** slice. It uses the existing GitHub App with a repository-limited **Metadata: read** token; no organization administration permission is added. The discovery UI has no GitHub write actions. The P2.R2 wizard previews and saves local drafts for one selected repository. Preflyt does not publish a required check or deploy a ruleset in these slices.
