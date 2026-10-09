@@ -81,7 +81,17 @@ export class OrganizationController {
   @Get() @Header('Cache-Control', 'no-store') async list(@Req() req: R) {
     const memberships = await this.db.organizationMembership.findMany({
       where: { identityId: req.preflytSession.identityId, active: true },
-      include: { organization: true },
+      include: {
+        organization: {
+          include: {
+            githubLink: { select: { login: true } },
+            installations: {
+              where: { active: true, accountType: 'Organization' },
+              select: { accountLogin: true },
+            },
+          },
+        },
+      },
       orderBy: { createdAt: 'asc' },
     })
     const verified = []
@@ -101,11 +111,22 @@ export class OrganizationController {
     return {
       activeOrganizationId: req.preflytSession.organizationId,
       platformAdmin: !!req.preflytSession.platformAdmin,
-      organizations: verified.map((m) => ({
-        id: m.organizationId,
-        name: m.organization.name,
-        role: m.role,
-      })),
+      organizations: verified.map((m) => {
+        // Legacy workspaces may have an installation before explicit identity linking.
+        // Only an unambiguous organization installation supplies a display identity.
+        const logins = [
+          ...new Set(m.organization.installations.map((i) => i.accountLogin)),
+        ]
+        const githubLogin =
+          m.organization.githubLink?.login ??
+          (logins.length === 1 ? logins[0] : null)
+        return {
+          id: m.organizationId,
+          name: githubLogin ?? m.organization.name,
+          githubLogin,
+          role: m.role,
+        }
+      }),
     }
   }
   @Post() async create(@Body() body: CreateOrganizationDto, @Req() req: R) {

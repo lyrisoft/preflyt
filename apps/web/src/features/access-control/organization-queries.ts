@@ -10,7 +10,12 @@ export function useOrganizations() {
     }): Promise<{
       activeOrganizationId: string | null
       platformAdmin: boolean
-      organizations: { id: string; name: string; role: string }[]
+      organizations: {
+        id: string
+        name: string
+        role: string
+        githubLogin: string | null
+      }[]
     }> => {
       const r = await fetch(`${API_BASE_URL}/organizations`, {
         credentials: 'include',

@@ -1,5 +1,6 @@
 import * as React from 'react'
-import { ChevronsUpDown } from 'lucide-react'
+import { Check, ChevronsUpDown } from 'lucide-react'
+import { siGithub } from 'simple-icons'
 import { API_BASE_URL } from '@/lib/api'
 import {
   DropdownMenu,
@@ -15,6 +16,19 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar'
 import { useOrganizations } from '@/features/access-control/organization-queries'
+
+function GitHubIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox='0 0 24 24'
+      fill='currentColor'
+      className={className}
+      aria-hidden='true'
+    >
+      <path d={siGithub.path} />
+    </svg>
+  )
+}
 
 type TeamSwitcherProps = {
   teams: {
@@ -32,9 +46,19 @@ export function TeamSwitcher({ teams }: TeamSwitcherProps) {
   const activeOrganization = organizations.data?.organizations.find(
     (o) => o.id === organizations.data.activeOrganizationId
   )
+  const connectedOrganizations =
+    organizations.data?.organizations.filter(
+      (organization) => organization.githubLogin
+    ) ?? []
   const activeTeam = {
     ...teams[0],
-    plan: activeOrganization?.name ?? 'Select an organization',
+    name:
+      activeOrganization?.name ??
+      (organizations.isPending ? 'Loading…' : 'Select organization'),
+    plan: activeOrganization?.githubLogin
+      ? 'GitHub organization'
+      : 'Organization setup',
+    logo: GitHubIcon,
   }
   async function activate(id: string) {
     setSwitching(true)
@@ -66,6 +90,7 @@ export function TeamSwitcher({ teams }: TeamSwitcherProps) {
             <SidebarMenuButton
               size='lg'
               disabled={switching}
+              aria-label={`Switch organization: ${activeTeam.name}`}
               className='data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground'
             >
               <div className='flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground'>
@@ -87,25 +112,34 @@ export function TeamSwitcher({ teams }: TeamSwitcherProps) {
             sideOffset={4}
           >
             <DropdownMenuLabel className='text-xs text-muted-foreground'>
-              Organizations
+              GitHub organizations
             </DropdownMenuLabel>
-            {organizations.data?.organizations.map((organization) => (
+            {connectedOrganizations.map((organization) => (
               <DropdownMenuItem
                 key={organization.id}
+                disabled={
+                  switching || organization.id === activeOrganization?.id
+                }
                 onClick={() => void activate(organization.id)}
                 className='gap-2 p-2'
               >
                 <div className='flex size-6 items-center justify-center rounded-sm border'>
                   <activeTeam.logo className='size-4 shrink-0' />
                 </div>
-                <span className='truncate'>{organization.name}</span>
+                <span className='flex-1 truncate'>{organization.name}</span>
+                {organization.id === activeOrganization?.id && (
+                  <Check
+                    className='size-4 shrink-0'
+                    aria-label='Current organization'
+                  />
+                )}
               </DropdownMenuItem>
             ))}
-            {!organizations.data?.organizations.length && (
+            {!connectedOrganizations.length && (
               <DropdownMenuLabel className='text-xs text-muted-foreground'>
                 {organizations.isPending
                   ? 'Loading organizations…'
-                  : 'No active organization memberships'}
+                  : 'Connect a GitHub organization in Access Control.'}
               </DropdownMenuLabel>
             )}
             {(error || organizations.isError) && (

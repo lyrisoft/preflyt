@@ -44,3 +44,10 @@ Tabs appear immediately below the filters. The graph and compliance dashboard ap
 After an Owner verifies and links the organization, an active workspace Owner/Admin using the existing OIDC or local recovery session can sync the directory and resolve members for role assignment without changing their sign-in identity. Preflyt verifies the linked App installation's organization ID and requests only Metadata read and Organization Members read. Approve Members: Read-only on the installation if GitHub reports it missing. Sync does not grant access. Member assignment still uses existing authorization, repository scope and audit checks.
 
 GitHub-linked user accounts continue to use their own credentials and verified access; expired or denied user authorization never falls back to the installation token. Local role, organization link and installation revision are rechecked before returning fetched data. Failures stay within Access Control and leave the existing session intact. No identity merge, new organization, migration or worker change is required.
+
+
+## GitHub organization workspace selector
+
+The sidebar workspace selector shows the connected GitHub organization login, rather than a generic Preflyt workspace label. It lists only the user's authorized connected organizations and marks the current one. Selecting another organization verifies its active membership and changes only the current browser session; a full-page reload clears organization-bound client data. Connecting an App never grants a user membership automatically.
+
+For existing workspaces awaiting explicit GitHub linking, a single active organization App installation can supply the display name. Multiple distinct installation accounts do not become separate workspaces automatically; use verified organization onboarding/linking to establish their identities and memberships. An unconnected recovery workspace retains access to setup in Access Control.
