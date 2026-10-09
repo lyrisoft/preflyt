@@ -103,7 +103,7 @@ export function PolicyComplianceSummary({
     ? data.incompletePrs + data.unassessedPrs + data.stalePrs
     : 0
   return (
-    <Card className='min-w-0 gap-3 border-primary/20'>
+    <Card className='h-full min-w-0 gap-3 border-primary/20'>
       <CardHeader className='flex flex-row flex-wrap items-start justify-between gap-3'>
         <div className='space-y-1'>
           <CardTitle className='flex items-center gap-2'>
@@ -132,7 +132,7 @@ export function PolicyComplianceSummary({
           <ArrowRight className='size-3.5' />
         </Button>
       </CardHeader>
-      <CardContent className='space-y-4'>
+      <CardContent className='flex flex-1 flex-col gap-4'>
         {!data ? (
           <p className='text-sm text-muted-foreground'>
             You need contributor policy evidence permission to view compliance.
@@ -144,7 +144,7 @@ export function PolicyComplianceSummary({
           </p>
         ) : (
           <>
-            <div className='grid grid-cols-2 gap-3'>
+            <div className='grid flex-1 auto-rows-fr grid-cols-2 gap-3'>
               {[
                 {
                   label: 'Pass rate',
@@ -167,7 +167,7 @@ export function PolicyComplianceSummary({
                 {
                   label: 'Failed checks',
                   value: String(data.blockedPrs),
-                  detail: 'Known required-check failures',
+                  detail: '',
                   icon: CircleAlert,
                   color: 'text-red-600 dark:text-red-400',
                 },
@@ -197,9 +197,11 @@ export function PolicyComplianceSummary({
                   >
                     {metric.value}
                   </p>
-                  <p className='mt-1 text-xs text-muted-foreground'>
-                    {metric.detail}
-                  </p>
+                  {metric.detail && (
+                    <p className='mt-1 text-xs text-muted-foreground'>
+                      {metric.detail}
+                    </p>
+                  )}
                 </div>
               ))}
             </div>
@@ -267,18 +269,6 @@ export function PolicyComplianceSummary({
             )}
           </>
         )}
-        <details className='text-xs text-muted-foreground'>
-          <summary className='cursor-pointer'>
-            Metric definitions · Observe mode
-          </summary>{' '}
-          <p className='mt-2'>
-            Based on saved engineering standards in observe mode, not
-            published-policy enforcement or current merge readiness. First
-            recorded means the first complete assessment found in this period
-            under the same standards version. Activity counts do not measure
-            employee performance.
-          </p>
-        </details>
       </CardContent>
     </Card>
   )

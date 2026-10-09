@@ -153,3 +153,17 @@ it('pages Activity content and does not render later rows on page one', () => {
   expect(second).toContain('>PR #31')
   expect(second).not.toContain('>PR #1<')
 })
+
+it('puts Help after Refresh and keeps explanatory notes out of the dashboard', () => {
+  state.tab = 'overview'
+  state.page = 1
+  const html = renderToStaticMarkup(<ContributorsPage contributorId='person' />)
+  expect(html.indexOf('Refresh local data')).toBeLessThan(
+    html.indexOf('Help for Contributor profile')
+  )
+  expect(html).not.toContain('Metric definitions · Observe mode')
+  expect(html).not.toContain('How activity is counted')
+  expect(html).not.toContain('Data sources and limits')
+  expect(html).toContain('items-stretch')
+  expect(html).toContain('h-full min-w-0')
+})

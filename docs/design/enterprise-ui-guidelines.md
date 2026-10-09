@@ -32,3 +32,10 @@ Use existing shadcn/ui and TanStack patterns where available. Reuse one routing/
 - [ ] Metrics reconcile with underlying rows and explain unknown/missing evidence.
 - [ ] Appropriate loading, empty, error, unauthorized and stale states.
 - [ ] Mobile/keyboard/theme testing and design consistency with existing Preflyt shell.
+
+
+## Page help pattern
+
+Use the shared `PageHelpDrawer` for explanatory notes. Put a labeled Help button at the top right of the page, after Refresh when present. Open a right-side, scrollable drawer with grouped metric definitions, data sources, counting rules, interpretation and limitations. Contributor pages implement this pattern. Reuse it for new and updated pages rather than adding scattered helper paragraphs or help accordions.
+
+Keep actual results, denominators, chart axes/legends, dates, permission-denied states, errors, empty states and actionable incomplete-data warnings beside the relevant data. Move explanations, not the information needed to assess a result. Preserve accessible chart data and keyboard navigation. Side-by-side summary cards should stretch to equal height on desktop and stack naturally on smaller screens.

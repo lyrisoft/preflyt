@@ -27,7 +27,6 @@ export function ContributorActivitySummary({
   series,
   metrics,
   allowed,
-  truncated,
 }: {
   series: ContributionDay[]
   metrics: {
@@ -37,7 +36,6 @@ export function ContributorActivitySummary({
     commits: number | null
   }
   allowed: boolean
-  truncated: boolean
 }) {
   const definitions = [
     {
@@ -54,19 +52,16 @@ export function ContributorActivitySummary({
     },
   ]
   return (
-    <Card className='min-w-0 gap-3'>
+    <Card className='h-full min-w-0 gap-3'>
       <CardHeader>
         <CardTitle>Contribution activity</CardTitle>
-        <p className='text-xs text-muted-foreground'>
-          Daily PRs, reviews and commits · UTC
-        </p>
       </CardHeader>
-      <CardContent className='space-y-4'>
+      <CardContent className='flex flex-1 flex-col gap-4'>
         {allowed &&
         series.some((day) => definitions.some((d) => day[d.key] > 0)) ? (
           <>
             <div
-              className='chart-motion h-44'
+              className='chart-motion h-44 min-h-44 flex-1'
               role='img'
               aria-label='Daily authored PRs, merged PRs, recorded reviews and attributed commits'
             >
@@ -139,37 +134,29 @@ export function ContributorActivitySummary({
             </div>
           ))}
         </div>
-        <details className='text-xs text-muted-foreground'>
-          <summary className='cursor-pointer'>How activity is counted</summary>
-          <p className='mt-2'>
-            Each object is counted once at its latest recorded activity date.
-            Merged PRs are a subset of authored PRs. Counts describe
-            participation, not employee performance.
-            {truncated ? ' Collection is partial; narrow the filters.' : ''}
-          </p>
-          <div className='mt-2 max-h-40 overflow-auto'>
-            <table className='w-full text-left text-[11px]'>
-              <thead>
-                <tr>
-                  <th>Date</th>
+        <div className='sr-only'>
+          <table className='w-full text-left text-[11px]'>
+            <caption>Daily contribution activity (UTC)</caption>
+            <thead>
+              <tr>
+                <th>Date</th>
+                {definitions.map((d) => (
+                  <th key={d.key}>{d.label}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {series.map((day) => (
+                <tr key={day.date}>
+                  <td>{day.date}</td>
                   {definitions.map((d) => (
-                    <th key={d.key}>{d.label}</th>
+                    <td key={d.key}>{day[d.key]}</td>
                   ))}
                 </tr>
-              </thead>
-              <tbody>
-                {series.map((day) => (
-                  <tr key={day.date}>
-                    <td>{day.date}</td>
-                    {definitions.map((d) => (
-                      <td key={d.key}>{day[d.key]}</td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </details>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </CardContent>
     </Card>
   )

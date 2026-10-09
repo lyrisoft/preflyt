@@ -43,6 +43,7 @@ import {
   ContributorActivitySummary,
   type ContributionDay,
 } from './contributor-activity-summary'
+import { ContributorHelp } from './contributor-help'
 import {
   PolicyComplianceSummary,
   PolicyComplianceEvidence,
@@ -407,20 +408,24 @@ export function ContributorsPage({
               ) : null}
               {contributorId ? (c?.login ?? 'Contributor') : 'Contributors'}
             </h1>
-            <p className='mt-1 text-sm text-muted-foreground'>
-              Observed participation and revision evidence from authorized
-              repositories.
-            </p>
           </div>
-          <Button
-            variant='outline'
-            size='sm'
-            onClick={() => void query.refetch()}
-            disabled={query.isFetching}
-          >
-            <RefreshCw className='size-4' />
-            Refresh local data
-          </Button>
+          <div className='flex items-center gap-2'>
+            <Button
+              variant='outline'
+              size='sm'
+              onClick={() => void query.refetch()}
+              disabled={query.isFetching}
+            >
+              <RefreshCw className='size-4' />
+              Refresh local data
+            </Button>
+            <ContributorHelp
+              profile={!!contributorId}
+              limitations={data?.limitations}
+              lastReceivedAt={data?.lastReceivedAt}
+              collectionEnabled={data?.collectionEnabled}
+            />
+          </div>
         </div>
         <div className='flex flex-wrap gap-3 rounded-xl border bg-card p-4'>
           <label className='flex flex-col gap-1 text-xs text-muted-foreground'>
@@ -543,12 +548,11 @@ export function ContributorsPage({
           data && (
             <>
               {contributorId && c && tab === 'overview' ? (
-                <div className='grid items-start gap-4 xl:grid-cols-[minmax(0,7fr)_minmax(0,3fr)]'>
+                <div className='grid items-stretch gap-4 xl:grid-cols-[minmax(0,7fr)_minmax(0,3fr)]'>
                   <ContributorActivitySummary
                     series={data.contributionActivity ?? []}
                     metrics={c}
                     allowed={data.permissions.activity}
-                    truncated={data.truncated}
                   />
                   <PolicyComplianceSummary
                     data={data.policyCompliance ?? null}
@@ -578,18 +582,9 @@ export function ContributorsPage({
                   ))}
                 </div>
               ) : null}
-              <div className='flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground'>
-                <p>
-                  {data.lastReceivedAt
-                    ? `Last receipt: ${new Date(data.lastReceivedAt).toLocaleString()}`
-                    : 'No contributor receipts yet'}{' '}
-                  ·{' '}
-                  {data.collectionEnabled
-                    ? 'Signed event collection enabled'
-                    : 'Signed event collection is disabled'}
-                </p>
-                {repository !== 'all' &&
-                  canPerform(session.data, 'repository.manage', repository) && (
+              {repository !== 'all' &&
+                canPerform(session.data, 'repository.manage', repository) && (
+                  <div className='flex justify-end'>
                     <Button
                       size='sm'
                       variant='outline'
@@ -601,8 +596,8 @@ export function ContributorsPage({
                         ? 'Importing…'
                         : 'Import recent GitHub activity'}
                     </Button>
-                  )}
-              </div>
+                  </div>
+                )}
               {sync.isError && (
                 <p role='alert' className='text-sm text-danger-text'>
                   {sync.error.message}
@@ -649,10 +644,6 @@ export function ContributorsPage({
                   <Card className='lg:col-span-2'>
                     <CardHeader>
                       <CardTitle>Participation over time</CardTitle>
-                      <p className='text-xs text-muted-foreground'>
-                        Recorded PRs, commits and reviews per day (UTC).
-                        Repeated GitHub events are counted once.
-                      </p>
                     </CardHeader>
                     <CardContent>
                       {data.permissions.activity && data.activity.length ? (
@@ -702,9 +693,6 @@ export function ContributorsPage({
                   <Card>
                     <CardHeader>
                       <CardTitle>PR revision evidence</CardTitle>
-                      <p className='text-xs text-muted-foreground'>
-                        Recorded snapshots are not verified passing assessments.
-                      </p>
                     </CardHeader>
                     <CardContent>
                       {data.permissions.policyEvidence &&
@@ -949,13 +937,6 @@ export function ContributorsPage({
                           ? 'Policy evidence'
                           : tab.replace(/-/g, ' ')}
                       </CardTitle>
-                      {tab === 'policy-evidence' && (
-                        <p className='text-sm text-muted-foreground'>
-                          Required-check results for the latest recorded PR
-                          revisions. Open an assessment to inspect its standards
-                          and evidence. Confirmed findings are not available.
-                        </p>
-                      )}
                     </CardHeader>
                     <CardContent>
                       {tab === 'policy-evidence' ? (
@@ -987,16 +968,6 @@ export function ContributorsPage({
                     </CardContent>
                   </Card>
                 )}
-              <details className='rounded-xl border bg-muted/10 p-4 text-xs text-muted-foreground'>
-                <summary className='cursor-pointer font-medium'>
-                  Data sources and limits
-                </summary>
-                <ul className='mt-3 list-disc space-y-1 pl-4'>
-                  {data.limitations.map((l) => (
-                    <li key={l}>{l}</li>
-                  ))}
-                </ul>
-              </details>
             </>
           )
         )}
