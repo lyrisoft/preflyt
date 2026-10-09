@@ -124,7 +124,7 @@ export function OrganizationStandardsLibrary() {
               {
                 title: 'Supported checks',
                 content:
-                  'Standards group deterministic checks and advisory AI checks. Each AI check pins an approved skill version and chooses when it runs. AI suggestions cannot satisfy required deterministic checks. Source-code review is not yet available; the current runtime reviews saved check evidence.',
+                  'Standards group deterministic checks and advisory AI Reviews. Each AI Review pins an approved skill version and chooses when it runs. AI suggestions cannot satisfy required deterministic checks. Source-code review is not yet available; the current runtime reviews saved check evidence.',
               },
             ]}
           />
@@ -456,14 +456,14 @@ function StandardEditor({
                   {selected.length} deterministic checks
                 </StatusBadge>
                 <StatusBadge tone='info'>
-                  {aiChecks.length} AI checks
+                  {aiChecks.length} AI Reviews
                 </StatusBadge>
               </div>
             </div>
             <Tabs defaultValue='checks' className='min-w-0'>
               <TabsList>
                 <TabsTrigger value='checks'>Deterministic checks</TabsTrigger>
-                <TabsTrigger value='ai'>AI checks</TabsTrigger>
+                <TabsTrigger value='ai'>AI Reviews</TabsTrigger>
               </TabsList>
               <TabsContent value='checks' className='mt-4 space-y-3'>
                 <Input
@@ -550,7 +550,7 @@ function StandardEditor({
               <TabsContent value='ai' className='mt-4'>
                 <fieldset disabled={busy} className='space-y-3'>
                   <div className='flex items-center justify-between gap-3'>
-                    <span className='text-sm font-semibold'>AI checks</span>
+                    <span className='text-sm font-semibold'>AI Reviews</span>
                     <Button
                       type='button'
                       size='sm'
@@ -574,7 +574,7 @@ function StandardEditor({
                         }
                       }}
                     >
-                      Add AI check
+                      Add AI Review
                     </Button>
                   </div>
                   {!library.reviewSkills?.length && (
@@ -598,7 +598,7 @@ function StandardEditor({
                             type='button'
                             size='sm'
                             variant='ghost'
-                            aria-label={`Remove AI check ${index + 1}`}
+                            aria-label={`Remove AI Review ${index + 1}`}
                             onClick={() =>
                               setAiChecks((old) =>
                                 old.filter((c) => c.id !== check.id)
@@ -609,7 +609,7 @@ function StandardEditor({
                           </Button>
                         </div>
                         <label className='block space-y-1 text-sm'>
-                          <span>AI check name</span>
+                          <span>AI Review name</span>
                           <Input
                             required
                             maxLength={120}
@@ -692,7 +692,7 @@ function StandardEditor({
                 </fieldset>
                 {aiPages > 1 && (
                   <nav
-                    aria-label='AI check pages'
+                    aria-label='AI Review pages'
                     className='mt-3 flex items-center justify-end gap-2'
                   >
                     <Button
@@ -702,7 +702,7 @@ function StandardEditor({
                       disabled={aiPage <= 1}
                       onClick={() => setAiPage((p) => p - 1)}
                     >
-                      Previous AI checks
+                      Previous AI Reviews
                     </Button>
                     <span className='text-xs'>
                       {Math.min(aiPage, aiPages)} / {aiPages}
@@ -714,7 +714,7 @@ function StandardEditor({
                       disabled={aiPage >= aiPages}
                       onClick={() => setAiPage((p) => p + 1)}
                     >
-                      Next AI checks
+                      Next AI Reviews
                     </Button>
                   </nav>
                 )}

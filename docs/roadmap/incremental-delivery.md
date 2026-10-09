@@ -403,6 +403,6 @@ This advances P4.2/P4.3/P4.4/P4.CQ but does not complete contextual PR review: d
 Verification: 100 API/transport tests and 19 Chromium tests passed, alongside API/web type checks and focused UI lint. The local additive migration was applied after a protected snapshot; Prisma regenerated. Local explicit reviews are enabled; deployment examples stay disabled. No live model inference was requested.
 
 
-### P4 AI check-to-skill assignment (2026-10-09)
+### P4 AI review-to-skill assignment (2026-10-09)
 
-Organization standards now support named advisory AI checks with approved immutable skill pins. Check stages control repository/PR applicability; policy review freezes the assignment and assessment requests accept only assigned check IDs. Disabling or replacing a skill cannot silently change a saved check. Deterministic rules and gate decisions remain separate. The standard editor now uses a wide rectangle, separate check tabs, filtering/pagination and visible actions. Selecting a self-hosted model defaults to optional authentication. This increment needs no database migration; contextual source review remains pending.
+Organization standards now support named advisory AI reviews with approved immutable skill pins. Check stages control repository/PR applicability; policy review freezes the assignment and assessment requests accept only assigned check IDs. Disabling or replacing a skill cannot silently change a saved check. Deterministic rules and gate decisions remain separate. The standard editor now uses a wide rectangle, separate check tabs, filtering/pagination and visible actions. Selecting a self-hosted model defaults to optional authentication. This increment needs no database migration; contextual source review remains pending.

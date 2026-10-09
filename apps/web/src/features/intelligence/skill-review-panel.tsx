@@ -141,7 +141,7 @@ export function SkillReviewPanel({
           </div>
           {!eligible.length && (
             <p className='text-sm text-muted-foreground'>
-              No AI checks are assigned in this assessment. Add them to
+              No AI Reviews are assigned in this assessment. Add them to
               Engineering Standards, adopt the version and create a new
               assessment.
             </p>

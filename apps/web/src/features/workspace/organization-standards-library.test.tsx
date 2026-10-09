@@ -134,7 +134,7 @@ it('preserves the editor after a save conflict and presents a useful error', asy
     .toHaveValue('Team standard')
 })
 
-it('authors an AI check with an approved pinned skill in the wide tabbed editor', async () => {
+it('authors an AI Review with an approved pinned skill in the wide tabbed editor', async () => {
   state.query = {
     data: {
       builtIn: [pack],
@@ -147,10 +147,10 @@ it('authors an AI check with an approved pinned skill in the wide tabbed editor'
   await view
     .getByRole('textbox', { name: 'Name', exact: true })
     .fill('Service standard')
-  await view.getByRole('tab', { name: 'AI checks', exact: true }).click()
-  await view.getByRole('button', { name: 'Add AI check' }).click()
+  await view.getByRole('tab', { name: 'AI Reviews', exact: true }).click()
+  await view.getByRole('button', { name: 'Add AI Review' }).click()
   await view
-    .getByRole('textbox', { name: 'AI check name' })
+    .getByRole('textbox', { name: 'AI Review name' })
     .fill('Review security evidence')
   await view.getByRole('button', { name: 'Save standard' }).click()
   expect(state.save).toHaveBeenCalledWith(

@@ -248,11 +248,11 @@ export function assessmentAiChecks(plan: unknown, stage: string): AiCheck[] {
     throw new Error("Invalid assessment standards");
   for (const pack of packs) {
     if (!pack.aiChecks?.length) continue;
-    if (!organizationPack(pack)) throw new Error("Invalid AI check definition");
+    if (!organizationPack(pack)) throw new Error("Invalid AI review definition");
     for (const check of pack.aiChecks) {
       const old = checks.get(check.id);
       if (old && contentDigest(old) !== contentDigest(check))
-        throw new Error("Conflicting AI check definitions");
+        throw new Error("Conflicting AI review definitions");
       checks.set(check.id, check);
     }
   }

@@ -137,7 +137,7 @@ export class OrganizationStandardsService {
             });
             if (!skill || skillDigest(skill) !== skill.contentDigest)
               throw new BadRequestException(
-                "Choose an approved, enabled skill version for every AI check",
+                "Choose an approved, enabled skill version for every AI review",
               );
             aiChecks.push({
               id: check.id,
@@ -155,7 +155,7 @@ export class OrganizationStandardsService {
             new Set(aiChecks.map((c) => c.id)).size !== aiChecks.length
           )
             throw new BadRequestException(
-              "Choose up to twelve distinct AI checks",
+              "Choose up to twelve distinct AI reviews",
             );
           const revision = (previous?.revision ?? 0) + 1;
           const definition: Omit<StandardPack, "digest"> = {
@@ -177,7 +177,7 @@ export class OrganizationStandardsService {
           const digest = packDigest(definition);
           if (!organizationPack({ ...definition, digest }))
             throw new BadRequestException(
-              "Enter a check name, skill and review stage for each AI check",
+              "Enter a review name, skill and review stage for each AI review",
             );
           const saved = await tx.organizationStandardVersion.create({
             data: {

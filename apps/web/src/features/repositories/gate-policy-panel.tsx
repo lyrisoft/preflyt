@@ -610,7 +610,7 @@ export function GatePolicyPanel({
                 {!!selected.definition.aiChecks?.length && (
                   <section className='space-y-3'>
                     <h3 className='text-sm font-semibold'>
-                      Advisory AI checks
+                      Advisory AI Reviews
                     </h3>
                     {selected.definition.aiChecks.map((check) => (
                       <div

@@ -18,7 +18,7 @@ const help = [
   {
     title: 'Assign and run',
     content:
-      'Assign an approved skill version to an AI check in Engineering Standards, choose its review stages, then adopt that standard version. Open a new saved assessment, select up to three assigned AI checks and run explicitly. Skills can optionally restrict repository scope. A tested model route and configured rates are required. Suggestions stay separate from deterministic gates.',
+      'Assign an approved skill version to an AI Review in Engineering Standards, choose its review stages, then adopt that standard version. Open a new saved assessment, select up to three assigned AI Reviews and run explicitly. Skills can optionally restrict repository scope. A tested model route and configured rates are required. Suggestions stay separate from deterministic gates.',
   },
 ]
 export function SkillsPage() {

@@ -177,7 +177,7 @@ export class SkillReviewService {
       new Set(checkIds).size !== checkIds.length
     )
       throw new BadRequestException(
-        "Choose up to three AI checks from this assessment’s saved standards",
+        "Choose up to three AI reviews from this assessment’s saved standards",
       );
     const skillIds = [...new Set(checks.map((c) => c.skillId))];
     const skills = await this.db.aiReviewSkill.findMany({
@@ -435,7 +435,7 @@ export class SkillReviewService {
       .filter((c) => snapshot.checks.some((s) => s.id === c.id))
       .sort((a, b) => a.id.localeCompare(b.id));
     if (digest(assigned) !== digest(snapshot.checks))
-      throw new Error("AI check assignment changed");
+      throw new Error("AI review assignment changed");
     const route = await this.db.aiStageRoute.findFirst({
       where: {
         id: snapshot.route.id,

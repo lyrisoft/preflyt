@@ -140,7 +140,7 @@ const help = [
   {
     title: 'Review skills',
     content:
-      'Create a versioned skill or start from a first-party template. Review its instructions, source and license, then approve and enable it. Changes require a new version. Add an AI check in Engineering Standards and assign this approved skill version to it. The check selects its review stages; up to three assigned checks can run per review. Model output is advisory and never changes deterministic checks. Third-party packages and scripts are not automatically imported or executed.',
+      'Create a versioned skill or start from a first-party template. Review its instructions, source and license, then approve and enable it. Changes require a new version. Add an AI Review in Engineering Standards and assign this approved skill version to it. Choose where the review applies; up to three assigned reviews can run in one request. Model output is advisory and never changes deterministic checks. Third-party packages and scripts are not automatically imported or executed.',
   },
   {
     title: 'Current availability',
