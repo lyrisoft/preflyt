@@ -6,6 +6,7 @@ const state = vi.hoisted(() => ({
   history: {} as Record<string, unknown>,
   assessments: {} as Record<string, unknown>,
 }))
+vi.mock('./readiness-automation', () => ({ ReadinessAutomation: () => null }))
 vi.mock('@tanstack/react-query', () => ({
   useQuery: (options: { queryKey: string[] }) =>
     options.queryKey[0] === 'check-publications'

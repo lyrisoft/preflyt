@@ -1,3 +1,7 @@
+import { RulesetDeploymentController } from '../github/ruleset-deployment.controller.js'
+import { RulesetDeploymentService } from '../github/ruleset-deployment.service.js'
+import { ReadinessAutomationController } from './readiness-automation.controller.js'
+import { ReadinessAutomationService } from './readiness-automation.service.js'
 import { CheckPublicationController } from './check-publication.controller.js'
 import { CheckPublicationService } from './check-publication.service.js'
 import { GitHubProviderModule } from '../github/github-provider.module.js'
@@ -14,13 +18,14 @@ import { AssessmentController } from './assessment.controller.js'
 import { AssessmentService } from './assessment.service.js'
 @Module({
   imports: [AuthModule, PrismaModule, GitHubProviderModule],
-  controllers: [
+  controllers: [RulesetDeploymentController,
+    ReadinessAutomationController,
     CheckPublicationController,
     GatePolicyController,
     AssessmentController,
     CiBindingController,
     PullRequestController,
   ],
-  providers: [CheckPublicationService, GatePolicyService, AssessmentService, CiBindingService, PullRequestService],
+  providers: [RulesetDeploymentService,ReadinessAutomationService, CheckPublicationService, GatePolicyService, AssessmentService, CiBindingService, PullRequestService],
 })
 export class AssessmentModule {}

@@ -168,3 +168,20 @@ it('reads the current run using Actions read and checks repository identity', as
   ).rejects.toThrow('identity')
   provider.close()
 })
+
+it('invalidates an existing success with PATCH and verifies read-back without creating a second check', async()=>{
+  const {provider,fetch}=setup()
+  const previous={...run(),conclusion:'success',output:{title:'Passed',summary:'Old evidence'}}
+  fetch.mockResolvedValueOnce(response({check_runs:[previous]})).mockResolvedValueOnce(response(previous)).mockResolvedValueOnce(response(run())).mockResolvedValueOnce(response(run()))
+  await provider.publishReadinessCheck(500n,501n,payload,false,true)
+  expect(fetch.mock.calls.map(c=>c[1].method)).toEqual(['GET','GET','PATCH','GET'])
+  expect(JSON.parse(fetch.mock.calls[2][1].body).conclusion).toBe('action_required')
+  provider.close()
+})
+it('never updates an existing check whose App identity changed',async()=>{
+  const {provider,fetch}=setup()
+  fetch.mockResolvedValueOnce(response({check_runs:[run()]})).mockResolvedValueOnce(response({...run(),app:{id:1000},conclusion:'success'}))
+  await expect(provider.publishReadinessCheck(500n,501n,payload,false,true)).rejects.toThrow('identity changed')
+  expect(fetch.mock.calls.every(c=>c[1].method==='GET')).toBe(true)
+  provider.close()
+})

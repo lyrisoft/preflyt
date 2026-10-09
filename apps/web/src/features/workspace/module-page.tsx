@@ -174,17 +174,17 @@ export function WorkspaceModule({ module }: { module: Module }) {
                   {
                     title: 'GitHub rulesets',
                     content:
-                      'Rulesets come from GitHub for the selected repository, including inherited organization or enterprise rules. Active rules are enforced by GitHub; Evaluate records evaluations without blocking, and Disabled rules are not enforced. This view does not report legacy branch protection or deploy rulesets.',
+                      'Rulesets come from GitHub for the selected repository, including inherited organization or enterprise rules. Active rules are enforced by GitHub; Evaluate records evaluations without blocking, and Disabled rules are not enforced. The discovery view does not report legacy branch protection. Deployments manages only the dedicated Preflyt ruleset.',
                   },
                   {
                     title: 'Readiness check publication',
                     content:
-                      'Review an assessment against the live open PR head before publishing. This first publisher sends failure for known required-CI failures and action required for all other historical previews, including configuration-only passes. It never sends success, neutral or skipped. Checks: write permission and an explicit API deployment flag are required. Read-back verifies the App, commit, name, output and conclusion; history records verification at publication, not ongoing merge readiness. If a request times out, refresh history and retry the same preview to recover its existing check. Forks, draft PRs, merge queues, automatic publication and activation remain unsupported.',
+                      'Automatic checks evaluate the published policy against current PR and workflow evidence. Only verified passing execution can produce success. Missing evidence remains incomplete. The worker invalidates old results before reevaluation and retries failed requests. Checks are refreshed at least once per polling cycle; GitHub outages can delay updates. Manual reviewed publication remains available. Forks, draft PRs and merge queues are unsupported.',
                   },
                   {
                     title: 'Local ruleset drafts',
                     content:
-                      'Choose one repository, select up to 20 exact branches, and use a Standard, Strict or Custom profile. The server generates the preview and saves the current standards version with the draft. If standards or the draft change while you edit, reload and review again. Drafts do not change GitHub protections; the Preflyt check publisher has not been verified and activation is unavailable.',
+                      'Choose one repository, select up to 20 exact branches, and use a Standard, Strict or Custom profile. The server generates the preview and saves the current standards version with the draft. If standards or the draft change while you edit, reload and review again. Drafts do not change GitHub protections. In Deployments, review affected PRs and exact GitHub configuration, obtain independent administrator approval, then activate. Every target branch needs a recent automatically verified passing check. Old drafts may need saving again to refresh their verification hash.',
                   },
                   {
                     title: 'Scope and freshness',
@@ -194,7 +194,7 @@ export function WorkspaceModule({ module }: { module: Module }) {
                   {
                     title: 'Access and limitations',
                     content:
-                      'Only authorized, selected repositories are shown. This uses read-only repository metadata permission. The GitHub discovery view omits bypass actors and full rule parameters. Local drafts show their complete generated configuration. Organization-wide management, legacy protection, effective branch evaluation and deployment are not included. Unavailable access, plans or throttled requests are reported as errors.',
+                      'Only authorized, selected repositories are shown. This uses read-only repository metadata permission. The GitHub discovery view omits bypass actors and full rule parameters. Local drafts show their complete generated configuration. Activation requires separate governance credentials and both ruleset management and enforcement permissions. GitHub changes outside Preflyt are reported as drift and never overwritten. Rollback disables only the dedicated managed ruleset after verifying its current state. Organization-wide targeting and legacy protection remain outside this slice. Unavailable access, plans or throttled requests are reported as errors.',
                   },
                 ]}
               />
@@ -480,6 +480,18 @@ export function WorkspaceModule({ module }: { module: Module }) {
                               repositoryId={repository.githubId}
                               repositoryName={repository.fullName}
                               actorId={session.data?.identityId}
+                              canManage={
+                                canPerform(
+                                  session.data,
+                                  'github.ruleset.manage',
+                                  repository.githubId
+                                ) &&
+                                canPerform(
+                                  session.data,
+                                  'policy.enforcement.manage',
+                                  repository.githubId
+                                )
+                              }
                               canDraft={canPerform(
                                 session.data,
                                 'policy.draft',

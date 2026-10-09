@@ -28,6 +28,7 @@ import {
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { StatusBadge } from '@/components/status-badge'
+import { RulesetDeployments } from './ruleset-deployments'
 import { RulesetDrafts } from './ruleset-drafts'
 
 type Summary = {
@@ -239,12 +240,14 @@ export function RepositoryRulesets({
   actorId,
   canRead,
   canDraft,
+  canManage,
   repositoryName,
 }: {
   repositoryId: string
   actorId?: string
   canRead: boolean
   canDraft: boolean
+  canManage: boolean
   repositoryName: string
 }) {
   const [view, setView] = useState('github')
@@ -274,6 +277,7 @@ export function RepositoryRulesets({
       <TabsList>
         <TabsTrigger value='github'>GitHub rulesets</TabsTrigger>
         <TabsTrigger value='drafts'>Drafts</TabsTrigger>
+        <TabsTrigger value='deployments'>Deployments</TabsTrigger>
       </TabsList>
       <TabsContent value='github'>
         <Card className='gap-4'>
@@ -405,6 +409,15 @@ export function RepositoryRulesets({
             repositoryName={repositoryName}
             actorId={actorId}
             canDraft={canDraft}
+          />
+        )}
+      </TabsContent>
+      <TabsContent value='deployments'>
+        {view === 'deployments' && (
+          <RulesetDeployments
+            repositoryId={repositoryId}
+            actorId={actorId}
+            canManage={canManage}
           />
         )}
       </TabsContent>

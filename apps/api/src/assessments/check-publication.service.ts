@@ -42,7 +42,7 @@ export class CheckPublicationService {
     return {
       enabled: process.env.GITHUB_CHECK_PUBLICATION_ENABLED === 'true',
       publicationMode: 'POLICY_AWARE',
-      activationAvailable: false,
+      activationAvailable: process.env.GITHUB_RULESET_ACTIVATION_ENABLED === 'true',
       page,
       hasMore: rows.length > 20,
       publications: rows
@@ -74,7 +74,7 @@ export class CheckPublicationService {
       gateStatus: plan.gate.status,
       output: plan.payload.output,
       enabled: process.env.GITHUB_CHECK_PUBLICATION_ENABLED === 'true',
-      activationAvailable: false,
+      activationAvailable: process.env.GITHUB_RULESET_ACTIVATION_ENABLED === 'true',
       policy: plan.policy
         ? {
             id: plan.policy.id,
@@ -86,7 +86,7 @@ export class CheckPublicationService {
       publicationMode: plan.policy ? 'PUBLISHED_POLICY' : 'OBSERVE_NON_PASSING',
     }
   }
-  private async plan(
+  async plan(
     session: AuthenticatedSession,
     githubId: string,
     prNumber: number,
@@ -362,7 +362,7 @@ export class CheckPublicationService {
       return receipt
     }
     try {
-      // Recheck upstream head/base immediately before publication; every conclusion is non-passing.
+      // Recheck upstream head/base and evidence immediately before publication.
       const latest = await this.plan(
         session,
         githubId,
@@ -398,7 +398,7 @@ export class CheckPublicationService {
               ...receipt,
               sourceSha: plan.assessment.sourceSha,
               conclusion: plan.payload.conclusion,
-              activationAvailable: false,
+              activationAvailable: process.env.GITHUB_RULESET_ACTIVATION_ENABLED === 'true',
             },
           },
         })
@@ -429,7 +429,7 @@ export class CheckPublicationService {
       })
       if (error instanceof ConflictException) throw error
       throw new ServiceUnavailableException(
-        'Publication could not be verified. Refresh history, then retry the same preview to recover an existing check. No passing check was requested.',
+        'Publication could not be verified. Refresh history, then retry the same preview to recover an existing check. Review GitHub before retrying.',
       )
     }
   }

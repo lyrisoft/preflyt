@@ -38,7 +38,7 @@ import type { ProfileSignal } from '../github/repository-profile.js'
 import { resolveBindings, type Binding } from './ci-binding.js'
 import { buildAssessment, digest, type Mapping } from './assessment-plan.js'
 type Trigger = {
-  kind: 'MANUAL' | 'GITHUB_CI' | 'GITHUB_PR'
+  kind: 'MANUAL' | 'GITHUB_CI' | 'GITHUB_PR' | 'AUTOMATIC'
   deliveryId: string | null
   pullRequest?: PullRequestContext & { number: number; objectId: string }
 }
@@ -129,6 +129,11 @@ export class AssessmentService {
         deliveryId: null,
       }),
     )
+  }
+
+  async createAutomatic(id: string, sourceSha: string, selectionId: string, requestKey: string, actorId: string, pullRequest: NonNullable<Trigger['pullRequest']>) {
+    const repo=await this.repository(id)
+    return this.prisma.$transaction(tx=>this.persist(tx,repo,id,{sourceSha,expectedSelectionId:selectionId,requestKey,mappings:[]},actorId,{kind:'AUTOMATIC',deliveryId:null,pullRequest}))
   }
 
   /** Called inside the signed-delivery processor transaction; context never establishes current PR readiness. */

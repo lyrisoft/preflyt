@@ -30,6 +30,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { StatusBadge } from '@/components/status-badge'
+import { ReadinessAutomation } from './readiness-automation'
 
 type Publication = {
   id: string
@@ -172,6 +173,11 @@ export function CheckPublications({
     )
   return (
     <div className='space-y-4'>
+      <ReadinessAutomation
+        repositoryId={repositoryId}
+        actorId={actorId}
+        canPublish={canPublish}
+      />
       <Card className='gap-4'>
         <CardHeader className='flex flex-wrap items-center justify-between gap-3'>
           <div className='flex items-center gap-3'>
@@ -196,8 +202,7 @@ export function CheckPublications({
         </CardHeader>
         <CardContent className='space-y-4'>
           <div className='flex flex-wrap gap-2'>
-            <StatusBadge tone='info'>Observe only</StatusBadge>
-            <StatusBadge tone='neutral'>Activation unavailable</StatusBadge>
+            <StatusBadge tone='info'>Published policy evaluation</StatusBadge>
           </div>
           <p className='rounded-lg border border-info/20 bg-info/5 p-3 text-sm'>
             Passing checks require a published policy, verified reports, and

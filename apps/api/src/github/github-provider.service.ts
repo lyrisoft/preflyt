@@ -9,6 +9,7 @@ import {
 } from './repository-profile.js'
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   ServiceUnavailableException,
@@ -688,6 +689,7 @@ export class GitHubProviderService {
       output: { title: string; summary: string }
     },
     verifiedPolicy = false,
+    refreshExisting = false,
   ) {
     const { appId } = await this.checkPublicationAccess(installationId)
     // Observe previews cannot publish success; only a verified published-policy evaluation can.
@@ -717,12 +719,12 @@ export class GitHubProviderService {
         'GitHub check credentials are unavailable',
       )
     const root = `/repos/${encodeURIComponent(reader.metadata.owner.login)}/${encodeURIComponent(reader.metadata.name)}`
-    const call = async (path: string, body?: unknown) => {
+    const call = async (path: string, body?: unknown, method = 'POST') => {
       const response = await this.apiFetch(
         `installation:${installationId}`,
         `https://api.github.com${path}`,
         {
-          method: body === undefined ? 'GET' : 'POST',
+          method: body === undefined ? 'GET' : method,
           signal: AbortSignal.timeout(10_000),
           headers: {
             Authorization: `Bearer ${token}`,
@@ -809,7 +811,14 @@ export class GitHubProviderService {
         throw new ServiceUnavailableException(
           'GitHub returned an invalid check ID',
         )
-      return verify(await call(`${root}/check-runs/${existing.id}`))
+      const current = await call(`${root}/check-runs/${existing.id}`)
+      if (refreshExisting && (current.conclusion !== payload.conclusion || current.output?.summary !== payload.output.summary || current.output?.title !== payload.output.title)) {
+        if (String(current.app?.id)!==appId || current.head_sha!==payload.head_sha || current.name!==payload.name || current.external_id!==payload.external_id)
+          throw new ServiceUnavailableException('Existing readiness check identity changed')
+        await call(`${root}/check-runs/${existing.id}`, {status:'completed',conclusion:payload.conclusion,output:payload.output,completed_at:new Date().toISOString()}, 'PATCH')
+        return verify(await call(`${root}/check-runs/${existing.id}`))
+      }
+      return verify(current)
     }
     const created = await call(`${root}/check-runs`, {
       ...payload,
@@ -820,6 +829,48 @@ export class GitHubProviderService {
         'GitHub returned an invalid check ID',
       )
     return verify(await call(`${root}/check-runs/${created.id}`))
+  }
+
+  async readPublishedReadinessCheck(installationId: bigint, repositoryId: bigint, checkRunId: string, sourceSha: string) {
+    if (!/^[1-9]\d{0,15}$/.test(checkRunId)) throw new BadRequestException('Invalid readiness check ID')
+    const {appId}=await this.checkPublicationAccess(installationId)
+    const reader=await this.openRepository(installationId, repositoryId, 'metadata')
+    const run=await reader.request<Record<string,any>>(`/repos/${encodeURIComponent(reader.metadata.owner.login)}/${encodeURIComponent(reader.metadata.name)}/check-runs/${checkRunId}`)
+    if(String(run.id)!==checkRunId || String(run.app?.id)!==appId || run.head_sha!==sourceSha || run.name!=='Preflyt / Engineering Readiness' || run.status!=='completed')throw new ServiceUnavailableException('Current readiness check could not be verified')
+    return {appId, conclusion:run.conclusion, externalId:run.external_id, output:run.output}
+  }
+
+  async assertNoReadinessMergeQueue(installationId: bigint, repositoryId: bigint) {
+    const reader=await this.openRepository(installationId,repositoryId,'metadata')
+    const root=`/repos/${encodeURIComponent(reader.metadata.owner.login)}/${encodeURIComponent(reader.metadata.name)}/rulesets`
+    for(let page=1;page<=5;page++) {
+      const rows=await reader.request<Record<string,any>[]>(`${root}?includes_parents=true&per_page=20&page=${page}`)
+      if(!Array.isArray(rows)||rows.length>20)throw new ServiceUnavailableException('Current protection inventory unavailable')
+      for(const row of rows)if(row.enforcement==='active') {
+        if(!Number.isSafeInteger(row.id)||row.id<1)throw new ServiceUnavailableException('Invalid ruleset identity')
+        const detail=await reader.request<Record<string,any>>(`${root}/${row.id}?includes_parents=true`)
+        if(!Array.isArray(detail.rules))throw new ServiceUnavailableException('Protection rules unavailable')
+        if(detail.rules.some((rule:Record<string,any>)=>rule.type==='merge_queue'))throw new ConflictException('Merge queue protection is enabled. Managed readiness gates do not support merge queues yet')
+      }
+      if(rows.length<20)return
+    }
+    throw new ServiceUnavailableException('Protection inventory exceeds the safe activation limit')
+  }
+
+  async verifyReadinessBranch(installationId: bigint, repositoryId: bigint, branch: string) {
+    if(!validProfileBranch(branch))throw new BadRequestException('Invalid branch')
+    const reader=await this.openRepository(installationId,repositoryId,'contents')
+    const ref=await reader.request<Record<string,any>>(`/repos/${encodeURIComponent(reader.metadata.owner.login)}/${encodeURIComponent(reader.metadata.name)}/git/ref/heads/${encodeURIComponent(branch)}`)
+    if(ref.ref!==`refs/heads/${branch}` || ref.object?.type!=='commit' || !/^[a-f0-9]{40}$/.test(ref.object?.sha))throw new ServiceUnavailableException('Branch could not be verified')
+    return ref.object.sha as string
+  }
+
+  async readOpenReadinessPullRequests(installationId: bigint, repositoryId: bigint) {
+    const reader=await this.openRepository(installationId,repositoryId,'pull_requests')
+    const rows=await reader.request<Record<string,any>[]>(`/repos/${encodeURIComponent(reader.metadata.owner.login)}/${encodeURIComponent(reader.metadata.name)}/pulls?state=open&per_page=100`)
+    if(!Array.isArray(rows) || rows.length>=100)throw new ServiceUnavailableException('Open pull request scope exceeds the safe activation limit')
+    if(rows.some(row=>!Number.isSafeInteger(row.number)||row.number<1||!/^[a-f0-9]{40}$/.test(row.head?.sha)||String(row.base?.repo?.id)!==repositoryId.toString()||!validProfileBranch(row.base?.ref)))throw new ServiceUnavailableException('Invalid open pull request identity')
+    return rows.map(row=>({number:row.number,headSha:row.head?.sha,headRepositoryId:String(row.head?.repo?.id),baseBranch:row.base?.ref,draft:row.draft===true}))
   }
 
   async readPullRequest(

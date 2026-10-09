@@ -1,3 +1,6 @@
+import { ReadinessAutomationService } from './assessments/readiness-automation.service.js'
+import { AssessmentService } from './assessments/assessment.service.js'
+import { CheckPublicationService } from './assessments/check-publication.service.js'
 import { AuthorizationService } from './auth/authorization.service.js'
 import { GitHubIdentityProvider } from './auth/github-identity-provider.js'
 import { GitHubUserAccessService } from './auth/github-user-access.service.js'
@@ -105,6 +108,10 @@ async function start() {
     if (typeof job.data?.deliveryId !== 'string' || !/^[a-zA-Z0-9-]{1,80}$/.test(job.data.deliveryId)) throw new Error('Invalid email delivery job')
     await telemetryOperation('preflyt.notification.email', { 'notification.delivery.id': job.data.deliveryId }, () => deliverNotificationEmail(prisma, emailAuthorization, mail, job.data.deliveryId))
   }, { ...consumerConfig, connection: consumer, concurrency: 2, autorun: notificationsEnabled() && emailNotificationsEnabled() })
+  const assessments = new AssessmentService(prisma)
+  const checks = new CheckPublicationService(prisma, emailAuthorization, githubProvider, assessments)
+  const automation = new ReadinessAutomationService(prisma, emailAuthorization, githubProvider, assessments, checks)
+  let automationRun: Promise<void> | undefined
   let lastWarning = 0
   const warn = () => {
     if (Date.now() - lastWarning > 5000) {
@@ -159,6 +166,7 @@ async function start() {
             syncRun = undefined
           })
       }
+      if (!automationRun) automationRun = automation.reconcile().catch(warn).finally(() => { automationRun = undefined })
       // Test Redis even when the inbox is empty; readiness is not a stale process flag.
       await queue.getJobCounts('wait')
       if (!closing)
@@ -194,6 +202,7 @@ async function start() {
     producer.disconnect()
     consumer.disconnect()
     await syncRun
+    await automationRun
     cache.onModuleDestroy()
     await prisma.$disconnect()
     await unlink(heartbeat).catch(() => undefined)

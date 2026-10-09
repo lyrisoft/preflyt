@@ -21,6 +21,8 @@ export const rolePermissions: Record<string, string[]> = {
     'policy.read',
     'policy.draft',
     'policy.publish',
+    'github.ruleset.manage',
+    'policy.enforcement.manage',
     'evidence.manage',
     'contributors.read',
     'contributors.activity.read',
@@ -36,6 +38,8 @@ export const rolePermissions: Record<string, string[]> = {
     'policy.read',
     'policy.draft',
     'policy.publish',
+    'github.ruleset.manage',
+    'policy.enforcement.manage',
     'evidence.manage',
     'contributors.read',
     'contributors.activity.read',
@@ -155,6 +159,8 @@ export class AuthorizationService {
           'organization.settings.update',
           'repository.connect',
           'policy.publish',
+          'github.ruleset.manage',
+          'policy.enforcement.manage',
         ].includes(permission)
     )
     if (!member || !rolePermissions[member.role]?.includes(permission))
@@ -211,8 +217,12 @@ export class AuthorizationService {
     )
     if (repo) {
       const part = repo[2] ?? ''
-      if (part === 'check-publications' || part.startsWith('check-publications/')) {
+      if (part === 'check-publications' || part.startsWith('check-publications/') || part === 'check-automation') {
         await this.requireRepository(session, repo[1], request.method === 'GET' ? 'policy.read' : 'policy.publish')
+        return true
+      }
+      if (part === 'ruleset-deployments' || part.startsWith('ruleset-deployments/')) {
+        await this.requireRepository(session, repo[1], request.method === 'GET' ? 'policy.read' : 'github.ruleset.manage')
         return true
       }
       if (part === 'gate-policies' || part.startsWith('gate-policies/')) {

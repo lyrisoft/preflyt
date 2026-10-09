@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto'
+import { digest } from '../assessments/assessment-digest.js'
 import { BadRequestException } from '@nestjs/common'
 import { validProfileBranch } from './repository-profile.js'
 export const readinessCheck = 'Preflyt / Engineering Readiness'
@@ -98,5 +98,5 @@ export function draftDefinition(input: DraftInput, githubId: string) {
   }
 }
 export function draftHash(value: unknown) {
-  return createHash('sha256').update(JSON.stringify(value)).digest('hex')
+  return digest(value)
 }
