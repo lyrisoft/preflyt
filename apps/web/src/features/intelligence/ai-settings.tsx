@@ -523,7 +523,7 @@ function AiSettings({
                       </dl>
                       <Button
                         variant='outline'
-                        className='mt-auto'
+                        className='mt-auto self-end'
                         disabled={busy}
                         onClick={() => {
                           setError('')
