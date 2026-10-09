@@ -213,6 +213,10 @@ Preflyt requires tenant- and repository-scoped notifications driven by durable e
 
 Code quality is a first-class assessment domain. P1 imports lint, typecheck, coverage and static-analysis evidence with exact revision/provenance and optional read-only AI review; P2 provides a versioned Code Quality policy pack and deterministic gates; P3 adds native analyzers only after sandbox approval; P4 adds contextual multi-skill AI review and optional deduplicated GitHub inline feedback; P5 reuses findings in CLI/IDE. Agents may apply approved versioned instruction-only skills (candidate examples: Ponytail and Thermo-Nuclear Code Quality Review), subject to license/security review, model routing, egress and RBAC. Skill output is advisory and cannot block a PR without independent deterministic evidence. See [Code Quality Review](product/code-quality-review.md) and [Skill-Based Review](product/skill-based-code-review.md).
 
+### Teams and scoped policy assignments
+
+Preflyt shall support locally created and GitHub-imported teams. Authorized administrators can assign versioned standards/policies at **organization, team or individual repository** scope; team assignments apply automatically to explicitly approved policy-scoped repositories, including repositories shared by multiple teams. GitHub team access is **not** policy ownership or a grant of Preflyt RBAC. P0 additive team creation/import/sync, P1 repository provenance, P2 deterministic effective-policy compilation and conflict preview, P3 team reporting. No automatic enforcement expansion from new GitHub access without approval. See [Teams and Policy Inheritance](product/teams-and-policy-inheritance.md).
+
 ## 6. Supported SDLC stages and user journeys
 
 ### 6.1 Lifecycle coverage
