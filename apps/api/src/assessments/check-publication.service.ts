@@ -1,3 +1,4 @@
+import { readLatestNativeEvidence } from '../execution/native-evidence.js'
 import { evaluatePublishedPolicy } from './published-policy-evaluation.js'
 import { randomUUID } from 'node:crypto'
 import {
@@ -42,7 +43,8 @@ export class CheckPublicationService {
     return {
       enabled: process.env.GITHUB_CHECK_PUBLICATION_ENABLED === 'true',
       publicationMode: 'POLICY_AWARE',
-      activationAvailable: process.env.GITHUB_RULESET_ACTIVATION_ENABLED === 'true',
+      activationAvailable:
+        process.env.GITHUB_RULESET_ACTIVATION_ENABLED === 'true',
       page,
       hasMore: rows.length > 20,
       publications: rows
@@ -74,7 +76,8 @@ export class CheckPublicationService {
       gateStatus: plan.gate.status,
       output: plan.payload.output,
       enabled: process.env.GITHUB_CHECK_PUBLICATION_ENABLED === 'true',
-      activationAvailable: process.env.GITHUB_RULESET_ACTIVATION_ENABLED === 'true',
+      activationAvailable:
+        process.env.GITHUB_RULESET_ACTIVATION_ENABLED === 'true',
       policy: plan.policy
         ? {
             id: plan.policy.id,
@@ -205,12 +208,25 @@ export class CheckPublicationService {
           runId,
         )
     }
+    const nativeEvidence =
+      policy &&
+      Array.isArray(report.nativeExecutions) &&
+      report.nativeExecutions.length
+        ? await readLatestNativeEvidence(this.prisma, {
+            repositoryId: repo.id,
+            organizationId: session.organizationId!,
+            sourceSha: assessment.sourceSha,
+            selectionId: selection!.id,
+          })
+        : []
     const policyEvaluation = policy
       ? evaluatePublishedPolicy(
           assessment,
           policy,
           `refs/heads/${context.base.ref}`,
           liveRuns,
+          new Date(),
+          nativeEvidence,
         )
       : undefined
     const id = digest({
@@ -398,7 +414,8 @@ export class CheckPublicationService {
               ...receipt,
               sourceSha: plan.assessment.sourceSha,
               conclusion: plan.payload.conclusion,
-              activationAvailable: process.env.GITHUB_RULESET_ACTIVATION_ENABLED === 'true',
+              activationAvailable:
+                process.env.GITHUB_RULESET_ACTIVATION_ENABLED === 'true',
             },
           },
         })

@@ -26,7 +26,7 @@ export function previewGate(snapshot: {
     request.sourceSha === snapshot.sourceSha &&
     plan.sourceSha === snapshot.sourceSha &&
     report.sourceSha === snapshot.sourceSha &&
-    plan.mode === 'INGEST_ONLY' &&
+    ['INGEST_ONLY', 'HYBRID'].includes(plan.mode) &&
     plan.stage === 'ci' &&
     plan.enforcement === 'observe' &&
     Array.isArray(plan.checks) &&

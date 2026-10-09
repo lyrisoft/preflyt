@@ -1,3 +1,7 @@
+import {
+  freezeNativeEvidence,
+  readLatestNativeEvidence,
+} from '../execution/native-evidence.js'
 import { recordAssessmentNotification } from '../notifications/notification-event.js'
 import {
   reportProofPolicy,
@@ -38,7 +42,7 @@ import type { ProfileSignal } from '../github/repository-profile.js'
 import { resolveBindings, type Binding } from './ci-binding.js'
 import { buildAssessment, digest, type Mapping } from './assessment-plan.js'
 type Trigger = {
-  kind: 'MANUAL' | 'GITHUB_CI' | 'GITHUB_PR' | 'AUTOMATIC'
+  kind: 'MANUAL' | 'GITHUB_CI' | 'GITHUB_PR' | 'AUTOMATIC' | 'NATIVE'
   deliveryId: string | null
   pullRequest?: PullRequestContext & { number: number; objectId: string }
 }
@@ -131,11 +135,57 @@ export class AssessmentService {
     )
   }
 
-  async createAutomatic(id: string, sourceSha: string, selectionId: string, requestKey: string, actorId: string, pullRequest: NonNullable<Trigger['pullRequest']>) {
-    const repo=await this.repository(id)
-    return this.prisma.$transaction(tx=>this.persist(tx,repo,id,{sourceSha,expectedSelectionId:selectionId,requestKey,mappings:[]},actorId,{kind:'AUTOMATIC',deliveryId:null,pullRequest}))
+  async createAutomatic(
+    id: string,
+    sourceSha: string,
+    selectionId: string,
+    requestKey: string,
+    actorId: string,
+    pullRequest: NonNullable<Trigger['pullRequest']>,
+  ) {
+    const repo = await this.repository(id)
+    return this.prisma.$transaction((tx) =>
+      this.persist(
+        tx,
+        repo,
+        id,
+        {
+          sourceSha,
+          expectedSelectionId: selectionId,
+          requestKey,
+          mappings: [],
+        },
+        actorId,
+        { kind: 'AUTOMATIC', deliveryId: null, pullRequest },
+      ),
+    )
   }
 
+  /** Internal native completion produces a new immutable commit snapshot. */
+  async createNative(
+    id: string,
+    sourceSha: string,
+    selectionId: string,
+    requestKey: string,
+    actorId: string,
+  ) {
+    const repo = await this.repository(id)
+    return this.prisma.$transaction((tx) =>
+      this.persist(
+        tx,
+        repo,
+        id,
+        {
+          sourceSha,
+          expectedSelectionId: selectionId,
+          requestKey,
+          mappings: [],
+        },
+        actorId,
+        { kind: 'NATIVE', deliveryId: null },
+      ),
+    )
+  }
   /** Called inside the signed-delivery processor transaction; context never establishes current PR readiness. */
   async createForDelivery(
     tx: Prisma.TransactionClient,
@@ -413,11 +463,26 @@ export class AssessmentService {
             }),
           ),
       })
+    const installation = await tx.gitHubInstallation.findUnique({
+      where: { id: repo.installationId },
+      select: { organizationId: true },
+    })
+    // Latest per supported rule avoids dropping a newer blocked/cancelled attempt from the evidence window.
+    const nativeRows = installation?.organizationId
+      ? await readLatestNativeEvidence(tx, {
+          repositoryId: repo.id,
+          organizationId: installation.organizationId,
+          sourceSha: normalized.sourceSha,
+          selectionId: selection.id,
+        })
+      : []
+    const nativeExecutions = nativeRows.map(freezeNativeEvidence)
     const at = new Date()
     let result
     try {
       result = buildAssessment({
         sourceSha: normalized.sourceSha,
+        nativeExecutions,
         profile: selection.profile as AdoptionProfile,
         packs,
         signals,
@@ -439,7 +504,7 @@ export class AssessmentService {
     }
     const request = {
       version: 1,
-      organization: 'deployment',
+      organization: installation?.organizationId ?? 'deployment',
       repositoryId: id,
       sourceSha: normalized.sourceSha,
       installationId: repo.installationId.toString(),

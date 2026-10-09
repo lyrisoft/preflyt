@@ -1,4 +1,9 @@
 import {
+  latestNativeEvidence,
+  verifiedNativeEvidence,
+  type NativeEvidenceRecord,
+} from '../execution/native-evidence.js'
+import {
   validateRuleEvidence,
   type ObservationValidation,
   VALIDATOR_VERSION,
@@ -45,6 +50,7 @@ export type Observation = {
 }
 export function buildAssessment(input: {
   sourceSha: string
+  nativeExecutions?: NativeEvidenceRecord[]
   profile: AdoptionProfile
   packs: (PackRef & { digest: string })[]
   signals: ProfileSignal[]
@@ -71,7 +77,7 @@ export function buildAssessment(input: {
   )
   const plan = {
     version: 1,
-    mode: 'INGEST_ONLY',
+    mode: input.nativeExecutions?.length ? 'HYBRID' : 'INGEST_ONLY',
     stage: 'ci',
     sourceSha: input.sourceSha,
     adoptionProfile: input.profile,
@@ -239,7 +245,37 @@ export function buildAssessment(input: {
             input.validationCollectionTruncated ?? false,
           )
         : null
+    const native = latestNativeEvidence(
+      input.nativeExecutions ?? [],
+      control.id,
+    )
+    const receipt = native
+      ? verifiedNativeEvidence(native, input.at.getTime())
+      : null
+    const nativeCheck = receipt?.checks.find(
+      (check) => check.ruleId === control.id,
+    )
+    const nativeAge = receipt
+      ? (input.at.getTime() - Date.parse(receipt.finishedAt)) / 3600000
+      : null
+    const freshNative =
+      nativeCheck &&
+      !receipt!.cancelled &&
+      nativeAge !== null &&
+      nativeAge >= 0 &&
+      nativeAge <= control.maxAgeHours
     return {
+      ...(native?.controllerJobId &&
+      native.runtimeApprovalHash &&
+      native.sourceHash
+        ? {
+            nativeRequestId: native.id,
+            evidenceSource: 'NATIVE',
+            nativeOutcome: freshNative ? nativeCheck.state : 'INCOMPLETE',
+            nativeCoverage: freshNative ? nativeCheck.coverage : 'PARTIAL',
+            nativeReceiptHash: native.receiptHash,
+          }
+        : {}),
       ruleId: control.id,
       title: control.title,
       required: control.required,
@@ -287,6 +323,7 @@ export function buildAssessment(input: {
       collectedAt: input.at.toISOString(),
       checks,
       observations: observed,
+      nativeExecutions: input.nativeExecutions ?? [],
       coverage: required.length ? 'INCOMPLETE' : 'NOT_EVALUATED',
       qualityGate: null,
       requiredChecks: required.length,
@@ -300,7 +337,7 @@ export function buildAssessment(input: {
       currentBranchReadiness: 'NOT_VERIFIED',
       limitations: [
         'Manual CI-to-rule associations are unverified coverage.',
-        'No gate evaluation, repository execution or GitHub status publication.',
+        'This snapshot records evidence; current published-policy evaluation is required for GitHub publication.',
         'Historical exact-SHA snapshot; later evidence needs a new assessment.',
       ],
     },

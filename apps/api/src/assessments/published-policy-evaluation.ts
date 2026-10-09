@@ -1,3 +1,8 @@
+import {
+  latestNativeEvidence,
+  verifiedNativeEvidence,
+  type NativeEvidenceRecord,
+} from '../execution/native-evidence.js'
 import { ConflictException } from '@nestjs/common'
 import { digest } from './assessment-digest.js'
 import { previewGate } from './gate-preview.js'
@@ -24,6 +29,7 @@ export function evaluatePublishedPolicy(
     }
   >,
   now = new Date(),
+  nativeEvidence: NativeEvidenceRecord[] = [],
 ) {
   const request = snapshot.request as any,
     plan = snapshot.plan as any,
@@ -88,6 +94,55 @@ export function evaluatePublishedPolicy(
   const rules = base.rules.map((rule: any) => {
     const requirement = definition.rules.find((r: any) => r.id === rule.ruleId)
     const check = report.checks.find((r: any) => r.ruleId === rule.ruleId)
+    if (check?.evidenceSource === 'NATIVE') {
+      const frozen = latestNativeEvidence(
+        report.nativeExecutions ?? [],
+        rule.ruleId,
+      )
+      const live = latestNativeEvidence(nativeEvidence, rule.ruleId)
+      const bound =
+        frozen &&
+        live &&
+        frozen.id === check.nativeRequestId &&
+        live.id === frozen.id &&
+        frozen.receiptHash === live.receiptHash &&
+        check.nativeReceiptHash === live.receiptHash &&
+        live.organizationId === request.organization &&
+        live.repositoryGithubId === request.repositoryId &&
+        live.sourceSha === snapshot.sourceSha &&
+        live.selectionId === request.selectionId
+      const receipt = bound ? verifiedNativeEvidence(live, now.getTime()) : null
+      const outcome = receipt?.checks.find((c) => c.ruleId === rule.ruleId)
+      const age = receipt
+        ? (now.getTime() - Date.parse(receipt.finishedAt)) / 3600000
+        : NaN
+      const trusted =
+        base.reasons.length === 0 &&
+        request.sourceSha === snapshot.sourceSha &&
+        plan.sourceSha === snapshot.sourceSha &&
+        report.sourceSha === snapshot.sourceSha &&
+        requirement.operator === 'verified_check_succeeded' &&
+        requirement.allowedSources?.includes('approved_sandbox') &&
+        outcome &&
+        !receipt!.cancelled &&
+        outcome.cleanupConfirmed &&
+        Number.isFinite(age) &&
+        age >= 0 &&
+        age <= requirement.maxAgeHours
+      if (trusted && outcome.state === 'FAIL')
+        return { ...rule, status: 'BLOCK', reasons: ['NATIVE_CHECK_FAILED'] }
+      if (
+        trusted &&
+        outcome.state === 'PASS' &&
+        outcome.coverage === 'FULL_RULE'
+      )
+        return { ...rule, status: 'PASS', reasons: [] }
+      return {
+        ...rule,
+        status: 'INCOMPLETE',
+        reasons: ['CURRENT_NATIVE_EXECUTION_NOT_VERIFIED'],
+      }
+    }
     const observation = report.observations?.find(
       (o: any) => o.deliveryId === check?.deliveryId,
     )

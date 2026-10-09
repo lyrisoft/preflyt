@@ -831,6 +831,7 @@ model NativeExecutionRequest {
   cancelledById String?
   finishedAt DateTime?
   receiptHash String?
+  receiptSignature   String?
   @@unique([repositoryId,requestKey])
   @@index([organizationId,repositoryId,requestedAt,id])
   @@index([state,leaseUntil,requestedAt])

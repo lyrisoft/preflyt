@@ -1,3 +1,4 @@
+import { nativeRequestIntegrity } from './native-request-integrity.js'
 import {
   BadRequestException,
   ConflictException,
@@ -47,27 +48,7 @@ export class NativeRequestService {
     @Inject(NativeStatusService) private readonly status: NativeStatusService,
   ) {}
   private verify(record: NativeExecutionRequest) {
-    const plan = record.plan as Record<string, unknown>
-    if (
-      !plan ||
-      digest(plan) !== record.planHash ||
-      plan.repositoryId !== record.repositoryGithubId ||
-      plan.organizationId !== record.organizationId ||
-      plan.sourceSha !== record.sourceSha ||
-      plan.selectionId !== record.selectionId ||
-      digest({
-        organizationId: record.organizationId,
-        repositoryId: record.repositoryGithubId,
-        actorId: record.actorId,
-        input: {
-          requestKey: record.requestKey,
-          expectedSourceSha: record.sourceSha,
-          expectedSelectionId: record.selectionId,
-          expectedPlanHash: record.planHash,
-          ruleIds: record.ruleIds,
-        },
-      }) !== record.inputHash
-    )
+    if (!nativeRequestIntegrity(record))
       throw new ConflictException(
         'Check request integrity could not be verified',
       )
