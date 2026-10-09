@@ -53,6 +53,8 @@ Tabs must reflect available functionality and preserve deep links.
 | `/contributors` | Contributor overview | Authorized contributor list, search, filters, activity KPIs, assessment coverage, policy adherence, charts and freshness | P3; bots/private members/unlinked identities and incomplete evidence labeled |
 | `/contributors/:id` | Contributor detail | Repositories, commits, authored/merged PRs, reviews, assessments, findings and evidence-backed trends | Scoped source links; no opaque employee ranking |
 | `/integrations` | Integration health | GitHub App installation, permissions, selected repositories, webhook/CI evidence status and troubleshooting | Secret-safe, reconnect/disconnect RBAC |
+| `/teams` | Team management | Create/import/sync teams; list members, repositories, standards and policies | Only when functional; RBAC enforced |
+| `/teams/:id` | Team detail | GitHub access versus approved policy scope, assignments, impact preview and audit | Authorized scope; stale sync visible |
 | `/access-control` | Member access management | Searchable connected-GitHub member directory, username selection, Preflyt roles, repo grants, audit and revocation | Implemented behind GitHub login flag; existing workspaces use explicit Owner-verified organization linking; backend enforces |
 | `/settings` | Workspace settings | Organization details, identity/session settings, supported AI provider/model routing controls when shipped, operational preferences | Do not show secrets; unavailable features hidden |
 | `/intelligence/skills` | Review skill catalogue and management | Approved and pinned skills, provenance, enablement, stage/model routing, budgets, security review and audit | Only when functional; organization permissions required |
