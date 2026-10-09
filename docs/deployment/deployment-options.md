@@ -15,6 +15,6 @@ Preflyt should run entirely as containers with either Docker Compose or Kubernet
 
 Database, queue and application volumes must survive application replacement. Neither option may reset data during installation, upgrades or tests. Secrets come from deployment configuration and never from images. Scanner containers do not receive platform secrets.
 
-The current Compose stack and application Dockerfiles exist. The Kubernetes application bundle and complete native dispatch/result integration still need implementation and acceptance tests. This document states the deployment contract, not completion of those missing deliverables.
+The Compose stack, application Dockerfiles and [Kubernetes bundle](../../deploy/kubernetes/README.md) exist. The Kubernetes bundle is rendered and statically tested; live deployment acceptance and complete native dispatch/result integration remain outstanding.
 
 See [Compose operations](../operations/docker-compose.md) for existing application deployment and [native runner](native-runner/README.md) for scanner execution defaults and current verification limits.

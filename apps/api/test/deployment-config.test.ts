@@ -3,7 +3,7 @@ import { resolve } from 'node:path'
 import { parse } from 'yaml'
 import { expect, it } from 'vitest'
 const root = resolve(process.cwd(), '../..')
-const config = parse(readFileSync(resolve(root, 'compose.yaml'), 'utf8'), { merge: true })
+const config = parse(readFileSync(resolve(root, 'docker-compose.yaml'), 'utf8'), { merge: true })
 it('starts all released services with separate persistent queue and disposable cache', () => {
   for (const name of ['web', 'api', 'worker', 'db', 'migrate', 'cache', 'queue']) expect(config.services[name].profiles).toBeUndefined()
   expect(config.services.queue.command).toContain('noeviction')

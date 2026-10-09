@@ -38,7 +38,7 @@ For an available published release, set its registry/version in root `.env`, the
 For a local demonstration only, set `WEB_ORIGIN=http://localhost:8080`, keep OIDC fields empty and configure Super Admin credentials. Use the explicit override:
 
 ```sh
-docker compose --env-file .env -f compose.yaml -f compose.local.yaml up -d --build --wait --wait-timeout 180
+docker compose --env-file .env -f docker-compose.yaml -f compose.local.yaml up -d --build --wait --wait-timeout 180
 ```
 
 Open `http://localhost:8080/super-admin/login`. This override uses development cookie settings and still binds only to loopback; do not use it for an external deployment. Do not restart the standalone `pnpm dev:api` process for a Compose deployment.

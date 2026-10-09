@@ -15,7 +15,7 @@ root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 cd "$root"
 env_file=${PREFLYT_ENV_FILE:-.env}
 if [ -z "${PREFLYT_ENV_FILE:-}" ] && [ ! -f "$env_file" ] && [ -f deploy/.env ]; then env_file=deploy/.env; fi
-dc() { docker compose --env-file "$env_file" -f compose.yaml "$@"; }
+dc() { docker compose --env-file "$env_file" -f docker-compose.yaml "$@"; }
 # createdb fails if the destination exists: an existing database is never replaced.
 dc exec -T db createdb -U preflyt_owner --maintenance-db=postgres "$database"
 dc exec -T db pg_restore -U preflyt_owner -d "$database" --exit-on-error \
