@@ -348,7 +348,8 @@ export class GitHubService {
       }
     }
 
-    return this.repositoryOverview(scope, organizationId, organizationAdmin)
+    // Organization administrators may see newly discovered repositories immediately.
+    return this.repositoryOverview(organizationAdmin ? undefined : scope, organizationId, organizationAdmin)
   }
 
   // Last-synced display data only. No upstream calls and no permission grants.

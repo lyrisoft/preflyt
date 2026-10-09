@@ -479,6 +479,12 @@ describe('local inventory reads and explicit upstream synchronization', () => {
     expect(provider.verifyInstallation).not.toHaveBeenCalled()
     expect(provider.listInstallationRepositories).not.toHaveBeenCalled()
   })
+  it('returns newly discovered repositories in the same organization refresh', async () => {
+    const { service } = await setup()
+    const listing = await service.listRepositories(true, [], 'preflyt-default', true)
+    expect(listing.repositories.map((repo) => repo.githubId)).toEqual(['88001'])
+    expect((await service.repositoryOverview([], 'preflyt-default', false)).repositories).toEqual([])
+  })
   it('explicit refresh bypasses inventory and reconciles removals', async () => {
     const { service } = await setup()
     await service.listRepositories(true)
