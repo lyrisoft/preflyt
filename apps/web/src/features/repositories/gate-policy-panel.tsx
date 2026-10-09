@@ -48,6 +48,7 @@ import {
 } from '@/components/ui/table'
 import { StatusBadge } from '@/components/status-badge'
 import { engineeringPath, engineeringRead } from './engineering-queries'
+import { policyActions } from './policy-actions'
 import { useStandards } from './repository-queries'
 
 type Revision = {
@@ -172,6 +173,17 @@ export function GatePolicyPanel({
     : query.data?.revisions.find((policy) => policy.id === selectedId)
   const stale =
     !!selected && selected.selectionId !== query.data?.currentSelectionId
+  const actions = selected
+    ? policyActions({
+        state: selected.state,
+        stale,
+        canPublish,
+        platformAdmin,
+        actorId,
+        draftedById: selected.draftedById,
+        truncated: !!query.data?.truncated,
+      })
+    : null
   const current = query.data?.revisions.find(
     (policy) =>
       policy.branchRef === selected?.branchRef && policy.state === 'PUBLISHED'
@@ -636,25 +648,29 @@ export function GatePolicyPanel({
                       recorded in the audit history.
                     </p>
                   )}
-                {selected.state === 'DRAFT' &&
-                  actorId === selected.draftedById &&
-                  !platformAdmin && (
-                    <p className='flex items-start gap-2 text-xs text-muted-foreground'>
-                      <Info
-                        className='size-4 shrink-0 text-info'
-                        aria-hidden='true'
-                      />
-                      You created this revision. Another authorized publisher
-                      must approve it.
-                    </p>
-                  )}
+                {['DRAFT', 'APPROVED'].includes(selected.state) && (
+                  <p
+                    id='policy-action-reason'
+                    className='flex items-start gap-2 text-xs text-muted-foreground'
+                  >
+                    <Info
+                      className='size-4 shrink-0 text-info'
+                      aria-hidden='true'
+                    />
+                    {selected.state === 'DRAFT'
+                      ? actions?.approvalReason ||
+                        'Approve this policy, then publish it. Publishing saves a non-blocking policy; it does not activate GitHub rules.'
+                      : actions?.publicationReason ||
+                        'This policy is approved and ready to publish. Publishing does not activate GitHub rules.'}
+                  </p>
+                )}
                 {selected.state === 'PUBLISHED' && (
                   <p className='flex items-center gap-2 text-sm text-success'>
                     <CheckCheck className='size-4' aria-hidden='true' />
                     Advisory definition published
                   </p>
                 )}
-                <div className='flex justify-end gap-2'>
+                <div className='flex flex-wrap justify-end gap-2'>
                   <Button
                     variant='outline'
                     disabled={mutation.isPending}
@@ -694,26 +710,25 @@ export function GatePolicyPanel({
                       Edit draft
                     </Button>
                   )}
-                  {canPublish &&
-                    !stale &&
-                    selected.state === 'DRAFT' &&
-                    actorId &&
-                    (actorId !== selected.draftedById || platformAdmin) && (
-                      <Button
-                        disabled={mutation.isPending}
-                        onClick={() =>
-                          mutation.mutate({
-                            path: `/${encodeURIComponent(selected.id)}/approve`,
-                            body: { expectedHash: selected.definitionHash },
-                          })
-                        }
-                      >
-                        {mutation.isPending ? 'Approving…' : 'Approve policy'}
-                      </Button>
-                    )}
-                  {canPublish && !stale && selected.state === 'APPROVED' && (
+                  {selected.state === 'DRAFT' && (
                     <Button
-                      disabled={mutation.isPending || query.data?.truncated}
+                      variant='outline'
+                      aria-describedby='policy-action-reason'
+                      disabled={mutation.isPending || !actions?.canApprove}
+                      onClick={() =>
+                        mutation.mutate({
+                          path: `/${encodeURIComponent(selected.id)}/approve`,
+                          body: { expectedHash: selected.definitionHash },
+                        })
+                      }
+                    >
+                      {mutation.isPending ? 'Approving…' : 'Approve policy'}
+                    </Button>
+                  )}
+                  {['DRAFT', 'APPROVED'].includes(selected.state) && (
+                    <Button
+                      disabled={mutation.isPending || !actions?.canPublish}
+                      title={actions?.publicationReason || undefined}
                       onClick={() =>
                         mutation.mutate({
                           path: `/${encodeURIComponent(selected.id)}/publish`,
