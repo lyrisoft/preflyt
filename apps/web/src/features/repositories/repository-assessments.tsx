@@ -196,8 +196,8 @@ function AssessmentCreator({
           <p className='text-sm'>Save a standards selection first.</p>
         ) : !standards.data.selectionIntegrity ? (
           <p role='alert' className='text-sm text-destructive'>
-            Review the saved pack versions and digests before creating an
-            assessment.
+            The saved pack versions could not be verified. Review your standards
+            selection before creating an assessment.
           </p>
         ) : (
           <fieldset className='space-y-3'>
@@ -205,8 +205,9 @@ function AssessmentCreator({
               CI result per control
             </legend>
             <p className='text-xs text-muted-foreground'>
-              Optional manual overrides. Unassigned controls use active approved
-              source bindings when available. Overrides remain unverified.
+              You can manually link a CI result to a control. Otherwise, Preflyt
+              uses its approved CI source when available. Manual links do not
+              verify that the control ran.
             </p>
             {evidence.isError && (
               <p role='alert' className='text-sm text-destructive'>
@@ -232,7 +233,7 @@ function AssessmentCreator({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value='none'>
-                      Use approved binding if available
+                      Use the approved CI source if available
                     </SelectItem>
                     {evidence.data?.observations.map((item) => (
                       <SelectItem key={item.deliveryId} value={item.deliveryId}>
@@ -341,7 +342,7 @@ export function RepositoryAssessments({
           <h2>Commit assessments</h2>
         </CardTitle>
         <CardDescription>
-          Standards and CI results frozen at an exact commit.
+          Standards and CI results saved for a specific commit.
         </CardDescription>
         <CardAction className='flex gap-2'>
           <Button
@@ -421,7 +422,7 @@ export function RepositoryAssessments({
                 {
                   icon: Layers,
                   label: 'Adopt standards',
-                  detail: 'Select the applicable packs',
+                  detail: 'Choose packs for this repository',
                 },
                 {
                   icon: GitCommitHorizontal,
@@ -431,7 +432,7 @@ export function RepositoryAssessments({
                 {
                   icon: ShieldCheck,
                   label: 'Review evidence',
-                  detail: 'Inspect the immutable snapshot',
+                  detail: 'Review the saved assessment',
                 },
               ].map(({ icon: Icon, label, detail }, index) => (
                 <div key={label} className='flex items-center gap-2.5'>
@@ -723,7 +724,7 @@ export function RepositoryAssessments({
                   </div>
                   <details className='group rounded-md border text-xs'>
                     <summary className='cursor-pointer px-4 py-3 text-sm font-medium'>
-                      Provenance and integrity
+                      Source and verification details
                     </summary>
                     <dl className='grid gap-x-4 gap-y-2 border-t px-4 py-3 font-mono break-all sm:grid-cols-[max-content_1fr]'>
                       <dt className='font-sans text-muted-foreground'>

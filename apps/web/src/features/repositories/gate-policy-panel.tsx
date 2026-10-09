@@ -79,7 +79,7 @@ const stateLabel: Record<string, string> = {
   DRAFT: 'Draft',
   APPROVED: 'Approved',
   PUBLISHED: 'Published',
-  SUPERSEDED: 'Superseded',
+  SUPERSEDED: 'Replaced',
 }
 function PolicyState({ policy, stale }: { policy: Revision; stale: boolean }) {
   return (
@@ -94,7 +94,7 @@ function PolicyState({ policy, stale }: { policy: Revision; stale: boolean }) {
               : 'neutral'
       }
     >
-      {stale ? 'Baseline changed' : (stateLabel[policy.state] ?? policy.state)}
+      {stale ? 'Standards changed' : (stateLabel[policy.state] ?? policy.state)}
     </StatusBadge>
   )
 }
@@ -157,7 +157,7 @@ export function GatePolicyPanel({
           ? 'Policy draft created'
           : path.endsWith('/approve')
             ? 'Policy approved'
-            : 'Advisory policy published'
+            : 'Non-blocking policy published'
       )
     },
   })
@@ -198,7 +198,8 @@ export function GatePolicyPanel({
               Policy revisions
             </CardTitle>
             <CardDescription>
-              Branch policies with version history and independent approval.
+              Versioned branch policies. Approval requires a different
+              authorized reviewer.
             </CardDescription>
           </div>
           {canDraft && (
@@ -239,8 +240,8 @@ export function GatePolicyPanel({
             <>
               {query.data.truncated && (
                 <p role='status' className='text-sm text-warning'>
-                  Latest 50 revisions shown. Publication requires complete
-                  history.
+                  Only the latest 50 versions are shown. Publishing is
+                  unavailable while the policy history is incomplete.
                 </p>
               )}
               {!query.data.revisions.length ? (
@@ -252,7 +253,7 @@ export function GatePolicyPanel({
                   <p className='text-sm font-medium'>No branch policies yet</p>
                   <p className='max-w-sm text-sm text-muted-foreground'>
                     {query.data.currentSelectionId
-                      ? 'Create a policy from the saved standards baseline, then send it for independent review.'
+                      ? 'Create a policy from your saved standards, then ask another authorized reviewer to approve it.'
                       : 'Save a standards selection above to start creating branch policies.'}
                   </p>
                 </div>
@@ -341,8 +342,8 @@ export function GatePolicyPanel({
                   aria-hidden='true'
                 />
                 <p>
-                  Advisory definitions only. GitHub enforcement is off;
-                  assessments continue to use saved standards selections.
+                  These policies do not block merges or change assessment
+                  results. Assessments still use the saved standards selection.
                 </p>
               </div>
             </>
@@ -360,7 +361,7 @@ export function GatePolicyPanel({
           <DialogHeader>
             <DialogTitle>New branch policy</DialogTitle>
             <DialogDescription>
-              Create a draft from this repository’s saved standards baseline.
+              Create a draft using this repository’s saved standards.
             </DialogDescription>
           </DialogHeader>
           <form
@@ -402,7 +403,7 @@ export function GatePolicyPanel({
             <div className='rounded-lg border bg-muted/20 p-3'>
               <p className='flex items-center gap-2 text-sm font-medium'>
                 <ListChecks className='size-4 text-info' aria-hidden='true' />
-                Saved baseline
+                Saved standards
               </p>
               <p className='mt-1 text-xs text-muted-foreground'>
                 {standards.isPending
@@ -418,7 +419,7 @@ export function GatePolicyPanel({
                   variant='ghost'
                   onClick={() => void standards.refetch()}
                 >
-                  Retry baseline
+                  Reload standards
                 </Button>
               )}
             </div>
@@ -428,8 +429,8 @@ export function GatePolicyPanel({
                   Additional requirements
                 </legend>
                 <p className='text-xs text-muted-foreground'>
-                  Optional: promote advisory rules. Existing requirements stay
-                  mandatory.
+                  Choose optional rules to make required. Existing required
+                  rules cannot be removed.
                 </p>
                 {optionalRules.map((rule) => (
                   <label
@@ -506,7 +507,7 @@ export function GatePolicyPanel({
                 <div className='flex items-center justify-between gap-3'>
                   <PolicyState policy={selected} stale={stale} />
                   <span className='text-xs text-muted-foreground'>
-                    Advisory policy
+                    Non-blocking policy
                   </span>
                 </div>
                 <div className='grid grid-cols-3 divide-x rounded-xl border bg-muted/20'>
@@ -519,7 +520,7 @@ export function GatePolicyPanel({
                     [
                       selected.definition.rules.filter((rule) => !rule.required)
                         .length,
-                      'Advisory',
+                      'Optional',
                     ],
                     [selected.definition.packs.length, 'Packs'],
                   ].map(([value, label]) => (
@@ -552,7 +553,7 @@ export function GatePolicyPanel({
                               <StatusBadge
                                 tone={rule.required ? 'info' : 'neutral'}
                               >
-                                {rule.required ? 'Required' : 'Advisory'}
+                                {rule.required ? 'Required' : 'Optional'}
                               </StatusBadge>
                             </TableCell>
                             <TableCell className='text-xs text-muted-foreground'>
@@ -569,9 +570,7 @@ export function GatePolicyPanel({
                   </div>
                 </section>
                 <section className='space-y-2'>
-                  <h3 className='text-sm font-semibold'>
-                    Frozen pack versions
-                  </h3>
+                  <h3 className='text-sm font-semibold'>Saved pack versions</h3>
                   <div className='flex flex-wrap gap-2'>
                     {selected.definition.packs.map((pack) => (
                       <span
@@ -588,7 +587,7 @@ export function GatePolicyPanel({
                 </section>
                 <details className='rounded-lg border p-3'>
                   <summary className='cursor-pointer text-xs font-medium text-muted-foreground'>
-                    Technical identity
+                    Technical details
                   </summary>
                   <p className='mt-3 text-xs text-muted-foreground'>
                     Definition SHA-256
@@ -603,7 +602,7 @@ export function GatePolicyPanel({
                 </details>
                 {stale && (
                   <p className='rounded-lg border border-warning/20 bg-warning/5 p-3 text-sm text-warning'>
-                    The standards baseline changed. Create a new revision before
+                    The selected standards changed. Create a new version before
                     approval or publication.
                   </p>
                 )}
@@ -665,9 +664,7 @@ export function GatePolicyPanel({
                         })
                       }
                     >
-                      {mutation.isPending
-                        ? 'Publishing…'
-                        : 'Publish advisory policy'}
+                      {mutation.isPending ? 'Publishing…' : 'Publish policy'}
                     </Button>
                   )}
                 </div>

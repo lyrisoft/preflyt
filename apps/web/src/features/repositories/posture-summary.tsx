@@ -93,7 +93,7 @@ export function PostureSummary({
   }))
   const stats = [
     {
-      label: 'Controls in scope',
+      label: 'Selected controls',
       value: standards.isPending
         ? '—'
         : standards.isError || !selectionValid
@@ -114,7 +114,7 @@ export function PostureSummary({
         standards.isPending || standards.isError || !selectionValid
           ? '—'
           : `${found} / ${controls.length}`,
-      description: 'Files observed · not executed',
+      description: 'Files found · checks not run',
       icon: FileCode2,
       color: 'text-chart-2 bg-chart-2/10',
       tab: 'overview' as const,
@@ -187,13 +187,13 @@ export function PostureSummary({
       </div>
       <Card>
         <CardHeader>
-          <CardTitle>Control posture</CardTitle>
+          <CardTitle>Check configuration</CardTitle>
           <CardDescription>
-            Configuration observed at{' '}
+            Configuration found at{' '}
             {(
               standards.data?.profileSnapshot?.sourceSha ?? profile?.sourceSha
             )?.slice(0, 7) ?? 'the current profile'}{' '}
-            · no execution or gate evaluation
+            · checks were not run and merge readiness was not evaluated
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -291,7 +291,7 @@ export function PostureSummary({
               </div>
               <div>
                 <p className='mb-2 text-xs font-medium text-muted-foreground'>
-                  Required and advisory controls
+                  Required and optional controls
                 </p>
                 <div
                   className='h-44'

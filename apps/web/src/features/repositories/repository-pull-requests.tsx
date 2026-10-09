@@ -312,7 +312,7 @@ export function RepositoryPullRequests({
                         </Button>
                       ) : (
                         <p className='mt-3 text-xs text-muted-foreground'>
-                          No applicable snapshot
+                          No matching assessment
                         </p>
                       )}
                     </div>
@@ -335,7 +335,7 @@ export function RepositoryPullRequests({
                   className='rounded-md bg-muted/30 px-3 py-2 text-xs text-muted-foreground'
                 >
                   {reasons[data.reason] ??
-                    'Current readiness has not been evaluated.'}
+                    'Preflyt has not evaluated whether this change is ready to merge.'}
                 </p>
                 {data.collectionTruncated && (
                   <p role='alert' className='text-xs text-warning'>

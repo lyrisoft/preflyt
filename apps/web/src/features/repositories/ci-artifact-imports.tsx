@@ -31,7 +31,8 @@ export function ReportList({
             </span>
           </p>
           <p className='text-xs text-muted-foreground'>
-            Administrator upload. Signed CI provenance is evaluated separately.
+            Uploaded by an administrator. Verify the signed report source
+            separately.
           </p>
           <p className='flex flex-wrap gap-x-3 gap-y-1 text-xs'>
             {Object.entries(artifact.summary).map(([key, value]) => (

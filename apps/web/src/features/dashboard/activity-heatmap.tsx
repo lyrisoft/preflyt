@@ -148,8 +148,8 @@ export function ActivityHeatmap({
           </p>
         )}
         <p className='mt-4 text-xs text-muted-foreground'>
-          Activity measures snapshot volume. It does not indicate passing checks
-          or merge readiness.
+          This chart counts saved assessments. It does not show whether checks
+          passed or changes are ready to merge.
         </p>
       </CardContent>
     </Card>

@@ -23,6 +23,7 @@ import {
   siVuedotjs,
   type SimpleIcon,
 } from 'simple-icons'
+import { cn } from '@/lib/utils'
 import {
   Tooltip,
   TooltipContent,
@@ -61,7 +62,13 @@ function isNearBlack(hex: string) {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b < 40
 }
 
-export function TechIcon({ name }: { name: string }) {
+export function TechIcon({
+  name,
+  compact = false,
+}: {
+  name: string
+  compact?: boolean
+}) {
   const icon = icons[name]
   const brand = icon && !isNearBlack(icon.hex) ? `#${icon.hex}` : undefined
   return (
@@ -70,7 +77,10 @@ export function TechIcon({ name }: { name: string }) {
         <span
           role='img'
           aria-label={name}
-          className='inline-flex size-9 items-center justify-center rounded-lg border bg-muted/40'
+          className={cn(
+            'inline-flex shrink-0 items-center justify-center border bg-muted/40',
+            compact ? 'size-7 rounded-md' : 'size-9 rounded-lg'
+          )}
           style={
             brand
               ? { backgroundColor: `${brand}14`, borderColor: `${brand}33` }
@@ -81,7 +91,7 @@ export function TechIcon({ name }: { name: string }) {
             <svg
               viewBox='0 0 24 24'
               aria-hidden='true'
-              className='size-[18px]'
+              className={compact ? 'size-3.5' : 'size-[18px]'}
               fill={brand ?? 'currentColor'}
             >
               <path d={icon.path} />

@@ -9,7 +9,7 @@ const capabilities = {
   findings: {
     title: 'Findings',
     description:
-      'The findings registry is not available yet. Review imported security and test reports in CI evidence.',
+      'The findings list is not available yet. Review imported security and test reports in CI evidence.',
     to: '/integrations',
     action: 'Review CI evidence',
     admin: false,
@@ -17,7 +17,7 @@ const capabilities = {
   'quality-gates': {
     title: 'Quality Gates',
     description:
-      'Merge-readiness decisions and enforcement are not available yet. Assessment snapshots show missing or unverified evidence and do not represent passing quality gates.',
+      'Preflyt does not decide whether changes can merge yet. Saved assessments show missing or unverified evidence; they do not mean all required checks passed.',
     to: '/assessments',
     action: 'Review assessments',
     admin: false,
@@ -25,7 +25,7 @@ const capabilities = {
   intelligence: {
     title: 'AI Intelligence',
     description:
-      'AI investigations and explanations are not available yet. Review exact-commit assessment evidence before drawing conclusions.',
+      'AI investigations and explanations are not available yet. Review the assessment evidence for the relevant commit before drawing conclusions.',
     to: '/assessments',
     action: 'Review assessments',
     admin: false,

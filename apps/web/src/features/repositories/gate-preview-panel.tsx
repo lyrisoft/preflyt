@@ -33,7 +33,28 @@ type GatePreview = {
     deliveryId: string | null
   }[]
 }
-const label = (reason: string) => reason.toLowerCase().replace(/_/g, ' ')
+const reasonLabels: Record<string, string> = {
+  COLLECTION_INCOMPLETE: 'Not all CI results were collected.',
+  CONFIGURATION_NOT_ESTABLISHED:
+    'The required configuration could not be confirmed.',
+  PROFILE_NOT_COMPLETE_AT_REVISION:
+    'Repository inspection was incomplete for this commit.',
+  CONFIGURATION_EVIDENCE_MISSING:
+    'The required configuration evidence is missing.',
+  RULE_ADAPTER_UNSUPPORTED:
+    'Preflyt does not support evaluating this rule yet.',
+  TRUSTED_EXECUTION_NOT_ESTABLISHED:
+    'The tools and rules that ran have not been verified.',
+  EVIDENCE_INTEGRITY_INVALID: 'The saved evidence failed verification.',
+  SOURCE_AMBIGUOUS: 'More than one CI result could match this rule.',
+  SOURCE_SUPERSEDED: 'A newer CI result has replaced this one.',
+  APPROVED_CI_SOURCE_FAILED: 'The approved CI check or workflow failed.',
+  SNAPSHOT_SCHEMA_UNSUPPORTED:
+    'This saved assessment format cannot be evaluated.',
+  NO_REQUIRED_RULES: 'This assessment has no required rules.',
+}
+const label = (reason: string) =>
+  reasonLabels[reason] ?? reason.toLowerCase().replace(/_/g, ' ')
 export function GatePreviewPanel({
   repositoryId,
   assessmentId,
@@ -59,13 +80,13 @@ export function GatePreviewPanel({
           Policy gate preview
         </CardTitle>
         <CardDescription>
-          Historical evaluation of this snapshot. GitHub publication and merge
-          blocking are disabled.
+          Results for this saved assessment. Preflyt does not publish GitHub
+          checks or block merges yet.
         </CardDescription>
       </CardHeader>
       <CardContent className='space-y-4'>
         {query.isPending ? (
-          <p role='status'>Evaluating frozen policy…</p>
+          <p role='status'>Checking saved requirements…</p>
         ) : query.isError ? (
           <div role='alert'>
             <p>{query.error.message}</p>
@@ -103,10 +124,10 @@ export function GatePreviewPanel({
               </p>
             </div>
             <p className='text-xs text-muted-foreground'>
-              Configuration PASS confirms only the frozen configuration
-              requirement. Provider success or signed report provenance cannot
-              establish verified execution. BLOCK identifies a failed approved
-              CI source, not a verified test or scanner finding.
+              PASS for a configuration rule means the required files were found.
+              A successful CI result or a verified report signature does not
+              prove which tools and rules ran. BLOCK means an approved CI check
+              or workflow failed; it does not confirm a specific defect.
             </p>
             {query.data.reasons.map((r) => (
               <p key={r} role='status' className='text-sm text-warning'>
@@ -124,7 +145,7 @@ export function GatePreviewPanel({
                       <span className='text-sm font-medium'>
                         {rule.title}{' '}
                         <span className='font-normal text-muted-foreground'>
-                          · {rule.required ? 'Required' : 'Advisory'}
+                          · {rule.required ? 'Required' : 'Optional'}
                         </span>
                       </span>
                       <StatusBadge
@@ -142,7 +163,7 @@ export function GatePreviewPanel({
                     <p className='mt-2 text-xs text-muted-foreground'>
                       {rule.reasons.length
                         ? rule.reasons.map(label).join(' · ')
-                        : 'Revision-bound configuration observed.'}
+                        : 'Required configuration found at this commit.'}
                     </p>
                     {rule.deliveryId && (
                       <a
@@ -151,7 +172,7 @@ export function GatePreviewPanel({
                         target='_blank'
                         rel='noreferrer'
                       >
-                        Exact-revision CI evidence{' '}
+                        CI evidence for this commit{' '}
                         <ExternalLink className='size-3' aria-hidden='true' />
                       </a>
                     )}
@@ -160,7 +181,7 @@ export function GatePreviewPanel({
               </ul>
             </details>
             <details className='text-xs text-muted-foreground'>
-              <summary className='cursor-pointer'>Evaluation identity</summary>
+              <summary className='cursor-pointer'>Evaluation details</summary>
               <p className='mt-2'>Evaluator v{query.data.evaluatorVersion}</p>
               <code className='block break-all'>
                 {query.data.evaluationHash}

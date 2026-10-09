@@ -37,15 +37,15 @@ export function EvidenceValidationPanel({
       </summary>
       <div className='mt-2 space-y-2'>
         <p>
-          Execution trust remains unverified. Source approval:{' '}
+          The tools and rules that ran have not been verified. CI source:{' '}
           {validation.sourceApproved ? 'approved' : 'missing'}.
         </p>
         {validation.reports.map((report) => (
           <p key={report.artifactId}>
-            {report.format.toUpperCase()} · report integrity:{' '}
+            {report.format.toUpperCase()} · report verification:{' '}
             {sentence(report.integrity)} · {sentence(report.reportedResult)}
             {report.provenance &&
-              ` · signed provenance verified: ${report.provenance.signerWorkflow}, run ${report.provenance.runId}, attempt ${report.provenance.runAttempt}`}
+              ` · signed report source verified: ${report.provenance.signerWorkflow}, run ${report.provenance.runId}, attempt ${report.provenance.runAttempt}`}
             {report.executedTests !== null &&
               ` · ${report.executedTests} reported executed tests`}
           </p>

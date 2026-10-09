@@ -45,7 +45,7 @@ export function CiProvenance({
       const result = await fetch(path, { credentials: 'include', signal })
       if (!result.ok)
         throw new Error(
-          'Could not load provenance. Check report integrity and repository access.'
+          'Could not load report source verification. Check the report and your repository access.'
         )
       return result.json() as Promise<Proof>
     },
@@ -64,7 +64,7 @@ export function CiProvenance({
             ? 'Verification is not configured on this deployment.'
             : result.status === 429
               ? 'Verification is busy or the report proof limit was reached. Retry later.'
-              : 'Proof rejected. Check the signed report digest, repository, commit, approved workflow and run attempt.'
+              : 'Proof rejected. Check the signed report hash, repository, commit, approved workflow and run attempt.'
         )
     },
     onSuccess: async () => {
@@ -80,21 +80,22 @@ export function CiProvenance({
         onClick={() => setOpen(!open)}
         aria-expanded={open}
       >
-        CI provenance
+        Report source verification
       </Button>
       {open && (
         <div className='space-y-3 rounded-md border p-3'>
           {query.isPending ? (
-            <p role='status'>Loading provenance…</p>
+            <p role='status'>Loading report verification…</p>
           ) : query.isError ? (
             <p role='alert'>{query.error.message}</p>
           ) : (
             <>
               <p>
                 {query.data.provenance
-                  ? 'Signed provenance verified.'
-                  : 'No current verified attestation.'}{' '}
-                Execution trust remains unverified.
+                  ? 'The report’s signed source was verified.'
+                  : 'No valid signed proof of the report’s source is available.'}{' '}
+                Preflyt has not verified which tools ran or which rules they
+                checked.
               </p>
               {query.data.provenance && (
                 <p className='break-all'>
@@ -108,8 +109,8 @@ export function CiProvenance({
               )}
               {!query.data.configured && (
                 <p>
-                  The administrator must configure a pinned verifier, trust
-                  roots and approved signer workflows.
+                  Ask your administrator to configure the signature verification
+                  tool, trusted certificates and approved signing workflows.
                 </p>
               )}
               {canVerify && query.data.configured && (
@@ -167,7 +168,7 @@ export function CiProvenance({
                   )}
                   {mutation.isSuccess && (
                     <p role='status'>
-                      Provenance verified. Create a new assessment to record
+                      Report source verified. Create a new assessment to include
                       this proof.
                     </p>
                   )}
@@ -176,9 +177,7 @@ export function CiProvenance({
                     type='submit'
                     disabled={!bundle || mutation.isPending}
                   >
-                    {mutation.isPending
-                      ? 'Verifying…'
-                      : 'Verify signed provenance'}
+                    {mutation.isPending ? 'Verifying…' : 'Verify report source'}
                   </Button>
                 </form>
               )}

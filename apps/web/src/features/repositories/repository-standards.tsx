@@ -138,7 +138,8 @@ function SelectionEditor({
             </SelectContent>
           </Select>
           <span className='block text-xs text-muted-foreground'>
-            {profileHints[profile] ?? ''} All profiles stay in observe mode.
+            {profileHints[profile] ?? ''} These profiles do not run checks or
+            block merges.
           </span>
         </label>
         <fieldset className='space-y-2'>
@@ -467,8 +468,8 @@ export function RepositoryStandards({
             aria-hidden='true'
             className='mt-0.5 size-4 shrink-0 text-destructive'
           />
-          Saved pack definitions do not match their recorded digests. Controls
-          are not evaluated until supported versions are saved again.
+          The saved packs differ from their recorded versions. Save supported
+          pack versions again before evaluating checks.
         </div>
       )}
       <div className='grid gap-5 xl:grid-cols-2'>
@@ -587,7 +588,7 @@ export function RepositoryStandards({
               </CardTitle>
               <CardDescription>
                 {data.selection ? 'Saved selection' : 'Recommended preview'} ·
-                shared rules counted once.
+                rules included in multiple packs are counted once.
               </CardDescription>
               <CardAction>
                 <Badge variant='neutral'>{uniqueRules.length} rules</Badge>
@@ -621,8 +622,8 @@ export function RepositoryStandards({
                 ))}
               </dl>
               <p className='text-xs text-muted-foreground'>
-                Configuration and CI import describe evidence paths. Planned
-                rules await adapters.
+                Configuration means Preflyt can inspect files. CI import means
+                it can read CI results. Planned rules are not supported yet.
               </p>
             </CardContent>
           </Card>
@@ -641,7 +642,8 @@ export function RepositoryStandards({
                 Pack catalogue
               </h2>
               <p className='mt-1 text-xs text-muted-foreground'>
-                Explore rule capabilities and select applicable packs.
+                See which rules Preflyt supports and choose packs for this
+                repository.
               </p>
             </div>
             <Badge variant='neutral'>{data.catalogue.length} available</Badge>
@@ -672,7 +674,7 @@ export function RepositoryStandards({
         </TabsTrigger>
         <TabsTrigger value='bindings' className='gap-2'>
           <Workflow aria-hidden='true' className='size-4' />
-          CI source bindings
+          CI sources
         </TabsTrigger>
         <TabsTrigger value='catalogue' className='gap-2'>
           <Layers aria-hidden='true' className='size-4' />

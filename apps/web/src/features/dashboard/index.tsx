@@ -33,9 +33,15 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { AppHeader } from '@/components/layout/app-header'
 import { Main } from '@/components/layout/main'
 import { RepositoryPicker } from '@/components/repository-picker'
+import { StatusBadge } from '@/components/status-badge'
 import { RelativeTime } from '@/features/repositories/relative-time'
 import { TechIcon } from '@/features/repositories/tech-icon'
 import { ActivityHeatmap } from './activity-heatmap'
@@ -286,8 +292,9 @@ export function Dashboard() {
                           </div>
                         </div>
                         <p className='border-t pt-4 text-xs text-muted-foreground'>
-                          Verified gates and findings are not available yet.
-                          Imported CI success does not establish readiness.
+                          Verified gates and findings are not available yet. A
+                          successful CI result alone does not mean a change is
+                          ready to merge.
                         </p>
                         <Button variant='outline' size='sm' asChild>
                           <Link to='/policies' search={{ repository }}>
@@ -384,7 +391,7 @@ export function Dashboard() {
                   <Card>
                     <CardHeader className='flex flex-row flex-wrap items-start justify-between gap-3'>
                       <div>
-                        <CardTitle>Repository posture</CardTitle>
+                        <CardTitle>Repository status</CardTitle>
                         <CardDescription>
                           Latest recorded profile, standards selection, and
                           assessment
@@ -403,6 +410,7 @@ export function Dashboard() {
                           <TableRow>
                             <TableHead>Repository</TableHead>
                             <TableHead>Language / framework</TableHead>
+                            <TableHead>Profile status</TableHead>
                             <TableHead>Policy profile</TableHead>
                             <TableHead>Last assessment</TableHead>
                             <TableHead>Readiness</TableHead>
@@ -422,27 +430,67 @@ export function Dashboard() {
                               </TableCell>
                               <TableCell className='max-w-60 whitespace-normal text-muted-foreground'>
                                 {repo.technologies.length ? (
-                                  <div className='flex flex-wrap items-center gap-2 py-1'>
+                                  <div className='flex flex-wrap items-center gap-1.5'>
                                     {[...new Set(repo.technologies)].map(
                                       (name) => (
-                                        <TechIcon key={name} name={name} />
+                                        <TechIcon
+                                          key={name}
+                                          name={name}
+                                          compact
+                                        />
                                       )
                                     )}
                                   </div>
+                                ) : repo.profileComplete === null ? (
+                                  'Not inspected'
+                                ) : repo.profileComplete === false ? (
+                                  'Unknown'
                                 ) : (
-                                  'Not profiled'
-                                )}
-                                {repo.profileComplete === false && (
-                                  <p className='mt-1 text-xs'>
-                                    Partial profile
-                                  </p>
+                                  'Not detected'
                                 )}
                               </TableCell>
                               <TableCell>
-                                {repo.policy
-                                  ? repo.policy.charAt(0) +
-                                    repo.policy.slice(1).toLowerCase()
-                                  : 'Not adopted'}
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span
+                                      tabIndex={0}
+                                      className='inline-flex rounded-md focus-visible:outline-2 focus-visible:outline-ring'
+                                    >
+                                      <StatusBadge
+                                        tone={
+                                          repo.profileComplete === false
+                                            ? 'warning'
+                                            : repo.profileComplete === true
+                                              ? 'info'
+                                              : 'neutral'
+                                        }
+                                      >
+                                        {repo.profileComplete === false
+                                          ? 'Partially inspected'
+                                          : repo.profileComplete === true
+                                            ? 'Inspected'
+                                            : 'Not inspected'}
+                                      </StatusBadge>
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent className='max-w-72'>
+                                    {repo.profileComplete === false
+                                      ? 'Preflyt could not complete the repository inspection. Some configuration may be unknown.'
+                                      : repo.profileComplete === true
+                                        ? 'Preflyt completed its supported file inspection. Tests and scanners were not run.'
+                                        : 'No repository inspection has been saved yet.'}
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TableCell>
+                              <TableCell>
+                                <StatusBadge
+                                  tone={repo.policy ? 'info' : 'warning'}
+                                >
+                                  {repo.policy
+                                    ? repo.policy.charAt(0) +
+                                      repo.policy.slice(1).toLowerCase()
+                                    : 'Not adopted'}
+                                </StatusBadge>
                               </TableCell>
                               <TableCell>
                                 {repo.latestAssessment ? (
@@ -456,13 +504,15 @@ export function Dashboard() {
                                     />
                                   </Link>
                                 ) : (
-                                  <span className='text-muted-foreground'>
+                                  <StatusBadge tone='neutral'>
                                     Not assessed
-                                  </span>
+                                  </StatusBadge>
                                 )}
                               </TableCell>
-                              <TableCell className='text-muted-foreground'>
-                                Not evaluated
+                              <TableCell>
+                                <StatusBadge tone='neutral'>
+                                  Not evaluated
+                                </StatusBadge>
                               </TableCell>
                             </TableRow>
                           ))}
@@ -481,8 +531,8 @@ export function Dashboard() {
               )}
               <p className='text-xs text-muted-foreground'>
                 Local data · updated <RelativeTime value={data.generatedAt} /> ·
-                activity dates use UTC. Repository posture and tracked PRs are
-                current recorded state; activity and PRs assessed use the
+                activity dates use UTC. Repository status and tracked PRs are
+                shown as last recorded; activity and assessed PR counts use the
                 selected period.
               </p>
             </>

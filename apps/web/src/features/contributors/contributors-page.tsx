@@ -306,7 +306,7 @@ export function ContributorsPage({
     ? [
         { label: 'Authored PRs', n: c?.authoredPrs, icon: GitPullRequest },
         { label: 'Merged PRs', n: c?.mergedPrs, icon: GitBranch },
-        { label: 'Reviews observed', n: c?.reviews, icon: UsersRound },
+        { label: 'Recorded reviews', n: c?.reviews, icon: UsersRound },
         {
           label: 'Attributed commits',
           n: c?.commits,
@@ -596,8 +596,8 @@ export function ContributorsPage({
                     <CardHeader>
                       <CardTitle>Participation over time</CardTitle>
                       <p className='text-xs text-muted-foreground'>
-                        Distinct source objects observed per UTC day. Repeated
-                        deliveries are deduplicated.
+                        Recorded PRs, commits and reviews per day (UTC).
+                        Repeated GitHub events are counted once.
                       </p>
                     </CardHeader>
                     <CardContent>
@@ -639,7 +639,7 @@ export function ContributorsPage({
                       ) : (
                         <p className='py-16 text-center text-sm text-muted-foreground'>
                           {data.permissions.activity
-                            ? 'No observed participation in this period.'
+                            ? 'No recorded activity in this period.'
                             : 'Activity permission is required to view this chart.'}
                         </p>
                       )}
@@ -761,7 +761,7 @@ export function ContributorsPage({
                               <th className='p-3'>Repositories</th>
                               <th className='p-3'>Authored PRs</th>
                               <th className='p-3'>Reviews</th>
-                              <th className='p-3'>Last observed</th>
+                              <th className='p-3'>Last recorded activity</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -923,7 +923,7 @@ export function ContributorsPage({
                 )}
               <details className='rounded-xl border bg-muted/10 p-4 text-xs text-muted-foreground'>
                 <summary className='cursor-pointer font-medium'>
-                  Scope, provenance and data gaps
+                  Data sources and limits
                 </summary>
                 <ul className='mt-3 list-disc space-y-1 pl-4'>
                   {data.limitations.map((l) => (

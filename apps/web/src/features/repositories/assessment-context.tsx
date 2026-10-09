@@ -73,12 +73,12 @@ export function AssessmentContext({ request }: { request: ContextRequest }) {
         </div>
       ) : (
         <p className='text-xs text-muted-foreground'>
-          No active source bindings were frozen in this snapshot.
+          No approved CI sources were saved with this assessment.
         </p>
       )}
       <p className='text-xs text-muted-foreground'>
-        Historical context. Source approval does not verify execution or
-        establish a quality gate.
+        This shows the context when the assessment was saved. Approving a CI
+        source does not prove that a check ran or passed.
       </p>
     </section>
   )
@@ -99,7 +99,8 @@ export function AssessmentSnapshotDialog({
         <DialogHeader>
           <DialogTitle>Assessment snapshot</DialogTitle>
           <DialogDescription>
-            Immutable evidence at an exact commit. This is not a merge decision.
+            Evidence saved for a specific commit. This assessment does not
+            decide whether the change can merge.
           </DialogDescription>
         </DialogHeader>
         {query.isPending ? (
@@ -119,7 +120,10 @@ export function AssessmentSnapshotDialog({
               {query.data.report.trustedExecutedChecks} verified executed checks
             </p>
             {query.data.report.collectionTruncated && (
-              <p role='alert'>Evidence collection was truncated.</p>
+              <p role='alert'>
+                Not all evidence was collected; the collection limit was
+                reached.
+              </p>
             )}
             <div className='divide-y rounded-md border'>
               {query.data.report.checks.map((check) => {
@@ -156,7 +160,9 @@ export function AssessmentSnapshotDialog({
               })}
             </div>
             <details className='text-xs'>
-              <summary className='cursor-pointer'>Snapshot integrity</summary>
+              <summary className='cursor-pointer'>
+                Saved assessment verification
+              </summary>
               <code className='mt-2 block break-all'>
                 {query.data.assessmentHash}
               </code>

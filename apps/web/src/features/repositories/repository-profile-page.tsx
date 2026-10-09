@@ -67,8 +67,8 @@ const profileNotes = [
   'Not found means no supported hint was found. It is not a policy failure.',
 ]
 const evidenceNotes = [
-  'CI results are reported by GitHub. Administrator associations to rules stay unverified.',
-  'Assessments are frozen at one commit; later evidence needs a new snapshot.',
+  'CI results are reported by GitHub. Manually linking a result to a rule does not verify that the rule ran.',
+  'Each assessment saves evidence for one commit. Create a new assessment to include later evidence.',
 ]
 
 class ProfileRequestError extends Error {
@@ -219,7 +219,7 @@ function ReadingGuide({ limitations }: { limitations: string[] }) {
         </Button>
       </PopoverTrigger>
       <PopoverContent align='start' className='w-96 text-sm'>
-        <p className='font-medium'>Reading repository posture</p>
+        <p className='font-medium'>Understanding repository status</p>
         <ul className='mt-2 list-disc space-y-1.5 ps-5 text-muted-foreground'>
           {[
             ...(limitations.length ? limitations : profileNotes),
@@ -338,6 +338,15 @@ export function RepositoryProfilePage() {
       ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
   const profile = result?.profile
+  const technologies = [
+    ...new Set(
+      profile?.report.signals
+        .filter(
+          (signal) => stackIds.has(signal.id) && signal.state === 'detected'
+        )
+        .flatMap((signal) => signal.observations) ?? []
+    ),
+  ]
   return (
     <>
       <AppHeader
@@ -360,10 +369,23 @@ export function RepositoryProfilePage() {
             </Link>
           </Button>
           <div className='flex flex-wrap items-start justify-between gap-4'>
-            <div className='min-w-0 space-y-2'>
-              <h1 className='text-2xl font-bold tracking-tight break-words'>
-                {result?.repository.fullName ?? 'Repository'}
-              </h1>
+            <div className='min-w-0 flex-1 space-y-2'>
+              <div className='flex flex-wrap items-center gap-x-3 gap-y-2'>
+                <h1 className='min-w-0 text-2xl font-bold tracking-tight break-words'>
+                  {result?.repository.fullName ?? 'Repository'}
+                </h1>
+                {!!technologies.length && (
+                  <div
+                    className='flex flex-wrap items-center gap-1.5'
+                    role='group'
+                    aria-label='Detected languages and frameworks'
+                  >
+                    {technologies.map((name) => (
+                      <TechIcon key={name} name={name} compact />
+                    ))}
+                  </div>
+                )}
+              </div>
               {profile ? (
                 <div className='flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-muted-foreground'>
                   <span className='flex items-center gap-1.5'>
@@ -396,7 +418,7 @@ export function RepositoryProfilePage() {
               )}
               {result && (
                 <p className='flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground'>
-                  <StatusBadge tone='info'>Observe mode</StatusBadge>
+                  <StatusBadge tone='info'>No merge blocking</StatusBadge>
                   <ReadingGuide
                     limitations={profile?.report.limitations ?? []}
                   />

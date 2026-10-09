@@ -129,7 +129,7 @@ function BindingEditor({
       if (!response.ok)
         throw new Error(
           response.status === 409
-            ? 'Standards or bindings changed. Close this editor, reload and review again.'
+            ? 'Standards or CI sources changed. Close this editor, reload and review again.'
             : response.status === 403
               ? 'Your permission or repository access changed.'
               : 'Approval failed. Check exact source identities and try again.'
@@ -153,9 +153,9 @@ function BindingEditor({
     >
       <div className='flex-1 space-y-5 overflow-y-auto px-4 pb-4'>
         <p className='text-sm text-muted-foreground'>
-          Choose an observed signed source or enter its exact identifiers.
-          Approval identifies the source; it does not prove that a rule
-          executed.
+          Choose a CI source received from a verified GitHub webhook, or enter
+          its identifiers. Approving a source does not prove that its test or
+          scanner ran.
         </p>
         {rules.map((rule) => {
           const b = bindings.find((item) => item.ruleId === rule.id)
@@ -214,7 +214,7 @@ function BindingEditor({
                     aria-label={`Observed source for ${rule.title}`}
                     className='w-full'
                   >
-                    <SelectValue placeholder='Use an observed CI source' />
+                    <SelectValue placeholder='Use a recorded CI source' />
                   </SelectTrigger>
                   <SelectContent>
                     {observed.map((source, i) => (
@@ -280,11 +280,11 @@ function BindingEditor({
       <SheetFooter className='border-t'>
         <p className='text-xs text-muted-foreground'>
           {bindings.filter((b) => rules.some((r) => r.id === b.ruleId)).length}{' '}
-          associations will be approved in a new revision. No associations
-          clears the saved mappings.
+          rule-to-source connections will be saved in a new version. Saving
+          without connections removes the existing ones.
         </p>
         <Button type='submit' disabled={!valid || mutation.isPending}>
-          {mutation.isPending ? 'Saving…' : 'Approve source bindings'}
+          {mutation.isPending ? 'Saving…' : 'Approve CI sources'}
         </Button>
       </SheetFooter>
     </form>
@@ -318,17 +318,17 @@ export function RepositoryBindings({
       <CardHeader>
         <CardTitle className='flex items-center gap-2'>
           <Link2 className='size-4 text-chart-2' />
-          CI source bindings
+          CI sources
         </CardTitle>
         <CardDescription>
-          Approved sources associated with imported-evidence rules.
+          Choose which CI check or workflow supplies results for each rule.
         </CardDescription>
         <CardAction>
           <Button
             size='icon'
             variant='outline'
             className='size-8'
-            aria-label='Reload CI bindings'
+            aria-label='Reload CI sources'
             disabled={query.isFetching}
             onClick={() => {
               setEditing(false)
@@ -343,7 +343,7 @@ export function RepositoryBindings({
       <CardContent className='space-y-4'>
         {query.isPending ? (
           <p role='status' className='text-sm text-muted-foreground'>
-            Loading bindings…
+            Loading CI sources…
           </p>
         ) : query.isError ? (
           <p role='alert' className='text-sm text-destructive'>
@@ -356,7 +356,7 @@ export function RepositoryBindings({
                 {saved?.active
                   ? `Active · revision ${saved.binding?.revision}`
                   : saved?.binding
-                    ? 'Reapproval required'
+                    ? 'Approve sources again'
                     : 'No approved sources'}
               </StatusBadge>
               {canManage && (
@@ -371,7 +371,9 @@ export function RepositoryBindings({
                   onClick={() => setEditing(true)}
                 >
                   <ShieldCheck className='size-3.5' />
-                  {saved?.binding ? 'Review bindings' : 'Configure bindings'}
+                  {saved?.binding
+                    ? 'Review CI sources'
+                    : 'Configure CI sources'}
                 </Button>
               )}
             </div>
@@ -385,7 +387,7 @@ export function RepositoryBindings({
                     {mappings.length}
                   </p>
                   <p className='mt-1.5 text-xs text-muted-foreground'>
-                    Source mappings
+                    Connected rules
                   </p>
                 </div>
               </div>
@@ -453,8 +455,8 @@ export function RepositoryBindings({
                 role='status'
                 className='rounded-lg border border-warning/20 bg-warning/5 px-3 py-2.5 text-xs text-warning-text'
               >
-                Standards changed. Review and approve these historical mappings
-                for the current selection.
+                Standards changed. Review these CI sources and approve them
+                again for your current selection.
               </p>
             )}
             {mappings.length ? (

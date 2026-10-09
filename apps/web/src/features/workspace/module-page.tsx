@@ -38,7 +38,7 @@ const modules = {
     section: 'Governance',
     icon: ClipboardCheck,
     description:
-      'Preview frozen policy outcomes at an exact revision. Publication and blocking are disabled.',
+      'Review saved check results for a specific commit. Preflyt does not publish GitHub checks or block merges yet.',
     accent: 'border-info/20 bg-info/5',
     iconAccent: 'bg-info/15 text-info',
   },
@@ -47,7 +47,7 @@ const modules = {
     section: 'Workspace',
     icon: ClipboardCheck,
     description:
-      'Review activity, tracked revisions and frozen assessment evidence.',
+      'Review activity, tracked commits and the evidence saved with each assessment.',
     accent: 'border-chart-1/20 bg-chart-1/5',
     iconAccent: 'bg-chart-1/15 text-chart-1',
   },
