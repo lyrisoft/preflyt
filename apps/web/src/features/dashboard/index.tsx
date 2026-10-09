@@ -37,6 +37,7 @@ import { AppHeader } from '@/components/layout/app-header'
 import { Main } from '@/components/layout/main'
 import { RepositoryPicker } from '@/components/repository-picker'
 import { RelativeTime } from '@/features/repositories/relative-time'
+import { TechIcon } from '@/features/repositories/tech-icon'
 import { ActivityHeatmap } from './activity-heatmap'
 import type { DashboardData } from './dashboard-types'
 
@@ -420,9 +421,17 @@ export function Dashboard() {
                                 </Link>
                               </TableCell>
                               <TableCell className='max-w-60 whitespace-normal text-muted-foreground'>
-                                {repo.technologies.length
-                                  ? repo.technologies.join(', ')
-                                  : 'Not profiled'}
+                                {repo.technologies.length ? (
+                                  <div className='flex flex-wrap items-center gap-2 py-1'>
+                                    {[...new Set(repo.technologies)].map(
+                                      (name) => (
+                                        <TechIcon key={name} name={name} />
+                                      )
+                                    )}
+                                  </div>
+                                ) : (
+                                  'Not profiled'
+                                )}
                                 {repo.profileComplete === false && (
                                   <p className='mt-1 text-xs'>
                                     Partial profile
