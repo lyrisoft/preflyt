@@ -52,7 +52,7 @@ A finding includes PR/head SHA, file and changed-line mapping, rule/skill/versio
 
 ## Administration and UI
 
-**Settings → AI → Review Skills** (when usable): list installed/available reviewed skills, provenance, pinned version, license/security status, supported repositories/languages, enablement, assigned stages, selected model route, budgets, last review outcome and audit. Organization admins can propose/import; authorized policy/security approvers activate. Repository-level overrides cannot bypass organization restrictions.
+**Intelligence → Skills** (when usable): list installed/available reviewed skills, provenance, pinned version, license/security status, supported repositories/languages, enablement, assigned stages, selected model route, budgets, last review outcome and audit. Organization admins can propose/import; authorized policy/security approvers activate. Repository-level overrides cannot bypass organization restrictions.
 
 Assessment → **Code Quality → AI Review**: show which skills ran/skipped/failed, exact versions, duration, costs, findings and source references. GitHub summary feedback is default; inline comments require separate authorization and deduplication.
 
