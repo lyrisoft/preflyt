@@ -69,6 +69,8 @@ Routes are a design contract; existing implemented paths may differ. Prefer back
 6. **Repository Posture:** selected repositories, stack, policy profile, last assessed, readiness and missing controls.
 7. **Platform Status:** GitHub integration, webhook/worker/API/database/cache and configured AI health **from actual health evidence**; no fabricated “all healthy.”
 
+**Implemented overview navigation:** The summary cards and repository/time filters remain shared above Overview, Repositories and Pull requests tabs. Overview contains the assessment calendar and evidence summary; Repositories contains paginated recorded status; Pull requests contains the bounded attention summary and its assessment links. The selected tab is stored in the URL and survives reload/filter changes. Definitions and data-source notes use the page Help drawer. The broader composition above remains the target as verified gates and findings become available.
+
 No large marketing hero, decorative globe or fake percentage. Charts should have axis labels, source/time range, empty states and accessible table alternatives.
 
 ### Dashboard metric definitions
