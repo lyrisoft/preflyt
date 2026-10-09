@@ -110,6 +110,8 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 
 - **P2.R5 Insights:** Extend ruleset synchronization with GitHub Rule Suites ingestion, ruleset-ID-based detailed evaluation attribution, metrics/charts, filtered history and evidence drill-down. Separate GitHub evaluations from Preflyt gate outcomes; enforce RBAC and rate-limit-aware pagination. See [Ruleset Management](../product/github-ruleset-management.md).
 
+- **P2.N1:** Notify blocked/incomplete PRs, policy/ruleset changes and exceptions through in-app and configured email delivery with retry/audit.
+
 ### P3 — Native Secure Validation
 
 **User value:** Preflyt can perform useful code/security/IaC validation itself, rather than depending exclusively on existing CI.
