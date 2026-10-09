@@ -2,7 +2,7 @@ import { Inject, Injectable } from '@nestjs/common'
 import { randomUUID } from 'node:crypto'
 import { AuthorizationService } from '../auth/authorization.service.js'
 import type { AuthenticatedSession } from '../auth/session.guard.js'
-import { parseNativeApproval } from './native-approval.js'
+import { nativeRuntimeApproval } from './native-runtime.js'
 import { verifyNativeProbe } from './native-proof.js'
 @Injectable()
 export class NativeStatusService {
@@ -29,7 +29,7 @@ export class NativeStatusService {
         message:
           'Preflyt uses imported CI results. Sandbox verification is not enabled.',
       }
-    const reviewed = parseNativeApproval()
+    const reviewed = nativeRuntimeApproval()
     if (
       !reviewed ||
       !reviewed.approval.organizationIds.includes(session.organizationId!)
@@ -86,7 +86,7 @@ export class NativeStatusService {
         repositoryId,
         'assessment.read',
       )
-      if (parseNativeApproval()?.approvalHash !== reviewed.approvalHash)
+      if (nativeRuntimeApproval()?.approvalHash !== reviewed.approvalHash)
         throw new Error('Review changed')
       return {
         ...base,

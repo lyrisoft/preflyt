@@ -299,6 +299,72 @@ describe('signed controller observations', () => {
       }),
     ).toBeNull()
   })
+  it('uses the same signed protocol for a separately injected Docker observer and blocks review changes', async () => {
+    const cert = certificate()
+    const approval = {
+      version: 1 as const,
+      environmentId: cert.environmentId,
+      organizationIds: cert.organizationIds,
+      runtime: 'runsc' as const,
+      controlsHash: cert.controlsHash,
+      toolReviewHash: 'a'.repeat(64),
+      controllerOrigin: cert.controllerOrigin,
+      controllerPublicKey: cert.controllerPublicKey,
+      approvedAt: cert.approvedAt,
+      expiresAt: cert.expiresAt,
+      reviewDigest: cert.reviewDigest,
+      testDigests: cert.testDigests,
+    }
+    const review = { approval, approvalHash: digest(approval) }
+    let current: typeof review | null = review
+    const observe = vi
+      .fn()
+      .mockImplementation(async () => ({
+        verified: true,
+        failed: [],
+        controlsHash: approval.controlsHash,
+      }))
+    const kubeObserver = vi.fn()
+    const server = createNativeController(kubeObserver, {
+      review: () => current,
+      observe,
+    })
+    server.listen(0, '127.0.0.1')
+    await once(server, 'listening')
+    const base = 'http://127.0.0.1:' + (server.address() as any).port
+    const input = probe(review.approvalHash)
+    const request = () =>
+      fetch(base + '/preflight', {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer ' + process.env.NATIVE_CONTROLLER_API_KEY,
+        },
+        body: JSON.stringify(input),
+      })
+    try {
+      const good = (await (await request()).json()) as any
+      expect(verifyNativeProbe(good.signature, input, approval)?.verified).toBe(
+        true,
+      )
+      expect(kubeObserver).not.toHaveBeenCalled()
+      observe.mockImplementationOnce(async () => {
+        current = null
+        return {
+          verified: true,
+          failed: [],
+          controlsHash: approval.controlsHash,
+        }
+      })
+      const changed = (await (await request()).json()) as any
+      expect(
+        verifyNativeProbe(changed.signature, input, approval)?.verified,
+      ).toBe(false)
+      expect((await request()).status).toBe(503)
+    } finally {
+      server.closeAllConnections()
+      await new Promise<void>((resolve) => server.close(() => resolve()))
+    }
+  })
   it('runs a bounded authenticated HTTP preflight with no job-dispatch endpoint', async () => {
     const observe = vi.fn().mockResolvedValue(objects()),
       server = createNativeController(observe)

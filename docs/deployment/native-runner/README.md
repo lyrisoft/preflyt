@@ -43,3 +43,13 @@ pnpm --filter @preflyt/api exec tsx scripts/native-check-fixtures.mts
 ```
 
 The harness selects only generated fixtures, uses content-addressed local image IDs, creates no database records and never publishes GitHub checks. Fixture image tags are build conveniences, not production approval. Production images must be published by immutable digest and reviewed together with their configuration, licenses and any vulnerability databases. The bundled Semgrep configuration contains one dynamic-code-execution rule; extend reviewed coverage before representing it as a complete security scan. Trivy dependency scanning requires an image with a reviewed fresh offline database.
+
+## Containerized Docker preflight
+
+`deploy/api.Dockerfile` provides the separate `native-docker-controller` target with an immutable official Docker CLI. The normal API and worker use the `runtime` target without that CLI. `execution-controller.js` rejects application/database/GitHub/model/cloud credentials and is absent from the API/worker import graphs.
+
+Set `NATIVE_RUNTIME_BACKEND=docker` on the API status client and the dedicated controller; supply the same independently signed `NATIVE_DOCKER_APPROVAL` and trusted review keys. Enable `NATIVE_PREFLIGHT_ENABLED=true` on the API only after configuring that reviewed controller. The status client calls the reviewed HTTPS controller origin and verifies a short-lived nonce-bound signature. It never connects to the Docker engine. A missing Docker review does not fall back to Kubernetes. Kubernetes remains the existing default for installations using its reviewed preflight configuration.
+
+Copy `controller.env.example` to a protected `controller.env`. Place your dedicated engine's client certificate, private key and CA certificate in protected `docker-tls` files named `cert.pem`, `key.pem` and `ca.pem`, readable only by the controller's deployment identity. The engine must enforce mutual TLS. Use a dedicated Docker engine; this connection grants trusted controller authority over that engine. Do not share the application host engine. TLS client settings are available to the controller's Docker CLI only and are never passed to scanner containers.
+
+Run `docker compose -f controller.compose.yaml up -d` from this directory with `PREFLYT_NATIVE_CONTROLLER_IMAGE` set to a reviewed immutable controller digest. Put an HTTPS proxy in front of the loopback controller port and use that origin in the signed runtime approval. Liveness confirms the process, not runtime approval. This target currently provides verified preflight only; it does not claim completed job dispatch. Production rollout requires published images, engine/runtime review and live acceptance.

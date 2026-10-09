@@ -1,6 +1,7 @@
 import { createServer, type ServerResponse } from 'node:http'
 import { createHash, timingSafeEqual } from 'node:crypto'
-import { parseNativeApproval } from './native-approval.js'
+import { parseNativeApproval, type NativeApproval } from './native-approval.js'
+import type { DockerApproval } from './native-docker-approval.js'
 import { checkNativeControls } from './native-controls.js'
 import { observeNativeRuntime } from './native-observer.js'
 import { signNativeProbe, validNativeProbe } from './native-proof.js'
@@ -12,7 +13,20 @@ const reply = (res: ServerResponse, status: number, value: unknown) => {
   })
   res.end(JSON.stringify(value))
 }
-export function createNativeController(observer = observeNativeRuntime) {
+type ReviewedRuntime = {
+  approval: NativeApproval | DockerApproval
+  approvalHash: string
+}
+export type NativePreflightAdapter = {
+  review: () => ReviewedRuntime | null
+  observe: (
+    reviewed: ReviewedRuntime,
+  ) => Promise<{ verified: boolean; failed: string[]; controlsHash: string }>
+}
+export function createNativeController(
+  observer = observeNativeRuntime,
+  adapter?: NativePreflightAdapter,
+) {
   const secret = process.env.NATIVE_CONTROLLER_API_KEY ?? ''
   if (secret.length < 32 || secret.length > 256)
     throw new Error(
@@ -53,7 +67,7 @@ export function createNativeController(observer = observeNativeRuntime) {
         reply(res, 400, { message: 'Invalid runtime observation request' })
         return
       }
-      const reviewed = parseNativeApproval()
+      const reviewed = adapter ? adapter.review() : parseNativeApproval()
       if (
         !reviewed ||
         reviewed.approvalHash !== input.approvalHash ||
@@ -71,12 +85,24 @@ export function createNativeController(observer = observeNativeRuntime) {
         controlsHash: reviewed.approval.controlsHash,
       }
       try {
-        result = checkNativeControls(
-          reviewed.approval,
-          await observer(reviewed.approval),
+        result = adapter
+          ? await adapter.observe(reviewed)
+          : checkNativeControls(
+              reviewed.approval as NativeApproval,
+              await observer(reviewed.approval as NativeApproval),
+            )
+        if (
+          (adapter ? adapter.review() : parseNativeApproval())?.approvalHash !==
+          reviewed.approvalHash
         )
+          throw new Error('Runtime review changed')
       } catch {
-        /* Never expose cluster credentials or errors. */
+        result = {
+          verified: false,
+          failed: ['Runtime observation unavailable'],
+          controlsHash: reviewed.approval.controlsHash,
+        }
+        /* Never expose runtime credentials or errors. */
       }
       // No jobs or repository code execute in this read-only preflight controller.
       const signature = signNativeProbe(

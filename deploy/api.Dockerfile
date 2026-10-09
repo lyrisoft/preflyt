@@ -32,3 +32,9 @@ ENV NODE_ENV=production API_HOST=0.0.0.0 API_PORT=3000
 USER node
 EXPOSE 3000
 CMD ["node", "dist/main.js"]
+
+# Dedicated native controller only. API and integration worker keep the runtime target.
+FROM docker:29-cli@sha256:1a4c7cb63513f349bdad01fcc6e0f3f2f67d37b9da86f14dc0d4a0942eecda00 AS docker-cli
+FROM runtime AS native-docker-controller
+COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
+CMD ["node", "dist/execution-controller.js"]

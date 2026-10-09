@@ -44,6 +44,12 @@ export const dockerCommand: DockerCommand = (args, options = {}) =>
           ...(process.env.DOCKER_HOST
             ? { DOCKER_HOST: process.env.DOCKER_HOST }
             : {}),
+          ...(process.env.DOCKER_TLS_VERIFY
+            ? { DOCKER_TLS_VERIFY: process.env.DOCKER_TLS_VERIFY }
+            : {}),
+          ...(process.env.DOCKER_CERT_PATH
+            ? { DOCKER_CERT_PATH: process.env.DOCKER_CERT_PATH }
+            : {}),
         },
       },
       (error, stdout) =>

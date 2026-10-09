@@ -1,5 +1,9 @@
 import { createPrivateKey, createPublicKey, sign, verify } from 'node:crypto'
 import type { NativeApproval } from './native-approval.js'
+type ProbeApproval = Pick<
+  NativeApproval,
+  'controllerPublicKey' | 'environmentId' | 'controlsHash'
+>
 export type NativeProbeInput = {
   nonce: string
   organizationId: string
@@ -29,7 +33,7 @@ const proofType = 'preflyt.native-preflight.v1'
 export function signNativeProbe(
   result: NativeProbeResult,
   privateKey: string,
-  approval: NativeApproval,
+  approval: ProbeApproval,
 ) {
   const key = createPrivateKey(privateKey)
   if (
@@ -54,7 +58,7 @@ export function signNativeProbe(
 export function verifyNativeProbe(
   token: string,
   expected: NativeProbeInput,
-  approval: NativeApproval,
+  approval: ProbeApproval,
   now = Date.now(),
 ): NativeProbeResult | null {
   try {
