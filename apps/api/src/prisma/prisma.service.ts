@@ -1,14 +1,43 @@
+import { withDatabaseStartupRetry } from './database-startup.js'
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { PrismaClient } from '../generated/prisma/client.js'
 
 @Injectable()
-export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
+export class PrismaService
+  extends PrismaClient
+  implements OnModuleInit, OnModuleDestroy
+{
   constructor() {
     const connectionString = process.env.DATABASE_URL
     if (!connectionString) throw new Error('DATABASE_URL is required')
-    super({ adapter: new PrismaPg({ connectionString }) })
+    super({
+      adapter: new PrismaPg({
+        connectionString,
+        connectionTimeoutMillis: 5000,
+      }),
+    })
   }
-  async onModuleInit() { await this.$connect() }
-  async onModuleDestroy() { await this.$disconnect() }
+  async waitUntilWritable() {
+    await withDatabaseStartupRetry('database initialization', async () => {
+      await this.$connect()
+      const state = await this.$transaction(
+        async (tx) =>
+          tx.$queryRawUnsafe<Array<{ writable: boolean }>>(
+            "SELECT NOT pg_is_in_recovery() AND current_setting('transaction_read_only') = 'off' AS writable",
+          ),
+        { maxWait: 5000, timeout: 5000 },
+      )
+      if (state[0]?.writable !== true)
+        throw new Error(
+          'Preflyt requires a writable primary PostgreSQL database; the configured database is read-only or a standby.',
+        )
+    })
+  }
+  async onModuleInit() {
+    await this.waitUntilWritable()
+  }
+  async onModuleDestroy() {
+    await this.$disconnect()
+  }
 }

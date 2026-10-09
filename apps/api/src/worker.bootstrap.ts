@@ -39,7 +39,7 @@ async function start() {
   const producerConfig = queueConfig(process.env.QUEUE_REDIS_URL, prefix)
   const consumerConfig = queueConfig(process.env.QUEUE_REDIS_URL, prefix, true)
   const prisma = new PrismaService()
-  await prisma.$connect()
+  await prisma.waitUntilWritable()
   const producer = new Redis(producerConfig.connection)
   const consumer = new Redis(consumerConfig.connection)
   const queue = new Queue(queueName, {

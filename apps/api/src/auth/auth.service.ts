@@ -1,3 +1,4 @@
+import { withDatabaseStartupRetry } from '../prisma/database-startup.js'
 import { githubLoginEnabled } from './github-identity-provider.js'
 import { rolePermissions } from './authorization.service.js'
 import {
@@ -190,7 +191,7 @@ export class AuthService implements OnModuleInit {
 
   async onModuleInit() {
     if (!this.issuer) {
-      await this.seedSuperAdmin()
+      await withDatabaseStartupRetry('Super Admin initialization', () => this.seedSuperAdmin())
       return
     }
     const localDevelopmentIssuer =
@@ -213,7 +214,7 @@ export class AuthService implements OnModuleInit {
     ) {
       throw new Error('OIDC discovery issuer mismatch')
     }
-    await this.seedSuperAdmin()
+    await withDatabaseStartupRetry('Super Admin initialization', () => this.seedSuperAdmin())
   }
 
   async beginLogin(ip: string) {
