@@ -1,6 +1,6 @@
 # Preflyt RBAC and resource authorization
 
-**Status:** Organization memberships, predefined roles, repository grants and existing API resource checks implemented. Later enforcement/execution permissions remain pending. **P0 foundational**, extended within existing phases. GitHub login, inherited organizations, verified owner onboarding and username-based grants are implemented behind a deployment flag under [ADR-0007](../architecture/ADR-0007-github-first-identity-and-organizations.md); legacy identity merging remains pending. See [OIDC ADR](../architecture/ADR-0003-oidc-user-authentication.md) and [roadmap](../roadmap/incremental-delivery.md).
+**Status:** Organization memberships, predefined roles, repository grants and existing API resource checks implemented. Policy publication, managed ruleset activation and native-request permissions are implemented; policy exception workflows, actual native dispatch and AI administration remain pending. **P0 foundational**, extended within existing phases. GitHub login, inherited organizations, verified owner onboarding and username-based grants are implemented behind a deployment flag under [ADR-0007](../architecture/ADR-0007-github-first-identity-and-organizations.md); legacy identity merging remains pending. See [OIDC ADR](../architecture/ADR-0003-oidc-user-authentication.md) and [roadmap](../roadmap/incremental-delivery.md).
 
 ## Authorization model
 
@@ -12,9 +12,9 @@ Use GitHub login for GitHub-connected workspaces, with OIDC retained as an expli
 
 **Contributor permissions:** `contributors.read`, `contributors.activity.read`, `contributors.policy_evidence.read` are repository-scoped and require authorization to underlying GitHub evidence. Organization aggregates must exclude unauthorized private repositories. See [Engineering Contributors](engineering-contributors.md).
 
-**Team administration permissions:** `team.read`, `team.create`, `team.manage`, `team.import`, `team.sync`, `team.repository_scope.manage` and `policy.assignment.manage`. Imported GitHub team membership does not automatically grant Preflyt permissions or private repository access. Team-based policy scope and team-based RBAC grants are separate concerns. See [Teams and Policy Inheritance](teams-and-policy-inheritance.md).
+**Planned team administration permissions (not implemented):** `team.read`, `team.create`, `team.manage`, `team.import`, `team.sync`, `team.repository_scope.manage` and `policy.assignment.manage`. Imported GitHub team membership does not automatically grant Preflyt permissions or private repository access. Team-based policy scope and team-based RBAC grants are separate concerns. See [Teams and Policy Inheritance](teams-and-policy-inheritance.md).
 
-## Scope and security## Scope and security
+## Scope and security
 
 - P0 supports organization membership and repository-level assignments, with team membership/inheritance if implemented; otherwise defer team management explicitly and do not pretend it works.
 - In the GitHub-first target, repository access is the intersection of the user's verified GitHub repository rights, installed/selected scope and Preflyt role/grants. Even a Preflyt Owner/Admin cannot read private repository evidence outside their GitHub rights. Current OIDC deployments need the migration described in ADR-0007 before this additional provider-user bound is enabled.
@@ -63,7 +63,7 @@ Full login, bootstrap, revocation, migration and acceptance contracts: [ADR-0007
 
 ## Current implementation
 
-See [organization access and contributors](../operations/scoped-access-contributors.md) for shipped workflows, the explicit compatibility migration, live-request revocation behavior, contributor permission boundaries and remaining limitations. This slice does not implement team inheritance, policy enforcement/exception approval, independent sandbox admission or AI egress authorization.
+See [organization access and contributors](../operations/scoped-access-contributors.md) for shipped workflows, the explicit compatibility migration, live-request revocation behavior, contributor permission boundaries and remaining limitations. Scoped policy publication and managed ruleset activation permissions are implemented, as are separate native-request permissions and signed runtime preflight. Policy exception approval, team inheritance, actual native dispatch and AI egress authorization remain pending. Preflight is not execution acceptance.
 
 ## Access Control interface
 

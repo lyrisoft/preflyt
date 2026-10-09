@@ -1,6 +1,6 @@
 # Preflyt incremental delivery plan: usable vertical slices
 
-**Status:** Proposed development roadmap, not an implementation claim  
+**Status:** Ordered delivery roadmap with explicit source-implementation notes. Only entries marked implemented describe current code; phase completion still requires its deployment and live acceptance gates.
 **Version:** 0.1 · **Date:** 2026-10-08  
 **Related:** [SDLC capability model](../product/sdlc-capabilities.md) · [PRD](../PRD.md) · [ADR-0004](../architecture/ADR-0004-shift-left-assessment-governance.md)
 
@@ -46,7 +46,7 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 
 **Tasks:**
 - P0.1 Set up pnpm/Turborepo, NestJS API, Prisma/PostgreSQL and minimum health/telemetry; **pull the existing Shadcn Admin source at a reviewed, pinned full upstream Git SHA, build it, then integrate its React/Vite code into `apps/web`** as Preflyt's frontend foundation, rather than independently scaffolding the dashboard. Preserve source/license attribution and audit dependencies/customized components.
-- P0.2 Implement GitHub-first login, verified organization-owner onboarding, inherited organization identity and GitHub member selection per [ADR-0007](../architecture/ADR-0007-github-first-identity-and-organizations.md). Current OIDC login/bootstrap and scoped RBAC remain operational during additive migration; this target is not yet implemented.
+- P0.2 Implement GitHub-first login, verified organization-owner onboarding, inherited organization identity and GitHub member selection per [ADR-0007](../architecture/ADR-0007-github-first-identity-and-organizations.md). Current OIDC login/bootstrap and scoped RBAC remain operational during additive migration; GitHub login, verified owner onboarding, workspace linking and member grants are implemented behind the login flag; legacy identity merging, revocation events and reconciliation remain pending.
 - P0.3 Implement GitHub App installation and repository selection with least-privilege *read* permissions, store secrets server-side.
 - P0.4 Discover pinned-commit profile: language/framework, manifest/lockfiles, CI, tests, Docker/IaC, migration hints; evidence and unknown labels.
 - **P0.4a:** Ship a browsable, versioned first-party Engineering Standards Library (baseline, security, backend, frontend, IaC); recommend applicable packs based on detected stack and allow authorized Default/Recommended/Strict profile selection. Mark unsupported checks clearly.
@@ -63,16 +63,18 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 - **P0.AI2:** Primary/fallback model routing for laptop, repository, PR/CI, QA, performance/staging and production feedback, with egress, budget and RBAC restrictions.
 - **P0.AI3:** Working Settings → AI Providers & Routing interface with audit and route preview. Preserve already completed P0 functionality.
 
-### P0 GitHub-first access update (implementation pending)
+### P0 GitHub-first access update (partially implemented)
 
-**Accepted foundational access update:** Deliver ADR-0007 within P0 access-control scope without adding/reordering phases. Build additive provider links and migration first, then GitHub login/organization-owner onboarding, member-directory and username grants, repository access intersection, revocation/reconciliation and bounded authorization caching. Demonstrate renamed usernames, unassigned/non-member denial, owner-claim races, private-repository isolation, provider outage handling, OIDC migration and safe rollback before making GitHub login the default. This does not mark current P2 enforcement work complete.
+**Implemented:** GitHub login, verified owner onboarding, existing-workspace linking, member sync/grants and bounded provider-access checks. Existing OIDC/recovery Owner/Admin sessions can manage the linked directory through read-only App access; GitHub users retain their own credential/access verification.
+
+**Remaining acceptance and migration work:** Deliver ADR-0007 within P0 access-control scope without adding/reordering phases. Preserve the implemented provider links, onboarding, directory and repository access intersection; complete legacy identity migration and provider revocation/reconciliation. Demonstrate renamed usernames, unassigned/non-member denial, owner-claim races, private-repository isolation, provider outage handling, OIDC migration and safe rollback before making GitHub login the default. This does not mark current P2 enforcement work complete.
 
 ### P0 Teams extension (additive; do not reopen completed P0)
 
 - **P0.T1:** Create Preflyt teams and import selected GitHub teams with stable provider IDs, membership/repository-access snapshots, pagination and sync status.
 - **P0.T2:** Keep imported GitHub repository access separate from administrator-approved team policy scope; no implicit RBAC grants or policy enforcement. See [Teams and Policy Inheritance](../product/teams-and-policy-inheritance.md).
 
-### P1 — CI Evidence Assessments### P1 — CI Evidence Assessments
+### P1 — CI Evidence Assessments
 
 **User value:** A developer opens a PR or a CI run completes and can inspect an assessment with collected test/check status and provenance.
 
@@ -98,7 +100,7 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 
 - **P1.Teams:** Show verified team associations and policy-source provenance in repository profiles and assessments.
 
-### P2 — Policy Quality Gates### P2 — Policy Quality Gates
+### P2 — Policy Quality Gates
 
 **User value:** A policy owner defines a simple standard and a developer sees an accurate advisory or blocking GitHub quality check.
 
@@ -135,7 +137,7 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 
 - **P2.Teams:** Support organization/team/repository policy assignments, approved team repository scope, deterministic effective-policy composition, conflict handling, preview, audit and enforcement impact. No silent weakening of inherited controls.
 
-### P3 — Native Secure Validation### P3 — Native Secure Validation
+### P3 — Native Secure Validation
 
 **User value:** Preflyt can perform useful code/security/IaC validation itself, rather than depending exclusively on existing CI.
 
@@ -143,7 +145,7 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 - **P3 admission preflight (implemented, not execution):** A separate read-only TypeScript controller verifies independent signed review and current named runtime controls. Scoped assessment UI reports imported-only, missing review, changed controls and verified preflight. All native jobs remain disabled; live independent sandbox acceptance and dispatch/adapters are still required. See [Native execution](../operations/native-execution.md).
 - P3.1 Approved isolated executor with non-root, no privileged/container socket/host access, quotas, short-lived jobs, default-deny egress, no platform/model/Git-write credentials.
 - P3.2 Independently test effective sandbox isolation and prohibit all real-repository tasks until the approved stronger runtime passes review; retain INGEST_ONLY mode.
-- **P3 recorded-commit planning (implemented, not dispatch):** Scoped check-plan API/UI binds saved source SHA and standards to fixed scanner command contracts, deployment-reviewed image/config digests, bounded resources and report paths. Missing/expired tools and unsupported adapters remain blocked. Durable jobs, brokered source, actual scanner fixture tests and native evidence remain pending.
+- **P3 recorded-commit planning (implemented, not dispatch):** Scoped check-plan API/UI binds saved source SHA and standards to fixed scanner command contracts, deployment-reviewed image/config digests, bounded resources and report paths. Missing/expired tools and unsupported adapters remain blocked. Exact-commit source verification and durable request/cancellation records are implemented in the later increment below. Authenticated source delivery, actual job dispatch, scanner fixture runs and native result evidence remain pending.
 - P3.3 Pin repository SHA, tool/container digest, command, environment, outcome and evidence hashes; add artifact collection/reconciliation.
 - P3.4 Integrate first tested security (secrets/SCA/SAST), test/lint and Terraform/Kubernetes policy adapters; handle tool license restrictions.
 - P3.5 Add UI toggle to select imported vs run checks and distinguish evidence sources; display blocked executor explicitly.
@@ -160,7 +162,7 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 
 - **P3.Teams:** Deliver source-backed team engineering readiness and policy adherence reporting, scoped by RBAC and assessment coverage.
 
-### P4 — Advanced AI Engineering Intelligence### P4 — Advanced AI Engineering Intelligence
+### P4 — Advanced AI Engineering Intelligence
 
 **User value:** A developer sees an evidence-linked explanation and recommended action for an assessment finding.
 

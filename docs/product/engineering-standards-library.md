@@ -1,6 +1,6 @@
 # Preflyt Engineering Standards Library
 
-**Status:** P0 catalogue and repository selection implemented in source; later evidence mapping and enforcement remain specified
+**Status:** Built-in catalogue, repository selection, CI evidence mapping, versioned organization authoring and policy/check governance are implemented in source. Native execution, broader inheritance and live enforcement acceptance remain pending.
 **Applies to:** Repository onboarding, assessments, CI/PR quality gates, and later SDLC stages  
 **Related:** [PRD](../PRD.md) · [Incremental delivery plan](../roadmap/incremental-delivery.md) · [ADR-0004](../architecture/ADR-0004-shift-left-assessment-governance.md)
 
@@ -11,6 +11,8 @@ Preflyt must ship with **first-party, versioned engineering policy packs** that 
 An organization can inspect, enable, combine, configure and later update built-in packs, or create organization-managed policies. AI may recommend packs and explain results, but **only authorized users choose or change enforcement** and the deterministic policy engine issues gate decisions.
 
 ## Initial policy pack catalogue
+
+The first five packs are implemented. API, database, production-readiness, performance and compliance packs below are target scope; listing them does not mean they are installed or executable.
 
 | Pack ID | Template | Representative controls | Initial introduction |
 | --- | --- | --- | --- |
@@ -102,9 +104,11 @@ A built-in profile recommends configuration; it must not silently enable blockin
 
 ## Team-scoped policy inheritance
 
+**Target, not implemented:** organization standard authoring is available, but organization/team inheritance and team assignments remain pending.
+
 Organizations can assign versioned standards at organization, **team** or individual repository scope. A GitHub-imported team's accessible repositories are **not** automatically its policy scope: an administrator explicitly approves repository associations. Effective policies compose mandatory organization baseline, all applicable approved team assignments and repository rules, with branch/stage applicability, source provenance, deterministic deduplication and explicit conflict resolution. Repository overrides cannot silently weaken inherited mandatory requirements. Preview affected repositories and require approval for enforced scope expansion. See [Teams and Policy Inheritance](teams-and-policy-inheritance.md).
 
-## Phased deliverables## Phased deliverables
+## Phased deliverables
 
 **P0 — catalogue and recommendations:** deliver actual browsable pack details, supported-vs-planned tags, deterministic stack-based recommendations and authorized organization/repository selection stored by version. This adds usable value to repository posture **even before policy enforcement**.
 
@@ -136,7 +140,7 @@ Organizations can assign versioned standards at organization, **team** or indivi
 - [ ] Owners can preview affected repositories before adopting a new built-in pack version.
 - [ ] AI cannot enable enforcement, waive critical checks or forge evidence.
 
-**P0 implementation:** five frozen packs, stack recommendations, authorized append-only repository selection and configuration-gap preview are available. See the [operations guide](../operations/engineering-standards.md) for supported capabilities, tests, deployment and limits. P1 evidence mapping, P2 enforcement, organization inheritance/overrides and later specialized packs remain unimplemented; P0 release acceptance is not implied.
+**P0 implementation:** five frozen packs, stack recommendations, authorized append-only repository selection and configuration-gap preview are available. See the [operations guide](../operations/engineering-standards.md) for supported capabilities, tests, deployment and limits. CI evidence mapping, deterministic policy evaluation, publication and flag-gated single-repository ruleset activation are implemented; see [publication limits](../operations/github-check-publication.md). Organization standards authoring is described below. Full organization/team inheritance, advanced overrides, native execution and specialized adapters remain pending. Source implementation does not imply phase-level live release acceptance.
 
 
 ### Editing draft branch policies

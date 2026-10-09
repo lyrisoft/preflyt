@@ -236,7 +236,7 @@ Requirements/design artifact validation is a later optional entrypoint alongside
 
 ### 6.2 User journey A: GitHub onboarding and baseline
 
-1. Administrator chooses Continue with GitHub, connects the organization App installation, and proves active GitHub organization ownership. Preflyt creates the matching workspace automatically and establishes its first Owner; no separate organization creation is required. This is the accepted target in ADR-0007; existing OIDC onboarding remains in use until migration.
+1. Administrator chooses Continue with GitHub, connects the organization App installation, and proves active GitHub organization ownership. Preflyt creates the matching workspace automatically and establishes its first Owner; no separate organization creation is required. GitHub login and verified onboarding are implemented behind a deployment flag; existing OIDC remains available during migration. Existing workspaces use explicit verified linking rather than automatic identity merging.
 2. Preflyt discovers languages, manifests and CI/infra signals and drafts a Repository Engineering Profile.
 3. Administrator reviews the profile and selects the applicable policy baseline.
 4. Preflyt explains which checks are imported, which run in approved sandboxes, and which remain unavailable.
@@ -310,7 +310,7 @@ The PoC does **not** need to generate a patch or remediation PR. If a future sep
 
 **MVP target outcomes, delivered incrementally by P0–P3:**
 
-- Self-hosted initial organization onboarding inherited from a verified GitHub organization installation, GitHub user login, scoped authorization and audit; retain current OIDC as a compatibility option during migration. GitHub-first onboarding is accepted but not yet implemented.
+- Self-hosted initial organization onboarding inherited from a verified GitHub organization installation, GitHub user login, scoped authorization and audit; retain current OIDC as a compatibility option during migration. GitHub login, verified owner onboarding, workspace linking and member grants are implemented behind the login flag. Legacy identity merging, revocation events, reconciliation and full migration acceptance remain pending.
 - GitHub integration, selected-repository onboarding, webhook signatures and idempotent PR/CI event ingestion.
 - Repository Engineering Profile and changed-path applicability detection.
 - Versioned baseline engineering policy with inherited repo scope, mandatory/advisory checks, enforcement mode.
@@ -533,7 +533,7 @@ If no safe execution runtime is available, Preflyt is **INGEST_ONLY**: use exter
 ### Security and authentication
 
 - GitHub login and inherited organization/member onboarding are the accepted routine-access target under [ADR-0007](architecture/ADR-0007-github-first-identity-and-organizations.md). Retain server-managed sessions, explicitly scoped Preflyt roles, OIDC compatibility during migration and the separate deployment-configured local Super Admin recovery path.
-- Current implementation: absent OIDC settings permit only configured Super Admin recovery; partial OIDC configuration or failed discovery fails closed. GitHub-first target: valid configured GitHub login can operate without OIDC, with no implicit fallback; disabled/misconfigured providers cannot bypass authentication. Implementation and configuration changes are required before this mode is available.
+- Current implementation: valid configured GitHub login can operate without OIDC. If both routine providers are absent/disabled, configured Super Admin permits recovery-only operation. Partial OIDC configuration or failed discovery fails closed; GitHub configuration/token-key validation also fails closed. Legacy identity merging and full migration acceptance remain pending; no provider outage silently changes the authenticated identity.
 - Signed webhook validation, idempotency, replay handling and exact revision association.
 - Least-privilege Git installation access: read repository/CI data plus authorized check-run/status publishing; no general branch write needed.
 - Encryption/rotation of model credentials; source-code egress policy; model tools cannot access CI/SCM secrets or grant themselves new rights.
