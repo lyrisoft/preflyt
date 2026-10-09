@@ -11,6 +11,18 @@ export class PrismaService
   constructor() {
     const connectionString = process.env.DATABASE_URL
     if (!connectionString) throw new Error('DATABASE_URL is required')
+    if (process.env.NODE_ENV === 'test') {
+      const database = new URL(connectionString)
+      if (
+        !['127.0.0.1', 'localhost'].includes(database.hostname) ||
+        !/^\/preflyt_(?:[a-z0-9_]+_)?test(?:_[a-z0-9_]+)?$/.test(
+          database.pathname,
+        )
+      )
+        throw new Error(
+          'Tests require a local disposable Preflyt test database; application databases are forbidden',
+        )
+    }
     super({
       adapter: new PrismaPg({
         connectionString,
