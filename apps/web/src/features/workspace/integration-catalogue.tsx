@@ -53,7 +53,9 @@ export function IntegrationCatalogue({
       (filter === 'all' ||
         (filter === 'connected'
           ? item.status === 'Connected'
-          : item.status !== 'Connected'))
+          : filter === 'disconnected'
+            ? item.status === 'Not connected'
+            : item.status === 'Available'))
   )
   return (
     <section aria-label='Integration catalogue' className='space-y-4'>
@@ -75,7 +77,8 @@ export function IntegrationCatalogue({
           <SelectContent>
             <SelectItem value='all'>All integrations</SelectItem>
             <SelectItem value='connected'>Connected</SelectItem>
-            <SelectItem value='available'>Not connected</SelectItem>
+            <SelectItem value='disconnected'>Not connected</SelectItem>
+            <SelectItem value='available'>Available</SelectItem>
           </SelectContent>
         </Select>
       </div>
