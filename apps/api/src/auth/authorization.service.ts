@@ -233,12 +233,13 @@ export class AuthorizationService {
             ? 'assessment.read'
             : part.startsWith('standards') ||
               part.startsWith('ci-bindings') ||
-              part.startsWith('rulesets')
+              part.startsWith('rulesets') ||
+              part.startsWith('ruleset-drafts')
               ? 'policy.read'
               : 'repository.read'
           : part === 'assessments'
             ? 'assessment.run'
-            : part === 'standards' || part === 'ci-bindings'
+            : part === 'standards' || part === 'ci-bindings' || part.startsWith('ruleset-drafts')
               ? 'policy.draft'
               : part.startsWith('ci-evidence')
                 ? 'evidence.manage'

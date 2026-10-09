@@ -172,6 +172,7 @@ model GitHubRepository {
   assessments    CommitAssessment[]
   standards      RepositoryStandardsSelection[]
   gatePolicies   GatePolicyRevision[]
+  rulesetDrafts  GitHubRulesetDraft[]
   profiles       RepositoryProfile[]
   @@index([installationId, selected])
 }
@@ -633,4 +634,23 @@ model NotificationEmailDelivery {
   failureCode String?
   createdAt DateTime @default(now())
   @@index([state, nextAttemptAt, leaseUntil])
+}
+
+model GitHubRulesetDraft {
+  id String @id @default(cuid())
+  repositoryId String
+  repository GitHubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  organizationId String
+  name String
+  profile String
+  options Json
+  definition Json
+  definitionHash String
+  selectionId String?
+  packs Json
+  revision Int @default(1)
+  draftedById String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([organizationId, repositoryId, updatedAt])
 }

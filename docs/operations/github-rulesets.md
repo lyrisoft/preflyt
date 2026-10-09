@@ -1,8 +1,8 @@
-# Read-only GitHub rulesets
+# GitHub rulesets: discovery and local drafts
 
 Quality Gates → GitHub Rulesets shows rulesets GitHub returns for the selected repository, including applicable parent organization/enterprise rulesets. Choose a repository, open a ruleset, and inspect its branch patterns, rule types, approval count and required status-check names/source App IDs.
 
-This is the first **P2.R1** slice. It uses the existing GitHub App with a repository-limited **Metadata: read** token; no organization administration permission is added. There are no create, update, activate, adopt or delete actions. Preflyt does not publish a required check in this slice.
+This is the first **P2.R1** slice. It uses the existing GitHub App with a repository-limited **Metadata: read** token; no organization administration permission is added. The discovery UI has no GitHub write actions. The initial P2.R2 backend can save local drafts; its setup wizard remains pending. Preflyt does not publish a required check or deploy a ruleset in these slices.
 
 ## Access and data
 
@@ -24,3 +24,31 @@ The detail response intentionally omits organization repository-target lists, by
 Plan/permission/provider failures are shown as errors. An empty result is displayed only after a successful list response. GitHub remains the authority for merge protection.
 
 See [GitHub repository rules API](https://docs.github.com/en/rest/repos/rules) and [the product specification](../product/github-ruleset-management.md).
+
+
+## Local draft API (P2.R2 backend foundation)
+
+- `GET /github/repositories/:repositoryId/ruleset-drafts?page=1` returns 20 local
+  drafts per page and the current saved standards selection. Requires `policy.read`.
+- `POST /github/repositories/:repositoryId/ruleset-drafts` saves a local
+  Standard, Strict or Custom draft. Requires `policy.draft` and the configured web origin.
+- `POST /github/repositories/:repositoryId/ruleset-drafts/:draftId/edit` edits a
+  draft using its `expectedHash`. A stale draft or changed standards selection returns
+  409 so callers can reload before saving.
+
+Draft inputs specify a name, profile, 1–20 exact branch names, review/control
+options and `expectedSelectionId` (or null when no standards have been adopted).
+Standard requires one approval; Strict requires two approvals and resolved
+conversations. Both prevent force pushes and deletion. Custom provides bounded
+options. Every generated definition includes the stable Preflyt check name and
+`enforcement: disabled`. Branch names are validated syntactically; GitHub branch
+existence, check source, publishing readiness and plan capabilities are not yet verified.
+
+The selected standards ID and pack versions are frozen in the draft. Saving and
+editing are audited, concurrent edits conflict, and organization/repository grants
+are checked. Lists expose `activationAvailable: false`; no draft endpoint writes to
+GitHub. The check's source App ID remains unset until verified publisher preflight.
+
+Apply database migrations before using these endpoints. The branch/profile wizard,
+server-generated preview, broader organization targeting, check publishing,
+approval and deployment remain pending; this backend does not close P2.R2.

@@ -1,3 +1,5 @@
+import { RulesetDraftController } from './ruleset-draft.controller.js'
+import { RulesetDraftService } from './ruleset-draft.service.js'
 import { GitHubRulesetController } from './github-ruleset.controller.js'
 import { GitHubRulesetService } from './github-ruleset.service.js'
 import { DashboardController } from '../dashboard/dashboard.controller.js'
@@ -17,10 +19,11 @@ import { GitHubService } from './github.service.js'
   controllers: [
     GitHubController,
     GitHubRulesetController,
+    RulesetDraftController,
     RepositoryProfileController,
     DashboardController,
   ],
   exports: [GitHubProviderModule],
-  providers: [GitHubRulesetService, GitHubService, RepositoryProfileService, DashboardService],
+  providers: [RulesetDraftService, GitHubRulesetService, GitHubService, RepositoryProfileService, DashboardService],
 })
 export class GitHubModule {}
