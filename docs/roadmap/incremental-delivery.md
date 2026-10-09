@@ -124,6 +124,8 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 
 - **P2.N1 (partially implemented):** Policy publication, confirmed automatic blocked/incomplete PR checks, managed activation/rollback and detected drift notices are implemented, with opt-in SMTP, scoped recipient authorization, deduplication and delivery status/retries. Exception notices remain pending until the exception workflow is implemented. Scheduled read-only drift checks are implemented with live actor authorization, bounded polling, failure freshness and deduplicated audit/notifications.
 
+- **P2.CQ:** Deliver a versioned Code Quality policy pack, deterministic check evaluation, and a reviewed skill catalogue/enablement workflow. AI findings remain advisory.
+
 ### P3 — Native Secure Validation
 
 **User value:** Preflyt can perform useful code/security/IaC validation itself, rather than depending exclusively on existing CI.
