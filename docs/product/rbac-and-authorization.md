@@ -82,3 +82,7 @@ For a workspace that already has the GitHub App connected, use **Access Control 
 ### Native execution requests (P3)
 
 `execution.run` is implemented separately from imported `assessment.run`. Owner and Admin have organization scope; Security Engineer needs an assigned repository. It permits durable request/cancellation only after fresh resource authorization. History uses `assessment.read`. All requests currently remain blocked because dispatch and effective runtime acceptance are unfinished. This permission does not grant unsafe execution, cluster credentials, source egress or authority to publish a passing native result. See [native execution](../operations/native-execution.md).
+
+### Standards authoring
+
+`standards.manage` is available to the predefined Owner and Admin roles. It permits creating organization standards and adding a new version to an existing one, with fresh organization authority and audit. `policy.read` permits library/version inspection. Repository adoption continues to require its existing scoped policy permission. Platform administration alone does not grant organization standards authority; policy approval and enforcement permissions remain separate.

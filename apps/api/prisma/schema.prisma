@@ -835,3 +835,17 @@ model NativeExecutionRequest {
   @@index([organizationId,repositoryId,requestedAt,id])
   @@index([state,leaseUntil,requestedAt])
 }
+
+model OrganizationStandardVersion {
+  id             String @id @default(uuid())
+  organizationId String
+  packId         String
+  revision       Int
+  definition     Json
+  digest         String
+  createdById    String
+  createdAt      DateTime @default(now())
+
+  @@unique([organizationId, packId, revision])
+  @@index([organizationId, createdAt])
+}

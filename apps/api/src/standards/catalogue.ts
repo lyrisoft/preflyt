@@ -1,3 +1,4 @@
+import { digest as contentDigest } from '../assessments/assessment-digest.js'
 import { createHash } from 'node:crypto'
 import type { ProfileSignal } from '../github/repository-profile.js'
 export type AdoptionProfile = 'DEFAULT' | 'RECOMMENDED' | 'STRICT'
@@ -205,12 +206,62 @@ export const catalogue = freeze(
     digest: createHash('sha256').update(JSON.stringify(pack)).digest('hex'),
   })),
 )
-export type PackRef = { id: string; version: string }
+export type StandardPack = (typeof catalogue)[number]
+export type PackRef = { id: string; version: string; definition?: StandardPack }
+export function packDigest(pack: Omit<StandardPack, 'digest'>) {
+  return contentDigest(pack)
+}
+// Embedded organization versions come only from a server-frozen selection.
+// Revalidate the complete definition against supported check contracts before use.
+export function organizationPack(value: unknown): StandardPack | undefined {
+  if (!value || typeof value !== 'object') return
+  const pack = value as StandardPack
+  const { digest, ...definition } = pack
+  if (
+    !/^org-standard-[a-f0-9-]{36}$/.test(pack.id) ||
+    !/^1\.0\.[1-9]\d{0,5}$/.test(pack.version) ||
+    typeof pack.title !== 'string' ||
+    !pack.title.trim() ||
+    pack.title.length > 120 ||
+    typeof pack.description !== 'string' ||
+    pack.description.length > 2000 ||
+    !Array.isArray(pack.rules) ||
+    !pack.rules.length ||
+    pack.rules.length > 64 ||
+    new Set(pack.rules.map((r) => r.id)).size !== pack.rules.length ||
+    pack.schemaVersion !== 1 ||
+    pack.owner !== 'Organization' ||
+    JSON.stringify(pack.stages) !==
+      JSON.stringify(['repository', 'pull_request', 'ci']) ||
+    JSON.stringify(pack.languages) !== JSON.stringify(['*']) ||
+    JSON.stringify(pack.repositoryTypes) !== JSON.stringify(['all']) ||
+    !Array.isArray(pack.changelog) ||
+    pack.changelog.length !== 1 ||
+    pack.changelog[0] !== 'Organization-managed version.' ||
+    Object.keys(pack).sort().join(',') !==
+      'changelog,description,digest,id,languages,owner,repositoryTypes,rules,schemaVersion,stages,title,version' ||
+    digest !== packDigest(definition) ||
+    pack.rules.some(
+      (r) =>
+        !catalogue.some((p) =>
+          p.rules.some((known) => contentDigest(known) === contentDigest(r)),
+        ),
+    )
+  )
+    return
+  return pack
+}
 export function resolvePacks(refs: PackRef[]) {
-  return refs.map((ref) =>
-    catalogue.find(
-      (pack) => pack.id === ref.id && pack.version === ref.version,
-    ),
+  return refs.map(
+    (ref) =>
+      catalogue.find(
+        (pack) => pack.id === ref.id && pack.version === ref.version,
+      ) ??
+      (ref.definition &&
+      ref.definition.id === ref.id &&
+      ref.definition.version === ref.version
+        ? organizationPack(ref.definition)
+        : undefined),
   )
 }
 export function recommend(signals: ProfileSignal[]) {

@@ -11,6 +11,7 @@ import type { AuthenticatedSession } from './session.guard.js'
 
 export const rolePermissions: Record<string, string[]> = {
   OWNER: [
+    'standards.manage',
     'organization.members.manage',
     'organization.settings.update',
     'repository.connect',
@@ -30,6 +31,7 @@ export const rolePermissions: Record<string, string[]> = {
     'contributors.policy_evidence.read',
   ],
   ADMIN: [
+    'standards.manage',
     'organization.members.manage',
     'repository.connect',
     'repository.read',
@@ -165,6 +167,7 @@ export class AuthorizationService {
           'github.ruleset.manage',
           'policy.enforcement.manage',
           'execution.run',
+          'standards.manage',
         ].includes(permission)
     )
     if (!member || !rolePermissions[member.role]?.includes(permission))
@@ -216,6 +219,10 @@ export class AuthorizationService {
   // SessionGuard calls this after live session validation, before any controller or cache lookup.
   async authorizeRequest(request: Request, session: AuthenticatedSession) {
     const path = request.path.replace(/\/$/, '')
+    if (path === '/standards/library' || /^\/standards\/library\/[^/]+\/versions$/.test(path)) {
+      await this.requireOrganization(session, request.method === 'GET' ? 'policy.read' : 'standards.manage')
+      return true
+    }
     const repo = /^\/github\/repositories\/([1-9]\d{0,15})(?:\/(.*))?$/.exec(
       path
     )

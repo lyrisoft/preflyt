@@ -96,7 +96,7 @@ function SelectionEditor({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             profile,
-            packs: selected,
+            packs: selected.map(({ id, version }) => ({ id, version })),
             expectedSelectionId: data.selection?.id ?? null,
           }),
         }
@@ -150,7 +150,7 @@ function SelectionEditor({
                 (ref) => ref.id === pack.id
               )
               return (
-                <li key={pack.id}>
+                <li key={`${pack.id}@${pack.version}`}>
                   <label className='flex cursor-pointer items-start gap-3 p-3 hover:bg-muted/50'>
                     <Checkbox
                       className='mt-0.5'

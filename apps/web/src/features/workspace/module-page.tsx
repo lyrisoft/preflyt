@@ -37,6 +37,7 @@ import {
   type IntegrationId,
 } from './integration-catalogue'
 import { useNavigationSession } from './navigation-session'
+import { OrganizationStandardsLibrary } from './organization-standards-library'
 import { canPerform } from './scoped-access'
 
 type Module =
@@ -64,7 +65,7 @@ const modules = {
     section: 'Governance',
     icon: Layers,
     description:
-      'Explore the versioned standards that apply to your repositories.',
+      'Create, edit and adopt versioned standards for your organization.',
     accent: 'border-chart-2/20 bg-chart-2/5',
     iconAccent: 'bg-chart-2/15 text-chart-2',
   },
@@ -221,7 +222,11 @@ export function WorkspaceModule({ module }: { module: Module }) {
             )}
           </div>
         </div>
-        {inventory.isPending ? (
+        {module === 'standards' ? (
+          <OrganizationStandardsLibrary
+            key={`${session.data?.identityId}:${session.data?.organizationId}`}
+          />
+        ) : inventory.isPending ? (
           <div
             role='status'
             aria-label='Loading workspace repositories'
@@ -543,12 +548,6 @@ export function WorkspaceModule({ module }: { module: Module }) {
                             )}
                           />
                         </TabsContent>
-                      )}
-                      {module === 'standards' && (
-                        <RepositoryStandards
-                          repositoryId={repository.githubId}
-                          canManage={false}
-                        />
                       )}
                       {module === 'policies' && (
                         <>

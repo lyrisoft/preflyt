@@ -1,3 +1,4 @@
+import { organizationCatalogue } from './organization-standards.service.js'
 import {
   BadRequestException,
   ConflictException,
@@ -28,6 +29,7 @@ export class StandardsService {
     if (!/^[1-9]\d{0,15}$/.test(id) || !Number.isSafeInteger(Number(id)))
       throw new ForbiddenException('Repository is unavailable')
     const repository = await this.prisma.gitHubRepository.findFirst({
+      include: { installation: true },
       where: {
         githubId: BigInt(id),
         selected: true,
@@ -49,10 +51,34 @@ export class StandardsService {
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       }),
     ])
+    const customVersions = repo.installation.organizationId
+      ? await organizationCatalogue(
+          this.prisma,
+          repo.installation.organizationId,
+        )
+      : []
+    const latest = new Map<string, (typeof customVersions)[number]>()
+    for (const version of customVersions)
+      if (!latest.has(version.id)) latest.set(version.id, version)
+    const selectedRefs = selection?.packs as unknown as PackRef[] | undefined
+    const selectedCustom = (selectedRefs ?? []).flatMap((ref) =>
+      ref.definition ? resolvePacks([ref]).filter((pack) => !!pack) : [],
+    )
+    const library = [
+      ...catalogue,
+      ...latest.values(),
+      ...selectedCustom.filter(
+        (pack) =>
+          ![...latest.values()].some(
+            (v) => v.id === pack.id && v.version === pack.version,
+          ),
+      ),
+    ]
     const checked = await this.repository(id)
     if (
       checked.id !== repo.id ||
-      checked.installationId !== repo.installationId
+      checked.installationId !== repo.installationId ||
+      checked.installation.organizationId !== repo.installation.organizationId
     )
       throw new ForbiddenException('Repository access changed')
     const signals =
@@ -71,7 +97,7 @@ export class StandardsService {
         },
       )
     return {
-      catalogue,
+      catalogue: library,
       adoptionProfiles,
       selection,
       selectionIntegrity,
@@ -108,7 +134,9 @@ export class StandardsService {
       input.packs.length < 1 ||
       input.packs.length > 5 ||
       new Set(input.packs.map((p) => p.id)).size !== input.packs.length ||
-      resolvePacks(input.packs).some((p) => !p)
+      input.packs.some(
+        (p) => !p || typeof p.id !== 'string' || typeof p.version !== 'string',
+      )
     )
       throw new BadRequestException(
         'Choose unique supported pack versions and a valid profile',
@@ -118,7 +146,11 @@ export class StandardsService {
       if (
         !(
           await tx.gitHubInstallation.updateMany({
-            where: { id: repo.installationId, active: true },
+            where: {
+              id: repo.installationId,
+              active: true,
+              organizationId: repo.installation.organizationId,
+            },
             data: { active: true },
           })
         ).count ||
@@ -146,13 +178,37 @@ export class StandardsService {
         where: { repositoryId: repo.id },
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       })
-      const frozen = resolvePacks(input.packs)
+      const library = [
+        ...catalogue,
+        ...(repo.installation.organizationId
+          ? await organizationCatalogue(tx, repo.installation.organizationId)
+          : []),
+      ]
+      const requested = input.packs.map((ref) =>
+        library.find((p) => p.id === ref.id && p.version === ref.version),
+      )
+      if (requested.some((p) => !p))
+        throw new BadRequestException(
+          'Choose a supported standard version from this organization',
+        )
+      // Freeze complete custom definitions so later edits cannot change historical evaluation.
+      const frozen = requested
         .map((pack) => ({
           id: pack!.id,
           version: pack!.version,
           digest: pack!.digest,
+          ...(pack!.id.startsWith('org-standard-')
+            ? {
+                definition: Object.fromEntries(
+                  Object.entries(pack!).filter(
+                    ([key]) => !['versionId', 'createdAt'].includes(key),
+                  ),
+                ),
+              }
+            : {}),
         }))
         .sort((a, b) => a.id.localeCompare(b.id))
+      posture(frozen as unknown as PackRef[], input.profile, [])
       const saved = await tx.repositoryStandardsSelection.create({
         data: {
           repositoryId: repo.id,

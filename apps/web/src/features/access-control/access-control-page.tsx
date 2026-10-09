@@ -146,6 +146,8 @@ const permissionName: Record<string, string> = {
   'assessment.read': 'Read assessments and CI evidence',
   'assessment.run': 'Create assessments',
   'policy.read': 'Read policies and standards',
+  'standards.manage': 'Create and edit organization standards',
+  'execution.run': 'Request and cancel sandbox checks',
   'policy.draft': 'Create policies and choose standards',
   'github.ruleset.manage': 'Manage GitHub rulesets',
   'policy.enforcement.manage': 'Approve and activate merge protection',
