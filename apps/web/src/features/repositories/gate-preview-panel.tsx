@@ -15,11 +15,14 @@ import { engineeringRead } from './engineering-queries'
 type GatePreview = {
   evaluatorVersion: number
   sourceSha: string
-  status: 'PASS' | 'WARN' | 'INCOMPLETE'
+  status: 'PASS' | 'WARN' | 'BLOCK' | 'INCOMPLETE'
   evaluationHash: string
   requiredRules: number
   requiredRulesSatisfied: number
   advisoryIncomplete: number
+  advisoryFailed: number
+  requiredRulesBlocked: number
+  requiredRulesIncomplete: number
   reasons: string[]
   rules: {
     ruleId: string
@@ -79,7 +82,13 @@ export function GatePreviewPanel({
             <div className='flex flex-wrap items-center justify-between gap-4'>
               <div className='flex items-center gap-3'>
                 <StatusBadge
-                  tone={query.data.status === 'PASS' ? 'success' : 'warning'}
+                  tone={
+                    query.data.status === 'PASS'
+                      ? 'success'
+                      : query.data.status === 'BLOCK'
+                        ? 'error'
+                        : 'warning'
+                  }
                 >
                   {query.data.status}
                 </StatusBadge>
@@ -89,14 +98,15 @@ export function GatePreviewPanel({
               </div>
               <p className='text-sm tabular-nums'>
                 {query.data.requiredRulesSatisfied} / {query.data.requiredRules}{' '}
-                required rules satisfied · {query.data.advisoryIncomplete}{' '}
-                advisory incomplete
+                required rules satisfied · {query.data.requiredRulesBlocked}{' '}
+                blocked · {query.data.requiredRulesIncomplete} incomplete
               </p>
             </div>
             <p className='text-xs text-muted-foreground'>
               Configuration PASS confirms only the frozen configuration
               requirement. Provider success or signed report provenance cannot
-              establish verified execution.
+              establish verified execution. BLOCK identifies a failed approved
+              CI source, not a verified test or scanner finding.
             </p>
             {query.data.reasons.map((r) => (
               <p key={r} role='status' className='text-sm text-warning'>
@@ -118,7 +128,13 @@ export function GatePreviewPanel({
                         </span>
                       </span>
                       <StatusBadge
-                        tone={rule.status === 'PASS' ? 'success' : 'warning'}
+                        tone={
+                          rule.status === 'PASS'
+                            ? 'success'
+                            : rule.status === 'BLOCK'
+                              ? 'error'
+                              : 'warning'
+                        }
                       >
                         {rule.status}
                       </StatusBadge>

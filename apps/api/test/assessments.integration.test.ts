@@ -1898,3 +1898,24 @@ describe('historical gate preview API', () => {
     await request(app.getHttpServer()).get(path).set('Cookie','test.sid=VIEWER').expect(409)
   })
 })
+
+it('blocks a signed failed approved CI source through the scoped historical gate API', async () => {
+  const { selection, delivery } = await ready()
+  await prisma.importedCiEvidence.delete({ where: { deliveryId: delivery.id } })
+  const failed = await prisma.gitHubWebhookDelivery.update({
+    where: { id: delivery.id },
+    data: {sourceConclusion: 'failure', sourceIdentity: {kind: 'check_run', appId: '123', checkName: 'unit tests'}},
+  })
+  await prisma.importedCiEvidence.create({data: importCiEvidence(failed)!})
+  await bind(selection.id).expect(201)
+  const created = await boundAssessment(selection.id).expect(201)
+  const preview = await request(app.getHttpServer())
+    .get(`/github/repositories/501/assessments/${created.body.assessment.id}/gate-preview`)
+    .set('Cookie', 'test.sid=VIEWER').expect(200)
+  expect(preview.body).toMatchObject({status: 'BLOCK', publication: 'DISABLED', requiredRulesBlocked: 1})
+  expect(preview.body.rules.find((r: any) => r.ruleId === 'tests.required')).toMatchObject({
+    status: 'BLOCK', reasons: expect.arrayContaining(['APPROVED_CI_SOURCE_FAILED']),
+  })
+  // The immutable snapshot remains evidence, not a current branch decision.
+  expect((await readAssessment(created.body.assessment.id)).body.report.qualityGate).toBeNull()
+})

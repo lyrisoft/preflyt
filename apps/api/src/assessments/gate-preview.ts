@@ -1,5 +1,5 @@
 import { digest } from './assessment-digest.js'
-export const GATE_PREVIEW_VERSION = 1
+export const GATE_PREVIEW_VERSION = 2
 const record = (value: unknown): Record<string, any> | null =>
   value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, any>)
@@ -54,6 +54,34 @@ export function previewGate(snapshot: {
     ? plan.checks.map((definition: any) => {
         const check = report.checks.find((c: any) => c.ruleId === definition.id)
         const reasons: string[] = []
+        // Negative provider evidence can fail a required CI-success condition.
+        // It cannot establish tool execution/coverage or turn a success green.
+        const failedObservations = Array.isArray(report.observations)
+          ? report.observations.filter(
+              (o: any) => record(o) && o.deliveryId === check.deliveryId,
+            )
+          : []
+        const failedCi =
+          collectionComplete &&
+          definition.operator === 'verified_check_succeeded' &&
+          definition.capability === 'import_only' &&
+          Array.isArray(definition.allowedSources) &&
+          definition.allowedSources.includes('verified_imported_ci') &&
+          check.providerResult === 'FAILED' &&
+          check.mappingTrust === 'APPROVED_SOURCE_BINDING' &&
+          check.freshness === 'FRESH_AT_COLLECTION' &&
+          check.ambiguous === false &&
+          check.superseded === false &&
+          check.evidenceValidation?.version === 2 &&
+          check.evidenceValidation?.observationIntegrity === true &&
+          check.evidenceValidation?.sourceApproved === true &&
+          typeof check.deliveryId === 'string' &&
+          failedObservations.length === 1 &&
+          failedObservations[0].sourceSha === snapshot.sourceSha &&
+          failedObservations[0].result === 'FAILED' &&
+          failedObservations[0].sourceStatus === 'completed' &&
+          ['check_run', 'workflow_run'].includes(failedObservations[0].sourceKind)
+
         if (!collectionComplete) reasons.push('COLLECTION_INCOMPLETE')
         if (
           definition.operator === 'configuration_hint_present' &&
@@ -98,11 +126,12 @@ export function previewGate(snapshot: {
           if (check.ambiguous) reasons.push('SOURCE_AMBIGUOUS')
           if (check.superseded) reasons.push('SOURCE_SUPERSEDED')
         }
+        if (failedCi) reasons.push('APPROVED_CI_SOURCE_FAILED')
         return {
           ruleId: definition.id,
           title: typeof check.title === 'string' ? check.title : definition.id,
           required: definition.required,
-          status: reasons.length ? 'INCOMPLETE' : 'PASS',
+          status: failedCi ? 'BLOCK' : reasons.length ? 'INCOMPLETE' : 'PASS',
           reasons: [...new Set(reasons)].sort(),
           deliveryId:
             typeof check.deliveryId === 'string' ? check.deliveryId : null,
@@ -110,14 +139,17 @@ export function previewGate(snapshot: {
       })
     : []
   const required = rules.filter((r: any) => r.required)
-  const incomplete = required.filter((r: any) => r.status !== 'PASS').length
+  const incomplete = required.filter((r: any) => r.status === 'INCOMPLETE').length
+  const blocked = required.filter((r: any) => r.status === 'BLOCK').length
   const reasons = !valid
     ? ['SNAPSHOT_SCHEMA_UNSUPPORTED']
     : !required.length
       ? ['NO_REQUIRED_RULES']
       : []
   const status =
-    reasons.length || incomplete
+    blocked
+      ? 'BLOCK'
+      : reasons.length || incomplete
       ? 'INCOMPLETE'
       : rules.some((r: any) => r.status !== 'PASS')
         ? 'WARN'
@@ -131,9 +163,14 @@ export function previewGate(snapshot: {
     reasons,
     rules,
     requiredRules: required.length,
-    requiredRulesSatisfied: required.length - incomplete,
+    requiredRulesSatisfied: required.length - incomplete - blocked,
+    requiredRulesBlocked: blocked,
+    requiredRulesIncomplete: incomplete,
     advisoryIncomplete: rules.filter(
-      (r: any) => !r.required && r.status !== 'PASS',
+      (r: any) => !r.required && r.status === 'INCOMPLETE',
+    ).length,
+    advisoryFailed: rules.filter(
+      (r: any) => !r.required && r.status === 'BLOCK',
     ).length,
     publication: 'DISABLED',
     currentBranchReadiness: 'NOT_VERIFIED',
@@ -141,6 +178,7 @@ export function previewGate(snapshot: {
       'Historical policy preview at collection; not current merge readiness.',
       'Configuration PASS means only the frozen configuration requirement is satisfied.',
       'Imported execution remains INCOMPLETE until tool, environment and rule coverage are verified.',
+      'BLOCK identifies a failed approved CI source; it does not prove which tool or test failed.',
       'No GitHub check publication, merge blocking, exceptions or execution admission.',
     ],
   }
