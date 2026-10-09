@@ -427,6 +427,11 @@ export function Dashboard() {
                                 >
                                   {repo.fullName}
                                 </Link>
+                                {repo.profileBranch && (
+                                  <p className='mt-1 text-xs text-muted-foreground'>
+                                    Inspected: {repo.profileBranch}
+                                  </p>
+                                )}
                               </TableCell>
                               <TableCell className='max-w-60 whitespace-normal text-muted-foreground'>
                                 {repo.technologies.length ? (

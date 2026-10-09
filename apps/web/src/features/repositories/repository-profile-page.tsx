@@ -20,6 +20,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
 import {
   Popover,
   PopoverContent,
@@ -238,6 +239,10 @@ export function RepositoryProfilePage() {
   const { tab = 'overview', assessment } = route.useSearch()
   const navigate = route.useNavigate()
   const queryClient = useQueryClient()
+  const [branchChoice, setBranchChoice] = useState<{
+    repositoryId: string
+    branch: string
+  } | null>(null)
   const [filter, setFilter] = useState<ControlFilter>('all')
   const profileQuery = useQuery({
     queryKey: ['repository-profile', repositoryId],
@@ -272,45 +277,64 @@ export function RepositoryProfilePage() {
     },
   })
   const discovery = useMutation({
-    mutationFn: async (id: string): Promise<Result> => {
+    mutationFn: async ({
+      id,
+      branch,
+    }: {
+      id: string
+      branch: string
+    }): Promise<Result> => {
       const response = await fetch(
         `${API_BASE_URL}/github/repositories/${encodeURIComponent(id)}/profile`,
         {
           method: 'POST',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: '{}',
+          body: JSON.stringify({ branch }),
         }
       )
-      if (!response.ok)
+      if (!response.ok) {
+        const detail = (await response.json().catch(() => ({}))) as {
+          message?: unknown
+        }
         throw new ProfileRequestError(
           response.status,
-          response.status === 403
-            ? 'Repository selection, permissions, or GitHub access changed. Reload the page to check access.'
-            : response.status === 429
-              ? 'Discovery is already running or busy. Try again shortly.'
-              : 'Discovery failed. The previous profile was preserved; check GitHub access and retry.'
+          response.status === 400 && typeof detail.message === 'string'
+            ? detail.message
+            : response.status === 403
+              ? 'Repository selection, permissions, or GitHub access changed. Reload the page to check access.'
+              : response.status === 429
+                ? 'Discovery is already running or busy. Try again shortly.'
+                : 'Discovery failed. The previous profile was preserved; check the branch name, GitHub access and retry.'
         )
+      }
       return response.json() as Promise<Result>
     },
-    onSuccess: (value, id) => {
+    onSuccess: (value, { id }) => {
       queryClient.setQueryData(['repository-profile', id], value)
       void queryClient.invalidateQueries({
         queryKey: ['repository-standards', id],
+      })
+      void queryClient.invalidateQueries({
+        queryKey: ['engineering-dashboard'],
       })
     },
   })
   const loading = profileQuery.isPending || profileQuery.isFetching
   const discovering =
-    discovery.isPending && discovery.variables === repositoryId
+    discovery.isPending && discovery.variables?.id === repositoryId
   const mutationError =
-    discovery.variables === repositoryId ? discovery.error : null
+    discovery.variables?.id === repositoryId ? discovery.error : null
   const accessDenied =
     mutationError instanceof ProfileRequestError && mutationError.status === 403
   const result =
     loading || profileQuery.isError || accessDenied
       ? undefined
       : profileQuery.data
+  const inspectionBranch =
+    branchChoice?.repositoryId === repositoryId
+      ? branchChoice.branch
+      : (result?.profile?.branch ?? result?.repository.defaultBranch ?? '')
   const error = mutationError?.message ?? profileQuery.error?.message ?? ''
   const canDiscover = canPerform(
     sessionQuery.data,
@@ -390,7 +414,7 @@ export function RepositoryProfilePage() {
                 <div className='flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-muted-foreground'>
                   <span className='flex items-center gap-1.5'>
                     <GitBranch aria-hidden='true' className='size-4' />
-                    {profile.branch}
+                    Inspected branch: {profile.branch}
                   </span>
                   <span
                     className='flex items-center gap-1.5'
@@ -426,23 +450,70 @@ export function RepositoryProfilePage() {
               )}
             </div>
             {canDiscover && result && (
-              <Button
-                size='sm'
-                variant='outline'
-                disabled={loading || discovering}
-                onClick={() => discovery.mutate(repositoryId)}
-              >
-                {discovering ? (
-                  <LoaderCircle className='animate-spin' />
-                ) : (
-                  <RefreshCw />
-                )}
-                {discovering
-                  ? 'Discovering…'
-                  : profile
-                    ? 'Refresh profile'
-                    : 'Discover profile'}
-              </Button>
+              <div className='flex flex-col gap-2'>
+                <label
+                  className='text-xs font-medium text-muted-foreground'
+                  htmlFor='profile-branch'
+                >
+                  Inspect branch
+                </label>
+                <div className='flex flex-wrap items-center gap-2'>
+                  <Input
+                    id='profile-branch'
+                    className='h-8 w-44'
+                    list='profile-branch-suggestions'
+                    placeholder='development'
+                    value={inspectionBranch}
+                    maxLength={244}
+                    disabled={discovering}
+                    onChange={(event) =>
+                      setBranchChoice({
+                        repositoryId,
+                        branch: event.target.value,
+                      })
+                    }
+                  />
+                  <datalist id='profile-branch-suggestions'>
+                    {[
+                      ...new Set(
+                        [
+                          result.repository.defaultBranch,
+                          profile?.branch,
+                        ].filter(Boolean)
+                      ),
+                    ].map((name) => (
+                      <option key={name} value={name!} />
+                    ))}
+                  </datalist>
+                  <Button
+                    size='sm'
+                    variant='outline'
+                    disabled={
+                      loading || discovering || !inspectionBranch.trim()
+                    }
+                    onClick={() =>
+                      discovery.mutate({
+                        id: repositoryId,
+                        branch: inspectionBranch.trim(),
+                      })
+                    }
+                  >
+                    {discovering ? (
+                      <LoaderCircle className='animate-spin' />
+                    ) : (
+                      <RefreshCw />
+                    )}
+                    {discovering
+                      ? 'Discovering…'
+                      : profile
+                        ? 'Refresh profile'
+                        : 'Discover profile'}
+                  </Button>
+                </div>
+                <p className='text-xs text-muted-foreground'>
+                  Enter a branch name. Only that branch will be inspected.
+                </p>
+              </div>
             )}
           </div>
         </div>
@@ -515,7 +586,7 @@ export function RepositoryProfilePage() {
                         </CardTitle>
                         <CardDescription>
                           {canDiscover
-                            ? 'Discover the default branch to detect its stack, tooling and control configuration.'
+                            ? 'Choose a branch above to detect its languages, frameworks and configuration.'
                             : 'Ask an Owner or Admin to discover this repository.'}
                         </CardDescription>
                       </CardHeader>

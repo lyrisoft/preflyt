@@ -67,7 +67,7 @@ export class DashboardService {
     if (rawRepository !== undefined && !repositories.length)
       throw new ForbiddenException('Repository is unavailable')
     const key =
-      'dashboard:v1:' +
+      'dashboard:v2:' +
       createHash('sha256')
         .update(
           JSON.stringify({
@@ -164,7 +164,7 @@ export class DashboardService {
             profiles: {
               orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
               take: 1,
-              select: { report: true, complete: true, sourceSha: true },
+              select: { report: true, complete: true, sourceSha: true, branch: true },
             },
             assessments: {
               where: { createdAt: { lte: now } },
@@ -213,6 +213,7 @@ export class DashboardService {
       fullName: row.fullName,
       technologies: profileTechnologies(row.profiles[0]?.report),
       profileComplete: row.profiles[0]?.complete ?? null,
+      profileBranch: row.profiles[0]?.branch ?? null,
       policy: row.standards[0]?.profile ?? null,
       latestAssessment: row.assessments[0]
         ? {

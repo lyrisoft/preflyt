@@ -226,3 +226,36 @@ describe('profile HTTP authorization and persistence', () => {
     ).toBe(0)
   })
 })
+
+it('persists the selected branch, retains the actual default branch, and audits the inspected branch', async () => {
+  provider.readRepositorySnapshot.mockResolvedValueOnce({
+    ...snapshot(),
+    branch: 'development',
+  })
+  const response = await owner('post')
+    .send({ branch: 'development' })
+    .expect(201)
+  expect(provider.readRepositorySnapshot).toHaveBeenCalledWith(
+    500n,
+    501n,
+    'development',
+  )
+  expect(response.body.profile.branch).toBe('development')
+  expect(response.body.repository.defaultBranch).toBe('main')
+  const saved = await owner('get').expect(200)
+  expect(saved.body.profile.branch).toBe('development')
+  const audit = await prisma.auditEvent.findFirstOrThrow({
+    where: { event: 'repository_profile_discovered' },
+  })
+  expect(audit.metadata).toMatchObject({ branch: 'development' })
+})
+it('rejects ambiguous branch names and preserves the previous profile when branch lookup fails', async () => {
+  await owner('post').send({}).expect(201)
+  await owner('post').send({ branch: 'refs/tags/v1' }).expect(400)
+  expect(provider.readRepositorySnapshot).toHaveBeenCalledTimes(1)
+  provider.readRepositorySnapshot.mockRejectedValueOnce(
+    new Error('Branch does not exist'),
+  )
+  await owner('post').send({ branch: 'missing' }).expect(503)
+  expect((await owner('get').expect(200)).body.profile.branch).toBe('main')
+})

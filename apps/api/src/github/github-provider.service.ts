@@ -2,10 +2,12 @@ import { normalizeGitHubEvent } from '../github-events/github-event.js'
 import { createHash } from 'node:crypto'
 import {
   wantsProfileContent,
+  validProfileBranch,
   type RepositorySnapshot,
   type RepositoryFile,
 } from './repository-profile.js'
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   ServiceUnavailableException,
@@ -355,20 +357,54 @@ export class GitHubProviderService {
   async readRepositorySnapshot(
     installationId: bigint,
     repositoryId: bigint,
+    branch?: string,
   ): Promise<RepositorySnapshot> {
+    if (branch !== undefined && !validProfileBranch(branch))
+      throw new BadRequestException(
+        'Enter a valid branch name, such as development',
+      )
     const { metadata, request } = await this.openRepository(
       installationId,
       repositoryId,
     )
-    if (!metadata.default_branch)
+    const inspectedBranch = branch ?? metadata.default_branch
+    if (!inspectedBranch)
       throw new ServiceUnavailableException(
         'Repository has no default branch to inspect',
       )
     const base = `/repos/${encodeURIComponent(metadata.owner.login)}/${encodeURIComponent(metadata.name)}`
+    let commitRef = inspectedBranch
+    if (branch !== undefined) {
+      const ref = await request<{
+        ref: string
+        object: { type: string; sha: string }
+      }>(`${base}/git/ref/heads/${encodeURIComponent(branch)}`).catch(
+        (error) => {
+          if (error instanceof ForbiddenException)
+            throw new BadRequestException(
+              'That branch is unavailable. Check the branch name and GitHub access.',
+            )
+          throw error
+        },
+      )
+      if (
+        ref.ref !== `refs/heads/${branch}` ||
+        ref.object?.type !== 'commit' ||
+        !/^[a-f0-9]{40}$/.test(ref.object.sha)
+      )
+        throw new ServiceUnavailableException(
+          'GitHub returned an invalid branch revision',
+        )
+      commitRef = ref.object.sha
+    }
     const commit = await request<{
       sha: string
       commit: { tree: { sha: string } }
-    }>(`${base}/commits/${encodeURIComponent(metadata.default_branch)}`)
+    }>(`${base}/commits/${encodeURIComponent(commitRef)}`)
+    if (branch !== undefined && commit.sha !== commitRef)
+      throw new ServiceUnavailableException(
+        'GitHub returned a different branch revision',
+      )
     const shaPattern = /^[a-f0-9]{40}$/
     if (
       !shaPattern.test(commit.sha) ||
@@ -475,7 +511,7 @@ export class GitHubProviderService {
     return {
       sourceSha: commit.sha,
       treeSha: tree.sha,
-      branch: metadata.default_branch,
+      branch: inspectedBranch,
       fullName: metadata.full_name,
       complete,
       files,

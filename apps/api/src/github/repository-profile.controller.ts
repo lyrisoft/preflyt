@@ -1,4 +1,5 @@
 import {
+  Body,
   Controller,
   Get,
   Header,
@@ -35,12 +36,14 @@ export class RepositoryProfileController {
   @Header('Cache-Control', 'no-store')
   discover(
     @Param('repositoryId') repositoryId: string,
+    @Body() body: { branch?: string } | undefined,
     @Req() request: Request & { preflytSession?: AuthenticatedSession },
   ) {
     return this.profiles.discover(
       repositoryId,
       request.preflytSession!.identityId,
       request.headers.origin,
+      body?.branch,
     )
   }
 }

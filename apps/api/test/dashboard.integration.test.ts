@@ -406,3 +406,31 @@ it.skipIf(process.env.PREFLYT_DASHBOARD_REDIS_TEST !== 'true')(
     }
   },
 )
+
+it('returns the inspected branch alongside detected technologies in the repository table', async () => {
+  await prisma.repositoryProfile.create({
+    data: {
+      repositoryId: repoId,
+      sourceSha: 'a'.repeat(40),
+      treeSha: 'b'.repeat(40),
+      branch: 'development',
+      fullName: 'fixture/app',
+      version: 1,
+      complete: true,
+      report: {
+        signals: [
+          { id: 'languages', observations: ['TypeScript'] },
+          { id: 'frameworks', observations: ['NestJS'] },
+        ],
+      },
+    },
+  })
+  const response = await get().expect(200)
+  expect(response.body.repositories[0]).toMatchObject({
+    profileBranch: 'development',
+    technologies: ['TypeScript', 'NestJS'],
+  })
+  expect((await get().expect(200)).body.repositories[0].profileBranch).toBe(
+    'development',
+  )
+})

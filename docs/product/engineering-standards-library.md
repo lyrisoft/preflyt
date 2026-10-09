@@ -136,3 +136,8 @@ A built-in profile recommends configuration; it must not silently enable blockin
 Users with repository-scoped `policy.draft` permission can edit a DRAFT policy from its review panel, including after the saved standards change. Editing uses the latest saved standards and allows optional rules to be made required. The target branch and policy version stay the same; use a new policy for another branch. Approved, published, and replaced revisions are locked.
 
 Saving checks both the expected draft hash and the current standards selection in a serializable transaction. Concurrent edits or standards changes require a reload. The editor becomes the draft author, so independent approval applies to the edited definition (with the existing audited local Super Admin exception). The audit history retains the previous definition, hash, standards selection and author. Editing does not activate GitHub enforcement.
+
+
+### Branch-specific repository discovery
+
+Repository details offers an **Inspect branch** field. It defaults to the last inspected branch, or the GitHub default branch for a new profile. Enter an explicit branch name, then refresh/discover the profile. The reader verifies `refs/heads/<branch>` and pins inspection to its exact commit and tree. It does not change the GitHub default branch or inspect tags. Repository details and the Overview repository table display the saved profile's inspected branch. Each discovery stores a new historical profile; failures preserve the prior one. Existing callers that omit the branch continue to inspect the GitHub default branch. Language/framework detection remains based on supported file extensions and Node.js dependency manifests, with the existing bounded inspection limits.

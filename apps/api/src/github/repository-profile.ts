@@ -1,3 +1,23 @@
+/** Explicit branch names only; tags, SHAs and wildcard refs are not accepted. */
+export function validProfileBranch(branch: unknown): branch is string {
+  return (
+    typeof branch === 'string' &&
+    branch.length > 0 &&
+    branch.length <= 244 &&
+    !branch.startsWith('refs/') &&
+    branch !== '@' &&
+    !/[\x00-\x20\x7f~^:?*\[\\]/.test(branch) &&
+    !branch.includes('..') &&
+    !branch.includes('@{') &&
+    !branch.includes('//') &&
+    !branch.endsWith('/') &&
+    !branch.endsWith('.') &&
+    !branch
+      .split('/')
+      .some((part) => !part || part.startsWith('.') || part.endsWith('.lock'))
+  )
+}
+
 export type RepositoryFile = {
   path: string
   sha: string

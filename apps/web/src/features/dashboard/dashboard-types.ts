@@ -28,6 +28,7 @@ export type DashboardData = {
     fullName: string
     technologies: string[]
     profileComplete: boolean | null
+    profileBranch?: string | null
     policy: string | null
     latestAssessment: {
       id: string

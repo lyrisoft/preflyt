@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   HttpException,
   Inject,
@@ -8,7 +9,10 @@ import {
 import { resolveWebOrigin } from '../config/web-origin.js'
 import { PrismaService } from '../prisma/prisma.service.js'
 import { GitHubProviderService } from './github-provider.service.js'
-import { discoverRepositoryProfile } from './repository-profile.js'
+import {
+  discoverRepositoryProfile,
+  validProfileBranch,
+} from './repository-profile.js'
 
 @Injectable()
 export class RepositoryProfileService {
@@ -60,10 +64,19 @@ export class RepositoryProfileService {
     }
   }
 
-  async discover(rawId: string, actorId: string, origin: string | undefined) {
+  async discover(
+    rawId: string,
+    actorId: string,
+    origin: string | undefined,
+    branch?: string,
+  ) {
     if (origin !== resolveWebOrigin())
       throw new ForbiddenException('Request origin is not allowed')
     const repository = await this.selectedRepository(rawId)
+    if (branch !== undefined && !validProfileBranch(branch))
+      throw new BadRequestException(
+        'Enter a valid branch name, such as development',
+      )
     if (this.inFlight.has(repository.id) || this.inFlight.size >= 4)
       throw new HttpException(
         'Repository discovery is already running; try again shortly',
@@ -74,6 +87,7 @@ export class RepositoryProfileService {
       const snapshot = await this.provider.readRepositorySnapshot(
         repository.installationId,
         repository.githubId,
+        branch,
       )
       const report = discoverRepositoryProfile(snapshot)
       const profile = await this.prisma.$transaction(async (tx) => {
@@ -119,6 +133,7 @@ export class RepositoryProfileService {
               profileId: saved.id,
               sourceSha: snapshot.sourceSha,
               treeSha: snapshot.treeSha,
+              branch: snapshot.branch,
               complete: report.complete,
             },
           },
@@ -129,7 +144,7 @@ export class RepositoryProfileService {
         repository: {
           githubId: rawId,
           fullName: snapshot.fullName,
-          defaultBranch: snapshot.branch,
+          defaultBranch: repository.defaultBranch,
         },
         profile,
       }

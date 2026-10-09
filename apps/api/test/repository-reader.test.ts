@@ -15,8 +15,12 @@ const setup = (
     size?: number
     invalidBlob?: boolean
     denied?: boolean
+    wrongRef?: boolean
+    missingBranch?: boolean
+    mismatchedCommit?: boolean
   } = {},
 ) => {
+  vi.stubEnv('GITHUB_APP_ID', '123')
   const provider = new GitHubProviderService()
   vi.spyOn(provider, 'verifyInstallation').mockResolvedValue({
     id: 1n,
@@ -26,11 +30,20 @@ const setup = (
     permissions: { contents: 'read' },
   })
   const tokenRequest = vi.fn(async () => ({
-    data: { token: 'short-lived-token' },
+    status: 201,
+    headers: {},
+    data: {
+      token: 'short-lived-token',
+      expires_at: new Date(Date.now() + 3600000).toISOString(),
+    },
   }))
   Object.assign(provider, { app: { octokit: { request: tokenRequest } } })
   const fetchMock = vi.fn(async (url: string) => {
-    if (options.denied) return new Response('{}', { status: 404 })
+    if (
+      options.denied ||
+      (options.missingBranch && url.includes('/git/ref/heads/'))
+    )
+      return new Response('{}', { status: 404 })
     let body: unknown
     if (url.endsWith('/repositories/2'))
       body = {
@@ -40,8 +53,26 @@ const setup = (
         owner: { login: 'fixture' },
         default_branch: 'feature/work',
       }
-    else if (url.endsWith('/commits/feature%2Fwork'))
-      body = { sha: sourceSha, commit: { tree: { sha: treeSha } } }
+    else if (
+      url.endsWith('/git/ref/heads/development') ||
+      url.endsWith('/git/ref/heads/feature%2Fother')
+    )
+      body = {
+        ref: options.wrongRef
+          ? 'refs/tags/development'
+          : url.endsWith('/development')
+            ? 'refs/heads/development'
+            : 'refs/heads/feature/other',
+        object: { type: 'commit', sha: sourceSha },
+      }
+    else if (
+      url.endsWith(`/commits/${sourceSha}`) ||
+      url.endsWith('/commits/feature%2Fwork')
+    )
+      body = {
+        sha: options.mismatchedCommit ? 'f'.repeat(40) : sourceSha,
+        commit: { tree: { sha: treeSha } },
+      }
     else if (url.endsWith(`/git/trees/${treeSha}?recursive=1`))
       body = {
         sha: treeSha,
@@ -82,6 +113,7 @@ const setup = (
 }
 afterEach(() => {
   vi.unstubAllGlobals()
+  vi.unstubAllEnvs()
   vi.restoreAllMocks()
 })
 
@@ -128,4 +160,54 @@ describe('bounded GitHub snapshot reader', () => {
       'access is unavailable',
     )
   })
+})
+
+it.each(['development', 'feature/other'])(
+  'inspects exact branch %s through a pinned commit instead of the default branch',
+  async (branch) => {
+    const { provider, fetchMock } = setup()
+    const snapshot = await provider.readRepositorySnapshot(1n, 2n, branch)
+    expect(snapshot.branch).toBe(branch)
+    expect(snapshot.sourceSha).toBe(sourceSha)
+    const urls = fetchMock.mock.calls.map(([url]) => url)
+    expect(
+      urls.some((url) =>
+        url.endsWith('/git/ref/heads/' + encodeURIComponent(branch)),
+      ),
+    ).toBe(true)
+    expect(urls.some((url) => url.endsWith('/commits/' + sourceSha))).toBe(true)
+    expect(urls.some((url) => url.endsWith('/commits/feature%2Fwork'))).toBe(
+      false,
+    )
+  },
+)
+it.each([
+  'refs/tags/v1',
+  'refs/heads/main',
+  '../main',
+  'feature*',
+  'main.lock',
+  '',
+  '@',
+  42,
+  null,
+])('rejects invalid branch input %s before GitHub reads', async (branch) => {
+  const { provider, fetchMock } = setup()
+  await expect(
+    provider.readRepositorySnapshot(1n, 2n, branch as string),
+  ).rejects.toThrow('valid branch name')
+  expect(fetchMock).not.toHaveBeenCalled()
+})
+
+it('refuses missing branches, tag refs and mismatched branch commits', async () => {
+  for (const [options, message] of [
+    [{ missingBranch: true }, 'branch is unavailable'],
+    [{ wrongRef: true }, 'invalid branch revision'],
+    [{ mismatchedCommit: true }, 'different branch revision'],
+  ] as const) {
+    const { provider } = setup(options)
+    await expect(
+      provider.readRepositorySnapshot(1n, 2n, 'development'),
+    ).rejects.toThrow(message)
+  }
 })
