@@ -67,7 +67,12 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 
 **Accepted foundational access update:** Deliver ADR-0007 within P0 access-control scope without adding/reordering phases. Build additive provider links and migration first, then GitHub login/organization-owner onboarding, member-directory and username grants, repository access intersection, revocation/reconciliation and bounded authorization caching. Demonstrate renamed usernames, unassigned/non-member denial, owner-claim races, private-repository isolation, provider outage handling, OIDC migration and safe rollback before making GitHub login the default. This does not mark current P2 enforcement work complete.
 
-### P1 — CI Evidence Assessments
+### P0 Teams extension (additive; do not reopen completed P0)
+
+- **P0.T1:** Create Preflyt teams and import selected GitHub teams with stable provider IDs, membership/repository-access snapshots, pagination and sync status.
+- **P0.T2:** Keep imported GitHub repository access separate from administrator-approved team policy scope; no implicit RBAC grants or policy enforcement. See [Teams and Policy Inheritance](../product/teams-and-policy-inheritance.md).
+
+### P1 — CI Evidence Assessments### P1 — CI Evidence Assessments
 
 **User value:** A developer opens a PR or a CI run completes and can inspect an assessment with collected test/check status and provenance.
 
