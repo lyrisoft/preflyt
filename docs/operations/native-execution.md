@@ -1,6 +1,6 @@
 # Native execution: P3 admission preflight
 
-**Implemented:** a separate read-only TypeScript preflight controller, independent signed review verification, fresh signed runtime observations, repository-scoped status API and assessment UI status. **Not yet implemented:** job dispatch, source checkout, scanner/test/IaC adapters, artifact collection and native gate evidence. No preflight result enables repository execution; all installations remain INGEST_ONLY in this increment.
+**Implemented:** a separate TypeScript preflight controller for Docker or Kubernetes, independent signed review verification, fresh signed runtime observations, repository-scoped status API/UI, exact-commit source verification/materialization and generated Docker scanner/test/IaC fixtures. **Not yet implemented:** durable job dispatch, authenticated source delivery, complete reviewed adapter coverage, signed artifact ingestion and native gate evidence. No preflight result enables repository execution; all installations remain INGEST_ONLY in this increment.
 
 ## Where to find it
 
@@ -8,11 +8,11 @@ Open a repository's **Assessments** tab (or the workspace Assessments page), the
 
 ## Trust boundaries
 
-The API holds no Kubernetes token. The dedicated controller reads only named runtime resources and cannot schedule jobs with the supplied RBAC. It receives no database, Redis, model, GitHub or cloud-write credentials. Its entry point refuses common platform/model/SCM credential variables. It never loads the default kubeconfig, the developer's current context, an exec authentication plugin or an insecure TLS connection. No shell/repository commands or host-container socket are used.
+The API and integration worker hold no Docker engine or Kubernetes control connection. `NATIVE_RUNTIME_BACKEND` selects `docker` or `kubernetes` without fallback on failed review. The Kubernetes controller reads only named runtime resources and cannot schedule jobs with the supplied observer RBAC. The Docker variant uses a dedicated engine connection only in the separate controller entrypoint, currently for configuration observation; the trusted connection itself carries engine authority and must never point to the application host engine. It receives no database, Redis, model, GitHub or cloud-write credentials. Its entry point refuses common platform/model/SCM credential variables. It never loads the default kubeconfig, the developer's current context, an exec authentication plugin or an insecure TLS connection. No shell/repository commands or host-container socket are used.
 
 An independent reviewer signs a deployment-scoped approval **outside Preflyt's API, worker and controller**. The controller has a different signing identity for short-lived configuration observations; it cannot manufacture an independent review. Deployers control the trusted reviewer public-key allowlist. Signatures prove who attested to a review, not that these code tests independently verified your runtime.
 
-Review approval is an Ed25519 compact JWS with protected `{alg:"EdDSA", kid:"reviewer-key-id", typ:"preflyt.native-runtime-approval.v1"}`. Install trusted public SPKI PEM keys as `NATIVE_RUNTIME_REVIEW_KEYS` JSON `[{"kid":"reviewer-key-id","publicKey":"-----BEGIN PUBLIC KEY-----\n..."}]`. The signed payload must contain exactly the following fields (see `NativeApproval` in source):
+Kubernetes review approval is an Ed25519 compact JWS with protected `{alg:"EdDSA", kid:"reviewer-key-id", typ:"preflyt.native-runtime-approval.v1"}`. Install trusted public SPKI PEM keys as `NATIVE_RUNTIME_REVIEW_KEYS` JSON `[{"kid":"reviewer-key-id","publicKey":"-----BEGIN PUBLIC KEY-----\n..."}]`. The signed payload must contain exactly the following fields (see `NativeApproval` in source):
 
 - `version:1`, stable `environmentId`, explicit allowed internal `organizationIds` (no wildcard).
 - A dedicated `preflyt-sandbox-*` namespace name and its UID; exact runtime class name and handler `runsc` or `kata`.
@@ -22,7 +22,7 @@ Review approval is an Ed25519 compact JWS with protected `{alg:"EdDSA", kid:"rev
 - Exact HTTPS `controllerOrigin` and its Ed25519 SPKI `controllerPublicKey`.
 - `approvedAt`, `expiresAt` (maximum 30 days), SHA-256 `reviewDigest` and SHA-256 `testDigests` for `escape`, `metadata`, `exfiltration`, `crossRepository`, `resourceAbuse`, `cancellation`.
 
-These artifact digests must refer to actual independent review evidence. Do not generate dummy review certificates to enable real-repository execution. Review key removal, expiration or relevant resource changes invalidates the approval. The current preflight inspects Kubernetes API configuration, **not effective syscall isolation, CNI enforcement, node PID limits or runtime behavior**. The independent negative tests and future per-job effective runtime checks remain required under [ADR-0002](../architecture/ADR-0002-safe-execution-fixtures-remediation-contract.md). Passing local fixtures or requested YAML does not approve a sandbox.
+These artifact digests must refer to actual independent review evidence. Do not generate dummy review certificates to enable real-repository execution. Review key removal, expiration or relevant resource changes invalidates the approval. Preflight inspects Kubernetes API or Docker engine configuration, **not effective syscall isolation, CNI enforcement, node PID limits or runtime behavior**. The independent negative tests and future per-job effective runtime checks remain required under [ADR-0002](../architecture/ADR-0002-safe-execution-fixtures-remediation-contract.md). Passing local fixtures or requested YAML does not approve a sandbox.
 
 ## Current network/resource profile
 
@@ -67,7 +67,7 @@ Upstream references: [Gitleaks CLI](https://github.com/gitleaks/gitleaks), [Triv
 
 ## Verified source export and durable requests
 
-The internal source broker reads the exact Git commit/tree/blobs through a contents-only installation token. It checks Git SHA-1 blob and nested tree hashes, preserves binary bytes and file modes, and creates a SHA-256 bundle manifest. The receiving verifier repeats those checks. Exports reject truncated trees, unsafe paths, case collisions, symlinks, submodules, LFS pointers and oversized source. Limits are 10,000 tree entries, 2,000 files, 2 MiB per file and 20 MiB total. Cancellation stops further reads. Tokens stay in the provider broker; no public source-download route or source execution is added. The manifest proves content integrity; it is not an authenticated execution receipt. Trusted delivery, credential-free volume materialization and signed scope-bound broker receipts remain pending.
+The internal source broker reads the exact Git commit/tree/blobs through a contents-only installation token. It checks Git SHA-1 blob and nested tree hashes, preserves binary bytes and file modes, and creates a SHA-256 bundle manifest. The receiving verifier repeats those checks. Exports reject truncated trees, unsafe paths, case collisions, symlinks, submodules, LFS pointers and oversized source. Limits are 10,000 tree entries, 2,000 files, 2 MiB per file and 20 MiB total. Cancellation stops further reads. Tokens stay in the provider broker; no public source-download route or source execution is added. The manifest proves content integrity; it is not an authenticated execution receipt. Credential-free private read-only materialization is fixture-tested. Authenticated delivery and signed scope-bound broker receipts remain pending.
 
 **View check plan → Check requests** provides supported adapter selection, recorded-commit request feedback and paginated history. `POST /native-execution/requests` requires `execution.run`, an exact expected commit/selection/plan hash, selected supported rules and a UUID idempotency key. The server rechecks current scoped authority and source/standards in a serializable transaction, records request/audit together and bounds request frequency. Reusing a key with different input or actor conflicts. GET history requires `assessment.read` and rechecks access; page size is 20. Cancellation requires `execution.run`; an active external job enters `CANCEL_REQUESTED` until cleanup is confirmed. A queued request without an external job can become `CANCELLED` immediately.
 
@@ -78,3 +78,9 @@ The internal source broker reads the exact Git commit/tree/blobs through a conte
 Local isolated-database tests cover permissions, origin validation, cross-tenant denial, stale plans, concurrent idempotency, pagination, membership revocation, integrity tampering and cancellation. Git-generated source fixtures cover nested trees, binary content, unsafe source and cancellation. These tests do not establish effective sandbox isolation.
 
 Source format references: [Git objects](https://git-scm.com/book/en/v2/Git-Internals-Git-Objects), [GitHub tree API](https://docs.github.com/en/rest/git/trees?apiVersion=2022-11-28).
+
+## Docker deployment and fixture progress
+
+The [native runner runbook](../deployment/native-runner/README.md) documents the separate container target, mutual-TLS engine connection, signed Docker approval, fixed image-owned commands, report collection, resource limits and cleanup. The same nonce-bound preflight API and proof format work across both backends. A default Docker engine does not satisfy independent strong-runtime approval.
+
+Nine generated fixtures have run successfully in ordinary local Docker: secret/SAST/unsafe Kubernetes/failing-test detection, clean secret/SAST/test results, and incomplete zero/skipped-test results. The source is pinned to generated Git commits; containers use actual immutable local image IDs, no network/platform credentials and bounded reports. This proves the exercised adapters and launch controls, not production isolation or broad SAST/SCA coverage. The bundled Semgrep rule detects dynamic code execution only; reviewed rule expansion and offline dependency database coverage remain P3 tasks.

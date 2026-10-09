@@ -74,7 +74,7 @@ CRD schema must validate required configuration, mutually exclusive bundled/exte
 - **P7–P9:** Add configuration for performance workers and optional k6 Operator integration.
 - **P10–P11:** Improve HA, scaling, observability, drift handling and production lifecycle safeguards.
 
-The current repository has implemented Compose services, but **no Kubernetes manifests, chart, CRD or Operator implementation is claimed** by this ADR.
+The current repository has implemented Compose services and a locally rendered/tested [plain Kubernetes application bundle](../../deploy/kubernetes/README.md) as an interim deployment path. No chart, CRD, Operator reconciliation or live-cluster acceptance is claimed. This does not replace the preferred Operator lifecycle decision or mark its acceptance criteria complete.
 
 ## Acceptance criteria
 
