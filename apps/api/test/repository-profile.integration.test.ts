@@ -37,6 +37,7 @@ const snapshot = (): RepositorySnapshot => ({
 const provider = {
   verifyRepositoryAccess: vi.fn(),
   readRepositorySnapshot: vi.fn(),
+  listRepositoryBranches: vi.fn(),
 }
 const owner = (method: 'get' | 'post') =>
   request(app.getHttpServer())
@@ -134,6 +135,9 @@ beforeEach(async () => {
     .mockReset()
     .mockResolvedValue({ fullName: 'fixture/app', branch: 'main' })
   provider.readRepositorySnapshot.mockReset().mockResolvedValue(snapshot())
+  provider.listRepositoryBranches
+    .mockReset()
+    .mockResolvedValue({ branches: ['main', 'development'], hasMore: false })
 })
 
 describe('profile HTTP authorization and persistence', () => {
@@ -258,4 +262,24 @@ it('rejects ambiguous branch names and preserves the previous profile when branc
   )
   await owner('post').send({ branch: 'missing' }).expect(503)
   expect((await owner('get').expect(200)).body.profile.branch).toBe('main')
+})
+
+it('serves branch choices only to authenticated selected-repository readers and validates pages', async () => {
+  const path = '/github/repositories/501/profile/branches'
+  await request(app.getHttpServer()).get(path).expect(401)
+  const response = await request(app.getHttpServer())
+    .get(path + '?page=2')
+    .set('Cookie', 'test.sid=OWNER')
+    .expect(200)
+  expect(response.body.branches).toEqual(['main', 'development'])
+  expect(provider.listRepositoryBranches).toHaveBeenCalledWith(500n, 501n, 2)
+  await request(app.getHttpServer())
+    .get(path + '?page=no')
+    .set('Cookie', 'test.sid=OWNER')
+    .expect(400)
+  await prisma.gitHubRepository.updateMany({ data: { selected: false } })
+  await request(app.getHttpServer())
+    .get(path)
+    .set('Cookie', 'test.sid=OWNER')
+    .expect(403)
 })

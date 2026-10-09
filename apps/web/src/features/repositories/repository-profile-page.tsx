@@ -20,7 +20,6 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
 import {
   Popover,
   PopoverContent,
@@ -32,6 +31,7 @@ import { AppHeader } from '@/components/layout/app-header'
 import { Main } from '@/components/layout/main'
 import { StatusBadge } from '@/components/status-badge'
 import { canPerform, type ScopedSession } from '../workspace/scoped-access'
+import { BranchPicker } from './branch-picker'
 import { EvidenceDialog } from './evidence-dialog'
 import {
   PostureSummary,
@@ -458,33 +458,15 @@ export function RepositoryProfilePage() {
                   Inspect branch
                 </label>
                 <div className='flex flex-wrap items-center gap-2'>
-                  <Input
-                    id='profile-branch'
-                    className='h-8 w-44'
-                    list='profile-branch-suggestions'
-                    placeholder='development'
+                  <BranchPicker
+                    repositoryId={repositoryId}
+                    actorId={sessionQuery.data?.identityId}
                     value={inspectionBranch}
-                    maxLength={244}
                     disabled={discovering}
-                    onChange={(event) =>
-                      setBranchChoice({
-                        repositoryId,
-                        branch: event.target.value,
-                      })
+                    onValueChange={(branch) =>
+                      setBranchChoice({ repositoryId, branch })
                     }
                   />
-                  <datalist id='profile-branch-suggestions'>
-                    {[
-                      ...new Set(
-                        [
-                          result.repository.defaultBranch,
-                          profile?.branch,
-                        ].filter(Boolean)
-                      ),
-                    ].map((name) => (
-                      <option key={name} value={name!} />
-                    ))}
-                  </datalist>
                   <Button
                     size='sm'
                     variant='outline'
@@ -511,7 +493,7 @@ export function RepositoryProfilePage() {
                   </Button>
                 </div>
                 <p className='text-xs text-muted-foreground'>
-                  Enter a branch name. Only that branch will be inspected.
+                  Select a branch. Only that branch will be inspected.
                 </p>
               </div>
             )}

@@ -60,7 +60,9 @@ export class GitHubProviderService {
     { token: string; expiresAt: number }
   >()
   constructor(
-    @Optional() @Inject(RedisCacheService) cache?: RedisCacheService,
+    @Optional()
+    @Inject(RedisCacheService)
+    private readonly cache?: RedisCacheService,
     @Optional() @Inject(PrismaService) private readonly prisma?: PrismaService,
   ) {
     this.limiter = new GitHubRequestLimiter(cache)
@@ -352,6 +354,59 @@ export class GitHubProviderService {
       fullName: reader.metadata.full_name,
       branch: reader.metadata.default_branch,
     }
+  }
+
+  async listRepositoryBranches(
+    installationId: bigint,
+    repositoryId: bigint,
+    page = 1,
+  ) {
+    if (!Number.isInteger(page) || page < 1 || page > 1000)
+      throw new BadRequestException('Invalid branch list page')
+    // Recheck upstream repository access before returning even cached branch names.
+    const { metadata, request } = await this.openRepository(
+      installationId,
+      repositoryId,
+    )
+    const access = await this.prisma?.gitHubInstallation.findUnique({
+      where: { id: installationId },
+      select: { accessRevision: true },
+    })
+    const key = `github-branches:${this.requireAppId()}:${installationId}:${repositoryId}:${access?.accessRevision ?? 0}:${page}`
+    const cached = await this.cache?.get(key)
+    if (cached) {
+      try {
+        const value = JSON.parse(cached)
+        if (
+          Array.isArray(value.branches) &&
+          value.branches.length <= 100 &&
+          value.branches.every((name: unknown) => validProfileBranch(name)) &&
+          typeof value.hasMore === 'boolean'
+        )
+          return value as { branches: string[]; hasMore: boolean }
+      } catch {
+        /* An invalid cache entry is replaced from GitHub. */
+      }
+    }
+    return this.limiter.singleFlight(key, async () => {
+      const rows = await request<{ name: string }[]>(
+        `/repos/${encodeURIComponent(metadata.owner.login)}/${encodeURIComponent(metadata.name)}/branches?per_page=100&page=${page}`,
+      )
+      if (
+        !Array.isArray(rows) ||
+        rows.length > 100 ||
+        rows.some((row) => !validProfileBranch(row?.name))
+      )
+        throw new ServiceUnavailableException(
+          'GitHub returned an invalid branch list',
+        )
+      const result = {
+        branches: [...new Set(rows.map((row) => row.name))],
+        hasMore: rows.length === 100 && page < 1000,
+      }
+      await this.cache?.set(key, JSON.stringify(result), 300)
+      return result
+    })
   }
 
   async readRepositorySnapshot(

@@ -7,6 +7,7 @@ import {
   Param,
   Post,
   Req,
+  Query,
   UseGuards,
 } from '@nestjs/common'
 import type { Request } from 'express'
@@ -29,6 +30,18 @@ export class RepositoryProfileController {
   @Header('Cache-Control', 'no-store')
   get(@Param('repositoryId') repositoryId: string) {
     return this.profiles.get(repositoryId)
+  }
+
+  @Get('branches')
+  @Header('Cache-Control', 'no-store')
+  branches(
+    @Param('repositoryId') repositoryId: string,
+    @Query('page') page?: string,
+  ) {
+    return this.profiles.branches(
+      repositoryId,
+      page === undefined ? 1 : Number(page),
+    )
   }
 
   @Post()

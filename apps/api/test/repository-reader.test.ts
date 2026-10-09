@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { RedisCacheService } from '../src/cache/redis-cache.service.js'
 import { GitHubProviderService } from '../src/github/github-provider.service.js'
 
 const sourceSha = 'a'.repeat(40)
@@ -18,10 +19,12 @@ const setup = (
     wrongRef?: boolean
     missingBranch?: boolean
     mismatchedCommit?: boolean
+    cache?: RedisCacheService
+    branchCount?: number
   } = {},
 ) => {
   vi.stubEnv('GITHUB_APP_ID', '123')
-  const provider = new GitHubProviderService()
+  const provider = new GitHubProviderService(options.cache)
   vi.spyOn(provider, 'verifyInstallation').mockResolvedValue({
     id: 1n,
     accountLogin: 'fixture',
@@ -53,6 +56,10 @@ const setup = (
         owner: { login: 'fixture' },
         default_branch: 'feature/work',
       }
+    else if (url.includes('/branches?per_page=100&page='))
+      body = Array.from({ length: options.branchCount ?? 2 }, (_, i) => ({
+        name: i === 0 ? 'main' : i === 1 ? 'development' : `feature/${i}`,
+      }))
     else if (
       url.endsWith('/git/ref/heads/development') ||
       url.endsWith('/git/ref/heads/feature%2Fother')
@@ -210,4 +217,53 @@ it('refuses missing branches, tag refs and mismatched branch commits', async () 
       provider.readRepositorySnapshot(1n, 2n, 'development'),
     ).rejects.toThrow(message)
   }
+})
+
+it('caches branch pages for five minutes while rechecking repository access on each request', async () => {
+  const entries = new Map<string, string>()
+  const cache = {
+    get: vi.fn(async (key: string) => entries.get(key) ?? null),
+    set: vi.fn(async (key: string, value: string) => {
+      entries.set(key, value)
+    }),
+    githubPermit: vi.fn(async () => 0),
+    githubRemainingCooldown: vi.fn(async () => 0),
+  } as unknown as RedisCacheService
+  const { provider, fetchMock } = setup({ cache })
+  expect(await provider.listRepositoryBranches(1n, 2n)).toEqual({
+    branches: ['main', 'development'],
+    hasMore: false,
+  })
+  expect(await provider.listRepositoryBranches(1n, 2n)).toEqual({
+    branches: ['main', 'development'],
+    hasMore: false,
+  })
+  expect(cache.set).toHaveBeenCalledWith(
+    expect.any(String),
+    expect.any(String),
+    300,
+  )
+  expect(
+    fetchMock.mock.calls.filter(([url]) => url.includes('/branches?')),
+  ).toHaveLength(1)
+  expect(
+    fetchMock.mock.calls.filter(([url]) => url.endsWith('/repositories/2')),
+  ).toHaveLength(2)
+  fetchMock.mockResolvedValueOnce(new Response('{}', { status: 404 }))
+  await expect(provider.listRepositoryBranches(1n, 2n)).rejects.toThrow(
+    'access is unavailable',
+  )
+})
+it('pages branch lists and rejects invalid pages before upstream reads', async () => {
+  const { provider, fetchMock } = setup({ branchCount: 100 })
+  expect((await provider.listRepositoryBranches(1n, 2n, 2)).hasMore).toBe(true)
+  expect(
+    fetchMock.mock.calls.some(([url]) =>
+      url.endsWith('/branches?per_page=100&page=2'),
+    ),
+  ).toBe(true)
+  for (const page of [0, -1, NaN, 1.5, 1001])
+    await expect(provider.listRepositoryBranches(1n, 2n, page)).rejects.toThrow(
+      'Invalid branch list page',
+    )
 })

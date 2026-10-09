@@ -64,6 +64,20 @@ export class RepositoryProfileService {
     }
   }
 
+  async branches(rawId: string, page = 1) {
+    if (!Number.isInteger(page) || page < 1 || page > 1000)
+      throw new BadRequestException('Invalid branch list page')
+    const repository = await this.selectedRepository(rawId)
+    const result = await this.provider.listRepositoryBranches(
+      repository.installationId,
+      repository.githubId,
+      page,
+    )
+    // Selection/revocation may change while GitHub is responding.
+    await this.selectedRepository(rawId)
+    return result
+  }
+
   async discover(
     rawId: string,
     actorId: string,
