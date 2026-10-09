@@ -175,6 +175,62 @@ it('counts distinct PRs and snapshots in the period, including same-number PRs i
   expect(response.body.period.timezone).toBe('UTC')
   expect(response.body.metrics.blockedPrs).toBeNull()
 })
+it('defaults to 180 UTC days and keeps the 90-day and 180-day aggregate caches separate', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  const now = new Date('2026-10-09T12:00:00Z')
+  vi.setSystemTime(now)
+  try {
+    const from = new Date(now)
+    from.setUTCHours(0, 0, 0, 0)
+    from.setUTCDate(from.getUTCDate() - 179)
+    await snapshot(1, from)
+    await snapshot(2, new Date(now.getTime() - 120 * 86400000))
+    await snapshot(3, now)
+    await snapshot(4, new Date(from.getTime() - 86400000))
+    await snapshot(5, new Date(now.getTime() + 1))
+
+    const defaultPeriod = await get().expect(200)
+    expect(defaultPeriod.body.period).toEqual({
+      days: 180,
+      from: from.toISOString().slice(0, 10),
+      to: '2026-10-09',
+      timezone: 'UTC',
+    })
+    expect(defaultPeriod.body.metrics).toMatchObject({
+      snapshots: 3,
+      prsAssessed: 3,
+    })
+    expect(defaultPeriod.body.activity).toHaveLength(3)
+    expect(defaultPeriod.body.activity[0]).toEqual({
+      date: from.toISOString().slice(0, 10),
+      count: 1,
+    })
+    expect(
+      defaultPeriod.body.activity.reduce(
+        (sum: number, day: { count: number }) => sum + day.count,
+        0,
+      ),
+    ).toBe(3)
+
+    const shorterPeriod = await get('?days=90').expect(200)
+    expect(shorterPeriod.body.period.days).toBe(90)
+    expect(shorterPeriod.body.metrics).toMatchObject({
+      snapshots: 1,
+      prsAssessed: 1,
+    })
+    expect(shorterPeriod.body.activity).toEqual([
+      { date: '2026-10-09', count: 1 },
+    ])
+
+    const explicitPeriod = await get('?days=180').expect(200)
+    expect(explicitPeriod.body).toEqual(defaultPeriod.body)
+    expect(builds).toBe(2)
+    expect(entries.size).toBe(2)
+  } finally {
+    vi.useRealTimers()
+  }
+})
+
 it('filters to a selected repository and never counts deselected or revoked repositories', async () => {
   const other = await prisma.gitHubRepository.create({
     data: {
@@ -289,7 +345,9 @@ it('shows missing prerequisites without converting provider state into gate outc
   expect(adopted.body.metrics.standardsAdopted).toBe(1)
 })
 it.each([
+  '?days=181',
   '?days=365',
+  '?days=180&days=180',
   '?days=7&days=30',
   '?repository=bad',
   '?repository=9007199254740993',

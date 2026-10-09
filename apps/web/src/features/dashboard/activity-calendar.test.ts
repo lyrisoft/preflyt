@@ -37,3 +37,22 @@ it('keeps counts and intensity bounded and uses zero for invalid inputs', () => 
       .find(Boolean)?.count
   ).toBe(0)
 })
+
+it('renders the complete 180-day calendar with zero-filled days and bounded padding', () => {
+  const weeks = activityWeeks('2026-04-13', '2026-10-09', [
+    { date: '2026-04-12', count: 99 },
+    { date: '2026-04-13', count: 3 },
+    { date: '2026-10-09', count: 2 },
+    { date: '2026-10-10', count: 99 },
+  ])
+  const days = weeks.flat().filter((day) => day !== null)
+  expect(days).toHaveLength(180)
+  expect(weeks).toHaveLength(26)
+  expect(weeks.every((week) => week.length === 7)).toBe(true)
+  expect(days[0]).toEqual({ date: '2026-04-13', count: 3 })
+  expect(days[days.length - 1]).toEqual({ date: '2026-10-09', count: 2 })
+  expect(days.filter((day) => day.count === 0)).toHaveLength(178)
+  expect(days.reduce((total, day) => total + day.count, 0)).toBe(5)
+  expect(weeks[0][0]).toBeNull()
+  expect(weeks[weeks.length - 1][6]).toBeNull()
+})

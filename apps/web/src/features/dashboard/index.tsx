@@ -55,7 +55,7 @@ const reasons: Record<string, string> = {
 }
 
 export function Dashboard() {
-  const { days = '90', repository } = route.useSearch()
+  const { days = '180', repository } = route.useSearch()
   const navigate = useNavigate()
   const query = useQuery({
     queryKey: ['engineering-dashboard', days, repository ?? 'all'],
@@ -78,8 +78,10 @@ export function Dashboard() {
     },
   })
   const data = query.data
-  const filters = (next: { days?: '7' | '30' | '90'; repository?: string }) =>
-    void navigate({ to: '/', search: { days, repository, ...next } })
+  const filters = (next: {
+    days?: '7' | '30' | '90' | '180'
+    repository?: string
+  }) => void navigate({ to: '/', search: { days, repository, ...next } })
   const stats = data
     ? [
         {
@@ -144,16 +146,17 @@ export function Dashboard() {
             <Select
               value={days}
               onValueChange={(value) =>
-                filters({ days: value as '7' | '30' | '90' })
+                filters({ days: value as '7' | '30' | '90' | '180' })
               }
             >
-              <SelectTrigger className='w-36' aria-label='Assessment period'>
+              <SelectTrigger className='w-56' aria-label='Assessment period'>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value='7'>Last 7 days</SelectItem>
                 <SelectItem value='30'>Last 30 days</SelectItem>
                 <SelectItem value='90'>Last 90 days</SelectItem>
+                <SelectItem value='180'>Last 6 months (180 days)</SelectItem>
               </SelectContent>
             </Select>
             <Button
@@ -250,8 +253,8 @@ export function Dashboard() {
                       </Card>
                     ))}
                   </div>
-                  <div className='grid gap-4 xl:grid-cols-2'>
-                    <div className='min-w-0'>
+                  <div className='grid gap-4 xl:grid-cols-3'>
+                    <div className='min-w-0 xl:col-span-2'>
                       <ActivityHeatmap
                         key={`${days}-${repository}`}
                         from={data.period.from}

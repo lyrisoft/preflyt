@@ -4,7 +4,7 @@ import { Dashboard } from '@/features/dashboard'
 
 export const Route = createFileRoute('/_authenticated/')({
   validateSearch: z.object({
-    days: z.enum(['7', '30', '90']).optional(),
+    days: z.enum(['7', '30', '90', '180']).optional(),
     repository: z
       .string()
       .regex(/^[1-9]\d{0,15}$/)

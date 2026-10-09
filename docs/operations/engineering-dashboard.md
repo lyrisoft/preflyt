@@ -6,7 +6,7 @@ The dashboard preserves the Shadcn shell and presents a compact view of recorded
 
 An authenticated member can select all available, selected repositories or one selected repository. This follows the deployment's existing shared repository visibility; organization switching and organization membership isolation have not been implemented. An unavailable, revoked or deselected repository filter returns 403. Filters persist in the URL.
 
-Choose the last 7, 30 or 90 calendar days, including today. Snapshot timestamps use UTC, and future timestamps are excluded from activity. Counts are aggregated in PostgreSQL rather than calculated from a paginated sample.
+Choose the last 7, 30, 90 or 180 calendar days, including today. The default six-month view is a rolling 180-day period. Snapshot timestamps use UTC, and future timestamps are excluded from activity. Counts are aggregated in PostgreSQL rather than calculated from a paginated sample.
 
 | Metric | Definition |
 | --- | --- |
@@ -20,7 +20,7 @@ These metrics count records, not successful checks. They do not verify assessmen
 
 ## Activity heatmap
 
-Each calendar square represents a UTC day. Shade intensity represents the number of assessment snapshots: none, 1–2, 3–5, 6–10, or more than 10. Missing days have zero recorded snapshots; padded days outside the period are blank. Tooltips and accessible button labels provide exact counts and dates. Selecting a square displays its daily count. Activity is separate from readiness.
+The six-month view uses roughly 26–27 week columns in the existing card. Compact green squares remain left-aligned, with month labels above, weekday labels at the left and the intensity legend below. Smaller screens can scroll horizontally. Each calendar square represents a UTC day. Shade intensity represents the number of assessment snapshots: none, 1–2, 3–5, 6–10, or more than 10. Missing days have zero recorded snapshots; padded days outside the period are blank. Tooltips and accessible button labels provide exact counts and dates. Selecting a square displays its daily count. Activity is separate from readiness.
 
 The heatmap is most useful on Engineering Overview for assessment cadence and gaps, and can also be reused for an individual repository's history. It uses locally recorded Preflyt activity, not a GitHub user's contribution or productivity score.
 
@@ -39,3 +39,5 @@ Redis failure, malformed JSON or expired summaries fall back to PostgreSQL. The 
 ## Verification
 
 Task-scoped tests cover authenticated read-only access, real PostgreSQL aggregate queries, distinct PR counting, date windows, repository selection/revocation, Redis cache scope and expiry, prerequisite reasons and UTC calendar behavior. TypeScript, changed-file lint/format and the web production bundle are also checked. Browser tests remain skipped by user instruction. Tests use a dedicated disposable PostgreSQL database; the development database and user-run API are not restarted or modified.
+
+Six-month follow-up: 13 dashboard integration tests and four calendar model tests pass, including UTC window boundaries, future/older exclusions, range-specific cache keys and all 180 day cells. Tests use a new disposable local database that is removed afterward. API/web TypeScript, touched-file frontend lint/format and the web production bundle pass. Optional live-Redis and browser checks remain skipped.

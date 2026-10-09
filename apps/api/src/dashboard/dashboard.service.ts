@@ -21,14 +21,14 @@ export class DashboardService {
 
   async overview(
     actorId: string,
-    rawDays: unknown = '90',
+    rawDays: unknown = '180',
     rawRepository?: unknown,
   ) {
     if (
-      !['7', '30', '90'].includes(String(rawDays)) ||
+      !['7', '30', '90', '180'].includes(String(rawDays)) ||
       typeof rawDays !== 'string'
     )
-      throw new BadRequestException('Choose a 7, 30 or 90 day period')
+      throw new BadRequestException('Choose a 7, 30, 90 or 180 day period')
     if (
       rawRepository !== undefined &&
       (typeof rawRepository !== 'string' ||

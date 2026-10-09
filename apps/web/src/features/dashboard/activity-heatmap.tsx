@@ -20,10 +20,10 @@ import {
 
 const tones = [
   'bg-muted',
-  'bg-primary/20',
-  'bg-primary/40',
-  'bg-primary/65',
-  'bg-primary',
+  'bg-emerald-500/20',
+  'bg-emerald-500/40',
+  'bg-emerald-500/65',
+  'bg-emerald-500',
 ]
 const dateLabel = (date: string) =>
   new Intl.DateTimeFormat(undefined, {
@@ -54,10 +54,10 @@ export function ActivityHeatmap({
       </CardHeader>
       <CardContent>
         <div className='overflow-x-auto pb-2'>
-          <div className='mx-auto flex w-max gap-2'>
+          <div className='flex w-max gap-1'>
             <div
               aria-hidden='true'
-              className='grid grid-rows-8 gap-1 text-[10px] leading-4 text-muted-foreground'
+              className='grid grid-rows-[1rem_repeat(7,1.5rem)] gap-1 pe-2 text-[10px] leading-6 text-muted-foreground'
             >
               <span />
               <span />
@@ -73,7 +73,10 @@ export function ActivityHeatmap({
                 (day) => day && (index === 0 || day.date.endsWith('-01'))
               )
               return (
-                <div key={index} className='grid grid-rows-8 gap-1'>
+                <div
+                  key={index}
+                  className='grid grid-rows-[1rem_repeat(7,1.5rem)] gap-1'
+                >
                   <span
                     aria-hidden='true'
                     className='h-4 text-[10px] text-muted-foreground'
@@ -95,7 +98,7 @@ export function ActivityHeatmap({
                             aria-label={`${dateLabel(day.date)}: ${day.count} assessment snapshots`}
                             aria-pressed={selected?.date === day.date}
                             className={cn(
-                              'size-4 rounded-[3px] outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring',
+                              'size-6 rounded-[3px] outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring',
                               tones[activityLevel(day.count)],
                               selected?.date === day.date &&
                                 'ring-2 ring-ring ring-offset-1 ring-offset-card'
@@ -108,7 +111,7 @@ export function ActivityHeatmap({
                         </TooltipContent>
                       </Tooltip>
                     ) : (
-                      <span key={row} className='size-4' />
+                      <span key={row} className='size-6' />
                     )
                   )}
                 </div>
