@@ -89,6 +89,8 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 
 - **P1.N1 (implemented, flag-gated):** Durable assessment events/outbox, Redis delivery, RBAC-aware recipients, unread bell, filtered in-app inbox, read state and assessment preferences; see [Notification Engine](../product/notification-engine.md).
 
+- **P1.CQ:** Import and normalize revision-specific lint/typecheck/coverage and static-analysis evidence, with optional bounded read-only AI review using approved skills. See [Code Quality Review](../product/code-quality-review.md).
+
 ### P2 — Policy Quality Gates
 
 **User value:** A policy owner defines a simple standard and a developer sees an accurate advisory or blocking GitHub quality check.
