@@ -82,6 +82,8 @@ No large marketing hero, decorative globe or fake percentage. Charts should have
 
 **Quality Gates → GitHub Rulesets tab:** show existing organization rulesets, enforcement state, targeted branches/repos, linked Preflyt check/policy, sync/drift and a guided Standard/Strict/Custom setup. The wizard must preflight a real PR check, preview GitHub changes and require authorized deployment approval. Do not expose activation if the check publisher is not ready. See [GitHub Ruleset Management](github-ruleset-management.md).
 
+**GitHub Ruleset Details → Insights (P2.R5):** display GitHub rule-suite evaluation metrics and charts for the selected ruleset, most frequently failing rules, affected repositories, filtered evaluation history, and drill-down. Keep Preflyt quality-gate analytics in a separately labeled panel. Show source, time window, attribution completeness, permission and sync status. See [Ruleset Insights](github-ruleset-management.md#ruleset-detail-insights-tab-p2r5).
+
 ## End-to-end MVP journeys
 
 **New organization:** OIDC/owner bootstrap → connect GitHub App → select repository → discover profile → recommend and select policy packs → show missing controls and next steps. The Overview should be an onboarding state until real assessments exist.
