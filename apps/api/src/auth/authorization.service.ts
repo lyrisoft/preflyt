@@ -211,6 +211,10 @@ export class AuthorizationService {
     )
     if (repo) {
       const part = repo[2] ?? ''
+      if (part === 'check-publications' || part.startsWith('check-publications/')) {
+        await this.requireRepository(session, repo[1], request.method === 'GET' ? 'policy.read' : 'policy.publish')
+        return true
+      }
       if (part === 'gate-policies' || part.startsWith('gate-policies/')) {
         const action = /^gate-policies\/[^/]+\/(approve|publish)$/.exec(
           part

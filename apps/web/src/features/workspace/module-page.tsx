@@ -23,6 +23,7 @@ import { Main } from '@/components/layout/main'
 import { PageHelpDrawer } from '@/components/page-help-drawer'
 import { RepositoryPicker } from '@/components/repository-picker'
 import { StatusBadge } from '@/components/status-badge'
+import { CheckPublications } from '@/features/repositories/check-publications'
 import { GatePolicyPanel } from '@/features/repositories/gate-policy-panel'
 import { RepositoryActivityPanel } from '@/features/repositories/repository-activity-panel'
 import { RepositoryAssessments } from '@/features/repositories/repository-assessments'
@@ -176,6 +177,11 @@ export function WorkspaceModule({ module }: { module: Module }) {
                       'Rulesets come from GitHub for the selected repository, including inherited organization or enterprise rules. Active rules are enforced by GitHub; Evaluate records evaluations without blocking, and Disabled rules are not enforced. This view does not report legacy branch protection or deploy rulesets.',
                   },
                   {
+                    title: 'Readiness check publication',
+                    content:
+                      'Review an assessment against the live open PR head before publishing. This first publisher sends failure for known required-CI failures and action required for all other historical previews, including configuration-only passes. It never sends success, neutral or skipped. Checks: write permission and an explicit API deployment flag are required. Read-back verifies the App, commit, name, output and conclusion; history records verification at publication, not ongoing merge readiness. If a request times out, refresh history and retry the same preview to recover its existing check. Forks, draft PRs, merge queues, automatic publication and activation remain unsupported.',
+                  },
+                  {
                     title: 'Local ruleset drafts',
                     content:
                       'Choose one repository, select up to 20 exact branches, and use a Standard, Strict or Custom profile. The server generates the preview and saves the current standards version with the draft. If standards or the draft change while you edit, reload and review again. Drafts do not change GitHub protections; the Preflyt check publisher has not been verified and activation is unavailable.',
@@ -229,6 +235,7 @@ export function WorkspaceModule({ module }: { module: Module }) {
                   Assessment previews
                 </TabsTrigger>
                 <TabsTrigger value='rulesets'>GitHub Rulesets</TabsTrigger>
+                <TabsTrigger value='checks'>Readiness check</TabsTrigger>
               </TabsList>
             )}
             {module === 'integrations' && (
@@ -486,6 +493,25 @@ export function WorkspaceModule({ module }: { module: Module }) {
                             />
                           </TabsContent>
                         )}
+                      {module === 'quality-gates' && gateView === 'checks' && (
+                        <TabsContent value='checks'>
+                          <CheckPublications
+                            key={repository.githubId}
+                            repositoryId={repository.githubId}
+                            actorId={session.data?.identityId}
+                            canRead={canPerform(
+                              session.data,
+                              'policy.read',
+                              repository.githubId
+                            )}
+                            canPublish={canPerform(
+                              session.data,
+                              'policy.publish',
+                              repository.githubId
+                            )}
+                          />
+                        </TabsContent>
+                      )}
                       {module === 'standards' && (
                         <RepositoryStandards
                           repositoryId={repository.githubId}

@@ -173,6 +173,7 @@ model GitHubRepository {
   standards      RepositoryStandardsSelection[]
   gatePolicies   GatePolicyRevision[]
   rulesetDrafts  GitHubRulesetDraft[]
+  checkPublications GitHubCheckPublication[]
   profiles       RepositoryProfile[]
   @@index([installationId, selected])
 }
@@ -653,4 +654,28 @@ model GitHubRulesetDraft {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@index([organizationId, repositoryId, updatedAt])
+}
+
+// Durable publication intent and read-back receipt. No successful conclusions in this increment.
+model GitHubCheckPublication {
+  id String @id
+  repositoryId String
+  repository GitHubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  organizationId String
+  assessmentId String
+  prNumber Int
+  sourceSha String
+  installationId String
+  previewHash String
+  conclusion String
+  state String @default("PUBLISHING")
+  leaseToken String
+  actorId String
+  checkRunId String?
+  appId String?
+  htmlUrl String?
+  verifiedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([organizationId, repositoryId, createdAt])
 }

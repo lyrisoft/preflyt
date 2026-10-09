@@ -1,3 +1,6 @@
+import { CheckPublicationController } from './check-publication.controller.js'
+import { CheckPublicationService } from './check-publication.service.js'
+import { GitHubProviderModule } from '../github/github-provider.module.js'
 import { PullRequestController } from './pull-request.controller.js'
 import { PullRequestService } from './pull-request.service.js'
 import { CiBindingController } from './ci-binding.controller.js'
@@ -10,13 +13,14 @@ import { PrismaModule } from '../prisma/prisma.module.js'
 import { AssessmentController } from './assessment.controller.js'
 import { AssessmentService } from './assessment.service.js'
 @Module({
-  imports: [AuthModule, PrismaModule],
+  imports: [AuthModule, PrismaModule, GitHubProviderModule],
   controllers: [
+    CheckPublicationController,
     GatePolicyController,
     AssessmentController,
     CiBindingController,
     PullRequestController,
   ],
-  providers: [GatePolicyService, AssessmentService, CiBindingService, PullRequestService],
+  providers: [CheckPublicationService, GatePolicyService, AssessmentService, CiBindingService, PullRequestService],
 })
 export class AssessmentModule {}

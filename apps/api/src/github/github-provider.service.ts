@@ -659,6 +659,160 @@ export class GitHubProviderService {
     }
   }
 
+  async checkPublicationAccess(installationId: bigint) {
+    const installation = await this.verifyInstallation(installationId)
+    if (installation.permissions.checks !== 'write')
+      throw new ForbiddenException(
+        'The GitHub App needs repository Checks: write permission. Accept the updated installation permissions and try again.',
+      )
+    return { appId: this.requireAppId() }
+  }
+  /** Bounded recovery search before a write; POST is never automatically retried. */
+  async publishReadinessCheck(
+    installationId: bigint,
+    repositoryId: bigint,
+    payload: {
+      name: string
+      head_sha: string
+      external_id: string
+      status: 'completed'
+      conclusion: 'failure' | 'action_required'
+      output: { title: string; summary: string }
+    },
+  ) {
+    const { appId } = await this.checkPublicationAccess(installationId)
+    // Defense in depth: this foundation cannot ever publish success/neutral/skipped.
+    if (
+      payload.name !== 'Preflyt / Engineering Readiness' ||
+      !['failure', 'action_required'].includes(payload.conclusion) ||
+      !/^[a-f0-9]{40}$/.test(payload.head_sha) ||
+      !/^[a-f0-9]{64}$/.test(payload.external_id)
+    )
+      throw new BadRequestException('Unsupported readiness publication')
+    const reader = await this.openRepository(
+      installationId,
+      repositoryId,
+      'metadata',
+    )
+    const tokenResponse = await this.appRequest(
+      'POST /app/installations/{installation_id}/access_tokens',
+      {
+        installation_id: Number(installationId),
+        repository_ids: [Number(repositoryId)],
+        permissions: { metadata: 'read', checks: 'write' },
+      },
+    )
+    const token = tokenResponse.data.token
+    if (typeof token !== 'string' || !token)
+      throw new ServiceUnavailableException(
+        'GitHub check credentials are unavailable',
+      )
+    const root = `/repos/${encodeURIComponent(reader.metadata.owner.login)}/${encodeURIComponent(reader.metadata.name)}`
+    const call = async (path: string, body?: unknown) => {
+      const response = await this.apiFetch(
+        `installation:${installationId}`,
+        `https://api.github.com${path}`,
+        {
+          method: body === undefined ? 'GET' : 'POST',
+          signal: AbortSignal.timeout(10_000),
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: 'application/vnd.github+json',
+            'X-GitHub-Api-Version': '2026-03-10',
+            ...(body === undefined
+              ? {}
+              : { 'Content-Type': 'application/json' }),
+          },
+          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        },
+      )
+      if (!response.ok)
+        throw new ServiceUnavailableException(
+          'GitHub could not publish or verify the readiness check. Retry to check for an existing publication.',
+        )
+      return (await response.json()) as Record<string, any>
+    }
+    const verify = (run: Record<string, any>) => {
+      if (
+        !Number.isSafeInteger(run.id) ||
+        run.id < 1 ||
+        String(run.app?.id) !== appId ||
+        run.name !== payload.name ||
+        run.external_id !== payload.external_id ||
+        run.head_sha !== payload.head_sha ||
+        run.status !== 'completed' ||
+        run.conclusion !== payload.conclusion ||
+        run.output?.title !== payload.output.title ||
+        run.output?.summary !== payload.output.summary
+      )
+        throw new ServiceUnavailableException(
+          'GitHub check verification failed. This publication is not verified.',
+        )
+      const url = new URL(run.html_url)
+      if (
+        url.protocol !== 'https:' ||
+        url.hostname !== 'github.com' ||
+        url.username ||
+        url.password
+      )
+        throw new ServiceUnavailableException(
+          'GitHub returned an invalid check link',
+        )
+      return { checkRunId: String(run.id), appId, htmlUrl: url.href }
+    }
+    let existing: Record<string, any> | undefined
+    let exhausted = false
+    for (let page = 1; page <= 10; page++) {
+      const params = new URLSearchParams({
+        check_name: payload.name,
+        filter: 'all',
+        per_page: '100',
+        page: String(page),
+      })
+      const result = await call(
+        `${root}/commits/${payload.head_sha}/check-runs?${params}`,
+      )
+      if (!Array.isArray(result.check_runs) || result.check_runs.length > 100)
+        throw new ServiceUnavailableException(
+          'GitHub check history is unavailable',
+        )
+      const matches = result.check_runs.filter(
+        (run: any) =>
+          run.external_id === payload.external_id &&
+          String(run.app?.id) === appId,
+      )
+      if (matches.length > 1 || (existing && matches.length))
+        throw new ServiceUnavailableException(
+          'Duplicate check publications require review',
+        )
+      if (matches.length) existing = matches[0]
+      if (result.check_runs.length < 100) {
+        exhausted = true
+        break
+      }
+    }
+    if (!exhausted)
+      throw new ServiceUnavailableException(
+        'Check history exceeded the safe recovery limit. No check was created.',
+      )
+    if (existing) {
+      if (!Number.isSafeInteger(existing.id) || existing.id < 1)
+        throw new ServiceUnavailableException(
+          'GitHub returned an invalid check ID',
+        )
+      return verify(await call(`${root}/check-runs/${existing.id}`))
+    }
+    const created = await call(`${root}/check-runs`, {
+      ...payload,
+      completed_at: new Date().toISOString(),
+    })
+    if (!Number.isSafeInteger(created.id) || created.id < 1)
+      throw new ServiceUnavailableException(
+        'GitHub returned an invalid check ID',
+      )
+    return verify(await call(`${root}/check-runs/${created.id}`))
+  }
+
   async readPullRequest(
     installationId: bigint,
     repositoryId: bigint,

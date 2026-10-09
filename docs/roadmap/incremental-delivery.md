@@ -110,6 +110,8 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 
 - **P2.R2 single-repository draft wizard (implemented):** Searchable branch selection, Standard/Strict/Custom profiles, server-generated configuration preview, paginated local drafts and scoped create/read/edit APIs. Saved standards versions and optimistic edit protection prevent stale saves. Broader organization/repository targeting and exclude patterns remain pending; activation stays unavailable.
 
+- **P2.R3 publisher foundation (implemented):** Manual reviewed non-passing readiness checks, exact-PR revision preflight, scoped Checks-write tokens, audited publication receipts, paginated history and bounded retry recovery. Verified passing checks, published-policy evaluation and live disposable-repository acceptance remain pending; ruleset activation stays unavailable. See [publication setup](../operations/github-check-publication.md).
+
 - **P2.R1–R5 — GitHub Ruleset Management:** read organization rulesets; Standard/Strict/Custom safe-default wizard; publish and preflight stable Preflyt PR check; authorized diff/approval/deploy; sync, drift and rollback. Each increment independently usable; never require a check before publishing is verified. See [GitHub Ruleset Management](../product/github-ruleset-management.md).
 
 - **P2.R5 Insights:** Extend ruleset synchronization with GitHub Rule Suites ingestion, ruleset-ID-based detailed evaluation attribution, metrics/charts, filtered history and evidence drill-down. Separate GitHub evaluations from Preflyt gate outcomes; enforce RBAC and rate-limit-aware pagination. See [Ruleset Management](../product/github-ruleset-management.md).
