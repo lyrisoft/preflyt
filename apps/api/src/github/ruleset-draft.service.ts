@@ -53,6 +53,88 @@ export class RulesetDraftService {
       activationAvailable: false,
     }
   }
+  async detail(session: AuthenticatedSession, githubId: string, id: string) {
+    if (!/^[a-zA-Z0-9_-]{1,80}$/.test(id))
+      throw new BadRequestException('Invalid draft ID')
+    const repo = await this.access.requireRepository(
+      session,
+      githubId,
+      'policy.read',
+    )
+    const [draft, selection] = await Promise.all([
+      this.prisma.gitHubRulesetDraft.findFirst({
+        where: {
+          id,
+          repositoryId: repo.id,
+          organizationId: session.organizationId!,
+        },
+      }),
+      this.prisma.repositoryStandardsSelection.findFirst({
+        where: { repositoryId: repo.id },
+        orderBy: { revision: 'desc' },
+      }),
+    ])
+    await this.access.requireRepository(session, githubId, 'policy.read')
+    if (!draft) throw new NotFoundException('Draft is unavailable')
+    return {
+      draft,
+      selection: selection
+        ? {
+            id: selection.id,
+            revision: selection.revision,
+            packs: selection.packs,
+          }
+        : null,
+    }
+  }
+  async preview(
+    session: AuthenticatedSession,
+    githubId: string,
+    input: DraftInput,
+  ) {
+    const definition = draftDefinition(input, githubId)
+    const repo = await this.access.requireRepository(
+      session,
+      githubId,
+      'policy.draft',
+    )
+    const selection = await this.prisma.repositoryStandardsSelection.findFirst({
+      where: { repositoryId: repo.id },
+      orderBy: { revision: 'desc' },
+    })
+    this.assertSelection(input, selection?.id ?? null)
+    await this.access.requireRepository(session, githubId, 'policy.draft')
+    return {
+      definition,
+      definitionHash: draftHash({
+        definition,
+        selectionId: selection?.id ?? null,
+        packs: selection?.packs ?? [],
+      }),
+      selection: selection
+        ? {
+            id: selection.id,
+            revision: selection.revision,
+            packs: selection.packs,
+          }
+        : null,
+      activationAvailable: false,
+      checkSourceVerified: false,
+    }
+  }
+  private assertSelection(input: DraftInput, current: string | null) {
+    if (
+      input.expectedSelectionId !== null &&
+      (typeof input.expectedSelectionId !== 'string' ||
+        !input.expectedSelectionId ||
+        input.expectedSelectionId.length > 80)
+    )
+      throw new BadRequestException('Invalid standards selection')
+    if (current !== input.expectedSelectionId)
+      throw new ConflictException(
+        'Standards changed. Reload the preview before saving.',
+      )
+  }
   async save(
     session: AuthenticatedSession,
     githubId: string,
@@ -84,10 +166,7 @@ export class RulesetDraftService {
             where: { repositoryId: repo.id },
             orderBy: { revision: 'desc' },
           })
-          if ((selection?.id ?? null) !== input.expectedSelectionId)
-            throw new ConflictException(
-              'Standards changed. Reload the preview before saving.',
-            )
+          this.assertSelection(input, selection?.id ?? null)
           const hash = draftHash({
             definition,
             selectionId: selection?.id ?? null,

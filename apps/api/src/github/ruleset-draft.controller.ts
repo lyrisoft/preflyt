@@ -78,6 +78,33 @@ export class RulesetDraftController {
       page === undefined ? 1 : Number(page),
     )
   }
+  @Get(':draftId')
+  @Header('Cache-Control', 'no-store')
+  detail(
+    @Req() req: AuthRequest,
+    @Param('repositoryId') id: string,
+    @Param('draftId') draftId: string,
+  ) {
+    return this.drafts.detail(req.preflytSession, id, draftId)
+  }
+  @Post('preview')
+  @Header('Cache-Control', 'no-store')
+  preview(
+    @Req() req: AuthRequest,
+    @Param('repositoryId') id: string,
+    @Body(
+      new ValidationPipe({
+        expectedType: DraftDto,
+        transform: true,
+        whitelist: true,
+        forbidNonWhitelisted: true,
+      }),
+    )
+    body: DraftDto,
+  ) {
+    this.auth.assertOrigin(req.headers.origin)
+    return this.drafts.preview(req.preflytSession, id, body)
+  }
   @Post()
   @Header('Cache-Control', 'no-store')
   create(

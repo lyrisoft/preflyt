@@ -176,6 +176,11 @@ export function WorkspaceModule({ module }: { module: Module }) {
                       'Rulesets come from GitHub for the selected repository, including inherited organization or enterprise rules. Active rules are enforced by GitHub; Evaluate records evaluations without blocking, and Disabled rules are not enforced. This view does not report legacy branch protection or deploy rulesets.',
                   },
                   {
+                    title: 'Local ruleset drafts',
+                    content:
+                      'Choose one repository, select up to 20 exact branches, and use a Standard, Strict or Custom profile. The server generates the preview and saves the current standards version with the draft. If standards or the draft change while you edit, reload and review again. Drafts do not change GitHub protections; the Preflyt check publisher has not been verified and activation is unavailable.',
+                  },
+                  {
                     title: 'Scope and freshness',
                     content:
                       'Lists show 20 rulesets per page. Open a ruleset to see branch patterns, rule types and required check sources. GitHub patterns such as ~DEFAULT_BRANCH and ~ALL retain their GitHub meaning. Data is cached for up to one minute; the fetched time reflects the source read. Ruleset absence does not prove the branch is unprotected.',
@@ -183,7 +188,7 @@ export function WorkspaceModule({ module }: { module: Module }) {
                   {
                     title: 'Access and limitations',
                     content:
-                      'Only authorized, selected repositories are shown. This uses read-only repository metadata permission. Organization-wide management, bypass actors, full rule parameters, legacy protection, effective branch evaluation and deployment are not included. Unavailable access, plans or throttled requests are reported as errors.',
+                      'Only authorized, selected repositories are shown. This uses read-only repository metadata permission. The GitHub discovery view omits bypass actors and full rule parameters. Local drafts show their complete generated configuration. Organization-wide management, legacy protection, effective branch evaluation and deployment are not included. Unavailable access, plans or throttled requests are reported as errors.',
                   },
                 ]}
               />
@@ -466,7 +471,13 @@ export function WorkspaceModule({ module }: { module: Module }) {
                             <RepositoryRulesets
                               key={repository.githubId}
                               repositoryId={repository.githubId}
+                              repositoryName={repository.fullName}
                               actorId={session.data?.identityId}
+                              canDraft={canPerform(
+                                session.data,
+                                'policy.draft',
+                                repository.githubId
+                              )}
                               canRead={canPerform(
                                 session.data,
                                 'policy.read',

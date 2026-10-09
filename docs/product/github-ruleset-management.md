@@ -1,6 +1,6 @@
 # GitHub Ruleset Management and Preflyt Quality Gate Integration
 
-**Status:** P2 product requirement; first P2.R1 repository-scoped read-only slice and P2.R2 local-draft backend foundation implemented. The R2 targeting wizard, organization-wide discovery and R3–R5 remain pending. **No phase reorder.**
+**Status:** P2 product requirement; first P2.R1 repository-scoped read-only slice and P2.R2 single-repository draft wizard implemented. Organization-wide discovery, broader target/exclusion controls and R3–R5 remain pending. **No phase reorder.**
 
 See [current ruleset setup and limits](../operations/github-rulesets.md).
 **Related:** [MVP Experience](mvp-product-experience.md), [Engineering Standards](engineering-standards-library.md), [RBAC](rbac-and-authorization.md), [Roadmap](../roadmap/incremental-delivery.md).

@@ -349,3 +349,64 @@ it('paginates drafts and rejects a draft belonging to another repository', async
     body({ expectedHash: draft.definitionHash }),
   ).expect(404)
 })
+
+it('previews the exact saved definition without writing drafts or audit events', async () => {
+  const preview = (await post(author, base + '/preview').expect(201)).body
+  expect(preview).toMatchObject({
+    activationAvailable: false,
+    checkSourceVerified: false,
+    selection: { id: selectionId },
+  })
+  expect(await db.gitHubRulesetDraft.count()).toBe(0)
+  expect(await db.auditEvent.count()).toBe(0)
+  const saved = (await post(author).expect(201)).body
+  expect(saved.definition).toEqual(preview.definition)
+  expect(saved.definitionHash).toEqual(preview.definitionHash)
+})
+it('protects preview scope, origin and schema and rejects outdated standards', async () => {
+  await post(viewer, base + '/preview').expect(403)
+  await post(outsider, base + '/preview').expect(403)
+  await post(author, base + '/preview', body({ enforcement: 'active' })).expect(
+    400,
+  )
+  await post(
+    author,
+    base + '/preview',
+    body({ expectedSelectionId: 'outdated' }),
+  ).expect(409)
+  await request(app.getHttpServer())
+    .post(base + '/preview')
+    .set('Cookie', 'draft.sid=' + author)
+    .set('Origin', 'https://foreign.test')
+    .send(body())
+    .expect(403)
+  userAccess.repositoryIds.mockResolvedValue([])
+  await post(author, base + '/preview').expect(403)
+  expect(await db.gitHubRulesetDraft.count()).toBe(0)
+})
+
+it('reloads a draft by ID after its list position changes and keeps the read scoped', async () => {
+  const draft = (await post(author).expect(201)).body
+  const current = (await get(viewer, base + '/' + draft.id).expect(200)).body
+  expect(current).toMatchObject({
+    draft: { id: draft.id, revision: 1 },
+    selection: { id: selectionId },
+  })
+  await get(outsider, base + '/' + draft.id).expect(403)
+  await get(viewer, base + '/unavailable').expect(404)
+  const foreignRepository = await db.gitHubRepository.create({
+    data: {
+      githubId: 52n,
+      installationId: 50n,
+      name: 'other',
+      fullName: 'fixture/other',
+      ownerLogin: 'fixture',
+      isPrivate: true,
+    },
+  })
+  await db.gitHubRulesetDraft.update({
+    where: { id: draft.id },
+    data: { repositoryId: foreignRepository.id },
+  })
+  await get(viewer, base + '/' + draft.id).expect(404)
+})

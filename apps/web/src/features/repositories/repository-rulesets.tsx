@@ -26,7 +26,9 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { StatusBadge } from '@/components/status-badge'
+import { RulesetDrafts } from './ruleset-drafts'
 
 type Summary = {
   id: number
@@ -236,11 +238,16 @@ export function RepositoryRulesets({
   repositoryId,
   actorId,
   canRead,
+  canDraft,
+  repositoryName,
 }: {
   repositoryId: string
   actorId?: string
   canRead: boolean
+  canDraft: boolean
+  repositoryName: string
 }) {
+  const [view, setView] = useState('github')
   const [page, setPage] = useState(1)
   const [selected, setSelected] = useState<number | null>(null)
   const query = useQuery({
@@ -252,7 +259,7 @@ export function RepositoryRulesets({
         page: number
         fetchedAt: string
       }>(`/github/repositories/${repositoryId}/rulesets?page=${page}`, signal),
-    enabled: canRead,
+    enabled: canRead && view === 'github',
     staleTime: 60_000,
     retry: false,
   })
@@ -263,134 +270,150 @@ export function RepositoryRulesets({
       </p>
     )
   return (
-    <>
-      <Card className='gap-4'>
-        <CardHeader className='flex flex-wrap items-center justify-between gap-3'>
-          <div className='flex items-center gap-3'>
-            <span className='flex size-10 items-center justify-center rounded-xl bg-info/10 text-info'>
-              <ShieldCheck className='size-5' />
-            </span>
-            <div>
-              <CardTitle>GitHub Rulesets</CardTitle>
-              {query.data && (
-                <p className='mt-1 text-xs text-muted-foreground'>
-                  Fetched {new Date(query.data.fetchedAt).toLocaleString()}
-                </p>
-              )}
-            </div>
-          </div>
-          <Button
-            variant='outline'
-            size='sm'
-            disabled={query.isFetching}
-            onClick={() => void query.refetch()}
-          >
-            <RefreshCw className='size-4' />
-            Refresh
-          </Button>
-        </CardHeader>
-        <CardContent className='space-y-4'>
-          {query.isPending && <Skeleton className='h-48' />}
-          {query.isError && (
-            <p
-              role='alert'
-              className='rounded-lg border border-warning/20 bg-warning/5 p-4 text-sm'
-            >
-              {query.error.message}
-            </p>
-          )}
-          {query.data && (
-            <>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Source</TableHead>
-                    <TableHead>Target</TableHead>
-                    <TableHead>GitHub state</TableHead>
-                    <TableHead className='text-right'>Details</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {query.data.rulesets.map((item) => (
-                    <TableRow key={item.id}>
-                      <TableCell>
-                        <button
-                          type='button'
-                          className='max-w-80 text-left font-medium break-words text-primary hover:underline focus-visible:rounded focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'
-                          onClick={() => setSelected(item.id)}
-                        >
-                          {item.name}
-                        </button>
-                      </TableCell>
-                      <TableCell>
-                        <p className='text-sm'>{item.source}</p>
-                        <p className='text-xs text-muted-foreground'>
-                          {item.sourceType}
-                        </p>
-                      </TableCell>
-                      <TableCell>{ruleLabel(item.target)}</TableCell>
-                      <TableCell>
-                        <StatusBadge tone={tone[item.enforcement]}>
-                          {stateLabel[item.enforcement]}
-                        </StatusBadge>
-                      </TableCell>
-                      <TableCell className='text-right'>
-                        <Button
-                          variant='ghost'
-                          size='sm'
-                          onClick={() => setSelected(item.id)}
-                          aria-label={`View ${item.name}`}
-                        >
-                          View
-                          <ArrowUpRight className='size-3.5' />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              {!query.data.rulesets.length && (
-                <p className='rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground'>
-                  No rulesets returned for this repository. Other GitHub branch
-                  protections may still apply.
-                </p>
-              )}
-              <div className='flex items-center justify-between gap-3 border-t pt-4'>
-                <p className='text-xs text-muted-foreground'>
-                  Page {page} · {query.data.rulesets.length} rulesets
-                </p>
-                <div className='flex gap-2'>
-                  <Button
-                    variant='outline'
-                    size='sm'
-                    disabled={page === 1 || query.isFetching}
-                    onClick={() => setPage(page - 1)}
-                  >
-                    <ChevronLeft className='size-4' />
-                    Previous
-                  </Button>
-                  <Button
-                    variant='outline'
-                    size='sm'
-                    disabled={!query.data.hasMore || query.isFetching}
-                    onClick={() => setPage(page + 1)}
-                  >
-                    Next
-                    <ChevronRight className='size-4' />
-                  </Button>
-                </div>
+    <Tabs value={view} onValueChange={setView} className='space-y-4'>
+      <TabsList>
+        <TabsTrigger value='github'>GitHub rulesets</TabsTrigger>
+        <TabsTrigger value='drafts'>Drafts</TabsTrigger>
+      </TabsList>
+      <TabsContent value='github'>
+        <Card className='gap-4'>
+          <CardHeader className='flex flex-wrap items-center justify-between gap-3'>
+            <div className='flex items-center gap-3'>
+              <span className='flex size-10 items-center justify-center rounded-xl bg-info/10 text-info'>
+                <ShieldCheck className='size-5' />
+              </span>
+              <div>
+                <CardTitle>GitHub Rulesets</CardTitle>
+                {query.data && (
+                  <p className='mt-1 text-xs text-muted-foreground'>
+                    Fetched {new Date(query.data.fetchedAt).toLocaleString()}
+                  </p>
+                )}
               </div>
-            </>
-          )}
-        </CardContent>
-      </Card>
+            </div>
+            <Button
+              variant='outline'
+              size='sm'
+              disabled={query.isFetching}
+              onClick={() => void query.refetch()}
+            >
+              <RefreshCw className='size-4' />
+              Refresh
+            </Button>
+          </CardHeader>
+          <CardContent className='space-y-4'>
+            {query.isPending && <Skeleton className='h-48' />}
+            {query.isError && (
+              <p
+                role='alert'
+                className='rounded-lg border border-warning/20 bg-warning/5 p-4 text-sm'
+              >
+                {query.error.message}
+              </p>
+            )}
+            {query.data && (
+              <>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Source</TableHead>
+                      <TableHead>Target</TableHead>
+                      <TableHead>GitHub state</TableHead>
+                      <TableHead className='text-right'>Details</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {query.data.rulesets.map((item) => (
+                      <TableRow key={item.id}>
+                        <TableCell>
+                          <button
+                            type='button'
+                            className='max-w-80 text-left font-medium break-words text-primary hover:underline focus-visible:rounded focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'
+                            onClick={() => setSelected(item.id)}
+                          >
+                            {item.name}
+                          </button>
+                        </TableCell>
+                        <TableCell>
+                          <p className='text-sm'>{item.source}</p>
+                          <p className='text-xs text-muted-foreground'>
+                            {item.sourceType}
+                          </p>
+                        </TableCell>
+                        <TableCell>{ruleLabel(item.target)}</TableCell>
+                        <TableCell>
+                          <StatusBadge tone={tone[item.enforcement]}>
+                            {stateLabel[item.enforcement]}
+                          </StatusBadge>
+                        </TableCell>
+                        <TableCell className='text-right'>
+                          <Button
+                            variant='ghost'
+                            size='sm'
+                            onClick={() => setSelected(item.id)}
+                            aria-label={`View ${item.name}`}
+                          >
+                            View
+                            <ArrowUpRight className='size-3.5' />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                {!query.data.rulesets.length && (
+                  <p className='rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground'>
+                    No rulesets returned for this repository. Other GitHub
+                    branch protections may still apply.
+                  </p>
+                )}
+                <div className='flex items-center justify-between gap-3 border-t pt-4'>
+                  <p className='text-xs text-muted-foreground'>
+                    Page {page} · {query.data.rulesets.length} rulesets
+                  </p>
+                  <div className='flex gap-2'>
+                    <Button
+                      variant='outline'
+                      size='sm'
+                      disabled={page === 1 || query.isFetching}
+                      onClick={() => setPage(page - 1)}
+                    >
+                      <ChevronLeft className='size-4' />
+                      Previous
+                    </Button>
+                    <Button
+                      variant='outline'
+                      size='sm'
+                      disabled={!query.data.hasMore || query.isFetching}
+                      onClick={() => setPage(page + 1)}
+                    >
+                      Next
+                      <ChevronRight className='size-4' />
+                    </Button>
+                  </div>
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      </TabsContent>
+      <TabsContent value='drafts'>
+        {view === 'drafts' && (
+          <RulesetDrafts
+            repositoryId={repositoryId}
+            repositoryName={repositoryName}
+            actorId={actorId}
+            canDraft={canDraft}
+          />
+        )}
+      </TabsContent>
       <RulesetDrawer
         repositoryId={repositoryId}
         actorId={actorId}
         id={selected}
         onClose={() => setSelected(null)}
       />
-    </>
+    </Tabs>
   )
 }

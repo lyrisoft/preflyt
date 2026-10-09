@@ -22,12 +22,14 @@ export function BranchPicker({
   repositoryId,
   actorId,
   value,
+  label = 'Inspect branch',
   disabled,
   onValueChange,
 }: {
   repositoryId: string
   actorId?: string
   value: string
+  label?: string
   disabled?: boolean
   onValueChange: (branch: string) => void
 }) {
@@ -68,7 +70,7 @@ export function BranchPicker({
           disabled={disabled}
           role='combobox'
           aria-expanded={open}
-          aria-label={`Inspect branch: ${value || 'Choose a branch'}`}
+          aria-label={`${label}: ${value || 'Choose a branch'}`}
           className='w-48 justify-between font-normal'
         >
           <GitBranch className='size-3.5 shrink-0' aria-hidden='true' />
