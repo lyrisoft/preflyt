@@ -209,6 +209,10 @@ P0: administrators configure multiple providers, encrypted/write-only keys, host
 
 Preflyt requires tenant- and repository-scoped notifications driven by durable events. P1 provides a working in-app inbox and top-bar bell for assessment activity; P2 adds quality-gate/policy/exception events and configured email delivery; P3 adds security findings; P4 adds AI availability/budget alerts; later phases add QA/performance/production events and Slack/Teams/webhooks. Recipient resolution uses RBAC; deduplication, retries, preferences and audit are mandatory. Notifications do not determine gate results. See [Notification Engine](product/notification-engine.md).
 
+### PR Code Quality Review and AI Review Skills
+
+Code quality is a first-class assessment domain. P1 imports lint, typecheck, coverage and static-analysis evidence with exact revision/provenance and optional read-only AI review; P2 provides a versioned Code Quality policy pack and deterministic gates; P3 adds native analyzers only after sandbox approval; P4 adds contextual multi-skill AI review and optional deduplicated GitHub inline feedback; P5 reuses findings in CLI/IDE. Agents may apply approved versioned instruction-only skills (candidate examples: Ponytail and Thermo-Nuclear Code Quality Review), subject to license/security review, model routing, egress and RBAC. Skill output is advisory and cannot block a PR without independent deterministic evidence. See [Code Quality Review](product/code-quality-review.md) and [Skill-Based Review](product/skill-based-code-review.md).
+
 ## 6. Supported SDLC stages and user journeys
 
 ### 6.1 Lifecycle coverage
