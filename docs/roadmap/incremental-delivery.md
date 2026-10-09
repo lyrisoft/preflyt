@@ -163,6 +163,8 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 
 - **P4.RBAC:** Restrict AI provider credentials, model routing, usage visibility and data-egress policy to authorized roles.
 
+- **P4.CQ:** Multi-skill contextual PR review with pinned skill versions, evidence validation, deduplication, cost/egress controls and opt-in GitHub inline feedback. See [Skill-Based Review](../product/skill-based-code-review.md).
+
 ### P5 — Developer Experience: CLI and IDE Extension
 
 **Incremental release contract:** P5.1 shared local engine and installable CLI; P5.2 authenticated repository link and cached policy; P5.3 installable VS Code extension with inline diagnostics; P5.4 AI explanation and revision-bound PR gate visibility; P5.5 opt-in Git hooks and tested compatible editors. Each is independently usable and deployable. See [developer CLI and IDE specification](../product/developer-cli-ide-extension.md).
