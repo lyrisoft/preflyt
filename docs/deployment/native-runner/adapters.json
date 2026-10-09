@@ -1,0 +1,123 @@
+{
+  "tests.required": {
+    "id": "node-builtin-tests-v1",
+    "tool": "Node.js",
+    "license": "MIT",
+    "format": "junit",
+    "command": [
+      "/usr/local/bin/node"
+    ],
+    "args": [
+      "--test",
+      "--test-reporter=junit",
+      "--test-reporter-destination=/reports/report.xml"
+    ]
+  },
+  "secrets.scan": {
+    "id": "gitleaks-directory-v1",
+    "tool": "Gitleaks",
+    "license": "MIT",
+    "format": "sarif",
+    "command": [
+      "/usr/local/bin/gitleaks"
+    ],
+    "args": [
+      "dir",
+      "/workspace",
+      "--config",
+      "/opt/preflyt/config/gitleaks.toml",
+      "--gitleaks-ignore-path",
+      "/opt/preflyt/config/.gitleaksignore",
+      "--report-format",
+      "sarif",
+      "--report-path",
+      "/reports/report.sarif",
+      "--redact=100",
+      "--exit-code",
+      "1"
+    ]
+  },
+  "security.dependencies": {
+    "id": "trivy-dependencies-v1",
+    "tool": "Trivy",
+    "license": "Apache-2.0",
+    "format": "sarif",
+    "command": [
+      "/usr/local/bin/trivy"
+    ],
+    "args": [
+      "filesystem",
+      "--config",
+      "/opt/preflyt/config/trivy.yaml",
+      "--scanners",
+      "vuln",
+      "--offline-scan",
+      "--skip-db-update",
+      "--skip-java-db-update",
+      "--skip-check-update",
+      "--skip-version-check",
+      "--ignorefile",
+      "/opt/preflyt/config/.trivyignore",
+      "--format",
+      "sarif",
+      "--output",
+      "/reports/report.sarif",
+      "--exit-code",
+      "1",
+      "/workspace"
+    ]
+  },
+  "security.sast": {
+    "id": "semgrep-local-v1",
+    "tool": "Semgrep CE",
+    "license": "LGPL-2.1-only",
+    "format": "sarif",
+    "command": [
+      "/usr/local/bin/semgrep"
+    ],
+    "args": [
+      "scan",
+      "--config",
+      "/opt/preflyt/config/semgrep.yaml",
+      "--metrics",
+      "off",
+      "--disable-version-check",
+      "--no-git-ignore",
+      "--sarif",
+      "--output",
+      "/reports/report.sarif",
+      "--error",
+      "/workspace"
+    ]
+  },
+  "iac.policy": {
+    "id": "trivy-iac-v1",
+    "tool": "Trivy",
+    "license": "Apache-2.0",
+    "format": "sarif",
+    "command": [
+      "/usr/local/bin/trivy"
+    ],
+    "args": [
+      "filesystem",
+      "--config",
+      "/opt/preflyt/config/trivy.yaml",
+      "--scanners",
+      "misconfig",
+      "--misconfig-scanners",
+      "terraform,kubernetes",
+      "--offline-scan",
+      "--skip-check-update",
+      "--skip-version-check",
+      "--ignorefile",
+      "/opt/preflyt/config/.trivyignore",
+      "--format",
+      "sarif",
+      "--output",
+      "/reports/report.sarif",
+      "--exit-code",
+      "1",
+      "/workspace"
+    ]
+  }
+}

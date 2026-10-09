@@ -55,7 +55,7 @@ describe('native tool admission', () => {
     { expiresAt: '2026-10-08T00:00:00Z' },
     { expiresAt: '2027-10-08T00:00:00Z' },
     { license: 'commercial' },
-    { ruleId: 'tests.required' },
+    { ruleId: 'lint.required' },
     { configHash: 'missing' },
     { reviewDigest: '' },
     { toolVersion: ';evil' },
@@ -96,7 +96,7 @@ describe('revision-bound plans', () => {
     expect(plan.executionAvailable).toBe(false)
     expect(plan.steps.map((s) => s.reason)).toEqual([
       'TOOL_REVIEW_REQUIRED',
-      'ADAPTER_UNAVAILABLE',
+      'TOOL_REVIEW_REQUIRED',
       'PROFILE_EVIDENCE',
     ])
     expect(plan.steps[0]).not.toHaveProperty('command')

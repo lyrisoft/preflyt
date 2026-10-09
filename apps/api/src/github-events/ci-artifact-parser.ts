@@ -72,7 +72,7 @@ function junit(content: string) {
   if (roots.length !== 1 || !['testsuite', 'testsuites'].includes(roots[0])) throw invalid()
   let suites = 0, total = 0
   const zero = () => ({ tests: 0, failures: 0, errors: 0, skipped: 0, passed: 0 })
-  function container(node: ObjectValue, root: boolean): ReturnType<typeof zero> {
+  function container(node: ObjectValue): ReturnType<typeof zero> {
     if ((node as unknown) === '') node = {}
     if (!node || typeof node !== 'object' || ++suites > 1000) throw invalid()
     for (const key of Object.keys(node))
@@ -93,17 +93,17 @@ function junit(content: string) {
       else counts.passed++
     }
     for (const child of node.testsuite ?? []) {
-      const nested = container(child, false)
+      const nested = container(child)
       for (const key of Object.keys(counts) as (keyof typeof counts)[]) counts[key] += nested[key]
     }
     for (const key of ['tests', 'failures', 'errors', 'skipped'] as const) {
       const declared = node['@_' + key]
       if (declared !== undefined && (!/^\d+$/.test(declared) || Number(declared) !== counts[key])) throw invalid()
     }
-    if (root && node.testcase) throw invalid()
+    // Node.js emits direct testcases under testsuites; count these with the same strict validation.
     return counts
   }
-  const counts = roots[0] === 'testsuites' ? container(report.testsuites, true) : container(report.testsuite[0], false)
+  const counts = roots[0] === 'testsuites' ? container(report.testsuites) : container(report.testsuite[0])
   if (roots[0] === 'testsuite' && report.testsuite.length !== 1) throw invalid()
   return { ...counts, suites, execution: 'UNKNOWN', partial: true }
 }

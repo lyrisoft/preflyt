@@ -1,0 +1,4 @@
+cache:
+  backend: memory
+misconfiguration:
+  include-non-failures: true

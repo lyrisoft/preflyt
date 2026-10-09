@@ -2,6 +2,14 @@ import { digest } from '../assessments/assessment-digest.js'
 
 // Fixed native adapters. Repository and model input can never supply executable/argv/env.
 export const nativeAdapters = {
+  'tests.required': {
+    id: 'node-builtin-tests-v1',
+    tool: 'Node.js',
+    license: 'MIT',
+    format: 'junit',
+    command: ['/usr/local/bin/node'],
+    args: ['--test', '--test-reporter=junit', '--test-reporter-destination=/reports/report.xml'],
+  },
   'secrets.scan': {
     id: 'gitleaks-directory-v1',
     tool: 'Gitleaks',
@@ -236,8 +244,9 @@ export function buildNativePlan(
               ephemeralStorage: '2Gi',
               deadlineSeconds: 300,
             },
-            reportPath: '/reports/report.sarif',
-            maxReportBytes: 5 * 1024 * 1024,
+            workingDirectory: '/workspace',
+            reportPath: adapter.format === 'junit' ? '/reports/report.xml' : '/reports/report.sarif',
+            maxReportBytes: 256 * 1024,
           }
         : {}),
     }
