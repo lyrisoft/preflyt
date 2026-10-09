@@ -577,6 +577,7 @@ export function WorkspaceModule({ module }: { module: Module }) {
                       )}
                       {module === 'integrations' && (
                         <RepositoryCiEvidence
+                          showIntegrationLink={false}
                           repositoryId={repository.githubId}
                           canImport={canPerform(
                             session.data,

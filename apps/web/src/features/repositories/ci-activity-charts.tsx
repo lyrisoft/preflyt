@@ -223,10 +223,12 @@ export function CiActivityEmpty({
   enabled,
   filtered,
   canConfigure,
+  showIntegrationLink = true,
 }: {
   enabled: boolean
   filtered: boolean
   canConfigure: boolean
+  showIntegrationLink?: boolean
 }) {
   return (
     <div className='mx-6 overflow-hidden rounded-xl border bg-muted/10'>
@@ -250,7 +252,7 @@ export function CiActivityEmpty({
                 : 'Enable signed GitHub webhooks and the event worker to collect CI results.'}
           </p>
         </div>
-        {!enabled && !filtered && canConfigure && (
+        {!enabled && !filtered && canConfigure && showIntegrationLink && (
           <Button asChild variant='outline' size='sm'>
             <Link to='/integrations'>
               Integration settings

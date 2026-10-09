@@ -112,9 +112,11 @@ function DeliveryDialog({
 export function RepositoryCiEvidence({
   repositoryId,
   canImport,
+  showIntegrationLink = true,
 }: {
   repositoryId: string
   canImport: boolean
+  showIntegrationLink?: boolean
 }) {
   const [draft, setDraft] = useState('')
   const [sha, setSha] = useState('')
@@ -206,6 +208,7 @@ export function RepositoryCiEvidence({
             enabled={query.data.enabled}
             filtered={!!sha}
             canConfigure={canImport}
+            showIntegrationLink={showIntegrationLink}
           />
         ) : (
           <Table>
