@@ -444,7 +444,7 @@ export function TeamsWorkspace({
                           ? 'warning'
                           : t.source === 'LOCAL'
                             ? 'neutral'
-                            : 'info'
+                            : 'success'
                       }
                     >
                       {t.source === 'LOCAL'

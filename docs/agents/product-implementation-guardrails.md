@@ -43,3 +43,7 @@ Demonstrate new organization onboarding, selected repository profile, real CI as
 For a workspace that already has the GitHub App connected, use **Access Control → GitHub members → Link GitHub organization**. GitHub sign-in must be enabled and its callback registered first. The flow binds the request to the original authenticated workspace Owner session and verifies a GitHub organization owner before confirmation. It reuses the same internal organization and installation, preserves repositories, policies, grants and history, and grants that verified GitHub owner access with an audit record. It never moves an installation between workspaces or merges existing identities automatically.
 
 - Explanatory help belongs in the shared `PageHelpDrawer`, opened by a Help button at the top right after Refresh. Group metric definitions, data sources, counting rules and limits there. Keep actual results and actionable errors/permission/partial-data warnings visible on the page. Apply this pattern when creating or updating pages.
+
+## Mandatory badge colors
+
+Use `StatusBadge` for status labels and its shared `statusTones` mapping. Completed or healthy states (Synced, Approved, Active, Passed, Published, Connection tested) are green; failures are red; pending, stale or draft states are amber; information or ongoing work is blue; inactive, disabled or planned states are neutral. Never use blue for a successful sync. Add each new fixed status to the shared mapping and verify it in a regression test. Do not override semantic colors with custom CSS.
