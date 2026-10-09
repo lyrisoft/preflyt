@@ -73,7 +73,11 @@ The [MVP Product Experience Contract](docs/product/mvp-product-experience.md) de
 
 Preflyt's PR assessment design includes code-quality evidence, a deterministic Code Quality policy pack and optional read-only AI reviews using **approved, pinned review skills**. Candidate methodologies include Ponytail and Thermo-Nuclear Code Quality Review, subject to third-party license/security review. AI cannot override quality gates. See [Code Quality Review](docs/product/code-quality-review.md) and [Skill-Based Review](docs/product/skill-based-code-review.md). These are phased requirements, not claims of shipped skill execution.
 
-## Built-in Engineering Standards Library
+## Teams and Policy Inheritance
+
+Preflyt will support GitHub-imported and Preflyt-managed teams, with versioned engineering standards/policies assigned at organization, team or repository scope. Team assignments cover administrator-approved policy-scoped repositories, with effective-policy previews and conflict handling. Imported GitHub team access does not grant Preflyt RBAC or automatically activate policy enforcement. See [Teams and Policy Inheritance](docs/product/teams-and-policy-inheritance.md). This feature is planned, not yet implemented.
+
+
 
 Preflyt ships with versioned, first-party engineering policy packs so organizations can start with established rules rather than authoring policies from scratch. The initial library covers Baseline Engineering, Application Security, Backend Services, Frontend Applications and Infrastructure as Code; further packs cover API, database, production readiness, performance and compliance as their assessment adapters mature.
 
