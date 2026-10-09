@@ -199,6 +199,8 @@ The [MVP Product Experience Contract](product/mvp-product-experience.md) is the 
 
 Preflyt shall expose **Governance → Quality Gates → GitHub Rulesets** with Standard, Strict and Custom safe-default profiles, repository/branch targeting, exact Preflyt Check Run source mapping, preflight, preview/diff, explicit authorization, deploy, drift and rollback. GitHub Actions supplies CI evidence; Preflyt's deterministic gate publishes a stable check; GitHub enforces it. Use a separately authorized organization Administration-write integration; never silently change unmanaged rulesets or activate an unverified required check. See [GitHub Ruleset Management](product/github-ruleset-management.md).
 
+**Ruleset Insights (P2.R5):** each GitHub ruleset detail includes an Insights tab with source-backed evaluation counts, trend charts, failures by rule/repository, bypass events where attributable, filtered history and GitHub evidence links. Preflyt quality-gate outcomes are displayed separately. Attribution must use the detailed Rule Suites API's matching ruleset source ID, not suite-level results or fabricated totals. See [Ruleset Management](product/github-ruleset-management.md).
+
 ## 6. Supported SDLC stages and user journeys
 
 ### 6.1 Lifecycle coverage
