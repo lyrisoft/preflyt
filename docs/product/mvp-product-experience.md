@@ -96,6 +96,8 @@ Show sync time, partial directory results, verification errors and retry actions
 
 **Notifications:** once P1 is implemented, the top bar includes a working unread bell with authorized assessment events and a dedicated inbox. P2 adds gate/policy alerts and email preferences, and P3 adds critical findings. Empty, delivery-failure and stale states are explicit; do not show dummy alerts. See [Notification Engine](notification-engine.md).
 
+**Assessment → Code Quality:** show verified lint/typecheck/coverage/static-analysis results, changed-file findings, evidence freshness, severity, policy outcomes and source links. Clearly separate verified findings from AI hypotheses. Display reviewed skill provenance and output only when available; advanced multi-skill review/inline comments belong to P4. See [Code Quality Review](code-quality-review.md) and [Skill-Based Review](skill-based-code-review.md).
+
 ## End-to-end MVP journeys
 
 **New organization (GitHub-first target):** Continue with GitHub → connect/verify the organization App installation → verify GitHub organization ownership and create the matching workspace automatically → select repository → discover profile → recommend and select policy packs → show missing controls and next steps. The Overview should be an onboarding state until real assessments exist.
