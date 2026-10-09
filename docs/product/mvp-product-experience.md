@@ -80,6 +80,8 @@ No large marketing hero, decorative globe or fake percentage. Charts should have
 - **Readiness:** counts of latest assessment decisions by PR/repository context; avoid combining incomparable objects in one percentage.
 - **Contributor adherence:** first-pass and final adherence only over fully assessed eligible PRs, always shown beside assessment coverage and policy version.
 
+**Quality Gates → GitHub Rulesets tab:** show existing organization rulesets, enforcement state, targeted branches/repos, linked Preflyt check/policy, sync/drift and a guided Standard/Strict/Custom setup. The wizard must preflight a real PR check, preview GitHub changes and require authorized deployment approval. Do not expose activation if the check publisher is not ready. See [GitHub Ruleset Management](github-ruleset-management.md).
+
 ## End-to-end MVP journeys
 
 **New organization:** OIDC/owner bootstrap → connect GitHub App → select repository → discover profile → recommend and select policy packs → show missing controls and next steps. The Overview should be an onboarding state until real assessments exist.
