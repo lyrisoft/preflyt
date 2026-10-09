@@ -1,3 +1,6 @@
+import { dispatchNotifications, recordDeliveryFailure } from './notifications/notification-queue.js'
+import { deliverNotification } from './notifications/notification-delivery.js'
+import { notificationsEnabled } from './notifications/notification-event.js'
 import { GitHubPrSyncService } from './github/github-pr-sync.service.js'
 import {
   telemetryLog,
@@ -76,11 +79,25 @@ async function start() {
       concurrency: 4,
     },
   )
+  const notificationQueue = new Queue('notifications', {
+    ...producerConfig, connection: producer,
+  })
+  const notificationWorker = new Worker('notifications', async (job) => {
+    if (typeof job.data?.eventId !== 'string' || !/^[a-zA-Z0-9-]{1,80}$/.test(job.data.eventId))
+      throw new Error('Invalid notification job')
+    return telemetryOperation('preflyt.notification.deliver', { 'notification.event.id': job.data.eventId }, async () => {
+      try { await deliverNotification(prisma, job.data.eventId) }
+      catch (error) {
+        await recordDeliveryFailure(prisma, job.data.eventId)
+        throw error
+      }
+    })
+  }, { ...consumerConfig, connection: consumer, concurrency: 2, autorun: notificationsEnabled() })
   let lastWarning = 0
   const warn = () => {
     if (Date.now() - lastWarning > 5000) {
       console.warn(
-        'GitHub event worker unavailable; accepted deliveries remain in PostgreSQL',
+        'Event worker unavailable; accepted events remain in PostgreSQL',
       )
       telemetryLog('preflyt.worker.unavailable')
       lastWarning = Date.now()
@@ -90,6 +107,8 @@ async function start() {
   consumer.on('error', warn)
   queue.on('error', warn)
   worker.on('error', warn)
+  notificationQueue.on('error', warn)
+  notificationWorker.on('error', warn)
   worker.on('failed', (job) => {
     if (job && job.attemptsMade >= 5) {
       const args = {
@@ -113,6 +132,9 @@ async function start() {
     reconciling = true
     try {
       await dispatcher.reconcile()
+      if (notificationsEnabled()) {
+        await dispatchNotifications(prisma, notificationQueue)
+      }
       if (!syncRun) {
         syncRun = sync
           .reconcile()
@@ -147,6 +169,8 @@ async function start() {
       producer.disconnect()
       consumer.disconnect()
     }
+    await notificationWorker.close(force)
+    await notificationQueue.close()
     await worker.close(force)
     await queue.close()
     producer.disconnect()

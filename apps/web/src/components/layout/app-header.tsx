@@ -2,6 +2,7 @@ import { ConfigDrawer } from '@/components/config-drawer'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
+import { NotificationBell } from '@/features/notifications/inbox'
 import { AppBreadcrumbs, type Crumb } from './app-breadcrumbs'
 import { Header } from './header'
 
@@ -14,6 +15,7 @@ export function AppHeader({ breadcrumbs }: { breadcrumbs: Crumb[] }) {
     <Header fixed>
       <AppBreadcrumbs className='me-auto hidden sm:block' items={breadcrumbs} />
       <Search />
+      <NotificationBell />
       <ThemeSwitch />
       <ConfigDrawer />
       <ProfileDropdown />

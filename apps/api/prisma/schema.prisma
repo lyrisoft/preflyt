@@ -578,3 +578,41 @@ model GitHubUserAccessEvidence {
   @@unique([accountId, organizationId])
   @@index([expiresAt])
 }
+
+// Durable, redacted assessment outbox. Delivery is independent of gate decisions.
+model NotificationEvent {
+  id String @id @default(cuid())
+  assessmentId String @unique
+  organizationId String
+  repositoryId String
+  repositoryGithubId String
+  repositoryName String
+  sourceSha String
+  actorId String?
+  type String
+  severity String
+  createdAt DateTime @default(now())
+  deliveredAt DateTime?
+  attempts Int @default(0)
+  failedAt DateTime?
+  notifications InboxNotification[]
+  @@index([deliveredAt, failedAt, createdAt])
+}
+model InboxNotification {
+  id String @id @default(cuid())
+  eventId String
+  event NotificationEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  identityId String
+  readAt DateTime?
+  deliveredAt DateTime @default(now())
+  @@unique([eventId, identityId])
+  @@index([identityId, readAt, deliveredAt])
+}
+
+model NotificationPreference {
+  identityId String
+  organizationId String
+  assessments Boolean @default(true)
+  updatedAt DateTime @updatedAt
+  @@id([identityId, organizationId])
+}

@@ -1,3 +1,4 @@
+import { recordAssessmentNotification } from '../notifications/notification-event.js'
 import {
   attestationPolicy,
   validatedProvenance,
@@ -502,6 +503,7 @@ export class AssessmentService {
         },
       },
     })
+    await recordAssessmentNotification(tx, assessment, repo, actorId)
     return { assessment, duplicate: false }
   }
 }

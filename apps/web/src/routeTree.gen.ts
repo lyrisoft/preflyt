@@ -24,6 +24,7 @@ import { Route as AuthenticatedAssessmentsRouteImport } from './routes/_authenti
 import { Route as AuthenticatedFindingsRouteImport } from './routes/_authenticated/findings'
 import { Route as AuthenticatedIntegrationsRouteImport } from './routes/_authenticated/integrations'
 import { Route as AuthenticatedIntelligenceRouteImport } from './routes/_authenticated/intelligence'
+import { Route as AuthenticatedNotificationsRouteImport } from './routes/_authenticated/notifications'
 import { Route as AuthenticatedOrganizationSettingsRouteImport } from './routes/_authenticated/organization-settings'
 import { Route as AuthenticatedPoliciesRouteImport } from './routes/_authenticated/policies'
 import { Route as AuthenticatedQualityGatesRouteImport } from './routes/_authenticated/quality-gates'
@@ -121,6 +122,12 @@ const AuthenticatedIntelligenceRoute =
   AuthenticatedIntelligenceRouteImport.update({
     id: '/intelligence',
     path: '/intelligence',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedNotificationsRoute =
+  AuthenticatedNotificationsRouteImport.update({
+    id: '/notifications',
+    path: '/notifications',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedOrganizationSettingsRoute =
@@ -253,6 +260,7 @@ export interface FileRoutesByFullPath {
   '/findings': typeof AuthenticatedFindingsRoute
   '/integrations': typeof AuthenticatedIntegrationsRoute
   '/intelligence': typeof AuthenticatedIntelligenceRoute
+  '/notifications': typeof AuthenticatedNotificationsRoute
   '/organization-settings': typeof AuthenticatedOrganizationSettingsRoute
   '/policies': typeof AuthenticatedPoliciesRoute
   '/quality-gates': typeof AuthenticatedQualityGatesRoute
@@ -287,6 +295,7 @@ export interface FileRoutesByTo {
   '/findings': typeof AuthenticatedFindingsRoute
   '/integrations': typeof AuthenticatedIntegrationsRoute
   '/intelligence': typeof AuthenticatedIntelligenceRoute
+  '/notifications': typeof AuthenticatedNotificationsRoute
   '/organization-settings': typeof AuthenticatedOrganizationSettingsRoute
   '/policies': typeof AuthenticatedPoliciesRoute
   '/quality-gates': typeof AuthenticatedQualityGatesRoute
@@ -325,6 +334,7 @@ export interface FileRoutesById {
   '/_authenticated/findings': typeof AuthenticatedFindingsRoute
   '/_authenticated/integrations': typeof AuthenticatedIntegrationsRoute
   '/_authenticated/intelligence': typeof AuthenticatedIntelligenceRoute
+  '/_authenticated/notifications': typeof AuthenticatedNotificationsRoute
   '/_authenticated/organization-settings': typeof AuthenticatedOrganizationSettingsRoute
   '/_authenticated/policies': typeof AuthenticatedPoliciesRoute
   '/_authenticated/quality-gates': typeof AuthenticatedQualityGatesRoute
@@ -364,6 +374,7 @@ export interface FileRouteTypes {
     | '/findings'
     | '/integrations'
     | '/intelligence'
+    | '/notifications'
     | '/organization-settings'
     | '/policies'
     | '/quality-gates'
@@ -398,6 +409,7 @@ export interface FileRouteTypes {
     | '/findings'
     | '/integrations'
     | '/intelligence'
+    | '/notifications'
     | '/organization-settings'
     | '/policies'
     | '/quality-gates'
@@ -435,6 +447,7 @@ export interface FileRouteTypes {
     | '/_authenticated/findings'
     | '/_authenticated/integrations'
     | '/_authenticated/intelligence'
+    | '/_authenticated/notifications'
     | '/_authenticated/organization-settings'
     | '/_authenticated/policies'
     | '/_authenticated/quality-gates'
@@ -575,6 +588,13 @@ declare module '@tanstack/react-router' {
       path: '/intelligence'
       fullPath: '/intelligence'
       preLoaderRoute: typeof AuthenticatedIntelligenceRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/notifications': {
+      id: '/_authenticated/notifications'
+      path: '/notifications'
+      fullPath: '/notifications'
+      preLoaderRoute: typeof AuthenticatedNotificationsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/organization-settings': {
@@ -750,6 +770,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedFindingsRoute: typeof AuthenticatedFindingsRoute
   AuthenticatedIntegrationsRoute: typeof AuthenticatedIntegrationsRoute
   AuthenticatedIntelligenceRoute: typeof AuthenticatedIntelligenceRoute
+  AuthenticatedNotificationsRoute: typeof AuthenticatedNotificationsRoute
   AuthenticatedOrganizationSettingsRoute: typeof AuthenticatedOrganizationSettingsRoute
   AuthenticatedPoliciesRoute: typeof AuthenticatedPoliciesRoute
   AuthenticatedQualityGatesRoute: typeof AuthenticatedQualityGatesRoute
@@ -773,6 +794,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedFindingsRoute: AuthenticatedFindingsRoute,
   AuthenticatedIntegrationsRoute: AuthenticatedIntegrationsRoute,
   AuthenticatedIntelligenceRoute: AuthenticatedIntelligenceRoute,
+  AuthenticatedNotificationsRoute: AuthenticatedNotificationsRoute,
   AuthenticatedOrganizationSettingsRoute:
     AuthenticatedOrganizationSettingsRoute,
   AuthenticatedPoliciesRoute: AuthenticatedPoliciesRoute,

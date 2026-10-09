@@ -1,0 +1,75 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { API_BASE_URL } from '@/lib/api'
+import { useNavigationSession } from '@/features/workspace/navigation-session'
+
+export type Item = {
+  id: string
+  readAt: string | null
+  createdAt: string
+  type: string
+  severity: string
+  repository: string
+  repositoryId: string
+  assessmentId: string
+  sourceSha: string
+}
+type InboxData = {
+  enabled: boolean
+  unreadCount: number
+  items: Item[]
+  total: number
+  page: number
+  repositories: { repositoryGithubId: string; repositoryName: string }[]
+}
+export const titles: Record<string, string> = {
+  ASSESSMENT_COMPLETED: 'Assessment saved',
+  ASSESSMENT_FAILED: 'CI failure recorded',
+  ASSESSMENT_INCOMPLETE: 'Assessment needs more evidence',
+}
+export async function notificationRequest<T>(
+  path: string,
+  signal?: AbortSignal,
+  method = 'GET'
+): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}/notifications${path}`, {
+    credentials: 'include',
+    cache: 'no-store',
+    method,
+    signal,
+  })
+  if (!response.ok)
+    throw new Error(
+      response.status === 401
+        ? 'Your session expired. Sign in again.'
+        : 'Could not load notifications. Try again.'
+    )
+  return response.json() as Promise<T>
+}
+export function useInbox(filters: Record<string, string> = {}) {
+  const session = useNavigationSession()
+  const query = useQuery({
+    queryKey: [
+      'notifications',
+      session.data?.identityId,
+      session.data?.organizationId,
+      filters,
+    ],
+    queryFn: ({ signal }) =>
+      notificationRequest<InboxData>(
+        `?${new URLSearchParams(filters)}`,
+        signal
+      ),
+    enabled: !!session.data?.identityId && !session.isFetching,
+    staleTime: 0,
+    gcTime: 0,
+    refetchInterval: 30000,
+    retry: false,
+  })
+  const client = useQueryClient()
+  const read = useMutation({
+    mutationFn: (id: string | null) =>
+      notificationRequest(id ? `/${id}/read` : '/read-all', undefined, 'POST'),
+    onSuccess: () => client.invalidateQueries({ queryKey: ['notifications'] }),
+  })
+  return { query, read, session }
+}

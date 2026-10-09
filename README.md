@@ -288,3 +288,7 @@ The GitHub members tab loads the active organization member directory, supports 
 For GitHub-linked workspaces, **Grant access** uses a searchable member dropdown showing only users without active Preflyt access, including revoked members. Select the user, then choose a built-in role and repositories. Existing members are edited through their access record.
 
 For a workspace that already has the GitHub App connected, use **Access Control → GitHub members → Link GitHub organization**. GitHub sign-in must be enabled and its callback registered first. The flow binds the request to the original authenticated workspace Owner session and verifies a GitHub organization owner before confirmation. It reuses the same internal organization and installation, preserves repositories, policies, grants and history, and grants that verified GitHub owner access with an audit record. It never moves an installation between workspaces or merges existing identities automatically.
+
+### Assessment notifications
+
+A persistent in-app assessment inbox is available behind `NOTIFICATIONS_ENABLED=true`. It includes the unread bell, repository/event/severity/date filters, read actions, and optional assessment alerts. Both API and worker need the same flag, the database migration, and the worker's Redis connection. See [notification setup and recovery](docs/operations/notifications.md). Policy/gate email alerts remain planned.

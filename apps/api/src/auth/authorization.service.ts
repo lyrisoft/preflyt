@@ -254,6 +254,8 @@ export class AuthorizationService {
       return true
     }
     if (
+      path === '/notifications' ||
+      /^\/notifications\/(preferences|read-all|[a-zA-Z0-9-]{1,80}\/read)$/.test(path) ||
       path === '/github/repositories' ||
       path === '/github/repositories/overview' ||
       path === '/github/dashboard' ||

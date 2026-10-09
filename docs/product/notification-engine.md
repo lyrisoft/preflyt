@@ -1,6 +1,6 @@
 # Preflyt Notification Engine
 
-**Status:** Planned, not implemented. **Phase order unchanged:** P1 in-app, P2 email and governance, P3 security, P4 AI, later SDLC and channels.
+**Status:** P1 assessment in-app inbox implemented behind `NOTIFICATIONS_ENABLED`; P2 email/governance and later events remain planned. **Phase order unchanged:** P1 in-app, P2 email and governance, P3 security, P4 AI, later SDLC and channels.
 
 ## Purpose and channels
 
@@ -48,10 +48,18 @@ Each increment must be independently usable within its existing phase, without i
 
 ## Acceptance
 
-- [ ] A real assessment event creates exactly one inbox entry per eligible recipient despite repeated webhook delivery.
-- [ ] Unauthorized users cannot retrieve another organization's or repository's notifications.
-- [ ] Read/unread state persists; unread count reconciles with inbox.
+- [x] A real assessment event creates exactly one inbox entry per eligible recipient despite repeated webhook delivery.
+- [x] Unauthorized users cannot retrieve another organization's or repository's notifications.
+- [x] Read/unread state persists; unread count reconciles with inbox.
 - [ ] P2 email sends with configured provider and records success/failure; outage does not change deterministic gate result.
 - [ ] Retry/backoff, dead-letter, preferences, mandatory notice policy and revocation are tested.
 - [ ] No fabricated alerts, secret leakage or evidence exposure in UI, email or telemetry.
 - [ ] Dashboard bell and notification page remain hidden until implemented and functional.
+
+## Current P1 implementation
+
+Assessment creation saves a redacted event in the same PostgreSQL transaction. The existing Redis worker dispatches and delivers the in-app event, deduplicated by assessment and recipient. Organization Owners/Admins, repository-assigned Engineering Leads, the manual assessment requester, and linked GitHub PR authors are eligible only when their current membership and repository grant permit assessment access. CI-only commits without a matching signed author observation notify the authorized leads; Preflyt never guesses authors from email or usernames.
+
+The bell, `/notifications` filters/pagination, individual and bulk mark-read, and optional per-user assessment notification preference are functional. Every inbox/count/read request rechecks current repository access, including the bounded GitHub user-access checks used elsewhere. Preferences suppress future assessment alerts; they do not delete existing alerts. Only in-app immediate delivery is supported; email, digests, quiet hours, mandatory governance/security preferences and an operator replay UI remain future work.
+
+Imported CI failure, missing required evidence, and a saved assessment are separate updates. None claims that tests ran successfully or that a PR may merge. Historical assessments are not backfilled and assessments created while the flag is off emit no events. See [setup and retry recovery](../operations/notifications.md).
