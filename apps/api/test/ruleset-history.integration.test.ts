@@ -284,3 +284,19 @@ it("rechecks policy access for retained history and rejects revoked access", asy
     ),
   ).rejects.toThrow("Revoked");
 });
+
+it("resolves the public GitHub repository ID to its internal snapshot scope", async () => {
+  await history.sync(repo.id);
+  const access = { requireRepository: vi.fn().mockResolvedValue(repo) };
+  const provider = { getRepositoryRuleset: vi.fn().mockResolvedValue({}) };
+  const response = await new GitHubRulesetService(
+    access as any,
+    provider as any,
+    history,
+  ).insights({} as any, "51", 7, {
+    page: 1,
+    period: "week",
+    source: "retained",
+  });
+  expect(response.summary.activeFail).toBe(1);
+});

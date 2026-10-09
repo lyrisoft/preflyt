@@ -750,12 +750,14 @@ model GitHubRulesetDeployment {
  observedHash String?
  observedDefinition Json?
  verifiedAt DateTime?
+ lastSyncAttemptAt DateTime?
  leaseToken String?
  leaseUntil DateTime?
  message String?
  createdAt DateTime @default(now())
  updatedAt DateTime @updatedAt
  @@index([repositoryId,organizationId,createdAt])
+ @@index([lastSyncAttemptAt])
 }
 
 // Provider evaluations are immutable, bounded historical evidence, never gate inputs.

@@ -696,3 +696,70 @@ it("creates activation, drift and rollback outbox events with verified deploymen
   ]);
   expect(events.every((e) => e.organizationId === org)).toBe(true);
 });
+
+it("checks scheduled drift once per polling window, deduplicating repeated observations", async () => {
+  vi.stubEnv("NOTIFICATIONS_ENABLED", "true");
+  const plan = await checks.plan();
+  checks.plan.mockResolvedValue({
+    ...plan,
+    policyEvaluation: { ...plan.policyEvaluation, status: "PASS" },
+  });
+  await automation.process(task.id);
+  const proposal = await deployments.preview(
+    owner,
+    "51",
+    draft.id,
+    draft.definitionHash,
+  );
+  await deployments.approve(reviewer, "51", proposal.id, proposal.previewHash);
+  await deployments.deploy(owner, "51", proposal.id, proposal.previewHash);
+  live.definition = { ...live.definition, enforcement: "disabled" };
+  live.hash = digest(live.definition);
+  await deployments.reconcile();
+  await deployments.reconcile();
+  const row = await db.gitHubRulesetDeployment.findUniqueOrThrow({
+    where: { id: proposal.id },
+  });
+  expect(row.state).toBe("DRIFTED");
+  expect(row.lastSyncAttemptAt).toBeInstanceOf(Date);
+  await db.gitHubRulesetDeployment.update({
+    where: { id: row.id },
+    data: { lastSyncAttemptAt: new Date(0) },
+  });
+  await deployments.reconcile();
+  expect(
+    await db.notificationEvent.count({ where: { type: "RULESET_DRIFTED" } }),
+  ).toBe(1);
+  expect(
+    await db.auditEvent.count({
+      where: { event: "github.ruleset_drift_detected" },
+    }),
+  ).toBe(1);
+});
+it("does not claim a fresh verified state when scheduled GitHub observation fails", async () => {
+  const plan = await checks.plan();
+  checks.plan.mockResolvedValue({
+    ...plan,
+    policyEvaluation: { ...plan.policyEvaluation, status: "PASS" },
+  });
+  await automation.process(task.id);
+  const proposal = await deployments.preview(
+    owner,
+    "51",
+    draft.id,
+    draft.definitionHash,
+  );
+  await deployments.approve(reviewer, "51", proposal.id, proposal.previewHash);
+  await deployments.deploy(owner, "51", proposal.id, proposal.previewHash);
+  const before = await db.gitHubRulesetDeployment.findUniqueOrThrow({
+    where: { id: proposal.id },
+  });
+  connection.read.mockRejectedValueOnce(new Error("Timeout"));
+  await deployments.reconcile();
+  const after = await db.gitHubRulesetDeployment.findUniqueOrThrow({
+    where: { id: proposal.id },
+  });
+  expect(after.state).toBe("ACTIVE");
+  expect(after.verifiedAt).toEqual(before.verifiedAt);
+  expect(after.message).toContain("may be outdated");
+});

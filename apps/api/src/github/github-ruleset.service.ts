@@ -78,7 +78,7 @@ export class GitHubRulesetService {
     const result =
       options.source === "retained"
         ? await this.history!.read(
-            repositoryId,
+            repository.id,
             repository.githubId,
             id,
             repository.fullName,

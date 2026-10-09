@@ -1,3 +1,4 @@
+import { RulesetDeploymentService } from './github/ruleset-deployment.service.js'
 import { RulesetHistoryService } from './github/ruleset-history.service.js'
 import { ReadinessAutomationService } from './assessments/readiness-automation.service.js'
 import { AssessmentService } from './assessments/assessment.service.js'
@@ -113,6 +114,8 @@ async function start() {
   }, { ...consumerConfig, connection: consumer, concurrency: 2, autorun: notificationsEnabled() && emailNotificationsEnabled() })
   const assessments = new AssessmentService(prisma)
   const checks = new CheckPublicationService(prisma, emailAuthorization, githubProvider, assessments)
+  const deployments = new RulesetDeploymentService(prisma, emailAuthorization, githubProvider, checks)
+  let driftRun: Promise<void> | undefined
   const automation = new ReadinessAutomationService(prisma, emailAuthorization, githubProvider, assessments, checks)
   let automationRun: Promise<void> | undefined
   let lastWarning = 0
@@ -171,6 +174,7 @@ async function start() {
       }
       if (!automationRun) automationRun = automation.reconcile().catch(warn).finally(() => { automationRun = undefined })
       if (!historyRun) historyRun = rulesetHistory.reconcile().catch(warn).finally(() => { historyRun = undefined })
+      if (!driftRun) driftRun = deployments.reconcile().catch(warn).finally(() => { driftRun = undefined })
       // Test Redis even when the inbox is empty; readiness is not a stale process flag.
       await queue.getJobCounts('wait')
       if (!closing)
@@ -191,6 +195,7 @@ async function start() {
     sync.close()
     prSync.close()
     rulesetHistory.close()
+    deployments.close()
     githubProvider.close()
     const force = consumer.status !== 'ready'
     if (force) {
@@ -209,6 +214,7 @@ async function start() {
     await syncRun
     await automationRun
     await historyRun
+    await driftRun
     cache.onModuleDestroy()
     await prisma.$disconnect()
     await unlink(heartbeat).catch(() => undefined)

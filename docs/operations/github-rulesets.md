@@ -113,3 +113,12 @@ Enabled reconciliation deletes evaluations whose provider timestamp is older tha
 **Coverage is collected evaluations only.** Each sweep queries GitHub's month window; it cannot recover older history that was never collected. Provider pagination is a changing list, not an atomic historical snapshot. Sweeps overlap and deduplicate, but a completed sweep is not proof of complete period coverage. A full 1,000th page stops the sweep with a collection error instead of claiming a completed sweep. The page limit, access failures, missed runs and upstream availability can leave gaps. The UI shows these observations without claiming all PRs or all period totals.
 
 Organization-wide comparisons, longer trend charts and exact links to Preflyt assessments remain pending. No browser or live GitHub acceptance is claimed by the local regression tests. See [GitHub Rule Suites API](https://docs.github.com/en/rest/repos/rule-suites).
+
+
+## Scheduled managed-ruleset drift checks
+
+With `GITHUB_RULESET_ACTIVATION_ENABLED=true`, the worker reads at most five due managed ACTIVE/DRIFTED/ROLLED_BACK deployments per reconciliation. It claims each observation window in PostgreSQL and polls no more often than five minutes. It uses the approving administrator's identity, current repository/organization permissions and the configured governance connection. Revoked authorization stops observation. Permission is checked again after the GitHub read. Polling only reads GitHub; it never activates, replaces, repairs or disables protections.
+
+A matching provider hash updates the verification timestamp. A changed hash marks DRIFTED and records an audit plus a scoped notification once per distinct deployment/hash; the expected managed definition stays intact. Restoring the exact expected provider definition can restore the corresponding ACTIVE/ROLLED_BACK state after verification. Unknown provider reads preserve the old state and verification timestamp, with an explicit outdated-state message. The next attempt waits five minutes. Notifications require the existing default-off notification configuration. An operator must review drift; safe rollback still rejects protections that no longer match the expected managed receipt.
+
+The additive `20261010001000_ruleset_drift_schedule` migration and regenerated client are required. API and worker restart remains an operator deployment action. Local database tests cover successful drift observation, repeated-poll deduplication and provider timeout. No live GitHub deployment acceptance is claimed.

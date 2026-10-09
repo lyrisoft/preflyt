@@ -26,6 +26,76 @@ export const governanceEnabled = () =>
 @Injectable()
 export class RulesetDeploymentService {
   private readonly governance = new GovernanceProvider();
+  private stopped = false;
+  close() {
+    this.stopped = true;
+  }
+  /** Read-only observation of managed deployments; never changes GitHub protections. */
+  async reconcile() {
+    if (this.stopped || !governanceEnabled()) return;
+    const rows = await this.prisma.gitHubRulesetDeployment.findMany({
+      where: {
+        state: { in: ["ACTIVE", "DRIFTED", "ROLLED_BACK"] },
+        githubRulesetId: { not: null },
+        leaseToken: null,
+        repository: {
+          selected: true,
+          available: true,
+          installation: { active: true },
+        },
+        OR: [
+          { lastSyncAttemptAt: null },
+          { lastSyncAttemptAt: { lt: new Date(Date.now() - 300000) } },
+        ],
+      },
+      orderBy: [{ lastSyncAttemptAt: "asc" }, { id: "asc" }],
+      take: 5,
+      include: { repository: true },
+    });
+    for (const row of rows) {
+      if (this.stopped) break;
+      const claim = await this.prisma.gitHubRulesetDeployment.updateMany({
+        where: {
+          id: row.id,
+          state: row.state,
+          lastSyncAttemptAt: row.lastSyncAttemptAt,
+          leaseToken: null,
+        },
+        data: { lastSyncAttemptAt: new Date() },
+      });
+      if (!claim.count) continue;
+      const session: AuthenticatedSession = {
+        authenticated: true,
+        identityId: row.approvedById ?? row.proposedById,
+        subject: row.approvedById ?? row.proposedById,
+        email: null,
+        role: "USER",
+        organizationId: row.organizationId,
+      };
+      try {
+        await this.refresh(
+          session,
+          row.repository.githubId.toString(),
+          row.id,
+          row.previewHash,
+        );
+      } catch {
+        // Do not update verifiedAt or overwrite deployment state on an unknown read.
+        await this.prisma.gitHubRulesetDeployment.updateMany({
+          where: {
+            id: row.id,
+            observedHash: row.observedHash,
+            verifiedAt: row.verifiedAt,
+            leaseToken: null,
+          },
+          data: {
+            message:
+              "Scheduled verification failed. The last verified GitHub state may be outdated. Refresh to retry.",
+          },
+        });
+      }
+    }
+  }
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(AuthorizationService) private readonly access: AuthorizationService,
@@ -548,6 +618,9 @@ export class RulesetDeploymentService {
     const connection = await this.governance.open(repo.fullName);
     const live = await connection.read(row.githubRulesetId);
     const drifted = live.hash !== row.observedHash;
+    await this.authorize(session, id);
+    if (this.stopped)
+      throw new ServiceUnavailableException("Ruleset observation stopped");
     await this.prisma.$transaction(async (tx) => {
       const saved = await tx.gitHubRulesetDeployment.updateMany({
         where: { id: row.id, observedHash: row.observedHash, leaseToken: null },
@@ -570,17 +643,28 @@ export class RulesetDeploymentService {
           "Deployment changed while verifying GitHub",
         );
       if (drifted) {
-        await tx.auditEvent.create({
-          data: {
+        const alreadyRecorded = await tx.auditEvent.findFirst({
+          where: {
             event: "github.ruleset_drift_detected",
-            actorId: session.identityId,
-            metadata: {
-              deploymentId: row.id,
-              observedHash: live.hash,
-              expectedHash: row.observedHash,
-            },
+            AND: [
+              { metadata: { path: ["deploymentId"], equals: row.id } },
+              { metadata: { path: ["observedHash"], equals: live.hash } },
+            ],
           },
+          select: { id: true },
         });
+        if (!alreadyRecorded)
+          await tx.auditEvent.create({
+            data: {
+              event: "github.ruleset_drift_detected",
+              actorId: session.identityId,
+              metadata: {
+                deploymentId: row.id,
+                observedHash: live.hash,
+                expectedHash: row.observedHash,
+              },
+            },
+          });
         await recordRulesetNotification(
           tx,
           repo,
