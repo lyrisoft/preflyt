@@ -344,6 +344,7 @@ model RepositoryCiBindings {
 }
 
 model RepositoryPullRequest {
+ aiReviewAttemptAt DateTime?
  verifiedInstallationId String?
  verifiedAccessRevision Int?
  id String @id @default(cuid())
@@ -885,6 +886,8 @@ model AiProviderConnection {
   @@index([organizationId, updatedAt])
 }
 model AiStageRoute {
+  automaticReviews Boolean @default(false)
+  publishSummary Boolean @default(false)
   id String @id @default(uuid())
   organizationId String
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
@@ -927,6 +930,11 @@ model AiReviewSkill {
   @@index([organizationId, createdAt])
 }
 model AiSkillReview {
+  automaticKey String? @unique
+  feedbackState String @default("NOT_REQUESTED")
+  feedbackUrl String?
+  feedbackAttempts Int @default(0)
+  feedbackAttemptAt DateTime?
   id String @id @default(uuid())
   organizationId String
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)

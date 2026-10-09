@@ -67,6 +67,7 @@ class ActionDto {
   @IsBoolean() reviewed!: boolean;
 }
 class ReviewDto {
+  @IsOptional() @IsBoolean() includeSource?: boolean;
   @IsString() @MaxLength(100) assessmentId!: string;
   @IsArray()
   @ArrayMinSize(1)
@@ -150,6 +151,7 @@ export class SkillReviewController {
       repo,
       body.assessmentId,
       body.checkIds,
+      { includeSource: body.includeSource ?? false },
     );
   }
   @Post(":id/cancel") @Header("Cache-Control", "no-store") cancel(

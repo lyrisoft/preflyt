@@ -70,6 +70,8 @@ type StageRoute = {
   fallbackId: string | null
   enabled: boolean
   allowSource: boolean
+  automaticReviews?: boolean
+  publishSummary?: boolean
   maxInputTokens: number
   maxOutputTokens: number
   dailyBudgetCents: number
@@ -941,6 +943,8 @@ function RouteForm({
       fallbackId: f.get('fallbackId') || null,
       enabled: f.get('enabled') === 'on',
       allowSource: f.get('allowSource') === 'on',
+      automaticReviews: f.get('automaticReviews') === 'on',
+      publishSummary: f.get('publishSummary') === 'on',
       maxInputTokens: Number(f.get('maxInputTokens')),
       maxOutputTokens: Number(f.get('maxOutputTokens')),
       dailyBudgetCents: Number(f.get('dailyBudgetCents')),
@@ -1019,6 +1023,34 @@ function RouteForm({
         />
         Allow repository source sharing
       </label>
+      {route.stage === 'pull_request' && (
+        <fieldset className='space-y-3 rounded-lg border p-4'>
+          <legend className='px-1 text-sm font-medium'>
+            Published PR policies
+          </legend>
+          <label className='flex items-center gap-2 text-sm'>
+            <input
+              type='checkbox'
+              name='automaticReviews'
+              defaultChecked={route.automaticReviews ?? false}
+            />
+            Run assigned AI Reviews automatically
+          </label>
+          <label className='flex items-center gap-2 text-sm'>
+            <input
+              type='checkbox'
+              name='publishSummary'
+              defaultChecked={route.publishSummary ?? false}
+            />
+            Publish advisory summary to GitHub
+          </label>
+          <p className='text-xs text-muted-foreground'>
+            Uses approved skills and your budget. Source sharing adds verified
+            PR changes; otherwise only assessment evidence is sent. AI summaries
+            do not decide merge readiness.
+          </p>
+        </fieldset>
+      )}
       {error && (
         <p role='alert' className='text-sm text-destructive'>
           {error}

@@ -44,6 +44,8 @@ export type RouteInput = {
   fallbackId: string | null;
   enabled: boolean;
   allowSource: boolean;
+  automaticReviews?: boolean;
+  publishSummary?: boolean;
   maxInputTokens: number;
   maxOutputTokens: number;
   dailyBudgetCents: number;
@@ -409,7 +411,8 @@ export class AiConfigurationService {
     );
     if (
       !aiStages.includes(stage as (typeof aiStages)[number]) ||
-      (input.fallbackId && input.fallbackId === input.primaryId)
+      (input.fallbackId && input.fallbackId === input.primaryId) ||
+      (stage !== "pull_request" && (input.automaticReviews || input.publishSummary))
     )
       throw new BadRequestException(
         "Choose a lifecycle stage and different primary/fallback connections",
@@ -460,6 +463,8 @@ export class AiConfigurationService {
             fallbackId: input.fallbackId,
             enabled: input.enabled,
             allowSource: input.allowSource,
+            automaticReviews: input.automaticReviews ?? false,
+            publishSummary: input.publishSummary ?? false,
             maxInputTokens: input.maxInputTokens,
             maxOutputTokens: input.maxOutputTokens,
             dailyBudgetCents: input.dailyBudgetCents,

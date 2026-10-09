@@ -1,3 +1,4 @@
+import { GitHubProviderModule } from '../github/github-provider.module.js';
 import { AssessmentService } from '../assessments/assessment.service.js';
 import { ReviewSkillsService } from './review-skills.service.js';
 import { SkillReviewService } from './skill-review.service.js';
@@ -7,7 +8,7 @@ import { AuthModule } from "../auth/auth.module.js";
 import { AiConfigurationController } from "./ai-configuration.controller.js";
 import { AiConfigurationService } from "./ai-configuration.service.js";
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, GitHubProviderModule],
   controllers: [AiConfigurationController, ReviewSkillsController, SkillReviewController],
   providers: [AiConfigurationService, ReviewSkillsService, SkillReviewService, AssessmentService],
 })

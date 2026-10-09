@@ -1,3 +1,6 @@
+import { prReviewSource } from '../src/intelligence/pr-review-context.js';
+import { GitHubProviderService } from '../src/github/github-provider.service.js';
+import { composeGatePolicy } from '../src/assessments/gate-policy.service.js';
 import { catalogue, packDigest } from '../src/standards/catalogue.js'
 import { ReviewSkillsService } from '../src/intelligence/review-skills.service.js';
 import { SkillReviewService } from '../src/intelligence/skill-review.service.js';
@@ -679,3 +682,91 @@ it('downloads an authorized exact version and imports changed text into a separa
   await db.aiReviewSkill.update({ where: { id: original.id }, data: { instructions: 'Tampered' } });
   await download(owner).expect(409);
 });
+
+// PR review fixtures execute the real admission/worker/storage path against this disposable database.
+async function prFixture(patch: {source?:boolean; automatic?:boolean; summary?:boolean} = {}) {
+  const f = await reviewFixture()
+  const check = {...f.check,stages:['pull_request' as const]}
+  const oldPlan = f.assessment.plan as any
+  const {digest: _digest,...oldPack}=oldPlan.packs[0]
+  const definition={...oldPack,aiChecks:[check]},pack={...definition,digest:packDigest(definition)}
+  const context={version:1 as const,head:{repositoryId:f.repo.githubId.toString(),ref:'feature',sha:f.assessment.sourceSha},base:{repositoryId:f.repo.githubId.toString(),ref:'main',sha:'b'.repeat(40)},state:'open' as const,draft:false,merged:false}
+  const request={sourceSha:f.assessment.sourceSha,subjectKind:'PULL_REQUEST',pullRequest:{...context,number:1,objectId:'pr:1'}}
+  const plan={...oldPlan,packs:[pack]}
+  const selection=await db.repositoryStandardsSelection.create({data:{repositoryId:f.repo.id,revision:1,profile:'RECOMMENDED',packs:[{id:pack.id,version:pack.version,digest:pack.digest,definition:pack}],selectedById:owner.identityId}})
+  const assessment=await db.commitAssessment.update({where:{id:f.assessment.id},data:{request,plan,selectionId:selection.id,assessmentHash:digest({request,plan,report:f.assessment.report})}})
+  const definitionPolicy={...composeGatePolicy(selection,'refs/heads/main',[])}
+  const policy=await db.gatePolicyRevision.create({data:{repositoryId:f.repo.id,organizationId:owner.organizationId!,branchRef:'refs/heads/main',revision:1,selectionId:selection.id,definition:definitionPolicy,definitionHash:digest(definitionPolicy),state:'PUBLISHED',draftedById:owner.identityId,approvedById:owner.identityId,publishedById:owner.identityId,publishedAt:new Date()}})
+  const pr=await db.repositoryPullRequest.create({data:{repositoryId:f.repo.id,number:1,objectId:'pr:1',context}})
+  const routeRow=(await post(owner,'/routes/pull_request',route(f.provider.id,{allowSource:patch.source??true,automaticReviews:patch.automatic??true,publishSummary:patch.summary??false,maxInputTokens:32000})).expect(201)).body
+  const github={readPullRequest:vi.fn(async()=>({context})),readPrReviewSource:vi.fn(async()=>prReviewSource(1,context,[{filename:'src/api.ts',patch:'@@ -0,0 +1 @@\n+handle(input)'}])),publishAiReviewSummary:vi.fn(async()=>({htmlUrl:'https://github.com/fixture/review/runs/1',checkRunId:'1',appId:'1'}))}
+  const reviews=new SkillReviewService(db,new AuthorizationService(db),new AssessmentService(db),service,github as unknown as GitHubProviderService)
+  const infer=()=>fetchMock.mockImplementation(async(_url:URL,_locality:string,opts:{body?:string})=>{
+    const body=JSON.parse(opts.body!),data=JSON.parse(body.messages[1].content)
+    return new Response(JSON.stringify({choices:[{finish_reason:'stop',message:{content:JSON.stringify({assessmentHash:data.DATA.assessmentHash,sourceSha:data.DATA.sourceSha,findings:[{checkId:data.SKILLS[0].id,evidenceRefs:[data.DATA.source?'diff:0':'check:0'],summary:'Input validation may be missing.',recommendation:'Validate inputs before use.'}]})}}]}))
+  })
+  return {...f,assessment,check,context,policy,pr,routeRow,github,reviews,infer}
+}
+it('automatically dispatches a published PR policy once, reviews changed code and publishes a neutral advisory summary',async()=>{
+  vi.stubEnv('GITHUB_CHECK_PUBLICATION_ENABLED','true')
+  const f=await prFixture({summary:true}),gate=previewGate(f.assessment)
+  await f.reviews.dispatchAutomatic();await f.reviews.dispatchAutomatic()
+  expect(await db.aiSkillReview.count({where:{assessmentId:f.assessment.id}})).toBe(1)
+  f.infer();await f.reviews.reconcile()
+  const job=await db.aiSkillReview.findFirstOrThrow({where:{assessmentId:f.assessment.id}})
+  expect(job.state).toBe('SUCCEEDED');expect(job.automaticKey).toBeTruthy()
+  expect(JSON.stringify(job.result)).toContain('src/api.ts');expect(JSON.stringify(job.result)).not.toContain('handle(input)')
+  expect(fetchMock.mock.lastCall![2].body).toContain('handle(input)')
+  await f.reviews.publishPendingSummary()
+  expect(f.github.publishAiReviewSummary).toHaveBeenCalledOnce()
+  expect(f.github.publishAiReviewSummary.mock.lastCall).toEqual(expect.arrayContaining([f.assessment.sourceSha]))
+  expect((await db.aiSkillReview.findUniqueOrThrow({where:{id:job.id}})).feedbackState).toBe('PUBLISHED')
+  expect(previewGate(await db.commitAssessment.findUniqueOrThrow({where:{id:f.assessment.id}}))).toEqual(gate)
+  await db.repositoryPullRequest.update({where:{id:f.pr.id},data:{aiReviewAttemptAt:null}})
+  await f.reviews.dispatchAutomatic();expect(await db.aiSkillReview.count({where:{assessmentId:f.assessment.id}})).toBe(1)
+})
+it('keeps automatic review evidence-only when source sharing is off',async()=>{
+  const f=await prFixture({source:false})
+  await f.reviews.dispatchAutomatic();f.infer();await f.reviews.reconcile()
+  expect(f.github.readPrReviewSource).not.toHaveBeenCalled()
+  expect((await db.aiSkillReview.findFirstOrThrow({where:{assessmentId:f.assessment.id}})).state).toBe('SUCCEEDED')
+  expect(fetchMock.mock.lastCall![2].body).not.toContain('handle(input)')
+})
+it('does not send model requests after PR, policy, source-sharing or access changes',async()=>{
+  const f=await prFixture();await f.reviews.dispatchAutomatic()
+  const job=await db.aiSkillReview.findFirstOrThrow({where:{assessmentId:f.assessment.id}})
+  f.github.readPullRequest.mockResolvedValue({context:{...f.context,head:{...f.context.head,sha:'c'.repeat(40)}}})
+  fetchMock.mockClear();await f.reviews.reconcile()
+  expect(fetchMock).not.toHaveBeenCalled();expect((await db.aiSkillReview.findUniqueOrThrow({where:{id:job.id}})).state).toBe('UNAVAILABLE')
+  await db.aiSkillReview.update({where:{id:job.id},data:{state:'QUEUED'}})
+  f.github.readPullRequest.mockResolvedValue({context:f.context})
+  await db.aiStageRoute.update({where:{id:f.routeRow.id},data:{allowSource:false}})
+  await f.reviews.reconcile();expect(fetchMock).not.toHaveBeenCalled()
+})
+it('blocks automatic admission without a published policy, explicit route enablement or sufficient budget',async()=>{
+  const f=await prFixture({automatic:false})
+  await f.reviews.dispatchAutomatic();expect(await db.aiSkillReview.count({where:{assessmentId:f.assessment.id}})).toBe(0)
+  await db.aiStageRoute.update({where:{id:f.routeRow.id},data:{automaticReviews:true,dailyBudgetCents:1}})
+  await db.aiProviderConnection.update({where:{id:f.provider.id},data:{inputPriceCentsPerMillion:100000000}})
+  await f.reviews.dispatchAutomatic();expect(await db.aiSkillReview.count({where:{assessmentId:f.assessment.id}})).toBe(0)
+  expect(await db.aiReviewBudget.count({where:{organizationId:owner.organizationId,stage:'pull_request'}})).toBe(0)
+  await db.gatePolicyRevision.update({where:{id:f.policy.id},data:{state:'APPROVED'}})
+  await db.repositoryPullRequest.update({where:{id:f.pr.id},data:{aiReviewAttemptAt:null}})
+  await f.reviews.dispatchAutomatic();expect(await db.aiSkillReview.count({where:{assessmentId:f.assessment.id}})).toBe(0)
+})
+it('rejects a manual code review when source sharing is off',async()=>{
+  const f=await prFixture({source:false,automatic:false})
+  await expect(f.reviews.request(owner,f.repo.githubId.toString(),f.assessment.id,[f.check.id],{includeSource:true})).rejects.toThrow('source sharing')
+  expect(f.github.readPrReviewSource).not.toHaveBeenCalled()
+})
+
+it.each(['policy','route','observed-head'])('rejects queued automatic reviews after %s changes', async (change) => {
+  const f=await prFixture();await f.reviews.dispatchAutomatic()
+  const job=await db.aiSkillReview.findFirstOrThrow({where:{assessmentId:f.assessment.id}})
+  if(change==='policy') await db.gatePolicyRevision.update({where:{id:f.policy.id},data:{state:'APPROVED'}})
+  if(change==='route') await db.aiStageRoute.update({where:{id:f.routeRow.id},data:{automaticReviews:false}})
+  if(change==='observed-head') await db.repositoryPullRequest.update({where:{id:f.pr.id},data:{context:{...f.context,head:{...f.context.head,sha:'c'.repeat(40)}}}})
+  fetchMock.mockClear();await f.reviews.reconcile()
+  expect(fetchMock).not.toHaveBeenCalled()
+  expect((await db.aiSkillReview.findUniqueOrThrow({where:{id:job.id}})).state).toBe('UNAVAILABLE')
+})

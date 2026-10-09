@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest'
 import { render } from 'vitest-browser-react'
-import { StatusBadge, statusTones } from './status-badge'
+import { statusTones } from '@/lib/status-tones'
+import { StatusBadge } from './status-badge'
 
 it('enforces shared semantic colors even when a caller supplies the wrong tone', async () => {
   const view = await render(<StatusBadge tone='info'>Synced</StatusBadge>)

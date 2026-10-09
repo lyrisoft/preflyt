@@ -46,4 +46,4 @@ For a workspace that already has the GitHub App connected, use **Access Control 
 
 ## Mandatory badge colors
 
-Use `StatusBadge` for status labels and its shared `statusTones` mapping. Completed or healthy states (Synced, Approved, Active, Passed, Published, Connection tested) are green; failures are red; pending, stale or draft states are amber; information or ongoing work is blue; inactive, disabled or planned states are neutral. Never use blue for a successful sync. Add each new fixed status to the shared mapping and verify it in a regression test. Do not override semantic colors with custom CSS.
+Use `StatusBadge` for status labels and the shared `apps/web/src/lib/status-tones.ts` mapping. Completed or healthy states (Synced, Approved, Active, Passed, Published, Connection tested) are green; failures are red; pending, stale or draft states are amber; information or ongoing work is blue; inactive, disabled or planned states are neutral. Never use blue for a successful sync. Add each new fixed status to the shared mapping and verify it in a regression test. Do not override semantic colors with custom CSS.

@@ -1,31 +1,8 @@
+import { statusTones, type StatusTone } from '@/lib/status-tones'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 
-export type StatusTone = 'success' | 'warning' | 'error' | 'info' | 'neutral'
-
-/** Shared semantics take precedence over caller tone for recognized status labels. */
-export const statusTones: Readonly<Record<string, StatusTone>> = {
-  synced: 'success',
-  approved: 'success',
-  active: 'success',
-  passed: 'success',
-  published: 'success',
-  completed: 'success',
-  'connection tested': 'success',
-  failed: 'error',
-  error: 'error',
-  'model unavailable': 'error',
-  draft: 'warning',
-  pending: 'warning',
-  stale: 'warning',
-  'sync needed': 'warning',
-  running: 'info',
-  queued: 'info',
-  inactive: 'neutral',
-  disabled: 'neutral',
-  planned: 'neutral',
-  'local team': 'neutral',
-}
+export type { StatusTone } from '@/lib/status-tones'
 
 /** Semantic status label: tinted tone, leading dot and visible text. */
 export function StatusBadge({
@@ -41,7 +18,12 @@ export function StatusBadge({
     <Badge
       variant={
         typeof children === 'string'
-          ? (statusTones[children.trim().toLowerCase()] ?? tone)
+          ? Object.prototype.hasOwnProperty.call(
+              statusTones,
+              children.trim().toLowerCase()
+            )
+            ? statusTones[children.trim().toLowerCase()]
+            : tone
           : tone
       }
       className={cn('min-h-6', className)}

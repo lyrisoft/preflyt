@@ -41,7 +41,7 @@ All reads and writes are checked against current organization membership. Mutati
 
 Unit and disposable-database API tests cover authenticated encryption, endpoint changes, organization isolation, RBAC, CSRF, stale/concurrent edits, revoked access, provider failures, throttling, routing defaults and freshness. Tests create a local UUID database before any writes and drop only that database; they never truncate the application database. Chromium tests cover page access, separate tabs, failure states and default-off forms. No real provider credentials or repository source are sent during these tests.
 
-Rollback: disable `AI_CONFIGURATION_ENABLED` and retain tables, audits and encryption secrets. Do not drop organization/application tables, reset the database or rotate the encryption key to roll back the UI. The evidence-only runtime now implements estimated budget reservations, cancellation and fixture-tested gate independence. Full P4 still requires contextual PR review and its acceptance work.
+Rollback: disable `AI_CONFIGURATION_ENABLED` and retain tables, audits and encryption secrets. Do not drop organization/application tables, reset the database or rotate the encryption key to roll back the UI. The evidence-only runtime now implements estimated budget reservations, cancellation and fixture-tested gate independence. Bounded contextual PR review and automatic dispatch are now implemented; full P4 still requires language-based selection, provider billing telemetry, LiteLLM and remaining live acceptance. See [automatic review setup](review-skills.md#automatic-pr-reviews-and-github-feedback).
 
 ## Upgrade from the initial connection setup
 

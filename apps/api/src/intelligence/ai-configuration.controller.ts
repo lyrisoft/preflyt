@@ -43,6 +43,8 @@ class ProviderDto {
   @IsInt() @Min(0) @Max(2147483646) expectedRevision!: number;
 }
 class RouteDto {
+  @IsOptional() @IsBoolean() automaticReviews?: boolean;
+  @IsOptional() @IsBoolean() publishSummary?: boolean;
   @ValidateIf((_o, v) => v !== null) @IsUUID() primaryId!: string | null;
   @ValidateIf((_o, v) => v !== null) @IsUUID() fallbackId!: string | null;
   @IsBoolean() enabled!: boolean;

@@ -1,3 +1,7 @@
+import { GitHubProviderService } from "../github/github-provider.service.js";
+import { readPullRequestContext } from "../github-events/pull-request-context.js";
+import { sameReviewPr, publicPrSource } from "./pr-review-context.js";
+import { verifyTeamContext } from "../teams/team-context.js";
 import {
   BadRequestException,
   ConflictException,
@@ -5,6 +9,7 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  Optional,
   ServiceUnavailableException,
 } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service.js";
@@ -44,6 +49,13 @@ const reviewTasks = (checks: AiCheck[], skills: AiReviewSkill[]) =>
   });
 export const skillReviewsEnabled = aiReviewsEnabled;
 type Snapshot = {
+  automatic?: {
+    key: string;
+    policyId: string;
+    policyHash: string;
+    number: number;
+    context: NonNullable<ReturnType<typeof readPullRequestContext>>;
+  };
   context: ReviewContext;
   skills: AiReviewSkill[];
   checks: AiCheck[];
@@ -54,6 +66,10 @@ type Snapshot = {
 };
 const publicReview = (r: any) => ({
   id: r.id,
+  automatic: !!(r.snapshot as Snapshot).automatic,
+  feedbackState: r.feedbackState,
+  feedbackUrl: r.feedbackUrl,
+  sourceReviewed: !!(r.snapshot as Snapshot).context.source,
   assessmentId: r.assessmentId,
   state: r.state,
   failure: r.failure,
@@ -81,6 +97,9 @@ export class SkillReviewService {
     @Inject(AssessmentService) private readonly assessments: AssessmentService,
     @Inject(AiConfigurationService)
     private readonly configuration: AiConfigurationService,
+    @Optional()
+    @Inject(GitHubProviderService)
+    private readonly github?: GitHubProviderService,
   ) {}
   close() {
     this.closing = true;
@@ -149,6 +168,10 @@ export class SkillReviewService {
     repoId: string,
     assessmentId: string,
     checkIds: string[],
+    options: {
+      includeSource?: boolean;
+      automatic?: Snapshot["automatic"];
+    } = {},
   ) {
     if (!skillReviewsEnabled())
       throw new ServiceUnavailableException(
@@ -221,6 +244,39 @@ export class SkillReviewService {
       throw new ConflictException(
         "Configure an enabled model route for this stage",
       );
+    if (
+      options.automatic &&
+      (!route.automaticReviews || stage !== "pull_request")
+    )
+      throw new ConflictException("Automatic PR reviews are disabled");
+    if (options.automatic) {
+      const existing = await this.db.aiSkillReview.findUnique({
+        where: { automaticKey: options.automatic.key },
+      });
+      if (existing) return publicReview(existing);
+    }
+    if (options.includeSource) {
+      const pr = (record.request as { pullRequest?: { number?: number } })
+        .pullRequest;
+      const expected = readPullRequestContext(pr);
+      if (
+        !route.allowSource ||
+        stage !== "pull_request" ||
+        !expected ||
+        expected.head.sha !== record.sourceSha ||
+        !pr?.number ||
+        !this.github
+      )
+        throw new ConflictException(
+          "Enable PR source sharing and choose a current PR assessment before reviewing code",
+        );
+      context.source = await this.github.readPrReviewSource(
+        repo.installationId,
+        repo.githubId,
+        pr.number,
+        expected,
+      );
+    }
     const prompt = reviewPrompt(reviewTasks(checks, skills), context),
       inputTokens = Buffer.byteLength(prompt.system + prompt.user) + 1024;
     if (inputTokens > route.maxInputTokens)
@@ -249,6 +305,7 @@ export class SkillReviewService {
       );
     }
     const snapshot: Snapshot = {
+      ...(options.automatic ? { automatic: options.automatic } : {}),
       context,
       skills,
       checks,
@@ -271,6 +328,12 @@ export class SkillReviewService {
             repoId,
             "ai.review.run",
           );
+          const automaticDuplicate = options.automatic
+            ? await tx.aiSkillReview.findUnique({
+                where: { automaticKey: options.automatic.key },
+              })
+            : null;
+          if (automaticDuplicate) return automaticDuplicate;
           const existing = await tx.aiSkillReview.findUnique({
             where: {
               organizationId_actorId_fingerprint: {
@@ -347,6 +410,11 @@ export class SkillReviewService {
               actorId: session.identityId,
               stage,
               fingerprint,
+              automaticKey: options.automatic?.key,
+              feedbackState:
+                options.automatic && route.publishSummary
+                  ? "PENDING"
+                  : "NOT_REQUESTED",
               snapshot: JSON.parse(JSON.stringify(snapshot)),
               reservedMicroCents: reserved,
             },
@@ -422,7 +490,14 @@ export class SkillReviewService {
     const assessment = await this.assessments.get(repoId, assessmentId);
     if (
       assessment.assessmentHash !== snapshot.context.assessmentHash ||
-      digest(reviewContext(assessment)) !== digest(snapshot.context)
+      digest(reviewContext(assessment)) !==
+        digest(
+          Object.fromEntries(
+            Object.entries(snapshot.context).filter(
+              ([key]) => key !== "source",
+            ),
+          ),
+        )
     )
       throw new Error("Assessment changed");
     const assigned = assessmentAiChecks(
@@ -444,7 +519,28 @@ export class SkillReviewService {
         enabled: true,
       },
     });
-    if (!route) throw new Error("Route changed");
+    if (
+      !route ||
+      (snapshot.context.source && !route.allowSource) ||
+      (snapshot.automatic && !route.automaticReviews)
+    )
+      throw new Error("Route changed");
+    if (snapshot.automatic) await this.currentPolicy(session, repoId, snapshot);
+    if (snapshot.context.source) {
+      const observed = await this.db.repositoryPullRequest.findUnique({
+        where: {
+          repositoryId_number: {
+            repositoryId: assessment.repositoryId,
+            number: snapshot.context.source.number,
+          },
+        },
+      });
+      if (
+        !observed ||
+        !sameReviewPr(snapshot.context.source.context, observed.context)
+      )
+        throw new Error("PR changed");
+    }
     for (const skill of snapshot.skills) {
       const current = await this.db.aiReviewSkill.findFirst({
         where: {
@@ -475,8 +571,379 @@ export class SkillReviewService {
     }
     return route;
   }
+  private async currentPolicy(
+    session: AuthenticatedSession,
+    repoId: string,
+    snapshot: Snapshot,
+    db: PrismaService = this.db,
+  ) {
+    const pin = snapshot.automatic!;
+    const repo = await new AuthorizationService(db).requireRepository(
+      session,
+      repoId,
+      "ai.review.run",
+    );
+    const policy = await db.gatePolicyRevision.findFirst({
+      where: {
+        repositoryId: repo.id,
+        branchRef: `refs/heads/${pin.context.base.ref}`,
+        state: "PUBLISHED",
+      },
+      orderBy: { publishedAt: "desc" },
+    });
+    const selection = await db.repositoryStandardsSelection.findFirst({
+      where: { repositoryId: repo.id },
+      orderBy: { revision: "desc" },
+    });
+    if (
+      !policy ||
+      policy.id !== pin.policyId ||
+      policy.definitionHash !== pin.policyHash ||
+      digest(policy.definition) !== pin.policyHash ||
+      policy.selectionId !== selection?.id ||
+      !policy.publishedById
+    )
+      throw new Error("Published policy changed");
+    const publisher: AuthenticatedSession = {
+      ...session,
+      identityId: policy.publishedById,
+    };
+    await new AuthorizationService(db).requireRepository(
+      publisher,
+      repoId,
+      "policy.publish",
+    );
+    await verifyTeamContext(
+      db,
+      repo.id,
+      (policy.definition as { teamContext?: unknown }).teamContext,
+    );
+  }
+  private async verifyLivePr(
+    repo: { installationId: bigint; githubId: bigint },
+    snapshot: Snapshot,
+  ) {
+    const expected =
+      snapshot.context.source?.context ?? snapshot.automatic?.context;
+    const number =
+      snapshot.context.source?.number ?? snapshot.automatic?.number;
+    if (!expected || !number) return;
+    if (!this.github) throw new Error("GitHub unavailable");
+    const live = await this.github.readPullRequest(
+      repo.installationId,
+      repo.githubId,
+      number,
+    );
+    if (!sameReviewPr(expected, live.context)) throw new Error("PR changed");
+  }
+  /** Durable PR observations come from signed webhook processing. Claims rotate fairly and retry admission failures once per minute. */
+  async dispatchAutomatic() {
+    if (!skillReviewsEnabled() || !this.github || this.closing) return;
+    const pr = await this.db.repositoryPullRequest.findFirst({
+      where: {
+        OR: [
+          { aiReviewAttemptAt: null },
+          { aiReviewAttemptAt: { lt: new Date(Date.now() - 60000) } },
+        ],
+        repository: {
+          selected: true,
+          available: true,
+          installation: {
+            active: true,
+            organization: {
+              aiRoutes: {
+                some: {
+                  stage: "pull_request",
+                  enabled: true,
+                  automaticReviews: true,
+                },
+              },
+            },
+          },
+        },
+      },
+      orderBy: [
+        { aiReviewAttemptAt: { sort: "asc", nulls: "first" } },
+        { id: "asc" },
+      ],
+      include: { repository: { include: { installation: true } } },
+    });
+    if (!pr) return;
+    const claimed = await this.db.repositoryPullRequest.updateMany({
+      where: {
+        id: pr.id,
+        revision: pr.revision,
+        aiReviewAttemptAt: pr.aiReviewAttemptAt,
+      },
+      data: { aiReviewAttemptAt: new Date() },
+    });
+    if (!claimed.count) return;
+    const context = readPullRequestContext(pr.context),
+      organizationId = pr.repository.installation.organizationId;
+    if (
+      !context ||
+      !sameReviewPr(context, context) ||
+      context.head.repositoryId !== context.base.repositoryId ||
+      !organizationId
+    )
+      return;
+    const route = await this.db.aiStageRoute.findUnique({
+      where: {
+        organizationId_stage: { organizationId, stage: "pull_request" },
+      },
+    });
+    const policy = await this.db.gatePolicyRevision.findFirst({
+      where: {
+        repositoryId: pr.repositoryId,
+        branchRef: `refs/heads/${context.base.ref}`,
+        state: "PUBLISHED",
+      },
+      orderBy: { publishedAt: "desc" },
+    });
+    if (!route?.automaticReviews || !route.enabled || !policy) return;
+    let assessment = await this.db.commitAssessment.findFirst({
+      where: {
+        repositoryId: pr.repositoryId,
+        sourceSha: context.head.sha,
+        selectionId: policy.selectionId,
+        request: { path: ["subjectKind"], equals: "PULL_REQUEST" },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    const session: AuthenticatedSession = {
+      authenticated: true,
+      identityId: route.updatedById,
+      organizationId,
+      subject: "",
+      email: null,
+      role: "VIEWER",
+    };
+    if (
+      !assessment ||
+      !sameReviewPr(
+        (assessment.request as { pullRequest?: unknown }).pullRequest,
+        context,
+      )
+    ) {
+      try {
+        const automatic = {
+          policyId: policy.id,
+          policyHash: policy.definitionHash,
+          number: pr.number,
+          context,
+        };
+        await this.currentPolicy(session, pr.repository.githubId.toString(), {
+          automatic,
+        } as Snapshot);
+        await this.access.requireRepository(
+          session,
+          pr.repository.githubId.toString(),
+          "assessment.request",
+        );
+        const live = await this.github.readPullRequest(
+          pr.repository.installationId,
+          pr.repository.githubId,
+          pr.number,
+        );
+        if (!sameReviewPr(context, live.context)) return;
+        const created = await this.assessments.createAutomatic(
+          pr.repository.githubId.toString(),
+          context.head.sha,
+          policy.selectionId,
+          `ai-pr:${digest({ context, policy: policy.definitionHash, number: pr.number })}`,
+          route.updatedById,
+          { ...context, number: pr.number, objectId: live.sourceObjectId },
+        );
+        assessment = await this.db.commitAssessment.findUnique({
+          where: { id: created.assessment.id },
+        });
+      } catch {
+        return;
+      }
+    }
+    if (!assessment) return;
+    const checks = assessmentAiChecks(assessment.plan, "pull_request").sort(
+      (a, b) => a.id.localeCompare(b.id),
+    );
+    const published =
+      (policy.definition as { aiChecks?: AiCheck[] }).aiChecks ?? [];
+    if (
+      !checks.length ||
+      checks.some((c) => !published.some((p) => digest(p) === digest(c)))
+    )
+      return;
+    for (let index = 0; index < checks.length; index += 3) {
+      const selected = checks.slice(index, index + 3);
+      const automatic = {
+        key: digest({
+          organizationId,
+          repositoryId: pr.repositoryId,
+          number: pr.number,
+          context,
+          policyHash: policy.definitionHash,
+          routeRevision: route.revision,
+          checks: selected,
+        }),
+        policyId: policy.id,
+        policyHash: policy.definitionHash,
+        number: pr.number,
+        context,
+      };
+      try {
+        await this.currentPolicy(session, pr.repository.githubId.toString(), {
+          automatic,
+        } as Snapshot);
+        await this.request(
+          session,
+          pr.repository.githubId.toString(),
+          assessment.id,
+          selected.map((c) => c.id),
+          { automatic, includeSource: route.allowSource },
+        );
+      } catch {
+        // A stable audit key bounds repeated errors without exposing provider responses or source.
+        const metadata = {
+          organizationId,
+          repositoryId: pr.repositoryId,
+          dispatchKey: automatic.key,
+          number: pr.number,
+          sourceSha: context.head.sha,
+        };
+        if (
+          !(await this.db.auditEvent.findFirst({
+            where: {
+              event: "ai.review.dispatch_unavailable",
+              metadata: { path: ["dispatchKey"], equals: automatic.key },
+            },
+          }))
+        )
+          await this.db.auditEvent.create({
+            data: {
+              actorId: route.updatedById,
+              event: "ai.review.dispatch_unavailable",
+              metadata,
+            },
+          });
+      }
+    }
+  }
+  async publishPendingSummary() {
+    if (!this.github || process.env.GITHUB_CHECK_PUBLICATION_ENABLED !== "true")
+      return;
+    const job = await this.db.aiSkillReview.findFirst({
+      where: {
+        state: "SUCCEEDED",
+        feedbackState: { in: ["PENDING", "RETRY"] },
+        feedbackAttempts: { lt: 5 },
+        OR: [
+          { feedbackAttemptAt: null },
+          { feedbackAttemptAt: { lt: new Date(Date.now() - 60000) } },
+        ],
+      },
+      orderBy: { createdAt: "asc" },
+      include: { repository: true },
+    });
+    if (!job) return;
+    const claim = await this.db.aiSkillReview.updateMany({
+      where: {
+        id: job.id,
+        feedbackAttempts: job.feedbackAttempts,
+        feedbackAttemptAt: job.feedbackAttemptAt,
+      },
+      data: {
+        feedbackAttempts: { increment: 1 },
+        feedbackAttemptAt: new Date(),
+      },
+    });
+    if (!claim.count) return;
+    const snapshot = job.snapshot as unknown as Snapshot;
+    const session: AuthenticatedSession = {
+      authenticated: true,
+      identityId: job.actorId,
+      organizationId: job.organizationId,
+      subject: "",
+      email: null,
+      role: "VIEWER",
+    };
+    try {
+      const route = await this.current(
+        session,
+        job.repository.githubId.toString(),
+        job.assessmentId,
+        snapshot,
+      );
+      if (!route.publishSummary || !snapshot.automatic)
+        throw new Error("Summary disabled");
+      await this.verifyLivePr(job.repository, snapshot);
+      const result = job.result as {
+        findings: {
+          summary: string;
+          recommendation: string;
+          evidenceRefs: string[];
+        }[];
+      };
+      const safe = (s: string) => s.replace(/[\`*_<>#@\[\]]/g, "");
+      const summary = [
+        `Advisory review for PR #${snapshot.automatic.number}, commit ${snapshot.context.sourceSha}. AI does not decide readiness.`,
+        ...result.findings.map(
+          (f) =>
+            `- ${safe(f.summary)} ${safe(f.recommendation)} (${f.evidenceRefs
+              .map((ref) => {
+                const line = snapshot.context.source?.lines.find(
+                  (l) => l.ref === ref,
+                );
+                return line
+                  ? `${safe(line.path)}:${line.line} ${line.side}`
+                  : ref;
+              })
+              .join(", ")})`,
+        ),
+        ...(result.findings.length
+          ? []
+          : [
+              "No advisory suggestions returned; this is not a passing engineering check.",
+            ]),
+        ...(snapshot.context.source
+          ? [
+              `Scope: ${snapshot.context.source.lines.length} changed lines; ${snapshot.context.source.omittedFiles} files and ${snapshot.context.source.omittedLines} lines omitted.`,
+            ]
+          : ["Assessment evidence only; repository source was not shared."]),
+      ].join("\n\n");
+      const publication = await this.github.publishAiReviewSummary(
+        job.repository.installationId,
+        job.repository.githubId,
+        snapshot.context.sourceSha,
+        digest({ kind: "AI_SUMMARY", key: snapshot.automatic.key }),
+        summary,
+      );
+      await this.db.aiSkillReview.update({
+        where: { id: job.id },
+        data: { feedbackState: "PUBLISHED", feedbackUrl: publication.htmlUrl },
+      });
+      await this.db.auditEvent.create({
+        data: {
+          actorId: job.actorId,
+          event: "ai.review.summary_published",
+          metadata: {
+            organizationId: job.organizationId,
+            reviewId: job.id,
+            sourceSha: snapshot.context.sourceSha,
+          },
+        },
+      });
+    } catch {
+      await this.db.aiSkillReview.update({
+        where: { id: job.id },
+        data: {
+          feedbackState: job.feedbackAttempts >= 4 ? "UNAVAILABLE" : "RETRY",
+        },
+      });
+    }
+  }
   async reconcile() {
     if (this.closing || !skillReviewsEnabled()) return;
+    await this.dispatchAutomatic();
+    await this.publishPendingSummary();
     await this.db.aiSkillReview.updateMany({
       where: {
         state: "RUNNING",
@@ -564,6 +1031,7 @@ export class SkillReviewService {
         )
           throw new Error("Provider changed");
         try {
+          await this.verifyLivePr(job.repository, snapshot);
           findings = await runSkillInference(
             provider,
             reviewTasks(snapshot.checks, snapshot.skills),
@@ -578,6 +1046,7 @@ export class SkillReviewService {
         }
       }
       if (!findings) throw new Error("Unavailable");
+      await this.verifyLivePr(job.repository, snapshot);
       signal.throwIfAborted();
       await this.current(
         session,
@@ -605,6 +1074,29 @@ export class SkillReviewService {
             }))
           )
             throw new Error("Route changed");
+          if (snapshot.automatic)
+            await this.currentPolicy(
+              session,
+              job.repository.githubId.toString(),
+              snapshot,
+              tx as PrismaService,
+            );
+          const sourceContext =
+            snapshot.context.source?.context ?? snapshot.automatic?.context;
+          const prNumber =
+            snapshot.context.source?.number ?? snapshot.automatic?.number;
+          if (sourceContext && prNumber) {
+            const observed = await tx.repositoryPullRequest.findUnique({
+              where: {
+                repositoryId_number: {
+                  repositoryId: job.repositoryId,
+                  number: prNumber,
+                },
+              },
+            });
+            if (!observed || !sameReviewPr(sourceContext, observed.context))
+              throw new Error("PR changed");
+          }
           for (const skill of snapshot.skills) {
             const live = await tx.aiReviewSkill.findFirst({
               where: {
@@ -640,7 +1132,12 @@ export class SkillReviewService {
               providerId,
               result: {
                 findings,
-                context: snapshot.context,
+                context: {
+                  ...snapshot.context,
+                  ...(snapshot.context.source
+                    ? { source: publicPrSource(snapshot.context.source) }
+                    : {}),
+                },
                 classification: "ADVISORY",
                 inputTokenEstimate: snapshot.inputTokens,
                 maxOutputTokens: snapshot.maxOutputTokens,
@@ -657,6 +1154,7 @@ export class SkillReviewService {
         where: { id: job.id, state: "RUNNING" },
         data: {
           state: "UNAVAILABLE",
+          feedbackState: "NOT_REQUESTED",
           failure:
             "Review unavailable: check current access, approved skills, model route and connection",
           latencyMs: Date.now() - start,

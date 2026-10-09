@@ -118,7 +118,7 @@ async function start() {
     await telemetryOperation('preflyt.notification.email', { 'notification.delivery.id': job.data.deliveryId }, () => deliverNotificationEmail(prisma, emailAuthorization, mail, job.data.deliveryId))
   }, { ...consumerConfig, connection: consumer, concurrency: 2, autorun: notificationsEnabled() && emailNotificationsEnabled() })
   const assessments = new AssessmentService(prisma)
-  const aiReviews = new SkillReviewService(prisma, emailAuthorization, assessments, new AiConfigurationService(prisma, emailAuthorization))
+  const aiReviews = new SkillReviewService(prisma, emailAuthorization, assessments, new AiConfigurationService(prisma, emailAuthorization), githubProvider)
   let aiReviewRun: Promise<void> | undefined
   const native = new NativeDispatchService(prisma, emailAuthorization, githubProvider, new NativeStatusService(emailAuthorization), new NativeResultService(prisma, emailAuthorization, assessments))
   let nativeRun: Promise<void> | undefined

@@ -1,3 +1,5 @@
+import { sameReviewPr, prReviewSource } from '../intelligence/pr-review-context.js'
+import type { PullRequestContext } from '../github-events/pull-request-context.js'
 import { readPinnedNativeSource } from '../execution/native-source.js'
 import { attributedSuite, summarizeRulesetSuites, type RulesetSuite } from './ruleset-insights.js'
 import { rulesetSummary, rulesetDetail } from './github-ruleset.js'
@@ -710,17 +712,17 @@ export class GitHubProviderService {
       head_sha: string
       external_id: string
       status: 'completed'
-      conclusion: 'failure' | 'action_required' | 'success'
+      conclusion: 'failure' | 'action_required' | 'success' | 'neutral'
       output: { title: string; summary: string }
     },
     verifiedPolicy = false,
     refreshExisting = false,
+    advisory = false,
   ) {
     const { appId } = await this.checkPublicationAccess(installationId)
     // Observe previews cannot publish success; only a verified published-policy evaluation can.
     if (
-      payload.name !== 'Preflyt / Engineering Readiness' ||
-      !(['failure', 'action_required', ...(verifiedPolicy ? ['success'] : [])]).includes(payload.conclusion) ||
+      (advisory ? payload.name !== 'Preflyt / AI Review' || payload.conclusion !== 'neutral' : payload.name !== 'Preflyt / Engineering Readiness' || !(['failure', 'action_required', ...(verifiedPolicy ? ['success'] : [])]).includes(payload.conclusion)) ||
       !/^[a-f0-9]{40}$/.test(payload.head_sha) ||
       !/^[a-f0-9]{64}$/.test(payload.external_id)
     )
@@ -930,6 +932,30 @@ export class GitHubProviderService {
     if(!Array.isArray(rows) || rows.length>=100)throw new ServiceUnavailableException('Open pull request scope exceeds the safe activation limit')
     if(rows.some(row=>!Number.isSafeInteger(row.number)||row.number<1||!/^[a-f0-9]{40}$/.test(row.head?.sha)||String(row.base?.repo?.id)!==repositoryId.toString()||!validProfileBranch(row.base?.ref)))throw new ServiceUnavailableException('Invalid open pull request identity')
     return rows.map(row=>({number:row.number,headSha:row.head?.sha,headRepositoryId:String(row.head?.repo?.id),baseBranch:row.base?.ref,draft:row.draft===true}))
+  }
+
+  /** Verify both sides of a bounded PR files read; no checkout or code execution. */
+  async publishAiReviewSummary(installationId: bigint, repositoryId: bigint, sourceSha: string, externalId: string, summary: string) {
+    if (summary.length > 60000) throw new BadRequestException('AI summary exceeds limit')
+    return this.publishReadinessCheck(installationId, repositoryId, {name:'Preflyt / AI Review',head_sha:sourceSha,external_id:externalId,status:'completed',conclusion:'neutral',output:{title:'Advisory AI review — does not decide merge readiness',summary}},false,true,true)
+  }
+
+  async readPrReviewSource(installationId: bigint, repositoryId: bigint, number: number, expected: PullRequestContext) {
+    const before = await this.readPullRequest(installationId, repositoryId, number)
+    if (!sameReviewPr(expected, before.context) || expected.base.repositoryId !== repositoryId.toString()) throw new ConflictException('PR changed before source review')
+    const reader = await this.openRepository(installationId, repositoryId, 'pull_requests')
+    const root = `/repos/${encodeURIComponent(reader.metadata.owner.login)}/${encodeURIComponent(reader.metadata.name)}/pulls/${number}`
+    const files: unknown[] = []
+    for (let page = 1; page <= 3; page++) {
+      const rows = await reader.request<unknown[]>(`${root}/files?per_page=100&page=${page}`)
+      if (!Array.isArray(rows) || rows.length > 100) throw new ServiceUnavailableException('PR files unavailable')
+      files.push(...rows)
+      if (files.length > 200) throw new ServiceUnavailableException('PR exceeds 200-file source review limit')
+      if (rows.length < 100) break
+    }
+    const after = await this.readPullRequest(installationId, repositoryId, number)
+    if (!sameReviewPr(expected, after.context)) throw new ConflictException('PR changed while reading source')
+    return prReviewSource(number, expected, files)
   }
 
   async readPullRequest(
