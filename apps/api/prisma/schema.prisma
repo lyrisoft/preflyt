@@ -180,6 +180,7 @@ model GitHubRepository {
   ruleSuiteSnapshots GitHubRuleSuiteSnapshot[]
   insightsSync GitHubInsightsSync?
   nativeRequests NativeExecutionRequest[]
+  skillReviews AiSkillReview[]
   profiles       RepositoryProfile[]
   @@index([installationId, selected])
 }
@@ -310,6 +311,7 @@ model CommitAssessment {
   plan           Json
   report         Json
   assessmentHash String
+  skillReviews AiSkillReview[]
   createdAt      DateTime @default(now())
   @@unique([repositoryId, requestKey])
   @@index([repositoryId, sourceSha, createdAt])
@@ -394,6 +396,9 @@ model Organization {
   githubAccessEvidence GitHubUserAccessEvidence[]
   aiProviders AiProviderConnection[]
   aiRoutes AiStageRoute[]
+  reviewSkills AiReviewSkill[]
+  skillReviews AiSkillReview[]
+  reviewBudgets AiReviewBudget[]
 }
 
 model OrganizationMembership {
@@ -854,6 +859,8 @@ model OrganizationStandardVersion {
 }
 
 model AiProviderConnection {
+  inputPriceCentsPerMillion Int?
+  outputPriceCentsPerMillion Int?
   id String @id @default(uuid())
   organizationId String
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
@@ -889,4 +896,63 @@ model AiStageRoute {
   updatedById String
   updatedAt DateTime @updatedAt
   @@unique([organizationId, stage])
+}
+
+model AiReviewSkill {
+  id String @id @default(uuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  skillKey String
+  version Int
+  name String
+  description String
+  instructions String
+  stages String[]
+  repositories String[]
+  source String
+  license String
+  contentDigest String
+  status String @default("DRAFT")
+  enabled Boolean @default(false)
+  createdById String
+  approvedById String?
+  approvedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([organizationId, skillKey, version])
+  @@index([organizationId, createdAt])
+}
+model AiSkillReview {
+  id String @id @default(uuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  repositoryId String
+  repository GitHubRepository @relation(fields: [repositoryId], references: [id], onDelete: Restrict)
+  assessmentId String
+  assessment CommitAssessment @relation(fields: [assessmentId], references: [id], onDelete: Restrict)
+  actorId String
+  fingerprint String
+  stage String
+  snapshot Json
+  reservedMicroCents BigInt
+  state String @default("QUEUED")
+  result Json?
+  failure String?
+  providerId String?
+  latencyMs Int?
+  startedAt DateTime?
+  finishedAt DateTime?
+  createdAt DateTime @default(now())
+  @@unique([organizationId, actorId, fingerprint])
+  @@index([state, createdAt])
+  @@index([organizationId, repositoryId, assessmentId, createdAt])
+}
+model AiReviewBudget {
+  id String @id @default(uuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  stage String
+  day String
+  reservedMicroCents BigInt @default(0)
+  @@unique([organizationId, stage, day])
 }

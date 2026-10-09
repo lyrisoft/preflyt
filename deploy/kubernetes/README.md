@@ -63,3 +63,8 @@ The restricted PostgreSQL startup and application-role initialization are also c
 The bundle is locally rendered and checked for security, persistence, credentials and Compose parity. It has not been applied to a production cluster or accepted as a complete deployment. No existing user cluster was touched.
 
 References: [Kubernetes security contexts](https://kubernetes.io/docs/tasks/configure-pod-container/security-context/) and [Jobs](https://kubernetes.io/docs/concepts/workloads/controllers/job/).
+
+
+### Advisory AI reviews
+
+Enable `AI_CONFIGURATION_ENABLED` and `AI_REVIEWS_ENABLED` in `preflyt-config` only after model/skill setup. Supply the same separate stable `AI_PROVIDER_ENCRYPTION_KEY` in API and worker Secrets. The existing worker processes explicit evidence-only reviews; it needs model egress, not runtime-control permissions. See [review skills deployment](../../docs/operations/review-skills.md).

@@ -679,3 +679,8 @@ A task can be developed behind a feature flag in parallel, but it cannot be coun
 ---
 
 **Decision for review:** Approve the **assessment-first Shift Left** scope and MVP gates. Do not start coding-agent/remediation development as if it is required for Preflyt to deliver value.
+
+
+### Review skills delivery note (2026-10-09)
+
+The versioned instruction-only skills catalogue and explicit multi-skill review of saved assessment check evidence are implemented. Scope is repository/PR stage and authorized repository assignment; results are inferred suggestions with validated check references. Source-code/diff review, changed-line references, imported third-party skills and automatic GitHub feedback remain target requirements. See [current setup and limits](operations/review-skills.md).

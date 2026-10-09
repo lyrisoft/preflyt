@@ -1,3 +1,5 @@
+import { SkillReviewService } from './intelligence/skill-review.service.js'
+import { AiConfigurationService } from './intelligence/ai-configuration.service.js'
 import { NativeDispatchService } from './execution/native-dispatch.service.js'
 import { NativeResultService } from './execution/native-result.service.js'
 import { NativeStatusService } from './execution/native-status.service.js'
@@ -116,6 +118,8 @@ async function start() {
     await telemetryOperation('preflyt.notification.email', { 'notification.delivery.id': job.data.deliveryId }, () => deliverNotificationEmail(prisma, emailAuthorization, mail, job.data.deliveryId))
   }, { ...consumerConfig, connection: consumer, concurrency: 2, autorun: notificationsEnabled() && emailNotificationsEnabled() })
   const assessments = new AssessmentService(prisma)
+  const aiReviews = new SkillReviewService(prisma, emailAuthorization, assessments, new AiConfigurationService(prisma, emailAuthorization))
+  let aiReviewRun: Promise<void> | undefined
   const native = new NativeDispatchService(prisma, emailAuthorization, githubProvider, new NativeStatusService(emailAuthorization), new NativeResultService(prisma, emailAuthorization, assessments))
   let nativeRun: Promise<void> | undefined
   const checks = new CheckPublicationService(prisma, emailAuthorization, githubProvider, assessments)
@@ -177,6 +181,7 @@ async function start() {
             syncRun = undefined
           })
       }
+      if (!aiReviewRun) aiReviewRun = aiReviews.reconcile().catch(warn).finally(() => { aiReviewRun = undefined })
       if (!nativeRun) nativeRun = native.reconcile().catch(warn).finally(() => { nativeRun = undefined })
       if (!automationRun) automationRun = automation.reconcile().catch(warn).finally(() => { automationRun = undefined })
       if (!historyRun) historyRun = rulesetHistory.reconcile().catch(warn).finally(() => { historyRun = undefined })
@@ -198,6 +203,7 @@ async function start() {
     if (closing) return
     closing = true
     clearInterval(timer)
+    aiReviews.close()
     native.close()
     sync.close()
     prSync.close()
@@ -218,6 +224,7 @@ async function start() {
     await queue.close()
     producer.disconnect()
     consumer.disconnect()
+    await aiReviewRun
     await nativeRun
     await syncRun
     await automationRun

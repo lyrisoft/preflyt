@@ -54,8 +54,9 @@ export function allowedAiAddress(
 export async function aiHttpRequest(
   url: URL,
   locality: "local" | "hosted",
-  options: { headers: Record<string, string>; signal: AbortSignal },
+  options: { headers: Record<string, string>; signal: AbortSignal; body?: string },
 ) {
+  if (options.body && Buffer.byteLength(options.body) > 65536) throw new Error("Request limit");
   const host = url.hostname.replace(/^\[|\]$/g, "");
   if (isIP(host) && !allowedAiAddress(host, locality))
     throw new Error("Model endpoint address is not allowed");
@@ -64,7 +65,7 @@ export async function aiHttpRequest(
     const req = send(
       url,
       {
-        method: "GET",
+        method: options.body === undefined ? "GET" : "POST",
         headers: options.headers,
         signal: options.signal,
         agent: false,
@@ -124,6 +125,6 @@ export async function aiHttpRequest(
       },
     );
     req.on("error", reject);
-    req.end();
+    req.end(options.body);
   });
 }

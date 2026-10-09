@@ -30,6 +30,8 @@ import {
 } from "../auth/session.guard.js";
 import { AiConfigurationService } from "./ai-configuration.service.js";
 class ProviderDto {
+  @IsOptional() @IsInt() @Min(0) @Max(100000000) inputPriceCentsPerMillion?: number | null;
+  @IsOptional() @IsInt() @Min(0) @Max(100000000) outputPriceCentsPerMillion?: number | null;
   @IsOptional() @IsIn(["openai", "anthropic", "gemini", "deepseek"]) preset?: string;
   @IsString() @MinLength(1) @MaxLength(120) name!: string;
   @IsString() @MaxLength(2048) baseUrl!: string;

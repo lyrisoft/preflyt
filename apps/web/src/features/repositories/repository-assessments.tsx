@@ -46,6 +46,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { StatusBadge } from '@/components/status-badge'
+import { SkillReviewPanel } from '../intelligence/skill-review-panel'
 import { AssessmentContext } from './assessment-context'
 import { AssessmentCoverageChart } from './assessment-coverage-chart'
 import type { ContextRequest } from './engineering-queries'
@@ -307,7 +308,7 @@ export function RepositoryAssessments({
       return response.json() as Promise<Assessment>
     },
   })
-  const data = detail.data
+  const data = detail.isError ? undefined : detail.data
   const sources = new Map(
     data?.report.observations.map((item) => [
       item.deliveryId,
@@ -547,6 +548,16 @@ export function RepositoryAssessments({
                       missing={noInputs}
                       selected={inputFilter}
                       onSelect={setInputFilter}
+                    />
+                    <SkillReviewPanel
+                      key={data.id}
+                      repositoryId={repositoryId}
+                      assessmentId={data.id}
+                      stage={
+                        data.request.subjectKind === 'PULL_REQUEST'
+                          ? 'pull_request'
+                          : 'repository'
+                      }
                     />
                     <div className='grid grid-cols-2 gap-3'>
                       <div className='rounded-lg border border-info/20 bg-info/5 p-4'>

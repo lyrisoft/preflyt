@@ -27,6 +27,7 @@ import {
   useNavigationSession,
   canAdminister,
 } from '../workspace/navigation-session'
+import { SkillsCatalogue } from './skills-catalogue'
 
 type Preset = {
   id: string
@@ -53,6 +54,8 @@ type Provider = {
   revision: number
   testStatus: string
   approved: boolean
+  inputPriceCentsPerMillion?: number | null
+  outputPriceCentsPerMillion?: number | null
   apiKeySet: boolean
 }
 type StageRoute = {
@@ -129,9 +132,14 @@ const help = [
       'Each stage has a primary model and an optional fallback. Source sharing starts off. A connection must be enabled and successfully tested within the last 24 hours before its route is ready. Switching organizations separates connections and routes.',
   },
   {
+    title: 'Review skills',
+    content:
+      'Create a versioned skill or start from a first-party template. Review its instructions, source and license, then approve and enable it. Changes require a new version. Skills run only against their assigned stage and repository scope, with up to three skills per review. Model output is advisory and never changes deterministic checks. Third-party packages and scripts are not automatically imported or executed.',
+  },
+  {
     title: 'Current availability',
     content:
-      'These settings prepare model connections. AI explanations and usage enforcement are still being built. Saving a budget does not start requests or enforce spending yet. AI never approves policies or changes deterministic checks.',
+      'These settings prepare model connections. Skill reviews use saved assessment evidence only. Reviews require enabled, tested model routing and configured input/output rates. Reservations enforce the configured daily estimate budget; they are not the provider’s final bill. Source review and GitHub feedback are not available. AI never approves policies or changes deterministic checks.',
   },
 ]
 export function AiSettingsPage() {
@@ -146,7 +154,12 @@ export function AiSettingsPage() {
         ) : session.isError ? (
           <p role='alert'>Access details unavailable. Refresh and try again.</p>
         ) : !allowed ? (
-          <p role='alert'>Owner or Admin access is required.</p>
+          <div className='space-y-6'>
+            <h1 className='text-2xl font-semibold'>AI Intelligence</h1>
+            <SkillsCatalogue
+              key={`${session.data?.identityId}:${session.data?.organizationId}`}
+            />
+          </div>
         ) : (
           <AiSettings
             key={`${session.data?.identityId}:${session.data?.organizationId}`}
@@ -260,8 +273,9 @@ function AiSettings({
         <>
           <div className='flex items-center gap-2 rounded-lg border bg-info/5 p-3 text-sm'>
             <ShieldCheck className='size-4 shrink-0 text-info' />
-            Connection setup is available. AI explanations are still being
-            built.
+            {data.executionAvailable
+              ? 'Model connections and advisory assessment reviews are available.'
+              : 'Model connections are available. Advisory reviews are disabled for this deployment.'}
           </div>
           <Tabs defaultValue='connections'>
             <TabsList>
@@ -269,6 +283,7 @@ function AiSettings({
                 <Cable className='mr-2 size-4' />
                 Models
               </TabsTrigger>
+              <TabsTrigger value='skills'>Review skills</TabsTrigger>
               <TabsTrigger value='routing'>
                 <RouteIcon className='mr-2 size-4' />
                 Model routing
@@ -484,6 +499,9 @@ function AiSettings({
                 per organization
               </p>
             </TabsContent>
+            <TabsContent value='skills' className='mt-5'>
+              <SkillsCatalogue />
+            </TabsContent>
             <TabsContent value='routing' className='mt-5'>
               <div className='grid gap-4 md:grid-cols-2 xl:grid-cols-3'>
                 {data.stages.map((stage) => {
@@ -663,6 +681,14 @@ function ProviderForm({
       modelId: f.get('modelId'),
       enabled: preset && !provider ? true : f.get('enabled') === 'on',
       expectedRevision: provider?.revision ?? 0,
+      inputPriceCentsPerMillion:
+        f.get('inputRate') === null || f.get('inputRate') === ''
+          ? (provider?.inputPriceCentsPerMillion ?? null)
+          : Number(f.get('inputRate')),
+      outputPriceCentsPerMillion:
+        f.get('outputRate') === null || f.get('outputRate') === ''
+          ? (provider?.outputPriceCentsPerMillion ?? null)
+          : Number(f.get('outputRate')),
       ...(apiKey ? { apiKey } : {}),
     })
   }
@@ -752,6 +778,37 @@ function ProviderForm({
           />
           Enable model
         </label>
+      )}
+      {provider && (
+        <fieldset className='space-y-3 rounded-lg border p-3'>
+          <legend className='px-1 text-sm font-medium'>
+            Review budget rates
+          </legend>
+          <div className='grid gap-3 sm:grid-cols-2'>
+            <label className='space-y-2 text-sm'>
+              <span>Input · cents per million tokens</span>
+              <Input
+                type='number'
+                name='inputRate'
+                min={0}
+                max={100000000}
+                placeholder='200'
+                defaultValue={provider.inputPriceCentsPerMillion ?? ''}
+              />
+            </label>
+            <label className='space-y-2 text-sm'>
+              <span>Output · cents per million tokens</span>
+              <Input
+                type='number'
+                name='outputRate'
+                min={0}
+                max={100000000}
+                placeholder='800'
+                defaultValue={provider.outputPriceCentsPerMillion ?? ''}
+              />
+            </label>
+          </div>
+        </fieldset>
       )}
       {error && (
         <p role='alert' className='text-sm text-destructive'>

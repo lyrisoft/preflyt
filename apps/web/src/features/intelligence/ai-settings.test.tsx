@@ -22,6 +22,9 @@ vi.mock('../workspace/navigation-session', () => ({
 vi.mock('../repositories/governance-api', () => ({
   governanceRequest: (...args: unknown[]) => state.save(...args),
 }))
+vi.mock('./skills-catalogue', () => ({
+  SkillsCatalogue: () => <section>Review skills</section>,
+}))
 vi.mock('@/components/layout/app-header', () => ({ AppHeader: () => null }))
 vi.mock('@/components/layout/main', () => ({
   Main: ({ children }: { children: React.ReactNode }) => (
@@ -59,13 +62,15 @@ it('keeps connections and routing separate without promising inference', () => {
   const html = renderToStaticMarkup(<AiSettingsPage />)
   expect(html).toContain('Models')
   expect(html).toContain('Model routing')
-  expect(html).toContain('AI explanations are still being built')
+  expect(html).toContain('Advisory reviews are disabled for this deployment')
+  state.query = { data: { ...configuration(), executionAvailable: true } }
+  expect(renderToStaticMarkup(<AiSettingsPage />)).toContain('advisory assessment reviews are available')
   expect(html).not.toContain('Explain findings')
 })
-it('denies management views to developers', () => {
+it('shows read-only skills without model management to developers', () => {
   state.role = 'DEVELOPER'
   const html = renderToStaticMarkup(<AiSettingsPage />)
-  expect(html).toContain('Owner or Admin access is required')
+  expect(html).toContain('Review skills')
   expect(html).not.toContain('Add model')
 })
 it('shows deployment-disabled and request-failure states without old settings', () => {

@@ -1,6 +1,6 @@
 # Preflyt RBAC and resource authorization
 
-**Status:** Organization memberships, predefined roles, repository grants and existing API resource checks implemented. Policy publication, managed ruleset activation and native-request permissions are implemented; policy exception workflows, actual native dispatch and AI administration remain pending. **P0 foundational**, extended within existing phases. GitHub login, inherited organizations, verified owner onboarding and username-based grants are implemented behind a deployment flag under [ADR-0007](../architecture/ADR-0007-github-first-identity-and-organizations.md); legacy identity merging remains pending. See [OIDC ADR](../architecture/ADR-0003-oidc-user-authentication.md) and [roadmap](../roadmap/incremental-delivery.md).
+**Status:** Organization memberships, predefined roles, repository grants and existing API resource checks implemented. Policy publication, managed ruleset activation and native-request permissions are implemented; native Docker/Kubernetes dispatch and organization AI administration are implemented behind deployment controls; policy exceptions and live native acceptance remain pending. **P0 foundational**, extended within existing phases. GitHub login, inherited organizations, verified owner onboarding and username-based grants are implemented behind a deployment flag under [ADR-0007](../architecture/ADR-0007-github-first-identity-and-organizations.md); legacy identity merging remains pending. See [OIDC ADR](../architecture/ADR-0003-oidc-user-authentication.md) and [roadmap](../roadmap/incremental-delivery.md).
 
 ## Authorization model
 
@@ -63,7 +63,7 @@ Full login, bootstrap, revocation, migration and acceptance contracts: [ADR-0007
 
 ## Current implementation
 
-See [organization access and contributors](../operations/scoped-access-contributors.md) for shipped workflows, the explicit compatibility migration, live-request revocation behavior, contributor permission boundaries and remaining limitations. Scoped policy publication and managed ruleset activation permissions are implemented, as are separate native-request permissions and signed runtime preflight. Policy exception approval, team inheritance, actual native dispatch and AI egress authorization remain pending. Preflight is not execution acceptance.
+See [organization access and contributors](../operations/scoped-access-contributors.md) for shipped workflows, the explicit compatibility migration, live-request revocation behavior, contributor permission boundaries and remaining limitations. Scoped policy publication and managed ruleset activation permissions are implemented, as are separate native-request permissions and signed runtime preflight. Native Docker/Kubernetes dispatch and bounded advisory AI egress are implemented behind deployment controls. Policy exceptions, team inheritance and live native acceptance remain pending. Preflight is not execution acceptance.
 
 ## Access Control interface
 
@@ -86,3 +86,15 @@ For a workspace that already has the GitHub App connected, use **Access Control 
 ### Standards authoring
 
 `standards.manage` is available to the predefined Owner and Admin roles. It permits creating organization standards and adding a new version to an existing one, with fresh organization authority and audit. `policy.read` permits library/version inspection. Repository adoption continues to require its existing scoped policy permission. Platform administration alone does not grant organization standards authority; policy approval and enforcement permissions remain separate.
+
+
+## Review skills permissions
+
+| Built-in roles | Skills authority |
+| --- | --- |
+| Owner, Admin | Read, create versions, approve, enable/disable, retire and run reviews |
+| Policy Manager, Security Engineer | Read, approve reviewed versions and run reviews |
+| Engineering Lead, Developer | Read and run reviews |
+| Auditor, Viewer | Read catalogue and authorized assessment results |
+
+Identifiers are `ai.skills.read`, `ai.skills.manage`, `ai.skills.approve` and `ai.review.run`. Reviews additionally require live repository access; background workers recheck access and frozen configuration. Cancellation is limited to the requester or Owner/Admin. AI outputs have no policy publication, enforcement or GitHub write authority. See [review skills](../operations/review-skills.md).

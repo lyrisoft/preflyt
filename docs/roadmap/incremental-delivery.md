@@ -377,7 +377,7 @@ This is implementation evidence, not a live cluster release certificate. The ini
 
 Implemented organization-scoped provider setup and model routing behind a default-off flag. Owner/Admin users create and approve models through AI Intelligence → Models / Model routing. Keys are authenticated-encrypted, write-only and bound to endpoint transport definitions. Connection tests send metadata only; revisions, organization scope, access revocation, response bounds, throttling and freshness are enforced. Source sharing and new connections/routes start disabled. Unit, UUID-disposable-database API and Chromium interaction tests verify these boundaries. See [AI configuration](../operations/ai-configuration.md).
 
-This partially implements P0.AI1/P4.1/P4.RBAC. Inference remains unavailable; stored budgets are not spending enforcement. LiteLLM deployment, read-only intelligence dispatch, evidence validation, cancellation/usage telemetry, adversarial gate-independence tests and multi-skill review remain open. P4 is not complete.
+This connection-only increment partially implemented P0.AI1/P4.1/P4.RBAC. Its initial unavailable-inference state is superseded by the review skills increment below. LiteLLM deployment, contextual PR review, actual billing telemetry and full P4 acceptance remain open.
 
 The additive `20261010004000_ai_configuration` migration was applied locally after a protected database snapshot; the Prisma client was regenerated. No execution/provider flags were enabled and no real model requests or repository code were run by these tests.
 
@@ -392,3 +392,12 @@ Migration `20261010006000_admin_ai_models` was applied locally after a protected
 AI Intelligence now offers inactive OpenAI (ChatGPT), Claude, Gemini and DeepSeek presets. Activation needs only the provider API model name and key; server-owned endpoints and native authentication reduce setup decisions. Custom OpenAI-compatible/self-hosted connections remain available. Activation and a successful metadata test are separate, with test freshness still required for enabled routing. No inference or repository source is sent on activation. Credentials retain organization/connection/transport binding, now including the preset protocol; legacy custom connections keep their existing binding. This change requires no database migration. P4 inference and acceptance items above remain open.
 
 Verification: 68 API/transport tests and 9 Chromium UI tests passed, alongside web/API type checks and focused UI lint. Tests used metadata fixtures and UUID disposable databases; no live provider credentials, inference requests or application-data mutations were used.
+
+
+### P4 review skills and assessment evidence runtime (2026-10-09)
+
+Implemented organization-scoped immutable instruction-only skill versions, reviewed digest approval, separate activation, stage/repository assignment, first-party templates and paginated catalogue UI. Explicit saved-assessment review requests freeze approved skills, SHA/hash and model configuration, reserve estimated primary/fallback cost against stage/day budgets, and run through the existing worker. Native provider protocols, cancellation, access/configuration revalidation, deadline/restart recovery, strict known-check references and inferred suggestions are implemented. No source/diff/log text is sent, and no model result mutates deterministic gates. Docker and Kubernetes settings default off. See [review skills](../operations/review-skills.md).
+
+This advances P4.2/P4.3/P4.4/P4.CQ but does not complete contextual PR review: diff/changed-line evidence, language-specific selection, third-party import, automatic dispatch, GitHub feedback, actual billing telemetry and LiteLLM remain open. Fixture verification uses UUID disposable databases and generated provider HTTP responses; it is not live provider acceptance.
+
+Verification: 100 API/transport tests and 19 Chromium tests passed, alongside API/web type checks and focused UI lint. The local additive migration was applied after a protected snapshot; Prisma regenerated. Local explicit reviews are enabled; deployment examples stay disabled. No live model inference was requested.

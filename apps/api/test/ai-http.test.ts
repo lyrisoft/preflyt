@@ -173,3 +173,14 @@ it("aborts a hanging response and rejects hosted loopback before issuing a reque
   ).rejects.toThrow();
   expect(requests).toBe(1);
 });
+it('sends bounded POST bodies to a generated local inference server', async () => {
+  let method = '', body = '', auth = ''
+  const url = await server((req, res) => {
+    method = req.method!; auth = req.headers.authorization ?? ''
+    req.on('data', chunk => { body += chunk })
+    req.on('end', () => { res.writeHead(200); res.end('{"ok":true}') })
+  })
+  const response = await aiHttpRequest(url, 'local', { headers: { 'content-type': 'application/json', authorization: 'Bearer fixture-key' }, body: '{"input":"fixture"}', signal: AbortSignal.timeout(1000) })
+  expect(response.ok).toBe(true); expect(method).toBe('POST'); expect(body).toBe('{"input":"fixture"}'); expect(auth).toBe('Bearer fixture-key')
+  await expect(aiHttpRequest(url, 'local', { headers: {}, body: 'a'.repeat(65537), signal: AbortSignal.timeout(1000) })).rejects.toThrow('Request limit')
+})

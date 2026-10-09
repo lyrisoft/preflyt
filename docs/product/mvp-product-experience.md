@@ -130,3 +130,8 @@ Access Control separates **People**, **GitHub members**, **Roles & permissions**
 For GitHub-linked workspaces, **Grant access** uses a searchable member dropdown showing only users without active Preflyt access, including revoked members. Select the user, then choose a built-in role and repositories. Existing members are edited through their access record.
 
 If the App is already connected, the GitHub members tab offers **Link GitHub organization** to an existing workspace Owner when GitHub sign-in is enabled. This verifies GitHub organization ownership and reuses the current workspace and installation.
+
+
+### Skills delivery note (2026-10-09)
+
+The functional **Intelligence → Skills** page now provides an organization-scoped, paginated review catalogue, first-party templates, immutable draft versions, reviewed approval and separate activation. The same catalogue is accessible in AI Intelligence. Saved assessment details contain **Code Quality · AI Review** with explicit evidence-only requests, cancellation and inferred suggestions. Language/path-driven source review, changed-line findings and GitHub feedback remain future requirements. See [current behavior and setup](../operations/review-skills.md).

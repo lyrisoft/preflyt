@@ -14,6 +14,7 @@ import type { AuthenticatedSession } from "../auth/session.guard.js";
 import type { AiProviderConnection } from "../generated/prisma/client.js";
 import {
   aiConfigurationEnabled,
+  aiReviewsEnabled,
   aiCredentialKey,
   validateAiEndpoint,
   providerEndpoint,
@@ -26,6 +27,8 @@ import {
   testAiEndpoint,
 } from "./ai-configuration.js";
 export type ProviderInput = {
+  inputPriceCentsPerMillion?: number | null;
+  outputPriceCentsPerMillion?: number | null;
   preset?: string;
   name: string;
   baseUrl: string;
@@ -95,7 +98,7 @@ export class AiConfigurationService {
     await this.access.requireOrganization(session, "ai.usage.read");
     return {
       enabled: true,
-      executionAvailable: false,
+      executionAvailable: aiReviewsEnabled(),
       providers: providers.map(publicProvider),
       routes,
       stages: aiStages,
@@ -185,6 +188,8 @@ export class AiConfigurationService {
               "This endpoint requires a provider key",
             );
           const data = {
+            inputPriceCentsPerMillion: input.inputPriceCentsPerMillion ?? null,
+            outputPriceCentsPerMillion: input.outputPriceCentsPerMillion ?? null,
             name: input.name.trim(),
             endpointId: providerId,
             endpoint,
@@ -373,7 +378,7 @@ export class AiConfigurationService {
     });
     return { status, testedAt };
   }
-  private ready(provider: AiProviderConnection | undefined) {
+  ready(provider: AiProviderConnection | undefined) {
     const endpoint = provider ? providerEndpoint(provider) : null;
     return (
       !!provider &&
@@ -537,7 +542,7 @@ export class AiConfigurationService {
       reason,
       providerId: reason === "CONFIGURATION_READY" ? id : null,
       routeRevision: route?.revision ?? null,
-      executionAvailable: false,
+      executionAvailable: aiReviewsEnabled(),
       maxOutputTokens: route?.maxOutputTokens ?? null,
       dailyBudgetCents: route?.dailyBudgetCents ?? null,
     };

@@ -4,6 +4,7 @@ import { isIP } from "node:net";
 import { digest } from "../assessments/assessment-digest.js";
 export const aiConfigurationEnabled = () =>
   process.env.AI_CONFIGURATION_ENABLED === "true";
+export const aiReviewsEnabled = () => aiConfigurationEnabled() && process.env.AI_REVIEWS_ENABLED === "true";
 export const aiStages = [
   "laptop",
   "repository",

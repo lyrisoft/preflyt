@@ -25,6 +25,8 @@ data:
   QUEUE_REDIS_URL: redis://queue:6379/0
   QUEUE_PREFIX: preflyt:production:queue
   OTEL_SDK_DISABLED: "true"
+  AI_CONFIGURATION_ENABLED: "false"
+  AI_REVIEWS_ENABLED: "false"
   GITHUB_LOGIN_ENABLED: "false"
   GITHUB_EVENTS_ENABLED: "false"
   GITHUB_CHECK_PUBLICATION_ENABLED: "false"

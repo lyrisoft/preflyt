@@ -12,6 +12,7 @@ import type { AuthenticatedSession } from './session.guard.js'
 export const rolePermissions: Record<string, string[]> = {
   OWNER: [
     'ai.provider.manage', 'ai.routing.manage', 'ai.usage.read',
+    'ai.skills.read', 'ai.skills.manage', 'ai.skills.approve', 'ai.review.run',
     'standards.manage',
     'organization.members.manage',
     'organization.settings.update',
@@ -33,6 +34,7 @@ export const rolePermissions: Record<string, string[]> = {
   ],
   ADMIN: [
     'ai.provider.manage', 'ai.routing.manage', 'ai.usage.read',
+    'ai.skills.read', 'ai.skills.manage', 'ai.skills.approve', 'ai.review.run',
     'standards.manage',
     'organization.members.manage',
     'repository.connect',
@@ -52,6 +54,7 @@ export const rolePermissions: Record<string, string[]> = {
     'contributors.policy_evidence.read',
   ],
   POLICY_MANAGER: [
+    'ai.skills.read', 'ai.skills.approve', 'ai.review.run',
     'repository.read',
     'assessment.read',
     'policy.read',
@@ -62,6 +65,7 @@ export const rolePermissions: Record<string, string[]> = {
     'contributors.policy_evidence.read',
   ],
   SECURITY_ENGINEER: [
+    'ai.skills.read', 'ai.skills.approve', 'ai.review.run',
     'execution.run',
     'repository.read',
     'assessment.read',
@@ -72,6 +76,7 @@ export const rolePermissions: Record<string, string[]> = {
     'contributors.policy_evidence.read',
   ],
   ENGINEERING_LEAD: [
+    'ai.skills.read', 'ai.review.run',
     'repository.read',
     'assessment.read',
     'assessment.run',
@@ -81,6 +86,7 @@ export const rolePermissions: Record<string, string[]> = {
     'contributors.policy_evidence.read',
   ],
   DEVELOPER: [
+    'ai.skills.read', 'ai.review.run',
     'repository.read',
     'assessment.read',
     'assessment.run',
@@ -90,6 +96,7 @@ export const rolePermissions: Record<string, string[]> = {
     'contributors.policy_evidence.read',
   ],
   AUDITOR: [
+    'ai.skills.read',
     'ai.usage.read',
     'repository.read',
     'assessment.read',
@@ -99,6 +106,7 @@ export const rolePermissions: Record<string, string[]> = {
     'contributors.policy_evidence.read',
   ],
   VIEWER: [
+    'ai.skills.read',
     'repository.read',
     'assessment.read',
     'policy.read',
@@ -171,7 +179,7 @@ export class AuthorizationService {
           'policy.enforcement.manage',
           'execution.run',
           'standards.manage',
-          'ai.provider.manage', 'ai.routing.manage',
+          'ai.provider.manage', 'ai.routing.manage', 'ai.skills.manage', 'ai.skills.approve', 'ai.review.run',
         ].includes(permission)
     )
     if (!member || !rolePermissions[member.role]?.includes(permission))
@@ -223,6 +231,10 @@ export class AuthorizationService {
   // SessionGuard calls this after live session validation, before any controller or cache lookup.
   async authorizeRequest(request: Request, session: AuthenticatedSession) {
     const path = request.path.replace(/\/$/, '')
+    if (path === '/ai/skills' || path.startsWith('/ai/skills/')) {
+      await this.requireOrganization(session, request.method === 'GET' ? 'ai.skills.read' : path.endsWith('/approve') ? 'ai.skills.approve' : 'ai.skills.manage')
+      return true
+    }
     if (path === '/ai/configuration' || path.startsWith('/ai/configuration/')) {
       const permission = request.method === 'GET' || path.endsWith('/preview') ? 'ai.usage.read' : path.includes('/routes/') ? 'ai.routing.manage' : 'ai.provider.manage'
       await this.requireOrganization(session, permission)
@@ -237,6 +249,10 @@ export class AuthorizationService {
     )
     if (repo) {
       const part = repo[2] ?? ''
+      if (part === 'ai-reviews' || part.startsWith('ai-reviews/')) {
+        await this.requireRepository(session, repo[1], request.method === 'GET' ? 'assessment.read' : 'ai.review.run')
+        return true
+      }
       if (part === 'native-execution/requests' || part.startsWith('native-execution/requests/')) {
         await this.requireRepository(session, repo[1], request.method === 'GET' ? 'assessment.read' : 'execution.run')
         return true

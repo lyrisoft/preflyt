@@ -1,6 +1,7 @@
 import {
   BookOpen,
   BrainCircuit,
+  Sparkles,
   ShieldCheck,
   ShieldAlert,
   UsersRound,
@@ -73,6 +74,7 @@ export const sidebarData: SidebarData = {
           icon: BrainCircuit,
           badge: 'Preview',
         },
+        { title: 'Skills', url: '/skills', icon: Sparkles },
       ],
     },
     {

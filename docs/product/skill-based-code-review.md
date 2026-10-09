@@ -1,8 +1,12 @@
 # Skill-Based AI Engineering Review
 
-**Status:** Product design specification, not evidence of implemented skill runtime.  
+**Status:** Instruction-only catalogue and saved-assessment evidence runtime implemented; contextual PR source review remains a target specification.
 **Scope:** Read-only pull-request analysis. Not a general coding agent.  
 **Related:** [Code Quality Review](code-quality-review.md), [AI routing](../architecture/ADR-0004-shift-left-assessment-governance.md), [RBAC](rbac-and-authorization.md).
+
+## Implemented first increment
+
+Intelligence → Skills supports organization-scoped drafts, immutable integer versions and content digests, reviewed approval, enable/disable/retire, stage/repository assignments and pagination. Repository assessment details expose explicit multi-skill evidence review using approved model routing, estimated daily budget reservations, cancellation and validated inferred suggestions. First-party evidence-review templates are included; candidate third-party skills are not imported. No source or PR diff is sent. See [setup, permissions and exact limits](../operations/review-skills.md). The semantic manifests, changed-line mapping, automatic dispatch and GitHub feedback below remain future requirements.
 
 ## Decision
 
