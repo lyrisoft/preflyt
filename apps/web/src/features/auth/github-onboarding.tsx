@@ -127,13 +127,33 @@ export function GitHubOnboarding() {
                   : org.state === 'unavailable'
                     ? 'This installation does not belong to the workspace you are linking.'
                     : org.state === 'migration_required'
-                      ? 'Sign in to this workspace, then use Link GitHub organization in Access Control to enable GitHub member access.'
+                      ? 'This workspace already has connected repositories. A workspace administrator must link it to this GitHub organization before GitHub sign-in can be used. Sign in with your existing administrator account, then open Access Control → GitHub members → Link GitHub organization.'
                       : org.state === 'no_access'
                         ? 'Ask your Preflyt administrator to grant you access.'
                         : org.state === 'new'
                           ? 'An organization owner can connect this workspace. Your ownership will be verified.'
                           : 'Continue with your existing Preflyt role.'}
               </p>
+              {org.state === 'migration_required' && (
+                <div className='mt-3 flex flex-col gap-2'>
+                  <Button asChild>
+                    <Link
+                      to='/super-admin/login'
+                      search={{ redirect: '/access-control' }}
+                    >
+                      Sign in as workspace administrator
+                      <ArrowRight className='size-4' />
+                    </Link>
+                  </Button>
+                  <Link
+                    to='/sign-in'
+                    search={{ redirect: '/access-control' }}
+                    className='text-center text-xs text-muted-foreground underline underline-offset-4'
+                  >
+                    Use organization sign-in instead
+                  </Link>
+                </div>
+              )}
               {['new', 'existing', 'link_existing'].includes(org.state) && (
                 <Button
                   onClick={() => void enter(org)}

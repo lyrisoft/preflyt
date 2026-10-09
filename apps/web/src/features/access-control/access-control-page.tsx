@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useSearch } from '@tanstack/react-router'
 import {
   ShieldCheck,
   UsersRound,
@@ -199,7 +200,10 @@ export function AccessControlPage() {
     queryFn: ({ signal }) => read<Access>('access', signal),
     retry: false,
   })
-  const [tab, setTab] = useState('people'),
+  const { tab: initialTab } = useSearch({
+    from: '/_authenticated/access-control',
+  })
+  const [tab, setTab] = useState(initialTab),
     [search, setSearch] = useState(''),
     [roleFilter, setRoleFilter] = useState('all'),
     [statusFilter, setStatusFilter] = useState('all')
@@ -708,7 +712,7 @@ export function AccessControlPage() {
                         onClick={() =>
                           window.location.assign(
                             API_BASE_URL +
-                              '/auth/github/login?link=workspace&redirect=%2Faccess-control'
+                              '/auth/github/login?link=workspace&redirect=%2Faccess-control%3Ftab%3Dgithub'
                           )
                         }
                       >

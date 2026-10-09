@@ -539,6 +539,7 @@ it('links the existing installed organization with both owner proofs and preserv
     'http://localhost:5173',
     legacy.sessionToken,
   )
+  expect(entered.returnPath).toBe('/access-control?tab=github')
   expect(await db.organization.count()).toBe(1)
   expect(
     await db.gitHubRepository.findUnique({ where: { githubId: 11n } }),

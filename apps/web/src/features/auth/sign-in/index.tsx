@@ -100,7 +100,7 @@ export function SignIn() {
             Your Preflyt account and access are provisioned by your
             organization.
           </p>
-          {superAdminEnabled && (
+          {(superAdminEnabled || !!methodsError) && (
             <div className='border-t border-white/10 pt-4 text-center'>
               <Link
                 to='/super-admin/login'

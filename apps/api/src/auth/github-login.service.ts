@@ -632,6 +632,12 @@ export class GitHubLoginService implements OnModuleInit {
       })
       throw error
     }
-    return { sessionToken, expiresAt, returnPath: challenge.returnPath }
+    return {
+      sessionToken,
+      expiresAt,
+      returnPath: challenge.linkingOrganizationId
+        ? '/access-control?tab=github'
+        : challenge.returnPath,
+    }
   }
 }

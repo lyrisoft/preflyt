@@ -19,3 +19,23 @@ Apply additive migration `20261009020000_github_sync` before restarting API and 
 Scoped checks cover local profile/inventory reads with GitHub unavailable, removal/suspension/unsuspend, omitted removal lists, signed acceptance/replay, malformed events, revision races, failed synchronization, historical retention, token reuse/scope/expiry/revision, queue reconciliation and worker shutdown. They use an isolated database and uniquely scoped Redis queues; worker process tests explicitly disable live GitHub and telemetry exporters. Local checks do not assert measured production latency or live GitHub webhook delivery.
 
 Tracked [PR state](current-pr-state.md) is also reconciled in the worker; ordinary PR API reads remain local and exact-revision assessment links expire when current context is unverified.
+
+
+### GitHub organization linking and member sync
+
+The human sign-in App also needs **Organization permissions → Members: Read-only**.
+Repository access alone cannot verify organization membership or list members. After
+changing the App permissions, a GitHub organization owner must approve the updated
+installation permissions and sign in again to receive a token with that access.
+
+If GitHub returns `403 Resource not accessible by integration` with
+`x-accepted-github-permissions: members=read`, check this permission on the App
+configured by `GITHUB_APP_ID`, not just a separate governance App. Existing repository
+connections remain intact. Start linking from an existing workspace Owner session in
+Access Control. Successful linking returns to `/access-control?tab=github`, where the
+owner can sync members and assign access.
+
+GitHub request and response-body timeouts during human sign-in return a retryable
+503. They do not grant access or consume an organization-link challenge before
+verification succeeds. An unreachable API is shown separately from an unconfigured
+Super Admin account.

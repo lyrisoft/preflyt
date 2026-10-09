@@ -198,3 +198,47 @@ it('rejects an unavailable member list instead of showing an empty successful sy
     provider().members('unavailable-directory-token', 'fixture-org'),
   ).rejects.toThrow('verified')
 })
+
+it('reports missing organization Members permission with an actionable error', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(
+      async () =>
+        new Response('{}', {
+          status: 403,
+          headers: { 'x-accepted-github-permissions': 'members=read' },
+        }),
+    ),
+  )
+  await expect(
+    provider().members('permission-token', 'fixture'),
+  ).rejects.toThrow('Members: Read-only')
+})
+it('turns request and response-body timeouts into retryable service errors', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => {
+      throw new DOMException('expired', 'TimeoutError')
+    }),
+  )
+  await expect(provider().user('timeout-token')).rejects.toMatchObject({
+    status: 503,
+  })
+  await expect(provider().exchange('code', 'verifier')).rejects.toMatchObject({
+    status: 503,
+  })
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => ({
+      status: 200,
+      ok: true,
+      headers: new Headers(),
+      json: async () => {
+        throw new DOMException('expired', 'TimeoutError')
+      },
+    })),
+  )
+  await expect(provider().user('body-timeout-token')).rejects.toMatchObject({
+    status: 503,
+  })
+})

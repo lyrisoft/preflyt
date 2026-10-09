@@ -20,6 +20,8 @@ export function SuperAdminLogin() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [enabled, setEnabled] = useState<boolean | null>(null)
+  const [methodsError, setMethodsError] = useState(false)
+  const [checkAttempt, setCheckAttempt] = useState(0)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
@@ -34,12 +36,12 @@ export function SuperAdminLogin() {
         if (active) setEnabled(methods.superAdmin === true)
       })
       .catch(() => {
-        if (active) setEnabled(false)
+        if (active) setMethodsError(true)
       })
     return () => {
       active = false
     }
-  }, [])
+  }, [checkAttempt])
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -94,11 +96,29 @@ export function SuperAdminLogin() {
             Super Admin sign-in
           </CardTitle>
           <CardDescription className='text-sm leading-relaxed'>
-            Local break-glass access is separate from organization SSO.
+            Use the administrator account configured for this Preflyt
+            deployment.
           </CardDescription>
         </CardHeader>
         <CardContent className='px-7'>
-          {enabled === null ? (
+          {methodsError ? (
+            <div className='space-y-3'>
+              <p role='alert' className='text-sm text-destructive'>
+                Cannot reach the Preflyt API to check administrator access.
+                Check that the API is running, then try again.
+              </p>
+              <Button
+                variant='outline'
+                onClick={() => {
+                  setEnabled(null)
+                  setMethodsError(false)
+                  setCheckAttempt((attempt) => attempt + 1)
+                }}
+              >
+                Try again
+              </Button>
+            </div>
+          ) : enabled === null ? (
             <div className='flex items-center justify-center gap-2 py-4 text-sm text-muted-foreground'>
               <LoaderCircle
                 aria-hidden='true'

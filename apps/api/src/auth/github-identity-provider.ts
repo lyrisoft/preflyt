@@ -6,7 +6,10 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common'
 import { GitHubProviderService } from '../github/github-provider.service.js'
-import { GitHubRequestLimiter } from '../github/github-rate-limit.js'
+import {
+  GitHubRateLimitError,
+  GitHubRequestLimiter,
+} from '../github/github-rate-limit.js'
 import { RedisCacheService } from '../cache/redis-cache.service.js'
 
 export function githubLoginEnabled() {
@@ -16,7 +19,7 @@ export function githubLoginCallback() {
   const raw = process.env.GITHUB_LOGIN_CALLBACK_URL
   if (!raw)
     throw new Error(
-      'GITHUB_LOGIN_CALLBACK_URL is required when GitHub login is enabled'
+      'GITHUB_LOGIN_CALLBACK_URL is required when GitHub login is enabled',
     )
   const url = new URL(raw)
   if (
@@ -25,7 +28,7 @@ export function githubLoginCallback() {
     url.username ||
     url.password ||
     !['/auth/github/callback', '/api/auth/github/callback'].includes(
-      url.pathname
+      url.pathname,
     ) ||
     (url.protocol !== 'https:' &&
       !(
@@ -35,14 +38,14 @@ export function githubLoginCallback() {
       ))
   )
     throw new Error(
-      'GitHub login callback must be an HTTPS /auth/github/callback URL (HTTP localhost is allowed in development)'
+      'GitHub login callback must be an HTTPS /auth/github/callback URL (HTTP localhost is allowed in development)',
     )
   return url.href
 }
 function providerId(value: unknown): bigint {
   if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 1)
     throw new ServiceUnavailableException(
-      'GitHub returned an invalid account ID'
+      'GitHub returned an invalid account ID',
     )
   return BigInt(value)
 }
@@ -56,9 +59,24 @@ export class GitHubIdentityProvider {
   private readonly limiter: GitHubRequestLimiter
   constructor(
     @Inject(GitHubProviderService) private readonly app: GitHubProviderService,
-    @Optional() @Inject(RedisCacheService) cache?: RedisCacheService
+    @Optional() @Inject(RedisCacheService) cache?: RedisCacheService,
   ) {
     this.limiter = new GitHubRequestLimiter(cache)
+  }
+  private async request<T>(action: () => Promise<T>): Promise<T> {
+    try {
+      return await action()
+    } catch (error) {
+      if (error instanceof GitHubRateLimitError) throw error
+      if (
+        error instanceof Error &&
+        ['TimeoutError', 'AbortError'].includes(error.name)
+      )
+        throw new ServiceUnavailableException(
+          'GitHub took too long to respond. Try again. Your workspace has not been changed.',
+        )
+      throw error
+    }
   }
   authorizationUrl(state: string, challenge: string) {
     const url = new URL('https://github.com/login/oauth/authorize')
@@ -72,31 +90,36 @@ export class GitHubIdentityProvider {
     return url.href
   }
   async exchange(code: string, verifier: string) {
-    const response = await this.limiter.run(
-      `oauth:${process.env.GITHUB_APP_CLIENT_ID}`,
-      () =>
-        fetch('https://github.com/login/oauth/access_token', {
-          method: 'POST',
-          headers: {
-            accept: 'application/json',
-            'content-type': 'application/x-www-form-urlencoded',
-          },
-          body: new URLSearchParams({
-            client_id: process.env.GITHUB_APP_CLIENT_ID!,
-            client_secret: process.env.GITHUB_APP_CLIENT_SECRET!,
-            redirect_uri: githubLoginCallback(),
-            code,
-            code_verifier: verifier,
+    const response = await this.request(() =>
+      this.limiter.run(
+        `oauth:${process.env.GITHUB_APP_CLIENT_ID}`,
+        () =>
+          fetch('https://github.com/login/oauth/access_token', {
+            method: 'POST',
+            headers: {
+              accept: 'application/json',
+              'content-type': 'application/x-www-form-urlencoded',
+            },
+            body: new URLSearchParams({
+              client_id: process.env.GITHUB_APP_CLIENT_ID!,
+              client_secret: process.env.GITHUB_APP_CLIENT_SECRET!,
+              redirect_uri: githubLoginCallback(),
+              code,
+              code_verifier: verifier,
+            }),
+            signal: AbortSignal.timeout(10000),
           }),
-          signal: AbortSignal.timeout(10000),
-        }),
-      false
+        false,
+      ),
     )
     if (!response.ok)
       throw new ServiceUnavailableException(
-        'GitHub sign-in could not be completed'
+        'GitHub sign-in could not be completed',
       )
-    const data = (await response.json()) as Record<string, unknown>
+    const data = (await this.request(() => response.json())) as Record<
+      string,
+      unknown
+    >
     if (
       data.error ||
       typeof data.access_token !== 'string' ||
@@ -112,37 +135,48 @@ export class GitHubIdentityProvider {
       data.refresh_token_expires_in > 15897600
     )
       throw new ForbiddenException(
-        'GitHub did not issue expiring user credentials. Enable expiring user tokens for the App.'
+        'GitHub did not issue expiring user credentials. Enable expiring user tokens for the App.',
       )
     return {
       accessToken: data.access_token,
       refreshToken: data.refresh_token,
       accessExpiresAt: new Date(Date.now() + data.expires_in * 1000),
       refreshExpiresAt: new Date(
-        Date.now() + data.refresh_token_expires_in * 1000
+        Date.now() + data.refresh_token_expires_in * 1000,
       ),
     }
   }
   private async get(token: string, path: string) {
-    const response = await this.limiter.run(`user:${token}`, () =>
-      fetch('https://api.github.com' + path, {
-        headers: {
-          accept: 'application/vnd.github+json',
-          authorization: `Bearer ${token}`,
-          'x-github-api-version': '2022-11-28',
-        },
-        signal: AbortSignal.timeout(10000),
-      })
+    const response = await this.request(() =>
+      this.limiter.run(`user:${token}`, () =>
+        fetch('https://api.github.com' + path, {
+          headers: {
+            accept: 'application/vnd.github+json',
+            authorization: `Bearer ${token}`,
+            'x-github-api-version': '2022-11-28',
+          },
+          signal: AbortSignal.timeout(10000),
+        }),
+      ),
     )
+    if (
+      response.status === 403 &&
+      response.headers
+        .get('x-accepted-github-permissions')
+        ?.includes('members=read')
+    )
+      throw new ForbiddenException(
+        'The GitHub App needs Organization permissions → Members: Read-only. A GitHub organization owner must approve the updated installation permissions, then sign in again.',
+      )
     if ([401, 403, 404].includes(response.status))
       throw new ForbiddenException(
-        'GitHub access could not be verified. Check your organization access and sign in again.'
+        'GitHub access could not be verified. Check your organization access and sign in again.',
       )
     if (!response.ok)
       throw new ServiceUnavailableException(
-        'GitHub access verification is temporarily unavailable. Try again.'
+        'GitHub access verification is temporarily unavailable. Try again.',
       )
-    return response.json()
+    return this.request(() => response.json())
   }
   async user(token: string) {
     const data = await this.get(token, '/user')
@@ -164,11 +198,11 @@ export class GitHubIdentityProvider {
     for (let page = 1; page <= 20; page++) {
       const data = await this.get(
         token,
-        `/user/installations?per_page=100&page=${page}`
+        `/user/installations?per_page=100&page=${page}`,
       )
       if (!Array.isArray(data.installations))
         throw new ServiceUnavailableException(
-          'GitHub organization list is unavailable'
+          'GitHub organization list is unavailable',
         )
       for (const item of data.installations)
         if (
@@ -185,7 +219,7 @@ export class GitHubIdentityProvider {
       if (data.installations.length < 100) return result
     }
     throw new ServiceUnavailableException(
-      'GitHub organization list is too large. Contact your administrator.'
+      'GitHub organization list is too large. Contact your administrator.',
     )
   }
   async members(token: string, organizationLogin: string) {
@@ -196,11 +230,11 @@ export class GitHubIdentityProvider {
     for (let page = 1; page <= 100; page++) {
       const data = await this.get(
         token,
-        `/orgs/${encodeURIComponent(organizationLogin)}/members?filter=all&role=all&per_page=100&page=${page}`
+        `/orgs/${encodeURIComponent(organizationLogin)}/members?filter=all&role=all&per_page=100&page=${page}`,
       )
       if (!Array.isArray(data))
         throw new ServiceUnavailableException(
-          'GitHub organization members could not be loaded'
+          'GitHub organization members could not be loaded',
         )
       for (const item of data) {
         if (item.type !== 'User') continue
@@ -209,7 +243,7 @@ export class GitHubIdentityProvider {
           !/^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,37}[a-zA-Z0-9])?$/.test(item.login)
         )
           throw new ServiceUnavailableException(
-            'GitHub returned an invalid member'
+            'GitHub returned an invalid member',
           )
         const id = providerId(item.id).toString()
         members.set(id, {
@@ -224,18 +258,18 @@ export class GitHubIdentityProvider {
       }
       if (data.length < 100)
         return [...members.values()].sort((a, b) =>
-          a.login.localeCompare(b.login)
+          a.login.localeCompare(b.login),
         )
     }
     throw new ServiceUnavailableException(
-      'GitHub organization exceeds the supported member sync limit'
+      'GitHub organization exceeds the supported member sync limit',
     )
   }
   async resolveMember(
     token: string,
     organizationLogin: string,
     organizationId: bigint,
-    username: string
+    username: string,
   ) {
     if (!/^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,37}[a-zA-Z0-9])?$/.test(username))
       throw new ForbiddenException('Enter a valid GitHub username')
@@ -245,7 +279,7 @@ export class GitHubIdentityProvider {
     const id = providerId(data.id)
     const membership = await this.get(
       token,
-      `/orgs/${encodeURIComponent(organizationLogin)}/memberships/${encodeURIComponent(data.login)}`
+      `/orgs/${encodeURIComponent(organizationLogin)}/memberships/${encodeURIComponent(data.login)}`,
     )
     if (
       membership.state !== 'active' ||
@@ -253,7 +287,7 @@ export class GitHubIdentityProvider {
       providerId(membership.user?.id) !== id
     )
       throw new ForbiddenException(
-        'The GitHub account must be an active member of this organization'
+        'The GitHub account must be an active member of this organization',
       )
     return {
       id,
@@ -268,24 +302,26 @@ export class GitHubIdentityProvider {
   }
   async verify(token: string, installationId: bigint, userId: bigint) {
     const found = (await this.installations(token)).find(
-      (item) => item.id === installationId
+      (item) => item.id === installationId,
     )
     if (!found)
       throw new ForbiddenException(
-        'This GitHub organization is not available to your account'
+        'This GitHub organization is not available to your account',
       )
-    const installation = await this.app.verifyInstallation(installationId)
+    const installation = await this.request(() =>
+      this.app.verifyInstallation(installationId),
+    )
     if (
       installation.accountType !== 'Organization' ||
       installation.accountId !== found.organizationId ||
       installation.accountLogin.toLowerCase() !== found.login.toLowerCase()
     )
       throw new ForbiddenException(
-        'GitHub organization identity could not be verified'
+        'GitHub organization identity could not be verified',
       )
     const member = await this.get(
       token,
-      `/user/memberships/orgs/${encodeURIComponent(found.login)}`
+      `/user/memberships/orgs/${encodeURIComponent(found.login)}`,
     )
     if (
       member.state !== 'active' ||
@@ -294,20 +330,22 @@ export class GitHubIdentityProvider {
       providerId(member.user?.id) !== userId
     )
       throw new ForbiddenException(
-        'Active GitHub organization membership is required'
+        'Active GitHub organization membership is required',
       )
     const repositoryIds: bigint[] = []
     for (let page = 1; page <= 100; page++) {
       const data = await this.get(
         token,
-        `/user/installations/${installationId}/repositories?per_page=100&page=${page}`
+        `/user/installations/${installationId}/repositories?per_page=100&page=${page}`,
       )
       if (!Array.isArray(data.repositories))
         throw new ServiceUnavailableException(
-          'GitHub repository access is unavailable'
+          'GitHub repository access is unavailable',
         )
       repositoryIds.push(
-        ...data.repositories.map((repo: { id: unknown }) => providerId(repo.id))
+        ...data.repositories.map((repo: { id: unknown }) =>
+          providerId(repo.id),
+        ),
       )
       if (data.repositories.length < 100)
         return {
@@ -319,7 +357,7 @@ export class GitHubIdentityProvider {
         }
     }
     throw new ServiceUnavailableException(
-      'GitHub repository access list exceeds the supported limit'
+      'GitHub repository access list exceeds the supported limit',
     )
   }
 }
