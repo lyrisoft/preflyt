@@ -61,7 +61,7 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 
 - **P0.AI1:** Multiple provider connections, encrypted write-only keys, local/compatible endpoints and connectivity testing.
 - **P0.AI2:** Primary/fallback model routing for laptop, repository, PR/CI, QA, performance/staging and production feedback, with egress, budget and RBAC restrictions.
-- **P0.AI3:** Working Settings → AI Providers & Routing interface with audit and route preview. Preserve already completed P0 functionality.
+- **P0.AI3:** Working AI Intelligence → Connections / Model routing interface with audit and route preview. Preserve already completed P0 functionality.
 
 ### P0 GitHub-first access update (partially implemented)
 
@@ -351,7 +351,7 @@ See [ADR-0004](../architecture/ADR-0004-shift-left-assessment-governance.md) for
 
 ### P3 increment: verified source export and durable requests
 
-Implemented exact-commit Git object verification with bounded credential-free bundles, scoped native request/cancellation APIs, atomic audit and idempotency, and a paginated assessment request interface. Supported required checks are preselected; optional checks remain explicit. Migration `20261010002000_native_execution_requests` is applied locally and Prisma regenerated. This earlier source/request increment recorded only BLOCKED attempts; the later Docker dispatch increment below adds reviewed opt-in execution. Effective independent sandbox acceptance, authenticated source delivery/volume materialization, dispatcher leases/deadlines/cleanup and end-to-end native execution acceptance remain pending. Signed native receipts, immutable assessment ingestion and native policy evaluation are implemented; generated scanner fixtures and receipt/database fixtures pass. See [native execution](../operations/native-execution.md). P3/P4 are not complete.
+Implemented exact-commit Git object verification with bounded credential-free bundles, scoped native request/cancellation APIs, atomic audit and idempotency, and a paginated assessment request interface. Supported required checks are preselected; optional checks remain explicit. Migration `20261010002000_native_execution_requests` is applied locally and Prisma regenerated. This earlier source/request increment recorded only BLOCKED attempts; the later Docker dispatch increment below adds reviewed opt-in execution. The later Docker/Kubernetes increments below implement source materialization, dispatcher leases/deadlines and cleanup. Effective independent sandbox and live end-to-end deployment acceptance remain pending. Signed native receipts, immutable assessment ingestion and native policy evaluation are implemented; generated scanner fixtures and receipt/database fixtures pass. See [native execution](../operations/native-execution.md). P3/P4 are not complete.
 
 ### User-requested standards authoring increment
 
@@ -372,3 +372,11 @@ Remaining P3 work is concrete: complete test/lint/SAST/SCA/IaC coverage, live Ku
 Implemented the opt-in Kubernetes launcher through the existing dedicated controller and durable request journal. Fixed Job/Pod/source contracts use a reviewed runtime class, credential-free sandbox identity, scheduling-gate admission, whole-source verification, shared bounded report parsing, current runtime/tool reviews and UID-scoped confirmed cleanup. Simulated API tests cover clean/failing results, injected sidecars/credentials/host mounts, wrong runtime/source/ownership, cancellation, ambiguous creation, review revocation and cleanup failure. Docker behavior remains covered by regression tests.
 
 This is implementation evidence, not a live cluster release certificate. The initial serialized source delivery limit is 512 KiB. Independent runtime acceptance, full supported-project analyzer coverage/fresh offline dependency databases and versioned live deployment acceptance remain required for P3 completion. P4 implementation may proceed while those external acceptance gates stay explicitly recorded and real-repository execution remains disabled.
+
+### P4 connection and routing increment (2026-10-09)
+
+Implemented organization-scoped provider setup and model routing behind a default-off flag. Owner/Admin users configure approved endpoints/models through AI Intelligence → Connections / Model routing. Keys are authenticated-encrypted, write-only and bound to endpoint transport definitions. Connection tests send metadata only; revisions, organization scope, access revocation, response bounds, throttling and freshness are enforced. Source sharing and new connections/routes start disabled. Unit, UUID-disposable-database API and Chromium interaction tests verify these boundaries. See [AI configuration](../operations/ai-configuration.md).
+
+This partially implements P0.AI1/P4.1/P4.RBAC. Inference remains unavailable; stored budgets are not spending enforcement. LiteLLM deployment, read-only intelligence dispatch, evidence validation, cancellation/usage telemetry, adversarial gate-independence tests and multi-skill review remain open. P4 is not complete.
+
+The additive `20261010004000_ai_configuration` migration was applied locally after a protected database snapshot; the Prisma client was regenerated. No execution/provider flags were enabled and no real model requests or repository code were run by these tests.

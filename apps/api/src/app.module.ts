@@ -1,3 +1,4 @@
+import { IntelligenceModule } from './intelligence/intelligence.module.js'
 import { NotificationsModule } from './notifications/notifications.module.js'
 import { ContributorsModule } from './contributors/contributors.module.js'
 import { AssessmentModule } from './assessments/assessment.module.js'
@@ -9,7 +10,7 @@ import { HealthController } from './health/health.controller.js'
 import { GitHubModule } from './github/github.module.js'
 import { PrismaModule } from './prisma/prisma.module.js'
 @Module({
-  imports: [NotificationsModule, ContributorsModule,
+  imports: [IntelligenceModule, NotificationsModule, ContributorsModule,
     PrismaModule, AuthModule, GitHubModule, GitHubEventsModule, StandardsModule, AssessmentModule],
   controllers: [HealthController],
 })

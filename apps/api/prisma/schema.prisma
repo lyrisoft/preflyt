@@ -392,6 +392,8 @@ model Organization {
   installations GitHubInstallation[]
   githubLink    GitHubOrganizationLink?
   githubAccessEvidence GitHubUserAccessEvidence[]
+  aiProviders AiProviderConnection[]
+  aiRoutes AiStageRoute[]
 }
 
 model OrganizationMembership {
@@ -849,4 +851,41 @@ model OrganizationStandardVersion {
 
   @@unique([organizationId, packId, revision])
   @@index([organizationId, createdAt])
+}
+
+model AiProviderConnection {
+  id String @id @default(uuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  name String
+  endpointId String
+  modelId String
+  encryptedCredential String?
+  credentialEndpointDigest String?
+  enabled Boolean @default(false)
+  revision Int @default(1)
+  testStatus String @default("NOT_TESTED")
+  testedAt DateTime?
+  testedRevision Int?
+  testedEndpointDigest String?
+  createdById String
+  updatedAt DateTime @updatedAt
+  @@index([organizationId, updatedAt])
+}
+model AiStageRoute {
+  id String @id @default(uuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  stage String
+  primaryId String?
+  fallbackId String?
+  enabled Boolean @default(false)
+  allowSource Boolean @default(false)
+  maxInputTokens Int @default(8000)
+  maxOutputTokens Int @default(1000)
+  dailyBudgetCents Int @default(1000)
+  revision Int @default(1)
+  updatedById String
+  updatedAt DateTime @updatedAt
+  @@unique([organizationId, stage])
 }

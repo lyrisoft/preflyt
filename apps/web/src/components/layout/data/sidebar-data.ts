@@ -71,7 +71,7 @@ export const sidebarData: SidebarData = {
           title: 'AI Intelligence',
           url: '/intelligence',
           icon: BrainCircuit,
-          badge: 'Planned',
+          badge: 'Preview',
         },
       ],
     },

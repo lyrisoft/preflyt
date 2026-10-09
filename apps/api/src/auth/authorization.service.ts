@@ -11,6 +11,7 @@ import type { AuthenticatedSession } from './session.guard.js'
 
 export const rolePermissions: Record<string, string[]> = {
   OWNER: [
+    'ai.provider.manage', 'ai.routing.manage', 'ai.usage.read',
     'standards.manage',
     'organization.members.manage',
     'organization.settings.update',
@@ -31,6 +32,7 @@ export const rolePermissions: Record<string, string[]> = {
     'contributors.policy_evidence.read',
   ],
   ADMIN: [
+    'ai.provider.manage', 'ai.routing.manage', 'ai.usage.read',
     'standards.manage',
     'organization.members.manage',
     'repository.connect',
@@ -88,6 +90,7 @@ export const rolePermissions: Record<string, string[]> = {
     'contributors.policy_evidence.read',
   ],
   AUDITOR: [
+    'ai.usage.read',
     'repository.read',
     'assessment.read',
     'policy.read',
@@ -168,6 +171,7 @@ export class AuthorizationService {
           'policy.enforcement.manage',
           'execution.run',
           'standards.manage',
+          'ai.provider.manage', 'ai.routing.manage',
         ].includes(permission)
     )
     if (!member || !rolePermissions[member.role]?.includes(permission))
@@ -219,6 +223,11 @@ export class AuthorizationService {
   // SessionGuard calls this after live session validation, before any controller or cache lookup.
   async authorizeRequest(request: Request, session: AuthenticatedSession) {
     const path = request.path.replace(/\/$/, '')
+    if (path === '/ai/configuration' || path.startsWith('/ai/configuration/')) {
+      const permission = request.method === 'GET' || path.endsWith('/preview') ? 'ai.usage.read' : path.includes('/routes/') ? 'ai.routing.manage' : 'ai.provider.manage'
+      await this.requireOrganization(session, permission)
+      return true
+    }
     if (path === '/standards/library' || /^\/standards\/library\/[^/]+\/versions$/.test(path)) {
       await this.requireOrganization(session, request.method === 'GET' ? 'policy.read' : 'standards.manage')
       return true
