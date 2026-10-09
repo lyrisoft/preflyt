@@ -1,3 +1,4 @@
+import { NativePlanService } from '../execution/native-plan.service.js'
 import { NativeStatusController } from '../execution/native-status.controller.js'
 import { NativeStatusService } from '../execution/native-status.service.js'
 import { RulesetDeploymentController } from '../github/ruleset-deployment.controller.js'
@@ -31,6 +32,7 @@ import { AssessmentService } from './assessment.service.js'
     PullRequestController,
   ],
   providers: [
+    NativePlanService,
     NativeStatusService,
     RulesetDeploymentService,
     ReadinessAutomationService,

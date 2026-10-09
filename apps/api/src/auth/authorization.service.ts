@@ -242,6 +242,7 @@ export class AuthorizationService {
         request.method === 'GET'
           ? part.startsWith('assessments') ||
             part === 'native-execution/status' ||
+            part === 'native-execution/plan' ||
             part.startsWith('ci-evidence') ||
             part.startsWith('pull-requests') ||
             part === 'events'

@@ -5,6 +5,7 @@ import { PageHelpDrawer } from '@/components/page-help-drawer'
 import { StatusBadge } from '@/components/status-badge'
 import { useNavigationSession } from '../workspace/navigation-session'
 import { governanceRequest } from './governance-api'
+import { NativeCheckPlan } from './native-check-plan'
 
 type NativeStatus = {
   mode: string
@@ -116,12 +117,13 @@ export function NativeExecutionStatus({
               {
                 title: 'Current support',
                 content:
-                  'The preflight controller is read-only. Job dispatch, source checkout and native result collection are still being built. Preflyt does not run repository commands on the API or integration worker.',
+                  'The preflight controller is read-only. The check plan lists saved rules against the recorded commit. Tool versions, image digests and configuration must be reviewed before execution. Job dispatch, source checkout and native result collection are still being built. Preflyt does not run repository commands on the API or integration worker.',
               },
             ]}
           />
         </div>
       </div>
+      {data && <NativeCheckPlan repositoryId={repositoryId} />}
       {data && (
         <p className='mt-3 text-xs text-muted-foreground'>
           Checked {new Date(data.checkedAt).toLocaleString()}
