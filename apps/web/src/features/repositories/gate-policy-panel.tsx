@@ -61,6 +61,7 @@ type Revision = {
   draftedById: string
   approvedById: string | null
   definition: {
+    teamContext?: { teamId: string; teamName?: string; assignmentId: string }[]
     aiChecks?: {
       id: string
       title: string
@@ -571,6 +572,21 @@ export function GatePolicyPanel({
                   ))}
                 </div>
                 <section className='space-y-3'>
+                  {selected.definition.teamContext?.length ? (
+                    <div className='mb-4 space-y-2 rounded-lg border p-3'>
+                      <h3 className='text-sm font-semibold'>
+                        Inherited team standards
+                      </h3>
+                      {selected.definition.teamContext.map((source) => (
+                        <p
+                          key={source.assignmentId}
+                          className='text-sm text-muted-foreground'
+                        >
+                          {source.teamName ?? 'Team'} · saved assignment
+                        </p>
+                      ))}
+                    </div>
+                  ) : null}
                   <h3 className='text-sm font-semibold'>Requirements</h3>
                   <div className='overflow-hidden rounded-xl border'>
                     <Table>

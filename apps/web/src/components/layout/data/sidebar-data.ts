@@ -81,6 +81,7 @@ export const sidebarData: SidebarData = {
       title: 'Administration',
       items: [
         { title: 'Integrations', url: '/integrations', icon: Plug },
+        { title: 'Teams', url: '/teams', icon: UsersRound },
         {
           title: 'Access Control',
           url: '/access-control',

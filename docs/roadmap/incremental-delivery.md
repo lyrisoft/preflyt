@@ -411,3 +411,8 @@ Organization standards now support named advisory AI reviews with approved immut
 ### P4 Markdown review skill documents (2026-10-09)
 
 Implemented a wide Markdown Write/Preview editor, bounded UTF-8 `SKILL.md` uploads that open editable drafts, and organization-authorized exact-version downloads with digest verification. Files cannot approve or enable skills, import packages or run commands. Saving changed content creates a new disabled version; published policies retain their existing skill pins. Repository scope and license/provenance requirements are validated before saving. No database migration is required. Contextual PR source review and third-party package/script execution remain outside this increment. See [Markdown workflow and format](../operations/review-skills.md#markdown-editor-and-skillmd).
+
+
+### Teams, policy assignment and impact preview (2026-10-10)
+
+Administration → Teams now supports local teams, read-only GitHub import/manual sync and explicitly approved repository policy scope. Version-pinned team assignments compose stronger requirements, preview conflicts and atomically create repository selections and existing policy drafts. Approval/publication, assessments and gates retain source pins and validate current scope. Organization baselines, automatic reconciliation, nested scope and upgrades remain pending; phase order is unchanged. See [Teams implementation and remaining scope](../product/teams-and-policy-inheritance.md#implemented-slice-2026-10-10).

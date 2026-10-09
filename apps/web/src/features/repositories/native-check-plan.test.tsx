@@ -95,7 +95,10 @@ it('exposes loading and empty states', () => {
 })
 
 it('shows reviewed execution readiness without presenting a plan as a passing result', () => {
-  const data = state.query.data as any
+  const data = state.query.data as {
+    executionAvailable: boolean
+    steps: { reason: string }[]
+  }
   data.executionAvailable = true
   data.steps[0].reason = 'DISPATCHER_REQUIRED'
   const html = render()

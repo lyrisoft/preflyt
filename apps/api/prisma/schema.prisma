@@ -181,6 +181,7 @@ model GitHubRepository {
   insightsSync GitHubInsightsSync?
   nativeRequests NativeExecutionRequest[]
   skillReviews AiSkillReview[]
+  teamScopes TeamRepositoryScope[]
   profiles       RepositoryProfile[]
   @@index([installationId, selected])
 }
@@ -285,6 +286,7 @@ model CiArtifactImport {
 
 // Append-only adopted pack versions; catalogue/profile changes never auto-upgrade selection.
 model RepositoryStandardsSelection {
+  teamContext Json?
   id                String @id @default(cuid())
   repositoryId      String
   repository        GitHubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
@@ -398,6 +400,7 @@ model Organization {
   aiRoutes AiStageRoute[]
   reviewSkills AiReviewSkill[]
   skillReviews AiSkillReview[]
+  teams PreflytTeam[]
   reviewBudgets AiReviewBudget[]
 }
 
@@ -411,6 +414,7 @@ model OrganizationMembership {
   active         Boolean           @default(true)
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
+  teamMembers TeamMember[]
   grants         RepositoryGrant[]
 
   @@unique([organizationId, identityId])
@@ -955,4 +959,65 @@ model AiReviewBudget {
   day String
   reservedMicroCents BigInt @default(0)
   @@unique([organizationId, stage, day])
+}
+
+// Team membership never grants Preflyt or GitHub access. Scopes require explicit authorization.
+model PreflytTeam {
+  id String @id @default(uuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  name String
+  description String @default("")
+  source String @default("LOCAL")
+  githubTeamId String?
+  githubOrganizationId String?
+  githubSlug String?
+  parentGithubTeamId String?
+  installationId BigInt?
+  importedMembers Json @default("[]")
+  scopeRevision Int @default(1)
+  syncState String @default("LOCAL")
+  syncedAt DateTime?
+  revision Int @default(1)
+  createdById String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  members TeamMember[]
+  repositories TeamRepositoryScope[]
+  assignments TeamPolicyAssignment[]
+  @@unique([organizationId, githubTeamId])
+  @@index([organizationId, name, id])
+}
+model TeamMember {
+  id String @id @default(uuid())
+  teamId String
+  team PreflytTeam @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  membershipId String
+  membership OrganizationMembership @relation(fields: [membershipId], references: [id], onDelete: Restrict)
+  @@unique([teamId, membershipId])
+}
+model TeamRepositoryScope {
+  id String @id @default(uuid())
+  teamId String
+  team PreflytTeam @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  repositoryId String
+  repository GitHubRepository @relation(fields: [repositoryId], references: [id], onDelete: Restrict)
+  origin String
+  providerPresent Boolean @default(true)
+  policyScopeEnabled Boolean @default(false)
+  approvedById String?
+  verifiedAt DateTime?
+  @@unique([teamId, repositoryId])
+}
+model TeamPolicyAssignment {
+  id String @id @default(uuid())
+  teamId String
+  team PreflytTeam @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  branchRef String
+  profile String
+  packs Json
+  digest String
+  createdById String
+  createdAt DateTime @default(now())
+  @@index([teamId, branchRef, createdAt])
 }

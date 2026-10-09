@@ -26,7 +26,9 @@ describe('enterprise navigation permissions and scope', () => {
         'Engineering Standards',
         'Policies',
         'AI Intelligence',
+        'Skills',
         'Integrations',
+        'Teams',
         'Access Control',
         'Settings',
       ])
@@ -38,13 +40,13 @@ describe('enterprise navigation permissions and scope', () => {
       expect(titles(role)).not.toContain('Settings')
       expect(titles(role)).toContain('Integrations')
     }
-    expect(sidebarData.navGroups[3].items).toHaveLength(3)
+    expect(sidebarData.navGroups[3].items).toHaveLength(4)
   })
   it('distinguishes unfinished modules and excludes theme demo routes', () => {
     const items = sidebarData.navGroups.flatMap((group) => group.items)
     expect(
       items.filter((item) => item.badge === 'Planned').map((item) => item.title)
-    ).toEqual(['Findings', 'AI Intelligence', 'Settings'])
+    ).toEqual(['Findings', 'Settings'])
     for (const route of ['/tasks', '/chats', '/users', '/settings']) {
       expect(items.map((item) => item.url)).not.toContain(route)
     }

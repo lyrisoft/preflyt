@@ -98,3 +98,8 @@ For a workspace that already has the GitHub App connected, use **Access Control 
 | Auditor, Viewer | Read catalogue and authorized assessment results |
 
 Identifiers are `ai.skills.read`, `ai.skills.manage`, `ai.skills.approve` and `ai.review.run`. Reviews additionally require live repository access; background workers recheck access and frozen configuration. Cancellation is limited to the requester or Owner/Admin. AI outputs have no policy publication, enforcement or GitHub write authority. See [review skills](../operations/review-skills.md).
+
+
+## Teams permissions (implemented 2026-10-10)
+
+Organization readers receive `team.read`. Owners/Admins receive `team.manage`, `team.import` and `team.policy.assign`; Policy Managers receive `team.policy.assign` within their repository grants. Backend checks require access to every assignment target, organization scope and an unchanged impact preview. Team membership grants no additional Preflyt or GitHub access. See [Teams operations](../operations/teams.md).

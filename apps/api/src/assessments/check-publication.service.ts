@@ -1,3 +1,4 @@
+import { verifyTeamContext } from '../teams/team-context.js'
 import { readLatestNativeEvidence } from '../execution/native-evidence.js'
 import { evaluatePublishedPolicy } from './published-policy-evaluation.js'
 import { randomUUID } from 'node:crypto'
@@ -180,6 +181,7 @@ export class CheckPublicationService {
       },
       orderBy: [{ publishedAt: 'desc' }, { id: 'desc' }],
     })
+    if (policy) await verifyTeamContext(this.prisma, repo.id, (policy.definition as any).teamContext)
     const report = assessment.report as Record<string, any>
     const liveRuns: Record<
       string,

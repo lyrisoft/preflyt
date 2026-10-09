@@ -1,3 +1,5 @@
+import { inheritedTeamStandards } from '../teams/team-context.js'
+import { composeTeamStandards } from '../teams/team-composition.js'
 import { organizationCatalogue } from './organization-standards.service.js'
 import {
   BadRequestException,
@@ -208,6 +210,10 @@ export class StandardsService {
             : {}),
         }))
         .sort((a, b) => a.id.localeCompare(b.id))
+      const inherited = await inheritedTeamStandards(tx, repo.id, repo.installation.organizationId)
+      const composed = composeTeamStandards([...inherited.sources, {label: 'Repository selection', profile: input.profile, packs: frozen as unknown as (PackRef & {digest: string})[]}])
+      if (composed.conflicts.length || composed.profile !== input.profile || composed.packs.some(ref => !frozen.some(p => p.id === ref.id && p.version === ref.version && p.digest === ref.digest)))
+        throw new ConflictException('Keep the required team standard versions and profile. Change team policy scope through Teams, then preview again.')
       posture(frozen as unknown as PackRef[], input.profile, [])
       const saved = await tx.repositoryStandardsSelection.create({
         data: {
@@ -216,6 +222,7 @@ export class StandardsService {
           profile: input.profile,
           packs: frozen,
           selectedById: actorId,
+          ...(inherited.context.length ? {teamContext: inherited.context} : {}),
           profileSnapshotId: snapshot?.id,
           sourceSha: snapshot?.sourceSha,
         },

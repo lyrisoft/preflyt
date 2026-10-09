@@ -1,7 +1,18 @@
 # Teams and Policy Inheritance
 
-**Status:** Product specification; not yet implemented. **No change to P0–P11 phase order.**  
+**Status:** Initial Teams, assignment and impact-preview slice implemented; broader inheritance remains planned. **No change to P0–P11 phase order.**
 **Related:** [PRD](../PRD.md), [Engineering Standards](engineering-standards-library.md), [RBAC](rbac-and-authorization.md), [MVP Experience](mvp-product-experience.md), [Roadmap](../roadmap/incremental-delivery.md).
+
+
+## Implemented slice (2026-10-10)
+
+Administration → Teams supports local teams, read-only GitHub discovery/import and manual synchronization, explicit repository policy scope, pinned standard-version assignment, impact preview and saved assignment activity. Detail tabs separate members, repositories, standards/policies and effective impact. Membership never grants workspace or repository access.
+
+Applying an unchanged preview creates repository standards selections and existing policy drafts atomically. Required checks compose additively, the strongest profile wins, and version conflicts block application. Existing approvals, assessments and deterministic gates are reused. Published policy and check publication revalidate inherited source digests and approved scope; stale GitHub snapshots cannot authorize publication. Metadata-only changes do not invalidate policy scope.
+
+This increment does **not** deliver organization baseline assignment, scheduled/event-driven sync, nested team scope expansion, automatic policy version upgrades, waiver management or automatic enforcement activation. Repository selections change on assignment: CI source mappings and fresh assessments must be reviewed before publication. GitHub imports require a linked organization and installation Members: read permission. Operational bounds and rollout are documented in [Teams operations](../operations/teams.md).
+
+Verification: 29 API tests and 15 Chromium tests cover composition, authorization, explicit scope, failed sync preservation, preview concurrency, assignment, existing approval/publication and UI actions. Fixtures use disposable databases; live GitHub team import is not claimed as accepted.
 
 ## Purpose
 
