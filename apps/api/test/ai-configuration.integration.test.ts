@@ -648,3 +648,34 @@ it('rejects free-form skill selection and AI checks outside the frozen assessmen
   expect(list.body.checks).toEqual([expect.objectContaining({ id: f.check.id, skillVersion: 1, skillDigest: f.skill.contentDigest, available: true })])
   expect(await db.aiSkillReview.count({ where: { assessmentId: f.assessment.id } })).toBe(0)
 })
+
+it('parses SKILL.md without saving or approving it, and enforces origin and management access', async () => {
+  const { exportSkillMarkdown } = await import('../src/intelligence/skill-markdown.js');
+  const markdown = exportSkillMarkdown(skillTemplates[0]!);
+  const count = await db.aiReviewSkill.count();
+  const parsed = await skillPost(owner, '/parse', { markdown }).expect(201);
+  expect(parsed.body.instructions).toBe(skillTemplates[0]!.instructions);
+  expect(await db.aiReviewSkill.count()).toBe(count);
+  await skillPost(developer, '/parse', { markdown }).expect(403);
+  await http(app.getHttpServer()).post('/ai/skills/parse').set('Cookie', `ai.sid=${owner.identityId}`).set('Origin', 'https://wrong.invalid').send({ markdown }).expect(403);
+  await skillPost(owner, '/parse', { markdown: markdown.replace('name:', 'enabled: true\nname:') }).expect(400);
+  await skillPost(owner, '/parse', { markdown, approved: true }).expect(400);
+});
+it('downloads an authorized exact version and imports changed text into a separate disabled draft', async () => {
+  const { parseSkillMarkdown } = await import('../src/intelligence/skill-markdown.js');
+  const original = await approvedSkill();
+  const download = (actor: AuthenticatedSession) => http(app.getHttpServer()).get(`/ai/skills/${original.id}/markdown`).set('Cookie', `ai.sid=${actor.identityId}`);
+  const file = await download(developer).expect(200);
+  expect(file.headers['content-type']).toContain('text/markdown');
+  expect(file.headers['content-disposition']).toBe('attachment; filename="SKILL.md"');
+  expect(file.headers['cache-control']).toBe('no-store');
+  expect(parseSkillMarkdown(file.text).instructions).toBe(original.instructions);
+  await download(outsider).expect(404);
+  const changed = (await skillPost(owner, '/parse', { markdown: file.text.replace(original.instructions, '# Changed instructions\n\n- Cite evidence.') }).expect(201)).body;
+  const next = (await skillPost(owner, '', { ...changed, skillKey: original.skillKey, expectedVersion: original.version }).expect(201)).body;
+  expect(next).toMatchObject({ version: 2, status: 'DRAFT', enabled: false });
+  expect(next.contentDigest).not.toBe(original.contentDigest);
+  expect(await db.aiReviewSkill.findUniqueOrThrow({ where: { id: original.id } })).toMatchObject({ instructions: original.instructions, contentDigest: original.contentDigest, status: 'APPROVED', enabled: true });
+  await db.aiReviewSkill.update({ where: { id: original.id }, data: { instructions: 'Tampered' } });
+  await download(owner).expect(409);
+});

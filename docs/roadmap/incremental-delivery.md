@@ -406,3 +406,8 @@ Verification: 100 API/transport tests and 19 Chromium tests passed, alongside AP
 ### P4 AI review-to-skill assignment (2026-10-09)
 
 Organization standards now support named advisory AI reviews with approved immutable skill pins. Check stages control repository/PR applicability; policy review freezes the assignment and assessment requests accept only assigned check IDs. Disabling or replacing a skill cannot silently change a saved check. Deterministic rules and gate decisions remain separate. The standard editor now uses a wide rectangle, separate check tabs, filtering/pagination and visible actions. Selecting a self-hosted model defaults to optional authentication. This increment needs no database migration; contextual source review remains pending.
+
+
+### P4 Markdown review skill documents (2026-10-09)
+
+Implemented a wide Markdown Write/Preview editor, bounded UTF-8 `SKILL.md` uploads that open editable drafts, and organization-authorized exact-version downloads with digest verification. Files cannot approve or enable skills, import packages or run commands. Saving changed content creates a new disabled version; published policies retain their existing skill pins. Repository scope and license/provenance requirements are validated before saving. No database migration is required. Contextual PR source review and third-party package/script execution remain outside this increment. See [Markdown workflow and format](../operations/review-skills.md#markdown-editor-and-skillmd).

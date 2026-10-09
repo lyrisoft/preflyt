@@ -6,7 +6,11 @@
 
 ## Implemented first increment
 
-Intelligence → Skills supports organization-scoped drafts, immutable integer versions and content digests, reviewed approval, enable/disable/retire, repository scope and pagination. Repository assessment details expose explicit AI evidence review using approved model routing, estimated daily budget reservations, cancellation and validated inferred suggestions. First-party evidence-review templates are included; candidate third-party skills are not imported. No source or PR diff is sent. See [setup, permissions and exact limits](../operations/review-skills.md). The semantic manifests, changed-line mapping, automatic dispatch and GitHub feedback below remain future requirements.
+Intelligence → Skills supports organization-scoped drafts, immutable integer versions and content digests, reviewed approval, enable/disable/retire, repository scope and pagination. Repository assessment details expose explicit AI evidence review using approved model routing, estimated daily budget reservations, cancellation and validated inferred suggestions. First-party evidence-review templates are included; instruction-only SKILL.md uploads open editable drafts and downloads export the selected immutable database version. Candidate third-party packages and scripts are not bundled or executed. No source or PR diff is sent. See [setup, permissions and exact limits](../operations/review-skills.md). The semantic manifests, changed-line mapping, automatic dispatch and GitHub feedback below remain future requirements.
+
+## Markdown file contract
+
+The implemented editor supports Markdown Write/Preview tabs and UTF-8 `SKILL.md` upload/download, with an explicit YAML header for name and description. Uploads never imply approval or execution. File changes create a new draft; approved versions and policy digests remain pinned. This instruction-only file format differs from the proposed executable-package manifest below. See [file format, limits and approval workflow](../operations/review-skills.md#markdown-editor-and-skillmd).
 
 ## Check-to-skill assignment
 

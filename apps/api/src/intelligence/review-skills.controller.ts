@@ -59,6 +59,9 @@ class SkillDto {
   @IsOptional() @IsUUID() skillKey?: string;
   @IsInt() @Min(0) @Max(199) expectedVersion!: number;
 }
+class MarkdownDto {
+  @IsString() @MaxLength(32768) markdown!: string;
+}
 class ActionDto {
   @Matches(/^[a-f0-9]{64}$/) expectedDigest!: string;
   @IsBoolean() reviewed!: boolean;
@@ -81,6 +84,21 @@ export class ReviewSkillsController {
   ) {}
   @Get() @Header("Cache-Control", "no-store") list(@Req() req: R) {
     return this.skills.list(req.preflytSession);
+  }
+  @Post("parse") @Header("Cache-Control", "no-store") parse(
+    @Req() req: R,
+    @Body() body: MarkdownDto,
+  ) {
+    this.auth.assertOrigin(req.headers.origin);
+    return this.skills.parseMarkdown(req.preflytSession, body.markdown);
+  }
+  @Get(":id/markdown")
+  @Header("Cache-Control", "no-store")
+  @Header("Content-Type", "text/markdown; charset=utf-8")
+  @Header("Content-Disposition", 'attachment; filename="SKILL.md"')
+  @Header("X-Content-Type-Options", "nosniff")
+  markdown(@Req() req: R, @Param("id") id: string) {
+    return this.skills.markdown(req.preflytSession, id);
   }
   @Post() @Header("Cache-Control", "no-store") create(
     @Req() req: R,

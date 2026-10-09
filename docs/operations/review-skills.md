@@ -4,6 +4,32 @@
 
 Open **Intelligence → Skills** (also available as **AI Intelligence → Review skills**). Owner/Admin users create drafts from the first-party Security evidence review or CI evidence review template, or enter reviewed instructions. Skills supply review instructions; optionally restrict their repository scope. Review stages are assigned on AI reviews in Engineering Standards. An empty repository selection means all authorized repositories in the organization. Drafts start disabled. Review the instructions, source and license, approve the exact content digest, then enable that version. Editing creates a new draft version; earlier versions remain unchanged. Policy Managers and Security Engineers can approve versions; only Owner/Admin can manage or enable them. Readers see only their organization’s catalogue.
 
+## Markdown editor and SKILL.md
+
+In **Intelligence → Skills**, select **Create skill** for a blank draft, **Upload SKILL.md** to load a file, or **Review → Create new version** to change an existing skill. The wide editor separates metadata and repository scope from instructions. **Write** accepts Markdown; **Preview** renders headings, lists and code blocks without running HTML, opening links or loading images. **Replace from SKILL.md** replaces the open draft contents while retaining the existing skill family and expected version. Uploading does not save, approve, enable or run a skill.
+
+Files must be UTF-8 `.md` documents, at most 32 KiB. Instructions can contain up to 6,000 characters. The YAML header requires `name` and `description`; optional fields are `source`, `license`, `stages` and `repositories`. Duplicate keys, aliases, custom YAML tags and unsupported fields are rejected. Repository IDs must be authorized for the current organization. When source is omitted it defaults to `Uploaded SKILL.md`; when license is omitted the editor requires you to enter it before saving. Record the actual provenance and license rather than assuming third-party material is organization-owned.
+
+```markdown
+---
+name: Security evidence review
+description: Explain failed checks and missing evidence
+source: Organization-authored instructions
+license: Organization-owned
+---
+
+# Review instructions
+
+- Review only the supplied assessment evidence.
+- Cite each check used to support a finding.
+- Recommend the next evidence to collect.
+- Never treat missing evidence as a passing check.
+```
+
+The server validates the file as an instruction document. It does not fetch related files, import scripts or install packages. Optional legacy `stages` metadata is retained for exact version/digest round trips; AI Review assignments in Engineering Standards determine where a skill runs.
+
+**Review → Download SKILL.md** exports the selected database version after verifying its content digest and the reader's organization access. Files contain metadata and instructions, not approval status or enablement. Saving an edited file creates a disabled draft requiring review and approval. Policies and assessments keep their existing skill version and digest; a later file change cannot alter those pins. No additional database migration is needed for Markdown support.
+
 These skills contain instructions only. They cannot run commands, load packages, read files, change policy or post to GitHub. No candidate third-party skill is bundled or automatically imported. Do not paste credentials into instructions. Administrators record provenance and license review when approving a version.
 
 In **Repository → Assessments**, open a saved assessment and find **Code Quality · AI Review**. Authorized reviewers select up to three AI reviews from that assessment’s frozen standards, then click **Run review**. Each review uses its pinned approved skill version. Free-form skill selection is not accepted. Results and recent history appear there, with pagination and cancellation. Viewers/Auditors can read results but cannot request reviews. Running a review still requires current repository permissions and GitHub access.

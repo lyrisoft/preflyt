@@ -1,6 +1,9 @@
+import '@/styles/index.css'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { render } from 'vitest-browser-react'
+import { page, userEvent } from 'vitest/browser'
+import { MarkdownInstructions } from './skill-markdown'
 import { SkillsCatalogue } from './skills-catalogue'
 
 const state = vi.hoisted(() => ({
@@ -8,6 +11,7 @@ const state = vi.hoisted(() => ({
   query: {} as Record<string, unknown>,
   save: vi.fn(),
   invalidate: vi.fn(),
+  download: vi.fn(),
 }))
 vi.mock('@tanstack/react-query', () => ({
   useQuery: (options: { queryKey: string[] }) =>
@@ -30,6 +34,7 @@ vi.mock('../workspace/navigation-session', () => ({
 }))
 vi.mock('../repositories/governance-api', () => ({
   governanceRequest: (...args: unknown[]) => state.save(...args),
+  governanceTextRequest: (...args: unknown[]) => state.download(...args),
 }))
 const template = {
   name: 'Security evidence review',
@@ -57,6 +62,11 @@ beforeEach(() => {
     isError: false,
   }
   state.save.mockReset().mockResolvedValue({})
+  state.download
+    .mockReset()
+    .mockResolvedValue(
+      '---\nname: Review\ndescription: Evidence\n---\n\n# Review instructions'
+    )
   state.invalidate.mockReset().mockResolvedValue({})
 })
 it('creates a disabled draft from a first-party template with bounded scope', async () => {
@@ -145,4 +155,157 @@ it('paginates skill versions and resets to matching results on filter', async ()
   await expect
     .element(view.getByText('Review 20', { exact: true }))
     .toBeVisible()
+})
+
+it('loads SKILL.md into an editable draft without saving or approving it', async () => {
+  const imported = {
+    ...template,
+    name: 'Uploaded review',
+    instructions: '# Review evidence\n\n- Cite checks.',
+    license: '',
+  }
+  state.save.mockResolvedValue(imported)
+  const view = await render(<SkillsCatalogue />)
+  await userEvent.upload(
+    view.getByLabelText('Upload SKILL.md file'),
+    new File(
+      [
+        '---\nname: Uploaded review\ndescription: Review evidence\n---\n\n# Review evidence',
+      ],
+      'SKILL.md',
+      { type: 'text/markdown' }
+    )
+  )
+  await expect
+    .element(view.getByRole('textbox', { name: 'Name', exact: true }))
+    .toHaveValue('Uploaded review')
+  expect(state.save).toHaveBeenCalledTimes(1)
+  expect(state.save).toHaveBeenCalledWith(
+    '/ai/skills/parse',
+    expect.objectContaining({ markdown: expect.any(String) }),
+    expect.any(AbortSignal)
+  )
+  await expect
+    .element(view.getByRole('button', { name: 'Save draft' }))
+    .toBeDisabled()
+  await view.getByRole('textbox', { name: 'License', exact: true }).fill('MIT')
+  await view.getByRole('tab', { name: 'Preview', exact: true }).click()
+  await expect
+    .element(view.getByRole('heading', { name: 'Review evidence' }))
+    .toBeVisible()
+  await view.getByRole('button', { name: 'Save draft' }).click()
+  expect(state.save).toHaveBeenLastCalledWith(
+    '/ai/skills',
+    expect.objectContaining({
+      name: imported.name,
+      instructions: imported.instructions,
+      license: 'MIT',
+      expectedVersion: 0,
+    })
+  )
+})
+it('replaces new-version draft text while retaining its family and expected version', async () => {
+  state.save.mockResolvedValue({
+    ...template,
+    name: 'Changed document',
+    instructions: '# Replacement',
+  })
+  const view = await render(<SkillsCatalogue />)
+  await view.getByRole('button', { name: 'Review', exact: true }).click()
+  await view.getByRole('button', { name: 'Create new version' }).click()
+  await userEvent.upload(
+    view.getByLabelText('Replace from SKILL.md file'),
+    new File(['fixture'], 'SKILL.md')
+  )
+  await expect
+    .element(view.getByRole('textbox', { name: 'Instructions', exact: true }))
+    .toHaveValue('# Replacement')
+  await view.getByRole('button', { name: 'Save draft' }).click()
+  expect(state.save).toHaveBeenLastCalledWith(
+    '/ai/skills',
+    expect.objectContaining({
+      skillKey: skill.skillKey,
+      expectedVersion: 1,
+      instructions: '# Replacement',
+    })
+  )
+})
+it('keeps unsaved text after a rejected file and cancels without saving', async () => {
+  const view = await render(<SkillsCatalogue />)
+  await view.getByRole('button', { name: 'Use template' }).click()
+  await userEvent.upload(
+    view.getByLabelText('Replace from SKILL.md file'),
+    new File(['x'.repeat(32769)], 'SKILL.md')
+  )
+  await expect.element(view.getByRole('alert')).toHaveTextContent('32 KiB')
+  await expect
+    .element(view.getByRole('textbox', { name: 'Instructions', exact: true }))
+    .toHaveValue(template.instructions)
+  expect(state.save).not.toHaveBeenCalled()
+  await view.getByRole('button', { name: 'Cancel', exact: true }).click()
+  await expect.element(view.getByRole('dialog')).not.toBeInTheDocument()
+})
+it('downloads the selected database version for a read-only user', async () => {
+  state.role = 'DEVELOPER'
+  const objectUrl = vi
+    .spyOn(URL, 'createObjectURL')
+    .mockReturnValue('blob:skill-download')
+  const click = vi
+    .spyOn(HTMLAnchorElement.prototype, 'click')
+    .mockImplementation(() => {})
+  try {
+    const view = await render(<SkillsCatalogue />)
+    await view.getByRole('button', { name: 'Review', exact: true }).click()
+    await view.getByRole('button', { name: 'Download SKILL.md' }).click()
+    expect(state.download).toHaveBeenCalledWith('/ai/skills/skill/markdown')
+    expect(click.mock.instances[0]).toHaveProperty('download', 'SKILL.md')
+    const file = objectUrl.mock.calls[0]![0] as Blob
+    expect(await file.text()).toContain('# Review instructions')
+  } finally {
+    objectUrl.mockRestore()
+    click.mockRestore()
+  }
+})
+it('renders Markdown headings and lists without executing HTML or loading linked resources', () => {
+  const html = renderToStaticMarkup(
+    <MarkdownInstructions>
+      {
+        '# Review\n\n- Cite checks.\n\n![image](https://external.invalid/image.png)\n\n[link](https://external.invalid)\n\n<script>bad()</script>\n\n<iframe src="https://external.invalid"></iframe>'
+      }
+    </MarkdownInstructions>
+  )
+  expect(html).toContain('<h1>Review</h1>')
+  expect(html).toContain('<li>Cite checks.</li>')
+  expect(html).not.toMatch(/<img|<script|<iframe|href=|src=/)
+})
+
+it('keeps the Markdown editor wide on desktop and prevents mobile overflow', async () => {
+  await page.viewport(1280, 900)
+  document.documentElement.classList.add('dark')
+  const view = await render(<SkillsCatalogue />)
+  await view.getByRole('button', { name: 'Use template' }).click()
+  await view
+    .getByRole('textbox', { name: 'Instructions', exact: true })
+    .fill(
+      '# Security evidence review\n\n## Instructions\n\n- Review the supplied evidence.\n- Cite each check behind a finding.\n- Do not treat missing checks as passing.\n\n```text\nEvidence → Finding → Recommended next action\n```'
+    )
+  await view.getByRole('tab', { name: 'Preview', exact: true }).click()
+  const dialog = document.querySelector('[role="dialog"]') as HTMLElement
+  await expect.poll(() => getComputedStyle(dialog).opacity).toBe('1')
+  expect(dialog.getBoundingClientRect().width).toBeGreaterThan(900)
+  await expect
+    .element(view.getByRole('button', { name: 'Save draft' }))
+    .toBeVisible()
+  await page.screenshot({ path: '__screenshots__/skill-markdown-desktop.png' })
+  await page.viewport(390, 844)
+  await expect
+    .poll(() => document.documentElement.scrollWidth <= window.innerWidth)
+    .toBe(true)
+  await expect
+    .element(view.getByRole('button', { name: 'Save draft' }))
+    .toBeVisible()
+  await page.screenshot({ path: '__screenshots__/skill-markdown-mobile.png' })
+  await view.getByRole('button', { name: 'Cancel', exact: true }).click()
+  document.documentElement.classList.remove('dark')
+  await page.viewport(1280, 900)
 })

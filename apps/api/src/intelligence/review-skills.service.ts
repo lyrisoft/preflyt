@@ -17,6 +17,7 @@ import {
   validateSkill,
   type SkillManifest,
 } from "./review-skills.js";
+import { parseSkillMarkdown, exportSkillMarkdown } from "./skill-markdown.js";
 @Injectable()
 export class ReviewSkillsService {
   constructor(
@@ -44,6 +45,36 @@ export class ReviewSkillsService {
       executionMode: "instructions_only",
       context: "assessment_evidence",
     };
+  }
+  async parseMarkdown(session: AuthenticatedSession, markdown: string) {
+    this.available();
+    await this.access.requireOrganization(session, "ai.skills.manage", true);
+    let manifest: SkillManifest;
+    try {
+      manifest = parseSkillMarkdown(markdown);
+    } catch (e) {
+      throw new BadRequestException(
+        e instanceof Error ? e.message : "Invalid SKILL.md",
+      );
+    }
+    for (const id of manifest.repositories)
+      await this.access.requireRepository(session, id, "ai.skills.manage");
+    await this.access.requireOrganization(session, "ai.skills.manage");
+    return manifest;
+  }
+  async markdown(session: AuthenticatedSession, id: string) {
+    const member = await this.access.requireOrganization(session, "ai.skills.read");
+    const skill = await this.db.aiReviewSkill.findFirst({
+      where: { id, organizationId: member.organizationId },
+    });
+    if (!skill) throw new NotFoundException("Skill unavailable");
+    if (skillDigest(skill) !== skill.contentDigest)
+      throw new ConflictException(
+        "Skill contents changed. Reload before downloading.",
+      );
+    const markdown = exportSkillMarkdown(skill);
+    await this.access.requireOrganization(session, "ai.skills.read");
+    return markdown;
   }
   async create(
     session: AuthenticatedSession,

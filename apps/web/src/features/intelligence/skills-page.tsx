@@ -6,6 +6,11 @@ import { SkillsCatalogue } from './skills-catalogue'
 
 const help = [
   {
+    title: 'Markdown skill files',
+    content:
+      'Write instructions in Markdown and use Preview to review them. Upload SKILL.md to open an editable draft; uploading does not save, approve or enable it. The UTF-8 file must be at most 32 KiB, with name and description in a YAML header and up to 6,000 instruction characters below it. Optional header fields are source, license, stages and repositories. Enter the source and license before saving. Download SKILL.md exports the selected database version. Existing policies keep their approved version and digest; file changes require a new draft and approval. Preview does not run HTML or load linked images.',
+  },
+  {
     title: 'What skills do',
     content:
       'Skills are reviewed instructions for advisory AI analysis. They cannot run commands, edit code, approve policies or change check results. The current runtime reviews saved assessment evidence; it does not read source files or pull request diffs.',

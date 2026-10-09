@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { BookOpen, Plus } from 'lucide-react'
+import { BookOpen, Download, Loader2, Plus, Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -16,6 +16,7 @@ import {
   SheetTitle,
   SheetDescription,
 } from '@/components/ui/sheet'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { StatusBadge } from '@/components/status-badge'
 import { governanceRequest } from '../repositories/governance-api'
@@ -23,6 +24,11 @@ import {
   useNavigationSession,
   canAdminister,
 } from '../workspace/navigation-session'
+import { SkillUpload, MarkdownInstructions } from './skill-markdown'
+import {
+  downloadSkillMarkdown,
+  type SkillDocument,
+} from './skill-markdown-file'
 
 export type ReviewSkill = {
   id: string
@@ -90,7 +96,8 @@ export function SkillsCatalogue() {
     [filter, setFilter] = useState(''),
     [page, setPage] = useState(1),
     [busy, setBusy] = useState(false),
-    [error, setError] = useState('')
+    [error, setError] = useState(''),
+    [downloading, setDownloading] = useState(false)
   const data = query.isError ? undefined : query.data,
     filtered =
       data?.skills.filter((s) =>
@@ -120,16 +127,24 @@ export function SkillsCatalogue() {
           Review skills
         </h2>
         {manage && (
-          <Button
-            size='sm'
-            onClick={() => {
-              setError('')
-              setEditing(null)
-            }}
-          >
-            <Plus className='size-4' />
-            Create skill
-          </Button>
+          <div className='flex flex-wrap items-center gap-2'>
+            <SkillUpload
+              disabled={busy || editing !== undefined}
+              onDocument={setEditing}
+              onError={setError}
+            />
+            <Button
+              size='sm'
+              disabled={busy}
+              onClick={() => {
+                setError('')
+                setEditing(null)
+              }}
+            >
+              <Plus className='size-4' />
+              Create skill
+            </Button>
+          </div>
         )}
       </div>
       {query.isPending && <p role='status'>Loading skills…</p>}
@@ -243,7 +258,7 @@ export function SkillsCatalogue() {
                 {!filtered.length && (
                   <tr>
                     <td
-                      colSpan={5}
+                      colSpan={4}
                       className='p-8 text-center text-muted-foreground'
                     >
                       No review skills yet.
@@ -332,9 +347,25 @@ export function SkillsCatalogue() {
               </dl>
               <div>
                 <h3 className='mb-2 text-sm font-semibold'>Instructions</h3>
-                <p className='rounded-lg border p-4 text-sm whitespace-pre-wrap'>
-                  {selected.instructions}
-                </p>
+                <Tabs defaultValue='preview'>
+                  <TabsList>
+                    <TabsTrigger value='preview'>Preview</TabsTrigger>
+                    <TabsTrigger value='markdown'>Markdown</TabsTrigger>
+                  </TabsList>
+                  <TabsContent
+                    value='preview'
+                    className='rounded-lg border p-4'
+                  >
+                    <MarkdownInstructions>
+                      {selected.instructions}
+                    </MarkdownInstructions>
+                  </TabsContent>
+                  <TabsContent value='markdown'>
+                    <pre className='rounded-lg border p-4 font-mono text-xs break-words whitespace-pre-wrap'>
+                      {selected.instructions}
+                    </pre>
+                  </TabsContent>
+                </Tabs>
               </div>
               {approve && selected.status === 'DRAFT' && (
                 <label className='flex items-start gap-2 text-sm'>
@@ -348,7 +379,43 @@ export function SkillsCatalogue() {
                   version.
                 </label>
               )}
+              {error && (
+                <p role='alert' className='text-sm text-destructive'>
+                  {error}
+                </p>
+              )}
               <div className='flex flex-wrap justify-end gap-2'>
+                <Button
+                  size='sm'
+                  variant='outline'
+                  disabled={busy || downloading}
+                  aria-busy={downloading}
+                  onClick={async () => {
+                    setDownloading(true)
+                    setError('')
+                    try {
+                      await downloadSkillMarkdown(selected.id)
+                    } catch (e) {
+                      setError(
+                        e instanceof Error
+                          ? e.message
+                          : 'Could not download SKILL.md'
+                      )
+                    } finally {
+                      setDownloading(false)
+                    }
+                  }}
+                >
+                  {downloading ? (
+                    <Loader2
+                      aria-hidden='true'
+                      className='size-4 animate-spin motion-reduce:animate-none'
+                    />
+                  ) : (
+                    <Download aria-hidden='true' className='size-4' />
+                  )}
+                  Download SKILL.md
+                </Button>
                 {manage && (
                   <Button
                     size='sm'
@@ -419,7 +486,7 @@ export function SkillsCatalogue() {
           if (!open && !busy) setEditing(undefined)
         }}
       >
-        <DialogContent className='max-h-[90svh] overflow-y-auto'>
+        <DialogContent className='flex max-h-[90svh] flex-col overflow-hidden sm:max-w-5xl'>
           <DialogHeader>
             <DialogTitle>
               {editing && 'version' in editing
@@ -441,6 +508,7 @@ export function SkillsCatalogue() {
                     ) ?? [])
               }
               save={(body) => void action('', body)}
+              cancel={() => setEditing(undefined)}
             />
           )}
         </DialogContent>
@@ -454,133 +522,203 @@ function SkillForm({
   busy,
   error,
   save,
+  cancel,
 }: {
   skill: Template | ReviewSkill | null
   repositories: { githubId: string; fullName: string }[]
   busy: boolean
   error: string
   save: (body: unknown) => void
+  cancel: () => void
 }) {
-  const [stages] = useState(skill?.stages ?? ['repository', 'pull_request']),
-    [ids, setIds] = useState(skill?.repositories ?? []),
-    [filter, setFilter] = useState('')
+  const [draft, setDraft] = useState<SkillDocument>(
+      skill ?? {
+        name: '',
+        description: '',
+        instructions: '',
+        stages: ['repository', 'pull_request'],
+        repositories: [],
+        source: 'Organization-authored instructions',
+        license: 'Organization-owned',
+      }
+    ),
+    [filter, setFilter] = useState(''),
+    [tab, setTab] = useState('write'),
+    [importError, setImportError] = useState('')
+  function field(
+    key: 'name' | 'description' | 'source' | 'license' | 'instructions',
+    value: string
+  ) {
+    setDraft((d) => ({ ...d, [key]: value }))
+  }
   function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    const f = new FormData(e.currentTarget)
     save({
-      name: f.get('name'),
-      description: f.get('description'),
-      instructions: f.get('instructions'),
-      source: f.get('source'),
-      license: f.get('license'),
-      stages,
-      repositories: ids,
+      ...draft,
       expectedVersion: skill && 'version' in skill ? skill.version : 0,
       ...(skill && 'skillKey' in skill ? { skillKey: skill.skillKey } : {}),
     })
   }
+  const ready =
+    [
+      draft.name,
+      draft.description,
+      draft.instructions,
+      draft.source,
+      draft.license,
+    ].every((v) => v.trim()) && draft.stages.length > 0
   return (
-    <form onSubmit={submit} className='space-y-4'>
-      <label className='block space-y-2 text-sm'>
-        <span>Name</span>
-        <Input
-          name='name'
-          placeholder='Security evidence review'
-          required
-          maxLength={100}
-          defaultValue={skill?.name}
-        />
-      </label>
-      <label className='block space-y-2 text-sm'>
-        <span>Description</span>
-        <Input
-          name='description'
-          placeholder='Explain failed security checks and missing evidence'
-          required
-          maxLength={400}
-          defaultValue={skill?.description}
-        />
-      </label>
-      <label className='block space-y-2 text-sm'>
-        <span>Instructions</span>
-        <Textarea
-          name='instructions'
-          placeholder='Review the supplied evidence and cite each relevant check…'
-          className='min-h-32'
-          required
-          maxLength={6000}
-          defaultValue={skill?.instructions}
-        />
-      </label>
-      <div className='grid gap-3 sm:grid-cols-2'>
-        <label className='block space-y-2 text-sm'>
-          <span>Source</span>
-          <Input
-            name='source'
-            placeholder='Organization-authored instructions'
-            required
-            maxLength={300}
-            defaultValue={skill?.source ?? 'Organization-authored instructions'}
-          />
-        </label>
-        <label className='block space-y-2 text-sm'>
-          <span>License</span>
-          <Input
-            name='license'
-            placeholder='Organization-owned or MIT'
-            required
-            maxLength={100}
-            defaultValue={skill?.license ?? 'Organization-owned'}
-          />
-        </label>
-      </div>
-
-      <fieldset className='space-y-2 text-sm'>
-        <legend className='mb-2 font-medium'>Repository scope</legend>
-        <label className='flex items-center gap-2'>
-          <input
-            type='checkbox'
-            checked={!ids.length}
-            onChange={() => setIds([])}
-          />
-          All authorized repositories
-        </label>
-        <Input
-          aria-label='Filter assigned repositories'
-          placeholder='Filter repositories…'
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-        />
-        <div className='max-h-32 space-y-2 overflow-y-auto'>
-          {repositories
-            .filter((r) =>
-              r.fullName.toLowerCase().includes(filter.toLowerCase())
-            )
-            .map((r) => (
-              <label key={r.githubId} className='flex items-center gap-2'>
-                <input
-                  type='checkbox'
-                  checked={ids.includes(r.githubId)}
-                  onChange={(e) =>
-                    setIds(
-                      e.target.checked
-                        ? [...ids, r.githubId]
-                        : ids.filter((id) => id !== r.githubId)
-                    )
-                  }
-                />
-                {r.fullName}
-              </label>
-            ))}
+    <form onSubmit={submit} className='flex min-h-0 flex-1 flex-col gap-5'>
+      <div className='grid min-h-0 gap-6 overflow-y-auto md:grid-cols-[280px_minmax(0,1fr)]'>
+        <div className='space-y-4'>
+          {(
+            [
+              ['name', 'Name', 'Security evidence review', 100],
+              [
+                'description',
+                'Description',
+                'Explain failed checks and missing evidence',
+                400,
+              ],
+              ['source', 'Source', 'Organization-authored instructions', 300],
+              ['license', 'License', 'Organization-owned or MIT', 100],
+            ] as const
+          ).map(([key, label, placeholder, maxLength]) => (
+            <label key={key} className='block space-y-2 text-sm'>
+              <span>{label}</span>
+              <Input
+                name={key}
+                placeholder={placeholder}
+                required
+                maxLength={maxLength}
+                value={draft[key]}
+                disabled={busy}
+                onChange={(e) => field(key, e.target.value)}
+              />
+            </label>
+          ))}
+          <fieldset className='space-y-2 text-sm' disabled={busy}>
+            <legend className='mb-2 font-medium'>Repository scope</legend>
+            <label className='flex items-center gap-2'>
+              <input
+                type='checkbox'
+                checked={!draft.repositories.length}
+                onChange={() => setDraft((d) => ({ ...d, repositories: [] }))}
+              />
+              All authorized repositories
+            </label>
+            <Input
+              aria-label='Filter assigned repositories'
+              placeholder='Filter repositories…'
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+            />
+            <div className='max-h-28 space-y-2 overflow-y-auto'>
+              {repositories
+                .filter((r) =>
+                  r.fullName.toLowerCase().includes(filter.toLowerCase())
+                )
+                .map((r) => (
+                  <label key={r.githubId} className='flex items-center gap-2'>
+                    <input
+                      type='checkbox'
+                      checked={draft.repositories.includes(r.githubId)}
+                      onChange={(e) =>
+                        setDraft((d) => ({
+                          ...d,
+                          repositories: e.target.checked
+                            ? [...d.repositories, r.githubId]
+                            : d.repositories.filter((id) => id !== r.githubId),
+                        }))
+                      }
+                    />
+                    {r.fullName}
+                  </label>
+                ))}
+            </div>
+          </fieldset>
         </div>
-      </fieldset>
-      {error && (
+        <div className='flex min-w-0 flex-col gap-3'>
+          <div className='flex flex-wrap items-center justify-between gap-2'>
+            <h3 className='text-sm font-semibold'>Instructions</h3>
+            <SkillUpload
+              disabled={busy}
+              label='Replace from SKILL.md'
+              onError={setImportError}
+              onDocument={(d) => {
+                setDraft(d)
+                setTab('write')
+              }}
+            />
+          </div>
+          <Tabs
+            value={tab}
+            onValueChange={setTab}
+            className='flex min-h-72 flex-1 flex-col'
+          >
+            <TabsList className='self-start'>
+              <TabsTrigger value='write'>Write</TabsTrigger>
+              <TabsTrigger value='preview'>Preview</TabsTrigger>
+            </TabsList>
+            <TabsContent value='write' className='flex flex-1 flex-col'>
+              <Textarea
+                aria-label='Instructions'
+                name='instructions'
+                placeholder={
+                  '# Review instructions\n\n- Review the supplied evidence.\n- Cite the check behind each finding.'
+                }
+                className='min-h-72 flex-1 resize-none font-mono text-sm'
+                maxLength={6000}
+                value={draft.instructions}
+                disabled={busy}
+                onChange={(e) => field('instructions', e.target.value)}
+              />
+            </TabsContent>
+            <TabsContent
+              value='preview'
+              className='max-h-[420px] min-h-72 flex-1 overflow-y-auto rounded-lg border p-4'
+            >
+              {draft.instructions ? (
+                <MarkdownInstructions>
+                  {draft.instructions}
+                </MarkdownInstructions>
+              ) : (
+                <p className='text-sm text-muted-foreground'>
+                  Write instructions to preview them here.
+                </p>
+              )}
+            </TabsContent>
+          </Tabs>
+          <p className='text-right text-xs text-muted-foreground'>
+            {draft.instructions.length.toLocaleString()}/6,000 characters
+          </p>
+        </div>
+      </div>
+      {(error || importError) && (
         <p role='alert' className='text-sm text-destructive'>
-          {error}
+          {error || importError}
         </p>
       )}
-      <div className='flex justify-end'>
-        <Button disabled={busy || !stages.length}>Save draft</Button>
+      <div className='flex shrink-0 justify-end gap-2 border-t pt-4'>
+        <Button
+          type='button'
+          variant='outline'
+          disabled={busy}
+          onClick={cancel}
+        >
+          Cancel
+        </Button>
+        <Button disabled={busy || !ready} aria-busy={busy}>
+          {busy ? (
+            <Loader2
+              aria-hidden='true'
+              className='size-4 animate-spin motion-reduce:animate-none'
+            />
+          ) : (
+            <Save aria-hidden='true' className='size-4' />
+          )}
+          Save draft
+        </Button>
       </div>
     </form>
   )
