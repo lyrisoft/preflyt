@@ -21,7 +21,13 @@ import {
 import { createNativeWorkspace } from '../src/execution/native-workspace.js'
 import { digest } from '../src/assessments/assessment-digest.js'
 import { nativeCheckOutcome } from '../src/execution/native-result.js'
-if (process.env.NATIVE_FIXTURE_TOOL && !['node','gitleaks','semgrep','trivy'].includes(process.env.NATIVE_FIXTURE_TOOL)) throw new Error('Choose an installed fixture tool')
+if (
+  process.env.NATIVE_FIXTURE_TOOL &&
+  !['node', 'gitleaks', 'semgrep', 'trivy'].includes(
+    process.env.NATIVE_FIXTURE_TOOL,
+  )
+)
+  throw new Error('Choose an installed fixture tool')
 const root = await mkdtemp(join(tmpdir(), 'preflyt-p3-fixtures-'))
 const git = (args: string[], input?: Buffer | string) =>
   execFileSync('git', args, {
@@ -100,6 +106,51 @@ const fixtures: Array<{
     expected: 'FAIL',
   },
   {
+    id: 'terraform-failure',
+    ruleId: 'iac.policy',
+    tool: 'trivy',
+    files: {
+      'main.tf':
+        'resource "aws_security_group" "unsafe" {\n  name = "unsafe-fixture"\n  ingress {\n    from_port = 22\n    to_port = 22\n    protocol = "tcp"\n    cidr_blocks = ["0.0.0.0/0"]\n  }\n}\n',
+    },
+    expected: 'FAIL',
+  },
+  {
+    id: 'python-sast-failure',
+    ruleId: 'security.sast',
+    tool: 'semgrep',
+    files: { 'app.py': 'user_input = input()\nexec(user_input)\n' },
+    expected: 'FAIL',
+  },
+  {
+    id: 'python-sast-clean',
+    ruleId: 'security.sast',
+    tool: 'semgrep',
+    files: { 'app.py': 'import json\nvalue = json.loads("{}")\n' },
+    expected: 'PASS',
+  },
+  {
+    id: 'lint-failure',
+    ruleId: 'lint.required',
+    tool: 'semgrep',
+    files: { 'app.js': 'function inspect() { debugger; }\n' },
+    expected: 'FAIL',
+  },
+  {
+    id: 'lint-clean',
+    ruleId: 'lint.required',
+    tool: 'semgrep',
+    files: { 'app.js': 'function inspect() { return 1; }\n' },
+    expected: 'PASS',
+  },
+  {
+    id: 'python-lint-failure',
+    ruleId: 'lint.required',
+    tool: 'semgrep',
+    files: { 'app.py': 'try:\n    inspect()\nexcept:\n    pass\n' },
+    expected: 'FAIL',
+  },
+  {
     id: 'test-failure',
     ruleId: 'tests.required',
     tool: 'node',
@@ -140,7 +191,11 @@ const fixtures: Array<{
 const results: unknown[] = []
 try {
   git(['-c', 'init.templateDir=', 'init', '--bare', '--quiet'])
-  for (const fixture of fixtures.filter(f => !process.env.NATIVE_FIXTURE_TOOL || f.tool === process.env.NATIVE_FIXTURE_TOOL)) {
+  for (const fixture of fixtures.filter(
+    (f) =>
+      !process.env.NATIVE_FIXTURE_TOOL ||
+      f.tool === process.env.NATIVE_FIXTURE_TOOL,
+  )) {
     const entries = Object.entries(fixture.files)
       .sort()
       .map(([path, text]) => {

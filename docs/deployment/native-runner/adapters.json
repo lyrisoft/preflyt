@@ -119,5 +119,28 @@
       "1",
       "/workspace"
     ]
+  },
+  "lint.required": {
+    "id": "semgrep-lint-v1",
+    "tool": "Semgrep CE",
+    "license": "LGPL-2.1-only",
+    "format": "sarif",
+    "command": [
+      "/usr/local/bin/semgrep"
+    ],
+    "args": [
+      "scan",
+      "--config",
+      "/opt/preflyt/config/lint.yaml",
+      "--metrics",
+      "off",
+      "--disable-version-check",
+      "--no-git-ignore",
+      "--sarif",
+      "--output",
+      "/reports/report.sarif",
+      "--error",
+      "/workspace"
+    ]
   }
 }

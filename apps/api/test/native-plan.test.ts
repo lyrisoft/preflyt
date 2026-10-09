@@ -65,6 +65,37 @@ describe('native tool admission', () => {
   ])('rejects unsafe tool configuration %j', (patch) =>
     expect(parse([{ ...review(), ...patch }])).toBeNull(),
   )
+  it('pins image-owned lint rules and requires a matching reviewed license and configuration', () => {
+    const lint = {
+      ...review(),
+      ruleId: 'lint.required',
+      license: 'LGPL-2.1-only',
+    }
+    const reviewed = parse([lint])!
+    expect(reviewed.reviews).toHaveLength(1)
+    const plan = buildNativePlan(
+      {
+        ...input(),
+        rules: [
+          {
+            id: 'lint.required',
+            title: 'Lint',
+            required: true,
+            capability: 'planned',
+          },
+        ],
+      },
+      reviewed,
+    )
+    expect(plan.steps[0]).toMatchObject({
+      adapterSupported: true,
+      adapterId: 'semgrep-lint-v1',
+      command: ['/usr/local/bin/semgrep'],
+      configHash: lint.configHash,
+    })
+    expect(plan.steps[0].args).toContain('/opt/preflyt/config/lint.yaml')
+    expect(plan.executionAvailable).toBe(false)
+  })
   it('rejects duplicates, excessive and malformed reviews', () => {
     expect(parse([review(), review()])).toBeNull()
     expect(parse(Array.from({ length: 17 }, review))).toBeNull()
@@ -163,23 +194,19 @@ describe('plan access', () => {
     }
     const prisma = {
       repositoryProfile: {
-        findFirst: vi
-          .fn()
-          .mockResolvedValue({
-            sourceSha: 'd'.repeat(40),
-            branch: 'main',
-            createdAt: new Date(now),
-          }),
+        findFirst: vi.fn().mockResolvedValue({
+          sourceSha: 'd'.repeat(40),
+          branch: 'main',
+          createdAt: new Date(now),
+        }),
       },
       repositoryStandardsSelection: {
-        findFirst: vi
-          .fn()
-          .mockResolvedValue({
-            id: 'selection-a',
-            profile: 'DEFAULT',
-            revision: 1,
-            packs: [{ id: 'baseline-engineering', version: '1.0.0' }],
-          }),
+        findFirst: vi.fn().mockResolvedValue({
+          id: 'selection-a',
+          profile: 'DEFAULT',
+          revision: 1,
+          packs: [{ id: 'baseline-engineering', version: '1.0.0' }],
+        }),
       },
     }
     return {
@@ -203,7 +230,7 @@ describe('plan access', () => {
     expect(result.repositoryId).toBe('51')
     expect(result.sourceSha).toBe('d'.repeat(40))
     expect(result.executionAvailable).toBe(false)
-    expect(access.requireRepository).toHaveBeenCalledTimes(2)
+    expect(access.requireRepository).toHaveBeenCalledTimes(3)
   })
   it('does not return a plan after access is revoked', async () => {
     const { access, service } = mocks()

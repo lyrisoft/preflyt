@@ -67,7 +67,7 @@ it('denies another organization and unauthenticated sessions',async()=>{
 })
 it('rejects CSRF, unknown commands and unsupported adapters',async()=>{
   const input=await body();await http(app.getHttpServer()).post(root).set('Cookie',`native.sid=${owner.identityId}`).set('Origin','https://attacker.invalid').send(input).expect(403)
-  await post(owner,root,{...input,command:['/bin/sh']}).expect(400);await post(owner,root,{...input,ruleIds:['lint.required']}).expect(400)
+  await post(owner,root,{...input,command:['/bin/sh']}).expect(400);await post(owner,root,{...input,ruleIds:['types.required']}).expect(400)
   expect(await db.nativeExecutionRequest.count()).toBe(0)
 })
 it('pins source, standards and plan and rejects stale expected values',async()=>{

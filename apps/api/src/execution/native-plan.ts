@@ -8,7 +8,11 @@ export const nativeAdapters = {
     license: 'MIT',
     format: 'junit',
     command: ['/usr/local/bin/node'],
-    args: ['--test', '--test-reporter=junit', '--test-reporter-destination=/reports/report.xml'],
+    args: [
+      '--test',
+      '--test-reporter=junit',
+      '--test-reporter-destination=/reports/report.xml',
+    ],
   },
   'secrets.scan': {
     id: 'gitleaks-directory-v1',
@@ -70,6 +74,27 @@ export const nativeAdapters = {
       'scan',
       '--config',
       '/opt/preflyt/config/semgrep.yaml',
+      '--metrics',
+      'off',
+      '--disable-version-check',
+      '--no-git-ignore',
+      '--sarif',
+      '--output',
+      '/reports/report.sarif',
+      '--error',
+      '/workspace',
+    ],
+  },
+  'lint.required': {
+    id: 'semgrep-lint-v1',
+    tool: 'Semgrep CE',
+    license: 'LGPL-2.1-only',
+    format: 'sarif',
+    command: ['/usr/local/bin/semgrep'],
+    args: [
+      'scan',
+      '--config',
+      '/opt/preflyt/config/lint.yaml',
       '--metrics',
       'off',
       '--disable-version-check',
@@ -245,7 +270,10 @@ export function buildNativePlan(
               deadlineSeconds: 300,
             },
             workingDirectory: '/workspace',
-            reportPath: adapter.format === 'junit' ? '/reports/report.xml' : '/reports/report.sarif',
+            reportPath:
+              adapter.format === 'junit'
+                ? '/reports/report.xml'
+                : '/reports/report.sarif',
             maxReportBytes: 256 * 1024,
           }
         : {}),

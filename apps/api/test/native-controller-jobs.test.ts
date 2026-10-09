@@ -62,7 +62,8 @@ afterEach(async () => {
   jobs = undefined
 })
 async function fixture(
-  ruleId: 'tests.required' | 'secrets.scan' = 'tests.required',
+  ruleId:
+    'tests.required' | 'secrets.scan' | 'lint.required' = 'tests.required',
 ) {
   directory = await mkdtemp(join(tmpdir(), 'preflyt-controller-contract-'))
   const now = Date.now(),
@@ -224,6 +225,23 @@ describe('durable native controller admission and signed results', () => {
     await jobs.initialize()
     expect(await jobs.call('status', expected)).toEqual(result)
     expect(runner).toHaveBeenCalledOnce()
+  })
+  it('signs the reviewed lint command with partial coverage instead of claiming complete lint validation', async () => {
+    const { expected, source, runner } = await fixture('lint.required')
+    await jobs!.call('admit', expected, source)
+    const result = await wait(() => jobs!.call('status', expected))
+    const receipt = verifyNativeReceipt(result.signature, expected)!
+    expect(receipt.checks[0]).toMatchObject({
+      ruleId: 'lint.required',
+      adapterId: 'semgrep-lint-v1',
+      coverage: 'PARTIAL',
+      commandHash: digest(nativeAdapters['lint.required']),
+      cleanupConfirmed: true,
+    })
+    expect(runner).toHaveBeenCalledOnce()
+    const step = expected.plan.steps[0]
+    expect(step.args).toContain('/opt/preflyt/config/lint.yaml')
+    expect(step.args).not.toContain('/workspace/eslint.config.js')
   })
   it('blocks source/plan/scope changes before executing', async () => {
     const { expected, source, runner } = await fixture()

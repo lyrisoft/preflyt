@@ -4,3 +4,10 @@ rules:
     severity: ERROR
     message: Dynamic code execution requires review.
     pattern: eval(...)
+  - id: preflyt-python-dynamic-execution
+    languages: [python]
+    severity: ERROR
+    message: Dynamic code execution requires review.
+    pattern-either:
+      - pattern: eval(...)
+      - pattern: exec(...)
