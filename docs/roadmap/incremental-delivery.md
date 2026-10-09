@@ -96,7 +96,9 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 
 - **P1.CQ:** Import and normalize revision-specific lint/typecheck/coverage and static-analysis evidence, with optional bounded read-only AI review using approved skills. See [Code Quality Review](../product/code-quality-review.md).
 
-### P2 — Policy Quality Gates
+- **P1.Teams:** Show verified team associations and policy-source provenance in repository profiles and assessments.
+
+### P2 — Policy Quality Gates### P2 — Policy Quality Gates
 
 **User value:** A policy owner defines a simple standard and a developer sees an accurate advisory or blocking GitHub quality check.
 
