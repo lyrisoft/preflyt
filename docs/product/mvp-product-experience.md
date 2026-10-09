@@ -92,6 +92,8 @@ Access Control shows a searchable, paginated GitHub member directory: avatar, us
 
 Show sync time, partial directory results, verification errors and retry actions. Do not treat a missing public membership as proof of non-membership. Role/grant editing must respect live organization permissions and the user's GitHub repository access. GitHub removal disables corresponding Preflyt access, including cached data. Rename-safe identity, first-owner verification and migration acceptance are required by ADR-0007; this UX is not implemented yet.
 
+**Notifications:** once P1 is implemented, the top bar includes a working unread bell with authorized assessment events and a dedicated inbox. P2 adds gate/policy alerts and email preferences, and P3 adds critical findings. Empty, delivery-failure and stale states are explicit; do not show dummy alerts. See [Notification Engine](notification-engine.md).
+
 ## End-to-end MVP journeys
 
 **New organization (GitHub-first target):** Continue with GitHub → connect/verify the organization App installation → verify GitHub organization ownership and create the matching workspace automatically → select repository → discover profile → recommend and select policy packs → show missing controls and next steps. The Overview should be an onboarding state until real assessments exist.
