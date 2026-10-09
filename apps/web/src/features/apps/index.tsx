@@ -43,14 +43,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { ConfigDrawer } from '@/components/config-drawer'
-import { AppBreadcrumbs } from '@/components/layout/app-breadcrumbs'
-import { Header } from '@/components/layout/header'
+import { AppHeader } from '@/components/layout/app-header'
 import { Main } from '@/components/layout/main'
-import { ProfileDropdown } from '@/components/profile-dropdown'
-import { Search } from '@/components/search'
 import { StatusBadge } from '@/components/status-badge'
-import { ThemeSwitch } from '@/components/theme-switch'
 import { TechIcon } from '@/features/repositories/tech-icon'
 import { useNavigationSession } from '@/features/workspace/navigation-session'
 import { canPerform } from '../workspace/scoped-access'
@@ -442,16 +437,7 @@ export function Apps() {
 
   return (
     <>
-      <Header fixed>
-        <AppBreadcrumbs
-          className='me-auto hidden sm:block'
-          items={[{ label: 'Repositories' }]}
-        />
-        <Search />
-        <ThemeSwitch />
-        <ConfigDrawer />
-        <ProfileDropdown />
-      </Header>
+      <AppHeader breadcrumbs={[{ label: 'Repositories' }]} />
       <Main fixed className='overflow-y-auto'>
         <div className='space-y-6'>
           <div className='flex flex-wrap items-start justify-between gap-4'>

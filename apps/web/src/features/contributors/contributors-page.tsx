@@ -34,7 +34,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Header } from '@/components/layout/header'
+import { AppHeader } from '@/components/layout/app-header'
 import { Main } from '@/components/layout/main'
 import { RepositoryPicker } from '@/components/repository-picker'
 import { useNavigationSession } from '../workspace/navigation-session'
@@ -337,7 +337,16 @@ export function ContributorsPage({
       ]
   return (
     <>
-      <Header />
+      <AppHeader
+        breadcrumbs={
+          contributorId
+            ? [
+                { label: 'Contributors', to: '/contributors' },
+                { label: c?.login ?? 'Contributor' },
+              ]
+            : [{ label: 'Contributors' }]
+        }
+      />
       <Main className='space-y-6'>
         <div className='flex flex-wrap items-center justify-between gap-4'>
           <div>
@@ -345,7 +354,7 @@ export function ContributorsPage({
               <Link
                 to='/contributors'
                 search={{ ...filters, page: 1, tab: 'overview' }}
-                className='mb-2 inline-flex items-center gap-1 text-xs text-primary'
+                className='mb-2 inline-flex items-center gap-1 text-xs text-primary sm:hidden'
               >
                 <ArrowLeft className='size-3' />
                 Contributors

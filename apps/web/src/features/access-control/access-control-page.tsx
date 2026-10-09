@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
-import { Header } from '@/components/layout/header'
+import { AppHeader } from '@/components/layout/app-header'
 import { Main } from '@/components/layout/main'
 import { useNavigationSession } from '../workspace/navigation-session'
 import { canPerform } from '../workspace/scoped-access'
@@ -148,7 +148,7 @@ export function AccessControlPage() {
   }
   return (
     <>
-      <Header />
+      <AppHeader breadcrumbs={[{ label: 'Access control' }]} />
       <Main className='space-y-6'>
         <div>
           <p className='text-[10px] font-semibold tracking-widest text-muted-foreground uppercase'>

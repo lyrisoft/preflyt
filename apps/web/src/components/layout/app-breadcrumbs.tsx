@@ -2,7 +2,9 @@ import { Link, type LinkProps } from '@tanstack/react-router'
 import { ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-type Crumb = { label: string } & Partial<Pick<LinkProps, 'to' | 'params'>>
+export type Crumb = { label: string } & Partial<
+  Pick<LinkProps, 'to' | 'params'>
+>
 
 /** Location in the app bar; the last crumb is the current page. */
 export function AppBreadcrumbs({

@@ -16,15 +16,10 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { ConfigDrawer } from '@/components/config-drawer'
-import { AppBreadcrumbs } from '@/components/layout/app-breadcrumbs'
-import { Header } from '@/components/layout/header'
+import { AppHeader } from '@/components/layout/app-header'
 import { Main } from '@/components/layout/main'
-import { ProfileDropdown } from '@/components/profile-dropdown'
 import { RepositoryPicker } from '@/components/repository-picker'
-import { Search } from '@/components/search'
 import { StatusBadge } from '@/components/status-badge'
-import { ThemeSwitch } from '@/components/theme-switch'
 import { RepositoryActivityPanel } from '@/features/repositories/repository-activity-panel'
 import { RepositoryAssessments } from '@/features/repositories/repository-assessments'
 import { RepositoryBindings } from '@/features/repositories/repository-bindings'
@@ -120,16 +115,7 @@ export function WorkspaceModule({ module }: { module: Module }) {
   const canManage = canPerform(session.data, 'repository.connect')
   return (
     <>
-      <Header fixed>
-        <AppBreadcrumbs
-          className='me-auto hidden sm:block'
-          items={[{ label: config.title }]}
-        />
-        <Search />
-        <ThemeSwitch />
-        <ConfigDrawer />
-        <ProfileDropdown />
-      </Header>
+      <AppHeader breadcrumbs={[{ label: config.title }]} />
       <Main>
         <div
           className={cn(

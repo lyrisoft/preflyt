@@ -33,14 +33,9 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { ConfigDrawer } from '@/components/config-drawer'
-import { AppBreadcrumbs } from '@/components/layout/app-breadcrumbs'
-import { Header } from '@/components/layout/header'
+import { AppHeader } from '@/components/layout/app-header'
 import { Main } from '@/components/layout/main'
-import { ProfileDropdown } from '@/components/profile-dropdown'
 import { RepositoryPicker } from '@/components/repository-picker'
-import { Search } from '@/components/search'
-import { ThemeSwitch } from '@/components/theme-switch'
 import { RelativeTime } from '@/features/repositories/relative-time'
 import { ActivityHeatmap } from './activity-heatmap'
 import type { DashboardData } from './dashboard-types'
@@ -112,16 +107,7 @@ export function Dashboard() {
     : []
   return (
     <>
-      <Header fixed>
-        <AppBreadcrumbs
-          className='me-auto hidden sm:block'
-          items={[{ label: 'Overview' }]}
-        />
-        <Search />
-        <ThemeSwitch />
-        <ConfigDrawer />
-        <ProfileDropdown />
-      </Header>
+      <AppHeader breadcrumbs={[{ label: 'Overview' }]} />
       <Main className='space-y-6'>
         <div className='flex flex-wrap items-start justify-between gap-4'>
           <div>

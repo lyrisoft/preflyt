@@ -27,14 +27,9 @@ import {
 } from '@/components/ui/popover'
 import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ConfigDrawer } from '@/components/config-drawer'
-import { AppBreadcrumbs } from '@/components/layout/app-breadcrumbs'
-import { Header } from '@/components/layout/header'
+import { AppHeader } from '@/components/layout/app-header'
 import { Main } from '@/components/layout/main'
-import { ProfileDropdown } from '@/components/profile-dropdown'
-import { Search } from '@/components/search'
 import { StatusBadge } from '@/components/status-badge'
-import { ThemeSwitch } from '@/components/theme-switch'
 import { canPerform, type ScopedSession } from '../workspace/scoped-access'
 import { EvidenceDialog } from './evidence-dialog'
 import {
@@ -345,19 +340,12 @@ export function RepositoryProfilePage() {
   const profile = result?.profile
   return (
     <>
-      <Header fixed>
-        <AppBreadcrumbs
-          className='me-auto hidden sm:block'
-          items={[
-            { label: 'Repositories', to: '/apps' },
-            { label: result?.repository.fullName ?? 'Repository' },
-          ]}
-        />
-        <Search />
-        <ThemeSwitch />
-        <ConfigDrawer />
-        <ProfileDropdown />
-      </Header>
+      <AppHeader
+        breadcrumbs={[
+          { label: 'Repositories', to: '/apps' },
+          { label: result?.repository.fullName ?? 'Repository' },
+        ]}
+      />
       <Main className='space-y-5'>
         <div>
           <Button
