@@ -1,5 +1,6 @@
 import type { AiProviderConnection } from "../generated/prisma/client.js";
 import {
+  aiApiBaseUrl,
   aiCredentialEndpointDigest,
   decryptAiCredential,
   providerEndpoint,
@@ -73,7 +74,7 @@ export async function runSkillInference(
     };
   }
   const response = await aiHttpRequest(
-    new URL(endpoint.baseUrl + path),
+    new URL(aiApiBaseUrl(endpoint) + path),
     endpoint.locality,
     { headers, body: JSON.stringify(body), signal },
   );

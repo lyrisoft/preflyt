@@ -2,6 +2,12 @@ import { useState, type FormEvent } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Cable,
+  Loader2,
+  Pencil,
+  PlugZap,
+  Power,
+  Save,
+  Settings2,
   Plus,
   RefreshCw,
   Route as RouteIcon,
@@ -196,6 +202,7 @@ function AiSettings({
     [edit, setEdit] = useState<Provider | null | undefined>(),
     [routing, setRouting] = useState<StageRoute | undefined>(),
     [busy, setBusy] = useState(false),
+    [activeAction, setActiveAction] = useState(''),
     [error, setError] = useState(''),
     [notice, setNotice] = useState(''),
     [search, setSearch] = useState(''),
@@ -203,17 +210,28 @@ function AiSettings({
   const data = query.isError ? undefined : query.data
   async function action(path: string, body: unknown, done?: () => void) {
     setBusy(true)
+    setActiveAction(path)
     setError('')
     setNotice('')
     try {
-      await governanceRequest('/ai/configuration' + path, body)
+      const result = await governanceRequest<{ status?: string }>(
+        '/ai/configuration' + path,
+        body
+      )
       done?.()
       await client.invalidateQueries({ queryKey: key })
-      setNotice('Saved.')
+      if (path.endsWith('/test')) {
+        if (result?.status === 'CONNECTED') setNotice('Connection tested.')
+        else
+          setError(
+            `${testName(result?.status ?? 'UNAVAILABLE')}. Check the endpoint, model name and authentication settings, then try again.`
+          )
+      } else setNotice('Saved.')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unable to save. Try again.')
     } finally {
       setBusy(false)
+      setActiveAction('')
     }
   }
   const filtered =
@@ -238,7 +256,14 @@ function AiSettings({
             disabled={query.isFetching || busy}
             onClick={() => void query.refetch()}
           >
-            <RefreshCw className='size-4' />
+            <RefreshCw
+              aria-hidden='true'
+              className={
+                query.isFetching
+                  ? 'size-4 animate-spin motion-reduce:animate-none'
+                  : 'size-4'
+              }
+            />
             Refresh
           </Button>
           <PageHelpDrawer title='AI Intelligence' sections={help} />
@@ -327,6 +352,11 @@ function AiSettings({
                           setEdit(connection ?? null)
                         }}
                       >
+                        {connection ? (
+                          <Settings2 aria-hidden='true' />
+                        ) : (
+                          <Power aria-hidden='true' />
+                        )}
                         {connection ? 'Configure' : 'Activate'}
                       </Button>
                     </section>
@@ -399,7 +429,9 @@ function AiSettings({
                           <td className='px-4 py-4'>
                             <div className='flex flex-wrap gap-2'>
                               {p.approved && (
-                                <StatusBadge tone='info'>Approved</StatusBadge>
+                                <StatusBadge tone='success'>
+                                  Approved
+                                </StatusBadge>
                               )}
                               <StatusBadge
                                 tone={
@@ -407,7 +439,13 @@ function AiSettings({
                                     ? 'neutral'
                                     : p.testStatus === 'CONNECTED'
                                       ? 'success'
-                                      : 'info'
+                                      : [
+                                            'AUTH_REJECTED',
+                                            'MODEL_UNAVAILABLE',
+                                            'UNAVAILABLE',
+                                          ].includes(p.testStatus)
+                                        ? 'error'
+                                        : 'neutral'
                                 }
                               >
                                 {!p.enabled
@@ -417,9 +455,9 @@ function AiSettings({
                             </div>
                           </td>
                           <td className='px-4 py-4'>
-                            <div className='flex gap-2'>
+                            <div className='flex items-center gap-2'>
                               <Button
-                                size='sm'
+                                className='min-w-24'
                                 variant='outline'
                                 disabled={busy}
                                 onClick={() => {
@@ -432,21 +470,34 @@ function AiSettings({
                                   setEdit(p)
                                 }}
                               >
+                                <Pencil aria-hidden='true' />
                                 Edit
                               </Button>
                               <Button
-                                size='sm'
+                                className='min-w-24'
+                                aria-busy={
+                                  busy &&
+                                  activeAction === `/providers/${p.id}/test`
+                                }
                                 variant='outline'
                                 disabled={busy}
                                 onClick={() =>
-                                  void action(
-                                    `/providers/${p.id}/test`,
-                                    {},
-                                    () => setNotice('Connection tested.')
-                                  )
+                                  void action(`/providers/${p.id}/test`, {})
                                 }
                               >
-                                Test
+                                {busy &&
+                                activeAction === `/providers/${p.id}/test` ? (
+                                  <Loader2
+                                    aria-hidden='true'
+                                    className='size-4 animate-spin motion-reduce:animate-none'
+                                  />
+                                ) : (
+                                  <PlugZap aria-hidden='true' />
+                                )}
+                                {busy &&
+                                activeAction === `/providers/${p.id}/test`
+                                  ? 'Testing…'
+                                  : 'Test'}
                               </Button>
                             </div>
                           </td>
@@ -513,7 +564,7 @@ function AiSettings({
                     >
                       <div className='flex items-center justify-between gap-2'>
                         <h2 className='font-semibold'>{stageName(stage)}</h2>
-                        <StatusBadge tone={r?.enabled ? 'info' : 'neutral'}>
+                        <StatusBadge tone={r?.enabled ? 'success' : 'neutral'}>
                           {r?.enabled ? 'Configured' : 'Disabled'}
                         </StatusBadge>
                       </div>
@@ -560,6 +611,7 @@ function AiSettings({
                           )
                         }}
                       >
+                        <Settings2 aria-hidden='true' />
                         Configure
                       </Button>
                     </section>
@@ -598,6 +650,7 @@ function AiSettings({
               provider={edit}
               busy={busy}
               error={error}
+              cancel={() => setEdit(undefined)}
               save={(body) =>
                 void action(
                   `/providers${edit ? '/' + edit.id : ''}`,
@@ -631,6 +684,7 @@ function AiSettings({
               providers={data.providers}
               busy={busy}
               error={error}
+              cancel={() => setRouting(undefined)}
               save={(body) =>
                 void action(`/routes/${routing.stage}`, body, () =>
                   setRouting(undefined)
@@ -648,12 +702,14 @@ function ProviderForm({
   provider,
   busy,
   error,
+  cancel,
   save,
 }: {
   preset?: Preset
   provider: Provider | null
   busy: boolean
   error: string
+  cancel: () => void
   save: (body: unknown) => void
 }) {
   const [baseUrl, setBaseUrl] = useState(provider?.endpoint?.baseUrl ?? ''),
@@ -712,7 +768,11 @@ function ProviderForm({
               type='url'
               value={baseUrl}
               onChange={(e) => setBaseUrl(e.target.value)}
-              placeholder='https://api.example.com/v1'
+              placeholder={
+                locality === 'local'
+                  ? 'http://localhost:11434/v1'
+                  : 'https://api.example.com/v1'
+              }
               required
               maxLength={2048}
             />
@@ -755,7 +815,7 @@ function ProviderForm({
       )}
       <label className='block space-y-2 text-sm'>
         <span>
-          API key{' '}
+          API key{!preset && !requiresKey ? ' (optional)' : ''}{' '}
           {provider?.apiKeySet && !changed
             ? '(leave blank to keep saved key)'
             : ''}
@@ -818,13 +878,38 @@ function ProviderForm({
           {error}
         </p>
       )}
-      <Button className='w-full' disabled={busy}>
-        {busy
-          ? 'Saving…'
-          : preset && !provider
-            ? 'Activate model'
-            : 'Save model'}
-      </Button>
+      <div className='flex flex-wrap justify-end gap-2 border-t pt-4'>
+        <Button
+          type='button'
+          variant='outline'
+          disabled={busy}
+          onClick={cancel}
+        >
+          Cancel
+        </Button>
+        <Button
+          type='submit'
+          className='min-w-32'
+          disabled={busy}
+          aria-busy={busy}
+        >
+          {busy ? (
+            <Loader2
+              aria-hidden='true'
+              className='size-4 animate-spin motion-reduce:animate-none'
+            />
+          ) : preset && !provider ? (
+            <Power aria-hidden='true' />
+          ) : (
+            <Save aria-hidden='true' />
+          )}
+          {busy
+            ? 'Saving…'
+            : preset && !provider
+              ? 'Activate model'
+              : 'Save model'}
+        </Button>
+      </div>
     </form>
   )
 }
@@ -833,12 +918,14 @@ function RouteForm({
   providers,
   busy,
   error,
+  cancel,
   save,
 }: {
   route: StageRoute
   providers: Provider[]
   busy: boolean
   error: string
+  cancel: () => void
   save: (body: unknown) => void
 }) {
   function submit(e: FormEvent<HTMLFormElement>) {
@@ -927,17 +1014,37 @@ function RouteForm({
         />
         Allow repository source sharing
       </label>
-      <p className='text-xs text-muted-foreground'>
-        Requests remain unavailable while AI execution is being built.
-      </p>
       {error && (
         <p role='alert' className='text-sm text-destructive'>
           {error}
         </p>
       )}
-      <Button className='w-full' disabled={busy}>
-        {busy ? 'Saving…' : 'Save routing'}
-      </Button>
+      <div className='flex flex-wrap justify-end gap-2 border-t pt-4'>
+        <Button
+          type='button'
+          variant='outline'
+          disabled={busy}
+          onClick={cancel}
+        >
+          Cancel
+        </Button>
+        <Button
+          type='submit'
+          className='min-w-32'
+          disabled={busy}
+          aria-busy={busy}
+        >
+          {busy ? (
+            <Loader2
+              aria-hidden='true'
+              className='size-4 animate-spin motion-reduce:animate-none'
+            />
+          ) : (
+            <Save aria-hidden='true' />
+          )}
+          {busy ? 'Saving…' : 'Save routing'}
+        </Button>
+      </div>
     </form>
   )
 }

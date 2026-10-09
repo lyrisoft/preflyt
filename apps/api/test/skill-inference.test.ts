@@ -171,3 +171,17 @@ it("rejects tool calls, truncated responses, unknown evidence and provider error
     ).rejects.toThrow();
   }
 });
+
+it("uses the same /v1 base for keyless Ollama reviews as connection testing", async () => {
+  const provider = {
+    id: "provider", organizationId: "org", modelId: "llama3.2:3b", encryptedCredential: null,
+    endpoint: { id: "provider", name: "Ollama", baseUrl: "http://localhost:11434", locality: "local", requiresKey: false, models: ["llama3.2:3b"] },
+  } as any;
+  transport.mockResolvedValue(new Response(JSON.stringify({ choices: [{ finish_reason: "stop", message: { content: output } }] })));
+  await runSkillInference(provider, skills, context, 400, AbortSignal.timeout(1000));
+  const [url, locality, options] = transport.mock.calls[0]!;
+  expect(url.href).toBe("http://localhost:11434/v1/chat/completions");
+  expect(locality).toBe("local");
+  expect(options.headers.authorization).toBeUndefined();
+  expect(JSON.parse(options.body)).toMatchObject({ model: "llama3.2:3b", max_tokens: 400, stream: false });
+});

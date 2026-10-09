@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  aiApiBaseUrl,
   aiConfigurationEnabled,
   aiProviderPresets,
   aiCredentialEndpointDigest,
@@ -265,4 +266,28 @@ it("accepts a Claude alias resolved by its metadata endpoint", async () => {
   expect(transport.mock.lastCall![0].pathname).toBe("/v1/models/claude-example");
   transport.mockResolvedValueOnce(new Response(JSON.stringify({ type: "model", id: "claude-example", lifecycle: "retired" })));
   expect(await testAiEndpoint(value, "claude-example", "fixture-key")).toBe("MODEL_UNAVAILABLE");
+});
+
+it.each([
+  ["http://localhost:11434", "http://localhost:11434/v1"],
+  ["http://localhost:11434/", "http://localhost:11434/v1"],
+  ["http://model-server:8000/v1", "http://model-server:8000/v1"],
+  ["http://model-server:8000/custom/v2", "http://model-server:8000/custom/v2"],
+])("tests a keyless self-hosted server at %s using %s", async (baseUrl, apiBase) => {
+  const local = validateAiEndpoint({ ...endpoint(), baseUrl, locality: "local", requiresKey: false });
+  const originalDigest = endpointDigest(local);
+  transport.mockResolvedValue(new Response(JSON.stringify({ data: [{ id: "reviewed-model" }] })));
+  expect(await testAiEndpoint(local, "reviewed-model")).toBe("CONNECTED");
+  const [url, locality, options] = transport.mock.calls[0]!;
+  expect(url.href).toBe(apiBase + "/models");
+  expect(locality).toBe("local");
+  expect(options.headers).toEqual({ accept: "application/json" });
+  expect(options.body).toBeUndefined();
+  expect(endpointDigest(local)).toBe(originalDigest);
+});
+it("preserves custom hosted roots and reports missing model-list routes as connection failures", async () => {
+  const hosted = { ...endpoint(), baseUrl: "https://gateway.example" };
+  expect(aiApiBaseUrl(hosted)).toBe(hosted.baseUrl);
+  transport.mockResolvedValue(new Response("not found", { status: 404 }));
+  expect(await testAiEndpoint(hosted, "reviewed-model")).toBe("UNAVAILABLE");
 });

@@ -179,6 +179,16 @@ export function decryptAiCredential(
     throw new Error("AI provider credentials could not be decrypted");
   }
 }
+/** Self-hosted OpenAI-compatible servers use /v1 when only an origin is supplied.
+ * Keep the stored endpoint unchanged so credentials and approval digests remain valid.
+ * Explicit paths and built-in provider protocols always take precedence.
+ */
+export function aiApiBaseUrl(endpoint: AiEndpoint) {
+  const url = new URL(endpoint.baseUrl);
+  if (!endpoint.preset && endpoint.locality === "local" && url.pathname === "/")
+    url.pathname = "/v1";
+  return url.href.replace(/\/$/, "");
+}
 /** Only metadata is sent. Redirects, unbounded bodies and response details are rejected. */
 export async function testAiEndpoint(
   endpoint: AiEndpoint,
@@ -191,7 +201,7 @@ export async function testAiEndpoint(
     return "MODEL_UNAVAILABLE";
   const direct = endpoint.preset === "gemini" || endpoint.preset === "anthropic";
   const response = await aiHttpRequest(
-    new URL(endpoint.baseUrl + "/models" + (direct ? "/" + encodeURIComponent(model) : "")),
+    new URL(aiApiBaseUrl(endpoint) + "/models" + (direct ? "/" + encodeURIComponent(model) : "")),
     endpoint.locality,
     {
       headers: {
@@ -208,7 +218,7 @@ export async function testAiEndpoint(
   if (!response.ok || !response.body)
     return response.status === 401 || response.status === 403
       ? "AUTH_REJECTED"
-      : response.status === 404 ? "MODEL_UNAVAILABLE" : "UNAVAILABLE";
+      : response.status === 404 && direct ? "MODEL_UNAVAILABLE" : "UNAVAILABLE";
   const reader = response.body.getReader(),
     chunks: Uint8Array[] = [];
   let size = 0;
