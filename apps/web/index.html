@@ -29,38 +29,91 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
     <!-- Primary Meta Tags -->
-    <title>Shadcn Admin</title>
-    <meta name="title" content="Shadcn Admin" />
+    <title>Preflyt | Engineering confidence before production</title>
+    <meta
+      name="title"
+      content="Preflyt | Engineering confidence before production"
+    />
     <meta
       name="description"
-      content="Admin Dashboard UI built with Shadcn and Vite."
+      content="Self-hosted Shift Left platform for GitHub teams. Profile repositories, adopt versioned engineering standards and assess commits with CI evidence."
+    />
+    <meta name="application-name" content="Preflyt" />
+    <meta name="apple-mobile-web-app-title" content="Preflyt" />
+    <meta name="author" content="Lyrisoft Technologies" />
+    <meta name="publisher" content="Lyrisoft Technologies" />
+    <meta
+      name="keywords"
+      content="Shift Left, engineering standards, DevSecOps, software quality, CI evidence, quality gates, security scanning, repository assessment, self-hosted, GitHub"
+    />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <meta name="color-scheme" content="light dark" />
+    <meta
+      name="theme-color"
+      content="#ffffff"
+      media="(prefers-color-scheme: light)"
+    />
+    <meta
+      name="theme-color"
+      content="#020618"
+      media="(prefers-color-scheme: dark)"
     />
 
-    <!-- Open Graph / Facebook -->
+    <!-- Open Graph -->
     <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://shadcn-admin.netlify.app" />
-    <meta property="og:title" content="Shadcn Admin" />
+    <meta property="og:site_name" content="Preflyt" />
+    <meta property="og:locale" content="en_US" />
+    <meta
+      property="og:title"
+      content="Preflyt | Engineering confidence before production"
+    />
     <meta
       property="og:description"
-      content="Admin Dashboard UI built with Shadcn and Vite."
-    />
-    <meta
-      property="og:image"
-      content="https://shadcn-admin.netlify.app/images/shadcn-admin.png"
+      content="Self-hosted Shift Left platform: repository profiling, versioned engineering standards and commit-pinned assessments with CI evidence."
     />
 
-    <!-- Twitter -->
-    <meta property="twitter:card" content="summary_large_image" />
-    <meta property="twitter:url" content="https://shadcn-admin.netlify.app" />
-    <meta property="twitter:title" content="Shadcn Admin" />
+    <!-- Twitter / X -->
+    <meta name="twitter:card" content="summary" />
     <meta
-      property="twitter:description"
-      content="Admin Dashboard UI built with Shadcn and Vite."
+      name="twitter:title"
+      content="Preflyt | Engineering confidence before production"
     />
     <meta
-      property="twitter:image"
-      content="https://shadcn-admin.netlify.app/images/shadcn-admin.png"
+      name="twitter:description"
+      content="Self-hosted Shift Left platform: repository profiling, versioned engineering standards and commit-pinned assessments with CI evidence."
     />
+
+    <!-- Structured data for search engines and AI answer engines -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "Preflyt",
+        "alternateName": "Preflyt Engineering Control Plane",
+        "slogan": "Engineering confidence before production.",
+        "description": "Preflyt is a self-hosted Shift Left engineering platform. Profile GitHub repositories, adopt versioned engineering standards and assess every commit against security, testing and CI evidence before production.",
+        "applicationCategory": "DeveloperApplication",
+        "applicationSubCategory": "Shift Left engineering governance",
+        "operatingSystem": "Linux (Docker Compose, self-hosted)",
+        "featureList": [
+          "Commit-pinned GitHub repository profiling with file evidence",
+          "Versioned engineering standards packs with profile-based recommendations",
+          "Exact-commit assessment snapshots",
+          "Signed GitHub pull request and CI event ingestion",
+          "Imported JUnit and SARIF report evidence",
+          "OIDC sign-in and role-based access control"
+        ],
+        "keywords": "Shift Left, engineering standards, DevSecOps, software quality, CI evidence, self-hosted",
+        "publisher": {
+          "@type": "Organization",
+          "name": "Lyrisoft Technologies"
+        },
+        "creator": {
+          "@type": "Organization",
+          "name": "Lyrisoft Technologies"
+        }
+      }
+    </script>
 
     <!-- font family -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -69,12 +122,19 @@
       href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Manrope:wght@200..800&display=swap"
       rel="stylesheet"
     />
-
-    <meta name="theme-color" content="#fff" />
   </head>
 
   <body>
     <div id="root"></div>
+    <noscript>
+      <h1>Preflyt: engineering confidence before production</h1>
+      <p>
+        Preflyt is a self-hosted Shift Left engineering platform by Lyrisoft
+        Technologies. It profiles GitHub repositories, applies versioned
+        engineering standards and records commit-pinned assessments with
+        imported CI evidence. Enable JavaScript to use the application.
+      </p>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
