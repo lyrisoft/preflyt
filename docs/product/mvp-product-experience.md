@@ -20,7 +20,7 @@ The **MVP** is P0–P3. Contributor analytics is specified as a P3 additive capa
 - **Workspace:** Overview, Repositories, Assessments, Findings, **Contributors** (only once P3 functional).
 - **Governance:** Quality Gates, Engineering Standards, Policies.
 - **Intelligence:** AI Intelligence (when a usable evidence-linked AI experience ships) and **Skills** (when the approved review-skill catalogue and management experience is functional). Skills is a sibling navigation item under Intelligence, **not** under Settings or Governance. The Intelligence group may be shown with only functional items; never render a dead-end route.
-- **Administration:** Integrations, Access Control, Settings; visibility depends on RBAC.
+- **Administration:** Teams (once functional), Integrations, Access Control, Settings; visibility depends on RBAC.
 - Footer: current identity/role, profile, sign out; preserve separate Super Admin recovery identity handling.
 - Desktop sidebar persists and collapses to icons; mobile uses a keyboard-accessible drawer. Active route is visibly highlighted; navigation order stable.
 - Do not show nonfunctional future pages. Hide unshipped routes or mark clearly unavailable without dead-end navigation.
