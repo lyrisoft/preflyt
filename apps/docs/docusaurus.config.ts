@@ -24,6 +24,20 @@ const config: Config = {
     hooks: { onBrokenMarkdownLinks: 'throw' },
   },
   i18n: { defaultLocale: 'en', locales: ['en'] },
+  // Same type families as the Preflyt app.
+  stylesheets: [
+    {
+      href: 'https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..700&family=JetBrains+Mono:wght@400;500&display=swap',
+      type: 'text/css',
+    },
+  ],
+  headTags: [
+    { tagName: 'link', attributes: { rel: 'preconnect', href: 'https://fonts.googleapis.com' } },
+    {
+      tagName: 'link',
+      attributes: { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: 'anonymous' },
+    },
+  ],
   themes: [
     '@docusaurus/theme-mermaid',
     [
@@ -54,7 +68,7 @@ const config: Config = {
     colorMode: { respectPrefersColorScheme: true },
     navbar: {
       title: 'Preflyt',
-      logo: { alt: 'Preflyt', src: 'img/logo.svg' },
+      logo: { alt: 'Preflyt', src: 'img/logo.svg', srcDark: 'img/logo-dark.svg' },
       items: [
         {
           type: 'docSidebar',
@@ -78,8 +92,35 @@ const config: Config = {
         { href: repository, label: 'GitHub', position: 'right' },
       ],
     },
+    docs: { sidebar: { hideable: true } },
     footer: {
-      style: 'dark',
+      style: 'light',
+      links: [
+        {
+          title: 'Start',
+          items: [
+            { label: 'Quick Start', to: '/getting-started/quick-start' },
+            { label: 'Connect GitHub', to: '/getting-started/connect-github' },
+            { label: 'First assessment', to: '/getting-started/first-assessment' },
+          ],
+        },
+        {
+          title: 'Operate',
+          items: [
+            { label: 'Docker Compose', to: '/self-hosting/docker-compose' },
+            { label: 'Configuration', to: '/self-hosting/configuration' },
+            { label: 'Troubleshooting', to: '/self-hosting/troubleshooting' },
+          ],
+        },
+        {
+          title: 'Understand',
+          items: [
+            { label: 'How Preflyt works', to: '/concepts/how-preflyt-works' },
+            { label: 'Evidence and trust', to: '/concepts/evidence-and-trust' },
+            { label: 'GitHub', href: repository },
+          ],
+        },
+      ],
       copyright: `Preflyt is developed by Lyrisoft Technologies. Built with Docusaurus.`,
     },
     prism: {
