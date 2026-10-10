@@ -1,3 +1,4 @@
+import { configurationValue } from '../configuration/runtime-configuration.js'
 import { recordReadinessNotification } from "../notifications/notification-event.js";
 import { randomUUID } from "node:crypto";
 import {
@@ -17,8 +18,8 @@ import { CheckPublicationService } from "./check-publication.service.js";
 import { digest } from "./assessment-digest.js";
 import { readinessCheck } from "../github/ruleset-draft.js";
 export const automationEnabled = () =>
-  process.env.GITHUB_CHECK_PUBLICATION_ENABLED === "true" &&
-  process.env.AUTOMATIC_CHECK_PUBLICATION_ENABLED === "true";
+  configurationValue('GITHUB_CHECK_PUBLICATION_ENABLED') === "true" &&
+  configurationValue('AUTOMATIC_CHECK_PUBLICATION_ENABLED') === "true";
 export function automaticExternalId(
   repositoryId: string,
   prNumber: number,

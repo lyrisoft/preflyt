@@ -1,5 +1,7 @@
 # Native execution: reviewed dispatch and evidence
 
+Application connections and feature switches are now provisioned in **Settings → Configuration** by Super Admin. Environment names below describe the legacy import contract; once stored, database values take precedence. See [deployment configuration](deployment-configuration.md). Infrastructure and execution trust controls remain deployment-managed.
+
 **Implemented:** separate runtime preflight, exact-commit source export, durable requests and worker leases, authenticated source delivery to a dedicated Docker or Kubernetes controller, private controller journals, fixed reviewed scanner execution, cancellation/restart cleanup, signed result ingestion and current published-policy evaluation. Execution defaults off and requires a current independent review plus a signed execution-capable preflight. **Remaining P3 acceptance:** complete supported-project analyzer coverage and fresh offline dependency databases, live Kubernetes acceptance, independent effective isolation review and a live release demonstration. Fixture tests do not approve connected-repository execution.
 
 ## Where to find it

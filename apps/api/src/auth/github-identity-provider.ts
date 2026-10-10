@@ -1,3 +1,4 @@
+import { configurationValue } from '../configuration/runtime-configuration.js'
 import {
   ForbiddenException,
   Inject,
@@ -13,10 +14,10 @@ import {
 import { RedisCacheService } from '../cache/redis-cache.service.js'
 
 export function githubLoginEnabled() {
-  return process.env.GITHUB_LOGIN_ENABLED === 'true'
+  return configurationValue('GITHUB_LOGIN_ENABLED') === 'true'
 }
 export function githubLoginCallback() {
-  const raw = process.env.GITHUB_LOGIN_CALLBACK_URL
+  const raw = configurationValue('GITHUB_LOGIN_CALLBACK_URL')
   if (!raw)
     throw new Error(
       'GITHUB_LOGIN_CALLBACK_URL is required when GitHub login is enabled',
@@ -80,7 +81,7 @@ export class GitHubIdentityProvider {
   }
   authorizationUrl(state: string, challenge: string) {
     const url = new URL('https://github.com/login/oauth/authorize')
-    url.searchParams.set('client_id', process.env.GITHUB_APP_CLIENT_ID!)
+    url.searchParams.set('client_id', configurationValue('GITHUB_APP_CLIENT_ID')!)
     url.searchParams.set('redirect_uri', githubLoginCallback())
     url.searchParams.set('state', state)
     url.searchParams.set('code_challenge', challenge)
@@ -92,7 +93,7 @@ export class GitHubIdentityProvider {
   async exchange(code: string, verifier: string) {
     const response = await this.request(() =>
       this.limiter.run(
-        `oauth:${process.env.GITHUB_APP_CLIENT_ID}`,
+        `oauth:${configurationValue('GITHUB_APP_CLIENT_ID')}`,
         () =>
           fetch('https://github.com/login/oauth/access_token', {
             method: 'POST',
@@ -101,8 +102,8 @@ export class GitHubIdentityProvider {
               'content-type': 'application/x-www-form-urlencoded',
             },
             body: new URLSearchParams({
-              client_id: process.env.GITHUB_APP_CLIENT_ID!,
-              client_secret: process.env.GITHUB_APP_CLIENT_SECRET!,
+              client_id: configurationValue('GITHUB_APP_CLIENT_ID')!,
+              client_secret: configurationValue('GITHUB_APP_CLIENT_SECRET')!,
               redirect_uri: githubLoginCallback(),
               code,
               code_verifier: verifier,
@@ -148,12 +149,12 @@ export class GitHubIdentityProvider {
   }
   async refresh(refreshToken: string) {
     const response = await this.request(() => this.limiter.run(
-      `oauth:${process.env.GITHUB_APP_CLIENT_ID}`,
+      `oauth:${configurationValue('GITHUB_APP_CLIENT_ID')}`,
       () => fetch('https://github.com/login/oauth/access_token', {
         method: 'POST',
         headers: { accept: 'application/json', 'content-type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ client_id: process.env.GITHUB_APP_CLIENT_ID!,
-          client_secret: process.env.GITHUB_APP_CLIENT_SECRET!, grant_type: 'refresh_token', refresh_token: refreshToken }),
+        body: new URLSearchParams({ client_id: configurationValue('GITHUB_APP_CLIENT_ID')!,
+          client_secret: configurationValue('GITHUB_APP_CLIENT_SECRET')!, grant_type: 'refresh_token', refresh_token: refreshToken }),
         signal: AbortSignal.timeout(10000),
       }), false,
     ))
@@ -231,7 +232,7 @@ export class GitHubIdentityProvider {
         )
       for (const item of data.installations)
         if (
-          String(item.app_id) === process.env.GITHUB_APP_ID &&
+          String(item.app_id) === configurationValue('GITHUB_APP_ID') &&
           !item.suspended_at &&
           item.account?.type === 'Organization' &&
           typeof item.account.login === 'string'

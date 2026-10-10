@@ -31,7 +31,7 @@ Status: active, audited against source and executable checks on 2026-10-10. This
 
 Before application migration, saved a protected `0600` local database snapshot at `/private/tmp/preflyt-gap-closure-20261010-1791608690089.dump` (192444 bytes; SHA-256 `a7e22f566c24d3eb46545392bca076ed0b583bc5023a0dbdb7759c83b28f2d29`). This file may contain credentials and identities; retain it locally under operator protection and never upload it with source.
 
-The additive `20261010050000_finding_lifecycle` migration creates Findings triage records, a unique organization-baseline index and assignment supersession timestamps. It does not delete/recreate repositories, installations, identities or assessment history. The migration was applied successfully to the local application database; all 43 migrations are current.
+The additive `20261010050000_finding_lifecycle` migration creates Findings triage records, a unique organization-baseline index and assignment supersession timestamps. It does not delete/recreate repositories, installations, identities or assessment history. The migration was applied successfully to the local application database; 43 migrations were current at that checkpoint; the configuration migration below brings the local database to 44.
 
 ## Verification record
 
@@ -51,3 +51,11 @@ These are scoped implementation results, not a claim that all phase/release gaps
 
 - GitHub CI run `38028028205` at `7708b15` passed both builds and the complete API/browser regression workflow.
 - Live local Kubernetes generated fixtures passed PASS, FAIL and INCOMPLETE, including scheduling-gate admission, exact-source reports and UID-owned cleanup. They exposed and verified fixes for omitted false host flags and asynchronous Kubernetes garbage collection. Focused Kubernetes/controller regression passed all 27 tests; API typecheck passed. Ordinary local runc fixtures do not approve connected-source isolation.
+
+## Database configuration follow-up (2026-10-10)
+
+Super Admin Settings → Configuration now provisions 32 deployment application settings. API/worker bootstrap loads the database before constructing connection clients; legacy environment values are imported once. Encrypted credentials, masked reads, origin enforcement, revision conflicts and field-only audit records protect changes. Connection edits require restart; capability switches refresh live, including previously disabled notification consumers. Infrastructure, encryption roots, recovery credentials and execution trust stay in deployment secrets.
+
+A protected application database and dotenv backup preceded additive migration `20261010100000_deployment_configuration`. The local migration and import succeeded. Every imported value was compared with the original environment before removing the 32 managed local dotenv fields. The separate encryption root was retained and backed up. Live Super Admin HTTP verification returned 32 masked fields, and a fresh startup verified the reduced environment.
+
+Verification: API and web builds passed; full API suite passed 102 files / 1,109 tests (three optional tests skipped); full Chromium suite passed 48 files / 266 tests, followed by seven focused Settings tests including Super Admin access without a workspace and hiding Configuration from organization administrators. Real-worker acceptance verifies enabling an initially disabled notification consumer from the database without restart. See [deployment configuration](deployment-configuration.md) for Docker/Kubernetes provisioning, restart and backup instructions. This follow-up does not close the remaining work listed above.

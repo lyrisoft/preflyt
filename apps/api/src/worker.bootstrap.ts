@@ -1,3 +1,4 @@
+import { watchConfiguration } from './configuration/configuration-store.js'
 import { TeamsService } from './teams/teams.service.js'
 import { SkillReviewService } from './intelligence/skill-review.service.js'
 import { AiConfigurationService } from './intelligence/ai-configuration.service.js'
@@ -46,6 +47,7 @@ async function start() {
   const consumerConfig = queueConfig(process.env.QUEUE_REDIS_URL, prefix, true)
   const prisma = new PrismaService()
   await prisma.waitUntilWritable()
+  const stopConfiguration = watchConfiguration(prisma)
   const producer = new Redis(producerConfig.connection)
   const consumer = new Redis(consumerConfig.connection)
   const queue = new Queue(queueName, {
@@ -173,6 +175,16 @@ async function start() {
     reconciling = true
     try {
       await dispatcher.reconcile()
+      // Configuration switches apply to consumers already running, too.
+      for (const [worker, enabled] of [
+        [notificationWorker, notificationsEnabled()],
+        [emailWorker, notificationsEnabled() && emailNotificationsEnabled()],
+      ] as const) {
+        if (enabled) {
+          if (!worker.isRunning()) void worker.run().catch(warn)
+          else if (worker.isPaused()) await worker.resume()
+        } else if (worker.isRunning() && !worker.isPaused()) await worker.pause(true)
+      }
       if (notificationsEnabled()) {
         await dispatchNotifications(prisma, notificationQueue)
         if (emailNotificationsEnabled()) await dispatchNotificationEmails(prisma, emailQueue)
@@ -240,6 +252,7 @@ async function start() {
     await historyRun
     await driftRun
     cache.onModuleDestroy()
+    stopConfiguration()
     await prisma.$disconnect()
     await unlink(heartbeat).catch(() => undefined)
     await shutdownTelemetry()

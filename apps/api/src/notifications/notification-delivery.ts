@@ -1,3 +1,4 @@
+import { configurationValue } from '../configuration/runtime-configuration.js'
 import { isGovernanceNotification } from "./notification-event.js";
 import { randomUUID } from "node:crypto";
 import type { PrismaService } from "../prisma/prisma.service.js";
@@ -76,7 +77,7 @@ export async function deliverNotification(db: PrismaService, eventId: string) {
         skipDuplicates: true,
       });
     }
-    if (process.env.NOTIFICATION_EMAIL_ENABLED === "true") {
+    if (configurationValue('NOTIFICATION_EMAIL_ENABLED') === "true") {
       const inbox = await tx.inboxNotification.findMany({
         where: { eventId: event.id },
       });

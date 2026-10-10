@@ -1,3 +1,4 @@
+import { configurationValue } from '../configuration/runtime-configuration.js'
 import { validNotificationEmail } from "./notification-mail.js";
 import {
   BadRequestException,
@@ -190,7 +191,7 @@ export class NotificationsService {
     return {
       assessments: preference?.assessments ?? true,
       email: preference?.email ?? false,
-      emailEnabled: process.env.NOTIFICATION_EMAIL_ENABLED === "true",
+      emailEnabled: configurationValue('NOTIFICATION_EMAIL_ENABLED') === "true",
       emailAddressAvailable: validNotificationEmail(
         (
           await this.db.identity.findUnique({

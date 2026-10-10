@@ -1,8 +1,15 @@
 import {disposableDatabase} from './disposable-database.js'
-import {beforeAll, afterAll} from 'vitest'
+import {beforeAll, afterAll, vi} from 'vitest'
+import { randomBytes } from 'node:crypto'
+import { initializeConfiguration } from '../src/configuration/configuration-store.js'
 let fixture: Awaited<ReturnType<typeof disposableDatabase>>
-beforeAll(async () => { fixture = await disposableDatabase('worker') })
-afterAll(async () => { await fixture?.close() })
+beforeAll(async () => {
+ fixture = await disposableDatabase('worker')
+ vi.stubEnv('CONFIGURATION_ENCRYPTION_KEY', randomBytes(32).toString('base64'))
+ vi.stubEnv('GITHUB_EVENTS_ENABLED', 'true')
+ await initializeConfiguration(fixture.prisma)
+})
+afterAll(async () => { await fixture?.close(); vi.unstubAllEnvs() })
 import { spawn } from 'node:child_process'
 import { readFile, unlink } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
@@ -27,6 +34,7 @@ it('runs the actual separate worker, reconciles an accepted delivery, reports he
   const connection = new Redis(config.connection)
   connection.on('error', () => undefined)
   const queue = new Queue(queueName, { ...config, connection })
+  const notifications = new Queue('notifications', { ...config, connection })
   queue.on('error', () => undefined)
   await prisma.gitHubWebhookDelivery.create({
     data: {
@@ -74,6 +82,14 @@ it('runs the actual separate worker, reconciles an accepted delivery, reports he
       (await prisma.gitHubWebhookDelivery.findUniqueOrThrow({ where: { id } }))
         .state,
     ).toBe('IGNORED')
+    const stored = await prisma.deploymentConfiguration.findUniqueOrThrow({ where: { id: 'primary' } })
+    await prisma.deploymentConfiguration.update({ where: { id: 'primary' }, data: { values: { ...(stored.values as Record<string, string>), NOTIFICATIONS_ENABLED: 'true' } } })
+    const notification = await notifications.add('live-toggle-fixture', { eventId: 'invalid_event_id' }, { attempts: 1 })
+    const toggleDeadline = Date.now() + 12000
+    while (Date.now() < toggleDeadline && await notification.getState() !== 'failed') await delay(50)
+    // It rejects the deliberately invalid payload only after the previously
+    // disabled consumer starts following a database toggle, without a restart.
+    expect(await notification.getState()).toBe('failed')
     child.kill('SIGTERM')
     const exited = await Promise.race([exit, delay(3000).then(() => 'timeout')])
     expect(exited).toBe(0)
@@ -87,6 +103,8 @@ it('runs the actual separate worker, reconciles an accepted delivery, reports he
       child.kill('SIGKILL')
       await exit
     }
+    await notifications.obliterate({ force: true })
+    await notifications.close()
     await queue.obliterate({ force: true })
     await queue.close()
     connection.disconnect()
@@ -94,7 +112,7 @@ it('runs the actual separate worker, reconciles an accepted delivery, reports he
     await prisma.$disconnect()
     await unlink(heartbeat).catch(() => undefined)
   }
-}, 12_000)
+}, 25_000)
 
 it('stays unhealthy and can stop while Redis is unavailable', async () => {
   const id = randomUUID()

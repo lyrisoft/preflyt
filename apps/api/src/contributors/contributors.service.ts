@@ -1,3 +1,4 @@
+import { configurationValue } from '../configuration/runtime-configuration.js'
 import {
   BadRequestException,
   ForbiddenException,
@@ -337,8 +338,8 @@ export class ContributorsService {
         : data.slice((page - 1) * 20, page * 20),
       lastReceivedAt: receipt?.receivedAt.toISOString() ?? null,
       collectionEnabled:
-        process.env.GITHUB_EVENTS_ENABLED === 'true' &&
-        (process.env.GITHUB_WEBHOOK_SECRET?.length ?? 0) >= 32,
+        configurationValue('GITHUB_EVENTS_ENABLED') === 'true' &&
+        (configurationValue('GITHUB_WEBHOOK_SECRET')?.length ?? 0) >= 32,
       limitations: [
         'Counts describe observed activity, not employee productivity.',
         'Only selected, authorized installed repositories are included.',
