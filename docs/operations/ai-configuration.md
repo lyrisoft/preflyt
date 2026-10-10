@@ -4,7 +4,7 @@ Application connections and feature switches are now provisioned in **Settings �
 
 ## Current delivery
 
-Owner/Admin users can open **AI Intelligence → Models / Review skills / Review settings**. The API supports multiple organization-scoped admin-approved models, encrypted write-only keys, metadata-only connection tests, optimistic revisions and stage-specific primary/fallback routing. Auditors can read configuration through the API; developers cannot change provider keys or routes.
+Owner/Admin users can open **AI Intelligence → Models / Review skills / Model router**. The API supports multiple organization-scoped admin-approved models, encrypted write-only keys, metadata-only connection tests, optimistic revisions and stage-specific primary/fallback routing. Auditors can read configuration through the API; developers cannot change provider keys or routes.
 
 Approved instruction-only skills and explicit saved-assessment reviews are now implemented behind `AI_REVIEWS_ENABLED`. Connection tests remain metadata-only; saving configuration never invokes inference. Daily budget reservations, bounded primary/fallback execution, cancellation and structured check references are available for this evidence-only runtime. Bounded contextual PR diff review, opt-in GitHub summary/inline feedback and provider-reported token usage are implemented. Cost estimates use administrator rates; they are not provider invoices. The optional LiteLLM gateway is available for Docker Compose or Kubernetes. See [review skills setup and limits](review-skills.md). AI output never changes a deterministic gate.
 

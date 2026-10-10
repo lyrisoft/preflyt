@@ -178,7 +178,7 @@ const help = [
       'Organization admins add and approve models directly in Preflyt. Choose a built-in provider or add an OpenAI-compatible endpoint. Model name means the exact API identifier your provider accepts. Hosted providers require HTTPS; select Self-hosted for a local model server. Keys are encrypted and write-only. Testing reads model metadata; it does not send repository code or generate an explanation. Editing a connection requires another test.',
   },
   {
-    title: 'Review settings',
+    title: 'Model router',
     content:
       'Each stage has a primary model and an optional fallback. Source sharing starts off. A connection must be enabled and successfully tested within the last 24 hours before its route is ready. Switching organizations separates connections and routes.',
   },
@@ -296,7 +296,7 @@ function AiSettings({
     <div className='space-y-6'>
       <PageHeader
         title='AI Intelligence'
-        description='Manage models, skills and AI review settings.'
+        description='Manage models, skills and model routing across SDLC stages.'
         section='Intelligence'
         icon={BrainCircuit}
         tone='violet'
@@ -374,7 +374,7 @@ function AiSettings({
               </TabsTrigger>
               <TabsTrigger value='routing'>
                 <RouteIcon className='mr-2 size-4' />
-                Review settings
+                Model router
               </TabsTrigger>
             </TabsList>
             <TabsContent value='connections' className='mt-5 space-y-6'>
@@ -762,7 +762,7 @@ function AiSettings({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {stageName(routing?.stage ?? '')} review settings
+              {stageName(routing?.stage ?? '')} model routing
             </DialogTitle>
             <DialogDescription>
               Set the models, review options and limits for this stage.
