@@ -132,7 +132,7 @@ export function OrganizationStandardsLibrary() {
               {
                 title: 'Supported checks',
                 content:
-                  'Standards group deterministic checks and advisory AI Reviews. Each AI Review pins an approved skill version and chooses when it runs. AI suggestions cannot satisfy required deterministic checks. Reviews use saved check evidence and may include verified PR changes when source sharing is enabled.',
+                  'Standards group rule-based checks and advisory AI Reviews. Each AI Review uses an approved skill version and chooses when it runs. AI suggestions cannot satisfy required rule-based checks. Reviews use saved check evidence and may include verified PR changes when source sharing is enabled.',
               },
             ]}
           />
@@ -337,7 +337,7 @@ export function OrganizationStandardsLibrary() {
               >
                 <div className='flex items-center justify-between gap-3'>
                   <h3 className='text-sm font-semibold'>{check.title}</h3>
-                  <StatusBadge tone='info'>AI · Advisory</StatusBadge>
+                  <StatusBadge tone='info'>Suggestions only</StatusBadge>
                 </div>
                 <p className='text-xs text-muted-foreground'>
                   Skill v{check.skillVersion} ·{' '}
@@ -556,7 +556,7 @@ function StandardEditor({
                   }}
                 />
                 <fieldset disabled={busy}>
-                  <legend className='sr-only'>Deterministic checks</legend>
+                  <legend className='sr-only'>Checks</legend>
                   <div className='grid gap-2 sm:grid-cols-2'>
                     {filteredRules
                       .slice((checkPage - 1) * 6, checkPage * 6)

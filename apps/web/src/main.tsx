@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import ReactDOM from 'react-dom/client'
 import { AxiosError } from 'axios'
 import {
+  MutationCache,
   QueryCache,
   QueryClient,
   QueryClientProvider,
@@ -35,28 +36,40 @@ const queryClient = new QueryClient({
       refetchOnWindowFocus: import.meta.env.PROD,
       staleTime: 10 * 1000, // 10s
     },
-    mutations: {
-      onError: (error) => {
-        handleServerError(error)
-
-        if (error instanceof AxiosError) {
-          if (error.response?.status === 304) {
-            toast.error('Content not modified!')
-          }
-        }
-      },
-    },
   },
+  mutationCache: new MutationCache({
+    onError: (error, _variables, _context, mutation) => {
+      if (!mutation.options.onError && mutation.meta?.silent !== true)
+        handleServerError(error)
+    },
+    onSuccess: (_data, _variables, _context, mutation) => {
+      if (typeof mutation.meta?.successMessage === 'string')
+        toast.success(mutation.meta.successMessage)
+    },
+  }),
   queryCache: new QueryCache({
-    onError: (error) => {
+    onError: (error, query) => {
+      // Initial failures remain visible in the page; notify failed background refreshes.
+      if (
+        query.state.data !== undefined &&
+        query.meta?.silent !== true &&
+        !(error instanceof AxiosError && error.response?.status === 401)
+      )
+        handleServerError(error, { id: `query-error:${query.queryHash}` })
       if (error instanceof AxiosError) {
         if (error.response?.status === 401) {
-          toast.error('Session expired!')
+          toast.error('Session expired. Sign in again.', {
+            id: 'session-expired',
+          })
           const redirect = `${router.history.location.href}`
           router.navigate({ to: '/sign-in', search: { redirect } })
         }
         if (error.response?.status === 500) {
-          toast.error('Internal Server Error!')
+          if (query.state.data === undefined)
+            toast.error(
+              'The server could not complete the request. Try again.',
+              { id: 'server-error' }
+            )
           // Only navigate to error page in production to avoid disrupting HMR in development
           if (import.meta.env.PROD) {
             router.navigate({ to: '/500' })

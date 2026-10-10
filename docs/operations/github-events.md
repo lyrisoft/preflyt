@@ -1,5 +1,7 @@
 # GitHub PR and CI webhook events (P1.1)
 
+Application connections and feature switches are now provisioned in **Settings → Configuration** by Super Admin. Environment names below describe the legacy import contract; once stored, database values take precedence. See [deployment configuration](deployment-configuration.md). Infrastructure and execution trust controls remain deployment-managed.
+
 This slice records signed, revision-bound GitHub events for selected repositories. The worker also projects new check/workflow observations into [imported CI status evidence](ci-evidence.md). It does not import test artifacts, execute code, create assessments or publish a quality gate. Open a selected repository profile to view the latest 50 deliveries, GitHub source state, exact commit and processing status. Older revisions remain history; a late delivery never advances a current PR or changes a verdict.
 
 ## Configure

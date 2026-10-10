@@ -521,7 +521,7 @@ export function SkillsCatalogue() {
                   </dd>
                 </div>
                 <div>
-                  <dt className='text-muted-foreground'>Content digest</dt>
+                  <dt className='text-muted-foreground'>File fingerprint</dt>
                   <dd className='font-mono text-xs break-all'>
                     {selected.contentDigest}
                   </dd>
@@ -825,7 +825,9 @@ function SkillForm({
             </label>
           ))}
           <fieldset className='space-y-2 text-sm' disabled={busy}>
-            <legend className='mb-2 font-medium'>Repository scope</legend>
+            <legend className='mb-2 font-medium'>
+              Repositories this skill applies to
+            </legend>
             <label className='flex items-center gap-2'>
               <input
                 type='checkbox'

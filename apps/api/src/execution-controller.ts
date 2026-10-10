@@ -34,6 +34,7 @@ const forbidden = [
   'REDIS_URL',
   'SMTP_PASSWORD',
   'AI_PROVIDER_ENCRYPTION_KEY',
+  'CONFIGURATION_ENCRYPTION_KEY',
 ]
 if (forbidden.some((key) => process.env[key]))
   throw new Error(

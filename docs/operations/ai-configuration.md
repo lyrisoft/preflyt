@@ -1,5 +1,7 @@
 # Organization AI configuration
 
+Application connections and feature switches are now provisioned in **Settings → Configuration** by Super Admin. Environment names below describe the legacy import contract; once stored, database values take precedence. See [deployment configuration](deployment-configuration.md). Infrastructure and execution trust controls remain deployment-managed.
+
 ## Current delivery
 
 Owner/Admin users can open **AI Intelligence → Models / Review skills / Model routing**. The API supports multiple organization-scoped admin-approved models, encrypted write-only keys, metadata-only connection tests, optimistic revisions and stage-specific primary/fallback routing. Auditors can read configuration through the API; developers cannot change provider keys or routes.

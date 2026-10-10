@@ -74,7 +74,7 @@ export function NativeExecutionStatus({
                 </StatusBadge>
                 {data.preflightVerified && (
                   <StatusBadge tone='info'>
-                    Sandbox preflight verified
+                    Execution setup verified
                   </StatusBadge>
                 )}
               </div>
@@ -123,7 +123,7 @@ export function NativeExecutionStatus({
               {
                 title: 'Current support',
                 content:
-                  'The check plan lists saved rules against the recorded commit. Tool versions, image digests and configuration must be reviewed before execution. Requests are recorded with the exact commit and saved standards. Source export verifies Git objects without running repository code. Requests remain blocked until a reviewed execution service is available; a recorded request is not a completed check. A reviewed dedicated Docker controller can run supported checks and return signed results. Unsupported or partial coverage remains incomplete. A reviewed Kubernetes controller can create scoped jobs with verified runtime isolation and signed results. Live runtime acceptance remains required before enabling execution. Preflyt does not run repository commands on the API or integration worker.',
+                  'The check plan lists saved rules against the recorded commit. Tool versions, image digests and configuration must be reviewed before execution. Requests are recorded with the exact commit and saved standards. Source export verifies Git objects without running repository code. Requests can run only when a reviewed execution service is available; a recorded request is not a completed check. A reviewed dedicated Docker controller can run supported checks and return signed results. Unsupported checks or partial coverage remain incomplete. A reviewed Kubernetes controller can create scoped jobs with verified runtime isolation and signed results. Live runtime acceptance remains required before enabling execution. Preflyt does not run repository commands on the API or integration worker.',
               },
             ]}
           />

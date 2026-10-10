@@ -4,7 +4,7 @@ Preflyt supports a common check contract for Docker and Kubernetes deployments: 
 
 ## Current verification
 
-The Docker launcher and image-owned report wrapper have passed disposable fixtures for Gitleaks secret detection, the bundled JavaScript/TypeScript and Python Semgrep rules, fixed JavaScript/TypeScript and Python lint rules, unsafe Terraform and Kubernetes configuration, and Node's built-in test runner. Clean scans and tests pass; zero or skipped tests remain incomplete. These fixtures use ordinary Docker with generated source only. They do not approve execution against connected repositories, establish broad SAST coverage, verify dependency database freshness or prove end-to-end policy-gate integration.
+The Docker launcher and image-owned report wrapper have passed disposable fixtures for Gitleaks secret detection, the bundled JavaScript/TypeScript and Python Semgrep rules, fixed JavaScript/TypeScript and Python lint rules, unsafe Terraform and Kubernetes configuration, and Node's built-in test runner. Clean scans and tests pass; zero or skipped tests remain incomplete. These fixtures use ordinary Docker with generated source only. They do not approve execution against connected repositories, establish broad SAST coverage, prove end-to-end policy-gate integration.
 
 Docker and Kubernetes job dispatch, signed result ingestion and policy-gate integration are implemented and fixture-tested. Kubernetes lifecycle tests use a simulated API; live cluster acceptance remains outstanding. Complete adapter coverage and independently reviewed live acceptance remain P3 work. Local Docker availability must not enable production execution by itself.
 
@@ -42,7 +42,14 @@ docker build -f docs/deployment/native-runner/Dockerfile.node -t preflyt-native-
 pnpm --filter @preflyt/api exec tsx scripts/native-check-fixtures.mts
 ```
 
-The harness selects only generated fixtures, uses content-addressed local image IDs, creates no database records and never publishes GitHub checks. Fixture image tags are build conveniences, not production approval. Production images must be published by immutable digest and reviewed together with their configuration, licenses and any vulnerability databases. The bundled security configuration checks JavaScript/TypeScript and Python dynamic code execution. The separate lint configuration checks debugger statements and bare Python exception handlers; both are partial coverage. Always extend reviewed coverage before representing it as a complete security scan. Trivy dependency scanning requires an image with a reviewed fresh offline database.
+The harness selects only generated fixtures, uses content-addressed local image IDs, creates no database records and never publishes GitHub checks. Fixture image tags are build conveniences, not production approval. Production images must be published by immutable digest and reviewed together with their configuration, licenses and any vulnerability databases. The bundled security configuration checks JavaScript/TypeScript and Python dynamic code execution. The separate lint configuration checks debugger statements and bare Python exception handlers; both are partial coverage. Always extend reviewed coverage before representing it as a complete security scan. Trivy dependency scanning uses the optional `dependencies` image target below. The image owns its offline database; repository files cannot supply or override it. The runner rejects missing, incompatible, future-dated or older-than-24-hour vendor `UpdatedAt` metadata before scanning. Download time is not database freshness. Java database coverage is not bundled. Dependency results retain partial coverage until the supported ecosystem matrix is accepted.
+
+```sh
+docker build --target dependencies -f docs/deployment/native-runner/Dockerfile.trivy -t preflyt-native-trivy-offline:fixture docs/deployment/native-runner
+NATIVE_FIXTURE_TOOL=trivy-offline pnpm --filter @preflyt/api exec tsx scripts/native-check-fixtures.mts
+```
+
+Only the image build downloads the vendor database. Runtime scan containers remain offline and read-only. Rebuild and review the immutable image before the vendor database becomes 24 hours old; set `databaseBuiltAt` in the tool review to the database metadata `UpdatedAt`. The runner independently verifies it. Changes to the cache arguments also require reviewing the new adapter configuration digest. A generated npm lockfile with a known vulnerable dependency was detected under these controls; this does not establish complete dependency coverage.
 
 ## Containerized Docker preflight
 
@@ -52,7 +59,7 @@ Set `NATIVE_RUNTIME_BACKEND=docker` on the API status client and the dedicated c
 
 Copy `controller.env.example` to a protected `controller.env`. Place your dedicated engine's client certificate, private key and CA certificate in protected `docker-tls` files named `cert.pem`, `key.pem` and `ca.pem`, readable only by the controller's deployment identity. The engine must enforce mutual TLS. Use a dedicated Docker engine; this connection grants trusted controller authority over that engine. Do not share the application host engine. TLS client settings are available to the controller's Docker CLI only and are never passed to scanner containers.
 
-Run `docker compose -f controller.compose.yaml up -d` from this directory with `PREFLYT_NATIVE_CONTROLLER_IMAGE` set to a reviewed immutable controller digest. Put an HTTPS proxy in front of the loopback controller port and use that origin in the signed runtime approval. Liveness confirms the process, not runtime approval. With explicit execution opt-in this target provides reviewed Docker admission and signed results; see the [dispatch runbook](../../operations/native-execution.md#durable-docker-dispatch) for durable state, identical engine paths and cleanup. The Kubernetes-native Job adapter remains unavailable. Production rollout requires published images, engine/runtime review and live acceptance.
+Run `docker compose -f controller.compose.yaml up -d` from this directory with `PREFLYT_NATIVE_CONTROLLER_IMAGE` set to a reviewed immutable controller digest. Put an HTTPS proxy in front of the loopback controller port and use that origin in the signed runtime approval. Liveness confirms the process, not runtime approval. With explicit execution opt-in this target provides reviewed Docker admission and signed results; see the [dispatch runbook](../../operations/native-execution.md#durable-docker-dispatch) for durable state, identical engine paths and cleanup. The opt-in Kubernetes Job adapter is implemented; see the launcher section below. Production rollout for either backend requires published images, runtime review and live acceptance.
 
 ### Source-binding upgrade
 
@@ -69,3 +76,16 @@ The optional `kubernetes-controller.execution.yaml` override mounts a protected 
 Source delivery initially uses one immutable ConfigMap limited to 512 KiB of serialized verified source. Larger repositories fail closed; use Docker execution or imported CI evidence until a separately reviewed larger-source delivery adapter exists. The initializer verifies binary bytes, paths, modes and the whole source hash before the check container starts. Job and ConfigMap deletion uses ownership annotations and UID preconditions; passing results require confirmed removal of both the Pod and source object. Cluster scheduling-gate support is required.
 
 A restarted controller cancels and cleans up its known attempts instead of rerunning code. Recovery requires the original valid cluster review; expired/changed reviews leave the controller unavailable and results incomplete until an operator performs scoped cleanup or restores the matching review. The fixture tests do not authorize deployment, certify CNI/runtime isolation, or replace independently reviewed live acceptance.
+
+## Local Kubernetes contract fixtures
+
+Use a fresh, dedicated local kind cluster and a separate kubeconfig. The harness refuses the default context, non-loopback API servers and contexts other than `kind-preflyt-gap-fixture`. It exercises generated Node fixtures through the real Kubernetes API, verifies admitted Pod controls before removing the scheduling gate, checks the exact-source report and confirms UID-owned Job/Pod/ConfigMap deletion. No application database, GitHub connection or runtime approval is used.
+
+```sh
+kind create cluster --name preflyt-gap-fixture --kubeconfig /private/tmp/preflyt-gap-kind.kubeconfig --wait 60s
+kind load docker-image preflyt-native-node:fixture --name preflyt-gap-fixture
+PREFLYT_FIXTURE_KUBECONFIG=/private/tmp/preflyt-gap-kind.kubeconfig pnpm --filter @preflyt/api exec tsx scripts/native-kubernetes-fixtures.mts
+kind delete cluster --name preflyt-gap-fixture --kubeconfig /private/tmp/preflyt-gap-kind.kubeconfig
+```
+
+This is a generated-source lifecycle test using ordinary runc, not independent strong-isolation approval. Connected repositories still require a reviewed gVisor/Kata runtime. Kubernetes omits false host-access booleans in API responses; verification normalizes only those documented false defaults, while enabled flags remain rejected. Cleanup has a separate 30-second deadline and never marks evidence complete if deletion cannot be confirmed.

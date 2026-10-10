@@ -36,7 +36,7 @@ export function IntegrationCatalogue({
     },
     {
       id: 'ci' as const,
-      name: 'CI evidence',
+      name: 'Check results and reports',
       description:
         'Import check results and workflow runs for your repositories.',
       icon: Workflow,
