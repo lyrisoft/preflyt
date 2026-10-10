@@ -21,9 +21,9 @@ This is the first **P2.R1** slice. It uses the existing GitHub App with a reposi
 
 **Active** is GitHub enforcement; **Disabled** is not enforced; **Evaluate** is GitHub evaluation without blocking. These states are not Preflyt PASS/BLOCK/INCOMPLETE decisions. Unknown states or malformed responses fail rather than appearing as empty results.
 
-Branch patterns remain GitHub patterns, including `~DEFAULT_BRANCH` and `~ALL`. The view lists rulesets associated with a repository; it does not resolve effective protection for each branch. Legacy branch protection is not included. No rulesets returned therefore does not prove a branch is unprotected.
+Branch patterns remain GitHub patterns, including `~DEFAULT_BRANCH` and `~ALL`. The ruleset list shows rulesets associated with a repository. Use the Branch protection tab to resolve active inherited rules for an existing branch and view available legacy review/check requirements. No rulesets returned therefore does not prove a branch is unprotected.
 
-The detail response intentionally omits organization repository-target lists, bypass actors and full rule parameters. It is not the complete deployable JSON. Organization-wide discovery and resolved effective branch protection remain pending. Separate deployment APIs provide preflight, approval, dedicated-ruleset activation, current-state verification and safe rollback. Ruleset Insights provides the repository-scoped view described below.
+The detail response intentionally omits organization repository-target lists, bypass actors and full rule parameters. It is not the complete deployable JSON. Organization-wide discovery and a complete merge-permission verdict remain pending; the Branch protection tab resolves active branch rules and separately reports available legacy protection. Separate deployment APIs provide preflight, approval, dedicated-ruleset activation, current-state verification and safe rollback. Ruleset Insights provides the repository-scoped view described below.
 
 Plan/permission/provider failures are shown as errors. An empty result is displayed only after a successful list response. GitHub remains the authority for merge protection.
 
@@ -71,7 +71,7 @@ editing are audited, concurrent edits conflict, and organization/repository gran
 are checked. Lists expose `activationAvailable: false`; no draft endpoint writes to
 GitHub. The check's source App ID remains unset until verified publisher preflight.
 
-Apply database migrations before using these endpoints. Broader organization and multi-repository targeting, exclusion patterns and resolved effective protection remain pending. Drafts remain local; use Deployments for the independently reviewed activation flow. Live passing/failing/incomplete acceptance remains pending. This selected-repository slice does not close P2.
+Apply database migrations before using these endpoints. Broader organization and multi-repository targeting and exclusion patterns remain pending. Branch protection provides the read-only resolved active requirements described below. Drafts remain local; use Deployments for the independently reviewed activation flow. Passing/failing/incomplete enforcement and verified rollback were accepted in the private disposable repository; see [the recorded acceptance](acceptance/p2-private-repository-20261010.json). Production signer and transport qualification remain pending. This selected-repository slice does not close P2.
 
 
 ## Repository Ruleset Insights (P2.R5 first slice)
