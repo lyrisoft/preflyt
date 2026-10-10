@@ -48,7 +48,7 @@ jobs:
         run: |
           if docker buildx imagetools inspect "$IMAGE" >/dev/null 2>/tmp/manifest-error; then
             echo 'exists=true' >> "$GITHUB_OUTPUT"
-          elif rg -qi '(manifest unknown|not found)' /tmp/manifest-error; then
+          elif grep -Eqi '(manifest unknown|not found)' /tmp/manifest-error; then
             echo 'exists=false' >> "$GITHUB_OUTPUT"
           else
             echo 'Unable to verify image availability; refusing to overwrite a release.' >&2
@@ -115,7 +115,7 @@ jobs:
             echo 'exists=true' >> "$GITHUB_OUTPUT"
             docker pull "$IMAGE"
             docker tag "$IMAGE" "$FIXTURE_IMAGE"
-          elif rg -qi '(manifest unknown|not found)' /tmp/manifest-error; then
+          elif grep -Eqi '(manifest unknown|not found)' /tmp/manifest-error; then
             echo 'exists=false' >> "$GITHUB_OUTPUT"
           else
             echo 'Unable to verify native image availability; refusing to overwrite.' >&2
@@ -147,3 +147,12 @@ jobs:
       - name: Publish only the verified image
         if: steps.existing.outputs.exists != 'true'
         run: docker push "$IMAGE"
+
+  accept-published:
+    needs: [publish, publish-native]
+    permissions:
+      contents: read
+      packages: read
+    uses: ./.github/workflows/compose-acceptance.yml
+    with:
+      published_images: true

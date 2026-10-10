@@ -129,3 +129,6 @@ For a workspace that already has the GitHub App connected, use **Access Control 
 PR verification now includes an isolated Compose smoke job with a unique project name and fresh protected fixture credentials. It builds every required application image, starts API/web/worker/PostgreSQL/cache/queue, checks real login and origin enforcement, replays migrations, restores a protected backup into a separate database, compares identity and migration counts, and checks service restart. Cleanup is limited to that randomly separated CI project. No existing application database or volume is selected.
 
 This regression proves the exercised deployment and restore paths. Live GitHub identity linking/recovery, reviewed native isolation, externally published image availability and rollback to a previous compatible release require their separate acceptance records.
+
+
+Release publication runs the shared container acceptance workflow against the published commit images. It verifies source revision labels, sign-in and protected routes, configuration persistence, migration replay, backup restore into a separate fixture database, and restart readiness. Each run uses an isolated project with generated credentials. This does not qualify production identity-provider onboarding or a rollback to a previous application version.
