@@ -1,6 +1,6 @@
 # Teams and Policy Inheritance
 
-**Status:** Teams, organization baseline, reviewed version upgrades, scheduled reconciliation and impact preview implemented; nested scope and exceptions remain planned. **No change to P0–P11 phase order.**
+**Status:** Teams, organization baseline, reviewed version upgrades, scheduled reconciliation and impact preview implemented; explicitly reviewed nested scope is implemented; exceptions remain planned. **No change to P0–P11 phase order.**
 **Related:** [PRD](../PRD.md), [Engineering Standards](engineering-standards-library.md), [RBAC](rbac-and-authorization.md), [MVP Experience](mvp-product-experience.md), [Roadmap](../roadmap/incremental-delivery.md).
 
 
@@ -10,7 +10,7 @@ Administration → Teams supports local teams, read-only GitHub discovery/import
 
 Applying an unchanged preview creates repository standards selections and existing policy drafts atomically. Required checks compose additively, the strongest profile wins, and version conflicts block application. Existing approvals, assessments and deterministic gates are reused. Published policy and check publication revalidate inherited source digests and approved scope; stale GitHub snapshots cannot authorize publication. Metadata-only changes do not invalidate policy scope.
 
-Organization baseline assignment, bounded scheduled reconciliation and explicit previewed version upgrades reuse the existing assignment flow. This increment does **not** deliver nested team scope expansion, waiver management or automatic enforcement activation. Versions never upgrade automatically. Repository selections change on assignment: CI source mappings and fresh assessments must be reviewed before publication. GitHub imports require a linked organization and installation Members: read permission. Operational bounds and rollout are documented in [Teams operations](../operations/teams.md).
+Organization baseline assignment, bounded scheduled reconciliation, explicitly reviewed nested team scope and previewed version upgrades reuse the existing assignment flow. This increment does **not** deliver waiver management or automatic enforcement activation. Versions never upgrade automatically. Repository selections change on assignment: CI source mappings and fresh assessments must be reviewed before publication. GitHub imports require a linked organization and installation Members: read permission. Operational bounds and rollout are documented in [Teams operations](../operations/teams.md).
 
 Verification: API integration and Chromium tests cover composition, authorization, explicit scope, failed sync preservation, preview concurrency, assignment, existing approval/publication and UI actions. Fixtures use disposable databases; live GitHub team import is not claimed as accepted.
 

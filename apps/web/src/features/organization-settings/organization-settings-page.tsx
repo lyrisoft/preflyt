@@ -14,17 +14,9 @@ import {
   Users,
 } from 'lucide-react'
 import { API_BASE_URL } from '@/lib/api'
-import { useTheme } from '@/context/theme-provider'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Main } from '@/components/layout/main'
 import { PageHeader } from '@/components/page-header'
@@ -34,6 +26,8 @@ import { NotificationPreferences } from '@/features/notifications/notification-p
 import { OrganizationNotificationChannels } from '@/features/notifications/organization-notification-channels'
 import { useNavigationSession } from '@/features/workspace/navigation-session'
 import { ConfigurationPanel } from './configuration-panel'
+import { GitHubIdentityLink } from './github-identity-link'
+import { ThemeCards } from './theme-cards'
 
 type Settings = {
   id: string
@@ -63,7 +57,6 @@ async function settingsRequest<T>(options: RequestInit = {}): Promise<T> {
 export function OrganizationSettingsPage() {
   const session = useNavigationSession()
   const client = useQueryClient()
-  const { theme, setTheme } = useTheme()
   const [draft, setDraft] = useState<{
     organizationId: string
     name: string
@@ -182,6 +175,7 @@ export function OrganizationSettingsPage() {
           </TabsContent>
         )}
         <TabsContent value='workspace' className='space-y-6'>
+          <GitHubIdentityLink />
           {settings.isPending ? (
             <p role='status'>Loading workspace settings…</p>
           ) : settings.isError ? (
@@ -331,24 +325,7 @@ export function OrganizationSettingsPage() {
               <h2 className='text-base font-semibold'>Appearance</h2>
             </div>
             <div className='p-6'>
-              <div className='max-w-sm space-y-2'>
-                <Label htmlFor='workspace-theme'>Theme</Label>
-                <Select
-                  value={theme}
-                  onValueChange={(value) =>
-                    setTheme(value as 'light' | 'dark' | 'system')
-                  }
-                >
-                  <SelectTrigger id='workspace-theme'>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value='system'>System</SelectItem>
-                    <SelectItem value='light'>Light</SelectItem>
-                    <SelectItem value='dark'>Dark</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              <ThemeCards />
             </div>
           </section>
         </TabsContent>

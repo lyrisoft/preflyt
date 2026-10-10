@@ -33,6 +33,7 @@ import { Main } from '@/components/layout/main'
 import { PageHeader } from '@/components/page-header'
 import { PageHelpDrawer } from '@/components/page-help-drawer'
 import { StatusBadge } from '@/components/status-badge'
+import { SurfaceIcon } from '@/components/surface-icon'
 import { governanceRequest } from '../repositories/governance-api'
 import { useNavigationSession } from '../workspace/navigation-session'
 import { canPerform } from '../workspace/scoped-access'
@@ -65,12 +66,14 @@ type Team = {
 }
 type Ref = { id: string; version: string }
 type Options = {
+  childTeams?: { id: string; name: string }[]
   members: { id: string; name: string }[]
   repositories: { id: string; name: string; defaultBranch: string | null }[]
   standards: (Ref & { title: string })[]
   installations: { id: string; name: string }[]
 }
 type Detail = Omit<Team, 'members' | 'repositories' | 'assignments'> & {
+  nestedScope?: { teamId: string }[]
   members: { id: string; name: string }[]
   repositories: {
     id: string
@@ -781,6 +784,114 @@ function TeamEditor({
     </Dialog>
   )
 }
+function ChildScopePanel({
+  team,
+  options,
+  onApplied,
+}: {
+  team: Detail
+  options?: Options
+  onApplied: () => Promise<void>
+}) {
+  const [children, setChildren] = useState(
+    (team.nestedScope ?? []).map((child) => child.teamId)
+  )
+  const [preview, setPreview] = useState<{
+    previewHash: string
+    repositories: { githubId: string; name: string }[]
+  } | null>(null)
+  const [busy, setBusy] = useState(false)
+  const items = (options?.childTeams ?? []).filter(
+    (child) => child.id !== team.id
+  )
+  async function review(approve = false) {
+    if (approve && !preview) return
+    setBusy(true)
+    try {
+      if (approve) {
+        await governanceRequest(`/teams/${team.id}/child-scope/approve`, {
+          childIds: children,
+          expectedPreviewHash: preview!.previewHash,
+        })
+        await onApplied()
+        setPreview(null)
+        toast.success(
+          'Child team scope approved. Review and apply standards next.'
+        )
+      } else {
+        setPreview(
+          await governanceRequest(`/teams/${team.id}/child-scope/preview`, {
+            childIds: children,
+          })
+        )
+      }
+    } catch (error) {
+      setPreview(null)
+      toast.error((error as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <section className='overflow-hidden rounded-xl border bg-card shadow-xs'>
+      <div className='flex items-center gap-3 border-b bg-muted/20 px-5 py-4'>
+        <SurfaceIcon icon={UsersRound} tone='teal' />
+        <div>
+          <h3 className='text-sm font-semibold'>Child team repositories</h3>
+          <p className='mt-1 text-xs text-muted-foreground'>
+            Review the repositories this parent team should cover.
+          </p>
+        </div>
+      </div>
+      <div className='space-y-4 p-5'>
+        <fieldset disabled={busy}>
+          <PickList
+            label='Child teams'
+            items={items}
+            selected={children}
+            onChange={(ids) => {
+              setChildren(ids)
+              setPreview(null)
+            }}
+          />
+        </fieldset>
+        {preview && (
+          <div className='rounded-lg border bg-muted/20 p-4'>
+            <p className='text-sm font-semibold'>
+              {preview.repositories.length} repositories in the reviewed scope
+            </p>
+            <ul className='mt-2 space-y-1 text-sm text-muted-foreground'>
+              {preview.repositories.map((repo) => (
+                <li key={repo.githubId}>{repo.name}</li>
+              ))}
+            </ul>
+            <p className='mt-3 text-xs text-muted-foreground'>
+              Approval updates team coverage. Existing policies keep their saved
+              version until you review and apply standards again.
+            </p>
+          </div>
+        )}
+        <div className='flex flex-wrap justify-end gap-2'>
+          <Button
+            size='sm'
+            variant='outline'
+            disabled={busy || !children.length || children.length > 10}
+            onClick={() => void review()}
+          >
+            Preview scope
+          </Button>
+          <Button
+            size='sm'
+            disabled={busy || !preview}
+            onClick={() => void review(true)}
+          >
+            Approve scope
+          </Button>
+        </div>
+      </div>
+    </section>
+  )
+}
 function TeamDetail({
   team,
   options,
@@ -892,6 +1003,14 @@ function TeamDetail({
         </div>
       </TabsContent>
       <TabsContent value='repositories' className='space-y-3'>
+        {canManage && team.source !== 'ORGANIZATION' && (
+          <ChildScopePanel
+            key={team.id}
+            team={team}
+            options={options}
+            onApplied={onApplied}
+          />
+        )}
         {canManage && (
           <div className='flex justify-end'>
             <Button size='sm' variant='outline' onClick={onEdit}>
@@ -928,7 +1047,9 @@ function TeamDetail({
                         tone={r.providerPresent ? 'neutral' : 'warning'}
                       >
                         {r.providerPresent
-                          ? 'Recorded'
+                          ? r.origin === 'NESTED'
+                            ? 'Child team association'
+                            : 'Recorded'
                           : 'Removed · review needed'}
                       </StatusBadge>
                     )}

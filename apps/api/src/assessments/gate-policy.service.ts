@@ -1,3 +1,4 @@
+import { sameIdentity } from '../auth/same-identity.js';
 import { verifyTeamContext } from '../teams/team-context.js';
 import { executionContracts } from "./execution-contract.js";
 import { recordPolicyNotification } from "../notifications/notification-event.js";
@@ -347,7 +348,7 @@ export class GatePolicyService {
         );
         if (policy.state !== "DRAFT")
           throw new ConflictException("Policy is not awaiting approval");
-        const selfApproval = policy.draftedById === session.identityId;
+        const selfApproval = await sameIdentity(tx, policy.draftedById, session.identityId);
         if (selfApproval && !(await this.isSuperAdmin(tx, session.identityId)))
           throw new ConflictException(
             "Independent policy approval is required",
@@ -395,7 +396,7 @@ export class GatePolicyService {
         if (
           policy.state !== "APPROVED" ||
           !policy.approvedById ||
-          (policy.approvedById === policy.draftedById &&
+          (await sameIdentity(tx, policy.approvedById, policy.draftedById) &&
             (policy.approvalKind !== "SUPER_ADMIN_SELF_APPROVAL" ||
               !(await this.isSuperAdmin(tx, policy.approvedById))))
         )

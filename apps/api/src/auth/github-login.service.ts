@@ -1,3 +1,5 @@
+import { digest } from '../assessments/assessment-digest.js'
+import type { Prisma } from '../generated/prisma/client.js'
 import { configurationValue } from '../configuration/runtime-configuration.js'
 import { GitHubCredentialService } from './github-credential.service.js'
 import { createHash, randomBytes } from 'node:crypto'
@@ -78,7 +80,7 @@ export class GitHubLoginService implements OnModuleInit {
     if (!this.enabled)
       throw new ServiceUnavailableException('GitHub sign-in is not enabled')
   }
-  async begin(ip: string, rawReturn?: string, linkingSessionToken?: string) {
+  async begin(ip: string, rawReturn?: string, linkingSessionToken?: string, identitySessionToken?: string) {
     this.requireEnabled()
     const returnPath = loginReturnPath(rawReturn)
     let linking:
@@ -125,6 +127,12 @@ export class GitHubLoginService implements OnModuleInit {
         linkingSessionHash: hash(linkingSessionToken),
       }
     }
+    let identityLink: { linkingIdentity: true; linkingOwnerId: string; linkingSessionHash: string } | undefined
+    if (identitySessionToken !== undefined) {
+      if (linkingSessionToken !== undefined) throw new ForbiddenException('Choose one account linking action')
+      const session = await this.recentLegacySession(identitySessionToken)
+      identityLink = { linkingIdentity: true, linkingOwnerId: session.identityId, linkingSessionHash: hash(identitySessionToken) }
+    }
     const windowStart = new Date(Math.floor(Date.now() / 600000) * 600000)
     const throttle = await this.db.authThrottle.upsert({
       where: {
@@ -162,6 +170,7 @@ export class GitHubLoginService implements OnModuleInit {
     await this.db.gitHubLoginTransaction.create({
       data: {
         ...linking,
+        ...identityLink,
         stateHash: hash(state),
         browserBindingHash: hash(browserBinding),
         codeVerifier,
@@ -271,6 +280,7 @@ export class GitHubLoginService implements OnModuleInit {
       })
       await tx.gitHubOnboardingChallenge.create({
         data: {
+          linkingIdentity: transaction.linkingIdentity,
           linkingOrganizationId: transaction.linkingOrganizationId,
           linkingOwnerId: transaction.linkingOwnerId,
           linkingSessionHash: transaction.linkingSessionHash,
@@ -288,7 +298,85 @@ export class GitHubLoginService implements OnModuleInit {
         },
       })
     })
-    return { challengeToken, linkingWorkspace: !!transaction.linkingOrganizationId }
+    return { challengeToken, linkingWorkspace: !!transaction.linkingOrganizationId, linkingIdentity: transaction.linkingIdentity }
+  }
+  private async recentLegacySession(sessionToken: string, db: Prisma.TransactionClient = this.db) {
+    const session = await db.webSession.findFirst({
+      where: { tokenHash: hash(sessionToken), expiresAt: { gt: new Date() }, createdAt: { gt: new Date(Date.now() - 300000) } },
+      include: { identity: { include: { membership: true, githubAccounts: true } } },
+    })
+    if (!session || !session.identity.membership?.active || session.identity.membership.role === 'SUPER_ADMIN' ||
+      ['https://github.com', 'preflyt://local'].includes(session.identity.issuer) || session.identity.githubAccounts.length)
+      throw new ForbiddenException('Sign in again with your organization account, then link GitHub within five minutes. Super Admin stays separate.')
+    return session
+  }
+  private async identityLinkPreview(raw: string | undefined, sessionToken: string | undefined, db: Prisma.TransactionClient = this.db) {
+    if (!sessionToken) throw new UnauthorizedException('Sign in with your organization account first')
+    const session = await this.recentLegacySession(sessionToken, db)
+    if (!raw || raw.length > 512) throw new UnauthorizedException('Account linking expired. Start again.')
+    const challenge = await db.gitHubOnboardingChallenge.findUnique({ where: { tokenHash: hash(raw) }, include: { account: { include: { identity: { include: { membership: true } } } } } })
+    if (!challenge?.linkingIdentity || challenge.expiresAt <= new Date() || challenge.linkingOwnerId !== session.identityId || challenge.linkingSessionHash !== hash(sessionToken))
+      throw new ForbiddenException('This account link belongs to another sign-in session or has expired')
+    if (challenge.account.identityId === session.identityId || challenge.account.identity.issuer !== 'https://github.com' || challenge.account.identity.membership?.role === 'SUPER_ADMIN')
+      throw new ConflictException('This GitHub account cannot be linked to your organization account')
+    if (await db.identityLoginLink.count({ where: { OR: [
+      { sourceIdentityId: { in: [session.identityId, challenge.account.identityId] } },
+      { targetIdentityId: { in: [session.identityId, challenge.account.identityId] } },
+    ] } })) throw new ConflictException('One of these accounts is already linked')
+    const oldGrants = await db.organizationMembership.findMany({ where: { identityId: challenge.account.identityId, active: true }, orderBy: { id: 'asc' }, take: 101, select: { id: true, organizationId: true, role: true, updatedAt: true } })
+    if (oldGrants.length > 100) throw new ConflictException('Too many existing access records to link safely')
+    const targetGrants = await db.organizationMembership.findMany({ where: { identityId: session.identityId, active: true }, orderBy: { id: 'asc' }, take: 101, select: { id: true, organizationId: true, role: true, updatedAt: true } })
+    if (targetGrants.length > 100) throw new ConflictException('Too many existing access records to link safely')
+    for (const grant of oldGrants.filter(grant => grant.role === 'OWNER')) {
+      const remainingOwner = await db.organizationMembership.count({ where: { organizationId: grant.organizationId, role: 'OWNER', active: true, identityId: { not: challenge.account.identityId } } })
+      if (!remainingOwner) throw new ConflictException('Assign another workspace Owner before linking this account')
+    }
+    const details = { accountId: challenge.accountId, sourceIdentityId: challenge.account.identityId, targetIdentityId: session.identityId, githubUserId: challenge.account.githubUserId.toString(), login: challenge.account.login, oldGrants, targetGrants }
+    return { session, challenge, details, previewHash: digest(details) }
+  }
+  async identityLinkStatus(sessionToken?: string) {
+    const session = await this.auth.currentSession(sessionToken)
+    if (!session.authenticated) throw new UnauthorizedException('Sign in first')
+    const identity = await this.db.identity.findUniqueOrThrow({ where: { id: session.identityId }, include: { githubAccounts: true } })
+    return { linked: !!identity.githubAccounts.length, canLink: this.enabled && !session.platformAdmin && identity.issuer !== 'https://github.com' && !identity.githubAccounts.length }
+  }
+  async identityLinkDetails(raw?: string, sessionToken?: string) {
+    const { details, previewHash } = await this.identityLinkPreview(raw, sessionToken)
+    return { login: details.login, previousAccessCount: details.oldGrants.length, retainedAccessCount: details.targetGrants.length, previewHash }
+  }
+  async confirmIdentityLink(raw: string | undefined, sessionToken: string | undefined, expectedHash: string, origin?: string) {
+    this.auth.assertOrigin(origin)
+    const { challenge } = await this.identityLinkPreview(raw, sessionToken)
+    // Revalidate the provider credential before applying either proof; no browser identity claim is accepted.
+    const { token } = await this.challenge(raw)
+    const user = await this.provider.user(token)
+    if (user.id !== challenge.account.githubUserId) throw new ForbiddenException('GitHub account changed. Start again.')
+    await this.db.$transaction(async tx => {
+      const ids = [challenge.account.identityId, challenge.linkingOwnerId!].sort()
+      for (const id of ids) await tx.$queryRaw`SELECT id FROM "Identity" WHERE id = ${id} FOR UPDATE`
+      const proof = await this.identityLinkPreview(raw, sessionToken, tx)
+      if (proof.previewHash !== expectedHash) throw new ConflictException('Account access changed. Review the link again.')
+      const used = await tx.gitHubOnboardingChallenge.deleteMany({ where: { id: proof.challenge.id, expiresAt: { gt: new Date() } } })
+      if (used.count !== 1) throw new ConflictException('Account link has already been used')
+      await tx.identityLoginLink.create({ data: { sourceIdentityId: proof.details.sourceIdentityId, targetIdentityId: proof.details.targetIdentityId, githubUserId: user.id } })
+      await tx.gitHubUserAccount.update({ where: { id: proof.challenge.accountId }, data: { identityId: proof.session.identityId } })
+      // Keep the legacy account's approved grants. Do not union two accounts' permissions.
+      await tx.organizationMembership.updateMany({ where: { identityId: proof.details.sourceIdentityId, active: true }, data: { active: false } })
+      await tx.membership.updateMany({ where: { identityId: proof.details.sourceIdentityId }, data: { active: false } })
+      await tx.webSession.deleteMany({ where: { identityId: proof.details.sourceIdentityId } })
+      await tx.gitHubUserAccessEvidence.deleteMany({ where: { accountId: proof.challenge.accountId } })
+      await tx.auditEvent.create({ data: { event: 'github_identity_linked', actorId: proof.session.identityId, metadata: { sourceIdentityId: proof.details.sourceIdentityId, githubUserId: user.id.toString(), previousAccessCount: proof.details.oldGrants.length, retainedAccessCount: proof.details.targetGrants.length } } })
+    }, { isolationLevel: 'Serializable' })
+    return { linked: true }
+  }
+  async cancelIdentityLink(raw?: string, sessionToken?: string) {
+    if (!raw || !sessionToken || raw.length > 512) return
+    await this.db.gitHubOnboardingChallenge.deleteMany({ where: { tokenHash: hash(raw), linkingIdentity: true, linkingSessionHash: hash(sessionToken) } })
+  }
+  async isIdentityLinkCallback(state: string, binding?: string) {
+    if (!state || state.length > 512 || !binding || binding.length > 512) return false
+    const transaction = await this.db.gitHubLoginTransaction.findUnique({ where: { stateHash: hash(state) } })
+    return !!transaction?.linkingIdentity && transaction.browserBindingHash === hash(binding)
   }
   async isWorkspaceLinkCallback(state: string, binding?: string) {
     if (!state || state.length > 512 || !binding || binding.length > 512) return false
@@ -332,6 +420,7 @@ export class GitHubLoginService implements OnModuleInit {
   }
   async organizations(raw?: string, existingSessionToken?: string) {
     const { challenge, token } = await this.challenge(raw)
+    if (challenge.linkingIdentity) throw new ForbiddenException('Confirm account linking in Settings')
     if (challenge.linkingOrganizationId) await this.assertLinkSession(challenge, existingSessionToken)
     const installations = await this.provider.installations(token)
     return {
@@ -371,9 +460,7 @@ export class GitHubLoginService implements OnModuleInit {
                 ? 'link_existing'
                 : 'unavailable'
               : link
-                ? grant?.active
-                  ? 'existing'
-                  : 'no_access'
+                ? await this.db.organizationMembership.count({ where: { organizationId: link.organizationId, role: 'OWNER', active: true } }) === 0 ? 'recovery_available' : grant?.active ? 'existing' : 'no_access'
                 : existing
                   ? 'migration_required'
                   : 'new',
@@ -387,11 +474,13 @@ export class GitHubLoginService implements OnModuleInit {
     installationId: string,
     origin?: string,
     existingSessionToken?: string,
+    recoverOwner = false,
   ) {
     this.auth.assertOrigin(origin)
     if (!/^[1-9]\d{0,15}$/.test(installationId))
       throw new ForbiddenException('Invalid GitHub installation')
     const { challenge, token, accessExpiresAt } = await this.challenge(raw)
+    if (challenge.linkingIdentity) throw new ForbiddenException('Confirm account linking in Settings')
     if (challenge.linkingOrganizationId) await this.assertLinkSession(challenge, existingSessionToken)
     const verified = await this.provider.verify(
       token,
@@ -589,7 +678,21 @@ export class GitHubLoginService implements OnModuleInit {
             },
           },
         })
-        if (!member?.active)
+        if (recoverOwner) {
+          await tx.$queryRaw`SELECT id FROM "Organization" WHERE id = ${link.organizationId} FOR UPDATE`
+          const owners = await tx.organizationMembership.count({ where: { organizationId: link.organizationId, role: 'OWNER', active: true } })
+          if (!verified.owner || owners || challenge.linkingOrganizationId) throw new ForbiddenException('Recovery requires a verified GitHub organization owner and a workspace with no active Owner')
+          if (!owners) {
+            await tx.organizationMembership.upsert({
+              where: { organizationId_identityId: { organizationId: link.organizationId, identityId: challenge.account.identityId } },
+              create: { organizationId: link.organizationId, identityId: challenge.account.identityId, role: 'OWNER', active: true },
+              update: { role: 'OWNER', active: true },
+            })
+            await tx.auditEvent.create({ data: { event: 'github_owner_recovered', actorId: challenge.account.identityId, metadata: { organizationId: link.organizationId, githubOrganizationId: verified.organizationId.toString(), installationId } } })
+          }
+        }
+        const currentMember = await tx.organizationMembership.findUnique({ where: { organizationId_identityId: { organizationId: link.organizationId, identityId: challenge.account.identityId } } })
+        if (!currentMember?.active)
           throw new ForbiddenException(
             'Your administrator has not granted you Preflyt access yet',
           )
@@ -633,7 +736,7 @@ export class GitHubLoginService implements OnModuleInit {
             actorId: challenge.account.identityId,
             metadata: {
               organizationId: link.organizationId,
-              role: member.role,
+              role: currentMember.role,
             },
           },
         })

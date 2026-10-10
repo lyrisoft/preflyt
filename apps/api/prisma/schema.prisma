@@ -36,6 +36,8 @@ model Identity {
   githubSetupTransactions GitHubSetupTransaction[]
   githubInstallations GitHubInstallation[]
   githubAccounts GitHubUserAccount[]
+  loginLinkSource IdentityLoginLink? @relation("LoginLinkSource")
+  loginLinkTarget IdentityLoginLink? @relation("LoginLinkTarget")
   @@unique([issuer, subject])
 }
 
@@ -549,6 +551,17 @@ model GitHubUserCredential {
   @@index([refreshExpiresAt])
 }
 
+// Historical actors remain intact; linked accounts count as one person for approvals.
+model IdentityLoginLink {
+  id String @id @default(cuid())
+  sourceIdentityId String @unique
+  source Identity @relation("LoginLinkSource", fields: [sourceIdentityId], references: [id], onDelete: Restrict)
+  targetIdentityId String @unique
+  target Identity @relation("LoginLinkTarget", fields: [targetIdentityId], references: [id], onDelete: Restrict)
+  githubUserId BigInt
+  linkedAt DateTime @default(now())
+}
+
 // Human login is distinct from authenticated App installation setup.
 model GitHubLoginTransaction {
   id                 String   @id @default(cuid())
@@ -559,6 +572,7 @@ model GitHubLoginTransaction {
   expiresAt          DateTime
   createdAt          DateTime @default(now())
 
+  linkingIdentity Boolean @default(false)
   linkingOrganizationId String?
   linkingOwnerId String?
   linkingSessionHash String?
@@ -576,6 +590,7 @@ model GitHubOnboardingChallenge {
   expiresAt  DateTime
   createdAt  DateTime          @default(now())
 
+  linkingIdentity Boolean @default(false)
   linkingOrganizationId String?
   linkingOwnerId String?
   linkingSessionHash String?
@@ -990,6 +1005,7 @@ model PreflytTeam {
   parentGithubTeamId String?
   installationId BigInt?
   importedMembers Json @default("[]")
+  nestedScope Json @default("[]")
   scopeRevision Int @default(1)
   syncState String @default("LOCAL")
   syncedAt DateTime?

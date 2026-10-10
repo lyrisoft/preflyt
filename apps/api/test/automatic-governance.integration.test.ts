@@ -150,6 +150,7 @@ beforeEach(async () => {
   await db.gitHubRepository.deleteMany();
   await db.gitHubInstallation.deleteMany();
   await db.organization.deleteMany();
+  await db.identityLoginLink.deleteMany();
   await db.identity.deleteMany();
   await db.auditEvent.deleteMany();
   for (const flag of [
@@ -762,4 +763,15 @@ it("does not claim a fresh verified state when scheduled GitHub observation fail
   expect(after.state).toBe("ACTIVE");
   expect(after.verifiedAt).toEqual(before.verifiedAt);
   expect(after.message).toContain("may be outdated");
+});
+
+it("rejects ruleset approval and deployment through proof-linked sign-ins", async () => {
+  await automation.process(task.id);
+  const proposal = await deployments.preview(owner, "51", draft.id, draft.definitionHash);
+  await deployments.approve(reviewer, "51", proposal.id, proposal.previewHash);
+  await db.identityLoginLink.create({ data: { sourceIdentityId: owner.identityId, targetIdentityId: reviewer.identityId, githubUserId: 123n } });
+  await expect(deployments.deploy(owner, "51", proposal.id, proposal.previewHash)).rejects.toThrow("independently approved");
+  const next = await deployments.preview(owner, "51", draft.id, draft.definitionHash);
+  await expect(deployments.approve(reviewer, "51", next.id, next.previewHash)).rejects.toThrow("Another authorized");
+  expect(connection.create).not.toHaveBeenCalled();
 });

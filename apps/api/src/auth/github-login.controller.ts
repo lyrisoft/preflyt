@@ -8,11 +8,15 @@ import {
   Req,
   Res,
 } from '@nestjs/common'
-import { IsString, Matches } from 'class-validator'
+import { IsString, Matches, IsOptional, IsBoolean } from 'class-validator'
 import type { Request, Response } from 'express'
 import { AuthService } from './auth.service.js'
 import { GitHubLoginService } from './github-login.service.js'
+class ConfirmIdentityDto {
+  @IsString() @Matches(/^[a-f0-9]{64}$/) previewHash!: string
+}
 class EnterOrganizationDto {
+  @IsOptional() @IsBoolean() recoverOwner?: boolean
   @IsString() @Matches(/^[1-9]\d{0,15}$/) installationId!: string
 }
 const options = (secure: boolean, maxAge: number) => ({
@@ -38,6 +42,7 @@ export class GitHubLoginController {
       req.query.link === 'workspace'
         ? (req.cookies?.[this.auth.sessionCookieName] ?? '')
         : undefined,
+      req.query.link === 'identity' ? (req.cookies?.[this.auth.sessionCookieName] ?? '') : undefined,
     )
     res.cookie(
       this.login.transactionCookie,
@@ -56,8 +61,10 @@ export class GitHubLoginController {
       this.login.transactionCookie,
       options(this.auth.secureCookie, 0),
     )
+    let linkingIdentity = false
     let linking = !!req.cookies?.[this.auth.sessionCookieName]
     try {
+      linkingIdentity = await this.login.isIdentityLinkCallback(typeof req.query.state === 'string' ? req.query.state : '', binding)
       linking =
         (await this.login.isWorkspaceLinkCallback(
           typeof req.query.state === 'string' ? req.query.state : '',
@@ -75,7 +82,7 @@ export class GitHubLoginController {
       )
       return res.redirect(
         new URL(
-          result.linkingWorkspace
+          result.linkingIdentity ? '/organization-settings?identityLink=confirm' : result.linkingWorkspace
             ? '/access-control?tab=github&githubLink=confirm'
             : '/github-onboarding',
           this.auth.frontendOrigin,
@@ -88,13 +95,30 @@ export class GitHubLoginController {
       )
       return res.redirect(
         new URL(
-          linking
+          linkingIdentity ? '/organization-settings?identityLink=failed' : linking
             ? '/access-control?tab=github&githubLink=failed'
             : '/sign-in?error=github',
           this.auth.frontendOrigin,
         ).href,
       )
     }
+  }
+  @Get('identity/status') @Header('Cache-Control', 'no-store') identityStatus(@Req() req: Request) {
+    return this.login.identityLinkStatus(req.cookies?.[this.auth.sessionCookieName])
+  }
+  @Get('identity/preview') @Header('Cache-Control', 'no-store') identityPreview(@Req() req: Request) {
+    return this.login.identityLinkDetails(req.cookies?.[this.login.onboardingCookie], req.cookies?.[this.auth.sessionCookieName])
+  }
+  @Post('identity/confirm') @Header('Cache-Control', 'no-store') async identityConfirm(@Body() body: ConfirmIdentityDto, @Req() req: Request, @Res() res: Response) {
+    const result = await this.login.confirmIdentityLink(req.cookies?.[this.login.onboardingCookie], req.cookies?.[this.auth.sessionCookieName], body.previewHash, req.headers.origin)
+    res.clearCookie(this.login.onboardingCookie, options(this.auth.secureCookie, 0))
+    return res.json(result)
+  }
+  @Post('identity/cancel') @Header('Cache-Control', 'no-store') async identityCancel(@Req() req: Request, @Res() res: Response) {
+    this.auth.assertOrigin(req.headers.origin)
+    await this.login.cancelIdentityLink(req.cookies?.[this.login.onboardingCookie], req.cookies?.[this.auth.sessionCookieName])
+    res.clearCookie(this.login.onboardingCookie, options(this.auth.secureCookie, 0))
+    return res.json({ cancelled: true })
   }
   @Get('organizations') @Header('Cache-Control', 'no-store') organizations(
     @Req() req: Request,
@@ -129,6 +153,7 @@ export class GitHubLoginController {
       body.installationId,
       req.headers.origin,
       req.cookies?.[this.auth.sessionCookieName],
+      body.recoverOwner ?? false,
     )
     res.clearCookie(
       this.login.onboardingCookie,
