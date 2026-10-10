@@ -243,6 +243,10 @@ export class AuthorizationService {
   // SessionGuard calls this after live session validation, before any controller or cache lookup.
   async authorizeRequest(request: Request, session: AuthenticatedSession) {
     const path = request.path.replace(/\/$/, '')
+    if (path === '/configuration') {
+      if (session.platformAdmin !== true) await this.deny(session, 'deployment.configuration.manage')
+      return true
+    }
     if (path === '/teams' || path.startsWith('/teams/')) {
       await this.requireOrganization(session, request.method === 'GET' ? 'team.read' : path.includes('github') || path.endsWith('/sync') ? 'team.import' : path.endsWith('/assign') || path.endsWith('/preview') ? 'team.policy.assign' : 'team.manage')
       return true

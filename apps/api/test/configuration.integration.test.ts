@@ -40,7 +40,7 @@ beforeAll(async () => {
         { provide: ConfigurationService, useValue: service },
         {
           provide: AuthorizationService,
-          useValue: { authorizeRequest: async () => false },
+          useValue: new AuthorizationService(fixture.prisma),
         },
         {
           provide: AuthService,
