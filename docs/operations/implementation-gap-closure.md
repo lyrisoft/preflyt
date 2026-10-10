@@ -6,7 +6,7 @@ Status: active, audited against source and executable checks on 2026-10-10. This
 
 | Gap | Result | Evidence |
 | --- | --- | --- |
-| GitHub rotating user credentials | Database-serialized refresh across service instances; encrypted persistence; transient outages preserve credentials and workspace sessions | Identity provider and GitHub login integration tests |
+| GitHub rotating user credentials | Database-serialized refresh across service instances; encrypted persistence; transient outages preserve credentials and workspace sessions; onboarding uses refreshed expiry | Identity provider and GitHub login integration tests |
 | Provider authorization revocation | Signed, idempotent user revocation clears provider credentials/evidence/challenges while preserving local sessions and installation history | GitHub login integration tests, including refresh/verification races |
 | Relationship invalidation | Signed organization/team/member events invalidate installation authorization revision and imported team freshness; payloads never grant access | GitHub login integration tests, delivery reuse and foreign organization rejection |
 | Missed-event reconciliation | Bounded worker authorization refresh and team snapshots under current original-importer authority | Identity and Teams integration tests |
@@ -35,7 +35,7 @@ The additive `20261010050000_finding_lifecycle` migration creates Findings triag
 ## Verification record
 
 - Six focused API files: 77 tests passed before relationship invalidation was added.
-- Latest GitHub login and Teams suites: 35 tests passed, including signed relationship invalidation and explicit upgrades.
+- GitHub login and Teams suites passed, including signed relationship invalidation and explicit upgrades. The final login suite passed all 25 tests after adding refreshed onboarding-expiry coverage.
 - Legacy webhook and notification suites: 38 passed, one optional real-Redis test initially skipped. The notification suite then passed all 20 tests with the local Redis transport enabled.
 - Chromium Teams, Findings and badge suites: 18 tests passed.
 - Full API regression: 99 files passed; 1,098 tests passed, two optional acceptance tests initially skipped. Both were then enabled: offline GitHub attestation verification and isolated real-Redis dashboard acceptance passed (29 tests across their two files). The CI workflow enables both.

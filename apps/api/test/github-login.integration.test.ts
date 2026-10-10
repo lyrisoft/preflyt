@@ -28,6 +28,7 @@ let admin: Client,
 let created = false,
   userId = 101n
 const provider = {
+  refresh: vi.fn(),
   authorizationUrl: vi.fn(
     (state: string, challenge: string) =>
       `https://github.com/login/oauth/authorize?state=${state}&code_challenge=${challenge}`,
@@ -154,6 +155,10 @@ beforeAll(async () => {
   access = new AuthorizationService(db, userAccess)
 }, 30000)
 beforeEach(async () => {
+  await db.teamPolicyAssignment.deleteMany()
+  await db.teamRepositoryScope.deleteMany()
+  await db.teamMember.deleteMany()
+  await db.preflytTeam.deleteMany()
   await db.gitHubOnboardingChallenge.deleteMany()
   await db.gitHubLoginTransaction.deleteMany()
   await db.gitHubUserAccessEvidence.deleteMany()
@@ -765,4 +770,19 @@ it('invalidates signed organization membership changes idempotently without clea
   await expect(webhooks.receive(changed, sign(changed), id, 'membership', {...body, action: 'added'})).rejects.toThrow('reused')
   const foreign = {...body, organization: {id: 999}}, foreignRaw = Buffer.from(JSON.stringify(foreign))
   expect(await webhooks.receive(foreignRaw, sign(foreignRaw), randomUUID(), 'membership', foreign)).toMatchObject({accepted: false})
+})
+
+it('uses refreshed credential expiry when onboarding completes after the access token expires', async () => {
+  const result = await callback()
+  const account = await db.gitHubUserAccount.findFirstOrThrow()
+  await db.gitHubUserCredential.update({ where: { accountId: account.id }, data: { accessExpiresAt: new Date(0) } })
+  const expiresAt = new Date(Date.now() + 3600000)
+  const refresh = vi.spyOn(provider, 'refresh')
+  refresh.mockResolvedValue({ accessToken: 'rotated-access', refreshToken: 'rotated-refresh', accessExpiresAt: expiresAt, refreshExpiresAt: new Date(Date.now() + 86400000) })
+  try {
+    const entered = await login.enter(result.challengeToken, '41', 'http://localhost:5173')
+    expect(entered.expiresAt.getTime()).toBe(expiresAt.getTime())
+    expect(await auth.currentSession(entered.sessionToken)).toMatchObject({ authenticated: true, role: 'OWNER' })
+    expect(refresh).toHaveBeenCalledTimes(1)
+  } finally { refresh.mockRestore() }
 })
