@@ -1,3 +1,4 @@
+import { configurationFields } from '../src/configuration/configuration-catalogue.js'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { parse, parseAllDocuments } from 'yaml'
@@ -123,7 +124,10 @@ describe('Kubernetes container deployment contract', () => {
       'GITHUB_EVENTS_ENABLED',
       'AUTOMATIC_CHECK_PUBLICATION_ENABLED',
     ])
-      expect(config[flag]).toBe('false')
+      {
+        expect(config[flag]).toBeUndefined()
+        expect(configurationFields.find(field => field.key === flag)?.defaultValue).toBe('false')
+      }
     expect(config.COOKIE_SECURE).toBe('true')
     expect(docs.some((doc) => doc.kind === 'Secret')).toBe(false)
     expect(

@@ -1,3 +1,4 @@
+import { checkReportAdapters } from './check-report-adapters.js'
 import { executionContracts } from './execution-contract.js'
 import type { validatedProvenance } from '../github-events/ci-attestation-policy.js'
 import { createHash } from 'node:crypto'
@@ -168,13 +169,7 @@ export function validateRuleEvidence(
   if (truncated) reasons.add('VALIDATION_COLLECTION_TRUNCATED')
   const contracts = executionContracts()
   const contract = contracts?.contracts.find((c) => c.ruleId === ruleId)
-  const expectedFormat =
-    contract?.format ??
-    (ruleId === 'tests.required'
-      ? 'junit'
-      : ruleId === 'security.sast'
-        ? 'sarif'
-        : null)
+  const expectedFormat = contract?.format ?? checkReportAdapters[ruleId] ?? null
   const reports =
     observation?.reports.filter((r) => r.format === expectedFormat) ?? []
   if (!expectedFormat) reasons.add('RULE_ADAPTER_UNSUPPORTED')
@@ -182,7 +177,7 @@ export function validateRuleEvidence(
   if (reports.length > 1) reasons.add('REPORT_SELECTION_AMBIGUOUS')
   for (const report of reports) {
     for (const reason of report.reasons) reasons.add(reason)
-    if (ruleId === 'tests.required' && !report.executedTests)
+    if (expectedFormat === 'junit' && !report.executedTests)
       reasons.add('MINIMUM_TEST_EXECUTION_NOT_ESTABLISHED')
     if (report.reportedResult === 'REPORTED_FAILURE')
       reasons.add('REPORT_REPORTED_FAILURE')

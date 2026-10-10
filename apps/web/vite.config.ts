@@ -21,6 +21,9 @@ export default defineConfig({
       '@': path.resolve(import.meta.dirname, './src'),
     },
   },
+  optimizeDeps: {
+    include: ['@radix-ui/react-switch', '@tanstack/react-query'],
+  },
   test: {
     silent: 'passed-only',
     unstubEnvs: true,

@@ -180,6 +180,8 @@ model GitHubRepository {
   ruleSuiteSnapshots GitHubRuleSuiteSnapshot[]
   insightsSync GitHubInsightsSync?
   nativeRequests NativeExecutionRequest[]
+  skillReviews AiSkillReview[]
+  teamScopes TeamRepositoryScope[]
   profiles       RepositoryProfile[]
   @@index([installationId, selected])
 }
@@ -284,6 +286,7 @@ model CiArtifactImport {
 
 // Append-only adopted pack versions; catalogue/profile changes never auto-upgrade selection.
 model RepositoryStandardsSelection {
+  teamContext Json?
   id                String @id @default(cuid())
   repositoryId      String
   repository        GitHubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
@@ -310,6 +313,7 @@ model CommitAssessment {
   plan           Json
   report         Json
   assessmentHash String
+  skillReviews AiSkillReview[]
   createdAt      DateTime @default(now())
   @@unique([repositoryId, requestKey])
   @@index([repositoryId, sourceSha, createdAt])
@@ -340,6 +344,7 @@ model RepositoryCiBindings {
 }
 
 model RepositoryPullRequest {
+ aiReviewAttemptAt DateTime?
  verifiedInstallationId String?
  verifiedAccessRevision Int?
  id String @id @default(cuid())
@@ -394,6 +399,10 @@ model Organization {
   githubAccessEvidence GitHubUserAccessEvidence[]
   aiProviders AiProviderConnection[]
   aiRoutes AiStageRoute[]
+  reviewSkills AiReviewSkill[]
+  skillReviews AiSkillReview[]
+  teams PreflytTeam[]
+  reviewBudgets AiReviewBudget[]
 }
 
 model OrganizationMembership {
@@ -406,6 +415,7 @@ model OrganizationMembership {
   active         Boolean           @default(true)
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
+  teamMembers TeamMember[]
   grants         RepositoryGrant[]
 
   @@unique([organizationId, identityId])
@@ -525,7 +535,7 @@ model GitHubOrganizationLink {
 }
 
 // AES-256-GCM envelope bound to the account ID; never store plaintext provider tokens.
-// Refresh ownership remains pending; authorization evidence is stored separately.
+// Rotation is serialized by the credential row lock; authorization evidence is stored separately.
 model GitHubUserCredential {
   accountId        String @id
   account          GitHubUserAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
@@ -854,6 +864,8 @@ model OrganizationStandardVersion {
 }
 
 model AiProviderConnection {
+  inputPriceCentsPerMillion Int?
+  outputPriceCentsPerMillion Int?
   id String @id @default(uuid())
   organizationId String
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
@@ -874,6 +886,9 @@ model AiProviderConnection {
   @@index([organizationId, updatedAt])
 }
 model AiStageRoute {
+  publishInline Boolean @default(false)
+  automaticReviews Boolean @default(false)
+  publishSummary Boolean @default(false)
   id String @id @default(uuid())
   organizationId String
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
@@ -889,4 +904,162 @@ model AiStageRoute {
   updatedById String
   updatedAt DateTime @updatedAt
   @@unique([organizationId, stage])
+}
+
+model AiReviewSkill {
+  languages String[] @default([])
+  frameworks String[] @default([])
+  id String @id @default(uuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  skillKey String
+  version Int
+  name String
+  description String
+  instructions String
+  stages String[]
+  repositories String[]
+  source String
+  license String
+  contentDigest String
+  status String @default("DRAFT")
+  enabled Boolean @default(false)
+  createdById String
+  approvedById String?
+  approvedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([organizationId, skillKey, version])
+  @@index([organizationId, createdAt])
+}
+model AiSkillReview {
+  usage Json?
+  inlineFeedbackUrl String?
+  automaticKey String? @unique
+  feedbackState String @default("NOT_REQUESTED")
+  feedbackUrl String?
+  feedbackAttempts Int @default(0)
+  feedbackAttemptAt DateTime?
+  id String @id @default(uuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  repositoryId String
+  repository GitHubRepository @relation(fields: [repositoryId], references: [id], onDelete: Restrict)
+  assessmentId String
+  assessment CommitAssessment @relation(fields: [assessmentId], references: [id], onDelete: Restrict)
+  actorId String
+  fingerprint String
+  stage String
+  snapshot Json
+  reservedMicroCents BigInt
+  state String @default("QUEUED")
+  result Json?
+  failure String?
+  providerId String?
+  latencyMs Int?
+  startedAt DateTime?
+  finishedAt DateTime?
+  createdAt DateTime @default(now())
+  @@unique([organizationId, actorId, fingerprint])
+  @@index([state, createdAt])
+  @@index([organizationId, repositoryId, assessmentId, createdAt])
+}
+model AiReviewBudget {
+  id String @id @default(uuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  stage String
+  day String
+  reservedMicroCents BigInt @default(0)
+  @@unique([organizationId, stage, day])
+}
+
+// Team membership never grants Preflyt or GitHub access. Scopes require explicit authorization.
+model PreflytTeam {
+  id String @id @default(uuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  name String
+  description String @default("")
+  source String @default("LOCAL")
+  githubTeamId String?
+  githubOrganizationId String?
+  githubSlug String?
+  parentGithubTeamId String?
+  installationId BigInt?
+  importedMembers Json @default("[]")
+  scopeRevision Int @default(1)
+  syncState String @default("LOCAL")
+  syncedAt DateTime?
+  revision Int @default(1)
+  createdById String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  members TeamMember[]
+  repositories TeamRepositoryScope[]
+  assignments TeamPolicyAssignment[]
+  @@unique([organizationId, githubTeamId])
+  @@index([organizationId, name, id])
+}
+model TeamMember {
+  id String @id @default(uuid())
+  teamId String
+  team PreflytTeam @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  membershipId String
+  membership OrganizationMembership @relation(fields: [membershipId], references: [id], onDelete: Restrict)
+  @@unique([teamId, membershipId])
+}
+model TeamRepositoryScope {
+  id String @id @default(uuid())
+  teamId String
+  team PreflytTeam @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  repositoryId String
+  repository GitHubRepository @relation(fields: [repositoryId], references: [id], onDelete: Restrict)
+  origin String
+  providerPresent Boolean @default(true)
+  policyScopeEnabled Boolean @default(false)
+  approvedById String?
+  verifiedAt DateTime?
+  @@unique([teamId, repositoryId])
+}
+model TeamPolicyAssignment {
+  id String @id @default(uuid())
+  teamId String
+  team PreflytTeam @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  branchRef String
+  profile String
+  packs Json
+  digest String
+  createdById String
+  createdAt DateTime @default(now())
+  @@index([teamId, branchRef, createdAt])
+  supersededAt DateTime?
+}
+
+// Human triage belongs to a specific saved finding; it never changes gate evidence.
+model FindingDisposition {
+  id String @id
+  organizationId String
+  repositoryGithubId String
+  assessmentId String
+  sourceSha String
+  state String @default("REPORTED")
+  assigneeId String?
+  note String @default("")
+  revision Int @default(1)
+  updatedById String
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+  @@index([organizationId, repositoryGithubId, state])
+}
+
+// Deployment-wide operational settings; connection roots and encryption keys stay outside the database.
+model DeploymentConfiguration {
+  id String @id
+  revision Int @default(1)
+  values Json
+  encryptedSecrets String?
+  updatedById String?
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
 }

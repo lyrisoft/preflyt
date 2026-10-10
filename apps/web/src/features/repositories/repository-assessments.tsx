@@ -46,6 +46,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { StatusBadge } from '@/components/status-badge'
+import { SkillReviewPanel } from '../intelligence/skill-review-panel'
 import { AssessmentContext } from './assessment-context'
 import { AssessmentCoverageChart } from './assessment-coverage-chart'
 import type { ContextRequest } from './engineering-queries'
@@ -134,6 +135,7 @@ function AssessmentCreator({
   const standards = useStandards(repositoryId)
   const evidence = useCiEvidence(repositoryId, sha, { enabled: valid })
   const mutation = useMutation({
+    meta: { successMessage: 'Assessment saved' },
     mutationFn: async () => {
       const response = await fetch(
         `${API_BASE_URL}/github/repositories/${encodeURIComponent(repositoryId)}/assessments`,
@@ -156,7 +158,7 @@ function AssessmentCreator({
           response.status === 409
             ? 'Inputs or standards changed. Reload before creating a new assessment.'
             : response.status === 404
-              ? 'This commit has no saved profile or imported CI evidence.'
+              ? 'This commit has no saved profile or imported check results and reports.'
               : 'Could not create assessment. Check the mappings, session and repository access.'
         )
       return response.json() as Promise<{ assessment: Assessment }>
@@ -266,7 +268,7 @@ function AssessmentCreator({
           }
           onClick={() => mutation.mutate()}
         >
-          {mutation.isPending ? 'Creating…' : 'Create snapshot'}
+          {mutation.isPending ? 'Creating…' : 'Create assessment'}
         </Button>
       </SheetFooter>
     </>
@@ -302,12 +304,12 @@ export function RepositoryAssessments({
       )
       if (!response.ok)
         throw new Error(
-          'Could not load this snapshot. Check your session and repository access.'
+          'Could not load this assessment. Check your session and repository access.'
         )
       return response.json() as Promise<Assessment>
     },
   })
-  const data = detail.data
+  const data = detail.isError ? undefined : detail.data
   const sources = new Map(
     data?.report.observations.map((item) => [
       item.deliveryId,
@@ -459,7 +461,7 @@ export function RepositoryAssessments({
                   Revision history
                 </p>
                 <span className='text-xs text-muted-foreground'>
-                  {history.data.assessments.length} saved snapshots
+                  {history.data.assessments.length} saved assessments
                 </span>
               </div>
               <div className='flex flex-wrap gap-2'>
@@ -502,7 +504,7 @@ export function RepositoryAssessments({
                 }}
               >
                 <SelectTrigger
-                  aria-label='Assessment snapshot'
+                  aria-label='Saved assessment'
                   className='w-full sm:w-80'
                 >
                   <SelectValue />
@@ -519,7 +521,7 @@ export function RepositoryAssessments({
                 </SelectContent>
               </Select>
               <span className='text-xs text-muted-foreground'>
-                {history.data.assessments.length} snapshot
+                {history.data.assessments.length} assessment
                 {history.data.assessments.length === 1 ? '' : 's'}
               </span>
             </div>
@@ -529,7 +531,7 @@ export function RepositoryAssessments({
               </p>
             ) : detail.isPending ? (
               <p role='status' className='text-sm text-muted-foreground'>
-                Loading snapshot…
+                Loading assessment…
               </p>
             ) : (
               data &&
@@ -548,6 +550,16 @@ export function RepositoryAssessments({
                       selected={inputFilter}
                       onSelect={setInputFilter}
                     />
+                    <SkillReviewPanel
+                      key={data.id}
+                      repositoryId={repositoryId}
+                      assessmentId={data.id}
+                      stage={
+                        data.request.subjectKind === 'PULL_REQUEST'
+                          ? 'pull_request'
+                          : 'repository'
+                      }
+                    />
                     <div className='grid grid-cols-2 gap-3'>
                       <div className='rounded-lg border border-info/20 bg-info/5 p-4'>
                         <p className='text-xs text-muted-foreground'>
@@ -557,7 +569,7 @@ export function RepositoryAssessments({
                           {data.report.requiredChecks}
                         </p>
                         <p className='mt-1 text-xs text-muted-foreground'>
-                          {data.report.checks.length} controls in this snapshot
+                          {data.report.checks.length} checks in this assessment
                         </p>
                       </div>
                       <div className='rounded-lg border border-chart-2/20 bg-chart-2/5 p-4'>
@@ -673,7 +685,7 @@ export function RepositoryAssessments({
                               </TableCell>
                               <TableCell>
                                 <Badge variant='neutral'>
-                                  {check.required ? 'Required' : 'Advisory'}
+                                  {check.required ? 'Required' : 'Optional'}
                                 </Badge>
                               </TableCell>
                               <TableCell>

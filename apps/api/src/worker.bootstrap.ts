@@ -1,3 +1,7 @@
+import { watchConfiguration } from './configuration/configuration-store.js'
+import { TeamsService } from './teams/teams.service.js'
+import { SkillReviewService } from './intelligence/skill-review.service.js'
+import { AiConfigurationService } from './intelligence/ai-configuration.service.js'
 import { NativeDispatchService } from './execution/native-dispatch.service.js'
 import { NativeResultService } from './execution/native-result.service.js'
 import { NativeStatusService } from './execution/native-status.service.js'
@@ -43,6 +47,7 @@ async function start() {
   const consumerConfig = queueConfig(process.env.QUEUE_REDIS_URL, prefix, true)
   const prisma = new PrismaService()
   await prisma.waitUntilWritable()
+  const stopConfiguration = watchConfiguration(prisma)
   const producer = new Redis(producerConfig.connection)
   const consumer = new Redis(consumerConfig.connection)
   const queue = new Queue(queueName, {
@@ -55,6 +60,8 @@ async function start() {
   const prSync = new GitHubPrSyncService(prisma, githubProvider)
   const rulesetHistory = new RulesetHistoryService(prisma, githubProvider)
   let historyRun: Promise<void> | undefined
+  let identityRun: Promise<void> | undefined
+  let teamRun: Promise<void> | undefined
   const processor = new GitHubEventProcessor(prisma)
   const dispatcher = new GitHubEventDispatcher(prisma, queue)
   const worker = new Worker(
@@ -109,13 +116,17 @@ async function start() {
     })
   }, { ...consumerConfig, connection: consumer, concurrency: 2, autorun: notificationsEnabled() })
   const mail = new NotificationMailer()
-  const emailAuthorization = new AuthorizationService(prisma, new GitHubUserAccessService(prisma, new GitHubIdentityProvider(githubProvider, cache), cache))
+  const userAccess = new GitHubUserAccessService(prisma, new GitHubIdentityProvider(githubProvider, cache), cache)
+  const emailAuthorization = new AuthorizationService(prisma, userAccess)
+  const teams = new TeamsService(prisma, emailAuthorization, githubProvider)
   const emailQueue = new Queue('notification-email', { ...producerConfig, connection: producer })
   const emailWorker = new Worker('notification-email', async (job) => {
     if (typeof job.data?.deliveryId !== 'string' || !/^[a-zA-Z0-9-]{1,80}$/.test(job.data.deliveryId)) throw new Error('Invalid email delivery job')
     await telemetryOperation('preflyt.notification.email', { 'notification.delivery.id': job.data.deliveryId }, () => deliverNotificationEmail(prisma, emailAuthorization, mail, job.data.deliveryId))
   }, { ...consumerConfig, connection: consumer, concurrency: 2, autorun: notificationsEnabled() && emailNotificationsEnabled() })
   const assessments = new AssessmentService(prisma)
+  const aiReviews = new SkillReviewService(prisma, emailAuthorization, assessments, new AiConfigurationService(prisma, emailAuthorization), githubProvider)
+  let aiReviewRun: Promise<void> | undefined
   const native = new NativeDispatchService(prisma, emailAuthorization, githubProvider, new NativeStatusService(emailAuthorization), new NativeResultService(prisma, emailAuthorization, assessments))
   let nativeRun: Promise<void> | undefined
   const checks = new CheckPublicationService(prisma, emailAuthorization, githubProvider, assessments)
@@ -164,6 +175,16 @@ async function start() {
     reconciling = true
     try {
       await dispatcher.reconcile()
+      // Configuration switches apply to consumers already running, too.
+      for (const [worker, enabled] of [
+        [notificationWorker, notificationsEnabled()],
+        [emailWorker, notificationsEnabled() && emailNotificationsEnabled()],
+      ] as const) {
+        if (enabled) {
+          if (!worker.isRunning()) void worker.run().catch(warn)
+          else if (worker.isPaused()) await worker.resume()
+        } else if (worker.isRunning() && !worker.isPaused()) await worker.pause(true)
+      }
       if (notificationsEnabled()) {
         await dispatchNotifications(prisma, notificationQueue)
         if (emailNotificationsEnabled()) await dispatchNotificationEmails(prisma, emailQueue)
@@ -177,6 +198,9 @@ async function start() {
             syncRun = undefined
           })
       }
+      if (!teamRun) teamRun = teams.reconcile().catch(warn).finally(() => { teamRun = undefined })
+      if (!identityRun) identityRun = userAccess.reconcile().catch(warn).finally(() => { identityRun = undefined })
+      if (!aiReviewRun) aiReviewRun = aiReviews.reconcile().catch(warn).finally(() => { aiReviewRun = undefined })
       if (!nativeRun) nativeRun = native.reconcile().catch(warn).finally(() => { nativeRun = undefined })
       if (!automationRun) automationRun = automation.reconcile().catch(warn).finally(() => { automationRun = undefined })
       if (!historyRun) historyRun = rulesetHistory.reconcile().catch(warn).finally(() => { historyRun = undefined })
@@ -198,6 +222,7 @@ async function start() {
     if (closing) return
     closing = true
     clearInterval(timer)
+    aiReviews.close()
     native.close()
     sync.close()
     prSync.close()
@@ -218,12 +243,16 @@ async function start() {
     await queue.close()
     producer.disconnect()
     consumer.disconnect()
+    await teamRun
+    await identityRun
+    await aiReviewRun
     await nativeRun
     await syncRun
     await automationRun
     await historyRun
     await driftRun
     cache.onModuleDestroy()
+    stopConfiguration()
     await prisma.$disconnect()
     await unlink(heartbeat).catch(() => undefined)
     await shutdownTelemetry()

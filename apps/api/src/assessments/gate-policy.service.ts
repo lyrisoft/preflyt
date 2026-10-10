@@ -1,4 +1,5 @@
-import { executionContracts } from './execution-contract.js';
+import { verifyTeamContext } from '../teams/team-context.js';
+import { executionContracts } from "./execution-contract.js";
 import { recordPolicyNotification } from "../notifications/notification-event.js";
 import {
   BadRequestException,
@@ -12,6 +13,7 @@ import { AuthorizationService } from "../auth/authorization.service.js";
 import type { AuthenticatedSession } from "../auth/session.guard.js";
 import {
   adoptionProfiles,
+  assessmentAiChecks,
   posture,
   resolvePacks,
   type AdoptionProfile,
@@ -91,7 +93,15 @@ export function composeGatePolicy(
   // This increment permits strengthening advisory rules only. Weakening/waivers need their own authority.
   for (const rule of rules)
     if (requiredRules.includes(rule.id)) rule.required = true;
+  const aiChecks = [
+    ...new Map(
+      ["repository", "pull_request"]
+        .flatMap((stage) => assessmentAiChecks({ packs }, stage))
+        .map((c) => [c.id, c]),
+    ).values(),
+  ].sort((a, b) => a.id.localeCompare(b.id));
   return {
+    ...(aiChecks.length ? { aiChecks } : {}),
     version: 1,
     mode: "ADVISORY",
     branchRef,
@@ -209,6 +219,7 @@ export class GatePolicyService {
           );
         const definition = {
           ...composeGatePolicy(selection, body.branchRef, body.requiredRules),
+          ...(selection.teamContext ? { teamContext: selection.teamContext } : {}),
           organizationId: session.organizationId!,
           repositoryGithubId: githubId,
         };
@@ -229,7 +240,8 @@ export class GatePolicyService {
           },
         });
         await this.audit(tx, session, "policy.drafted", policy);
-        return policy;
+        await verifyTeamContext(tx, repositoryId, (policy.definition as any).teamContext);
+    return policy;
       },
     );
   }
@@ -276,6 +288,7 @@ export class GatePolicyService {
           );
         const definition = {
           ...composeGatePolicy(selection, policy.branchRef, body.requiredRules),
+          ...(selection.teamContext ? { teamContext: selection.teamContext } : {}),
           organizationId: session.organizationId!,
           repositoryGithubId: githubId,
         };
@@ -458,6 +471,7 @@ export class GatePolicyService {
       throw new ConflictException(
         "Policy or standards baseline changed; draft and review a new version",
       );
+    await verifyTeamContext(tx, repositoryId, (policy.definition as any).teamContext);
     return policy;
   }
   private audit(

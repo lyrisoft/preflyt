@@ -1,6 +1,8 @@
+import '@/styles/index.css'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { render } from 'vitest-browser-react'
+import { page } from 'vitest/browser'
 import { AiSettingsPage } from './ai-settings'
 
 const state = vi.hoisted(() => ({
@@ -21,6 +23,9 @@ vi.mock('../workspace/navigation-session', () => ({
 }))
 vi.mock('../repositories/governance-api', () => ({
   governanceRequest: (...args: unknown[]) => state.save(...args),
+}))
+vi.mock('./skills-catalogue', () => ({
+  SkillsCatalogue: () => <section>Review skills</section>,
 }))
 vi.mock('@/components/layout/app-header', () => ({ AppHeader: () => null }))
 vi.mock('@/components/layout/main', () => ({
@@ -58,14 +63,18 @@ beforeEach(() => {
 it('keeps connections and routing separate without promising inference', () => {
   const html = renderToStaticMarkup(<AiSettingsPage />)
   expect(html).toContain('Models')
-  expect(html).toContain('Model routing')
-  expect(html).toContain('AI explanations are still being built')
+  expect(html).toContain('Model choices')
+  expect(html).toContain('AI Reviews are disabled for this deployment')
+  state.query = { data: { ...configuration(), executionAvailable: true } }
+  expect(renderToStaticMarkup(<AiSettingsPage />)).toContain(
+    'AI assessment reviews are available'
+  )
   expect(html).not.toContain('Explain findings')
 })
-it('denies management views to developers', () => {
+it('shows read-only skills without model management to developers', () => {
   state.role = 'DEVELOPER'
   const html = renderToStaticMarkup(<AiSettingsPage />)
-  expect(html).toContain('Owner or Admin access is required')
+  expect(html).toContain('Review skills')
   expect(html).not.toContain('Add model')
 })
 it('shows deployment-disabled and request-failure states without old settings', () => {
@@ -110,17 +119,21 @@ it('starts new provider connections disabled and keeps errors in the form', asyn
 })
 it('starts routing disabled with source sharing off and bounded defaults', async () => {
   const view = await render(<AiSettingsPage />)
-  await view.getByRole('tab', { name: 'Model routing' }).click()
+  await view.getByRole('tab', { name: 'Model choices' }).click()
   await view.getByRole('button', { name: 'Configure' }).click()
   await expect
-    .element(view.getByRole('checkbox', { name: 'Enable route' }))
+    .element(
+      view.getByRole('checkbox', { name: 'Enable reviews for this stage' })
+    )
     .not.toBeChecked()
   await expect
     .element(
-      view.getByRole('checkbox', { name: 'Allow repository source sharing' })
+      view.getByRole('checkbox', {
+        name: 'Send repository code to the selected AI model',
+      })
     )
     .not.toBeChecked()
-  await view.getByRole('button', { name: 'Save routing' }).click()
+  await view.getByRole('button', { name: 'Save model choices' }).click()
   expect(state.save).toHaveBeenCalledWith(
     '/ai/configuration/routes/pull_request',
     expect.objectContaining({
@@ -183,9 +196,11 @@ it('lets an admin approve a self-hosted model without a deployment allowlist or 
     .fill('http://model-server:4000/v1')
   await view.getByRole('combobox', { name: 'Hosting' }).selectOptions('local')
   await view.getByRole('textbox', { name: 'Model name' }).fill('internal-model')
-  await view
-    .getByRole('checkbox', { name: 'Provider requires an API key' })
-    .click()
+  await expect
+    .element(
+      view.getByRole('checkbox', { name: 'Provider requires an API key' })
+    )
+    .not.toBeChecked()
   await view.getByRole('button', { name: 'Save model' }).click()
   expect(state.save).toHaveBeenCalledWith(
     '/ai/configuration/providers',
@@ -243,5 +258,166 @@ it('activates a built-in provider with only model name and key', async () => {
       baseUrl: 'https://api.openai.com/v1',
       requiresKey: true,
     })
+  )
+})
+
+it.each([
+  ['CONNECTED', true, 'Connection tested', 'text-success-text'],
+  ['NOT_TESTED', true, 'Not tested', 'bg-muted'],
+  ['AUTH_REJECTED', true, 'Key rejected', 'text-danger-text'],
+  ['MODEL_UNAVAILABLE', true, 'Model unavailable', 'text-danger-text'],
+  ['UNAVAILABLE', true, 'Connection unavailable', 'text-danger-text'],
+  ['MODEL_UNAVAILABLE', false, 'Disabled', 'bg-muted'],
+])(
+  'uses semantic badges for %s (enabled %s)',
+  (testStatus, enabled, label, color) => {
+    state.query = {
+      data: {
+        ...configuration(),
+        providers: [
+          {
+            id: 'local',
+            name: 'Ollama',
+            modelId: 'llama3.2:3b',
+            endpoint: { baseUrl: 'http://localhost:11434' },
+            approved: true,
+            enabled,
+            testStatus,
+          },
+        ],
+      },
+    }
+    const html = renderToStaticMarkup(<AiSettingsPage />)
+    const doc = new DOMParser().parseFromString(html, 'text/html')
+    const badges = [...doc.querySelectorAll('[data-slot="badge"]')]
+    expect(
+      badges.find((badge) => badge.textContent === 'Approved')?.className
+    ).toContain('text-success-text')
+    expect(
+      badges.find((badge) => badge.textContent === String(label))?.className
+    ).toContain(color)
+  }
+)
+
+it('keeps test progress visible and never reports a failed connection as saved', async () => {
+  state.query = {
+    data: {
+      ...configuration(),
+      providers: [
+        {
+          id: 'local',
+          name: 'Ollama',
+          modelId: 'llama3.2:3b',
+          endpoint: { baseUrl: 'http://localhost:11434' },
+          enabled: true,
+          approved: true,
+          testStatus: 'NOT_TESTED',
+        },
+      ],
+    },
+  }
+  let finish!: (value: unknown) => void
+  state.save.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve
+      })
+  )
+  const view = await render(<AiSettingsPage />)
+  await view.getByRole('button', { name: 'Test', exact: true }).click()
+  await expect
+    .element(view.getByRole('button', { name: 'Testing…' }))
+    .toBeDisabled()
+  await expect
+    .element(view.getByRole('button', { name: 'Edit', exact: true }))
+    .toBeDisabled()
+  finish({ status: 'MODEL_UNAVAILABLE' })
+  await expect
+    .element(view.getByRole('alert'))
+    .toHaveTextContent('Model unavailable.')
+  await expect
+    .element(view.getByRole('button', { name: 'Test', exact: true }))
+    .toBeEnabled()
+  expect(state.save).toHaveBeenCalledWith(
+    '/ai/configuration/providers/local/test',
+    {}
+  )
+  expect(document.body.textContent).not.toContain('Saved.')
+  state.save.mockResolvedValueOnce({ status: 'CONNECTED' })
+  await view.getByRole('button', { name: 'Test', exact: true }).click()
+  await expect
+    .element(view.getByRole('status'))
+    .toHaveTextContent('Connection tested.')
+})
+it('cancels model and routing forms without saving', async () => {
+  const view = await render(<AiSettingsPage />)
+  await view.getByRole('button', { name: 'Add model', exact: true }).click()
+  await view.getByRole('button', { name: 'Cancel', exact: true }).click()
+  await expect.element(view.getByRole('dialog')).not.toBeInTheDocument()
+  await view.getByRole('tab', { name: 'Model choices', exact: true }).click()
+  await view.getByRole('button', { name: 'Configure', exact: true }).click()
+  await view.getByRole('button', { name: 'Cancel', exact: true }).click()
+  await expect.element(view.getByRole('dialog')).not.toBeInTheDocument()
+  expect(state.save).not.toHaveBeenCalled()
+})
+
+it('keeps model form actions compact and aligned in the footer', async () => {
+  await page.viewport(1280, 900)
+  document.documentElement.classList.add('dark')
+  const view = await render(<AiSettingsPage />)
+  await view.getByRole('button', { name: 'Add model', exact: true }).click()
+  const save = document.querySelector('button[type="submit"]') as HTMLElement
+  const form = save.closest('form')!
+  expect(save.getBoundingClientRect().width).toBeLessThan(
+    form.getBoundingClientRect().width / 2
+  )
+  await expect
+    .element(view.getByRole('button', { name: 'Cancel', exact: true }))
+    .toBeVisible()
+  await expect
+    .poll(
+      () => getComputedStyle(document.querySelector('[role="dialog"]')!).opacity
+    )
+    .toBe('1')
+  await page.screenshot({ path: '__screenshots__/model-buttons-dark.png' })
+  await page.viewport(390, 844)
+  await expect
+    .poll(() => document.documentElement.scrollWidth <= window.innerWidth)
+    .toBe(true)
+  await expect
+    .element(view.getByRole('button', { name: 'Save model', exact: true }))
+    .toBeVisible()
+  await view.getByRole('button', { name: 'Cancel', exact: true }).click()
+  document.documentElement.classList.remove('dark')
+  await page.viewport(1280, 900)
+})
+
+it('explains conditional PR source review and GitHub feedback without claiming they are absent', async () => {
+  const view = await render(<AiSettingsPage />)
+  await view.getByRole('button', { name: 'Help for AI Intelligence' }).click()
+  await expect
+    .element(view.getByText('Current availability', { exact: true }))
+    .toBeVisible()
+  await expect
+    .element(
+      view.getByText(
+        /PR reviews can also use selected changes from the assessed commit/
+      )
+    )
+    .toBeVisible()
+  await expect
+    .element(
+      view.getByText(/Comments on changed lines also require source sharing/)
+    )
+    .toBeVisible()
+  await expect
+    .element(
+      view.getByText(
+        /AI suggestions never approve policies or count as passed checks/
+      )
+    )
+    .toBeVisible()
+  expect(document.body.textContent).not.toContain(
+    'Source review and GitHub feedback are not available'
   )
 })

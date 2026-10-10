@@ -12,6 +12,8 @@ import type { AuthenticatedSession } from './session.guard.js'
 export const rolePermissions: Record<string, string[]> = {
   OWNER: [
     'ai.provider.manage', 'ai.routing.manage', 'ai.usage.read',
+    'ai.skills.read', 'ai.skills.manage', 'ai.skills.approve', 'ai.review.run',
+    'team.manage', 'team.import', 'team.policy.assign',
     'standards.manage',
     'organization.members.manage',
     'organization.settings.update',
@@ -21,18 +23,21 @@ export const rolePermissions: Record<string, string[]> = {
     'assessment.read',
     'assessment.run',
     'execution.run',
+    'team.read',
     'policy.read',
     'policy.draft',
     'policy.publish',
     'github.ruleset.manage',
     'policy.enforcement.manage',
-    'evidence.manage',
+    'evidence.manage', 'findings.manage',
     'contributors.read',
     'contributors.activity.read',
     'contributors.policy_evidence.read',
   ],
   ADMIN: [
     'ai.provider.manage', 'ai.routing.manage', 'ai.usage.read',
+    'ai.skills.read', 'ai.skills.manage', 'ai.skills.approve', 'ai.review.run',
+    'team.manage', 'team.import', 'team.policy.assign',
     'standards.manage',
     'organization.members.manage',
     'repository.connect',
@@ -41,19 +46,23 @@ export const rolePermissions: Record<string, string[]> = {
     'assessment.read',
     'assessment.run',
     'execution.run',
+    'team.read',
     'policy.read',
     'policy.draft',
     'policy.publish',
     'github.ruleset.manage',
     'policy.enforcement.manage',
-    'evidence.manage',
+    'evidence.manage', 'findings.manage',
     'contributors.read',
     'contributors.activity.read',
     'contributors.policy_evidence.read',
   ],
   POLICY_MANAGER: [
+    'team.policy.assign',
+    'ai.skills.read', 'ai.skills.approve', 'ai.review.run',
     'repository.read',
     'assessment.read',
+    'team.read',
     'policy.read',
     'policy.draft',
     'policy.publish',
@@ -62,45 +71,55 @@ export const rolePermissions: Record<string, string[]> = {
     'contributors.policy_evidence.read',
   ],
   SECURITY_ENGINEER: [
+    'ai.skills.read', 'ai.skills.approve', 'ai.review.run',
     'execution.run',
     'repository.read',
     'assessment.read',
+    'team.read',
     'policy.read',
-    'evidence.manage',
+    'evidence.manage', 'findings.manage',
     'contributors.read',
     'contributors.activity.read',
     'contributors.policy_evidence.read',
   ],
   ENGINEERING_LEAD: [
+    'ai.skills.read', 'ai.review.run',
     'repository.read',
     'assessment.read',
     'assessment.run',
+    'team.read',
     'policy.read',
     'contributors.read',
     'contributors.activity.read',
     'contributors.policy_evidence.read',
   ],
   DEVELOPER: [
+    'ai.skills.read', 'ai.review.run',
     'repository.read',
     'assessment.read',
     'assessment.run',
+    'team.read',
     'policy.read',
     'contributors.read',
     'contributors.activity.read',
     'contributors.policy_evidence.read',
   ],
   AUDITOR: [
+    'ai.skills.read',
     'ai.usage.read',
     'repository.read',
     'assessment.read',
+    'team.read',
     'policy.read',
     'contributors.read',
     'contributors.activity.read',
     'contributors.policy_evidence.read',
   ],
   VIEWER: [
+    'ai.skills.read',
     'repository.read',
     'assessment.read',
+    'team.read',
     'policy.read',
     'contributors.read',
   ],
@@ -170,8 +189,9 @@ export class AuthorizationService {
           'github.ruleset.manage',
           'policy.enforcement.manage',
           'execution.run',
+          'team.manage', 'team.import', 'team.policy.assign',
           'standards.manage',
-          'ai.provider.manage', 'ai.routing.manage',
+          'ai.provider.manage', 'ai.routing.manage', 'ai.skills.manage', 'ai.skills.approve', 'ai.review.run',
         ].includes(permission)
     )
     if (!member || !rolePermissions[member.role]?.includes(permission))
@@ -217,12 +237,24 @@ export class AuthorizationService {
       },
     })
     throw new ForbiddenException(
-      'This resource is outside your authorized scope'
+      'You do not have access to this resource. Ask your administrator for access.'
     )
   }
   // SessionGuard calls this after live session validation, before any controller or cache lookup.
   async authorizeRequest(request: Request, session: AuthenticatedSession) {
     const path = request.path.replace(/\/$/, '')
+    if (path === '/configuration') {
+      if (session.platformAdmin !== true) await this.deny(session, 'deployment.configuration.manage')
+      return true
+    }
+    if (path === '/teams' || path.startsWith('/teams/')) {
+      await this.requireOrganization(session, request.method === 'GET' ? 'team.read' : path.includes('github') || path.endsWith('/sync') ? 'team.import' : path.endsWith('/assign') || path.endsWith('/preview') ? 'team.policy.assign' : 'team.manage')
+      return true
+    }
+    if (path === '/ai/skills' || path.startsWith('/ai/skills/')) {
+      await this.requireOrganization(session, request.method === 'GET' ? 'ai.skills.read' : path.endsWith('/approve') ? 'ai.skills.approve' : 'ai.skills.manage')
+      return true
+    }
     if (path === '/ai/configuration' || path.startsWith('/ai/configuration/')) {
       const permission = request.method === 'GET' || path.endsWith('/preview') ? 'ai.usage.read' : path.includes('/routes/') ? 'ai.routing.manage' : 'ai.provider.manage'
       await this.requireOrganization(session, permission)
@@ -237,6 +269,10 @@ export class AuthorizationService {
     )
     if (repo) {
       const part = repo[2] ?? ''
+      if (part === 'ai-reviews' || part.startsWith('ai-reviews/')) {
+        await this.requireRepository(session, repo[1], request.method === 'GET' ? 'assessment.read' : 'ai.review.run')
+        return true
+      }
       if (part === 'native-execution/requests' || part.startsWith('native-execution/requests/')) {
         await this.requireRepository(session, repo[1], request.method === 'GET' ? 'assessment.read' : 'execution.run')
         return true
@@ -302,6 +338,7 @@ export class AuthorizationService {
       path === '/github/repositories' ||
       path === '/github/repositories/overview' ||
       path === '/github/dashboard' ||
+      (path === '/findings' || /^\/findings\/[a-f0-9]{64}\/(triage|assignees)$/.test(path)) ||
       path.startsWith('/contributors') ||
       path.startsWith('/organizations') ||
       path === '/standards/catalogue'

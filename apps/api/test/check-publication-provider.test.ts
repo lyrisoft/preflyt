@@ -185,3 +185,13 @@ it('never updates an existing check whose App identity changed',async()=>{
   expect(fetch.mock.calls.every(c=>c[1].method==='GET')).toBe(true)
   provider.close()
 })
+
+it('publishes AI feedback only as a separately named neutral advisory check', async () => {
+  const { provider, fetch } = setup()
+  const advisory = {...payload, name:'Preflyt / AI Review', conclusion:'neutral', output:{title:'Advisory AI review — does not decide merge readiness',summary:'Review suggestions'}}
+  fetch.mockResolvedValueOnce(response({check_runs:[]})).mockResolvedValueOnce(response({id:12})).mockResolvedValueOnce(response({...advisory,id:12,app:{id:999},html_url:'https://github.com/fixture/app/runs/12'}))
+  await provider.publishAiReviewSummary(500n,501n,payload.head_sha,payload.external_id,advisory.output.summary)
+  expect(JSON.parse(fetch.mock.calls[1][1].body)).toMatchObject(advisory)
+  await expect(provider.publishReadinessCheck(500n,501n,{...payload,conclusion:'neutral'})).rejects.toThrow()
+  provider.close()
+})

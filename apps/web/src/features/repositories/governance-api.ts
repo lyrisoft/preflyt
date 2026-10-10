@@ -1,10 +1,10 @@
 import { API_BASE_URL } from '@/lib/api'
 
-export async function governanceRequest<T>(
+async function governanceResponse(
   path: string,
   body?: unknown,
   signal?: AbortSignal
-): Promise<T> {
+): Promise<Response> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     credentials: 'include',
     cache: 'no-store',
@@ -27,5 +27,19 @@ export async function governanceRequest<T>(
         : 'The request could not be completed. Refresh and try again.'
     )
   }
-  return response.json() as Promise<T>
+  return response
+}
+
+export async function governanceRequest<T>(
+  path: string,
+  body?: unknown,
+  signal?: AbortSignal
+): Promise<T> {
+  return (await governanceResponse(path, body, signal)).json() as Promise<T>
+}
+export async function governanceTextRequest(
+  path: string,
+  signal?: AbortSignal
+): Promise<string> {
+  return (await governanceResponse(path, undefined, signal)).text()
 }

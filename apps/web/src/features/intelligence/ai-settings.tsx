@@ -2,6 +2,12 @@ import { useState, type FormEvent } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Cable,
+  Loader2,
+  Pencil,
+  PlugZap,
+  Power,
+  Save,
+  Settings2,
   Plus,
   RefreshCw,
   Route as RouteIcon,
@@ -27,6 +33,7 @@ import {
   useNavigationSession,
   canAdminister,
 } from '../workspace/navigation-session'
+import { SkillsCatalogue } from './skills-catalogue'
 
 type Preset = {
   id: string
@@ -53,6 +60,8 @@ type Provider = {
   revision: number
   testStatus: string
   approved: boolean
+  inputPriceCentsPerMillion?: number | null
+  outputPriceCentsPerMillion?: number | null
   apiKeySet: boolean
 }
 type StageRoute = {
@@ -61,6 +70,9 @@ type StageRoute = {
   fallbackId: string | null
   enabled: boolean
   allowSource: boolean
+  automaticReviews?: boolean
+  publishSummary?: boolean
+  publishInline?: boolean
   maxInputTokens: number
   maxOutputTokens: number
   dailyBudgetCents: number
@@ -119,19 +131,29 @@ const selectClass =
   'h-9 w-full min-w-0 rounded-md border bg-background px-3 text-sm focus-visible:outline-2 focus-visible:outline-ring'
 const help = [
   {
+    title: 'Markdown skill files',
+    content:
+      'Write instructions in Markdown and use Preview to review them. Upload SKILL.md to open an editable draft; uploading does not save, approve or enable it. The UTF-8 file must be at most 32 KiB, with name and description in a YAML header and up to 6,000 instruction characters below it. Optional header fields are source, license, stages and repositories. Enter the source and license before saving. Download SKILL.md exports the selected database version. Existing policies keep their approved version and digest; file changes require a new draft and approval. Preview does not run HTML or load linked images.',
+  },
+  {
     title: 'Models',
     content:
       'Organization admins add and approve models directly in Preflyt. Choose a built-in provider or add an OpenAI-compatible endpoint. Model name means the exact API identifier your provider accepts. Hosted providers require HTTPS; select Self-hosted for a local model server. Keys are encrypted and write-only. Testing reads model metadata; it does not send repository code or generate an explanation. Editing a connection requires another test.',
   },
   {
-    title: 'Model routing',
+    title: 'Model choices',
     content:
       'Each stage has a primary model and an optional fallback. Source sharing starts off. A connection must be enabled and successfully tested within the last 24 hours before its route is ready. Switching organizations separates connections and routes.',
   },
   {
+    title: 'Review skills',
+    content:
+      'Open Built-in skills for ready-to-edit Markdown reviews linked to engineering checks, or create a custom skill. Review its instructions, source and license, then approve and enable it. Changes require a new version. Add an AI Review in Engineering Standards and assign this approved skill version to it. Choose where the review applies; up to three assigned reviews can run in one request. AI output provides suggestions only and never changes check results. Third-party packages and scripts are not automatically imported or executed.',
+  },
+  {
     title: 'Current availability',
     content:
-      'These settings prepare model connections. AI explanations and usage enforcement are still being built. Saving a budget does not start requests or enforce spending yet. AI never approves policies or changes deterministic checks.',
+      'AI Reviews use saved assessment results. When source sharing is enabled, PR reviews can also use selected changes from the assessed commit. Published PR policies can run assigned reviews automatically and post summaries or comments to GitHub when those options are enabled. Comments on changed lines also require source sharing. Reviews require an enabled, tested model and configured token prices. Preflyt reserves the estimated cost against your daily budget; this is not the provider’s final bill. AI suggestions never approve policies or count as passed checks.',
   },
 ]
 export function AiSettingsPage() {
@@ -146,7 +168,12 @@ export function AiSettingsPage() {
         ) : session.isError ? (
           <p role='alert'>Access details unavailable. Refresh and try again.</p>
         ) : !allowed ? (
-          <p role='alert'>Owner or Admin access is required.</p>
+          <div className='space-y-6'>
+            <h1 className='text-2xl font-semibold'>AI Intelligence</h1>
+            <SkillsCatalogue
+              key={`${session.data?.identityId}:${session.data?.organizationId}`}
+            />
+          </div>
         ) : (
           <AiSettings
             key={`${session.data?.identityId}:${session.data?.organizationId}`}
@@ -183,6 +210,7 @@ function AiSettings({
     [edit, setEdit] = useState<Provider | null | undefined>(),
     [routing, setRouting] = useState<StageRoute | undefined>(),
     [busy, setBusy] = useState(false),
+    [activeAction, setActiveAction] = useState(''),
     [error, setError] = useState(''),
     [notice, setNotice] = useState(''),
     [search, setSearch] = useState(''),
@@ -190,17 +218,28 @@ function AiSettings({
   const data = query.isError ? undefined : query.data
   async function action(path: string, body: unknown, done?: () => void) {
     setBusy(true)
+    setActiveAction(path)
     setError('')
     setNotice('')
     try {
-      await governanceRequest('/ai/configuration' + path, body)
+      const result = await governanceRequest<{ status?: string }>(
+        '/ai/configuration' + path,
+        body
+      )
       done?.()
       await client.invalidateQueries({ queryKey: key })
-      setNotice('Saved.')
+      if (path.endsWith('/test')) {
+        if (result?.status === 'CONNECTED') setNotice('Connection tested.')
+        else
+          setError(
+            `${testName(result?.status ?? 'UNAVAILABLE')}. Check the endpoint, model name and authentication settings, then try again.`
+          )
+      } else setNotice('Saved.')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unable to save. Try again.')
     } finally {
       setBusy(false)
+      setActiveAction('')
     }
   }
   const filtered =
@@ -225,7 +264,14 @@ function AiSettings({
             disabled={query.isFetching || busy}
             onClick={() => void query.refetch()}
           >
-            <RefreshCw className='size-4' />
+            <RefreshCw
+              aria-hidden='true'
+              className={
+                query.isFetching
+                  ? 'size-4 animate-spin motion-reduce:animate-none'
+                  : 'size-4'
+              }
+            />
             Refresh
           </Button>
           <PageHelpDrawer title='AI Intelligence' sections={help} />
@@ -260,8 +306,9 @@ function AiSettings({
         <>
           <div className='flex items-center gap-2 rounded-lg border bg-info/5 p-3 text-sm'>
             <ShieldCheck className='size-4 shrink-0 text-info' />
-            Connection setup is available. AI explanations are still being
-            built.
+            {data.executionAvailable
+              ? 'Model connections and AI assessment reviews are available.'
+              : 'Model connections are available. AI Reviews are disabled for this deployment.'}
           </div>
           <Tabs defaultValue='connections'>
             <TabsList>
@@ -269,9 +316,10 @@ function AiSettings({
                 <Cable className='mr-2 size-4' />
                 Models
               </TabsTrigger>
+              <TabsTrigger value='skills'>Review skills</TabsTrigger>
               <TabsTrigger value='routing'>
                 <RouteIcon className='mr-2 size-4' />
-                Model routing
+                Model choices
               </TabsTrigger>
             </TabsList>
             <TabsContent value='connections' className='mt-5 space-y-4'>
@@ -312,6 +360,11 @@ function AiSettings({
                           setEdit(connection ?? null)
                         }}
                       >
+                        {connection ? (
+                          <Settings2 aria-hidden='true' />
+                        ) : (
+                          <Power aria-hidden='true' />
+                        )}
                         {connection ? 'Configure' : 'Activate'}
                       </Button>
                     </section>
@@ -384,7 +437,9 @@ function AiSettings({
                           <td className='px-4 py-4'>
                             <div className='flex flex-wrap gap-2'>
                               {p.approved && (
-                                <StatusBadge tone='info'>Approved</StatusBadge>
+                                <StatusBadge tone='success'>
+                                  Approved
+                                </StatusBadge>
                               )}
                               <StatusBadge
                                 tone={
@@ -392,7 +447,13 @@ function AiSettings({
                                     ? 'neutral'
                                     : p.testStatus === 'CONNECTED'
                                       ? 'success'
-                                      : 'info'
+                                      : [
+                                            'AUTH_REJECTED',
+                                            'MODEL_UNAVAILABLE',
+                                            'UNAVAILABLE',
+                                          ].includes(p.testStatus)
+                                        ? 'error'
+                                        : 'neutral'
                                 }
                               >
                                 {!p.enabled
@@ -402,9 +463,9 @@ function AiSettings({
                             </div>
                           </td>
                           <td className='px-4 py-4'>
-                            <div className='flex gap-2'>
+                            <div className='flex items-center gap-2'>
                               <Button
-                                size='sm'
+                                className='min-w-24'
                                 variant='outline'
                                 disabled={busy}
                                 onClick={() => {
@@ -417,21 +478,34 @@ function AiSettings({
                                   setEdit(p)
                                 }}
                               >
+                                <Pencil aria-hidden='true' />
                                 Edit
                               </Button>
                               <Button
-                                size='sm'
+                                className='min-w-24'
+                                aria-busy={
+                                  busy &&
+                                  activeAction === `/providers/${p.id}/test`
+                                }
                                 variant='outline'
                                 disabled={busy}
                                 onClick={() =>
-                                  void action(
-                                    `/providers/${p.id}/test`,
-                                    {},
-                                    () => setNotice('Connection tested.')
-                                  )
+                                  void action(`/providers/${p.id}/test`, {})
                                 }
                               >
-                                Test
+                                {busy &&
+                                activeAction === `/providers/${p.id}/test` ? (
+                                  <Loader2
+                                    aria-hidden='true'
+                                    className='size-4 animate-spin motion-reduce:animate-none'
+                                  />
+                                ) : (
+                                  <PlugZap aria-hidden='true' />
+                                )}
+                                {busy &&
+                                activeAction === `/providers/${p.id}/test`
+                                  ? 'Testing…'
+                                  : 'Test'}
                               </Button>
                             </div>
                           </td>
@@ -484,6 +558,9 @@ function AiSettings({
                 per organization
               </p>
             </TabsContent>
+            <TabsContent value='skills' className='mt-5'>
+              <SkillsCatalogue />
+            </TabsContent>
             <TabsContent value='routing' className='mt-5'>
               <div className='grid gap-4 md:grid-cols-2 xl:grid-cols-3'>
                 {data.stages.map((stage) => {
@@ -495,7 +572,7 @@ function AiSettings({
                     >
                       <div className='flex items-center justify-between gap-2'>
                         <h2 className='font-semibold'>{stageName(stage)}</h2>
-                        <StatusBadge tone={r?.enabled ? 'info' : 'neutral'}>
+                        <StatusBadge tone={r?.enabled ? 'success' : 'neutral'}>
                           {r?.enabled ? 'Configured' : 'Disabled'}
                         </StatusBadge>
                       </div>
@@ -542,6 +619,7 @@ function AiSettings({
                           )
                         }}
                       >
+                        <Settings2 aria-hidden='true' />
                         Configure
                       </Button>
                     </section>
@@ -580,6 +658,7 @@ function AiSettings({
               provider={edit}
               busy={busy}
               error={error}
+              cancel={() => setEdit(undefined)}
               save={(body) =>
                 void action(
                   `/providers${edit ? '/' + edit.id : ''}`,
@@ -600,7 +679,7 @@ function AiSettings({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {stageName(routing?.stage ?? '')} model routing
+              {stageName(routing?.stage ?? '')} model choices
             </DialogTitle>
             <DialogDescription>
               Choose models and limits for this stage.
@@ -613,6 +692,7 @@ function AiSettings({
               providers={data.providers}
               busy={busy}
               error={error}
+              cancel={() => setRouting(undefined)}
               save={(body) =>
                 void action(`/routes/${routing.stage}`, body, () =>
                   setRouting(undefined)
@@ -630,12 +710,14 @@ function ProviderForm({
   provider,
   busy,
   error,
+  cancel,
   save,
 }: {
   preset?: Preset
   provider: Provider | null
   busy: boolean
   error: string
+  cancel: () => void
   save: (body: unknown) => void
 }) {
   const [baseUrl, setBaseUrl] = useState(provider?.endpoint?.baseUrl ?? ''),
@@ -663,6 +745,14 @@ function ProviderForm({
       modelId: f.get('modelId'),
       enabled: preset && !provider ? true : f.get('enabled') === 'on',
       expectedRevision: provider?.revision ?? 0,
+      inputPriceCentsPerMillion:
+        f.get('inputRate') === null || f.get('inputRate') === ''
+          ? (provider?.inputPriceCentsPerMillion ?? null)
+          : Number(f.get('inputRate')),
+      outputPriceCentsPerMillion:
+        f.get('outputRate') === null || f.get('outputRate') === ''
+          ? (provider?.outputPriceCentsPerMillion ?? null)
+          : Number(f.get('outputRate')),
       ...(apiKey ? { apiKey } : {}),
     })
   }
@@ -686,7 +776,11 @@ function ProviderForm({
               type='url'
               value={baseUrl}
               onChange={(e) => setBaseUrl(e.target.value)}
-              placeholder='https://api.example.com/v1'
+              placeholder={
+                locality === 'local'
+                  ? 'http://localhost:11434/v1'
+                  : 'https://api.example.com/v1'
+              }
               required
               maxLength={2048}
             />
@@ -696,7 +790,10 @@ function ProviderForm({
             <select
               className={selectClass}
               value={locality}
-              onChange={(e) => setLocality(e.target.value)}
+              onChange={(e) => {
+                setLocality(e.target.value)
+                setRequiresKey(e.target.value !== 'local')
+              }}
             >
               <option value='hosted'>Hosted provider</option>
               <option value='local'>Self-hosted model</option>
@@ -726,7 +823,7 @@ function ProviderForm({
       )}
       <label className='block space-y-2 text-sm'>
         <span>
-          API key{' '}
+          API key{!preset && !requiresKey ? ' (optional)' : ''}{' '}
           {provider?.apiKeySet && !changed
             ? '(leave blank to keep saved key)'
             : ''}
@@ -753,18 +850,74 @@ function ProviderForm({
           Enable model
         </label>
       )}
+      {provider && (
+        <fieldset className='space-y-3 rounded-lg border p-3'>
+          <legend className='px-1 text-sm font-medium'>
+            Review budget rates
+          </legend>
+          <div className='grid gap-3 sm:grid-cols-2'>
+            <label className='space-y-2 text-sm'>
+              <span>Input · cents per million tokens</span>
+              <Input
+                type='number'
+                name='inputRate'
+                min={0}
+                max={100000000}
+                placeholder='200'
+                defaultValue={provider.inputPriceCentsPerMillion ?? ''}
+              />
+            </label>
+            <label className='space-y-2 text-sm'>
+              <span>Output · cents per million tokens</span>
+              <Input
+                type='number'
+                name='outputRate'
+                min={0}
+                max={100000000}
+                placeholder='800'
+                defaultValue={provider.outputPriceCentsPerMillion ?? ''}
+              />
+            </label>
+          </div>
+        </fieldset>
+      )}
       {error && (
         <p role='alert' className='text-sm text-destructive'>
           {error}
         </p>
       )}
-      <Button className='w-full' disabled={busy}>
-        {busy
-          ? 'Saving…'
-          : preset && !provider
-            ? 'Activate model'
-            : 'Save model'}
-      </Button>
+      <div className='flex flex-wrap justify-end gap-2 border-t pt-4'>
+        <Button
+          type='button'
+          variant='outline'
+          disabled={busy}
+          onClick={cancel}
+        >
+          Cancel
+        </Button>
+        <Button
+          type='submit'
+          className='min-w-32'
+          disabled={busy}
+          aria-busy={busy}
+        >
+          {busy ? (
+            <Loader2
+              aria-hidden='true'
+              className='size-4 animate-spin motion-reduce:animate-none'
+            />
+          ) : preset && !provider ? (
+            <Power aria-hidden='true' />
+          ) : (
+            <Save aria-hidden='true' />
+          )}
+          {busy
+            ? 'Saving…'
+            : preset && !provider
+              ? 'Activate model'
+              : 'Save model'}
+        </Button>
+      </div>
     </form>
   )
 }
@@ -773,12 +926,14 @@ function RouteForm({
   providers,
   busy,
   error,
+  cancel,
   save,
 }: {
   route: StageRoute
   providers: Provider[]
   busy: boolean
   error: string
+  cancel: () => void
   save: (body: unknown) => void
 }) {
   function submit(e: FormEvent<HTMLFormElement>) {
@@ -789,6 +944,9 @@ function RouteForm({
       fallbackId: f.get('fallbackId') || null,
       enabled: f.get('enabled') === 'on',
       allowSource: f.get('allowSource') === 'on',
+      automaticReviews: f.get('automaticReviews') === 'on',
+      publishSummary: f.get('publishSummary') === 'on',
+      publishInline: f.get('publishInline') === 'on',
       maxInputTokens: Number(f.get('maxInputTokens')),
       maxOutputTokens: Number(f.get('maxOutputTokens')),
       dailyBudgetCents: Number(f.get('dailyBudgetCents')),
@@ -835,7 +993,7 @@ function RouteForm({
             },
             {
               name: 'dailyBudgetCents',
-              label: 'Daily budget (US cents)',
+              label: 'Daily estimated cost limit (US cents)',
               min: 1,
               max: 5000,
             },
@@ -857,7 +1015,7 @@ function RouteForm({
       </div>
       <label className='flex items-center gap-2 text-sm'>
         <input type='checkbox' name='enabled' defaultChecked={route.enabled} />
-        Enable route
+        Enable reviews for this stage
       </label>
       <label className='flex items-center gap-2 text-sm'>
         <input
@@ -865,19 +1023,75 @@ function RouteForm({
           name='allowSource'
           defaultChecked={route.allowSource}
         />
-        Allow repository source sharing
+        Send repository code to the selected AI model
       </label>
-      <p className='text-xs text-muted-foreground'>
-        Requests remain unavailable while AI execution is being built.
-      </p>
+      {route.stage === 'pull_request' && (
+        <fieldset className='space-y-3 rounded-lg border p-4'>
+          <legend className='px-1 text-sm font-medium'>
+            Published PR policies
+          </legend>
+          <label className='flex items-center gap-2 text-sm'>
+            <input
+              type='checkbox'
+              name='automaticReviews'
+              defaultChecked={route.automaticReviews ?? false}
+            />
+            Run assigned AI Reviews automatically
+          </label>
+          <label className='flex items-center gap-2 text-sm'>
+            <input
+              type='checkbox'
+              name='publishSummary'
+              defaultChecked={route.publishSummary ?? false}
+            />
+            Post AI review summary to GitHub
+          </label>
+          <label className='flex items-center gap-2 text-sm'>
+            <input
+              type='checkbox'
+              name='publishInline'
+              defaultChecked={route.publishInline ?? false}
+            />
+            Post AI review comments on changed lines
+          </label>
+          <p className='text-xs text-muted-foreground'>
+            Uses approved skills and your budget. Source sharing adds verified
+            PR changes; otherwise only assessment evidence is sent. AI summaries
+            do not decide merge readiness.
+          </p>
+        </fieldset>
+      )}
       {error && (
         <p role='alert' className='text-sm text-destructive'>
           {error}
         </p>
       )}
-      <Button className='w-full' disabled={busy}>
-        {busy ? 'Saving…' : 'Save routing'}
-      </Button>
+      <div className='flex flex-wrap justify-end gap-2 border-t pt-4'>
+        <Button
+          type='button'
+          variant='outline'
+          disabled={busy}
+          onClick={cancel}
+        >
+          Cancel
+        </Button>
+        <Button
+          type='submit'
+          className='min-w-32'
+          disabled={busy}
+          aria-busy={busy}
+        >
+          {busy ? (
+            <Loader2
+              aria-hidden='true'
+              className='size-4 animate-spin motion-reduce:animate-none'
+            />
+          ) : (
+            <Save aria-hidden='true' />
+          )}
+          {busy ? 'Saving…' : 'Save model choices'}
+        </Button>
+      </div>
     </form>
   )
 }

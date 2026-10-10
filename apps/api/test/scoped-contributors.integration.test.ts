@@ -1,10 +1,12 @@
 import 'reflect-metadata'
-import { afterAll, beforeAll, beforeEach, expect, it } from 'vitest'
+import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { NestFactory } from '@nestjs/core'
-import { ValidationPipe, type INestApplication } from '@nestjs/common'
+import { ForbiddenException, ValidationPipe, type INestApplication } from '@nestjs/common'
 import cookieParser from 'cookie-parser'
 import request from 'supertest'
 import { createHash, createHmac, randomUUID } from 'node:crypto'
+import { readdir, readFile } from 'node:fs/promises'
+import { Client } from 'pg'
 import { PrismaService } from '../src/prisma/prisma.service.js'
 import { AuthorizationService } from '../src/auth/authorization.service.js'
 import { AuthService } from '../src/auth/auth.service.js'
@@ -22,6 +24,8 @@ import { GitHubWebhookService } from '../src/github-events/github-webhook.servic
 import { GitHubWebhookController } from '../src/github-events/github-webhook.controller.js'
 import { DashboardService } from '../src/dashboard/dashboard.service.js'
 import { DashboardController } from '../src/dashboard/dashboard.controller.js'
+import { FindingsController } from '../src/findings/findings.controller.js'
+import { FindingsService } from '../src/findings/findings.service.js'
 import { digest } from '../src/assessments/assessment-digest.js'
 import { RedisCacheService } from '../src/cache/redis-cache.service.js'
 let db: PrismaService, app: INestApplication, access: AuthorizationService
@@ -32,6 +36,8 @@ let orgA: string,
   viewer: string,
   platform: string,
   memberId: string
+let beforeBackfill = async () => {}
+let backfillObservations: { event: string; body: any }[] = []
 const origin = 'http://localhost:5173',
   sha = 'a'.repeat(40)
 const actor = (id: string, path: string) =>
@@ -42,20 +48,32 @@ const mutate = (id: string, path: string, body: object) =>
     .set('Cookie', `scope.sid=${id}`)
     .set('Origin', origin)
     .send(body)
+const testDatabase = 'preflyt_scope_test_' + randomUUID().replaceAll('-', '')
+let databaseAdmin: Client | undefined
+let databaseCreated = false
 beforeAll(async () => {
-  if (
-    !new URL(process.env.DATABASE_URL!).pathname.startsWith(
-      '/preflyt_scope_test_',
-    )
-  )
-    throw new Error('Use a disposable scope test database')
+  const url = new URL(process.env.DATABASE_URL!)
+  if (!['localhost', '127.0.0.1'].includes(url.hostname))
+    throw new Error('Local disposable database required')
+  databaseAdmin = new Client({ connectionString: url.toString() })
+  await databaseAdmin.connect()
+  await databaseAdmin.query(`CREATE DATABASE "${testDatabase}"`)
+  databaseCreated = true
+  url.pathname = '/' + testDatabase
+  const sql = new Client({ connectionString: url.toString() })
+  await sql.connect()
+  try {
+    for (const entry of (await readdir('prisma/migrations')).filter((n) => /^\d/.test(n)).sort())
+      await sql.query(await readFile(`prisma/migrations/${entry}/migration.sql`, 'utf8'))
+  } finally { await sql.end() }
+  vi.stubEnv('DATABASE_URL', url.toString())
   db = new PrismaService()
   await db.$connect()
   access = new AuthorizationService(db)
   const auth = {
     sessionCookieName: 'scope.sid',
     assertOrigin: (value: string) => {
-      if (value !== origin) throw new Error('Invalid origin')
+      if (value !== origin) throw new ForbiddenException('Invalid origin')
     },
     currentSession: async (id?: string) => {
       if (!id) return { authenticated: false }
@@ -82,6 +100,7 @@ beforeAll(async () => {
     {
       module: class TestModule {},
       controllers: [
+        FindingsController,
         OrganizationController,
         AssessmentController,
         ContributorsController,
@@ -92,6 +111,7 @@ beforeAll(async () => {
       providers: [
         SessionGuard,
         OwnerAdminGuard,
+        FindingsService,
         ContributorsService,
         AssessmentService,
         GitHubService,
@@ -107,11 +127,14 @@ beforeAll(async () => {
         {
           provide: GitHubProviderService,
           useValue: {
-            readContributorBackfill: async () => ({
-              observations: [],
+            readContributorBackfill: async () => {
+              await beforeBackfill()
+              return {
+              observations: backfillObservations,
               truncated: false,
               limits: { pullRequests: 30 },
-            }),
+              }
+            },
           },
         },
       ],
@@ -133,8 +156,13 @@ beforeAll(async () => {
 afterAll(async () => {
   await app?.close()
   await db?.$disconnect()
+  if (databaseCreated) await databaseAdmin?.query(`DROP DATABASE "${testDatabase}" WITH (FORCE)`)
+  await databaseAdmin?.end()
+  vi.unstubAllEnvs()
 })
 beforeEach(async () => {
+  beforeBackfill = async () => {}
+  backfillObservations = []
   await db.contributorObservation.deleteMany()
   await db.contributor.deleteMany()
   await db.contributorDelivery.deleteMany()
@@ -543,7 +571,10 @@ it('returns authorized contributor compliance with exact PR evidence and preserv
   expect(profile.body.contributionActivity.reduce((total: number, day: any) => total + day.authoredPrs, 0)).toBe(profile.body.contributors[0].authoredPrs)
   expect(profile.body.contributionActivity.reduce((total: number, day: any) => total + day.mergedPrs, 0)).toBe(profile.body.contributors[0].mergedPrs)
   expect(profile.body.contributionActivity).toHaveLength(30)
-  await actor(developer, `/contributors/${contributor.id}?relationship=REVIEWER`).expect(403)
+  const empty = await actor(developer, `/contributors/${contributor.id}?relationship=REVIEWER`).expect(200)
+  expect(empty.body.emptyActivity).toBe(true)
+  expect(empty.body.contributors[0]).toMatchObject({ id: contributor.id, authoredPrs: 0, reviews: 0 })
+  expect(empty.body.observations).toEqual([])
   await actor(developer, `/contributors/${contributor.id}?repository=12`).expect(403)
 })
 it('hides compliance after permission/grant revocation and excludes tampered evidence', async () => {
@@ -553,4 +584,136 @@ it('hides compliance after permission/grant revocation and excludes tampered evi
   expect(profile.body.policyCompliance).toMatchObject({ completePrs: 0, passRate: null, rows: [{ status: 'INVALID' }] })
   await db.repositoryGrant.deleteMany({ where: { membershipId: memberId } })
   await actor(developer, `/contributors/${contributor.id}`).expect(403)
+})
+
+it('returns an empty profile for another authorized repository while hiding unknown and inaccessible contributors', async () => {
+  const { contributor } = await complianceFixture()
+  const empty = await actor(owner, `/contributors/${contributor.id}?repository=12`).expect(200)
+  expect(empty.body.emptyActivity).toBe(true)
+  expect(empty.body.contributors[0]).toMatchObject({ id: contributor.id, repositoryCount: 0 })
+  expect(empty.body.observations).toEqual([])
+  await actor(owner, '/contributors/unknown-person?repository=12').expect(403)
+  await actor(developer, `/contributors/${contributor.id}?repository=12`).expect(403)
+})
+
+const backfillPr = (repositoryId: number) => ({
+  event: 'pull_request',
+  body: {
+    installation: { id: 1 }, repository: { id: repositoryId }, action: 'edited',
+    pull_request: {
+      id: 999, number: 999, base: { repo: { id: repositoryId } }, head: { sha },
+      user: { id: 999, login: 'imported-person', type: 'User' },
+      state: 'open', merged: false, updated_at: new Date().toISOString(),
+    },
+  },
+})
+it('persists upstream contributor activity and reports verified capture counts', async () => {
+  backfillObservations = [backfillPr(11)]
+  const response = await mutate(owner, '/contributors/repositories/11/sync', {}).expect(201)
+  expect(response.body.importedRecords).toBe(1)
+  expect(await db.contributorObservation.count({ where: { sourceObjectId: '999' } })).toBe(1)
+})
+it('does not report success when upstream activity belongs to an unselected repository', async () => {
+  backfillObservations = [backfillPr(99)]
+  await mutate(owner, '/contributors/repositories/11/sync', {}).expect(403)
+  expect(await db.auditEvent.count({ where: { event: 'contributors_backfilled' } })).toBe(0)
+})
+
+it('recovers activity after reconnecting a repository with retained duplicate receipts', async () => {
+  const oldRepo = await db.gitHubRepository.findUniqueOrThrow({ where: { githubId: 11n } })
+  const deliveryId = randomUUID()
+  const activity = {
+    actor: { githubUserId: '999', login: 'recovered-person', kind: 'HUMAN' as const },
+    relationship: 'PR_AUTHOR', sourceObjectId: '999', sourceSha: sha,
+    pullRequestNumber: 999, action: 'edited', state: 'open', merged: false,
+    observedAt: new Date(),
+  }
+  await captureContributors(db, deliveryId, 'same-payload', 1n, 11n, [activity])
+  await db.gitHubRepository.delete({ where: { id: oldRepo.id } })
+  const { id, ...fields } = oldRepo
+  const reconnected = await db.gitHubRepository.create({ data: fields })
+  const recovered = await captureContributors(db, deliveryId, 'same-payload', 1n, 11n, [activity])
+  expect(recovered).toMatchObject({ accepted: true, duplicate: false })
+  expect(await db.contributorObservation.count({ where: { repositoryId: reconnected.id, sourceObjectId: '999' } })).toBe(1)
+  expect(await captureContributors(db, deliveryId, 'same-payload', 1n, 11n, [activity])).toMatchObject({ duplicate: true })
+})
+
+it('reads scoped settings and audits Owner updates without exposing session secrets', async () => {
+  const settings = await actor(owner, '/organizations/settings').expect(200)
+  expect(settings.body).toMatchObject({ id: orgA, name: 'A', canUpdate: true })
+  expect(settings.body).not.toHaveProperty('authentication')
+  await request(app.getHttpServer()).patch('/organizations/settings').set('Cookie', `scope.sid=${owner}`).set('Origin', origin).send({ name: 'Updated workspace' }).expect(200)
+  expect((await db.organization.findUniqueOrThrow({ where: { id: orgA } })).name).toBe('Updated workspace')
+  expect((await db.organization.findUniqueOrThrow({ where: { id: orgB } })).name).toBe('B')
+  expect(await db.auditEvent.count({ where: { event: 'organization.settings.updated', actorId: owner } })).toBe(1)
+  await actor(developer, '/organizations/settings').expect(403)
+  await request(app.getHttpServer()).patch('/organizations/settings').set('Cookie', `scope.sid=${developer}`).set('Origin', origin).send({ name: 'Denied' }).expect(403)
+  await request(app.getHttpServer()).patch('/organizations/settings').set('Cookie', `scope.sid=${owner}`).set('Origin', 'https://foreign.example').send({ name: 'Denied' }).expect(403)
+})
+
+it('findings uses authorized saved commits and rejects invalid filters, foreign repositories and tampering', async () => {
+  const { assessment } = await complianceFixture()
+  const response = await actor(developer, '/findings').expect(200)
+  expect(response.body).toMatchObject({ rows: [], total: 0, assessedRevisions: 1, truncated: false })
+  expect(response.body.repositories.map((r: any) => r.githubId)).toEqual(['11'])
+  await actor(developer, '/findings?repository=12').expect(403)
+  await actor(developer, '/findings?severity=invalid').expect(400)
+  await actor(developer, '/findings?page=0').expect(400)
+  const report = { ...(assessment.report as any), checks: [{ ruleId: 'ci', required: true, coverage: 'MISSING' }] }
+  await db.commitAssessment.update({ where: { id: assessment.id }, data: { report, assessmentHash: digest({ request: assessment.request, plan: assessment.plan, report }) } })
+  const gaps = await actor(developer, '/findings?kind=gaps').expect(200)
+  expect(gaps.body.rows).toHaveLength(1)
+  expect(gaps.body.rows[0]).toMatchObject({ status: 'Evidence missing', sourceSha: sha, assessmentId: assessment.id, repositoryId: '11' })
+  await db.commitAssessment.update({ where: { id: assessment.id }, data: { assessmentHash: 'tampered' } })
+  await actor(developer, '/findings').expect(409)
+})
+
+it('aggregates findings before pagination with matching filters and repository authorization', async () => {
+  const { assessment } = await complianceFixture()
+  const checks = Array.from({ length: 60 }, (_, index) => ({ id: `check-${index}`, title: `Check ${index}`, required: true, operator: 'configuration_hint_present', capability: 'available', severity: index % 2 ? 'high' : 'medium' }))
+  const plan = { ...(assessment.plan as any), checks }
+  const report = { ...(assessment.report as any), checks: checks.map((check) => ({ ruleId: check.id, title: check.title, required: true, coverage: 'MISSING' })) }
+  const assessmentHash = digest({ request: assessment.request, plan, report })
+  await db.commitAssessment.update({ where: { id: assessment.id }, data: { plan, report, assessmentHash } })
+  const foreign = await db.gitHubRepository.findFirstOrThrow({ where: { githubId: 12n } })
+  await db.commitAssessment.create({ data: { repositoryId: foreign.id, sourceSha: sha, selectionId: assessment.selectionId, requestKey: randomUUID(), inputHash: 'fixture', request: assessment.request as any, plan, report, assessmentHash } })
+  const first = await actor(developer, '/findings?kind=gaps').expect(200)
+  const next = await actor(developer, '/findings?kind=gaps&page=2').expect(200)
+  expect(first.body.rows).toHaveLength(50)
+  expect(next.body.rows).toHaveLength(10)
+  expect(first.body.summary).toEqual(next.body.summary)
+  expect(first.body.summary).toMatchObject({ reportedIssues: 0, affectedRepositories: 1, criticalHigh: 0, evidenceGaps: 60, chartTotal: 60 })
+  expect(first.body.summary.byCheck.reduce((sum: number, item: any) => sum + item.count, 0)).toBe(60)
+  const high = await actor(developer, '/findings?kind=gaps&severity=high').expect(200)
+  expect(high.body.summary.evidenceGaps).toBe(30)
+  const search = await actor(developer, '/findings?kind=gaps&q=Check%2059').expect(200)
+  expect(search.body.summary.evidenceGaps).toBe(1)
+  const issues = await actor(developer, '/findings?kind=findings').expect(200)
+  expect(issues.body.summary.evidenceGaps).toBe(60)
+  expect(issues.body.summary.chartTotal).toBe(0)
+})
+
+it('assigns and resolves finding triage without changing evidence, rejects unauthorized updates and stale revisions', async () => {
+  const { assessment } = await complianceFixture()
+  const report = { ...(assessment.report as any), checks: [{ ruleId: 'ci', required: true, coverage: 'MISSING' }] }
+  const hash = digest({ request: assessment.request, plan: assessment.plan, report })
+  await db.commitAssessment.update({ where: { id: assessment.id }, data: { report, assessmentHash: hash } })
+  const list = await actor(owner, '/findings?kind=gaps').expect(200)
+  const finding = list.body.rows[0]
+  expect(list.body.canManage).toBe(true)
+  const input = { state: 'IN_REVIEW', assigneeId: developer, note: 'Investigating CI evidence', expectedRevision: 0 }
+  await mutate(developer, `/findings/${finding.id}/triage`, input).expect(403)
+  await request(app.getHttpServer()).post(`/findings/${finding.id}/triage`).set('Cookie', `scope.sid=${owner}`).set('Origin', 'https://bad.invalid').send(input).expect(403)
+  await mutate(owner, `/findings/${finding.id}/triage`, { ...input, assigneeId: platform }).expect(400)
+  const created = await mutate(owner, `/findings/${finding.id}/triage`, input).expect(201)
+  expect(created.body).toMatchObject({ state: 'IN_REVIEW', assigneeId: developer, revision: 1 })
+  await mutate(owner, `/findings/${finding.id}/triage`, input).expect(409)
+  await mutate(owner, `/findings/${finding.id}/triage`, { ...input, state: 'RESOLVED', note: '', expectedRevision: 1 }).expect(400)
+  const attempts = await Promise.all([mutate(owner, `/findings/${finding.id}/triage`, { ...input, state: 'RESOLVED', note: 'Reviewed and fixed in a follow-up commit; historical evidence retained', expectedRevision: 1 }),
+    mutate(owner, `/findings/${finding.id}/triage`, { ...input, note: 'Second reviewer', expectedRevision: 1 })])
+  expect(attempts.map(r => r.status).sort()).toEqual([201, 409])
+  const updated = (await actor(owner, '/findings?kind=gaps').expect(200)).body.rows[0]
+  expect(updated.triage.revision).toBe(2)
+  expect((await db.commitAssessment.findUniqueOrThrow({ where: { id: assessment.id } })).assessmentHash).toBe(hash)
+  expect(await db.auditEvent.count({ where: { event: 'finding.triage_updated' } })).toBe(2)
 })

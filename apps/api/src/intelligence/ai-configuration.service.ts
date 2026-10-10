@@ -14,6 +14,7 @@ import type { AuthenticatedSession } from "../auth/session.guard.js";
 import type { AiProviderConnection } from "../generated/prisma/client.js";
 import {
   aiConfigurationEnabled,
+  aiReviewsEnabled,
   aiCredentialKey,
   validateAiEndpoint,
   providerEndpoint,
@@ -26,6 +27,8 @@ import {
   testAiEndpoint,
 } from "./ai-configuration.js";
 export type ProviderInput = {
+  inputPriceCentsPerMillion?: number | null;
+  outputPriceCentsPerMillion?: number | null;
   preset?: string;
   name: string;
   baseUrl: string;
@@ -41,6 +44,9 @@ export type RouteInput = {
   fallbackId: string | null;
   enabled: boolean;
   allowSource: boolean;
+  automaticReviews?: boolean;
+  publishSummary?: boolean;
+  publishInline?: boolean;
   maxInputTokens: number;
   maxOutputTokens: number;
   dailyBudgetCents: number;
@@ -95,7 +101,7 @@ export class AiConfigurationService {
     await this.access.requireOrganization(session, "ai.usage.read");
     return {
       enabled: true,
-      executionAvailable: false,
+      executionAvailable: aiReviewsEnabled(),
       providers: providers.map(publicProvider),
       routes,
       stages: aiStages,
@@ -185,6 +191,8 @@ export class AiConfigurationService {
               "This endpoint requires a provider key",
             );
           const data = {
+            inputPriceCentsPerMillion: input.inputPriceCentsPerMillion ?? null,
+            outputPriceCentsPerMillion: input.outputPriceCentsPerMillion ?? null,
             name: input.name.trim(),
             endpointId: providerId,
             endpoint,
@@ -373,7 +381,7 @@ export class AiConfigurationService {
     });
     return { status, testedAt };
   }
-  private ready(provider: AiProviderConnection | undefined) {
+  ready(provider: AiProviderConnection | undefined) {
     const endpoint = provider ? providerEndpoint(provider) : null;
     return (
       !!provider &&
@@ -404,11 +412,14 @@ export class AiConfigurationService {
     );
     if (
       !aiStages.includes(stage as (typeof aiStages)[number]) ||
-      (input.fallbackId && input.fallbackId === input.primaryId)
+      (input.fallbackId && input.fallbackId === input.primaryId) ||
+      (stage !== "pull_request" && (input.automaticReviews || input.publishSummary || input.publishInline))
     )
       throw new BadRequestException(
         "Choose a lifecycle stage and different primary/fallback connections",
       );
+    if (input.publishInline && (!input.automaticReviews || !input.allowSource))
+      throw new BadRequestException("Inline feedback needs automatic PR reviews and source sharing");
     try {
       const route = await this.db.$transaction(
         async (tx) => {
@@ -455,6 +466,9 @@ export class AiConfigurationService {
             fallbackId: input.fallbackId,
             enabled: input.enabled,
             allowSource: input.allowSource,
+            automaticReviews: input.automaticReviews ?? false,
+            publishSummary: input.publishSummary ?? false,
+            publishInline: input.publishInline ?? false,
             maxInputTokens: input.maxInputTokens,
             maxOutputTokens: input.maxOutputTokens,
             dailyBudgetCents: input.dailyBudgetCents,
@@ -537,7 +551,7 @@ export class AiConfigurationService {
       reason,
       providerId: reason === "CONFIGURATION_READY" ? id : null,
       routeRevision: route?.revision ?? null,
-      executionAvailable: false,
+      executionAvailable: aiReviewsEnabled(),
       maxOutputTokens: route?.maxOutputTokens ?? null,
       dailyBudgetCents: route?.dailyBudgetCents ?? null,
     };

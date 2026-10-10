@@ -1,3 +1,4 @@
+import { configurationValue } from '../configuration/runtime-configuration.js'
 import { recordRulesetNotification } from "../notifications/notification-event.js";
 import { randomUUID } from "node:crypto";
 import {
@@ -22,7 +23,7 @@ import {
 import { digest } from "../assessments/assessment-digest.js";
 import { draftHash, readinessCheck } from "./ruleset-draft.js";
 export const governanceEnabled = () =>
-  process.env.GITHUB_RULESET_ACTIVATION_ENABLED === "true";
+  configurationValue('GITHUB_RULESET_ACTIVATION_ENABLED') === "true";
 @Injectable()
 export class RulesetDeploymentService {
   private readonly governance = new GovernanceProvider();

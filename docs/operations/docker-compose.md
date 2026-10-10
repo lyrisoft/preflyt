@@ -1,5 +1,7 @@
 # Self-hosted Docker Compose deployment
 
+Application connections and feature switches are now provisioned in **Settings → Configuration** by Super Admin. Environment names below describe the legacy import contract; once stored, database values take precedence. See [deployment configuration](deployment-configuration.md). Infrastructure and execution trust controls remain deployment-managed.
+
 This packages the current Preflyt UI, authentication, GitHub onboarding and repository profiles, webhook ingestion, a queue worker, separate cache/queue services, and vendor-neutral OpenTelemetry. It does not add repository execution, scanners, agents or Kubernetes deployment. The frontend theme is unchanged.
 
 For production policy-aware checks, also follow the [GitHub governance runbook](../deployment/github-governance-production.md). Attestation binaries/roots and the additional runtime variables require an explicit reviewed container override; root dotenv values alone do not enable them.

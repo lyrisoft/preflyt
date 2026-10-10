@@ -10,20 +10,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   verify:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 24.4.1
-      - name: Verify deployment and runtime boundaries
-        run: |
-          npm install --global pnpm@10.15.1
-          pnpm install --frozen-lockfile --ignore-scripts
-          pnpm --filter @preflyt/api typecheck
-          pnpm --filter @preflyt/api test test/telemetry.test.ts test/deployment-config.test.ts test/kubernetes-deployment.test.ts test/native-runtime.test.ts test/native-preflight.test.ts
-        env:
-          DATABASE_URL: postgresql://build:build@localhost:5432/build
+    uses: ./.github/workflows/verify.yml
   publish:
     needs: verify
     runs-on: ubuntu-latest

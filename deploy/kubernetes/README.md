@@ -15,12 +15,12 @@ The bundle is a single-instance starting point. PostgreSQL and queue storage use
 | --- | --- |
 | `preflyt-db-secrets` | `POSTGRES_PASSWORD`, `DATABASE_APP_PASSWORD` |
 | `preflyt-migration-secrets` | `DATABASE_URL` for the `preflyt_owner` role at `db:5432/preflyt` |
-| `preflyt-api-secrets` | `DATABASE_URL` for `preflyt_app`; enabled authentication/integration settings |
-| `preflyt-worker-secrets` | `DATABASE_URL` for `preflyt_app`; only enabled worker GitHub, SMTP, CI proof and telemetry settings |
+| `preflyt-api-secrets` | `DATABASE_URL` for `preflyt_app`; `CONFIGURATION_ENCRYPTION_KEY`, identity/provider encryption roots and deployment trust settings |
+| `preflyt-worker-secrets` | `DATABASE_URL` for `preflyt_app`; the same `CONFIGURATION_ENCRYPTION_KEY`, provider encryption roots, CI proof and telemetry settings |
 
 Use fresh URL-safe database passwords; the URLs and password Secrets must agree. The initialization script creates the restricted application role on an empty database volume. Editing a Secret does not rotate a password in an existing database. Application pods never receive migration owner credentials. Web receives no application Secrets.
 
-For GitHub login, include `GITHUB_APP_ID`, `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_USER_TOKEN_ENCRYPTION_KEY` and `GITHUB_LOGIN_CALLBACK_URL=https://your-origin/api/auth/github/callback` in API configuration, then enable the flag in the ConfigMap. Register that exact callback. Worker credentials depend on enabled background features. The encryption key must remain stable across pod replacement. Use the same existing application environment contract for OIDC, GitHub governance, CI proof and notifications; this bundle does not invent alternative authentication.
+Provision application connections and feature switches in **Settings → Configuration**. For GitHub login register the exact public `/api/auth/github/callback` URL, save it with the App credentials, and restart API/worker. See [database configuration and upgrade steps](../../docs/operations/deployment-configuration.md); legacy environment values are imported only on first API startup.
 
 ## Install and roll out
 
@@ -63,3 +63,8 @@ The restricted PostgreSQL startup and application-role initialization are also c
 The bundle is locally rendered and checked for security, persistence, credentials and Compose parity. It has not been applied to a production cluster or accepted as a complete deployment. No existing user cluster was touched.
 
 References: [Kubernetes security contexts](https://kubernetes.io/docs/tasks/configure-pod-container/security-context/) and [Jobs](https://kubernetes.io/docs/concepts/workloads/controllers/job/).
+
+
+### Advisory AI reviews
+
+Enable AI model configuration and advisory reviews in Settings → Configuration only after model/skill setup. Supply the same separate stable `AI_PROVIDER_ENCRYPTION_KEY` in API and worker Secrets. The existing worker processes explicit evidence-only reviews; it needs model egress, not runtime-control permissions. See [review skills deployment](../../docs/operations/review-skills.md).

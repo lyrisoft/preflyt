@@ -22,7 +22,18 @@ type Rule = {
   guidance: string
   requiredIn: string[]
 }
+export type AiCheck = {
+  id: string
+  title: string
+  kind: 'AI_REVIEW'
+  mode: 'ADVISORY'
+  skillId: string
+  skillVersion: number
+  skillDigest: string
+  stages: ('repository' | 'pull_request')[]
+}
 export type Pack = {
+  aiChecks?: AiCheck[]
   id: string
   version: string
   digest: string

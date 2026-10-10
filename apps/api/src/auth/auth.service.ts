@@ -1,3 +1,4 @@
+import { configurationValue } from '../configuration/runtime-configuration.js'
 import { withDatabaseStartupRetry } from '../prisma/database-startup.js'
 import { githubLoginEnabled } from './github-identity-provider.js'
 import { rolePermissions } from './authorization.service.js'
@@ -95,10 +96,10 @@ export class AuthService implements OnModuleInit {
   private readonly superAdminPassword?: string
 
   constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {
-    const issuer = process.env.OIDC_ISSUER
-    const clientId = process.env.OIDC_CLIENT_ID
-    const clientSecret = process.env.OIDC_CLIENT_SECRET
-    const redirectUri = process.env.OIDC_REDIRECT_URI
+    const issuer = configurationValue('OIDC_ISSUER')
+    const clientId = configurationValue('OIDC_CLIENT_ID')
+    const clientSecret = configurationValue('OIDC_CLIENT_SECRET')
+    const redirectUri = configurationValue('OIDC_REDIRECT_URI')
     const webOrigin = process.env.WEB_ORIGIN
     const bootstrapHash = process.env.BOOTSTRAP_TOKEN_SHA256
     const superAdminUsername =

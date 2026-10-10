@@ -1,3 +1,8 @@
+import {
+  skillTemplates,
+  skillDigest,
+  validateSkill,
+} from '../src/intelligence/review-skills.js'
 import { buildAssessment } from '../src/assessments/assessment-plan.js'
 import 'reflect-metadata'
 import { randomUUID } from 'node:crypto'
@@ -124,6 +129,7 @@ beforeEach(async () => {
   await db.organizationStandardVersion.deleteMany()
   await db.gitHubRepository.deleteMany()
   await db.gitHubInstallation.deleteMany()
+  await db.aiReviewSkill.deleteMany()
   await db.organization.deleteMany()
   await db.identity.deleteMany()
   await db.auditEvent.deleteMany()
@@ -364,4 +370,97 @@ it('keeps built-in definitions immutable and fails embedded command tampering', 
       },
     ])[0],
   ).toBeUndefined()
+})
+
+it('pins approved skills to advisory checks and freezes them in adopted policies', async () => {
+  const skill = await db.aiReviewSkill.create({
+    data: {
+      ...validateSkill(skillTemplates[0]!),
+      organizationId: org,
+      skillKey: randomUUID(),
+      version: 1,
+      contentDigest: skillDigest(skillTemplates[0]!),
+      status: 'APPROVED',
+      enabled: true,
+      createdById: owner.identityId,
+    },
+  })
+  const check = {
+    id: `ai-review-${randomUUID()}`,
+    title: 'Security evidence review',
+    skillId: skill.id,
+    stages: ['pull_request'],
+  }
+  const first = (
+    await post(owner, root, { ...input, aiChecks: [check] }).expect(201)
+  ).body
+  const previous = await db.repositoryStandardsSelection.findFirstOrThrow({
+    where: { repositoryId: repo.id },
+  })
+  const selected = (
+    await post(owner, '/github/repositories/51/standards', {
+      profile: 'RECOMMENDED',
+      packs: [{ id: first.packId, version: '1.0.1' }],
+      expectedSelectionId: previous.id,
+    }).expect(201)
+  ).body
+  const policy = composeGatePolicy(selected, 'refs/heads/main', [])
+  expect(policy.aiChecks).toEqual([
+    expect.objectContaining({
+      ...check,
+      skillVersion: 1,
+      skillDigest: skill.contentDigest,
+      mode: 'ADVISORY',
+    }),
+  ])
+  expect(policy.rules.some((r) => r.id === check.id)).toBe(false)
+  const library = (await get().expect(200)).body
+  expect(
+    library.reviewSkills.some((s: { id: string }) => s.id === skill.id),
+  ).toBe(true)
+  await post(owner, `${root}/${first.packId}/versions`, {
+    ...input,
+    expectedVersionId: first.id,
+  }).expect(201)
+  expect(composeGatePolicy(selected, 'refs/heads/main', [])).toEqual(policy)
+  await db.aiReviewSkill.update({
+    where: { id: skill.id },
+    data: { enabled: false },
+  })
+  await post(owner, root, { ...input, aiChecks: [check] }).expect(400)
+})
+it('rejects foreign skills, unapproved versions and executable or mandatory AI definitions', async () => {
+  const skill = await db.aiReviewSkill.create({
+    data: {
+      ...validateSkill(skillTemplates[0]!),
+      organizationId: org,
+      skillKey: randomUUID(),
+      version: 1,
+      contentDigest: skillDigest(skillTemplates[0]!),
+      createdById: owner.identityId,
+    },
+  })
+  const check = {
+    id: `ai-review-${randomUUID()}`,
+    title: 'Review',
+    skillId: skill.id,
+    stages: ['repository'],
+  }
+  await post(owner, root, { ...input, aiChecks: [check] }).expect(400)
+  await db.aiReviewSkill.update({
+    where: { id: skill.id },
+    data: { status: 'APPROVED', enabled: true },
+  })
+  await post(outsider, root, { ...input, aiChecks: [check] }).expect(400)
+  for (const patch of [
+    { mode: 'REQUIRED' },
+    { command: 'sh' },
+    { skillVersion: 99 },
+    { stages: [] },
+    { title: '   ' },
+  ])
+    await post(owner, root, {
+      ...input,
+      aiChecks: [{ ...check, ...patch }],
+    }).expect(400)
 })

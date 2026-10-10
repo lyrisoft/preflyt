@@ -1,8 +1,20 @@
 # Skill-Based AI Engineering Review
 
-**Status:** Product design specification, not evidence of implemented skill runtime.  
+**Status:** Instruction-only catalogue, saved-assessment evidence review, bounded exact-commit PR diff review, automatic published-policy dispatch and opt-in neutral GitHub summaries implemented.
 **Scope:** Read-only pull-request analysis. Not a general coding agent.  
 **Related:** [Code Quality Review](code-quality-review.md), [AI routing](../architecture/ADR-0004-shift-left-assessment-governance.md), [RBAC](rbac-and-authorization.md).
+
+## Implemented first increment
+
+Intelligence → Skills supports organization-scoped drafts, immutable integer versions and content digests, reviewed approval, enable/disable/retire, repository scope and pagination. Repository assessment details expose explicit AI evidence review using approved model routing, estimated daily budget reservations, cancellation and validated inferred suggestions. The [12 built-in Markdown skills](../skills/README.md) provide concrete review guides linked to every current engineering check; instruction-only SKILL.md uploads open editable drafts and downloads export the selected immutable database version. Candidate third-party packages and scripts are not bundled or executed. PR reviews can include bounded verified changed lines under an enabled source-sharing route. See [setup, permissions and exact limits](../operations/review-skills.md). Language/framework selection and opt-in inline comments are implemented. Administrator-reviewed public GitHub SKILL.md imports pin upstream commits and checksums. Executable-package manifests and script execution remain outside this instruction-only runtime.
+
+## Markdown file contract
+
+The implemented editor supports Markdown Write/Preview tabs and UTF-8 `SKILL.md` upload/download, with an explicit YAML header for name and description. Uploads never imply approval or execution. File changes create a new draft; approved versions and policy digests remain pinned. This instruction-only file format differs from the proposed executable-package manifest below. See [file format, limits and approval workflow](../operations/review-skills.md#markdown-editor-and-skillmd).
+
+## Check-to-skill assignment
+
+Each advisory AI review in an organization engineering standard has a name, review stages and a pinned approved skill ID/version/digest. Skill instructions explain how to perform that check; SDLC stages decide when it is applicable. Standard adoption freezes the assignment, policies include it in their reviewed definition, and assessments run only those saved assignments. A missing, disabled or revoked skill produces an unavailable review, not passing evidence. The catalogue stays reusable; skill versions do not independently schedule checks.
 
 ## Decision
 

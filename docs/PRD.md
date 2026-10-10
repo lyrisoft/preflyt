@@ -310,7 +310,7 @@ The PoC does **not** need to generate a patch or remediation PR. If a future sep
 
 **MVP target outcomes, delivered incrementally by P0–P3:**
 
-- Self-hosted initial organization onboarding inherited from a verified GitHub organization installation, GitHub user login, scoped authorization and audit; retain current OIDC as a compatibility option during migration. GitHub login, verified owner onboarding, workspace linking and member grants are implemented behind the login flag. Legacy identity merging, revocation events, reconciliation and full migration acceptance remain pending.
+- Self-hosted initial organization onboarding inherited from a verified GitHub organization installation, GitHub user login, scoped authorization and audit; retain current OIDC as a compatibility option during migration. GitHub login, verified owner onboarding, workspace linking and member grants are implemented behind the login flag. Serialized token refresh, signed revocation/relationship invalidation and bounded reconciliation are implemented. Explicit legacy identity linking, owner recovery and full migration acceptance remain pending.
 - GitHub integration, selected-repository onboarding, webhook signatures and idempotent PR/CI event ingestion.
 - Repository Engineering Profile and changed-path applicability detection.
 - Versioned baseline engineering policy with inherited repo scope, mandatory/advisory checks, enforcement mode.
@@ -679,3 +679,8 @@ A task can be developed behind a feature flag in parallel, but it cannot be coun
 ---
 
 **Decision for review:** Approve the **assessment-first Shift Left** scope and MVP gates. Do not start coding-agent/remediation development as if it is required for Preflyt to deliver value.
+
+
+### Review skills delivery note (2026-10-09)
+
+The versioned instruction-only skills catalogue and explicit multi-skill review of saved assessment check evidence are implemented. Scope is repository/PR stage and authorized repository assignment; results are inferred suggestions with validated check references. Bounded exact-commit PR diff review, validated changed-line references, automatic published-policy dispatch and opt-in neutral GitHub summaries are implemented. Pinned Markdown imports, exact-commit language/framework selection and opt-in validated inline comments are implemented. Provider invoice reconciliation and production release qualification remain separate acceptance work. See [current setup and limits](operations/review-skills.md).

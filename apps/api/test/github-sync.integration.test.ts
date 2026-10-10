@@ -1,3 +1,5 @@
+import {disposableDatabase} from './disposable-database.js'
+let fixture: Awaited<ReturnType<typeof disposableDatabase>>
 import 'reflect-metadata'
 import { createHmac, randomUUID } from 'node:crypto'
 import { beforeAll, beforeEach, afterAll, it, expect, vi } from 'vitest'
@@ -28,14 +30,15 @@ const provider = {
   listInstallationRepositories: vi.fn(),
 }
 beforeAll(async () => {
-  prisma = new PrismaService()
-  await prisma.$connect()
+  fixture = await disposableDatabase('githubsync')
+  prisma = fixture.prisma
 })
 afterAll(async () => {
-  await prisma.$disconnect()
+  await fixture.close()
   vi.unstubAllEnvs()
 })
 beforeEach(async () => {
+  await fixture.reset()
   await prisma.gitHubAccessDelivery.deleteMany()
   await prisma.gitHubWebhookDelivery.deleteMany()
   await prisma.gitHubRepository.deleteMany()
@@ -46,8 +49,9 @@ beforeEach(async () => {
   const actor = await prisma.identity.create({
     data: { issuer: 'fixture', subject: 'sync' },
   })
+  const organizationId = (await prisma.organization.create({data: {name: 'Sync fixture'}})).id
   await prisma.gitHubInstallation.create({
-    data: { ...info, connectedById: actor.id, permissions: info.permissions },
+    data: { organizationId, ...info, connectedById: actor.id, permissions: info.permissions },
   })
   await prisma.gitHubRepository.create({
     data: {

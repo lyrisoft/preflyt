@@ -39,3 +39,7 @@ Use existing shadcn/ui and TanStack patterns where available. Reuse one routing/
 Use the shared `PageHelpDrawer` for explanatory notes. Put a labeled Help button at the top right of the page, after Refresh when present. Open a right-side, scrollable drawer with grouped metric definitions, data sources, counting rules, interpretation and limitations. Contributor pages implement this pattern. Reuse it for new and updated pages rather than adding scattered helper paragraphs or help accordions.
 
 Keep actual results, denominators, chart axes/legends, dates, permission-denied states, errors, empty states and actionable incomplete-data warnings beside the relevant data. Move explanations, not the information needed to assess a result. Preserve accessible chart data and keyboard navigation. Side-by-side summary cards should stretch to equal height on desktop and stack naturally on smaller screens.
+
+### Global action notifications
+
+Reuse the root Sonner toaster in `apps/web/src/routes/__root.tsx`; do not mount another toaster on feature pages. Mutation failures without a local error handler use the shared global handler, preserving API and fetch error messages. Simple completed mutations can set `meta: { successMessage: 'Saved changes' }`; operations with partial outcomes must report their verified result explicitly. Keep persistent inline errors when users need details or recovery actions. Toasts are temporary feedback, not the persisted notification inbox.
