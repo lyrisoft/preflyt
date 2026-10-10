@@ -4,7 +4,7 @@ Preflyt supports a common check contract for Docker and Kubernetes deployments: 
 
 ## Current verification
 
-The Docker launcher and image-owned report wrapper have passed disposable fixtures for Gitleaks secret detection, the bundled JavaScript/TypeScript and Python Semgrep rules, fixed JavaScript/TypeScript and Python lint rules, unsafe Terraform and Kubernetes configuration, and Node's built-in test runner. Clean scans and tests pass; zero or skipped tests remain incomplete. These fixtures use ordinary Docker with generated source only. They do not approve execution against connected repositories, establish broad SAST coverage, verify dependency database freshness or prove end-to-end policy-gate integration.
+The Docker launcher and image-owned report wrapper have passed disposable fixtures for Gitleaks secret detection, the bundled JavaScript/TypeScript and Python Semgrep rules, fixed JavaScript/TypeScript and Python lint rules, unsafe Terraform and Kubernetes configuration, and Node's built-in test runner. Clean scans and tests pass; zero or skipped tests remain incomplete. These fixtures use ordinary Docker with generated source only. They do not approve execution against connected repositories, establish broad SAST coverage, prove end-to-end policy-gate integration.
 
 Docker and Kubernetes job dispatch, signed result ingestion and policy-gate integration are implemented and fixture-tested. Kubernetes lifecycle tests use a simulated API; live cluster acceptance remains outstanding. Complete adapter coverage and independently reviewed live acceptance remain P3 work. Local Docker availability must not enable production execution by itself.
 
@@ -42,7 +42,14 @@ docker build -f docs/deployment/native-runner/Dockerfile.node -t preflyt-native-
 pnpm --filter @preflyt/api exec tsx scripts/native-check-fixtures.mts
 ```
 
-The harness selects only generated fixtures, uses content-addressed local image IDs, creates no database records and never publishes GitHub checks. Fixture image tags are build conveniences, not production approval. Production images must be published by immutable digest and reviewed together with their configuration, licenses and any vulnerability databases. The bundled security configuration checks JavaScript/TypeScript and Python dynamic code execution. The separate lint configuration checks debugger statements and bare Python exception handlers; both are partial coverage. Always extend reviewed coverage before representing it as a complete security scan. Trivy dependency scanning requires an image with a reviewed fresh offline database.
+The harness selects only generated fixtures, uses content-addressed local image IDs, creates no database records and never publishes GitHub checks. Fixture image tags are build conveniences, not production approval. Production images must be published by immutable digest and reviewed together with their configuration, licenses and any vulnerability databases. The bundled security configuration checks JavaScript/TypeScript and Python dynamic code execution. The separate lint configuration checks debugger statements and bare Python exception handlers; both are partial coverage. Always extend reviewed coverage before representing it as a complete security scan. Trivy dependency scanning uses the optional `dependencies` image target below. The image owns its offline database; repository files cannot supply or override it. The runner rejects missing, incompatible, future-dated or older-than-24-hour vendor `UpdatedAt` metadata before scanning. Download time is not database freshness. Java database coverage is not bundled. Dependency results retain partial coverage until the supported ecosystem matrix is accepted.
+
+```sh
+docker build --target dependencies -f docs/deployment/native-runner/Dockerfile.trivy -t preflyt-native-trivy-offline:fixture docs/deployment/native-runner
+NATIVE_FIXTURE_TOOL=trivy-offline pnpm --filter @preflyt/api exec tsx scripts/native-check-fixtures.mts
+```
+
+Only the image build downloads the vendor database. Runtime scan containers remain offline and read-only. Rebuild and review the immutable image before the vendor database becomes 24 hours old; set `databaseBuiltAt` in the tool review to the database metadata `UpdatedAt`. The runner independently verifies it. Changes to the cache arguments also require reviewing the new adapter configuration digest. A generated npm lockfile with a known vulnerable dependency was detected under these controls; this does not establish complete dependency coverage.
 
 ## Containerized Docker preflight
 

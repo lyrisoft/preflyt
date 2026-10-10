@@ -16,13 +16,14 @@ Status: active, audited against source and executable checks on 2026-10-10. This
 | Explicit standard upgrades | Previewed replacement preserves frozen history/checks/profile and creates new drafts; stale old sources cannot publish | Teams integration tests, old v1.0 compatibility and v1.1 upgrades |
 | Legacy acceptance harnesses | Older integration suites own randomly named local databases and apply every migration; no shared application-data reset | Full API suite passed with notification Redis transport |
 | Delivery verification | Read-only PR workflow runs both builds and full API/browser suites against disposable services; release image publication reuses the same verification job | Local suite results below; remote workflow execution remains to verify |
+| Offline dependency database | Optional scanner image bundles vendor data; runtime independently rejects stale/missing/incompatible metadata and scans without network access | Generated vulnerable npm lockfile detected; freshness tests passed; dependency coverage remains partial |
 | Documentation drift | README, Teams, identity ADR, notification and native/governance deployment statements reconciled with current source | Source review; historical phase order unchanged |
 
 ## Remaining work, in order
 
 1. Finish nested team policy scope, reviewed time-bound exceptions and exception notifications. Preserve explicit scope expansion, strongest inherited requirements and independent authorization.
 2. Finish explicit legacy identity linking/recovery while preserving historical actors and preventing self-approval through alternate identities. Never match by email or username.
-3. Complete the supported native adapter matrix and fresh offline databases; run isolated live Kubernetes lifecycle checks. Record independent effective-isolation review separately. Keep connected-repository execution disabled without valid review.
+3. Complete the supported native adapter matrix; maintain the implemented fresh offline database image; run isolated live Kubernetes lifecycle checks. Record independent effective-isolation review separately. Keep connected-repository execution disabled without valid review.
 4. Run private-repository governance passing/failing/incomplete, drift and rollback acceptance with the organization-signed report route. Fork PR and merge-queue support remain explicit limitations until implemented and accepted.
 5. Audit the stacked delivery PRs, full regression suites and versioned release/deployment verification. Local builds alone do not prove published image availability or production acceptance.
 
@@ -43,3 +44,7 @@ The additive `20261010050000_finding_lifecycle` migration creates Findings triag
 - API and web release builds passed. The Chromium run emitted a ResizeObserver warning without failing tests; no connected-repository execution or production acceptance is claimed.
 
 These are scoped implementation results, not a claim that all phase/release gaps are closed.
+
+- Remote CI at `f14c268` passed API regression but caught an asynchronous browser download assertion. The assertion now waits for the actual request and download; the corrected remote run remains to verify.
+
+- Offline dependency slice: four API files passed all 44 tests; the generated dependency vulnerability fixture produced the expected FAIL with network disabled. Skills catalogue Chromium tests passed all 16 tests after the asynchronous assertion correction. API typecheck passed.
