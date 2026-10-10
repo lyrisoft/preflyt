@@ -1,3 +1,4 @@
+import { configurationValue } from '../configuration/runtime-configuration.js'
 import { createHash, randomBytes } from 'node:crypto'
 import {
   ForbiddenException,
@@ -466,7 +467,7 @@ export class GitHubService {
   }
 
   private inventoryKey(installationId: bigint) {
-    return `github:${process.env.GITHUB_APP_ID ?? 'unconfigured'}:installation:${installationId}:repositories`
+    return `github:${configurationValue('GITHUB_APP_ID') ?? 'unconfigured'}:installation:${installationId}:repositories`
   }
 
   get setupCookieName() {

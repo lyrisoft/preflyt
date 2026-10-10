@@ -40,3 +40,28 @@ Publish versioned Preflyt images and complete the deployment release checklist b
 A shared production LiteLLM gateway needs organization-scoped keys/model restrictions rather than sharing its administrator master key. Protect API/worker and gateway secrets separately. Kubernetes network controls must be enforced by the deployment CNI. No executable third-party runtime or invoice reconciliation is claimed.
 
 See [review setup](review-skills.md), [model configuration](ai-configuration.md) and [optional gateway](../deployment/ai-gateway/README.md).
+
+## Revalidation with standards 1.1.0
+
+The model/skill/PR inference regression suite was rerun against the current code after adding versioned deterministic check adapters. Coverage includes encrypted organization-bound credentials, hosted/self-hosted endpoint safety, provider protocol handling, pinned Markdown skill versions, source-sharing opt-in, automatic admission and budgets, active cancellation, fallback reservations, rejected-output usage accounting, RBAC, changed-line validation, duplicate publication recovery and model-independent gates. The recorded GitHub check was re-read from GitHub: completed, neutral, exact historical commit `5f8a032974e14e8f402b98dc3a22cfe24e89a3eb`. It is evidence of that acceptance run, not a claim about the current PR head.
+
+The audit corrected two stale organization-standard test fixtures that spread built-in template display metadata into Prisma writes. The production authoring path already normalizes manifests; the fixtures now use the same validator. The prior standards integration fixture was also moved to its own UUID database with all migrations, avoiding reuse of a stale test schema.
+
+Settings and the assessment-backed Findings worklist are described in [Settings and Findings](settings-and-findings.md). Added [check report adapters](engineering-check-adapters.md) retain the original version 1.0.0 catalogue digests and explicitly publish version 1.1.0. AI remains advisory and cannot supply deterministic passing evidence.
+
+## Objective completion audit
+
+| Requirement | Current implementation and verification |
+| --- | --- |
+| P4.1 model configuration, encrypted credentials, org egress and budgets | `ai-configuration.service.ts`, `ai-http.ts`, `skill-review.service.ts`; AI configuration integration/transport tests and gateway manifest tests; recorded hosted and LiteLLM acceptance above |
+| P4.2 read-only structured intelligence, evidence and observed/inferred distinction | `skill-review.service.ts`, `review-skills.ts`, `pr-review-context.ts`; inference, malformed-output, exact-commit citation and applicability tests |
+| P4.3 Explain findings, telemetry, cancellation, safety | `skill-review-panel.tsx`, provider usage projection and review worker; browser review-panel tests and active cancellation integration tests |
+| P4.4 malicious input/output and outage rejection, unchanged deterministic gate | `review-skills.test.ts`, `ai-configuration.integration.test.ts`; injected approval claims, invented references, credentials, outages and gate-before/after comparisons |
+| P4.RBAC and organization isolation | AI configuration and scoped API integration tests cover management, usage visibility, source approval, revoked access and org scope |
+| P4.CQ pinned multiple skills, language/context, deduplication, budgets and optional inline feedback | skill/applicability/context/import tests and automatic review integration tests; historical live neutral check and COMMENT receipts above |
+| Settings and Findings | Authorized controllers/services and routed pages; `scoped-contributors.integration.test.ts`, report-normalization tests and both page browser tests |
+| Previously Planned engineering controls | Immutable built-in packs 1.1.0, shared report adapters, reviewed execution contracts and command reporter; catalogue version/digest tests, all named adapters' negative/positive execution tests and standards API version-upgrade test |
+
+Final regression run: 324 API tests across 24 files, 22 additional scoped API tests, and 65 Chromium tests across eight files passed. API/frontend production builds, full frontend lint and diff whitespace validation passed. Tests use disposable UUID databases and generated inputs. No application database reset or existing-policy upgrade occurred. Current browser session expired before another authenticated UI pass; the populated UI states are covered by Chromium tests and the earlier recorded visual checks, not a new signed-in manual run.
+
+The engineering control implementation is trusted pipeline report evaluation. Preflyt does not automatically install every scanner or rewrite pipelines; approved workflows execute the relevant tools and supply verified reports. Native container dispatch remains limited to its existing tool adapters. Old selections and published policies remain unchanged until explicitly upgraded.

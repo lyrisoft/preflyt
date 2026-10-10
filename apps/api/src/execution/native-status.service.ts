@@ -1,3 +1,4 @@
+import { configurationValue } from '../configuration/runtime-configuration.js'
 import { Inject, Injectable } from '@nestjs/common'
 import { randomUUID } from 'node:crypto'
 import { AuthorizationService } from '../auth/authorization.service.js'
@@ -22,7 +23,7 @@ export class NativeStatusService {
       checkedAt,
       preflightVerified: false,
     }
-    if (process.env.NATIVE_PREFLIGHT_ENABLED !== 'true')
+    if (configurationValue('NATIVE_PREFLIGHT_ENABLED') !== 'true')
       return {
         ...base,
         reason: 'PREFLIGHT_DISABLED',
@@ -89,7 +90,7 @@ export class NativeStatusService {
       if (nativeRuntimeApproval()?.approvalHash !== reviewed.approvalHash)
         throw new Error('Review changed')
       const available =
-        process.env.NATIVE_EXECUTION_ENABLED === 'true' &&
+        configurationValue('NATIVE_EXECUTION_ENABLED') === 'true' &&
         proof.verified &&
         proof.executionAvailable === true
       return {

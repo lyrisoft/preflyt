@@ -16,6 +16,10 @@ else {
     repositoryId: process.env.PREFLYT_SOURCE_REPOSITORY, sourceSha: process.env.PREFLYT_SOURCE_SHA,
     sourceHash: process.env.PREFLYT_SOURCE_HASH,
   }) } catch { reply(2,null) }
+  if (verifiedSourceHash && process.argv[2] === 'security.dependencies') {
+    try { await (await import('./offline-database.mjs')).verifyOfflineDatabase() }
+    catch { verifiedSourceHash = null; reply(2, null) }
+  }
   if (verifiedSourceHash) {
   const child = spawn(adapter.command[0], adapter.args, {
     cwd: '/workspace', stdio: ['ignore', 'ignore', 'ignore'],

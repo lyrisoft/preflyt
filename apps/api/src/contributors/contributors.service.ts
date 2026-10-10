@@ -1,3 +1,4 @@
+import { configurationValue } from '../configuration/runtime-configuration.js'
 import {
   BadRequestException,
   ForbiddenException,
@@ -98,9 +99,17 @@ export class ContributorsService {
       orderBy: [{ observedAt: 'desc' }, { id: 'desc' }],
       take: 5001,
     })
-    if (contributorId && !rows.length)
+    // Filtered absence is not an authorization failure. Verify identity against
+    // the caller's full authorized repository scope before returning an empty profile.
+    const knownContributor = contributorId && !rows.length
+      ? await this.db.contributorObservation.findFirst({
+          where: { contributorId, repositoryId: { in: scope.map((r) => r.id) } },
+          include: { contributor: true },
+        })
+      : null
+    if (contributorId && !rows.length && !knownContributor)
       throw new ForbiddenException(
-        'Contributor is unavailable in this scope or period',
+        'You do not have access to this contributor’s activity. Ask your administrator for access.'
       )
     const truncated = rows.length > 5000,
       observations = rows.slice(0, 5000)
@@ -193,6 +202,20 @@ export class ContributorsService {
         }
       })
       .sort((a, b) => a.login.localeCompare(b.login))
+    if (knownContributor) {
+      const c = knownContributor.contributor
+      data.push({
+        id: c.id, login: c.login, githubUserId: c.githubUserId, kind: c.kind,
+        profileUrl: `https://github.com/${encodeURIComponent(c.login)}`,
+        avatarUrl: `https://avatars.githubusercontent.com/u/${c.githubUserId}?s=80`,
+        membership: 'UNLINKED', repositoryCount: 0,
+        authoredPrs: activityAllowed ? 0 : null,
+        mergedPrs: activityAllowed ? 0 : null,
+        reviews: activityAllowed ? 0 : null,
+        commits: activityAllowed ? 0 : null,
+        lastObservedAt: c.lastObservedAt.toISOString(),
+      })
+    }
     const activity = new Map<string, Set<string>>()
     for (const r of observations) {
       const day = r.observedAt.toISOString().slice(0, 10)
@@ -281,6 +304,7 @@ export class ContributorsService {
       },
     })
     return {
+      emptyActivity: !!contributorId && observations.length === 0,
       choices: scope.map((r) => ({
         githubId: r.githubId.toString(),
         fullName: r.fullName,
@@ -316,8 +340,8 @@ export class ContributorsService {
         : data.slice((page - 1) * 20, page * 20),
       lastReceivedAt: receipt?.receivedAt.toISOString() ?? null,
       collectionEnabled:
-        process.env.GITHUB_EVENTS_ENABLED === 'true' &&
-        (process.env.GITHUB_WEBHOOK_SECRET?.length ?? 0) >= 32,
+        configurationValue('GITHUB_EVENTS_ENABLED') === 'true' &&
+        (configurationValue('GITHUB_WEBHOOK_SECRET')?.length ?? 0) >= 32,
       limitations: [
         'Counts describe observed activity, not employee productivity.',
         'Only selected, authorized installed repositories are included.',
@@ -428,6 +452,8 @@ export class ContributorsService {
     })
     // Access is checked again after upstream requests before committing an administrative sync.
     await this.access.requireRepository(session, id, 'repository.manage')
+    let importedRecords = 0
+    let duplicateRecords = 0
     for (const item of result.observations) {
       const normalized = normalizeContributorEvent(item.event, item.body)
       if (!normalized) continue
@@ -438,7 +464,7 @@ export class ContributorsService {
           ),
         )
         .digest('hex')
-      await captureContributors(
+      const captured = await captureContributors(
         this.db,
         `backfill:${payloadHash}`,
         payloadHash,
@@ -446,6 +472,12 @@ export class ContributorsService {
         normalized.repositoryGithubId,
         normalized.activities,
       )
+      if (!captured.accepted)
+        throw new ForbiddenException(
+          'Repository access changed during contributor import; retry after reconnecting',
+        )
+      if (captured.duplicate) duplicateRecords++
+      else importedRecords += normalized.activities.length
     }
     await this.db.auditEvent.create({
       data: {
@@ -455,12 +487,16 @@ export class ContributorsService {
           organizationId: session.organizationId!,
           repositoryId: id,
           truncated: result.truncated,
+          importedRecords,
+          duplicateRecords,
           limits: result.limits,
         },
       },
     })
     return {
       observations: result.observations.length,
+      importedRecords,
+      duplicateRecords,
       truncated: result.truncated,
       limits: result.limits,
     }

@@ -1,3 +1,4 @@
+import { configurationValue } from '../configuration/runtime-configuration.js'
 import {
   Inject,
   Injectable,
@@ -10,10 +11,10 @@ import { PrismaService } from "../prisma/prisma.service.js";
 import { GitHubProviderService } from "./github-provider.service.js";
 import { attributedSuite, summarizeRulesetSuites } from "./ruleset-insights.js";
 export function insightsHistoryEnabled() {
-  return process.env.RULESET_INSIGHTS_SYNC_ENABLED === "true";
+  return configurationValue('RULESET_INSIGHTS_SYNC_ENABLED') === "true";
 }
 export function insightsRetentionDays() {
-  const value = Number(process.env.RULESET_INSIGHTS_RETENTION_DAYS ?? "90");
+  const value = Number(configurationValue('RULESET_INSIGHTS_RETENTION_DAYS') ?? "90");
   if (!Number.isInteger(value) || value < 30 || value > 365)
     throw new Error("Ruleset history retention must be 30–365 days");
   return value;

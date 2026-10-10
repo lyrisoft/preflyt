@@ -1,3 +1,4 @@
+import { configurationValue } from '../configuration/runtime-configuration.js'
 import { sameReviewPr, prReviewSource } from '../intelligence/pr-review-context.js'
 import type { PullRequestContext } from '../github-events/pull-request-context.js'
 import { readPinnedNativeSource } from '../execution/native-source.js'
@@ -292,7 +293,7 @@ export class GitHubProviderService {
       `${this.requireClientId()}:${this.requireClientSecret()}`,
     ).toString('base64')
     const response = await this.apiFetch(
-      `app:${process.env.GITHUB_APP_ID ?? this.requireClientId()}`,
+      `app:${configurationValue('GITHUB_APP_ID') ?? this.requireClientId()}`,
       `https://api.github.com/applications/${this.requireClientId()}/token`,
       {
         method: 'DELETE',
@@ -1235,7 +1236,7 @@ export class GitHubProviderService {
   private requireApp() {
     if (this.app) return this.app
     const appId = this.requireAppId()
-    const privateKey = process.env.GITHUB_APP_PRIVATE_KEY?.replace(/\\n/g, '\n')
+    const privateKey = configurationValue('GITHUB_APP_PRIVATE_KEY')?.replace(/\\n/g, '\n')
     if (!privateKey)
       throw new ServiceUnavailableException('GitHub App is not configured')
     this.app = new App({
@@ -1252,7 +1253,7 @@ export class GitHubProviderService {
   }
 
   private requireAppId() {
-    const appId = process.env.GITHUB_APP_ID
+    const appId = configurationValue('GITHUB_APP_ID')
     if (!appId || !/^\d+$/.test(appId)) {
       throw new ServiceUnavailableException('GitHub App is not configured')
     }
@@ -1260,21 +1261,21 @@ export class GitHubProviderService {
   }
 
   private requireClientId() {
-    const clientId = process.env.GITHUB_APP_CLIENT_ID
+    const clientId = configurationValue('GITHUB_APP_CLIENT_ID')
     if (!clientId)
       throw new ServiceUnavailableException('GitHub App is not configured')
     return clientId
   }
 
   private requireClientSecret() {
-    const clientSecret = process.env.GITHUB_APP_CLIENT_SECRET
+    const clientSecret = configurationValue('GITHUB_APP_CLIENT_SECRET')
     if (!clientSecret)
       throw new ServiceUnavailableException('GitHub App is not configured')
     return clientSecret
   }
 
   private requireCallbackUrl() {
-    const callback = process.env.GITHUB_APP_OAUTH_CALLBACK_URL
+    const callback = configurationValue('GITHUB_APP_OAUTH_CALLBACK_URL')
     if (!callback)
       throw new ServiceUnavailableException('GitHub App is not configured')
     const url = new URL(callback)

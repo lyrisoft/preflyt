@@ -43,7 +43,7 @@ it('never presents a successful preflight as passing repository checks', () => {
       'Sandbox review and current controls are verified. Running checks is not enabled yet.',
   }
   const html = render()
-  expect(html).toContain('Sandbox preflight verified')
+  expect(html).toContain('Execution setup verified')
   expect(html).toContain('Imported CI only')
   expect(html).toContain('not enabled yet')
   expect(html).not.toContain('Passed')
