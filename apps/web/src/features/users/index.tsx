@@ -1,9 +1,9 @@
 import { getRouteApi } from '@tanstack/react-router'
-import { ConfigDrawer } from '@/components/config-drawer'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
+import { SettingsLink } from '@/components/settings-link'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { UsersDialogs } from './components/users-dialogs'
 import { UsersPrimaryButtons } from './components/users-primary-buttons'
@@ -22,7 +22,7 @@ export function Users() {
       <Header fixed>
         <Search className='me-auto' />
         <ThemeSwitch />
-        <ConfigDrawer />
+        <SettingsLink />
         <ProfileDropdown />
       </Header>
 

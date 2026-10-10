@@ -63,6 +63,15 @@ class AssignmentDto {
   @IsOptional() @Matches(/^[a-f0-9]{64}$/) expectedPreviewHash?: string;
   @IsOptional() @IsString() @MaxLength(100) replacesAssignmentId?: string;
 }
+class ChildScopeDto {
+  @IsArray()
+  @ArrayUnique()
+  @ArrayMaxSize(10)
+  @IsString({ each: true })
+  @MaxLength(100, { each: true })
+  childIds!: string[];
+  @IsOptional() @Matches(/^[a-f0-9]{64}$/) expectedPreviewHash?: string;
+}
 class DiscoveryDto {
   @IsString() @Matches(/^[1-9]\d{0,15}$/) installationId!: string;
 }
@@ -102,7 +111,7 @@ export class TeamsController {
     this.auth.assertOrigin(r.headers.origin);
     return this.teams.importTeam(r.preflytSession, b.installationId, b.teamId);
   }
-  @Header('Cache-Control', 'no-store') @Post('baseline') baseline(@Req() r: R) {
+  @Header("Cache-Control", "no-store") @Post("baseline") baseline(@Req() r: R) {
     this.auth.assertOrigin(r.headers.origin);
     return this.teams.baseline(r.preflytSession);
   }
@@ -133,6 +142,31 @@ export class TeamsController {
   ) {
     this.auth.assertOrigin(r.headers.origin);
     return this.teams.sync(r.preflytSession, id);
+  }
+  @Header("Cache-Control", "no-store")
+  @Post(":id/child-scope/preview")
+  previewChildren(
+    @Req() r: R,
+    @Param("id") id: string,
+    @Body() b: ChildScopeDto,
+  ) {
+    this.auth.assertOrigin(r.headers.origin);
+    return this.teams.previewChildScope(r.preflytSession, id, b.childIds);
+  }
+  @Header("Cache-Control", "no-store")
+  @Post(":id/child-scope/approve")
+  approveChildren(
+    @Req() r: R,
+    @Param("id") id: string,
+    @Body() b: ChildScopeDto,
+  ) {
+    this.auth.assertOrigin(r.headers.origin);
+    return this.teams.approveChildScope(
+      r.preflytSession,
+      id,
+      b.childIds,
+      b.expectedPreviewHash ?? "",
+    );
   }
   @Header("Cache-Control", "no-store") @Post(":id/preview") preview(
     @Req() r: R,

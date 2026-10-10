@@ -485,3 +485,12 @@ it("rejects unauthorized, foreign, stale-hash and stale-standards draft edits", 
       .definitionHash,
   ).toBe(d.definitionHash);
 });
+
+it("rejects policy approval by a proof-linked sign-in, including links made after approval", async () => {
+  const d = (await draft()).body;
+  await approve(d);
+  await db.identityLoginLink.create({ data: { sourceIdentityId: author, targetIdentityId: approver, githubUserId: 123n } });
+  await post(author, `${base}/${d.id}/publish`, { expectedHash: d.definitionHash, expectedPublishedId: null }).expect(409);
+  const next = (await draft()).body;
+  await post(approver, `${base}/${next.id}/approve`, { expectedHash: next.definitionHash }).expect(409);
+});

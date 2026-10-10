@@ -8,6 +8,7 @@ const login = {
   transactionCookie: 'github-transaction',
   onboardingCookie: 'github-proof',
   isWorkspaceLinkCallback: vi.fn(),
+  isIdentityLinkCallback: vi.fn(),
   complete: vi.fn(),
   enter: vi.fn(),
   cancelWorkspaceLink: vi.fn(),
@@ -117,4 +118,23 @@ it('cancellation verifies origin and clears only the link proof', async () => {
   )
   expect(res.clearCookie).toHaveBeenCalledTimes(1)
   expect(vi.mocked(res.clearCookie).mock.calls[0]?.[0]).toBe('github-proof')
+})
+
+it('returns identity-link confirmation to Settings without replacing the original session', async () => {
+  login.isIdentityLinkCallback.mockResolvedValue(true)
+  login.complete.mockResolvedValue({ challengeToken: 'proof', linkingIdentity: true })
+  const res = response()
+  await controller().callback(request(), res)
+  expect(res.redirect).toHaveBeenCalledWith(auth.frontendOrigin + '/organization-settings?identityLink=confirm')
+  expect(res.cookie).toHaveBeenCalledTimes(1)
+  expect(vi.mocked(res.cookie).mock.calls[0]?.[0]).toBe('github-proof')
+})
+it('returns failed identity proof to Settings and preserves the original session', async () => {
+  login.isIdentityLinkCallback.mockResolvedValue(true)
+  login.complete.mockRejectedValue(new Error('Provider unavailable'))
+  const res = response()
+  await controller().callback(request(), res)
+  expect(res.redirect).toHaveBeenCalledWith(auth.frontendOrigin + '/organization-settings?identityLink=failed')
+  expect(res.cookie).not.toHaveBeenCalled()
+  expect(vi.mocked(res.clearCookie).mock.calls.every(([name]) => name !== auth.sessionCookieName)).toBe(true)
 })

@@ -54,3 +54,23 @@ it('rejects a PR diff when the live head changes during file collection', async 
   expect(read).toHaveBeenCalledTimes(2)
   provider.close()
 })
+
+
+it('verifies published checks with a repository-scoped Checks read token', async () => {
+  const provider = new GitHubProviderService() as any
+  const sourceSha = 'a'.repeat(40)
+  vi.spyOn(provider, 'checkPublicationAccess').mockResolvedValue({appId: '55'})
+  vi.spyOn(provider, 'verifyInstallation').mockResolvedValue({id:500n})
+  const mint = vi.spyOn(provider, 'appRequest').mockResolvedValue({data:{token:'read-check-token', expires_at:new Date(Date.now()+3600000).toISOString()}})
+  const fetchMock = vi.fn(async (url: string) => new Response(JSON.stringify(
+    url.endsWith('/repositories/501')
+      ? {id:501, owner:{login:'fixture'}, name:'app'}
+      : {id:123, app:{id:55}, head_sha:sourceSha, name:'Preflyt / Engineering Readiness', status:'completed', conclusion:'success', external_id:'b'.repeat(64), output:{title:'Passed'}}
+  ), {status:200}))
+  vi.stubGlobal('fetch', fetchMock)
+  await expect(provider.readPublishedReadinessCheck(500n,501n,'123',sourceSha)).resolves.toMatchObject({conclusion:'success'})
+  expect(mint.mock.calls[0][1]).toMatchObject({repository_ids:[501], permissions:{metadata:'read', checks:'read'}})
+  expect((mint.mock.calls[0][1] as any).permissions).not.toHaveProperty('contents')
+  expect((mint.mock.calls[0][1] as any).permissions).not.toHaveProperty('administration')
+  provider.close()
+})

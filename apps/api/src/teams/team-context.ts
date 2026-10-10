@@ -1,8 +1,9 @@
+import { verifyNestedScope } from './nested-team-scope.js';
 import { ConflictException } from "@nestjs/common";
 import type { PrismaService } from "../prisma/prisma.service.js";
 import { digest } from "../assessments/assessment-digest.js";
 export async function verifyTeamContext(
-  db: Pick<PrismaService, "preflytTeam" | "teamPolicyAssignment">,
+  db: Pick<PrismaService, "preflytTeam" | "teamPolicyAssignment" | "teamRepositoryScope">,
   repositoryId: string,
   context: unknown,
 ) {
@@ -33,6 +34,7 @@ export async function verifyTeamContext(
         },
       },
     });
+    if (team) await verifyNestedScope(db, team);
     const assignment = await db.teamPolicyAssignment.findFirst({
       where: {
         id: source.assignmentId,
@@ -61,7 +63,7 @@ export async function verifyTeamContext(
 }
 /** Current approved team scope is mandatory; repository edits may strengthen it only. */
 export async function inheritedTeamStandards(
-  db: Pick<PrismaService, "teamPolicyAssignment" | "preflytTeam">,
+  db: Pick<PrismaService, "teamPolicyAssignment" | "preflytTeam" | "teamRepositoryScope">,
   repositoryId: string,
   organizationId: string,
 ) {

@@ -539,7 +539,14 @@ export function SkillsCatalogue() {
           if (!open && !busy) setSelected(undefined)
         }}
       >
-        <SheetContent className='flex w-full flex-col sm:max-w-xl'>
+        <SheetContent
+          className='flex w-full flex-col sm:max-w-xl'
+          onCloseAutoFocus={(event) => {
+            // The new-version dialog owns focus during this handoff. Returning
+            // focus to the closing sheet's trigger can dismiss the editor.
+            if (editing !== undefined) event.preventDefault()
+          }}
+        >
           <SheetHeader>
             <SheetTitle>
               {selected?.name} · v{selected?.version}

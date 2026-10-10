@@ -1,3 +1,4 @@
+import { sameIdentity } from '../auth/same-identity.js';
 import { configurationValue } from '../configuration/runtime-configuration.js'
 import { recordRulesetNotification } from "../notifications/notification-event.js";
 import { randomUUID } from "node:crypto";
@@ -454,7 +455,7 @@ export class RulesetDeploymentService {
     hash: string,
   ) {
     const { row } = await this.row(session, id, deploymentId, hash);
-    if (row.proposedById === session.identityId)
+    if (await sameIdentity(this.prisma, row.proposedById, session.identityId))
       throw new ForbiddenException(
         "Another authorized administrator must approve ruleset activation",
       );
@@ -492,6 +493,7 @@ export class RulesetDeploymentService {
     const { repo, row } = await this.row(session, id, deploymentId, hash);
     if (
       !row.approvedById ||
+      await sameIdentity(this.prisma, row.approvedById, row.proposedById) ||
       !["APPROVED", "UNKNOWN", "DEPLOYING"].includes(row.state)
     )
       throw new ConflictException(

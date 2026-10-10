@@ -20,6 +20,9 @@ vi.mock('@tanstack/react-query', () => ({
 vi.mock('../workspace/navigation-session', () => ({
   useNavigationSession: () => state.session,
 }))
+vi.mock('./github-identity-link', () => ({
+  GitHubIdentityLink: () => <section>GitHub account linking</section>,
+}))
 vi.mock('./configuration-panel', () => ({
   ConfigurationPanel: () => <section>System settings controls</section>,
 }))

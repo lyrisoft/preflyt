@@ -18,6 +18,7 @@ type Organization = {
   state:
     | 'new'
     | 'existing'
+    | 'recovery_available'
     | 'no_access'
     | 'migration_required'
     | 'link_existing'
@@ -70,7 +71,7 @@ export function GitHubOnboarding() {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ installationId: org.installationId }),
+        body: JSON.stringify({ installationId: org.installationId, recoverOwner: org.state === 'recovery_available' }),
       })
       const result = await r.json()
       if (!r.ok)
@@ -137,7 +138,9 @@ export function GitHubOnboarding() {
                     ? 'This installation does not belong to the workspace you are linking.'
                     : org.state === 'migration_required'
                       ? 'This workspace already has connected repositories. A workspace administrator must link it to this GitHub organization before GitHub sign-in can be used. Sign in with your existing administrator account, then open Access Control → GitHub members → Link GitHub organization.'
-                      : org.state === 'no_access'
+                      : org.state === 'recovery_available'
+                        ? 'This workspace has no active Owner. A verified GitHub organization owner can recover it. Existing repositories, policies and history stay in place.'
+                        : org.state === 'no_access'
                         ? 'Ask your Preflyt administrator to give you access.'
                         : org.state === 'new'
                           ? 'An organization owner can connect this workspace. Your ownership will be verified.'
@@ -163,7 +166,7 @@ export function GitHubOnboarding() {
                   </Link>
                 </div>
               )}
-              {['new', 'existing', 'link_existing'].includes(org.state) && (
+              {['new', 'existing', 'link_existing', 'recovery_available'].includes(org.state) && (
                 <Button
                   onClick={() => void enter(org)}
                   disabled={busy !== null}
@@ -173,7 +176,7 @@ export function GitHubOnboarding() {
                     ? 'Verifying access…'
                     : org.state === 'link_existing'
                       ? 'Link organization and continue'
-                      : org.state === 'new'
+                      : org.state === 'recovery_available' ? 'Recover workspace ownership' : org.state === 'new'
                         ? 'Connect organization'
                         : 'Continue'}
                   <ArrowRight className='size-4' />
