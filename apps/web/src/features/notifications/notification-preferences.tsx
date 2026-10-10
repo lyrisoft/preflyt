@@ -23,6 +23,7 @@ export function NotificationPreferences() {
         emailAddressAvailable: boolean
       }>('/preferences', signal),
     enabled: !!session.data?.identityId,
+    meta: { silent: true },
     gcTime: 0,
     retry: false,
   })
@@ -48,7 +49,7 @@ export function NotificationPreferences() {
     <section className='overflow-hidden rounded-xl border bg-card shadow-xs'>
       <div className='flex items-center gap-3 border-b bg-muted/20 px-6 py-5'>
         <SurfaceIcon icon={Bell} tone='teal' />
-        <h2 className='text-base font-semibold'>Notifications</h2>
+        <h2 className='text-base font-semibold'>Your notifications</h2>
       </div>
       <div className='flex items-start justify-between gap-6 px-6 py-5'>
         <div>
@@ -62,9 +63,9 @@ export function NotificationPreferences() {
             Receive new in-app updates for your assessments and repositories you
             lead. Existing notifications stay in your inbox.
           </p>
-          {(save.isError || preference.isError) && (
+          {preference.isError && (
             <p role='alert' className='mt-2 text-xs text-destructive'>
-              Could not load or save preferences. Try again.
+              Could not load preferences. Try again.
             </p>
           )}
         </div>
@@ -88,13 +89,13 @@ export function NotificationPreferences() {
             className='flex items-center gap-2 text-sm font-semibold'
           >
             <Mail className='size-4 text-muted-foreground' />
-            Email notifications
+            Personal email notifications
           </label>
           <p className='mt-2 max-w-xl text-sm leading-6 text-muted-foreground'>
             {!preference.data?.emailEnabled
               ? 'Email delivery is not enabled for this deployment.'
               : !preference.data.emailAddressAvailable
-                ? 'Your sign-in account does not provide an email address. In-app notifications still work.'
+                ? 'Your account has no email address for personal alerts. Organization channels above use their own recipients; in-app notifications still work.'
                 : 'Receive a short email linking to your inbox. Repository and report details stay in Preflyt.'}
           </p>
         </div>
@@ -116,8 +117,8 @@ export function NotificationPreferences() {
         />
       </div>
       <p className='border-t bg-muted/20 px-6 py-4 text-xs leading-5 text-muted-foreground'>
-        Policy publication notices stay in your in-app inbox even when
-        assessment alerts are turned off.
+        Security, policy and AI configuration notices stay in your in-app inbox
+        even when assessment alerts are turned off.
       </p>
     </section>
   )

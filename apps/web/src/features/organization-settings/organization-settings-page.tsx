@@ -31,6 +31,7 @@ import { PageHeader } from '@/components/page-header'
 import { PageHelpDrawer } from '@/components/page-help-drawer'
 import { SurfaceIcon } from '@/components/surface-icon'
 import { NotificationPreferences } from '@/features/notifications/notification-preferences'
+import { OrganizationNotificationChannels } from '@/features/notifications/organization-notification-channels'
 import { useNavigationSession } from '@/features/workspace/navigation-session'
 import { ConfigurationPanel } from './configuration-panel'
 
@@ -76,6 +77,7 @@ export function OrganizationSettingsPage() {
     queryKey: key,
     queryFn: ({ signal }) => settingsRequest<Settings>({ signal }),
     enabled: session.isSuccess,
+    meta: { silent: true },
     retry: false,
     gcTime: 0,
   })
@@ -114,6 +116,12 @@ export function OrganizationSettingsPage() {
                 void client.invalidateQueries({
                   queryKey: ['deployment-configuration'],
                 })
+                void client.invalidateQueries({
+                  queryKey: ['organization-notification-channels'],
+                })
+                void client.invalidateQueries({
+                  queryKey: ['notification-preferences'],
+                })
               }}
             >
               <RefreshCw className='size-4' />
@@ -131,6 +139,11 @@ export function OrganizationSettingsPage() {
                   title: 'Deployment configuration',
                   content:
                     'Super Admin can configure system-wide GitHub connections, single sign-on, SMTP and feature switches here. Saved secrets are encrypted and never returned to the browser. An empty secret field keeps its saved value; Clear saved removes it on save. Connection changes need an API and worker restart. Feature switches and history retention refresh every five seconds; background work applies them on its next run. Preflyt-run checks still require approved execution setup and tool reviews; AI reviews still require approved models and skills. Database, queue, origins, encryption keys and execution trust approvals remain deployment secrets. Existing environment settings are imported once on first startup; stored settings then take precedence.',
+                },
+                {
+                  title: 'Organization notification channels',
+                  content:
+                    'Owners and Admins can add multiple named email groups for organization-wide updates across connected repositories. Each channel supports up to 20 recipients. Email delivery uses deployment SMTP configuration; channels can be saved while delivery is unavailable. A test email is queued for the worker, and delivery status updates here. Email sent means the mail server accepted it, not that a recipient read it. Pausing cancels queued emails; an email already being sent cannot be recalled. Organization channels are independent of your personal notification preferences and sign-in email. In-app access remains required to open linked content.',
                 },
                 {
                   title: 'Personal preferences',
@@ -218,11 +231,6 @@ export function OrganizationSettingsPage() {
                         </dd>
                       </div>
                     </dl>
-                    {save.isError && (
-                      <p role='alert' className='text-sm text-destructive'>
-                        {save.error.message}
-                      </p>
-                    )}
                   </div>
                   {settings.data.canUpdate && (
                     <div className='flex justify-end border-t bg-muted/20 px-6 py-4'>
@@ -312,7 +320,8 @@ export function OrganizationSettingsPage() {
             )
           )}
         </TabsContent>
-        <TabsContent value='notifications' className='max-w-4xl'>
+        <TabsContent value='notifications' className='max-w-4xl space-y-8'>
+          <OrganizationNotificationChannels />
           <NotificationPreferences />
         </TabsContent>
         <TabsContent value='appearance' className='max-w-4xl'>

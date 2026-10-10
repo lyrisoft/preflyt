@@ -6,6 +6,9 @@ import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 vi.mock('../src/execution/native-runtime.js', () => ({
   nativeRuntimeApproval: vi.fn(),
 }))
+vi.mock('../src/execution/native-controller-client.js', () => ({
+  nativeControllerCall: vi.fn(),
+}))
 import { nativeRuntimeApproval } from '../src/execution/native-runtime.js'
 import { PrismaService } from '../src/prisma/prisma.service.js'
 import { AuthorizationService } from '../src/auth/authorization.service.js'
@@ -13,6 +16,14 @@ import { AssessmentService } from '../src/assessments/assessment.service.js'
 import { NativePlanService } from '../src/execution/native-plan.service.js'
 import { NativeRequestService } from '../src/execution/native-request.service.js'
 import { NativeResultService } from '../src/execution/native-result.service.js'
+import { NativeDispatchService } from '../src/execution/native-dispatch.service.js'
+import { nativeControllerCall } from '../src/execution/native-controller-client.js'
+import { deliverNotification } from '../src/notifications/notification-delivery.js'
+import { NotificationsService } from '../src/notifications/notifications.service.js'
+import {
+  assessmentNotification,
+  nativeExecutionFailureId,
+} from '../src/notifications/notification-event.js'
 import {
   nativeAdapters,
   nativeToolReviews,
@@ -88,6 +99,8 @@ afterAll(async () => {
 })
 beforeEach(async () => {
   // This client is created only after the dedicated UUID database exists. Never use the original URL for mutation.
+  vi.stubEnv('NOTIFICATIONS_ENABLED', 'false')
+  await db.notificationEvent.deleteMany()
   await db.gitHubRepository.deleteMany()
   await db.gitHubInstallation.deleteMany()
   await db.organization.deleteMany()
@@ -448,4 +461,455 @@ it('queues only reviewed tools after signed execution capability and explicit op
       })
     ).state,
   ).toBe('BLOCKED')
+})
+
+it('records a verified native failure and one attempt alert before saving the assessment, including replay', async () => {
+  vi.stubEnv('NOTIFICATIONS_ENABLED', 'true')
+  const f = await admitted('FAIL')
+  await service.complete(f.record.id, f.signature)
+  const assessment = await db.commitAssessment.findFirstOrThrow({
+    where: { repositoryId: repoId },
+  })
+  expect(assessmentNotification(assessment.report).type).toBe(
+    'ASSESSMENT_FAILED',
+  )
+  const event = await db.notificationEvent.findUniqueOrThrow({
+    where: {
+      id: nativeExecutionFailureId(f.record.id, f.record.controllerJobId!),
+    },
+  })
+  expect(event).toMatchObject({
+    type: 'NATIVE_EXECUTION_FAILED',
+    severity: 'error',
+    organizationId: actor.organizationId,
+    repositoryId: repoId,
+    repositoryGithubId: '51',
+    sourceSha: f.record.sourceSha,
+    actorId: actor.identityId,
+  })
+  expect(event.assessmentId).toBeNull()
+  expect(await db.notificationEvent.count()).toBe(1)
+  expect((await service.complete(f.record.id, f.signature)).duplicate).toBe(
+    true,
+  )
+  expect(await db.notificationEvent.count()).toBe(1)
+  expect(await db.commitAssessment.count()).toBe(1)
+})
+it('rolls back a failed execution state when its outbox insertion fails', async () => {
+  vi.stubEnv('NOTIFICATIONS_ENABLED', 'true')
+  const f = await admitted('FAIL')
+  const failingDb = new Proxy(db, {
+    get(target, property) {
+      if (property !== '$transaction') return Reflect.get(target, property)
+      return async (call: (tx: any) => Promise<unknown>, options: any) =>
+        db.$transaction(async (tx) => {
+          const fail = vi
+            .spyOn(tx.notificationEvent, 'createMany')
+            .mockRejectedValueOnce(new Error('outbox unavailable'))
+          try {
+            return await call(tx)
+          } finally {
+            fail.mockRestore()
+          }
+        }, options)
+    },
+  })
+  const failingService = new NativeResultService(
+    failingDb,
+    new AuthorizationService(db),
+    new AssessmentService(db),
+  )
+  await expect(
+    failingService.complete(f.record.id, f.signature),
+  ).rejects.toThrow('outbox unavailable')
+  expect(await db.notificationEvent.count()).toBe(0)
+  expect(await db.commitAssessment.count()).toBe(0)
+  const live = await db.nativeExecutionRequest.findUniqueOrThrow({
+    where: { id: f.record.id },
+  })
+  expect(live.state).toBe('RUNNING')
+  expect(live.receiptHash).toBeNull()
+  await service.complete(f.record.id, f.signature)
+  expect(await db.notificationEvent.count()).toBe(1)
+})
+it('does not emit a native failure notification for user cancellation or partial coverage', async () => {
+  vi.stubEnv('NOTIFICATIONS_ENABLED', 'true')
+  const cancelled = await admitted()
+  await requests.cancel(actor, '51', cancelled.record.id)
+  await service.complete(cancelled.record.id, cancelled.signature)
+  expect(await db.notificationEvent.count()).toBe(0)
+  const partial = await admitted()
+  partial.value.checks.forEach((check) => {
+    check.coverage = 'PARTIAL'
+  })
+  expect(
+    (await service.complete(partial.record.id, seal(partial.value))).state,
+  ).toBe('BLOCKED')
+  expect(
+    await db.notificationEvent.count({
+      where: { type: 'NATIVE_EXECUTION_FAILED' },
+    }),
+  ).toBe(0)
+  expect(
+    await db.notificationEvent.count({
+      where: { type: 'ASSESSMENT_INCOMPLETE' },
+    }),
+  ).toBe(1)
+})
+it('records a signed tool execution error as a failure notice while its evidence stays incomplete', async () => {
+  vi.stubEnv('NOTIFICATIONS_ENABLED', 'true')
+  const f = await admitted('INCOMPLETE')
+  f.value.checks.forEach((check) => {
+    check.reason = 'TOOL_EXECUTION_FAILED'
+  })
+  expect((await service.complete(f.record.id, seal(f.value))).state).toBe(
+    'BLOCKED',
+  )
+  expect(
+    await db.notificationEvent.count({
+      where: { type: 'NATIVE_EXECUTION_FAILED' },
+    }),
+  ).toBe(1)
+  expect(await db.notificationEvent.count()).toBe(1)
+  expect((await gate()).status).toBe('INCOMPLETE')
+})
+it.each([
+  { reason: 'EXECUTION_UNAVAILABLE', cleanupConfirmed: true },
+  { reason: 'CLEANUP_UNCONFIRMED', cleanupConfirmed: false },
+])(
+  'records signed $reason with no exit status while the check remains incomplete',
+  async ({ reason, cleanupConfirmed }) => {
+    vi.stubEnv('NOTIFICATIONS_ENABLED', 'true')
+    const f = await admitted('INCOMPLETE')
+    f.value.checks.forEach((check) => {
+      check.exitCode = null
+      check.reason = reason
+      check.cleanupConfirmed = cleanupConfirmed
+      check.reportHash = null
+      check.summary = null
+    })
+    const signature = seal(f.value)
+    expect((await service.complete(f.record.id, signature)).state).toBe(
+      'BLOCKED',
+    )
+    const event = await db.notificationEvent.findUniqueOrThrow({
+      where: {
+        id: nativeExecutionFailureId(f.record.id, f.record.controllerJobId!),
+      },
+    })
+    expect(event).toMatchObject({
+      type: 'NATIVE_EXECUTION_FAILED',
+      severity: 'error',
+    })
+    expect(await db.notificationEvent.count()).toBe(1)
+    const assessment = await db.commitAssessment.findFirstOrThrow({
+      where: { repositoryId: repoId },
+    })
+    expect(assessmentNotification(assessment.report).type).toBe(
+      'ASSESSMENT_INCOMPLETE',
+    )
+    expect((await gate()).status).toBe('INCOMPLETE')
+    expect((await service.complete(f.record.id, signature)).duplicate).toBe(
+      true,
+    )
+    expect(await db.notificationEvent.count()).toBe(1)
+  },
+)
+it.each([
+  { reason: 'EXECUTION_UNAVAILABLE', cleanupConfirmed: true },
+  { reason: 'CLEANUP_UNCONFIRMED', cleanupConfirmed: false },
+])(
+  'keeps user cancellation silent for signed $reason with no exit status',
+  async ({ reason, cleanupConfirmed }) => {
+    vi.stubEnv('NOTIFICATIONS_ENABLED', 'true')
+    const f = await admitted('INCOMPLETE')
+    await requests.cancel(actor, '51', f.record.id)
+    f.value.cancelled = true
+    f.value.checks.forEach((check) => {
+      check.exitCode = null
+      check.reason = reason
+      check.cleanupConfirmed = cleanupConfirmed
+      check.reportHash = null
+      check.summary = null
+    })
+    expect((await service.complete(f.record.id, seal(f.value))).state).toBe(
+      cleanupConfirmed ? 'CANCELLED' : 'BLOCKED',
+    )
+    expect(
+      await db.notificationEvent.count({
+        where: { type: 'NATIVE_EXECUTION_FAILED' },
+      }),
+    ).toBe(0)
+  },
+)
+it('does not treat an incomplete report without an exit status as a runtime failure', async () => {
+  vi.stubEnv('NOTIFICATIONS_ENABLED', 'true')
+  const f = await admitted('INCOMPLETE')
+  f.value.checks.forEach((check) => {
+    check.exitCode = null
+    check.reason = 'REPORT_UNAVAILABLE'
+    check.coverage = 'PARTIAL'
+    check.reportHash = null
+    check.summary = null
+  })
+  expect((await service.complete(f.record.id, seal(f.value))).state).toBe(
+    'BLOCKED',
+  )
+  expect(
+    await db.notificationEvent.count({
+      where: { type: 'NATIVE_EXECUTION_FAILED' },
+    }),
+  ).toBe(0)
+  expect((await gate()).status).toBe('INCOMPLETE')
+})
+it('does not misclassify a worker interruption as user cancellation during signed cleanup', async () => {
+  vi.stubEnv('NOTIFICATIONS_ENABLED', 'true')
+  const f = await admitted()
+  await db.nativeExecutionRequest.update({
+    where: { id: f.record.id },
+    data: { state: 'CANCEL_REQUESTED', reason: 'EXECUTION_INTERRUPTED' },
+  })
+  f.value.cancelled = true
+  f.value.checks.forEach((check) => {
+    check.state = 'INCOMPLETE'
+    check.reason = 'EXECUTION_CANCELLED'
+    check.coverage = 'PARTIAL'
+  })
+  expect((await service.complete(f.record.id, seal(f.value))).state).toBe(
+    'FAILED',
+  )
+  expect(await db.notificationEvent.count()).toBe(1)
+  expect((await gate()).status).toBe('INCOMPLETE')
+})
+
+function dispatcher() {
+  vi.stubEnv('NATIVE_EXECUTION_ENABLED', 'true')
+  return new NativeDispatchService(
+    db,
+    new AuthorizationService(db),
+    {
+      readNativeSource: vi.fn(async () => {
+        throw new Error('Running attempts must not export source again')
+      }),
+    } as any,
+    { status: async () => ({ executionAvailable: true }) } as any,
+    service,
+  )
+}
+it('atomically records an admitted timeout once and does not re-notify a terminal attempt', async () => {
+  vi.stubEnv('NOTIFICATIONS_ENABLED', 'true')
+  const f = await admitted()
+  await db.nativeExecutionRequest.update({
+    where: { id: f.record.id },
+    data: { leaseUntil: null, requestedAt: new Date(Date.now() - 1800001) },
+  })
+  vi.mocked(nativeControllerCall).mockRejectedValue(
+    new Error('private controller error'),
+  )
+  const worker = dispatcher()
+  await worker.reconcile()
+  expect(
+    (
+      await db.nativeExecutionRequest.findUniqueOrThrow({
+        where: { id: f.record.id },
+      })
+    ).state,
+  ).toBe('TIMED_OUT')
+  expect(
+    await db.notificationEvent.count({
+      where: { type: 'NATIVE_EXECUTION_FAILED' },
+    }),
+  ).toBe(1)
+  expect(await db.commitAssessment.count()).toBe(0)
+  await worker.reconcile()
+  expect(await db.notificationEvent.count()).toBe(1)
+})
+it('records admitted infrastructure failure on missing completion proof, without creating trusted evidence', async () => {
+  vi.stubEnv('NOTIFICATIONS_ENABLED', 'true')
+  const f = await admitted()
+  await db.nativeExecutionRequest.update({
+    where: { id: f.record.id },
+    data: { leaseUntil: null },
+  })
+  vi.mocked(nativeControllerCall).mockResolvedValue({ state: 'COMPLETE' })
+  await dispatcher().reconcile()
+  const live = await db.nativeExecutionRequest.findUniqueOrThrow({
+    where: { id: f.record.id },
+  })
+  expect(live.state).toBe('FAILED')
+  expect(live.receiptHash).toBeNull()
+  expect(
+    await db.notificationEvent.count({
+      where: { type: 'NATIVE_EXECUTION_FAILED' },
+    }),
+  ).toBe(1)
+  expect(await db.commitAssessment.count()).toBe(0)
+})
+it('does not emit failure alerts for user cancellation that reaches the worker deadline', async () => {
+  vi.stubEnv('NOTIFICATIONS_ENABLED', 'true')
+  const f = await admitted()
+  await requests.cancel(actor, '51', f.record.id)
+  await db.nativeExecutionRequest.update({
+    where: { id: f.record.id },
+    data: { leaseUntil: null, requestedAt: new Date(Date.now() - 1800001) },
+  })
+  vi.mocked(nativeControllerCall).mockRejectedValue(
+    new Error('controller unavailable'),
+  )
+  await dispatcher().reconcile()
+  expect(await db.notificationEvent.count()).toBe(0)
+})
+it('distinguishes confirmed worker-interruption cleanup from user cancellation', async () => {
+  vi.stubEnv('NOTIFICATIONS_ENABLED', 'true')
+  const f = await admitted()
+  await db.nativeExecutionRequest.update({
+    where: { id: f.record.id },
+    data: { leaseUntil: null },
+  })
+  f.value.cancelled = true
+  f.value.checks.forEach((check) => {
+    check.state = 'INCOMPLETE'
+    check.reason = 'EXECUTION_CANCELLED'
+    check.coverage = 'PARTIAL'
+  })
+  vi.mocked(nativeControllerCall)
+    .mockRejectedValueOnce(new Error('controller status unavailable'))
+    .mockResolvedValue({ state: 'COMPLETE', signature: seal(f.value) })
+  await dispatcher().reconcile()
+  const live = await db.nativeExecutionRequest.findUniqueOrThrow({
+    where: { id: f.record.id },
+  })
+  expect(live.state).toBe('FAILED')
+  expect(live.reason).toBe('EXECUTION_UNAVAILABLE')
+  expect(await db.notificationEvent.count()).toBe(1)
+  expect(await db.commitAssessment.count()).toBe(0)
+})
+
+it('delivers native failure alerts only to current authorized repository recipients and hides revoked grants', async () => {
+  vi.stubEnv('NOTIFICATIONS_ENABLED', 'true')
+  const f = await admitted('FAIL')
+  await service.complete(f.record.id, f.signature)
+  const eventId = nativeExecutionFailureId(
+    f.record.id,
+    f.record.controllerJobId!,
+  )
+  const granted = await db.identity.create({
+    data: { issuer: 'fixture', subject: randomUUID() },
+  })
+  const unassigned = await db.identity.create({
+    data: { issuer: 'fixture', subject: randomUUID() },
+  })
+  const foreign = await db.identity.create({
+    data: { issuer: 'fixture', subject: randomUUID() },
+  })
+  const outside = await db.organization.create({
+    data: { name: 'foreign notification scope' },
+  })
+  const membership = await db.organizationMembership.create({
+    data: {
+      identityId: granted.id,
+      organizationId: actor.organizationId!,
+      role: 'SECURITY_ENGINEER',
+    },
+  })
+  await db.organizationMembership.create({
+    data: {
+      identityId: unassigned.id,
+      organizationId: actor.organizationId!,
+      role: 'SECURITY_ENGINEER',
+    },
+  })
+  const foreignMembership = await db.organizationMembership.create({
+    data: {
+      identityId: foreign.id,
+      organizationId: outside.id,
+      role: 'SECURITY_ENGINEER',
+    },
+  })
+  await db.repositoryGrant.createMany({
+    data: [
+      { membershipId: membership.id, repositoryId: repoId },
+      { membershipId: foreignMembership.id, repositoryId: repoId },
+    ],
+  })
+  await deliverNotification(db, eventId)
+  expect(
+    (
+      await db.inboxNotification.findMany({
+        where: { eventId },
+        select: { identityId: true },
+      })
+    )
+      .map((item) => item.identityId)
+      .sort(),
+  ).toEqual([actor.identityId, granted.id].sort())
+  const notifications = new NotificationsService(
+    db,
+    new AuthorizationService(db),
+  )
+  const securitySession = {
+    ...actor,
+    identityId: granted.id,
+    subject: granted.subject,
+    role: 'SECURITY_ENGINEER',
+  }
+  expect(
+    (
+      await notifications.list(securitySession, {
+        type: 'NATIVE_EXECUTION_FAILED',
+      })
+    ).total,
+  ).toBe(1)
+  await db.repositoryGrant.deleteMany({
+    where: { membershipId: membership.id },
+  })
+  expect(
+    (
+      await notifications.list(securitySession, {
+        type: 'NATIVE_EXECUTION_FAILED',
+      })
+    ).items,
+  ).toEqual([])
+  expect(
+    (
+      await notifications.list(
+        { ...securitySession, organizationId: outside.id },
+        {},
+      )
+    ).items,
+  ).toEqual([])
+})
+
+it('does not accept a late passing receipt after an admitted worker interruption', async () => {
+  vi.stubEnv('NOTIFICATIONS_ENABLED', 'true')
+  const f = await admitted()
+  await db.nativeExecutionRequest.update({
+    where: { id: f.record.id },
+    data: { state: 'CANCEL_REQUESTED', reason: 'EXECUTION_INTERRUPTED' },
+  })
+  expect((await service.complete(f.record.id, f.signature)).state).toBe(
+    'CANCELLED',
+  )
+  expect(await db.commitAssessment.count()).toBe(0)
+  expect(await db.notificationEvent.count()).toBe(0)
+})
+
+it('notifies a signed controller restart interruption of a running attempt without accepting cancelled evidence', async () => {
+  vi.stubEnv('NOTIFICATIONS_ENABLED', 'true')
+  const f = await admitted()
+  f.value.cancelled = true
+  f.value.checks.forEach((check) => {
+    check.state = 'INCOMPLETE'
+    check.reason = 'EXECUTION_CANCELLED'
+    check.coverage = 'PARTIAL'
+  })
+  expect((await service.complete(f.record.id, seal(f.value))).state).toBe(
+    'FAILED',
+  )
+  expect(
+    await db.notificationEvent.count({
+      where: { type: 'NATIVE_EXECUTION_FAILED' },
+    }),
+  ).toBe(1)
+  expect((await gate()).status).toBe('INCOMPLETE')
 })

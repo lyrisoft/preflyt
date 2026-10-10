@@ -1,3 +1,5 @@
+import { isMandatoryNotification } from "./notification-classification.js";
+import { isAiNotification } from "./ai-notification.js";
 import { isGovernanceNotification } from "./notification-event.js";
 import type { PrismaService } from "../prisma/prisma.service.js";
 import type { AuthorizationService } from "../auth/authorization.service.js";
@@ -44,7 +46,7 @@ export async function deliverNotificationEmail(
     });
     if (
       !preference?.email ||
-      (!isGovernanceNotification(event.type) && !preference.assessments) ||
+      (!isMandatoryNotification(event.type) && !preference.assessments) ||
       !validNotificationEmail(identity?.email)
     ) {
       await db.notificationEmailDelivery.update({
@@ -65,7 +67,11 @@ export async function deliverNotificationEmail(
       subject: "",
       email: null,
     };
-    await authorization.membership(identityId, event.organizationId, true);
+    const member = await authorization.membership(identityId, event.organizationId, true);
+    if (isAiNotification(event.type) && (!member?.active || !['OWNER', 'ADMIN'].includes(member.role))) {
+      await db.notificationEmailDelivery.update({ where: { id }, data: { state: 'SKIPPED', failureCode: 'ACCESS_REVOKED', leaseUntil: null } });
+      return;
+    }
     await authorization.requireRepository(
       session,
       event.repositoryGithubId,

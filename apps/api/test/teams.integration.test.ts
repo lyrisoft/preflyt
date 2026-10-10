@@ -23,6 +23,7 @@ import { TeamsService } from "../src/teams/teams.service.js";
 import { TeamsController } from "../src/teams/teams.controller.js";
 import { GatePolicyService } from "../src/assessments/gate-policy.service.js";
 import { verifyTeamContext } from "../src/teams/team-context.js";
+import { digest } from "../src/assessments/assessment-digest.js";
 let db: PrismaService,
   admin: Client,
   app: INestApplication,
@@ -218,6 +219,15 @@ it("creates a local team without granting membership or repository access", asyn
   const detail = (await get(owner, "/" + id).expect(200)).body;
   expect(detail.members).toHaveLength(1);
   expect(detail.repositories[0].policyScopeEnabled).toBe(true);
+  expect(detail.impact).toEqual([
+    expect.objectContaining({
+      githubId: "101",
+      branchRef: null,
+      policyId: null,
+      state: "NOT_ASSIGNED",
+      current: false,
+    }),
+  ]);
   expect(
     await db.repositoryGrant.count({ where: { membershipId: m.id } }),
   ).toBe(0);
@@ -586,4 +596,200 @@ it("allows scope removal before a team has assigned standards", async () => {
       where: { teamId_repositoryId: { teamId: id, repositoryId: repo.id } },
     })).policyScopeEnabled,
   ).toBe(false);
+});
+
+
+it("shows the latest policy independently for every active branch without exposing unauthorized repositories", async () => {
+  const repositories = await Promise.all(
+    [301n, 302n].map((githubId) =>
+      db.gitHubRepository.create({
+        data: {
+          githubId,
+          installationId: 1001n,
+          name: `impact-${githubId}`,
+          fullName: `fixture-org/impact-${githubId}`,
+          ownerLogin: "fixture-org",
+          defaultBranch: "main",
+          isPrivate: true,
+          selected: true,
+        },
+      }),
+    ),
+  );
+  const id = await create(["301", "302"]);
+  const team = await db.preflytTeam.findUniqueOrThrow({ where: { id } });
+  const branches = ["refs/heads/main", "refs/heads/develop"];
+  const active = await Promise.all(
+    branches.map((branchRef) => {
+      const source = { branchRef, profile: "DEFAULT", packs: [] };
+      return db.teamPolicyAssignment.create({
+        data: {
+          teamId: id,
+          ...source,
+          digest: digest(source),
+          createdById: owner.identityId,
+        },
+      });
+    }),
+  );
+  // Capped assignment history must not hide the older, still-active branches.
+  await db.teamPolicyAssignment.createMany({
+    data: Array.from({ length: 100 }, () => ({
+      teamId: id,
+      ...assignment,
+      digest: digest(assignment),
+      createdById: owner.identityId,
+      createdAt: new Date(Date.now() + 1000),
+      supersededAt: new Date(),
+    })),
+  });
+  const selection = await db.repositoryStandardsSelection.create({
+    data: {
+      repositoryId: repositories[0].id,
+      revision: 1,
+      profile: "DEFAULT",
+      packs: [],
+      selectedById: owner.identityId,
+    },
+  });
+  const policies = await Promise.all(
+    active.map((source) => {
+      const definition = {
+        teamContext: [
+          {
+            teamId: id,
+            organizationId: owner.organizationId!,
+            revision: team.scopeRevision,
+            assignmentId: source.id,
+            digest: source.digest,
+          },
+        ],
+      };
+      return db.gatePolicyRevision.create({
+        data: {
+          repositoryId: repositories[0].id,
+          organizationId: owner.organizationId!,
+          branchRef: source.branchRef,
+          revision: 1,
+          selectionId: selection.id,
+          definition,
+          definitionHash: digest(definition),
+          draftedById: owner.identityId,
+        },
+      });
+    }),
+  );
+  const latestMain = await db.gatePolicyRevision.create({
+    data: {
+      repositoryId: repositories[0].id,
+      organizationId: owner.organizationId!,
+      branchRef: branches[0],
+      revision: 2,
+      selectionId: selection.id,
+      definition: { teamContext: [] },
+      definitionHash: digest({ teamContext: [] }),
+      draftedById: owner.identityId,
+      state: "PUBLISHED",
+      createdAt: new Date("2025-01-01T00:00:00Z"),
+    },
+  });
+  const initial = (await get(owner, "/" + id).expect(200)).body;
+  expect(initial.assignments).toHaveLength(100);
+  expect(
+    initial.assignments.every(
+      (a: { supersededAt: string | null }) => a.supersededAt,
+    ),
+  ).toBe(true);
+  expect(initial.impact).toHaveLength(4);
+  const visible = initial.impact.filter(
+    (row: { githubId: string }) => row.githubId === "301",
+  );
+  expect(visible).toEqual([
+    expect.objectContaining({
+      branchRef: branches[1],
+      policyId: policies[1].id,
+      revision: 1,
+      current: true,
+    }),
+    expect.objectContaining({
+      branchRef: branches[0],
+      policyId: latestMain.id,
+      revision: 2,
+      state: "PUBLISHED",
+      current: false,
+    }),
+  ]);
+  expect(
+    initial.impact.filter(
+      (row: { githubId: string }) => row.githubId === "302",
+    ),
+  ).toEqual(
+    branches
+      .slice()
+      .sort()
+      .map((branchRef) =>
+        expect.objectContaining({
+          branchRef,
+          policyId: null,
+          state: "NOT_ASSIGNED",
+          current: false,
+        }),
+      ),
+  );
+  const membership = await db.organizationMembership.findUniqueOrThrow({
+    where: {
+      organizationId_identityId: {
+        organizationId: developer.organizationId!,
+        identityId: developer.identityId,
+      },
+    },
+  });
+  await db.repositoryGrant.create({
+    data: { membershipId: membership.id, repositoryId: repositories[0].id },
+  });
+  const scoped = (await get(developer, "/" + id).expect(200)).body;
+  expect(scoped.repositories).toHaveLength(1);
+  expect(scoped.impact).toHaveLength(2);
+  expect(
+    scoped.impact.every((row: { githubId: string }) => row.githubId === "301"),
+  ).toBe(true);
+  await get(outsider, "/" + id).expect(404);
+
+  await db.teamPolicyAssignment.update({
+    where: { id: active[1].id },
+    data: { digest: "b".repeat(64) },
+  });
+  const invalidSource = (await get(owner, "/" + id).expect(200)).body;
+  expect(
+    invalidSource.impact.find(
+      (row: { githubId: string; branchRef: string }) =>
+        row.githubId === "301" && row.branchRef === branches[1],
+    ).current,
+  ).toBe(false);
+  await db.teamPolicyAssignment.update({
+    where: { id: active[1].id },
+    data: { digest: active[1].digest },
+  });
+  await db.repositoryStandardsSelection.create({
+    data: {
+      repositoryId: repositories[0].id,
+      revision: 2,
+      profile: "DEFAULT",
+      packs: [],
+      selectedById: owner.identityId,
+    },
+  });
+  const newerSelection = (await get(owner, "/" + id).expect(200)).body;
+  expect(
+    newerSelection.impact
+      .filter((row: { githubId: string }) => row.githubId === "301")
+      .every((row: { current: boolean }) => !row.current),
+  ).toBe(true);
+  expect(
+    (
+      await db.gatePolicyRevision.findUniqueOrThrow({
+        where: { id: latestMain.id },
+      })
+    ).revision,
+  ).toBe(2);
 });

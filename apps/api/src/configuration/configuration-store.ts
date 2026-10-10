@@ -212,7 +212,7 @@ export function validateConfiguration(
         );
       if (!process.env.QUEUE_REDIS_URL)
         throw new BadRequestException(
-          "Configure the persistent queue connection first",
+          "Set QUEUE_REDIS_URL and restart the API and worker before enabling GitHub events",
         );
     }
     if (result.NOTIFICATION_EMAIL_ENABLED === "true") {

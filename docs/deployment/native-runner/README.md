@@ -4,9 +4,9 @@ Preflyt supports a common check contract for Docker and Kubernetes deployments: 
 
 ## Current verification
 
-The Docker launcher and image-owned report wrapper have passed disposable fixtures for Gitleaks secret detection, the bundled JavaScript/TypeScript and Python Semgrep rules, fixed JavaScript/TypeScript and Python lint rules, unsafe Terraform and Kubernetes configuration, and Node's built-in test runner. Clean scans and tests pass; zero or skipped tests remain incomplete. These fixtures use ordinary Docker with generated source only. They do not approve execution against connected repositories, establish broad SAST coverage, prove end-to-end policy-gate integration.
+The Docker launcher and image-owned report wrapper have passed disposable fixtures for Gitleaks secret detection, the bundled JavaScript/TypeScript and Python Semgrep rules, fixed JavaScript/TypeScript and Python lint rules, unsafe Terraform and Kubernetes configuration, and Node's built-in test runner. Clean scans and tests pass; zero or skipped tests remain incomplete. These fixtures use ordinary Docker with generated source only. They do not approve execution against connected repositories or establish broad SAST coverage. Signed receipt-to-policy integration is covered by separate isolated database fixtures; the generated scanner fixtures do not prove live production gate enforcement.
 
-Docker and Kubernetes job dispatch, signed result ingestion and policy-gate integration are implemented and fixture-tested. Kubernetes lifecycle tests use a simulated API; live cluster acceptance remains outstanding. Complete adapter coverage and independently reviewed live acceptance remain P3 work. Local Docker availability must not enable production execution by itself.
+Docker and Kubernetes job dispatch, signed result ingestion and policy-gate integration are implemented and fixture-tested. Kubernetes lifecycle tests cover both a simulated API and generated Node source on a dedicated local kind cluster, including scheduling-gate admission and UID-owned cleanup. These ordinary-runc fixtures do not certify a production cluster or independently reviewed effective isolation. Complete adapter coverage and independently reviewed live acceptance remain P3 work. Local Docker availability must not enable production execution by itself.
 
 ## Shared defaults
 

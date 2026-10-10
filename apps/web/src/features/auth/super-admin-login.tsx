@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { AuthLayout } from './auth-layout'
+import { SignInLayout } from './sign-in-layout'
 
 export function SuperAdminLogin() {
   const { redirect } = useSearch({ from: '/(auth)/super-admin/login' })
@@ -81,26 +81,28 @@ export function SuperAdminLogin() {
   }
 
   return (
-    <AuthLayout
+    <SignInLayout
       footer={
-        <p className='max-w-sm text-center text-xs leading-relaxed text-muted-foreground'>
+        <p>
           Use this deployment-configured account only for emergency Preflyt
           administration.
         </p>
       }
     >
-      <Card className='w-full gap-6 border-white/10 bg-card/90 py-7 shadow-[0_24px_80px_-32px_rgba(0,0,0,0.8)] backdrop-blur-sm'>
-        <CardHeader className='gap-2 px-7'>
-          <CardTitle className='flex items-center gap-2 text-xl tracking-tight'>
-            <KeyRound aria-hidden='true' className='size-5 text-sky-300' />
-            Super Admin sign-in
+      <Card className='sign-in-card w-full'>
+        <CardHeader className='gap-3 px-6 sm:px-8'>
+          <p className='text-[11px] font-medium tracking-[0.12em] text-muted-foreground uppercase'>
+            Deployment administration
+          </p>
+          <CardTitle asChild className='text-2xl tracking-tight'>
+            <h1>Super Admin sign-in</h1>
           </CardTitle>
           <CardDescription className='text-sm leading-relaxed'>
             Use the administrator account configured for this Preflyt
             deployment.
           </CardDescription>
         </CardHeader>
-        <CardContent className='px-7'>
+        <CardContent className='px-6 sm:px-8'>
           {methodsError ? (
             <div className='space-y-3'>
               <p role='alert' className='text-sm text-destructive'>
@@ -119,10 +121,13 @@ export function SuperAdminLogin() {
               </Button>
             </div>
           ) : enabled === null ? (
-            <div className='flex items-center justify-center gap-2 py-4 text-sm text-muted-foreground'>
+            <div
+              role='status'
+              className='flex items-center gap-2 py-4 text-sm text-muted-foreground'
+            >
               <LoaderCircle
                 aria-hidden='true'
-                className='size-4 animate-spin'
+                className='size-4 animate-spin motion-reduce:animate-none'
               />
               Checking local access…
             </div>
@@ -131,7 +136,7 @@ export function SuperAdminLogin() {
               Super Admin access is not configured for this Preflyt deployment.
             </p>
           ) : (
-            <form onSubmit={submit} className='space-y-4'>
+            <form onSubmit={submit} className='space-y-5'>
               <div className='space-y-2'>
                 <Label htmlFor='super-admin-username'>Username</Label>
                 <Input
@@ -144,7 +149,7 @@ export function SuperAdminLogin() {
                   maxLength={320}
                   value={username}
                   onChange={(event) => setUsername(event.target.value)}
-                  className='h-10 border-white/10 bg-black/20'
+                  className='h-11 bg-background'
                 />
               </div>
               <div className='space-y-2'>
@@ -159,13 +164,13 @@ export function SuperAdminLogin() {
                   required
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
-                  className='h-10 border-white/10 bg-black/20'
+                  className='h-11 bg-background'
                 />
               </div>
               {error && (
                 <p
                   role='alert'
-                  className='rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2.5 text-sm text-destructive'
+                  className='rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-3 text-sm leading-relaxed text-destructive'
                 >
                   {error}
                 </p>
@@ -173,23 +178,30 @@ export function SuperAdminLogin() {
               <Button
                 type='submit'
                 disabled={submitting}
-                className='h-11 w-full bg-slate-100 text-slate-950 hover:bg-white dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white'
+                className='h-11 w-full'
               >
-                <KeyRound aria-hidden='true' className='size-4' />
-                {submitting ? 'Signing in…' : 'Sign in as Super Admin'}
+                {submitting ? (
+                  <LoaderCircle
+                    aria-hidden='true'
+                    className='size-4 animate-spin motion-reduce:animate-none'
+                  />
+                ) : (
+                  <KeyRound aria-hidden='true' className='size-4' />
+                )}
+                {submitting ? 'Signing in…' : 'Sign in'}
               </Button>
             </form>
           )}
-          <div className='mt-5 border-t border-white/10 pt-4 text-center'>
+          <div className='mt-6 border-t pt-5'>
             <a
               href='/sign-in'
-              className='text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline'
+              className='inline-flex min-h-8 items-center rounded-sm text-xs font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring'
             >
               Back to organization sign-in
             </a>
           </div>
         </CardContent>
       </Card>
-    </AuthLayout>
+    </SignInLayout>
   )
 }

@@ -26,7 +26,7 @@ export function NotificationsPage() {
         <PageHeader
           title='Notifications'
           section='Workspace'
-          description='Assessment and policy updates from repositories you can access.'
+          description='Assessment, policy and AI configuration updates from repositories you can access.'
           icon={Inbox}
           tone='blue'
           actions={
@@ -67,7 +67,7 @@ export function NotificationsPage() {
               ['', 'All severities'],
               ['info', 'Information'],
               ['warning', 'Needs attention'],
-              ['error', 'CI failure'],
+              ['error', 'Failure'],
             ]}
           />
           <NotificationRepositoryFilter

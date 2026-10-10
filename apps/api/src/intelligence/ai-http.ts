@@ -2,6 +2,20 @@ import { lookup } from "node:dns/promises";
 import { BlockList, isIP } from "node:net";
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
+/** A redacted failure of an actual network request, never an endpoint safety rejection. */
+export class AiTransportError extends Error {
+  constructor(readonly code: "NETWORK" | "TIMEOUT" | "UPSTREAM_UNAVAILABLE") {
+    super("Model request unavailable");
+    this.name = "AiTransportError";
+  }
+}
+const networkErrors = new Set([
+  "ECONNREFUSED", "ECONNRESET", "ETIMEDOUT", "EHOSTUNREACH", "ENETUNREACH",
+  "ENOTFOUND", "EAI_AGAIN", "EPIPE", "ERR_TLS_CERT_ALTNAME_INVALID",
+  "CERT_HAS_EXPIRED", "DEPTH_ZERO_SELF_SIGNED_CERT", "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+]);
+const requestFailure = (error: Error & { code?: string }) =>
+  networkErrors.has(error.code ?? "") ? new AiTransportError("NETWORK") : error;
 const forbidden = new BlockList();
 for (const [address, prefix] of [
   ["0.0.0.0", 8],
@@ -98,18 +112,20 @@ export async function aiHttpRequest(
           return;
         }
         let size = 0;
+        let responseLimit = false;
         const chunks: Buffer[] = [];
         res.on("data", (chunk: Buffer) => {
           size += chunk.length;
           if (size > 1048576) {
+            responseLimit = true;
             res.destroy(new Error("Response limit"));
             return;
           }
           chunks.push(chunk);
         });
-        res.on("error", reject);
+        res.on("error", (error) => reject(requestFailure(error)));
         res.on("aborted", () =>
-          reject(new Error("Model response interrupted")),
+          reject(responseLimit ? new Error("Response limit") : new AiTransportError("NETWORK")),
         );
         res.on("end", () => {
           try {
@@ -124,7 +140,7 @@ export async function aiHttpRequest(
         });
       },
     );
-    req.on("error", reject);
+    req.on("error", (error) => reject(requestFailure(error)));
     req.end(options.body);
   });
 }

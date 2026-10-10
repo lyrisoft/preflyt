@@ -4,6 +4,7 @@ import { beforeEach, expect, it, vi } from 'vitest'
 import { render } from 'vitest-browser-react'
 import { page } from 'vitest/browser'
 import { AiSettingsPage } from './ai-settings'
+import { validateIntelligenceSearch } from './intelligence-search'
 
 const state = vi.hoisted(() => ({
   role: 'OWNER',
@@ -495,4 +496,51 @@ it('keeps provider actions compact and preserves routing labels across themes an
   await page.screenshot({ path: '__screenshots__/ai-model-choices-mobile.png' })
   document.documentElement.classList.remove('dark')
   await page.viewport(1280, 900)
+})
+
+it('opens notification links at the requested model or routing tab', async () => {
+  const view = await render(<AiSettingsPage tab='routing' />)
+  await expect
+    .element(view.getByRole('tab', { name: 'Model router' }))
+    .toHaveAttribute('data-state', 'active')
+  await expect
+    .element(view.getByRole('button', { name: 'Configure' }))
+    .toBeVisible()
+  await view.getByRole('tab', { name: 'Models', exact: true }).click()
+  await expect
+    .element(view.getByRole('button', { name: 'Add model' }))
+    .toBeVisible()
+})
+
+it('keeps routing selection in sync with controlled URL changes', async () => {
+  const changed = vi.fn()
+  const view = await render(
+    <AiSettingsPage tab='routing' onTabChange={changed} />
+  )
+  await view.getByRole('tab', { name: 'Models', exact: true }).click()
+  expect(changed).toHaveBeenCalledWith('connections')
+  await view.rerender(
+    <AiSettingsPage tab='connections' onTabChange={changed} />
+  )
+  await expect
+    .element(view.getByRole('tab', { name: 'Models', exact: true }))
+    .toHaveAttribute('data-state', 'active')
+})
+
+it('accepts only known intelligence tabs in notification URLs', () => {
+  expect(validateIntelligenceSearch({ tab: 'routing' })).toEqual({
+    tab: 'routing',
+  })
+  expect(validateIntelligenceSearch({ tab: 'skills' })).toEqual({
+    tab: 'skills',
+  })
+  for (const tab of [
+    undefined,
+    'unknown',
+    ['routing'],
+    1,
+    { value: 'routing' },
+  ]) {
+    expect(validateIntelligenceSearch({ tab })).toEqual({ tab: 'connections' })
+  }
 })

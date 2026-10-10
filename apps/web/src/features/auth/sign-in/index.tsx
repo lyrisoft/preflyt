@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearch } from '@tanstack/react-router'
-import { ArrowRight, LockKeyhole } from 'lucide-react'
+import { ArrowRight, LoaderCircle, LockKeyhole } from 'lucide-react'
 import { siGithub } from 'simple-icons'
 import { API_BASE_URL } from '@/lib/api'
 import { Button } from '@/components/ui/button'
@@ -11,7 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import { AuthLayout } from '../auth-layout'
+import { SignInLayout } from '../sign-in-layout'
 
 export function SignIn() {
   const { error } = useSearch({ from: '/(auth)/sign-in' })
@@ -19,6 +19,8 @@ export function SignIn() {
   const [oidcEnabled, setOidcEnabled] = useState(false)
   const [methodsError, setMethodsError] = useState('')
   const [superAdminEnabled, setSuperAdminEnabled] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [checkAttempt, setCheckAttempt] = useState(0)
 
   useEffect(() => {
     let active = true
@@ -36,82 +38,137 @@ export function SignIn() {
           setSuperAdminEnabled(methods.superAdmin === true)
           setGitHubEnabled(methods.github === true)
           setOidcEnabled(methods.oidc === true)
+          setLoading(false)
         }
       })
       .catch(() => {
-        if (active)
+        if (active) {
           setMethodsError(
-            'Sign-in options could not be loaded. Refresh the page to try again.'
+            'Sign-in options could not be loaded. Check that Preflyt is reachable, then try again.'
           )
+          setLoading(false)
+        }
       })
     return () => {
       active = false
     }
-  }, [])
+  }, [checkAttempt])
 
   return (
-    <AuthLayout>
-      <Card className='w-full gap-6 border-white/10 bg-card/90 py-7 shadow-[0_24px_80px_-32px_rgba(0,0,0,0.8)] backdrop-blur-sm'>
-        <CardHeader className='gap-2 px-7'>
-          <CardTitle className='text-xl tracking-tight'>Sign in</CardTitle>
+    <SignInLayout>
+      <Card className='sign-in-card w-full'>
+        <CardHeader className='gap-3 px-6 sm:px-8'>
+          <p className='text-[11px] font-medium tracking-[0.12em] text-muted-foreground uppercase'>
+            Organization access
+          </p>
+          <CardTitle asChild className='text-2xl tracking-tight'>
+            <h1>Sign in to Preflyt</h1>
+          </CardTitle>
           <CardDescription className='text-sm leading-relaxed'>
-            Continue securely with the identity provider configured by your
-            organization.
+            Continue with your organization’s sign-in provider.
           </CardDescription>
         </CardHeader>
-        <CardContent className='space-y-5 px-7'>
+        <CardContent className='space-y-6 px-6 sm:px-8'>
           {(error === 'oidc' || error === 'github' || methodsError) && (
-            <p
-              role='alert'
-              className='rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2.5 text-sm text-destructive'
-            >
-              {methodsError ||
-                'Sign-in could not be completed. Try again, or contact your Preflyt administrator. For GitHub SAML organizations, start your organization SSO session first.'}
-            </p>
-          )}
-          {githubEnabled && (
-            <Button asChild className='h-11 w-full'>
-              <a href={API_BASE_URL + '/auth/github/login'}>
-                <svg
-                  aria-hidden='true'
-                  className='size-4 fill-current'
-                  viewBox='0 0 24 24'
+            <div className='space-y-3'>
+              <p
+                role='alert'
+                className='rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-3 text-sm leading-relaxed text-destructive'
+              >
+                {methodsError ||
+                  'Sign-in could not be completed. Try again, or contact your Preflyt administrator. For GitHub SAML organizations, start your organization SSO session first.'}
+              </p>
+              {!!methodsError && (
+                <Button
+                  variant='outline'
+                  onClick={() => {
+                    setMethodsError('')
+                    setLoading(true)
+                    setCheckAttempt((attempt) => attempt + 1)
+                  }}
                 >
-                  <path d={siGithub.path} />
-                </svg>
-                Continue with GitHub
-                <ArrowRight aria-hidden='true' className='ms-auto size-4' />
-              </a>
-            </Button>
+                  Try again
+                </Button>
+              )}
+            </div>
           )}
-          {oidcEnabled && (
-            <Button
-              asChild
-              className='h-11 w-full bg-slate-100 text-slate-950 shadow-sm transition-colors hover:bg-white focus-visible:ring-sky-400 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white'
-            >
-              <a href={API_BASE_URL + '/auth/login'}>
-                <LockKeyhole aria-hidden='true' className='size-4' />
-                Continue with organization SSO
-                <ArrowRight aria-hidden='true' className='ms-auto size-4' />
-              </a>
-            </Button>
-          )}
-          <p className='text-center text-xs leading-relaxed text-muted-foreground'>
-            Your Preflyt account and access are provisioned by your
-            organization.
+          <div className='space-y-3'>
+            {loading ? (
+              <p
+                role='status'
+                className='flex items-center gap-2 py-3 text-sm text-muted-foreground'
+              >
+                <LoaderCircle
+                  aria-hidden='true'
+                  className='size-4 animate-spin motion-reduce:animate-none'
+                />
+                Loading sign-in options…
+              </p>
+            ) : (
+              <>
+                {githubEnabled && (
+                  <Button asChild className='h-11 w-full justify-start px-4'>
+                    <a href={API_BASE_URL + '/auth/github/login'}>
+                      <svg
+                        aria-hidden='true'
+                        className='size-4 fill-current'
+                        viewBox='0 0 24 24'
+                      >
+                        <path d={siGithub.path} />
+                      </svg>
+                      Continue with GitHub
+                      <ArrowRight
+                        aria-hidden='true'
+                        className='ms-auto size-4'
+                      />
+                    </a>
+                  </Button>
+                )}
+                {oidcEnabled && (
+                  <Button
+                    asChild
+                    variant={githubEnabled ? 'outline' : 'default'}
+                    className='h-11 w-full justify-start px-4'
+                  >
+                    <a href={API_BASE_URL + '/auth/login'}>
+                      <LockKeyhole aria-hidden='true' className='size-4' />
+                      Continue with SSO
+                      <ArrowRight
+                        aria-hidden='true'
+                        className='ms-auto size-4'
+                      />
+                    </a>
+                  </Button>
+                )}
+                {!githubEnabled && !oidcEnabled && !methodsError && (
+                  <p
+                    role='status'
+                    className='text-sm leading-relaxed text-muted-foreground'
+                  >
+                    Organization sign-in is not configured. Contact your Preflyt
+                    administrator.
+                  </p>
+                )}
+              </>
+            )}
+          </div>
+          <p className='text-xs leading-relaxed text-muted-foreground'>
+            Your organization manages your account and repository access.
           </p>
           {(superAdminEnabled || !!methodsError) && (
-            <div className='border-t border-white/10 pt-4 text-center'>
+            <div className='border-t pt-5'>
               <Link
                 to='/super-admin/login'
-                className='text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline'
+                className='inline-flex min-h-8 items-center gap-2 rounded-sm text-xs font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring'
               >
+                <LockKeyhole aria-hidden='true' className='size-3.5' />
                 Super Admin access
+                <ArrowRight aria-hidden='true' className='size-3.5' />
               </Link>
             </div>
           )}
         </CardContent>
       </Card>
-    </AuthLayout>
+    </SignInLayout>
   )
 }

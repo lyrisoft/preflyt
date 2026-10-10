@@ -26,6 +26,11 @@ vi.mock('./configuration-panel', () => ({
 vi.mock('@/context/theme-provider', () => ({
   useTheme: () => ({ theme: 'system', setTheme: vi.fn() }),
 }))
+vi.mock('@/features/notifications/organization-notification-channels', () => ({
+  OrganizationNotificationChannels: () => (
+    <section>Organization notification channels</section>
+  ),
+}))
 vi.mock('@/features/notifications/notification-preferences', () => ({
   NotificationPreferences: () => (
     <section>Existing notification preferences</section>
@@ -91,6 +96,9 @@ it('keeps administrator workspace settings read-only according to backend permis
   await view.getByRole('tab', { name: 'Notifications' }).click()
   await expect
     .element(view.getByText('Existing notification preferences'))
+    .toBeVisible()
+  await expect
+    .element(view.getByText('Organization notification channels'))
     .toBeVisible()
 })
 
