@@ -63,7 +63,7 @@ beforeEach(() => {
 it('keeps connections and routing separate without promising inference', () => {
   const html = renderToStaticMarkup(<AiSettingsPage />)
   expect(html).toContain('Models')
-  expect(html).toContain('Model choices')
+  expect(html).toContain('Review settings')
   expect(html).toContain('AI Reviews are disabled for this deployment')
   state.query = { data: { ...configuration(), executionAvailable: true } }
   expect(renderToStaticMarkup(<AiSettingsPage />)).toContain(
@@ -119,7 +119,7 @@ it('starts new provider connections disabled and keeps errors in the form', asyn
 })
 it('starts routing disabled with source sharing off and bounded defaults', async () => {
   const view = await render(<AiSettingsPage />)
-  await view.getByRole('tab', { name: 'Model choices' }).click()
+  await view.getByRole('tab', { name: 'Review settings' }).click()
   await view.getByRole('button', { name: 'Configure' }).click()
   await expect
     .element(
@@ -133,7 +133,7 @@ it('starts routing disabled with source sharing off and bounded defaults', async
       })
     )
     .not.toBeChecked()
-  await view.getByRole('button', { name: 'Save model choices' }).click()
+  await view.getByRole('button', { name: 'Save settings' }).click()
   expect(state.save).toHaveBeenCalledWith(
     '/ai/configuration/routes/pull_request',
     expect.objectContaining({
@@ -354,7 +354,7 @@ it('cancels model and routing forms without saving', async () => {
   await view.getByRole('button', { name: 'Add model', exact: true }).click()
   await view.getByRole('button', { name: 'Cancel', exact: true }).click()
   await expect.element(view.getByRole('dialog')).not.toBeInTheDocument()
-  await view.getByRole('tab', { name: 'Model choices', exact: true }).click()
+  await view.getByRole('tab', { name: 'Review settings', exact: true }).click()
   await view.getByRole('button', { name: 'Configure', exact: true }).click()
   await view.getByRole('button', { name: 'Cancel', exact: true }).click()
   await expect.element(view.getByRole('dialog')).not.toBeInTheDocument()
@@ -481,7 +481,7 @@ it('keeps provider actions compact and preserves routing labels across themes an
       .map((animation) => animation.finished.catch(() => undefined))
   )
   await page.screenshot({ path: '__screenshots__/ai-providers-dark.png' })
-  await view.getByRole('tab', { name: 'Model choices' }).click()
+  await view.getByRole('tab', { name: 'Review settings' }).click()
   await expect
     .element(view.getByRole('heading', { name: 'Pull requests', exact: true }))
     .toBeVisible()

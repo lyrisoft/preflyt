@@ -178,7 +178,7 @@ const help = [
       'Organization admins add and approve models directly in Preflyt. Choose a built-in provider or add an OpenAI-compatible endpoint. Model name means the exact API identifier your provider accepts. Hosted providers require HTTPS; select Self-hosted for a local model server. Keys are encrypted and write-only. Testing reads model metadata; it does not send repository code or generate an explanation. Editing a connection requires another test.',
   },
   {
-    title: 'Model choices',
+    title: 'Review settings',
     content:
       'Each stage has a primary model and an optional fallback. Source sharing starts off. A connection must be enabled and successfully tested within the last 24 hours before its route is ready. Switching organizations separates connections and routes.',
   },
@@ -296,7 +296,7 @@ function AiSettings({
     <div className='space-y-6'>
       <PageHeader
         title='AI Intelligence'
-        description='Manage approved models and model choices.'
+        description='Manage models, skills and AI review settings.'
         section='Intelligence'
         icon={BrainCircuit}
         tone='violet'
@@ -374,7 +374,7 @@ function AiSettings({
               </TabsTrigger>
               <TabsTrigger value='routing'>
                 <RouteIcon className='mr-2 size-4' />
-                Model choices
+                Review settings
               </TabsTrigger>
             </TabsList>
             <TabsContent value='connections' className='mt-5 space-y-6'>
@@ -762,10 +762,10 @@ function AiSettings({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {stageName(routing?.stage ?? '')} model choices
+              {stageName(routing?.stage ?? '')} review settings
             </DialogTitle>
             <DialogDescription>
-              Choose models and limits for this stage.
+              Set the models, review options and limits for this stage.
             </DialogDescription>
           </DialogHeader>
           {data && routing && (
@@ -1172,7 +1172,7 @@ function RouteForm({
           ) : (
             <Save aria-hidden='true' />
           )}
-          {busy ? 'Saving…' : 'Save model choices'}
+          {busy ? 'Saving…' : 'Save settings'}
         </Button>
       </div>
     </form>

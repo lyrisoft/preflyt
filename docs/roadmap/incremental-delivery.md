@@ -61,7 +61,7 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 
 - **P0.AI1:** Multiple provider connections, encrypted write-only keys, local/compatible endpoints and connectivity testing.
 - **P0.AI2:** Primary/fallback model routing for laptop, repository, PR/CI, QA, performance/staging and production feedback, with egress, budget and RBAC restrictions.
-- **P0.AI3:** Working AI Intelligence → Models / Model routing interface with audit and route preview. Preserve already completed P0 functionality.
+- **P0.AI3:** Working AI Intelligence → Models / Review settings interface with audit and route preview. Preserve already completed P0 functionality.
 
 ### P0 GitHub-first access update (partially implemented)
 
@@ -375,7 +375,7 @@ This is implementation evidence, not a live cluster release certificate. The ini
 
 ### P4 connection and routing increment (2026-10-09)
 
-Implemented organization-scoped provider setup and model routing behind a default-off flag. Owner/Admin users create and approve models through AI Intelligence → Models / Model routing. Keys are authenticated-encrypted, write-only and bound to endpoint transport definitions. Connection tests send metadata only; revisions, organization scope, access revocation, response bounds, throttling and freshness are enforced. Source sharing and new connections/routes start disabled. Unit, UUID-disposable-database API and Chromium interaction tests verify these boundaries. See [AI configuration](../operations/ai-configuration.md).
+Implemented organization-scoped provider setup and model routing behind a default-off flag. Owner/Admin users create and approve models through AI Intelligence → Models / Review settings. Keys are authenticated-encrypted, write-only and bound to endpoint transport definitions. Connection tests send metadata only; revisions, organization scope, access revocation, response bounds, throttling and freshness are enforced. Source sharing and new connections/routes start disabled. Unit, UUID-disposable-database API and Chromium interaction tests verify these boundaries. See [AI configuration](../operations/ai-configuration.md).
 
 This connection-only increment partially implemented P0.AI1/P4.1/P4.RBAC. Its initial unavailable-inference state is superseded by the review skills increment below. The P4 completion increment below supersedes its open LiteLLM, contextual PR review, provider-usage and live-review acceptance items. Provider invoice reconciliation remains separate.
 
