@@ -93,6 +93,21 @@ export class ReviewSkillsController {
     this.auth.assertOrigin(req.headers.origin);
     return this.skills.parseMarkdown(req.preflytSession, body.markdown);
   }
+  @Get("builtins/:id/markdown")
+  @Header("Cache-Control", "no-store")
+  @Header("Content-Type", "text/markdown; charset=utf-8")
+  @Header("Content-Disposition", 'attachment; filename="SKILL.md"')
+  @Header("X-Content-Type-Options", "nosniff")
+  builtinMarkdown(@Req() req: R, @Param("id") id: string) {
+    return this.skills.builtinMarkdown(req.preflytSession, id);
+  }
+  @Post("builtins/:id/use") @Header("Cache-Control", "no-store") useBuiltin(
+    @Req() req: R,
+    @Param("id") id: string,
+  ) {
+    this.auth.assertOrigin(req.headers.origin);
+    return this.skills.useBuiltin(req.preflytSession, id);
+  }
   @Get(":id/markdown")
   @Header("Cache-Control", "no-store")
   @Header("Content-Type", "text/markdown; charset=utf-8")

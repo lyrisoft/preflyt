@@ -29,9 +29,12 @@ export async function readSkillMarkdown(file: File, signal?: AbortSignal) {
     signal
   )
 }
-export async function downloadSkillMarkdown(id: string) {
+export async function downloadSkillMarkdown(
+  id: string,
+  kind: 'organization' | 'builtin' = 'organization'
+) {
   const content = await governanceTextRequest(
-    `/ai/skills/${encodeURIComponent(id)}/markdown`
+    `/ai/skills/${kind === 'builtin' ? 'builtins/' : ''}${encodeURIComponent(id)}/markdown`
   )
   const url = URL.createObjectURL(
     new Blob([content], { type: 'text/markdown;charset=utf-8' })

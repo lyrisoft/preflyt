@@ -13,17 +13,17 @@ const help = [
   {
     title: 'What skills do',
     content:
-      'Skills are reviewed instructions for advisory AI analysis. They cannot run commands, edit code, approve policies or change check results. The current runtime reviews saved assessment evidence; it does not read source files or pull request diffs.',
+      'Skills are reviewed instructions for advisory AI analysis. They cannot run commands, edit code, approve policies or change check results. The runtime reviews saved evidence and can include bounded verified PR changes when source sharing is enabled.',
   },
   {
     title: 'Create and approve',
     content:
-      'Owners and Admins can start from a first-party template or create a draft. Review the instructions, source and license before approving the version, then enable it. Editing creates a new draft version. Policy Managers and Security Engineers can approve versions but cannot enable them.',
+      'Built-in skills provide Markdown review steps for existing engineering checks. Filter by skill or check, preview the instructions, then Use skill to create or reopen the organization draft. Owners and Admins can save drafts. Review the instructions, source and license before approving the version, then enable it. Editing creates a new draft version. Policy Managers and Security Engineers can approve versions but cannot enable them.',
   },
   {
     title: 'Assign and run',
     content:
-      'Assign an approved skill version to an AI Review in Engineering Standards, choose its review stages, then adopt that standard version. Open a new saved assessment, select up to three assigned AI Reviews and run explicitly. Skills can optionally restrict repository scope. A tested model route and configured rates are required. Suggestions stay separate from deterministic gates.',
+      'Assign an approved skill version to an AI Review in Engineering Standards, choose its review stages, then adopt that standard version. Open a new saved assessment, select up to three assigned AI Reviews and run explicitly, or enable automatic reviews on the Pull requests model route for a published branch policy. Skills can optionally restrict repository scope. A tested model route and configured rates are required. Suggestions stay separate from deterministic gates.',
   },
 ]
 export function SkillsPage() {

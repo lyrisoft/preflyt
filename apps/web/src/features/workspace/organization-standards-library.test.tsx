@@ -221,3 +221,41 @@ it('keeps the desktop editor rectangular with visible actions and paginated chec
     .poll(() => document.documentElement.scrollWidth <= window.innerWidth)
     .toBe(true)
 })
+
+it('explains missing skills and refreshes them without losing the standard draft', async () => {
+  const view = await render(<OrganizationStandardsLibrary />)
+  await view.getByRole('button', { name: 'New standard' }).click()
+  await view
+    .getByRole('textbox', { name: 'Name', exact: true })
+    .fill('Keep my draft')
+  await view.getByRole('tab', { name: 'AI Reviews', exact: true }).click()
+  await expect
+    .element(view.getByRole('button', { name: 'Add AI Review' }))
+    .toBeDisabled()
+  await expect
+    .element(view.getByRole('link', { name: 'Open Skills' }))
+    .toHaveAttribute('target', '_blank')
+  state.query.refetch = vi.fn().mockResolvedValue({ isError: true })
+  await view.rerender(<OrganizationStandardsLibrary />)
+  await view.getByRole('button', { name: 'Refresh skills' }).click()
+  await expect
+    .element(view.getByRole('alert'))
+    .toHaveTextContent('Could not refresh skills. Try again.')
+  await expect
+    .element(view.getByRole('textbox', { name: 'Name', exact: true }))
+    .toHaveValue('Keep my draft')
+  state.query.data = {
+    builtIn: [pack],
+    versions: [],
+    reviewSkills: [{ id: 'skill', name: 'Security review', version: 1 }],
+  }
+  state.query.refetch = vi.fn().mockResolvedValue({ isError: false })
+  await view.rerender(<OrganizationStandardsLibrary />)
+  await view.getByRole('button', { name: 'Refresh skills' }).click()
+  await expect
+    .element(view.getByRole('button', { name: 'Add AI Review' }))
+    .toBeEnabled()
+  await expect
+    .element(view.getByRole('textbox', { name: 'Name', exact: true }))
+    .toHaveValue('Keep my draft')
+})

@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { BookOpen, Download, Loader2, Plus, Save } from 'lucide-react'
+import { BookOpen, Download, Loader2, Plus, Save, Pencil } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -48,7 +48,7 @@ export type ReviewSkill = {
 type Template = Omit<
   ReviewSkill,
   'id' | 'skillKey' | 'version' | 'contentDigest' | 'status' | 'enabled'
->
+> & { id?: string; category?: string; checks?: string[]; checkIds?: string[] }
 export function SkillsCatalogue() {
   const session = useNavigationSession(),
     manage = canAdminister(session.data?.role),
@@ -97,14 +97,26 @@ export function SkillsCatalogue() {
     [page, setPage] = useState(1),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(''),
-    [downloading, setDownloading] = useState(false)
+    [downloading, setDownloading] = useState(false),
+    [library, setLibrary] = useState<string>(),
+    [preview, setPreview] = useState<Template>()
   const data = query.isError ? undefined : query.data,
     filtered =
       data?.skills.filter((s) =>
         `${s.name} ${s.status}`.toLowerCase().includes(filter.toLowerCase())
       ) ?? [],
     pages = Math.max(1, Math.ceil(filtered.length / 10)),
-    current = Math.min(page, pages)
+    current = Math.min(page, pages),
+    activeLibrary =
+      library ?? (data?.skills.length ? 'organization' : 'builtin'),
+    builtin =
+      data?.templates.filter((t) =>
+        `${t.name} ${t.description} ${t.category ?? ''} ${t.checks?.join(' ') ?? ''}`
+          .toLowerCase()
+          .includes(filter.toLowerCase())
+      ) ?? [],
+    builtinPages = Math.max(1, Math.ceil(builtin.length / 6)),
+    builtinPage = Math.min(page, builtinPages)
   async function action(path: string, body: unknown) {
     setBusy(true)
     setError('')
@@ -113,8 +125,32 @@ export function SkillsCatalogue() {
       setEditing(undefined)
       setSelected(undefined)
       await client.invalidateQueries({ queryKey: key })
+      setLibrary('organization')
+      setFilter('')
+      setPage(1)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save skill')
+    } finally {
+      setBusy(false)
+    }
+  }
+  async function adoptBuiltin(template: Template) {
+    if (!template.id) return
+    setBusy(true)
+    setError('')
+    try {
+      const skill = await governanceRequest<ReviewSkill>(
+        `/ai/skills/builtins/${encodeURIComponent(template.id)}/use`,
+        {}
+      )
+      await client.invalidateQueries({ queryKey: key })
+      setPreview(undefined)
+      setSelected(skill)
+      setLibrary('organization')
+      setFilter('')
+      setPage(1)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not use skill')
     } finally {
       setBusy(false)
     }
@@ -160,142 +196,283 @@ export function SkillsCatalogue() {
       )}
       {data && (
         <>
-          {manage && (
-            <div className='grid gap-3 sm:grid-cols-2'>
-              {data.templates.map((t) => (
-                <div
-                  key={t.name}
-                  className='flex items-center justify-between gap-4 rounded-lg border p-4'
+          <Tabs
+            value={activeLibrary}
+            onValueChange={(value) => {
+              setLibrary(value)
+              setFilter('')
+              setPage(1)
+            }}
+          >
+            <TabsList aria-label='Skill libraries'>
+              <TabsTrigger value='organization'>
+                Organization skills
+              </TabsTrigger>
+              <TabsTrigger value='builtin'>Built-in skills</TabsTrigger>
+            </TabsList>
+            <Input
+              className='max-w-xs'
+              aria-label='Filter skills'
+              placeholder={
+                activeLibrary === 'builtin'
+                  ? 'Filter by skill or check…'
+                  : 'Filter skills…'
+              }
+              value={filter}
+              onChange={(e) => {
+                setFilter(e.target.value)
+                setPage(1)
+              }}
+            />
+            {activeLibrary === 'builtin' ? (
+              <TabsContent value='builtin'>
+                <div className='grid gap-4 md:grid-cols-2 xl:grid-cols-3'>
+                  {builtin
+                    .slice((builtinPage - 1) * 6, builtinPage * 6)
+                    .map((t) => (
+                      <article
+                        key={t.id ?? t.name}
+                        className='flex min-w-0 flex-col rounded-xl border p-5'
+                      >
+                        <div className='flex items-start justify-between gap-3'>
+                          <h3 className='text-sm font-semibold'>{t.name}</h3>
+                          <StatusBadge tone='neutral'>Built-in</StatusBadge>
+                        </div>
+                        <p className='mt-2 text-sm text-muted-foreground'>
+                          {t.description}
+                        </p>
+                        {t.checks?.length ? (
+                          <p className='mt-3 text-xs text-muted-foreground'>
+                            Checks: {t.checks.join(' · ')}
+                          </p>
+                        ) : null}
+                        <div className='mt-auto flex flex-wrap justify-end gap-2 pt-5'>
+                          <Button
+                            size='sm'
+                            variant='outline'
+                            disabled={busy}
+                            onClick={() => {
+                              setError('')
+                              setPreview(t)
+                            }}
+                            aria-label={`View ${t.name}`}
+                          >
+                            View
+                          </Button>
+                          {manage && (
+                            <Button
+                              size='sm'
+                              variant='outline'
+                              onClick={() => void adoptBuiltin(t)}
+                              aria-label={`Use ${t.name}`}
+                              disabled={busy || !t.id}
+                            >
+                              <Plus className='size-3.5' />
+                              Use skill
+                            </Button>
+                          )}
+                        </div>
+                      </article>
+                    ))}
+                </div>
+                {!builtin.length && (
+                  <p className='rounded-xl border p-8 text-center text-sm text-muted-foreground'>
+                    No built-in skills match this filter.
+                  </p>
+                )}
+                <nav
+                  aria-label='Built-in skill pages'
+                  className='flex items-center justify-end gap-3 text-sm'
                 >
-                  <div>
-                    <h3 className='text-sm font-medium'>{t.name}</h3>
-                    <p className='mt-1 text-xs text-muted-foreground'>
-                      {t.description}
-                    </p>
-                  </div>
+                  <span>
+                    Page {builtinPage} of {builtinPages}
+                  </span>
                   <Button
                     size='sm'
                     variant='outline'
-                    className='shrink-0'
-                    disabled={busy}
-                    onClick={() => {
-                      setError('')
-                      setEditing(t)
-                    }}
+                    disabled={builtinPage === 1}
+                    onClick={() => setPage(builtinPage - 1)}
                   >
-                    Use template
+                    Previous
                   </Button>
-                </div>
-              ))}
-            </div>
-          )}
-          <Input
-            className='max-w-xs'
-            aria-label='Filter skills'
-            placeholder='Filter skills…'
-            value={filter}
-            onChange={(e) => {
-              setFilter(e.target.value)
-              setPage(1)
-            }}
-          />
-          <div className='overflow-x-auto rounded-xl border'>
-            <table className='w-full text-left text-sm'>
-              <thead className='bg-muted/40 text-muted-foreground'>
-                <tr>
-                  {['Skill', 'Version', 'Status', 'Actions'].map((t) => (
-                    <th key={t} className='px-4 py-3 font-medium'>
-                      {t}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.slice((current - 1) * 10, current * 10).map((s) => (
-                  <tr key={s.id} className='border-t'>
-                    <td className='px-4 py-3'>
-                      <p className='font-medium'>{s.name}</p>
-                      <p className='mt-1 max-w-sm text-xs text-muted-foreground'>
-                        {s.description}
-                      </p>
-                    </td>
-                    <td className='px-4 py-3'>v{s.version}</td>
+                  <Button
+                    size='sm'
+                    variant='outline'
+                    disabled={builtinPage === builtinPages}
+                    onClick={() => setPage(builtinPage + 1)}
+                  >
+                    Next
+                  </Button>
+                </nav>
+              </TabsContent>
+            ) : (
+              <TabsContent value='organization'>
+                <div className='overflow-x-auto rounded-xl border'>
+                  <table className='w-full text-left text-sm'>
+                    <thead className='bg-muted/40 text-muted-foreground'>
+                      <tr>
+                        {['Skill', 'Version', 'Status', 'Actions'].map((t) => (
+                          <th key={t} className='px-4 py-3 font-medium'>
+                            {t}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filtered
+                        .slice((current - 1) * 10, current * 10)
+                        .map((s) => (
+                          <tr key={s.id} className='border-t'>
+                            <td className='px-4 py-3'>
+                              <p className='font-medium'>{s.name}</p>
+                              <p className='mt-1 max-w-sm text-xs text-muted-foreground'>
+                                {s.description}
+                              </p>
+                            </td>
+                            <td className='px-4 py-3'>v{s.version}</td>
 
-                    <td className='px-4 py-3'>
-                      <StatusBadge
-                        tone={
-                          s.enabled
-                            ? 'success'
-                            : s.status === 'DRAFT'
-                              ? 'warning'
-                              : 'neutral'
-                        }
-                      >
-                        {s.enabled
-                          ? 'Enabled'
-                          : s.status === 'DRAFT'
-                            ? 'Draft'
-                            : s.status === 'RETIRED'
-                              ? 'Retired'
-                              : 'Approved'}
-                      </StatusBadge>
-                    </td>
-                    <td className='px-4 py-3'>
-                      <Button
-                        size='sm'
-                        variant='outline'
-                        onClick={() => {
-                          setError('')
-                          setReviewed(false)
-                          setSelected(s)
-                        }}
-                      >
-                        Review
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-                {!filtered.length && (
-                  <tr>
-                    <td
-                      colSpan={4}
-                      className='p-8 text-center text-muted-foreground'
+                            <td className='px-4 py-3'>
+                              <StatusBadge
+                                tone={
+                                  s.enabled
+                                    ? 'success'
+                                    : s.status === 'DRAFT'
+                                      ? 'warning'
+                                      : 'neutral'
+                                }
+                              >
+                                {s.enabled
+                                  ? 'Enabled'
+                                  : s.status === 'DRAFT'
+                                    ? 'Draft'
+                                    : s.status === 'RETIRED'
+                                      ? 'Retired'
+                                      : 'Approved'}
+                              </StatusBadge>
+                            </td>
+                            <td className='px-4 py-3'>
+                              <Button
+                                size='sm'
+                                variant='outline'
+                                onClick={() => {
+                                  setError('')
+                                  setReviewed(false)
+                                  setSelected(s)
+                                }}
+                              >
+                                Review
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                      {!filtered.length && (
+                        <tr>
+                          <td
+                            colSpan={4}
+                            className='p-8 text-center text-muted-foreground'
+                          >
+                            No review skills yet.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                {pages > 1 && (
+                  <nav
+                    aria-label='Skill pages'
+                    className='flex items-center justify-end gap-3 text-sm'
+                  >
+                    <span>
+                      Page {current} of {pages}
+                    </span>
+                    <Button
+                      size='sm'
+                      variant='outline'
+                      disabled={current === 1}
+                      onClick={() => setPage(current - 1)}
                     >
-                      No review skills yet.
-                    </td>
-                  </tr>
+                      Previous
+                    </Button>
+                    <Button
+                      size='sm'
+                      variant='outline'
+                      disabled={current === pages}
+                      onClick={() => setPage(current + 1)}
+                    >
+                      Next
+                    </Button>
+                  </nav>
                 )}
-              </tbody>
-            </table>
-          </div>
-          {pages > 1 && (
-            <nav
-              aria-label='Skill pages'
-              className='flex items-center justify-end gap-3 text-sm'
-            >
-              <span>
-                Page {current} of {pages}
-              </span>
-              <Button
-                size='sm'
-                variant='outline'
-                disabled={current === 1}
-                onClick={() => setPage(current - 1)}
-              >
-                Previous
-              </Button>
-              <Button
-                size='sm'
-                variant='outline'
-                disabled={current === pages}
-                onClick={() => setPage(current + 1)}
-              >
-                Next
-              </Button>
-            </nav>
-          )}
+              </TabsContent>
+            )}
+          </Tabs>
         </>
       )}
+      <Dialog
+        open={!!preview}
+        onOpenChange={(open) => {
+          if (!open) setPreview(undefined)
+        }}
+      >
+        <DialogContent className='flex max-h-[85svh] flex-col sm:max-w-3xl'>
+          <DialogHeader>
+            <DialogTitle>{preview?.name}</DialogTitle>
+          </DialogHeader>
+          {preview && (
+            <div className='min-h-0 overflow-y-auto'>
+              <MarkdownInstructions>
+                {preview.instructions}
+              </MarkdownInstructions>
+            </div>
+          )}
+          {error && (
+            <p role='alert' className='text-sm text-destructive'>
+              {error}
+            </p>
+          )}
+          {preview && (
+            <div className='flex justify-end gap-2'>
+              {preview.id && (
+                <Button
+                  variant='outline'
+                  disabled={downloading}
+                  onClick={async () => {
+                    setError('')
+                    setDownloading(true)
+                    try {
+                      await downloadSkillMarkdown(preview.id!, 'builtin')
+                    } catch (e) {
+                      setError(
+                        e instanceof Error
+                          ? e.message
+                          : 'Could not download SKILL.md'
+                      )
+                    } finally {
+                      setDownloading(false)
+                    }
+                  }}
+                >
+                  <Download className='size-4' />
+                  Download SKILL.md
+                </Button>
+              )}
+              {manage && (
+                <Button
+                  variant='outline'
+                  onClick={() => {
+                    setEditing(preview)
+                    setPreview(undefined)
+                  }}
+                >
+                  <Pencil className='size-4' />
+                  Create separate copy
+                </Button>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
       <Sheet
         open={!!selected}
         onOpenChange={(open) => {
@@ -307,9 +484,7 @@ export function SkillsCatalogue() {
             <SheetTitle>
               {selected?.name} · v{selected?.version}
             </SheetTitle>
-            <SheetDescription>
-              Read-only assessment evidence review
-            </SheetDescription>
+            <SheetDescription>Read-only review instructions</SheetDescription>
           </SheetHeader>
           {selected && (
             <div className='flex-1 space-y-5 overflow-y-auto px-6 pb-6'>
@@ -516,6 +691,17 @@ export function SkillsCatalogue() {
     </section>
   )
 }
+function skillDocument(skill: Template | ReviewSkill): SkillDocument {
+  return {
+    name: skill.name,
+    description: skill.description,
+    instructions: skill.instructions,
+    stages: [...skill.stages],
+    repositories: [...skill.repositories],
+    source: skill.source,
+    license: skill.license,
+  }
+}
 function SkillForm({
   skill,
   repositories,
@@ -532,15 +718,17 @@ function SkillForm({
   cancel: () => void
 }) {
   const [draft, setDraft] = useState<SkillDocument>(
-      skill ?? {
-        name: '',
-        description: '',
-        instructions: '',
-        stages: ['repository', 'pull_request'],
-        repositories: [],
-        source: 'Organization-authored instructions',
-        license: 'Organization-owned',
-      }
+      skill
+        ? skillDocument(skill)
+        : {
+            name: '',
+            description: '',
+            instructions: '',
+            stages: ['repository', 'pull_request'],
+            repositories: [],
+            source: 'Organization-authored instructions',
+            license: 'Organization-owned',
+          }
     ),
     [filter, setFilter] = useState(''),
     [tab, setTab] = useState('write'),

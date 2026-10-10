@@ -1,3 +1,4 @@
+import { builtinReviewSkills } from './builtin-review-skills.js';
 import type { PrReviewSource } from './pr-review-context.js';
 import { digest } from "../assessments/assessment-digest.js";
 import { aiStages } from "./ai-configuration.js";
@@ -56,28 +57,7 @@ export const skillDigest = (skill: SkillManifest) =>
     context: "assessment_evidence",
     ...validateSkill(skill),
   });
-export const skillTemplates: SkillManifest[] = [
-  {
-    name: "Security evidence review",
-    description: "Explain verified security checks and missing evidence.",
-    instructions:
-      "Review the supplied assessment evidence for security gaps. Explain failed or unverified controls and recommend the next evidence to collect. Never claim missing checks passed. Cite only supplied evidence references. Do not infer code vulnerabilities without code or verified scanner evidence.",
-    stages: ["pull_request", "repository"],
-    repositories: [],
-    source: "Preflyt first-party template",
-    license: "Organization-owned",
-  },
-  {
-    name: "CI evidence review",
-    description: "Explain check coverage, failures and freshness.",
-    instructions:
-      "Review the supplied CI assessment evidence. Identify failed checks, incomplete coverage and stale or unverified results. Recommend concise next actions using only supplied evidence references. Do not claim build, test or runtime behavior that was not observed.",
-    stages: ["pull_request", "repository"],
-    repositories: [],
-    source: "Preflyt first-party template",
-    license: "Organization-owned",
-  },
-];
+export const skillTemplates = builtinReviewSkills;
 export type ReviewContext = {
   source?: PrReviewSource;
   assessmentHash: string;

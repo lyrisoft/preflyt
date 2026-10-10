@@ -2,7 +2,7 @@
 
 ## Current delivery
 
-Open **Intelligence → Skills** (also available as **AI Intelligence → Review skills**). Owner/Admin users create drafts from the first-party Security evidence review or CI evidence review template, or enter reviewed instructions. Skills supply review instructions; optionally restrict their repository scope. Review stages are assigned on AI reviews in Engineering Standards. An empty repository selection means all authorized repositories in the organization. Drafts start disabled. Review the instructions, source and license, approve the exact content digest, then enable that version. Editing creates a new draft version; earlier versions remain unchanged. Policy Managers and Security Engineers can approve versions; only Owner/Admin can manage or enable them. Readers see only their organization’s catalogue.
+Open **Intelligence → Skills** (also available as **AI Intelligence → Review skills**). Owner/Admin users create drafts from the built-in Markdown skill library, or enter reviewed instructions. Skills supply review instructions; optionally restrict their repository scope. Review stages are assigned on AI reviews in Engineering Standards. An empty repository selection means all authorized repositories in the organization. Drafts start disabled. Review the instructions, source and license, approve the exact content digest, then enable that version. Editing creates a new draft version; earlier versions remain unchanged. Policy Managers and Security Engineers can approve versions; only Owner/Admin can manage or enable them. Readers see only their organization’s catalogue.
 
 ## Markdown editor and SKILL.md
 
@@ -87,3 +87,11 @@ To publish feedback, enable **Publish advisory summary to GitHub**, set `GITHUB_
 Disable the route's automatic review or summary switches to stop new work/publication; disable the deployment review flag to stop all inference. Retain migrations, history and encryption keys when rolling back.
 
 Verification for this increment: disposable-database and provider fixtures exercise duplicate admission, stale PR/policy/route rejection, source controls, budgets, citations and neutral publication read-back. A synthetic changed-code review also passed through the real local Ollama `llama3.2:3b` transport with validated `diff:0` output. Hosted-provider and live GitHub summary acceptance are not claimed by these tests.
+
+## Built-in safe defaults
+
+The **Built-in skills** tab supplies 12 editable starters for CI/security evidence, changed-code tests, dependency lockfiles, secret exposure, access/input validation, build/types/lint, resilience, infrastructure, containers, database migrations and API contracts. Each lists its related checks and provides concrete Markdown review steps. Use View, Download SKILL.md or Use skill; organization versions follow the existing disabled-draft, reviewed-approval and version-pinning workflow. No automatic assignment, approval, inference, source sharing or data migration occurs. Readers can preview/download; only existing authorized administrators can save copies. See the [library and Markdown files](../skills/README.md).
+
+Use skill is repeat-safe: the server uses one stable, organization-scoped skill key per built-in and returns its latest saved version. Concurrent requests cannot create two initial versions. It does not overwrite edited instructions or restore disabled/retired skills. Editing continues through the existing new-version workflow. Create separate copy in the preview deliberately makes an independent variant.
+
+When no approved, enabled skill is available, the Engineering Standards AI Reviews editor keeps Add AI Review disabled. Open Skills launches a separate tab, and Refresh skills reloads eligible versions while keeping the unsaved standard draft. Failed refreshes show an inline error rather than discarding the draft.

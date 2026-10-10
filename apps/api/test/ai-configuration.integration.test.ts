@@ -8,7 +8,7 @@ import { ReviewSkillsController, SkillReviewController } from '../src/intelligen
 import { AssessmentService } from '../src/assessments/assessment.service.js';
 import { digest } from '../src/assessments/assessment-digest.js';
 import { previewGate } from '../src/assessments/gate-preview.js';
-import { skillTemplates } from '../src/intelligence/review-skills.js';
+import { skillTemplates, validateSkill } from '../src/intelligence/review-skills.js';
 import "reflect-metadata";
 import { randomUUID, randomBytes } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
@@ -508,7 +508,7 @@ it("resolves built-in endpoints on the server and requires keys before activatio
   await post(owner, "/providers", { ...body, preset: "unknown" }).expect(400);
 });
 const skillPost = (actor: AuthenticatedSession, path: string, body: unknown) => http(app.getHttpServer()).post('/ai/skills' + path).set('Cookie', `ai.sid=${actor.identityId}`).set('Origin', 'http://localhost:5173').send(body)
-const skillInput = () => ({ ...skillTemplates[0]!, expectedVersion: 0 })
+const skillInput = () => ({ ...validateSkill(skillTemplates[0]!), expectedVersion: 0 })
 const approvedSkill = async () => {
   const skill = (await skillPost(owner, '', skillInput()).expect(201)).body
   await skillPost(owner, `/${skill.id}/approve`, { expectedDigest: skill.contentDigest, reviewed: true }).expect(201)
@@ -769,4 +769,39 @@ it.each(['policy','route','observed-head'])('rejects queued automatic reviews af
   fetchMock.mockClear();await f.reviews.reconcile()
   expect(fetchMock).not.toHaveBeenCalled()
   expect((await db.aiSkillReview.findUniqueOrThrow({where:{id:job.id}})).state).toBe('UNAVAILABLE')
+})
+
+it('exposes built-in defaults and downloads Markdown without creating or approving organization skills',async()=>{
+  const list=await http(app.getHttpServer()).get('/ai/skills').set('Cookie',`ai.sid=${owner.identityId}`).expect(200)
+  expect(list.body.templates).toHaveLength(12)
+  const template=list.body.templates.find((s:any)=>s.id==='migration-safety')
+  expect(template.checkIds).toEqual(['build.required','tests.required'])
+  const markdown=await http(app.getHttpServer()).get('/ai/skills/builtins/migration-safety/markdown').set('Cookie',`ai.sid=${developer.identityId}`).expect(200)
+  expect(markdown.text).toContain('Never suggest resetting, truncating or dropping the application database')
+  await http(app.getHttpServer()).get('/ai/skills/builtins/unknown/markdown').set('Cookie',`ai.sid=${owner.identityId}`).expect(404)
+  await http(app.getHttpServer()).get('/ai/skills/builtins/migration-safety/markdown').expect(401)
+  const body={...validateSkill(template),expectedVersion:0}
+  const created=(await skillPost(owner,'',body).expect(201)).body
+  expect(created).toMatchObject({status:'DRAFT',enabled:false,version:1})
+  await skillPost(owner,`/${created.id}/enable`,{expectedDigest:created.contentDigest,reviewed:false}).expect(400)
+  await skillPost(owner,`/${created.id}/approve`,{expectedDigest:created.contentDigest,reviewed:true}).expect(201)
+  const changed=(await skillPost(owner,'',{...body,skillKey:created.skillKey,expectedVersion:1,instructions:body.instructions+'\nExtra organization guidance.'}).expect(201)).body
+  expect(changed).toMatchObject({version:2,status:'DRAFT',enabled:false})
+  expect((await db.aiReviewSkill.findUniqueOrThrow({where:{id:created.id}})).contentDigest).toBe(created.contentDigest)
+  expect(skillTemplates.find(s=>s.id==='migration-safety')!.instructions).toBe(template.instructions)
+})
+
+it("reuses one built-in skill lineage per organization without approving or duplicating it", async () => {
+  const path = "/builtins/api-contract/use";
+  await skillPost(developer,path,{}).expect(403);
+  const first = (await skillPost(owner,path,{}).expect(201)).body;
+  expect(first).toMatchObject({ status: "DRAFT", enabled: false, version: 1 });
+  const again = (await skillPost(owner,path,{}).expect(201)).body;
+  expect(again.id).toBe(first.id);
+  const updated = (await skillPost(owner,"",{ ...validateSkill(first), instructions: first.instructions + "\nOrganization extension.", skillKey: first.skillKey, expectedVersion: 1 }).expect(201)).body;
+  expect((await skillPost(owner,path,{}).expect(201)).body.id).toBe(updated.id);
+  expect(await db.aiReviewSkill.count({ where: { organizationId: first.organizationId, skillKey: first.skillKey } })).toBe(2);
+  const parallel = await Promise.all([skillPost(owner,"/builtins/container-security/use",{}),skillPost(owner,"/builtins/container-security/use",{})]);
+  expect(parallel.map(result=>result.status)).toEqual([201,201]);
+  expect(parallel[0]!.body.id).toBe(parallel[1]!.body.id);
 })

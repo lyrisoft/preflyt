@@ -20,4 +20,7 @@ it('keeps success, failure, pending and inactive states consistent', () => {
   expect(statusTones['sync needed']).toBe('warning')
   expect(statusTones.running).toBe('info')
   expect(statusTones.disabled).toBe('neutral')
+  expect(statusTones['built-in']).toBe('neutral')
+  expect(statusTones.enabled).toBe('success')
+  expect(statusTones.retired).toBe('neutral')
 })

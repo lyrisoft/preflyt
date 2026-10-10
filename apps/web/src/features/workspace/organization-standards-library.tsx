@@ -124,7 +124,7 @@ export function OrganizationStandardsLibrary() {
               {
                 title: 'Supported checks',
                 content:
-                  'Standards group deterministic checks and advisory AI Reviews. Each AI Review pins an approved skill version and chooses when it runs. AI suggestions cannot satisfy required deterministic checks. Source-code review is not yet available; the current runtime reviews saved check evidence.',
+                  'Standards group deterministic checks and advisory AI Reviews. Each AI Review pins an approved skill version and chooses when it runs. AI suggestions cannot satisfy required deterministic checks. Reviews use saved check evidence and may include verified PR changes when source sharing is enabled.',
               },
             ]}
           />
@@ -203,10 +203,15 @@ export function OrganizationStandardsLibrary() {
           )}
         </>
       )}
-      {allowed && editor && data && (
+      {allowed && editor && query.data && (
         <StandardEditor
           key={editor.pack?.id ?? 'new'}
-          library={data}
+          library={query.data}
+          onRefreshSkills={async () => {
+            const result = await query.refetch()
+            if (result.isError)
+              throw new Error('Could not refresh skills. Try again.')
+          }}
           pack={editor.pack}
           edit={editor.edit}
           onClose={() => setEditor(null)}
@@ -344,11 +349,13 @@ function StandardEditor({
   edit,
   onClose,
   onSaved,
+  onRefreshSkills,
 }: {
   library: Library
   pack?: Pack
   edit: boolean
   onClose: () => void
+  onRefreshSkills: () => Promise<void>
   onSaved: () => Promise<void>
 }) {
   const [title, setTitle] = useState(pack?.title ?? '')
@@ -367,6 +374,8 @@ function StandardEditor({
       stages: c.stages as string[],
     }))
   )
+  const [refreshingSkills, setRefreshingSkills] = useState(false)
+  const [skillsError, setSkillsError] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const rules = [
@@ -578,8 +587,44 @@ function StandardEditor({
                     </Button>
                   </div>
                   {!library.reviewSkills?.length && (
-                    <p className='text-xs text-muted-foreground'>
-                      Approve and enable a skill in Intelligence → Skills first.
+                    <p className='text-sm text-muted-foreground'>
+                      No approved, enabled skills. Open Skills, use a built-in
+                      skill, then approve and enable it.
+                    </p>
+                  )}
+                  <div className='flex flex-wrap justify-end gap-2'>
+                    <Button type='button' size='sm' variant='outline' asChild>
+                      <a
+                        href='/skills'
+                        target='_blank'
+                        rel='noopener noreferrer'
+                      >
+                        Open Skills
+                      </a>
+                    </Button>
+                    <Button
+                      type='button'
+                      size='sm'
+                      variant='outline'
+                      disabled={refreshingSkills}
+                      onClick={async () => {
+                        setRefreshingSkills(true)
+                        setSkillsError('')
+                        try {
+                          await onRefreshSkills()
+                        } catch {
+                          setSkillsError('Could not refresh skills. Try again.')
+                        } finally {
+                          setRefreshingSkills(false)
+                        }
+                      }}
+                    >
+                      <RefreshCw className='size-4' /> Refresh skills
+                    </Button>
+                  </div>
+                  {skillsError && (
+                    <p role='alert' className='text-sm text-destructive'>
+                      {skillsError}
                     </p>
                   )}
                   {aiChecks

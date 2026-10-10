@@ -71,7 +71,11 @@ beforeEach(() => {
 })
 it('creates a disabled draft from a first-party template with bounded scope', async () => {
   const view = await render(<SkillsCatalogue />)
-  await view.getByRole('button', { name: 'Use template' }).click()
+  await view.getByRole('tab', { name: 'Built-in skills' }).click()
+  await view
+    .getByRole('button', { name: 'View Security evidence review' })
+    .click()
+  await view.getByRole('button', { name: 'Create separate copy' }).click()
   await expect
     .element(view.getByRole('textbox', { name: 'Instructions', exact: true }))
     .toHaveValue(template.instructions)
@@ -232,7 +236,11 @@ it('replaces new-version draft text while retaining its family and expected vers
 })
 it('keeps unsaved text after a rejected file and cancels without saving', async () => {
   const view = await render(<SkillsCatalogue />)
-  await view.getByRole('button', { name: 'Use template' }).click()
+  await view.getByRole('tab', { name: 'Built-in skills' }).click()
+  await view
+    .getByRole('button', { name: 'View Security evidence review' })
+    .click()
+  await view.getByRole('button', { name: 'Create separate copy' }).click()
   await userEvent.upload(
     view.getByLabelText('Replace from SKILL.md file'),
     new File(['x'.repeat(32769)], 'SKILL.md')
@@ -283,7 +291,11 @@ it('keeps the Markdown editor wide on desktop and prevents mobile overflow', asy
   await page.viewport(1280, 900)
   document.documentElement.classList.add('dark')
   const view = await render(<SkillsCatalogue />)
-  await view.getByRole('button', { name: 'Use template' }).click()
+  await view.getByRole('tab', { name: 'Built-in skills' }).click()
+  await view
+    .getByRole('button', { name: 'View Security evidence review' })
+    .click()
+  await view.getByRole('button', { name: 'Create separate copy' }).click()
   await view
     .getByRole('textbox', { name: 'Instructions', exact: true })
     .fill(
@@ -308,4 +320,149 @@ it('keeps the Markdown editor wide on desktop and prevents mobile overflow', asy
   await view.getByRole('button', { name: 'Cancel', exact: true }).click()
   document.documentElement.classList.remove('dark')
   await page.viewport(1280, 900)
+})
+
+it('filters and paginates built-ins and strips catalogue metadata from editable copies', async () => {
+  state.query = {
+    data: {
+      skills: [],
+      templates: Array.from({ length: 8 }, (_, i) => ({
+        ...template,
+        id: `builtin-${i}`,
+        name: `Review ${i}`,
+        category: 'Backend Services',
+        checkIds: ['tests.required'],
+        checks: ['Required test execution'],
+      })),
+    },
+  }
+  const view = await render(<SkillsCatalogue />)
+  await expect
+    .element(view.getByRole('tab', { name: 'Built-in skills' }))
+    .toHaveAttribute('aria-selected', 'true')
+  await expect
+    .element(view.getByText('Review 6', { exact: true }))
+    .not.toBeInTheDocument()
+  await view.getByRole('button', { name: 'Next', exact: true }).click()
+  await expect
+    .element(view.getByText('Review 6', { exact: true }))
+    .toBeVisible()
+  await view
+    .getByRole('textbox', { name: 'Filter skills' })
+    .fill('test execution')
+  await expect.element(view.getByText('Page 1 of 2')).toBeVisible()
+  await view.getByRole('button', { name: 'View Review 0' }).click()
+  await view.getByRole('button', { name: 'Create separate copy' }).click()
+  await view
+    .getByRole('textbox', { name: 'Instructions', exact: true })
+    .fill('Organization-specific review instructions.')
+  await view.getByRole('button', { name: 'Save draft' }).click()
+  const body = state.save.mock.lastCall![1]
+  expect(body).toMatchObject({
+    name: 'Review 0',
+    instructions: 'Organization-specific review instructions.',
+    expectedVersion: 0,
+  })
+  for (const key of [
+    'id',
+    'category',
+    'checks',
+    'checkIds',
+    'enabled',
+    'status',
+    'contentDigest',
+  ])
+    expect(body).not.toHaveProperty(key)
+  expect(
+    (state.query.data as { templates: (typeof template)[] }).templates[0]!
+      .instructions
+  ).toBe(template.instructions)
+})
+it('lets developers preview built-in instructions without editing or enabling them', async () => {
+  state.role = 'DEVELOPER'
+  state.query = { data: { skills: [], templates: [template] } }
+  const view = await render(<SkillsCatalogue />)
+  await expect
+    .element(
+      view.getByRole('button', {
+        name: 'Use Security evidence review',
+      })
+    )
+    .not.toBeInTheDocument()
+  await view
+    .getByRole('button', { name: 'View Security evidence review' })
+    .click()
+  await expect.element(view.getByRole('dialog')).toBeVisible()
+  await expect
+    .element(view.getByText(template.instructions, { exact: true }))
+    .toBeVisible()
+  expect(state.save).not.toHaveBeenCalled()
+})
+
+it('downloads a built-in SKILL.md without creating an organization draft', async () => {
+  state.query = {
+    data: { skills: [], templates: [{ ...template, id: 'security-evidence' }] },
+  }
+  const view = await render(<SkillsCatalogue />)
+  await view
+    .getByRole('button', { name: 'View Security evidence review' })
+    .click()
+  await view.getByRole('button', { name: 'Download SKILL.md' }).click()
+  expect(state.download).toHaveBeenCalledWith(
+    '/ai/skills/builtins/security-evidence/markdown'
+  )
+  expect(state.save).not.toHaveBeenCalled()
+})
+
+it('keeps the built-in library and preview within a mobile viewport', async () => {
+  await page.viewport(390, 844)
+  state.query = {
+    data: {
+      skills: [],
+      templates: [
+        {
+          ...template,
+          id: 'security-evidence',
+          checks: [
+            'Secret scanning',
+            'Static application security',
+            'Dependency vulnerability scan',
+          ],
+        },
+      ],
+    },
+  }
+  const view = await render(<SkillsCatalogue />)
+  await expect
+    .poll(() => document.documentElement.scrollWidth <= window.innerWidth)
+    .toBe(true)
+  await view
+    .getByRole('button', { name: 'View Security evidence review' })
+    .click()
+  await expect
+    .element(view.getByRole('button', { name: 'Download SKILL.md' }))
+    .toBeVisible()
+  await expect
+    .poll(() => document.documentElement.scrollWidth <= window.innerWidth)
+    .toBe(true)
+  await page.viewport(1280, 900)
+})
+
+it('uses the existing organization instance of a built-in instead of creating another copy', async () => {
+  state.query = {
+    data: { skills: [], templates: [{ ...template, id: 'security-evidence' }] },
+  }
+  state.save.mockResolvedValue(skill)
+  const view = await render(<SkillsCatalogue />)
+  await view
+    .getByRole('button', { name: 'Use Security evidence review' })
+    .click()
+  expect(state.save).toHaveBeenCalledWith(
+    '/ai/skills/builtins/security-evidence/use',
+    {}
+  )
+  await expect
+    .element(view.getByRole('button', { name: 'Approve version' }))
+    .toBeVisible()
+  expect(state.save).toHaveBeenCalledTimes(1)
 })
