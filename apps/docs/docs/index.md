@@ -2,18 +2,19 @@
 slug: /
 id: index
 title: Preflyt Documentation
+hide_title: true
 sidebar_label: Welcome
 description: Self-hosted Shift Left platform that profiles GitHub repositories, applies versioned engineering standards and records commit-pinned assessments with CI evidence.
 ---
 
-# Preflyt Documentation
+import DocsHero from '@site/src/components/DocsHero'
 
-Welcome to the Preflyt documentation. **Preflyt gives engineering teams confidence before production**: it shows which engineering checks apply to each repository, whether the evidence for them is trustworthy, and where the gaps are, at an exact commit.
+<DocsHero />
 
 Preflyt is **self-hosted**. You run it on your own infrastructure with Docker Compose or Kubernetes, and it connects to your GitHub organization through a GitHub App.
 
 :::info Observe mode
-Preflyt currently **observes and records**. It reads repository configuration and imports CI results from GitHub; it does not run your tests or scanners as part of the default install, and it does not block merges on its own. [Concepts](concepts/how-preflyt-works.md) explains exactly what that means.
+By default Preflyt **observes and records**. It reads repository configuration and imports CI results from GitHub. It does not run your tests or scanners, and it does not block merges unless you set up the optional governance App. [How Preflyt works](concepts/how-preflyt-works.md) explains what that means.
 :::
 
 ## Features
@@ -27,16 +28,6 @@ Preflyt currently **observes and records**. It reads repository configuration an
 - **Access control**: GitHub or OIDC sign-in, organizations, teams and eight built-in roles.
 - **Notifications**: an in-app inbox and email channels for assessment outcomes.
 
-## Quick start
-
-You need Docker with Compose v2. This starts a local demonstration instance on `http://localhost:8080`:
-
-```bash
-git clone https://github.com/lyrisoft/preflyt.git
-cd preflyt
-```
-
-Then follow the [Quick Start](getting-started/quick-start.md) to create the environment file and start the stack.
 
 ## Documentation sections
 
@@ -62,9 +53,4 @@ Then follow the [Quick Start](getting-started/quick-start.md) to create the envi
 
 ## Status of this documentation
 
-Pages are marked <span className="badge-status badge-available">Available</span> or <span className="badge-status badge-planned">Planned</span>. Preflyt is under active development; where a capability is not implemented yet, the page says so rather than describing it as if it shipped.
-
-## Quick links
-
-- [GitHub repository](https://github.com/lyrisoft/preflyt)
-- [llms.txt](pathname:///preflyt/llms.txt) for AI assistants
+Preflyt is under active development. When a capability is not implemented yet, its page says so.

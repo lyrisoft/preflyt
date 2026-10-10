@@ -27,11 +27,11 @@ flowchart LR
 
 | Step | What Preflyt does | Status |
 | --- | --- | --- |
-| **Discover** | Profiles each selected repository: languages, frameworks, CI, tests, lockfiles, containers, infrastructure and scanner configuration, with file evidence. | <span className="badge-status badge-available">Available</span> |
-| **Assess** | Freezes your selected standards and the CI results GitHub reported into a commit-pinned snapshot. | <span className="badge-status badge-available">Available</span> |
-| **Validate** | Verifies where evidence came from, through approved CI bindings and signed reports. | <span className="badge-status badge-available">Available</span>, with limits below |
-| **Enforce** | Evaluates quality gates and can publish a GitHub readiness check. | <span className="badge-status badge-available">Observe-only preview</span>; enforcement needs the optional governance App |
-| **Improve** | Trends, contributor activity and advisory AI review. | <span className="badge-status badge-available">Available</span> |
+| **Discover** | Profiles each selected repository with file evidence. | Available |
+| **Assess** | Freezes your standards and reported CI results at a commit. | Available |
+| **Validate** | Verifies where evidence came from, through approved CI sources and signed reports. | Available, see [Evidence and trust](evidence-and-trust.md) |
+| **Enforce** | Evaluates quality gates. Publishing checks or rulesets needs the optional governance App. | Observe-only preview |
+| **Improve** | Trends, contributor activity and advisory AI review. | Available |
 
 ## The three engines
 

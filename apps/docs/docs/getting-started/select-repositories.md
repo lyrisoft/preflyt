@@ -14,7 +14,7 @@ Installing the GitHub App makes repositories **available**. Preflyt only works w
 1. Open **Repositories** in the sidebar.
 2. The summary tiles show **Available repositories**, **Selected for Preflyt**, **Active installations** and **Private repositories**.
 3. Below, each repository is a card. Tick the checkbox in the corner of a card to **select** it. Use **Search repositories** and the selection and visibility filters to narrow a long list.
-4. Select a card to open the repository.
+4. Selected repositories link to their own page. Select one to open it.
 
 ![The Repositories page before GitHub is connected, showing empty inventory](/img/screens/repositories.png)
 

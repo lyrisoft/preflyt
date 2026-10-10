@@ -71,11 +71,13 @@ An assessment's overall coverage is **Incomplete** when mandatory evidence is mi
 
 ## Quality gate preview
 
-The Quality Gates page is an **observe-only** preview built on assessment snapshots. Outcomes are deterministic, and they come only from the frozen snapshot:
+The Quality Gates page is an **observe-only** preview. Its outcome comes only from a frozen assessment, so it is repeatable.
 
-- **PASS**: a requirement is met by observed evidence. For configuration requirements this confirms configuration only.
-- **BLOCK**: a required, verified check failed at that commit.
-- **INCOMPLETE**: evidence is missing, stale, unverified or collection was truncated.
-- **Not evaluated**: no required checks exist.
+| Outcome | Meaning |
+| --- | --- |
+| **PASS** | Every rule is met by observed evidence. For configuration rules this confirms configuration only. |
+| **WARN** | Every required rule passes, but an advisory rule does not. |
+| **BLOCK** | A required rule has a failed result from an approved, verified CI source at that commit. |
+| **INCOMPLETE** | Required evidence is missing, stale or unverified, collection was truncated, or the policy has no required rules. |
 
-Execution evidence that Preflyt cannot verify stays **Incomplete**.
+Execution results that Preflyt cannot verify stay **INCOMPLETE**. They never become a pass.

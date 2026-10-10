@@ -48,7 +48,7 @@ In GitHub, open your App's page and choose **Install App**, then pick your organ
 ## 4. Sign in with GitHub and create the workspace
 
 1. Open Preflyt and sign out of Super Admin.
-2. On the sign-in page, continue with GitHub.
+2. On the sign-in page, choose **Continue with GitHub**.
 3. On **Choose your organization**, pick your organization. A GitHub **organization owner** can connect a new workspace. Preflyt verifies that you own the organization.
 4. Confirm. You are now the workspace **Owner**.
 

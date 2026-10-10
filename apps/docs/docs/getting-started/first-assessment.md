@@ -18,9 +18,9 @@ Preflyt reads the repository's default branch through the GitHub App and records
 
 The **Overview** tab then shows:
 
-- a **posture band** with the share of controls that have configuration, your required controls, recent CI results and your assessments,
-- a **Controls** table you can filter by **All**, **Needs review** and **Configuration found**,
-- a side panel with the detected **Stack** (languages and frameworks as icons), **Tooling** and the **Snapshot** (branch, commit, tree and when it was captured).
+- a summary of **selected checks**, **configuration hints**, **recent CI results** and **recent assessments**,
+- the **Control register**, filtered by **All**, **Needs review** or **Config found**,
+- the detected **Stack**, **Tooling** and the **Snapshot** (branch, commit and capture time).
 
 Open the **evidence** button on any row to see which files support it, each linked to GitHub at that commit.
 
@@ -40,7 +40,7 @@ Choose **Refresh profile** whenever you want to inspect the latest default-branc
 
 The five built-in packs are Baseline Engineering, Application Security, Backend Services, Frontend Applications and Infrastructure as Code. Each is versioned, and the **Pack catalogue** lets you open any pack's rules.
 
-Your saved selection turns into the **Controls** on the Overview. Each control is marked **Required** or **Advisory** and shows whether its configuration was found in the profile.
+Your saved selection becomes the **Control register** on the Overview. Each control is marked **Required** or **Advisory** and shows whether its configuration was found in the profile.
 
 ## 3. Create an assessment
 
@@ -51,13 +51,13 @@ An assessment **freezes** your standards and the evidence available for one comm
 3. Optionally, for each control, choose a **CI result** from that commit to associate with it. Leave **No association** if none applies.
 4. Choose **Create assessment**.
 
-The snapshot appears in the list. Open it to see its coverage, the controls table (requirement, coverage and the associated CI result) and a **Provenance and integrity** section with digests of everything it froze.
+The snapshot appears in the list. Open it to see its coverage, the controls table (requirement, coverage and the associated CI result) and **Source and verification details** with digests of everything it froze.
 
 :::caution Associations are your claim
 A CI result you associate with a control is recorded as **unverified**: Preflyt cannot tell from GitHub alone that the job covered that control. A successful job never turns into a pass by itself. [Evidence and trust](../concepts/evidence-and-trust.md) explains how to get verified coverage.
 :::
 
-If your GitHub App receives pull request events, Preflyt also creates assessments automatically for the head commit of pull requests in selected repositories. These are historical snapshots of that commit. They do not run code or block the pull request.
+If your GitHub App receives pull request events, Preflyt also creates assessments automatically for the head commit of pull requests in selected repositories that have adopted standards. These are historical snapshots of that commit. They do not run code or block the pull request.
 
 ## What next
 
