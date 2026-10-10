@@ -328,3 +328,64 @@ describe('ruleset route permission mapping', () => {
     expect(audit).toHaveBeenCalledOnce()
   })
 })
+
+describe('resolved branch protection', () => {
+  it('verifies the branch, includes inherited active requirements and keeps legacy 404 unknown', async () => {
+    const { provider, fetchMock } = setupProvider()
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.endsWith('/repositories/2')) return Response.json({ id: 2, name: 'app', full_name: 'fixture/app', owner: { login: 'fixture' }, default_branch: 'main' })
+      if (url.endsWith('/branches/main')) return Response.json({ name: 'main' })
+      if (url.includes('/rules/branches/main?')) return Response.json([{ type: 'required_status_checks', ruleset_id: 42, ruleset_source_type: 'Organization', ruleset_source: 'fixture', parameters: { required_status_checks: [{ context: 'test', integration_id: 123 }] } }])
+      return new Response('{}', { status: 404 })
+    })
+    const result = await provider.readBranchProtection(1n, 2n, 'main')
+    expect(result.rules[0]).toMatchObject({ sourceType: 'Organization', rulesetId: 42, checks: [{ context: 'test', integrationId: 123 }] })
+    expect(result.legacy.status).toBe('unavailable')
+    expect(result).not.toHaveProperty('unprotected')
+  })
+  it('returns verified legacy requirements without bypass identities', async () => {
+    const { provider, fetchMock } = setupProvider()
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.endsWith('/repositories/2')) return Response.json({ id: 2, name: 'app', full_name: 'fixture/app', owner: { login: 'fixture' }, default_branch: 'main' })
+      if (url.endsWith('/branches/main')) return Response.json({ name: 'main' })
+      if (url.includes('/rules/branches/main?')) return Response.json([])
+      return Response.json({ required_pull_request_reviews: { required_approving_review_count: 2, bypass_pull_request_allowances: { users: ['private-user'] } }, required_status_checks: { contexts: ['build'] }, enforce_admins: { enabled: true } })
+    })
+    const result = await provider.readBranchProtection(1n, 2n, 'main')
+    expect(result.legacy).toEqual({ status: 'verified', requiredApprovals: 2, checks: ['build'], enforceAdmins: true })
+    expect(JSON.stringify(result)).not.toContain('private-user')
+  })
+  it('rejects nonexistent branches and malformed active rules', async () => {
+    const { provider, fetchMock } = setupProvider()
+    fetchMock.mockImplementation(async (url: string) => url.endsWith('/repositories/2') ? Response.json({ id: 2, name: 'app', full_name: 'fixture/app', owner: { login: 'fixture' } }) : new Response('{}', { status: 404 }))
+    await expect(provider.readBranchProtection(1n, 2n, 'missing')).rejects.toThrow('access is unavailable')
+    await expect(provider.readBranchProtection(1n, 2n, '../main')).rejects.toThrow('Invalid branch')
+  })
+  it('rejects malformed inherited rules rather than omitting requirements', async () => {
+    const { provider, fetchMock } = setupProvider()
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.endsWith('/repositories/2')) return Response.json({ id: 2, name: 'app', full_name: 'fixture/app', owner: { login: 'fixture' } })
+      if (url.endsWith('/branches/main')) return Response.json({ name: 'main' })
+      return Response.json([{ type: 'required_status_checks', ruleset_id: 42, ruleset_source_type: 'Organization', ruleset_source: 'fixture', parameters: { required_status_checks: [{ context: 'test', integration_id: -1 }] } }])
+    })
+    await expect(provider.readBranchProtection(1n, 2n, 'main')).rejects.toThrow('invalid ruleset')
+  })
+  it('does not return results when upstream repository access is revoked during the read', async () => {
+    const { provider, fetchMock } = setupProvider()
+    let opens = 0
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.endsWith('/repositories/2')) return ++opens === 4 ? new Response('{}', { status: 403 }) : Response.json({ id: 2, name: 'app', full_name: 'fixture/app', owner: { login: 'fixture' } })
+      if (url.endsWith('/branches/main')) return Response.json({ name: 'main' })
+      if (url.includes('/rules/branches/main?')) return Response.json([])
+      return Response.json({ enforce_admins: { enabled: true } })
+    })
+    await expect(provider.readBranchProtection(1n, 2n, 'main')).rejects.toThrow('access is unavailable')
+  })
+  it('rechecks current repository permission after the provider read', async () => {
+    const access = { requireRepository: vi.fn().mockResolvedValueOnce({ installationId: 1n, githubId: 2n }).mockRejectedValueOnce(new ForbiddenException()) }
+    const provider = { readBranchProtection: vi.fn().mockResolvedValue({ rules: [], legacy: { status: 'unavailable' } }) }
+    const service = new GitHubRulesetService(access as unknown as AuthorizationService, provider as unknown as GitHubProviderService)
+    await expect(service.protection({} as AuthenticatedSession, 'repo', 'main', 1)).rejects.toThrow(ForbiddenException)
+    expect(access.requireRepository).toHaveBeenCalledTimes(2)
+  })
+})

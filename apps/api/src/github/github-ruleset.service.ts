@@ -33,6 +33,12 @@ export class GitHubRulesetService {
     await this.access.requireRepository(session, repositoryId, "policy.read");
     return result;
   }
+  async protection(session: AuthenticatedSession, repositoryId: string, branch: string, page: number) {
+    const repository = await this.access.requireRepository(session, repositoryId, 'policy.read');
+    const result = await this.provider.readBranchProtection(repository.installationId, repository.githubId, branch, page);
+    await this.access.requireRepository(session, repositoryId, 'policy.read');
+    return result;
+  }
   async insights(
     session: AuthenticatedSession,
     repositoryId: string,

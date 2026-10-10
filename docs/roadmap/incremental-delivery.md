@@ -117,7 +117,7 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 
 - **P2.Contributors:** Attribute deterministic gate outcomes and evidence completeness to PR authors and revisions, with first-pass and final assessment status; do not conflate missing evidence with compliance.
 
-- **P2.R1 first slice (implemented):** Quality Gates → GitHub Rulesets displays paginated repository rulesets and inherited parent rulesets, branch patterns and required-check sources using Metadata read. Organization-wide discovery and resolved effective branch protection remain pending; see [current limits](../operations/github-rulesets.md).
+- **P2.R1 first slice (implemented):** Quality Gates → GitHub Rulesets displays paginated repository rulesets and inherited parent rulesets, branch patterns and required-check sources using Metadata read. Branch protection now resolves active inherited rules for a verified existing branch and separately reads available legacy review/check requirements. Inaccessible legacy protection remains explicitly unverified; organization-wide discovery and a complete merge-permission verdict remain pending; see [current limits](../operations/github-rulesets.md).
 
 - **P2.R2 single-repository draft wizard (implemented):** Searchable branch selection, Standard/Strict/Custom profiles, server-generated configuration preview, paginated local drafts and scoped create/read/edit APIs. Saved standards versions and optimistic edit protection prevent stale saves. Broader organization/repository targeting and exclude patterns remain pending; local drafts stay disabled; activation is a separately approved deployment.
 

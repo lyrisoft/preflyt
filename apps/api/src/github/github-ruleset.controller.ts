@@ -34,6 +34,16 @@ export class GitHubRulesetController {
       page === undefined ? 1 : Number(page),
     );
   }
+  @Get('branch-protection')
+  @Header('Cache-Control', 'no-store')
+  protection(
+    @Req() req: Request & { preflytSession: AuthenticatedSession },
+    @Param('repositoryId') repositoryId: string,
+    @Query('branch') branch?: string,
+    @Query('page') page?: string,
+  ) {
+    return this.rulesets.protection(req.preflytSession, repositoryId, branch ?? '', page === undefined ? 1 : Number(page));
+  }
   @Get(":rulesetId/insights")
   @Header("Cache-Control", "no-store")
   insights(

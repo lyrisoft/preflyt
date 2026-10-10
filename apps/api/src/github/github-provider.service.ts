@@ -470,6 +470,51 @@ export class GitHubProviderService {
     )
   }
 
+  async readBranchProtection(installationId: bigint, repositoryId: bigint, branch: string, page = 1) {
+    if (!validProfileBranch(branch) || !Number.isInteger(page) || page < 1 || page > 1000)
+      throw new BadRequestException('Invalid branch protection request')
+    const contents = await this.openRepository(installationId, repositoryId, 'contents')
+    const path = `/repos/${encodeURIComponent(contents.metadata.owner.login)}/${encodeURIComponent(contents.metadata.name)}`
+    const existing = await contents.request<{ name: string }>(`${path}/branches/${encodeURIComponent(branch)}`)
+    if (existing.name !== branch) throw new ServiceUnavailableException('GitHub returned a different branch')
+    const reader = await this.openRepository(installationId, repositoryId, 'metadata')
+    const rows = await reader.request<unknown>(`${path}/rules/branches/${encodeURIComponent(branch)}?per_page=100&page=${page}`)
+    if (!Array.isArray(rows) || rows.length > 100)
+      throw new ServiceUnavailableException('GitHub returned an invalid branch rules response')
+    const rules = rows.map((value) => {
+      if (!value || typeof value !== 'object' || Array.isArray(value))
+        throw new ServiceUnavailableException('GitHub returned an invalid branch rule')
+      const row = value as Record<string, unknown>
+      const detail = rulesetDetail({
+        id: row.ruleset_id, name: 'Active branch rule', target: 'branch', enforcement: 'active',
+        source_type: row.ruleset_source_type, source: row.ruleset_source,
+        rules: [{ type: row.type, parameters: row.parameters }],
+      }, reader.metadata.full_name, Number(row.ruleset_id))
+      return { rulesetId: detail.id, sourceType: detail.sourceType, source: detail.source, ...detail.rules[0] }
+    })
+    let legacy: { status: 'verified' | 'unavailable'; requiredApprovals?: number; checks?: string[]; enforceAdmins?: boolean } = { status: 'unavailable' }
+    try {
+      const admin = await this.openRepository(installationId, repositoryId, 'administration')
+      const raw = await admin.request<Record<string, unknown>>(`${path}/branches/${encodeURIComponent(branch)}/protection`)
+      const reviews = raw.required_pull_request_reviews as { required_approving_review_count?: unknown } | null
+      const statuses = raw.required_status_checks as { contexts?: unknown } | null
+      const admins = raw.enforce_admins as { enabled?: unknown } | undefined
+      const approvals = reviews?.required_approving_review_count ?? 0
+      const checks = statuses?.contexts ?? []
+      if (!Number.isInteger(approvals) || Number(approvals) < 0 || Number(approvals) > 100 ||
+          !Array.isArray(checks) || checks.length > 100 || checks.some(value => typeof value !== 'string' || value.length > 4096) ||
+          typeof admins?.enabled !== 'boolean')
+        throw new ServiceUnavailableException('GitHub returned invalid legacy branch protection')
+      legacy = { status: 'verified', requiredApprovals: Number(approvals), checks: checks as string[], enforceAdmins: admins.enabled }
+    } catch (error) {
+      // GitHub uses 404 for both missing protection and inaccessible resources.
+      // Never turn an inaccessible legacy response into an unprotected verdict.
+      if (!(error instanceof ForbiddenException) && !(error instanceof ServiceUnavailableException)) throw error
+    }
+    await this.openRepository(installationId, repositoryId, 'metadata')
+    return { branch, rules, legacy, page, hasMore: rows.length === 100 && page < 1000, fetchedAt: new Date().toISOString() }
+  }
+
   async listRepositoryBranches(
     installationId: bigint,
     repositoryId: bigint,

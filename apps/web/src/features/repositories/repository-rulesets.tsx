@@ -28,6 +28,7 @@ import {
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { StatusBadge } from '@/components/status-badge'
+import { BranchProtection } from './branch-protection'
 import { RulesetDeployments } from './ruleset-deployments'
 import { RulesetDrafts } from './ruleset-drafts'
 import { RulesetInsights } from './ruleset-insights'
@@ -293,9 +294,13 @@ export function RepositoryRulesets({
     <Tabs value={view} onValueChange={setView} className='space-y-4'>
       <TabsList>
         <TabsTrigger value='github'>GitHub rulesets</TabsTrigger>
+        <TabsTrigger value='protection'>Branch protection</TabsTrigger>
         <TabsTrigger value='drafts'>Drafts</TabsTrigger>
         <TabsTrigger value='deployments'>Deployments</TabsTrigger>
       </TabsList>
+      <TabsContent value='protection'>
+        <BranchProtection repositoryId={repositoryId} actorId={actorId} />
+      </TabsContent>
       <TabsContent value='github'>
         <Card className='gap-4'>
           <CardHeader className='flex flex-wrap items-center justify-between gap-3'>
@@ -305,7 +310,7 @@ export function RepositoryRulesets({
               </span>
               <div>
                 <CardTitle>GitHub Rulesets</CardTitle>
-                {query.data && (
+                {!query.isError && query.data && (
                   <p className='mt-1 text-xs text-muted-foreground'>
                     Fetched {new Date(query.data.fetchedAt).toLocaleString()}
                   </p>
@@ -332,7 +337,7 @@ export function RepositoryRulesets({
                 {query.error.message}
               </p>
             )}
-            {query.data && (
+            {!query.isError && query.data && (
               <>
                 <Table>
                   <TableHeader>
