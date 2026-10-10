@@ -66,7 +66,7 @@ it('shows a useful empty state without fabricated findings', async () => {
   const view = await render(<FindingsPage />)
   await expect.element(view.getByText('No saved assessments yet')).toBeVisible()
   await expect
-    .element(view.getByRole('tab', { name: 'Evidence gaps' }))
+    .element(view.getByRole('tab', { name: 'Missing or unverified results' }))
     .toBeVisible()
 })
 it('opens exact commit evidence and preserves unverified report status', async () => {
@@ -255,7 +255,7 @@ it('provides compact custom triage controls with required resolution notes on mo
     .fill('Fixed in the next commit; historical evidence retained')
   await view.getByLabelText('Assignee', { exact: true }).click()
   await view.getByRole('option', { name: 'developer', exact: true }).click()
-  await view.getByRole('button', { name: 'Save triage' }).click()
+  await view.getByRole('button', { name: 'Save changes' }).click()
   expect(state.save).toHaveBeenCalledOnce()
   expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390)
 })

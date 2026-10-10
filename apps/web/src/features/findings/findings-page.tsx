@@ -167,7 +167,7 @@ function FindingsWorkspace() {
       >
         <TabsList>
           <TabsTrigger value='findings'>Reported issues</TabsTrigger>
-          <TabsTrigger value='gaps'>Evidence gaps</TabsTrigger>
+          <TabsTrigger value='gaps'>Missing or unverified results</TabsTrigger>
         </TabsList>
       </Tabs>
       <form
@@ -187,11 +187,11 @@ function FindingsWorkspace() {
             setDetail(null)
           }}
         >
-          <SelectTrigger aria-label='Triage status' className='w-full sm:w-40'>
+          <SelectTrigger aria-label='Issue status' className='w-full sm:w-40'>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value='all'>All triage states</SelectItem>
+            <SelectItem value='all'>All issue statuses</SelectItem>
             {Object.entries(triageLabels).map(([value, label]) => (
               <SelectItem key={value} value={value}>
                 {label}
@@ -502,7 +502,7 @@ function FindingTriage({
     },
   })
   const save = useMutation({
-    meta: { successMessage: 'Finding triage saved' },
+    meta: { successMessage: 'Issue updated' },
     mutationFn: async () => {
       const response = await fetch(
         `${API_BASE_URL}/findings/${finding.id}/triage`,
@@ -520,7 +520,9 @@ function FindingTriage({
       )
       const data = await response.json().catch(() => null)
       if (!response.ok)
-        throw new Error(data?.message ?? 'Finding triage could not be saved')
+        throw new Error(
+          data?.message ?? 'Could not update this issue. Try again.'
+        )
       return data as NonNullable<Finding['triage']>
     },
     onSuccess: async (data) => {
@@ -531,7 +533,7 @@ function FindingTriage({
   if (!canManage)
     return (
       <div className='space-y-2'>
-        <h3 className='text-sm font-semibold'>Triage</h3>
+        <h3 className='text-sm font-semibold'>Manage issue</h3>
         <StatusBadge
           tone={finding.triage?.state === 'RESOLVED' ? 'success' : 'info'}
         >
@@ -550,7 +552,7 @@ function FindingTriage({
         save.mutate()
       }}
     >
-      <h3 className='text-sm font-semibold'>Triage</h3>
+      <h3 className='text-sm font-semibold'>Manage issue</h3>
       <div className='grid gap-4 sm:grid-cols-2'>
         <div className='space-y-2'>
           <label className='text-sm font-medium' htmlFor='finding-state'>
@@ -602,8 +604,8 @@ function FindingTriage({
         />
       </div>
       <p className='text-xs text-muted-foreground'>
-        Triage applies to this commit. Assessment evidence and gate results stay
-        unchanged.
+        Your changes apply to this commit. Assessment evidence and gate results
+        stay unchanged.
       </p>
       {(save.error || assignees.error) && (
         <p role='alert' className='text-sm text-destructive'>
@@ -612,7 +614,7 @@ function FindingTriage({
       )}
       <div className='flex justify-end'>
         <Button size='sm' disabled={save.isPending || assignees.isFetching}>
-          Save triage
+          Save changes
         </Button>
       </div>
     </form>

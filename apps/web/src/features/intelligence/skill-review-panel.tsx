@@ -122,7 +122,7 @@ export function SkillReviewPanel({
           <Sparkles className='size-4' />
           Code Quality · AI Review
         </h3>
-        <StatusBadge tone='info'>Advisory</StatusBadge>
+        <StatusBadge tone='info'>Suggestions only</StatusBadge>
       </div>
       <p className='text-xs text-muted-foreground'>
         {stage === 'pull_request'
@@ -308,8 +308,7 @@ export function SkillReviewPanel({
           ))}
           {r.state === 'SUCCEEDED' && !r.result?.findings.length && (
             <p className='text-sm text-muted-foreground'>
-              No advisory suggestions returned. This does not change check
-              results.
+              No AI suggestions returned. This does not change check results.
             </p>
           )}
           {r.usage?.map((u, index) => (

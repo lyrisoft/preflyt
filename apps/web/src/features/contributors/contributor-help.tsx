@@ -11,7 +11,7 @@ const activityDefinitions = [
     'Distinct GitHub pull request reviews received by Preflyt.',
   ],
   [
-    'Attributed commits',
+    'Commits linked to contributor',
     'Distinct commits linked to this contributor by the available GitHub evidence.',
   ],
 ]
@@ -21,7 +21,7 @@ const complianceDefinitions = [
     'PRs whose required checks passed, divided by fully assessed authored PRs. Missing evidence never counts as passing. A dash means there is not enough evidence to calculate a rate.',
   ],
   [
-    'Coverage',
+    'PRs fully assessed',
     'Fully assessed PRs divided by all authored PRs recorded in the selected period and repository scope.',
   ],
   [
@@ -114,8 +114,8 @@ export function ContributorHelp({
           </p>
           {!profile && (
             <p>
-              PR snapshot coverage counts saved assessments. A saved assessment
-              is not necessarily verified or passing.
+              PR assessment coverage counts saved assessments. A saved
+              assessment is not necessarily verified or passing.
             </p>
           )}
         </>

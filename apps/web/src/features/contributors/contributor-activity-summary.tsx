@@ -47,7 +47,7 @@ export function ContributorActivitySummary({
     { key: 'reviews' as const, label: 'Recorded reviews', icon: UsersRound },
     {
       key: 'commits' as const,
-      label: 'Attributed commits',
+      label: 'Commits linked to contributor',
       icon: GitCommitHorizontal,
     },
   ]

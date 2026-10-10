@@ -293,7 +293,7 @@ it('opens the organization baseline through an explicit action', async () => {
   })
   const view = await mount()
   await userEvent.click(
-    view.getByRole('button', { name: 'Organization baseline', exact: true })
+    view.getByRole('button', { name: 'Organization-wide requirements', exact: true })
   )
   await expect
     .poll(() =>

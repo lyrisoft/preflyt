@@ -63,11 +63,11 @@ beforeEach(() => {
 it('keeps connections and routing separate without promising inference', () => {
   const html = renderToStaticMarkup(<AiSettingsPage />)
   expect(html).toContain('Models')
-  expect(html).toContain('Model routing')
-  expect(html).toContain('Advisory reviews are disabled for this deployment')
+  expect(html).toContain('Model choices')
+  expect(html).toContain('AI Reviews are disabled for this deployment')
   state.query = { data: { ...configuration(), executionAvailable: true } }
   expect(renderToStaticMarkup(<AiSettingsPage />)).toContain(
-    'advisory assessment reviews are available'
+    'AI assessment reviews are available'
   )
   expect(html).not.toContain('Explain findings')
 })
@@ -119,17 +119,21 @@ it('starts new provider connections disabled and keeps errors in the form', asyn
 })
 it('starts routing disabled with source sharing off and bounded defaults', async () => {
   const view = await render(<AiSettingsPage />)
-  await view.getByRole('tab', { name: 'Model routing' }).click()
+  await view.getByRole('tab', { name: 'Model choices' }).click()
   await view.getByRole('button', { name: 'Configure' }).click()
   await expect
-    .element(view.getByRole('checkbox', { name: 'Enable route' }))
+    .element(
+      view.getByRole('checkbox', { name: 'Enable reviews for this stage' })
+    )
     .not.toBeChecked()
   await expect
     .element(
-      view.getByRole('checkbox', { name: 'Allow repository source sharing' })
+      view.getByRole('checkbox', {
+        name: 'Send repository code to the selected AI model',
+      })
     )
     .not.toBeChecked()
-  await view.getByRole('button', { name: 'Save routing' }).click()
+  await view.getByRole('button', { name: 'Save model choices' }).click()
   expect(state.save).toHaveBeenCalledWith(
     '/ai/configuration/routes/pull_request',
     expect.objectContaining({
@@ -350,7 +354,7 @@ it('cancels model and routing forms without saving', async () => {
   await view.getByRole('button', { name: 'Add model', exact: true }).click()
   await view.getByRole('button', { name: 'Cancel', exact: true }).click()
   await expect.element(view.getByRole('dialog')).not.toBeInTheDocument()
-  await view.getByRole('tab', { name: 'Model routing', exact: true }).click()
+  await view.getByRole('tab', { name: 'Model choices', exact: true }).click()
   await view.getByRole('button', { name: 'Configure', exact: true }).click()
   await view.getByRole('button', { name: 'Cancel', exact: true }).click()
   await expect.element(view.getByRole('dialog')).not.toBeInTheDocument()

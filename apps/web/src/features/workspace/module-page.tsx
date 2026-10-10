@@ -74,7 +74,7 @@ const modules = {
     section: 'Governance',
     icon: SlidersHorizontal,
     description:
-      'Manage adopted standards and the CI sources approved for each control.',
+      'Manage adopted standards and the check sources approved for each check.',
     accent: 'border-chart-1/20 bg-chart-1/5',
     iconAccent: 'bg-chart-1/15 text-chart-1',
   },
@@ -83,7 +83,7 @@ const modules = {
     section: 'Administration',
     icon: PlugZap,
     description:
-      'Review GitHub access and the CI evidence available to Preflyt.',
+      'Review GitHub access and the check results and reports available to Preflyt.',
     accent: 'border-chart-2/20 bg-chart-2/5',
     iconAccent: 'bg-chart-2/15 text-chart-2',
   },
@@ -205,14 +205,14 @@ export function WorkspaceModule({ module }: { module: Module }) {
                       'Rulesets come from GitHub for the selected repository, including inherited organization or enterprise rules. Active rules are enforced by GitHub; Evaluate records evaluations without blocking, and Disabled rules are not enforced. The discovery view does not report legacy branch protection. Deployments manages only the dedicated Preflyt ruleset.',
                   },
                   {
-                    title: 'Readiness check publication',
+                    title: 'Publishing merge review results',
                     content:
                       'Automatic checks evaluate the published policy against current PR and workflow evidence. Only verified passing execution can produce success. Missing evidence remains incomplete. The worker invalidates old results before reevaluation and retries failed requests. Checks are refreshed at least once per polling cycle; GitHub outages can delay updates. Manual reviewed publication remains available. Forks, draft PRs and merge queues are unsupported.',
                   },
                   {
                     title: 'Ruleset Insights',
                     content:
-                      'Open a GitHub ruleset and choose Insights to see GitHub rule evaluations. Counts cover matching rule results on the current page, not all activity in the selected period. Active failures can block pushes; Evaluate mode records failures without blocking. Suite-wide bypasses do not prove this particular ruleset was bypassed. Preflyt readiness results are shown separately in Readiness check. Insights needs repository Administration: read on the assessment App. Choose Current GitHub history for an on-demand page or Saved GitHub history for evaluations collected by the worker. Saved history shows collection freshness, failures and retention. It cannot recover older evaluations that were never collected; a completed collection sweep does not prove complete period coverage.',
+                      'Open a GitHub ruleset and choose Insights to see GitHub rule evaluations. Counts cover matching rule results on the current page, not all activity in the selected period. Active failures can block pushes; Evaluate mode records failures without blocking. Suite-wide bypasses do not prove this particular ruleset was bypassed. Preflyt readiness results are shown separately in Merge review result. Insights needs repository Administration: read on the assessment App. Choose Current GitHub history for an on-demand page or Saved GitHub history for evaluations collected by the worker. Saved history shows collection freshness, failures and retention. It cannot recover older evaluations that were never collected; a completed collection sweep does not prove complete period coverage.',
                   },
                   {
                     title: 'Local ruleset drafts',
@@ -272,7 +272,7 @@ export function WorkspaceModule({ module }: { module: Module }) {
                   Assessment previews
                 </TabsTrigger>
                 <TabsTrigger value='rulesets'>GitHub Rulesets</TabsTrigger>
-                <TabsTrigger value='checks'>Readiness check</TabsTrigger>
+                <TabsTrigger value='checks'>Merge review result</TabsTrigger>
               </TabsList>
             )}
             {module === 'integrations' && (

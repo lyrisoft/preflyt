@@ -47,3 +47,12 @@ it('uses green for resolved triage and blue for ongoing review', async () => {
     .element(view.getByText('In review'))
     .toHaveClass('text-info-text')
 })
+
+it('preserves evidence colors after wording changes', () => {
+  expect(statusTones['source not verified']).toBe('warning')
+  expect(statusTones['newer result available']).toBe('warning')
+  expect(statusTones['result expired']).toBe('error')
+  expect(statusTones['multiple matching results']).toBe('error')
+  expect(statusTones['not run']).toBe('neutral')
+  expect(statusTones['suggestions only']).toBe('info')
+})

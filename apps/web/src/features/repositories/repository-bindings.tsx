@@ -113,7 +113,7 @@ function BindingEditor({
     )
   })
   const mutation = useMutation({
-    meta: { successMessage: 'CI sources saved' },
+    meta: { successMessage: 'Check sources saved' },
     mutationFn: async () => {
       const response = await fetch(
         engineeringPath(repositoryId, '/ci-bindings'),
@@ -133,7 +133,7 @@ function BindingEditor({
       if (!response.ok)
         throw new Error(
           response.status === 409
-            ? 'Standards or CI sources changed. Close this editor, reload and review again.'
+            ? 'Standards or Check sources changed. Close this editor, reload and review again.'
             : response.status === 403
               ? 'Your permission or repository access changed.'
               : 'Approval failed. Check exact source identities and try again.'
@@ -288,7 +288,7 @@ function BindingEditor({
           without connections removes the existing ones.
         </p>
         <Button type='submit' disabled={!valid || mutation.isPending}>
-          {mutation.isPending ? 'Saving…' : 'Approve CI sources'}
+          {mutation.isPending ? 'Saving…' : 'Approve Check sources'}
         </Button>
       </SheetFooter>
     </form>
@@ -324,7 +324,7 @@ export function RepositoryBindings({
       <CardHeader>
         <CardTitle className='flex items-center gap-2'>
           <Link2 className='size-4 text-chart-2' />
-          CI sources
+          Check sources
         </CardTitle>
         <CardDescription>
           Choose which CI check or workflow supplies results for each rule.
@@ -334,7 +334,7 @@ export function RepositoryBindings({
             size='icon'
             variant='outline'
             className='size-8'
-            aria-label='Reload CI sources'
+            aria-label='Reload Check sources'
             disabled={query.isFetching}
             onClick={() => {
               setEditing(false)
@@ -349,7 +349,7 @@ export function RepositoryBindings({
       <CardContent className='space-y-4'>
         {query.isPending ? (
           <p role='status' className='text-sm text-muted-foreground'>
-            Loading CI sources…
+            Loading Check sources…
           </p>
         ) : query.isError ? (
           <p role='alert' className='text-sm text-destructive'>
@@ -378,8 +378,8 @@ export function RepositoryBindings({
                 >
                   <ShieldCheck className='size-3.5' />
                   {saved?.binding
-                    ? 'Review CI sources'
-                    : 'Configure CI sources'}
+                    ? 'Review Check sources'
+                    : 'Configure Check sources'}
                 </Button>
               )}
             </div>
@@ -393,7 +393,7 @@ export function RepositoryBindings({
                     {mappings.length}
                   </p>
                   <p className='mt-1.5 text-xs text-muted-foreground'>
-                    Connected rules
+                    Connected checks
                   </p>
                 </div>
               </div>
@@ -410,7 +410,7 @@ export function RepositoryBindings({
                       : `${saved?.active ? mappedRules : 0} / ${importRules.length}`}
                   </p>
                   <p className='mt-1.5 text-xs text-muted-foreground'>
-                    Current rules associated
+                    Current checks connected
                   </p>
                 </div>
               </div>
@@ -437,7 +437,7 @@ export function RepositoryBindings({
                 role='alert'
                 className='rounded-lg border border-warning/20 bg-warning/5 p-3 text-xs text-warning-text'
               >
-                Saved standards need review before current rule associations can
+                Saved standards need review before current check connections can
                 be interpreted.
               </p>
             )}
@@ -461,7 +461,7 @@ export function RepositoryBindings({
                 role='status'
                 className='rounded-lg border border-warning/20 bg-warning/5 px-3 py-2.5 text-xs text-warning-text'
               >
-                Standards changed. Review these CI sources and approve them
+                Standards changed. Review these Check sources and approve them
                 again for your current selection.
               </p>
             )}
@@ -499,23 +499,23 @@ export function RepositoryBindings({
               <div className='flex items-center gap-3 rounded-lg border border-dashed px-4 py-5'>
                 <Link2 className='size-5 shrink-0 text-muted-foreground' />
                 <div>
-                  <p className='text-sm font-medium'>No rule associations</p>
+                  <p className='text-sm font-medium'>No checks connected</p>
                   <p className='mt-1 text-xs text-muted-foreground'>
-                    CI results remain available without an automatic
-                    source-to-rule mapping.
+                    CI results remain available without an automatic connection
+                    between a result source and a check.
                   </p>
                 </div>
               </div>
             )}
             <details className='group border-t pt-3'>
               <summary className='inline-flex cursor-pointer list-none items-center gap-1 text-xs text-muted-foreground hover:text-foreground [&::-webkit-details-marker]:hidden'>
-                Approval scope and history
+                Approval details and history
                 <ChevronDown className='size-3 transition-transform group-open:rotate-180' />
               </summary>
               <div className='mt-3 space-y-3 text-xs text-muted-foreground'>
                 {saved?.binding && (
                   <dl className='grid gap-x-4 gap-y-2 sm:grid-cols-[max-content_1fr]'>
-                    <dt>Binding revision</dt>
+                    <dt>Connection version</dt>
                     <dd className='font-medium text-foreground'>
                       {saved.binding.revision}
                     </dd>
@@ -530,9 +530,9 @@ export function RepositoryBindings({
                   </dl>
                 )}
                 <p>
-                  Matching sources identify where evidence originated; execution
-                  remains unverified. New revisions preserve existing assessment
-                  snapshots.
+                  Matching sources identify where results came from; they do not
+                  verify which tools ran. New revisions preserve existing saved
+                  assessments.
                 </p>
               </div>
             </details>
@@ -542,7 +542,7 @@ export function RepositoryBindings({
       <Sheet open={editing} onOpenChange={setEditing}>
         <SheetContent className='gap-0 sm:max-w-lg'>
           <SheetHeader>
-            <SheetTitle>Approve CI sources</SheetTitle>
+            <SheetTitle>Approve Check sources</SheetTitle>
             <SheetDescription>
               Review mappings for the current standards selection.
             </SheetDescription>
