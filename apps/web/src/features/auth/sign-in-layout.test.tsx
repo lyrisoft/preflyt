@@ -105,6 +105,13 @@ it.each([
     await expect
       .poll(() => document.documentElement.scrollWidth <= window.innerWidth)
       .toBe(true)
+    const brand = view
+      .getByRole('img', { name: 'Preflyt', exact: true })
+      .element()
+    withinViewport(brand)
+    const brandBounds = brand.getBoundingClientRect()
+    expect(brandBounds.bottom).toBeLessThan(card().getBoundingClientRect().top)
+    expect(brandBounds.top).toBeGreaterThanOrEqual(0)
     withinViewport(card())
     withinViewport(view.getByLabelText('Username').element())
     withinViewport(
@@ -128,18 +135,13 @@ it.each([
     ).toBeLessThanOrEqual(1)
     expect(cardBounds.top).toBeGreaterThanOrEqual(0)
     expect(cardBounds.bottom).toBeLessThanOrEqual(window.innerHeight)
-    const control = document.querySelector<HTMLElement>(
-      '.sign-in-motion-control'
-    )!
+    expect(document.querySelector('.sign-in-header')).toBeNull()
+    await expect
+      .element(view.getByRole('button', { name: 'Pause background animation' }))
+      .not.toBeInTheDocument()
     if (width < 768) {
-      expect(getComputedStyle(control).display).toBe('none')
       expect(cardBounds.width).toBeGreaterThanOrEqual(width - 64)
     } else {
-      await expect
-        .element(
-          view.getByRole('button', { name: 'Pause background animation' })
-        )
-        .toBeVisible()
       expect(cardBounds.width).toBeGreaterThanOrEqual(360)
       expect(cardBounds.width).toBeLessThanOrEqual(481)
     }
@@ -172,53 +174,105 @@ it.each([false, true])(
 )
 
 it.each([false, true])(
-  'lets keyboard users visibly focus, pause and resume real animation in dark=%s',
+  'starts keyboard access directly at the sign-in form in dark=%s',
   async (dark) => {
     await page.viewport(1440, 900)
     const view = await entry(dark)
-    expect(
-      window.matchMedia('(prefers-reduced-motion: no-preference)').matches
-    ).toBe(true)
-    await motion('running')
-    const pause = view.getByRole('button', {
-      name: 'Pause background animation',
-    })
+    const username = view.getByLabelText('Username')
     await userEvent.keyboard('{Tab}')
+    await expect.element(username).toHaveFocus()
+    expect(username.element().matches(':focus-visible')).toBe(true)
     await expect
-      .poll(() => document.activeElement === pause.element())
+      .poll(() => getComputedStyle(username.element()).boxShadow !== 'none')
       .toBe(true)
-    expect(pause.element().matches(':focus-visible')).toBe(true)
+    await userEvent.keyboard('{Tab}')
+    await expect.element(view.getByLabelText('Password')).toHaveFocus()
     await expect
-      .poll(() => getComputedStyle(pause.element()).boxShadow !== 'none')
-      .toBe(true)
-    await userEvent.keyboard('{Enter}')
-    const resume = view.getByRole('button', {
-      name: 'Resume background animation',
-    })
-    await expect.element(resume).toHaveAttribute('aria-pressed', 'true')
-    await motion('paused')
-    await userEvent.keyboard('{Enter}')
-    await expect.element(pause).toHaveAttribute('aria-pressed', 'false')
-    await motion('running')
+      .element(view.getByRole('button', { name: 'Pause background animation' }))
+      .not.toBeInTheDocument()
   }
 )
 
 it.each([false, true])(
-  'pauses actual ambient animation while the form has focus in dark=%s',
+  'settles the decorative entrance within five seconds in dark=%s',
   async (dark) => {
     await page.viewport(1440, 900)
-    const view = await entry(dark)
-    await motion('running')
-    const username = view.getByLabelText('Username')
-    await username.click()
-    await expect.element(username).toHaveFocus()
-    await motion('paused')
-    await username.fill('fixture-user')
-    await motion('paused')
-    username.element().blur()
-    await motion('running')
-  }
+    await entry(dark)
+    const nodes = [...surface().querySelectorAll<SVGElement>('[data-ambient]')]
+    for (const node of nodes) {
+      const style = getComputedStyle(node)
+      expect(style.animationIterationCount).toBe('1')
+      expect(parseFloat(style.animationDuration)).toBeLessThanOrEqual(5)
+    }
+    await expect
+      .poll(
+        () =>
+          nodes
+            .flatMap((node) => node.getAnimations())
+            .every((animation) => animation.playState === 'finished'),
+        { timeout: 5000 }
+      )
+      .toBe(true)
+    expect(
+      getComputedStyle(surface().querySelector('.sign-in-signal')!).opacity
+    ).toBe('0')
+  },
+  7000
 )
+
+it('softens local authentication geometry without changing workspace buttons', async () => {
+  const view = await entry()
+  const outer = await render(<Button>Workspace action</Button>)
+  const input = view.getByLabelText('Username').element()
+  const authButton = view
+    .getByRole('button', { name: 'Sign in', exact: true })
+    .element()
+  expect(getComputedStyle(card()).borderRadius).toBe('32px')
+  if (CSS.supports('backdrop-filter', 'blur(20px)')) {
+    expect(getComputedStyle(card()).backdropFilter).toBe(
+      'blur(20px) saturate(1.12)'
+    )
+  }
+  expect(getComputedStyle(input).borderRadius).toBe('12px')
+  expect(getComputedStyle(authButton).borderRadius).toBe('12px')
+  expect(
+    getComputedStyle(
+      outer.getByRole('button', { name: 'Workspace action' }).element()
+    ).borderRadius
+  ).not.toBe('12px')
+  const providerIcons = surface().querySelector('.sign-in-provider-icons')!
+  expect(providerIcons.getAttribute('aria-hidden')).toBe('true')
+  expect(getComputedStyle(providerIcons).animationName).toBe('none')
+  expect(getComputedStyle(providerIcons).opacity).toBe('0.12')
+  const logos = [...providerIcons.querySelectorAll('svg')]
+  expect(logos.map((logo) => logo.dataset.provider)).toEqual([
+    'github',
+    'github-actions',
+    'azure-pipelines',
+  ])
+  expect(
+    logos.every((logo) => logo.getAttribute('focusable') === 'false')
+  ).toBe(true)
+  const lines = getComputedStyle(
+    surface().querySelector('.sign-in-commit-lines')!
+  )
+  expect(lines.strokeWidth).toBe('9px')
+  expect(lines.strokeLinecap).toBe('round')
+  expect(lines.strokeLinejoin).toBe('round')
+  const brackets = getComputedStyle(
+    surface().querySelector('.sign-in-code-brackets')!
+  )
+  expect(brackets.strokeWidth).toBe('24px')
+  expect(brackets.strokeLinecap).toBe('round')
+  expect(brackets.strokeLinejoin).toBe('round')
+  expect(
+    surface().querySelector('.sign-in-code-brackets path')?.getAttribute('d')
+  ).toContain('Q')
+  expect(
+    getComputedStyle(surface().querySelector('.sign-in-source-lines')!)
+      .strokeWidth
+  ).toBe('12px')
+})
 
 it('responds to document visibility events with real animation styles using a temporary hidden-state getter', async () => {
   await page.viewport(1440, 900)
