@@ -45,6 +45,7 @@ class ProviderDto {
 class RouteDto {
   @IsOptional() @IsBoolean() automaticReviews?: boolean;
   @IsOptional() @IsBoolean() publishSummary?: boolean;
+  @IsOptional() @IsBoolean() publishInline?: boolean;
   @ValidateIf((_o, v) => v !== null) @IsUUID() primaryId!: string | null;
   @ValidateIf((_o, v) => v !== null) @IsUUID() fallbackId!: string | null;
   @IsBoolean() enabled!: boolean;

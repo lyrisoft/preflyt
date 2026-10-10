@@ -1,3 +1,5 @@
+import {disposableDatabase} from './disposable-database.js'
+let fixture: Awaited<ReturnType<typeof disposableDatabase>>
 import { AuthorizationService } from '../src/auth/authorization.service.js'
 import 'reflect-metadata'
 import { beforeAll, afterAll, beforeEach, expect, it, vi } from 'vitest'
@@ -31,16 +33,8 @@ const get = (query = '') =>
     .set('Cookie', 'test.sid=VIEWER')
 
 beforeAll(async () => {
-  if (
-    !new URL(process.env.DATABASE_URL!).pathname.startsWith(
-      '/preflyt_dashboard_test_',
-    )
-  )
-    throw new Error(
-      'Dashboard integration tests require a dedicated disposable database',
-    )
-  prisma = new PrismaService()
-  await prisma.$connect()
+  fixture = await disposableDatabase('dashboard')
+  prisma = fixture.prisma
   app = await NestFactory.create(
     {
       module: class TestModule {},
@@ -70,7 +64,7 @@ beforeAll(async () => {
             sessionCookieName: 'test.sid',
             currentSession: async (token?: string) =>
               token === 'VIEWER'
-                ? { authenticated: true, identityId: actorId, role: 'VIEWER' }
+                ? { authenticated: true, identityId: actorId, organizationId: 'fixture-org', role: 'VIEWER' }
                 : { authenticated: false },
           },
         },
@@ -83,9 +77,10 @@ beforeAll(async () => {
 })
 afterAll(async () => {
   await app?.close()
-  await prisma?.$disconnect()
+  await fixture?.close()
 })
 beforeEach(async () => {
+  await fixture.reset()
   entries.clear()
   builds = 0
   await prisma.gitHubRepository.deleteMany()
@@ -96,8 +91,11 @@ beforeEach(async () => {
       data: { issuer: 'dashboard-fixture', subject: 'viewer' },
     })
   ).id
+  const organization = await prisma.organization.create({data: {id: 'fixture-org', name: 'Fixture'}})
+  await prisma.organizationMembership.create({data: {organizationId: organization.id, identityId: actorId, role: 'OWNER'}})
   await prisma.gitHubInstallation.create({
     data: {
+      organizationId: organization.id,
       id: 501n,
       accountLogin: 'fixture',
       accountType: 'Organization',

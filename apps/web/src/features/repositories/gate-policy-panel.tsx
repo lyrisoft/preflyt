@@ -295,7 +295,7 @@ export function GatePolicyPanel({
                         <TableHead className='pl-4'>Branch</TableHead>
                         <TableHead>Version</TableHead>
                         <TableHead>Requirements</TableHead>
-                        <TableHead>Packs</TableHead>
+                        <TableHead>Standards</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead className='pr-4 text-right'>
                           <span className='sr-only'>Review</span>
@@ -393,7 +393,7 @@ export function GatePolicyPanel({
               {editing ? 'Edit policy draft' : 'New branch policy'}
             </DialogTitle>
             <DialogDescription>
-              Use the latest saved standards. Optional rules can be made
+              Use the latest saved standards. Optional checks can be made
               required.
             </DialogDescription>
           </DialogHeader>
@@ -445,7 +445,7 @@ export function GatePolicyPanel({
                   ? 'Loading requirements…'
                   : standards.isError
                     ? 'Requirements are unavailable. Retry below.'
-                    : `${standards.data?.controls.filter((rule) => rule.required).length ?? 0} required rules · ${standards.data?.selection?.packs.length ?? 0} packs`}
+                    : `${standards.data?.controls.filter((rule) => rule.required).length ?? 0} required checks · ${standards.data?.selection?.packs.length ?? 0} standards`}
               </p>
               {standards.isError && (
                 <Button
@@ -464,8 +464,8 @@ export function GatePolicyPanel({
                   Additional requirements
                 </legend>
                 <p className='text-xs text-muted-foreground'>
-                  Choose optional rules to make required. Existing required
-                  rules cannot be removed.
+                  Choose optional checks to make required. Existing required
+                  checks cannot be removed.
                 </p>
                 {optionalRules.map((rule) => (
                   <label
@@ -561,7 +561,7 @@ export function GatePolicyPanel({
                         .length,
                       'Optional',
                     ],
-                    [selected.definition.packs.length, 'Packs'],
+                    [selected.definition.packs.length, 'Standards'],
                   ].map(([value, label]) => (
                     <div key={label} className='px-4 py-3'>
                       <p className='text-xl font-semibold tabular-nums'>
@@ -592,7 +592,7 @@ export function GatePolicyPanel({
                     <Table>
                       <TableHeader>
                         <TableRow className='bg-muted/30'>
-                          <TableHead>Control</TableHead>
+                          <TableHead>Check</TableHead>
                           <TableHead>Requirement</TableHead>
                           <TableHead>Support</TableHead>
                         </TableRow>
@@ -626,7 +626,7 @@ export function GatePolicyPanel({
                 {!!selected.definition.aiChecks?.length && (
                   <section className='space-y-3'>
                     <h3 className='text-sm font-semibold'>
-                      Advisory AI Reviews
+                      AI Reviews · suggestions only
                     </h3>
                     {selected.definition.aiChecks.map((check) => (
                       <div
@@ -635,7 +635,9 @@ export function GatePolicyPanel({
                       >
                         <div className='flex items-center justify-between gap-3'>
                           <span className='font-medium'>{check.title}</span>
-                          <StatusBadge tone='info'>AI · Advisory</StatusBadge>
+                          <StatusBadge tone='info'>
+                            Suggestions only
+                          </StatusBadge>
                         </div>
                         <p className='mt-1 text-xs text-muted-foreground'>
                           Skill v{check.skillVersion} ·{' '}
@@ -651,7 +653,9 @@ export function GatePolicyPanel({
                   </section>
                 )}
                 <section className='space-y-2'>
-                  <h3 className='text-sm font-semibold'>Saved pack versions</h3>
+                  <h3 className='text-sm font-semibold'>
+                    Saved standard versions
+                  </h3>
                   <div className='flex flex-wrap gap-2'>
                     {selected.definition.packs.map((pack) => (
                       <span
@@ -718,7 +722,7 @@ export function GatePolicyPanel({
                 {selected.state === 'PUBLISHED' && (
                   <p className='flex items-center gap-2 text-sm text-success'>
                     <CheckCheck className='size-4' aria-hidden='true' />
-                    Advisory definition published
+                    Policy published
                   </p>
                 )}
                 <div className='flex flex-wrap justify-end gap-2'>

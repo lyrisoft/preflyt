@@ -27,7 +27,7 @@ export type NativePlan = {
 }
 const labels: Record<string, string> = {
   PROFILE_EVIDENCE: 'Uses repository inspection',
-  ADAPTER_UNAVAILABLE: 'Native check not supported yet',
+  ADAPTER_UNAVAILABLE: 'Preflyt cannot run this check yet',
   TOOL_REVIEW_REQUIRED: 'Tool review required',
   DISPATCHER_REQUIRED: 'Planned · execution unavailable',
 }

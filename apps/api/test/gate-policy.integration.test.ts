@@ -1,3 +1,5 @@
+import {disposableDatabase} from './disposable-database.js'
+let fixture: Awaited<ReturnType<typeof disposableDatabase>>
 import "reflect-metadata";
 import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
 import { NestFactory } from "@nestjs/core";
@@ -50,14 +52,8 @@ const approve = (p: any) =>
     expectedHash: p.definitionHash,
   }).expect(201);
 beforeAll(async () => {
-  if (
-    !new URL(process.env.DATABASE_URL!).pathname.startsWith(
-      "/preflyt_dashboard_test_",
-    )
-  )
-    throw Error("Disposable test database required");
-  db = new PrismaService();
-  await db.$connect();
+  fixture = await disposableDatabase('gatepolicy')
+  db = fixture.prisma
   app = await NestFactory.create(
     {
       module: class PoliciesTest {},
@@ -103,9 +99,10 @@ beforeAll(async () => {
 });
 afterAll(async () => {
   await app?.close();
-  await db?.$disconnect();
+  await fixture?.close();
 });
 beforeEach(async () => {
+  await fixture.reset()
   await db.gitHubRepository.deleteMany();
   await db.gitHubInstallation.deleteMany();
   await db.organization.deleteMany();

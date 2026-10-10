@@ -23,7 +23,7 @@ import { digest } from '../src/assessments/assessment-digest.js'
 import { nativeCheckOutcome } from '../src/execution/native-result.js'
 if (
   process.env.NATIVE_FIXTURE_TOOL &&
-  !['node', 'gitleaks', 'semgrep', 'trivy'].includes(
+  !['node', 'gitleaks', 'semgrep', 'trivy', 'trivy-offline'].includes(
     process.env.NATIVE_FIXTURE_TOOL,
   )
 )
@@ -65,6 +65,17 @@ const fixtures: Array<{
   files: Record<string, string>
   expected: string
 }> = [
+  {
+    id: 'dependency-vulnerability',
+    ruleId: 'security.dependencies',
+    tool: 'trivy-offline',
+    files: {
+      'package-lock.json': JSON.stringify({ name: 'fixture', version: '1.0.0', lockfileVersion: 2, requires: true,
+        packages: { '': { name: 'fixture', version: '1.0.0', dependencies: { lodash: '4.17.19' } }, 'node_modules/lodash': { version: '4.17.19' } },
+        dependencies: { lodash: { version: '4.17.19' } } }),
+    },
+    expected: 'FAIL',
+  },
   {
     id: 'secret-failure',
     ruleId: 'secrets.scan',
@@ -189,11 +200,12 @@ const fixtures: Array<{
   },
 ]
 const results: unknown[] = []
+const workspaces: Awaited<ReturnType<typeof createNativeWorkspace>>[] = []
 try {
   git(['-c', 'init.templateDir=', 'init', '--bare', '--quiet'])
   for (const fixture of fixtures.filter(
     (f) =>
-      !process.env.NATIVE_FIXTURE_TOOL ||
+      (!process.env.NATIVE_FIXTURE_TOOL && f.tool !== 'trivy-offline') ||
       f.tool === process.env.NATIVE_FIXTURE_TOOL,
   )) {
     const entries = Object.entries(fixture.files)
@@ -238,6 +250,7 @@ try {
       sha,
     )
     const workspace = await createNativeWorkspace(root, bundle)
+    workspaces.push(workspace)
     const image = JSON.parse(
       (
         await dockerCommand([
@@ -320,7 +333,9 @@ try {
         .digest('hex'),
       reviewDigest: 'f'.repeat(64),
       expiresAt: new Date(Date.now() + 86400000).toISOString(),
-      databaseBuiltAt: null,
+      databaseBuiltAt: fixture.tool === 'trivy-offline'
+        ? JSON.parse((await dockerCommand(['run', '--rm', '--network', 'none', '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges=true', '--entrypoint', '/usr/local/bin/node', image, '-e', "process.stdout.write(require('fs').readFileSync('/opt/preflyt/trivy-cache/db/metadata.json','utf8'))"])).toString()).UpdatedAt
+        : null,
     }
     const scope = {
       requestId: randomUUID(),
@@ -452,5 +467,6 @@ try {
     'Disposable fixture checks passed. No connected repository or production runtime was accepted.',
   )
 } finally {
+  for (const workspace of workspaces) await workspace.cleanup()
   await rm(root, { recursive: true, force: true })
 }

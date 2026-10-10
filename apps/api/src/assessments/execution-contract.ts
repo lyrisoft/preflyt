@@ -1,3 +1,4 @@
+import { checkReportAdapters } from './check-report-adapters.js'
 import { digest } from './assessment-digest.js'
 export type ExecutionContract = {
   ruleId: string
@@ -6,13 +7,6 @@ export type ExecutionContract = {
   format: 'junit' | 'sarif'
   tool: string
   toolVersion: string
-}
-const adapters: Record<string, string> = {
-  'tests.required': 'junit',
-  'security.sast': 'sarif',
-  'secrets.scan': 'sarif',
-  'security.dependencies': 'sarif',
-  'containers.scan': 'sarif',
 }
 /** Deployment-approved, reviewed workflow code is the execution trust boundary. */
 export function executionContracts(): {
@@ -31,7 +25,7 @@ export function executionContracts(): {
       contracts.some(
         (c) =>
           !c ||
-          adapters[c.ruleId] !== c.format ||
+          checkReportAdapters[c.ruleId] !== c.format ||
           !/^[a-f0-9]{40}$/.test(c.signerDigest) ||
           !/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+\/\.github\/workflows\/[a-zA-Z0-9_-]+\.ya?ml$/.test(
             c.signerWorkflow,

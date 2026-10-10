@@ -10,6 +10,7 @@ import {
   PanelsTopLeft,
   Network,
   ChevronRight,
+  Trash2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -20,6 +21,13 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   Sheet,
   SheetContent,
@@ -124,7 +132,7 @@ export function OrganizationStandardsLibrary() {
               {
                 title: 'Supported checks',
                 content:
-                  'Standards group deterministic checks and advisory AI Reviews. Each AI Review pins an approved skill version and chooses when it runs. AI suggestions cannot satisfy required deterministic checks. Source-code review is not yet available; the current runtime reviews saved check evidence.',
+                  'Standards group rule-based checks and advisory AI Reviews. Each AI Review uses an approved skill version and chooses when it runs. AI suggestions cannot satisfy required rule-based checks. Reviews use saved check evidence and may include verified PR changes when source sharing is enabled.',
               },
             ]}
           />
@@ -203,10 +211,15 @@ export function OrganizationStandardsLibrary() {
           )}
         </>
       )}
-      {allowed && editor && data && (
+      {allowed && editor && query.data && (
         <StandardEditor
           key={editor.pack?.id ?? 'new'}
-          library={data}
+          library={query.data}
+          onRefreshSkills={async () => {
+            const result = await query.refetch()
+            if (result.isError)
+              throw new Error('Could not refresh skills. Try again.')
+          }}
           pack={editor.pack}
           edit={editor.edit}
           onClose={() => setEditor(null)}
@@ -324,7 +337,7 @@ export function OrganizationStandardsLibrary() {
               >
                 <div className='flex items-center justify-between gap-3'>
                   <h3 className='text-sm font-semibold'>{check.title}</h3>
-                  <StatusBadge tone='info'>AI · Advisory</StatusBadge>
+                  <StatusBadge tone='info'>Suggestions only</StatusBadge>
                 </div>
                 <p className='text-xs text-muted-foreground'>
                   Skill v{check.skillVersion} ·{' '}
@@ -344,11 +357,13 @@ function StandardEditor({
   edit,
   onClose,
   onSaved,
+  onRefreshSkills,
 }: {
   library: Library
   pack?: Pack
   edit: boolean
   onClose: () => void
+  onRefreshSkills: () => Promise<void>
   onSaved: () => Promise<void>
 }) {
   const [title, setTitle] = useState(pack?.title ?? '')
@@ -359,6 +374,7 @@ function StandardEditor({
   const [checkSearch, setCheckSearch] = useState('')
   const [checkPage, setCheckPage] = useState(1)
   const [aiPage, setAiPage] = useState(1)
+  const [editorTab, setEditorTab] = useState('checks')
   const [aiChecks, setAiChecks] = useState(
     (pack?.aiChecks ?? []).map((c) => ({
       id: c.id,
@@ -367,6 +383,8 @@ function StandardEditor({
       stages: c.stages as string[],
     }))
   )
+  const [refreshingSkills, setRefreshingSkills] = useState(false)
+  const [skillsError, setSkillsError] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const rules = [
@@ -408,32 +426,32 @@ function StandardEditor({
         if (!open && !busy) onClose()
       }}
     >
-      <DialogContent className='max-h-[85svh] overflow-y-auto sm:max-w-5xl'>
-        <DialogHeader>
+      <DialogContent className='max-h-[90svh] gap-6 overflow-y-auto p-5 sm:max-w-6xl sm:p-8'>
+        <DialogHeader className='gap-2.5 pr-8 text-start'>
           <DialogTitle>
             {edit
               ? 'Edit standard'
               : pack
-                ? 'Create an editable copy'
+                ? 'Customize standard'
                 : 'New engineering standard'}
           </DialogTitle>
           <DialogDescription>
-            Save a version for your organization. Existing policies keep their
-            saved version.
+            Choose the checks and AI Reviews for this standard.
           </DialogDescription>
         </DialogHeader>
         <form
-          className='space-y-4'
+          className='space-y-6'
           onSubmit={(e) => {
             e.preventDefault()
             void save()
           }}
         >
-          <div className='grid items-start gap-6 md:grid-cols-[260px_minmax(0,1fr)]'>
-            <div className='space-y-4 md:border-r md:pr-6'>
-              <label className='block space-y-2 text-sm'>
+          <div className='grid items-start gap-8 md:grid-cols-[280px_minmax(0,1fr)]'>
+            <div className='space-y-6 md:border-r md:pr-8'>
+              <label className='flex flex-col gap-2.5 text-[13px] font-medium'>
                 <span>Name</span>
                 <Input
+                  className='h-10 font-normal md:text-[13px]'
                   required
                   maxLength={120}
                   value={title}
@@ -441,31 +459,93 @@ function StandardEditor({
                   onChange={(e) => setTitle(e.target.value)}
                 />
               </label>
-              <label className='block space-y-2 text-sm'>
+              <label className='flex flex-col gap-2.5 text-[13px] font-medium'>
                 <span>Description</span>
                 <textarea
                   maxLength={2000}
                   value={description}
                   disabled={busy}
                   onChange={(e) => setDescription(e.target.value)}
-                  className='min-h-20 w-full rounded-md border bg-background p-3'
+                  className='min-h-32 w-full resize-y rounded-md border border-input bg-transparent px-3 py-2.5 text-[13px] leading-6 font-normal shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50 dark:bg-input/30'
                 />
               </label>
-              <div className='flex flex-wrap gap-2 text-xs'>
-                <StatusBadge tone='neutral'>
-                  {selected.length} deterministic checks
-                </StatusBadge>
-                <StatusBadge tone='info'>
-                  {aiChecks.length} AI Reviews
-                </StatusBadge>
-              </div>
             </div>
-            <Tabs defaultValue='checks' className='min-w-0'>
-              <TabsList>
-                <TabsTrigger value='checks'>Deterministic checks</TabsTrigger>
-                <TabsTrigger value='ai'>AI Reviews</TabsTrigger>
-              </TabsList>
-              <TabsContent value='checks' className='mt-4 space-y-3'>
+            <Tabs
+              value={editorTab}
+              onValueChange={setEditorTab}
+              className='min-w-0 gap-0'
+            >
+              <div className='flex flex-wrap items-center justify-between gap-3'>
+                <TabsList className='p-1.5'>
+                  <TabsTrigger value='checks'>
+                    Checks{' '}
+                    <span className='text-xs text-muted-foreground'>
+                      {selected.length}
+                    </span>
+                  </TabsTrigger>
+                  <TabsTrigger value='ai' aria-label='AI Reviews'>
+                    AI Reviews{' '}
+                    <span aria-hidden className='text-xs text-muted-foreground'>
+                      {aiChecks.length}
+                    </span>
+                  </TabsTrigger>
+                </TabsList>
+                {editorTab === 'ai' && (
+                  <div className='flex items-center gap-2'>
+                    <Button
+                      type='button'
+                      size='sm'
+                      className='h-9'
+                      variant='outline'
+                      disabled={
+                        busy ||
+                        !library.reviewSkills?.length ||
+                        aiChecks.length >= 12
+                      }
+                      onClick={() => {
+                        const skill = library.reviewSkills?.[0]
+                        if (skill) {
+                          setAiPage(Math.ceil((aiChecks.length + 1) / 2))
+                          setAiChecks((old) => [
+                            ...old,
+                            {
+                              id: `ai-review-${crypto.randomUUID()}`,
+                              title: skill.name,
+                              skillId: skill.id,
+                              stages: ['pull_request'],
+                            },
+                          ])
+                        }
+                      }}
+                    >
+                      Add AI Review
+                    </Button>
+                    <Button
+                      type='button'
+                      size='icon'
+                      className='size-9'
+                      variant='outline'
+                      aria-label='Refresh skills'
+                      title='Refresh skills'
+                      disabled={busy || refreshingSkills}
+                      onClick={async () => {
+                        setRefreshingSkills(true)
+                        setSkillsError('')
+                        try {
+                          await onRefreshSkills()
+                        } catch {
+                          setSkillsError('Could not refresh skills. Try again.')
+                        } finally {
+                          setRefreshingSkills(false)
+                        }
+                      }}
+                    >
+                      <RefreshCw className='size-4' />
+                    </Button>
+                  </div>
+                )}
+              </div>
+              <TabsContent value='checks' className='mt-5 space-y-4'>
                 <Input
                   aria-label='Filter available checks'
                   placeholder='Filter checks…'
@@ -476,7 +556,7 @@ function StandardEditor({
                   }}
                 />
                 <fieldset disabled={busy}>
-                  <legend className='sr-only'>Deterministic checks</legend>
+                  <legend className='sr-only'>Checks</legend>
                   <div className='grid gap-2 sm:grid-cols-2'>
                     {filteredRules
                       .slice((checkPage - 1) * 6, checkPage * 6)
@@ -547,39 +627,26 @@ function StandardEditor({
                   </nav>
                 )}
               </TabsContent>
-              <TabsContent value='ai' className='mt-4'>
-                <fieldset disabled={busy} className='space-y-3'>
-                  <div className='flex items-center justify-between gap-3'>
-                    <span className='text-sm font-semibold'>AI Reviews</span>
-                    <Button
-                      type='button'
-                      size='sm'
-                      variant='outline'
-                      disabled={
-                        !library.reviewSkills?.length || aiChecks.length >= 12
-                      }
-                      onClick={() => {
-                        const skill = library.reviewSkills?.[0]
-                        if (skill) {
-                          setAiPage(Math.ceil((aiChecks.length + 1) / 2))
-                          setAiChecks((old) => [
-                            ...old,
-                            {
-                              id: `ai-review-${crypto.randomUUID()}`,
-                              title: skill.name,
-                              skillId: skill.id,
-                              stages: ['pull_request'],
-                            },
-                          ])
-                        }
-                      }}
-                    >
-                      Add AI Review
-                    </Button>
-                  </div>
+              <TabsContent value='ai' className='mt-5'>
+                <fieldset disabled={busy} className='space-y-4'>
                   {!library.reviewSkills?.length && (
-                    <p className='text-xs text-muted-foreground'>
-                      Approve and enable a skill in Intelligence → Skills first.
+                    <div className='rounded-lg border p-4 text-sm'>
+                      <p className='mb-2 text-muted-foreground'>
+                        Approve and enable a skill to add an AI Review.
+                      </p>
+                      <a
+                        href='/skills'
+                        target='_blank'
+                        rel='noopener noreferrer'
+                        className='font-medium text-primary underline underline-offset-4'
+                      >
+                        Open Skills
+                      </a>
+                    </div>
+                  )}
+                  {skillsError && (
+                    <p role='alert' className='text-sm text-destructive'>
+                      {skillsError}
                     </p>
                   )}
                   {aiChecks
@@ -590,13 +657,66 @@ function StandardEditor({
                     .map((check, index) => (
                       <div
                         key={check.id}
-                        className='space-y-3 rounded-lg border p-3'
+                        className='space-y-5 rounded-xl border p-5'
                       >
-                        <div className='flex items-center justify-between'>
-                          <StatusBadge tone='info'>AI · Advisory</StatusBadge>
+                        <div className='flex items-end gap-3'>
+                          <label className='flex min-w-0 flex-1 flex-col gap-2.5 text-[13px] font-medium'>
+                            <span>Skill</span>
+                            <Select
+                              required
+                              disabled={busy}
+                              value={check.skillId}
+                              onValueChange={(skillId) =>
+                                setAiChecks((old) =>
+                                  old.map((c) =>
+                                    c.id === check.id
+                                      ? {
+                                          ...c,
+                                          skillId,
+                                          title:
+                                            library.reviewSkills?.find(
+                                              (s) => s.id === skillId
+                                            )?.name ?? c.title,
+                                        }
+                                      : c
+                                  )
+                                )
+                              }
+                            >
+                              <SelectTrigger
+                                aria-label='Skill'
+                                className='w-full text-[13px] font-normal data-[size=default]:h-10'
+                              >
+                                <SelectValue placeholder='Select a skill' />
+                              </SelectTrigger>
+                              <SelectContent className='max-w-[var(--radix-select-trigger-width)]'>
+                                {!(library.reviewSkills ?? []).some(
+                                  (s) => s.id === check.skillId
+                                ) && (
+                                  <SelectItem
+                                    value={check.skillId}
+                                    disabled
+                                    className='text-[13px]'
+                                  >
+                                    Previously assigned version is unavailable
+                                  </SelectItem>
+                                )}
+                                {(library.reviewSkills ?? []).map((skill) => (
+                                  <SelectItem
+                                    key={skill.id}
+                                    value={skill.id}
+                                    className='py-2 text-[13px]'
+                                  >
+                                    {skill.name} · v{skill.version}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </label>
                           <Button
                             type='button'
-                            size='sm'
+                            size='icon'
+                            className='size-10 shrink-0 text-muted-foreground hover:text-destructive'
                             variant='ghost'
                             aria-label={`Remove AI Review ${index + 1}`}
                             onClick={() =>
@@ -605,64 +725,18 @@ function StandardEditor({
                               )
                             }
                           >
-                            Remove
+                            <Trash2 className='size-4' />
                           </Button>
                         </div>
-                        <label className='block space-y-1 text-sm'>
-                          <span>AI Review name</span>
-                          <Input
-                            required
-                            maxLength={120}
-                            value={check.title}
-                            onChange={(e) =>
-                              setAiChecks((old) =>
-                                old.map((c) =>
-                                  c.id === check.id
-                                    ? { ...c, title: e.target.value }
-                                    : c
-                                )
-                              )
-                            }
-                          />
-                        </label>
-                        <label className='block space-y-1 text-sm'>
-                          <span>Approved skill version</span>
-                          <select
-                            required
-                            className='h-9 w-full rounded-md border bg-background px-3'
-                            value={check.skillId}
-                            onChange={(e) =>
-                              setAiChecks((old) =>
-                                old.map((c) =>
-                                  c.id === check.id
-                                    ? { ...c, skillId: e.target.value }
-                                    : c
-                                )
-                              )
-                            }
-                          >
-                            {!(library.reviewSkills ?? []).some(
-                              (s) => s.id === check.skillId
-                            ) && (
-                              <option value={check.skillId}>
-                                Previously assigned version is unavailable
-                              </option>
-                            )}
-                            {(library.reviewSkills ?? []).map((skill) => (
-                              <option key={skill.id} value={skill.id}>
-                                {skill.name} · v{skill.version}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <div className='flex gap-4 text-sm'>
+                        <div className='flex flex-wrap gap-x-6 gap-y-3 text-[13px]'>
                           {['repository', 'pull_request'].map((stage) => (
                             <label
                               key={stage}
-                              className='flex items-center gap-2'
+                              className='flex min-h-6 cursor-pointer items-center gap-2.5'
                             >
                               <input
                                 type='checkbox'
+                                className='size-4 shrink-0 accent-primary'
                                 checked={check.stages.includes(stage)}
                                 onChange={(e) =>
                                   setAiChecks((old) =>
@@ -682,8 +756,8 @@ function StandardEditor({
                                 }
                               />
                               {stage === 'repository'
-                                ? 'Repository assessment'
-                                : 'Pull request assessment'}
+                                ? 'Repository'
+                                : 'Pull request'}
                             </label>
                           ))}
                         </div>
@@ -726,7 +800,7 @@ function StandardEditor({
               {error}
             </p>
           )}
-          <div className='sticky bottom-0 flex justify-end gap-2 border-t bg-background pt-4'>
+          <div className='sticky bottom-0 flex justify-end gap-2.5 border-t bg-background pt-6'>
             <Button
               type='button'
               variant='outline'

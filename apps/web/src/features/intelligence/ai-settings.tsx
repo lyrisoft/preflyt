@@ -72,6 +72,7 @@ type StageRoute = {
   allowSource: boolean
   automaticReviews?: boolean
   publishSummary?: boolean
+  publishInline?: boolean
   maxInputTokens: number
   maxOutputTokens: number
   dailyBudgetCents: number
@@ -140,19 +141,19 @@ const help = [
       'Organization admins add and approve models directly in Preflyt. Choose a built-in provider or add an OpenAI-compatible endpoint. Model name means the exact API identifier your provider accepts. Hosted providers require HTTPS; select Self-hosted for a local model server. Keys are encrypted and write-only. Testing reads model metadata; it does not send repository code or generate an explanation. Editing a connection requires another test.',
   },
   {
-    title: 'Model routing',
+    title: 'Model choices',
     content:
       'Each stage has a primary model and an optional fallback. Source sharing starts off. A connection must be enabled and successfully tested within the last 24 hours before its route is ready. Switching organizations separates connections and routes.',
   },
   {
     title: 'Review skills',
     content:
-      'Create a versioned skill or start from a first-party template. Review its instructions, source and license, then approve and enable it. Changes require a new version. Add an AI Review in Engineering Standards and assign this approved skill version to it. Choose where the review applies; up to three assigned reviews can run in one request. Model output is advisory and never changes deterministic checks. Third-party packages and scripts are not automatically imported or executed.',
+      'Open Built-in skills for ready-to-edit Markdown reviews linked to engineering checks, or create a custom skill. Review its instructions, source and license, then approve and enable it. Changes require a new version. Add an AI Review in Engineering Standards and assign this approved skill version to it. Choose where the review applies; up to three assigned reviews can run in one request. AI output provides suggestions only and never changes check results. Third-party packages and scripts are not automatically imported or executed.',
   },
   {
     title: 'Current availability',
     content:
-      'These settings prepare model connections. Skill reviews use saved assessment evidence only. Reviews require enabled, tested model routing and configured input/output rates. Reservations enforce the configured daily estimate budget; they are not the provider’s final bill. Source review and GitHub feedback are not available. AI never approves policies or changes deterministic checks.',
+      'AI Reviews use saved assessment results. When source sharing is enabled, PR reviews can also use selected changes from the assessed commit. Published PR policies can run assigned reviews automatically and post summaries or comments to GitHub when those options are enabled. Comments on changed lines also require source sharing. Reviews require an enabled, tested model and configured token prices. Preflyt reserves the estimated cost against your daily budget; this is not the provider’s final bill. AI suggestions never approve policies or count as passed checks.',
   },
 ]
 export function AiSettingsPage() {
@@ -306,8 +307,8 @@ function AiSettings({
           <div className='flex items-center gap-2 rounded-lg border bg-info/5 p-3 text-sm'>
             <ShieldCheck className='size-4 shrink-0 text-info' />
             {data.executionAvailable
-              ? 'Model connections and advisory assessment reviews are available.'
-              : 'Model connections are available. Advisory reviews are disabled for this deployment.'}
+              ? 'Model connections and AI assessment reviews are available.'
+              : 'Model connections are available. AI Reviews are disabled for this deployment.'}
           </div>
           <Tabs defaultValue='connections'>
             <TabsList>
@@ -318,7 +319,7 @@ function AiSettings({
               <TabsTrigger value='skills'>Review skills</TabsTrigger>
               <TabsTrigger value='routing'>
                 <RouteIcon className='mr-2 size-4' />
-                Model routing
+                Model choices
               </TabsTrigger>
             </TabsList>
             <TabsContent value='connections' className='mt-5 space-y-4'>
@@ -678,7 +679,7 @@ function AiSettings({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {stageName(routing?.stage ?? '')} model routing
+              {stageName(routing?.stage ?? '')} model choices
             </DialogTitle>
             <DialogDescription>
               Choose models and limits for this stage.
@@ -945,6 +946,7 @@ function RouteForm({
       allowSource: f.get('allowSource') === 'on',
       automaticReviews: f.get('automaticReviews') === 'on',
       publishSummary: f.get('publishSummary') === 'on',
+      publishInline: f.get('publishInline') === 'on',
       maxInputTokens: Number(f.get('maxInputTokens')),
       maxOutputTokens: Number(f.get('maxOutputTokens')),
       dailyBudgetCents: Number(f.get('dailyBudgetCents')),
@@ -991,7 +993,7 @@ function RouteForm({
             },
             {
               name: 'dailyBudgetCents',
-              label: 'Daily budget (US cents)',
+              label: 'Daily estimated cost limit (US cents)',
               min: 1,
               max: 5000,
             },
@@ -1013,7 +1015,7 @@ function RouteForm({
       </div>
       <label className='flex items-center gap-2 text-sm'>
         <input type='checkbox' name='enabled' defaultChecked={route.enabled} />
-        Enable route
+        Enable reviews for this stage
       </label>
       <label className='flex items-center gap-2 text-sm'>
         <input
@@ -1021,7 +1023,7 @@ function RouteForm({
           name='allowSource'
           defaultChecked={route.allowSource}
         />
-        Allow repository source sharing
+        Send repository code to the selected AI model
       </label>
       {route.stage === 'pull_request' && (
         <fieldset className='space-y-3 rounded-lg border p-4'>
@@ -1042,7 +1044,15 @@ function RouteForm({
               name='publishSummary'
               defaultChecked={route.publishSummary ?? false}
             />
-            Publish advisory summary to GitHub
+            Post AI review summary to GitHub
+          </label>
+          <label className='flex items-center gap-2 text-sm'>
+            <input
+              type='checkbox'
+              name='publishInline'
+              defaultChecked={route.publishInline ?? false}
+            />
+            Post AI review comments on changed lines
           </label>
           <p className='text-xs text-muted-foreground'>
             Uses approved skills and your budget. Source sharing adds verified
@@ -1079,7 +1089,7 @@ function RouteForm({
           ) : (
             <Save aria-hidden='true' />
           )}
-          {busy ? 'Saving…' : 'Save routing'}
+          {busy ? 'Saving…' : 'Save model choices'}
         </Button>
       </div>
     </form>

@@ -29,7 +29,7 @@ export const rolePermissions: Record<string, string[]> = {
     'policy.publish',
     'github.ruleset.manage',
     'policy.enforcement.manage',
-    'evidence.manage',
+    'evidence.manage', 'findings.manage',
     'contributors.read',
     'contributors.activity.read',
     'contributors.policy_evidence.read',
@@ -52,7 +52,7 @@ export const rolePermissions: Record<string, string[]> = {
     'policy.publish',
     'github.ruleset.manage',
     'policy.enforcement.manage',
-    'evidence.manage',
+    'evidence.manage', 'findings.manage',
     'contributors.read',
     'contributors.activity.read',
     'contributors.policy_evidence.read',
@@ -77,7 +77,7 @@ export const rolePermissions: Record<string, string[]> = {
     'assessment.read',
     'team.read',
     'policy.read',
-    'evidence.manage',
+    'evidence.manage', 'findings.manage',
     'contributors.read',
     'contributors.activity.read',
     'contributors.policy_evidence.read',
@@ -237,12 +237,16 @@ export class AuthorizationService {
       },
     })
     throw new ForbiddenException(
-      'This resource is outside your authorized scope'
+      'You do not have access to this resource. Ask your administrator for access.'
     )
   }
   // SessionGuard calls this after live session validation, before any controller or cache lookup.
   async authorizeRequest(request: Request, session: AuthenticatedSession) {
     const path = request.path.replace(/\/$/, '')
+    if (path === '/configuration') {
+      if (session.platformAdmin !== true) await this.deny(session, 'deployment.configuration.manage')
+      return true
+    }
     if (path === '/teams' || path.startsWith('/teams/')) {
       await this.requireOrganization(session, request.method === 'GET' ? 'team.read' : path.includes('github') || path.endsWith('/sync') ? 'team.import' : path.endsWith('/assign') || path.endsWith('/preview') ? 'team.policy.assign' : 'team.manage')
       return true
@@ -334,6 +338,7 @@ export class AuthorizationService {
       path === '/github/repositories' ||
       path === '/github/repositories/overview' ||
       path === '/github/dashboard' ||
+      (path === '/findings' || /^\/findings\/[a-f0-9]{64}\/(triage|assignees)$/.test(path)) ||
       path.startsWith('/contributors') ||
       path.startsWith('/organizations') ||
       path === '/standards/catalogue'

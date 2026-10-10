@@ -413,7 +413,7 @@ export function RulesetInsights({
           <p className='text-xs text-muted-foreground'>
             Counts cover {data.summary.ruleEvaluations} matching rule results in{' '}
             {data.scannedSuites} GitHub suites on this page. Preflyt readiness
-            checks are shown separately in the Readiness check tab.
+            checks are shown separately in the Merge review result tab.
           </p>
           <div className='flex items-center justify-between border-t pt-4'>
             <span className='text-xs text-muted-foreground'>Page {page}</span>

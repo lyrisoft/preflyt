@@ -1,4 +1,5 @@
-import { randomUUID } from "node:crypto";
+import { readUpstreamSkill } from "./upstream-skill.js";
+import { createHash, randomUUID } from "node:crypto";
 import {
   BadRequestException,
   ConflictException,
@@ -46,6 +47,16 @@ export class ReviewSkillsService {
       context: "assessment_evidence",
     };
   }
+  async upstream(session: AuthenticatedSession, input: Parameters<typeof readUpstreamSkill>[0]) {
+    this.available();
+    await this.access.requireOrganization(session,"ai.skills.manage",true);
+    try {
+      const result=await readUpstreamSkill(input);
+      for (const id of result.manifest.repositories) await this.access.requireRepository(session,id,"ai.skills.manage");
+      await this.access.requireOrganization(session,"ai.skills.manage");
+      return result;
+    } catch { throw new BadRequestException("Could not inspect the pinned skill and license. Check the public repository, commit and file paths."); }
+  }
   async parseMarkdown(session: AuthenticatedSession, markdown: string) {
     this.available();
     await this.access.requireOrganization(session, "ai.skills.manage", true);
@@ -62,8 +73,17 @@ export class ReviewSkillsService {
     await this.access.requireOrganization(session, "ai.skills.manage");
     return manifest;
   }
+  async builtinMarkdown(session: AuthenticatedSession, id: string) {
+    await this.access.requireOrganization(session, "ai.skills.read");
+    const skill = skillTemplates.find((template) => template.id === id);
+    if (!skill) throw new NotFoundException("Built-in skill unavailable");
+    return exportSkillMarkdown(skill);
+  }
   async markdown(session: AuthenticatedSession, id: string) {
-    const member = await this.access.requireOrganization(session, "ai.skills.read");
+    const member = await this.access.requireOrganization(
+      session,
+      "ai.skills.read",
+    );
     const skill = await this.db.aiReviewSkill.findFirst({
       where: { id, organizationId: member.organizationId },
     });
@@ -76,9 +96,30 @@ export class ReviewSkillsService {
     await this.access.requireOrganization(session, "ai.skills.read");
     return markdown;
   }
+  async useBuiltin(session: AuthenticatedSession, id: string) {
+    const template = skillTemplates.find((skill) => skill.id === id);
+    if (!template) throw new NotFoundException("Built-in skill unavailable");
+    const hash = createHash("sha256")
+      .update(`preflyt-builtin-skill:${id}`)
+      .digest("hex");
+    const key = `${hash.slice(0, 8)}-${hash.slice(8, 12)}-5${hash.slice(13, 16)}-a${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        return await this.create(
+          session,
+          { ...validateSkill(template), expectedVersion: 0 },
+          key,
+        );
+      } catch (error) {
+        if (!(error instanceof ConflictException) || attempt === 1) throw error;
+      }
+    }
+    throw new ConflictException("Could not use built-in skill. Try again.");
+  }
   async create(
     session: AuthenticatedSession,
     input: SkillManifest & { skillKey?: string; expectedVersion: number },
+    builtinKey?: string,
   ) {
     this.available();
     const member = await this.access.requireOrganization(
@@ -102,11 +143,12 @@ export class ReviewSkillsService {
           await new AuthorizationService(
             tx as PrismaService,
           ).requireOrganization(session, "ai.skills.manage");
-          const key = input.skillKey ?? randomUUID();
+          const key = builtinKey ?? input.skillKey ?? randomUUID();
           const latest = await tx.aiReviewSkill.findFirst({
             where: { organizationId: member.organizationId, skillKey: key },
             orderBy: { version: "desc" },
           });
+          if (builtinKey && latest) return latest;
           if (
             (latest?.version ?? 0) !== input.expectedVersion ||
             (input.skillKey && !latest)

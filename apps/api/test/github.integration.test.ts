@@ -1,3 +1,5 @@
+import {disposableDatabase} from './disposable-database.js'
+let fixture: Awaited<ReturnType<typeof disposableDatabase>>
 import { createHash } from 'node:crypto'
 import {
   afterAll,
@@ -33,16 +35,17 @@ let provider: {
 }
 
 beforeAll(async () => {
-  prisma = new PrismaService()
-  await prisma.$connect()
+  fixture = await disposableDatabase('github')
+  prisma = fixture.prisma
   process.env.WEB_ORIGIN = 'http://localhost:5173'
 })
 
 afterAll(async () => {
-  await prisma?.$disconnect()
+  await fixture?.close()
 })
 
 beforeEach(async () => {
+  await fixture.reset()
   await prisma.gitHubRepository.deleteMany()
   await prisma.gitHubInstallation.deleteMany()
   await prisma.gitHubSetupTransaction.deleteMany()

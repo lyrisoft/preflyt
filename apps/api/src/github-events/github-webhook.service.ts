@@ -1,3 +1,4 @@
+import { configurationValue } from '../configuration/runtime-configuration.js'
 import { normalizeContributorEvent } from './contributor-event.js'
 import { captureContributors } from '../contributors/capture.js'
 import { artifactSummarySelect } from './ci-artifact.service.js'
@@ -22,8 +23,8 @@ export class GitHubWebhookService {
 
   get enabled() {
     return (
-      process.env.GITHUB_EVENTS_ENABLED === 'true' &&
-      (process.env.GITHUB_WEBHOOK_SECRET?.length ?? 0) >= 32
+      configurationValue('GITHUB_EVENTS_ENABLED') === 'true' &&
+      (configurationValue('GITHUB_WEBHOOK_SECRET')?.length ?? 0) >= 32
     )
   }
 
@@ -40,7 +41,7 @@ export class GitHubWebhookService {
       )
     if (!raw || !signature || !/^sha256=[a-f0-9]{64}$/i.test(signature))
       throw new UnauthorizedException('GitHub webhook signature is invalid')
-    const expected = createHmac('sha256', process.env.GITHUB_WEBHOOK_SECRET!)
+    const expected = createHmac('sha256', configurationValue('GITHUB_WEBHOOK_SECRET')!)
       .update(raw)
       .digest()
     if (!timingSafeEqual(expected, Buffer.from(signature.slice(7), 'hex')))
@@ -54,6 +55,64 @@ export class GitHubWebhookService {
       event.length > 40
     )
       throw new BadRequestException('GitHub delivery headers are invalid')
+    if (event === 'github_app_authorization') {
+      const payload = body as { action?: unknown; sender?: { id?: unknown } }
+      if (payload?.action !== 'revoked' || !Number.isSafeInteger(payload.sender?.id) || Number(payload.sender?.id) < 1)
+        throw new BadRequestException('Invalid GitHub authorization revocation event')
+      const userId = BigInt(Number(payload.sender!.id))
+      const hash = createHash('sha256').update(event).update(raw).digest('hex')
+      const id = `github-user-revocation:${deliveryId.toLowerCase()}`
+      return this.prisma.$transaction(async tx => {
+        const account = await tx.gitHubUserAccount.findUnique({ where: { host_githubUserId: { host: 'github.com', githubUserId: userId } } })
+        if (account) await tx.$queryRaw`SELECT "id" FROM "GitHubUserAccount" WHERE "id" = ${account.id} FOR UPDATE`
+        const inserted = await tx.auditEvent.createMany({ data: [{ id, event: 'github.user_authorization_revoked', actorId: null,
+          metadata: { deliveryId: deliveryId.toLowerCase(), payloadHash: hash, githubUserId: userId.toString(), accountId: account?.id ?? null } }], skipDuplicates: true })
+        if (!inserted.count) {
+          const prior = await tx.auditEvent.findUniqueOrThrow({ where: { id } })
+          if ((prior.metadata as { payloadHash?: string }).payloadHash !== hash) throw new ConflictException('GitHub delivery identifier was reused')
+          return { accepted: true, duplicate: true, deliveryId: deliveryId.toLowerCase() }
+        }
+        if (account) {
+          // Deleting the locked credential waits for any in-flight rotation; access
+          // evidence and pending provider-link challenges are invalidated together.
+          await tx.gitHubUserCredential.deleteMany({ where: { accountId: account.id } })
+          await tx.gitHubUserAccessEvidence.deleteMany({ where: { accountId: account.id } })
+          await tx.gitHubOnboardingChallenge.deleteMany({ where: { accountId: account.id } })
+        }
+        return { accepted: true, duplicate: false, deliveryId: deliveryId.toLowerCase() }
+      })
+    }
+    // Provider relationship changes invalidate authority, never grant it from
+    // webhook payloads. A fresh bounded provider read owns reconciliation.
+    if (['membership', 'organization', 'team', 'member'].includes(event)) {
+      const payload = body as {action?: string; installation?: {id?: number}; organization?: {id?: number}; team?: {id?: number}};
+      const supported: Record<string, string[]> = {
+        membership: ['added', 'removed'], organization: ['member_added', 'member_removed', 'member_invited', 'renamed', 'deleted'],
+        team: ['created', 'edited', 'deleted', 'added_to_repository', 'removed_from_repository'], member: ['added', 'removed', 'edited'],
+      };
+      if (!supported[event].includes(payload?.action ?? '')) return {accepted: false, reason: 'unsupported_action'};
+      if (!Number.isSafeInteger(payload.installation?.id) || Number(payload.installation?.id) < 1 || !Number.isSafeInteger(payload.organization?.id) || Number(payload.organization?.id) < 1) throw new BadRequestException('Invalid GitHub organization relationship event');
+      const payloadHash = createHash('sha256').update(event).update(raw).digest('hex');
+      const receiptId = `github-directory-change:${deliveryId.toLowerCase()}`;
+      return this.prisma.$transaction(async tx => {
+        const installationId = BigInt(payload.installation!.id!);
+        const installation = await tx.gitHubInstallation.findUnique({where: {id: installationId}});
+        if (!installation) return {accepted: false, reason: 'installation_not_connected'};
+        const link = await tx.gitHubOrganizationLink.findUnique({where: {organizationId: installation.organizationId}});
+        if (!link || link.githubOrganizationId !== BigInt(payload.organization!.id!)) return {accepted: false, reason: 'organization_not_linked'};
+        await tx.$queryRaw`SELECT "id" FROM "GitHubInstallation" WHERE "id" = ${installationId} FOR UPDATE`;
+        const inserted = await tx.auditEvent.createMany({data: [{id: receiptId, event: 'github.directory_relationship_changed', actorId: null, metadata: {organizationId: installation.organizationId, installationId: installationId.toString(), deliveryId: deliveryId.toLowerCase(), payloadHash, providerEvent: event, action: payload.action!}}], skipDuplicates: true});
+        if (!inserted.count) {
+          const prior = await tx.auditEvent.findUniqueOrThrow({where: {id: receiptId}});
+          if ((prior.metadata as {payloadHash?: string}).payloadHash !== payloadHash) throw new ConflictException('GitHub delivery identifier was reused');
+          return {accepted: true, duplicate: true, deliveryId: deliveryId.toLowerCase()};
+        }
+        await tx.gitHubInstallation.update({where: {id: installationId}, data: {accessRevision: {increment: 1}, ...(event === 'organization' && payload.action === 'deleted' ? {active: false} : {})}});
+        await tx.gitHubUserAccessEvidence.deleteMany({where: {organizationId: installation.organizationId}});
+        await tx.preflytTeam.updateMany({where: {organizationId: installation.organizationId, installationId, source: 'GITHUB'}, data: {syncState: 'STALE', syncedAt: null}});
+        return {accepted: true, duplicate: false, deliveryId: deliveryId.toLowerCase()};
+      });
+    }
     const access = normalizeAccessEvent(event, body)
     if (access)
       return this.receiveAccess(
