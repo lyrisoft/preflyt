@@ -12,7 +12,7 @@ export function sentence(value: string) {
   return text.charAt(0).toUpperCase() + text.slice(1)
 }
 
-const configFound: Status = { label: 'Config found', tone: 'success' }
+const configFound: Status = { label: 'Configuration found', tone: 'success' }
 const notFound: Status = { label: 'Not found', tone: 'warning' }
 const unknown: Status = { label: 'Unknown', tone: 'neutral' }
 
@@ -40,16 +40,19 @@ export function coverageStatus(value: string): Status {
     case 'MISSING':
       return notFound
     case 'UNVERIFIED':
+      return { label: 'Source not verified', tone: 'warning' }
     case 'SUPERSEDED':
+      return { label: 'Newer result available', tone: 'warning' }
     case 'SKIPPED':
       return { label: sentence(value), tone: 'warning' }
     case 'PENDING':
       return { label: 'Pending', tone: 'info' }
     case 'EXPIRED':
+      return { label: 'Result expired', tone: 'error' }
     case 'AMBIGUOUS':
-      return { label: sentence(value), tone: 'error' }
+      return { label: 'Multiple matching results', tone: 'error' }
     case 'FUTURE':
-      return { label: 'Future timestamp', tone: 'error' }
+      return { label: 'Report date is in the future', tone: 'error' }
     case 'NOT_IMPLEMENTED':
       return { label: 'Not available', tone: 'neutral' }
     default:
@@ -62,16 +65,16 @@ export type CiResult =
 export const ciResultStatus: Record<CiResult, Status> = {
   SUCCEEDED: { label: 'Succeeded', tone: 'success' },
   PENDING: { label: 'Pending', tone: 'info' },
-  NOT_EXECUTED: { label: 'Not executed', tone: 'neutral' },
+  NOT_EXECUTED: { label: 'Not run', tone: 'neutral' },
   UNKNOWN: { label: 'Unknown', tone: 'neutral' },
   FAILED: { label: 'Failed', tone: 'error' },
 }
 
 export type DeliveryState = 'RECEIVED' | 'PROCESSED' | 'IGNORED' | 'FAILED'
 export const deliveryStatus: Record<DeliveryState, Status> = {
-  RECEIVED: { label: 'Awaiting worker', tone: 'info' },
+  RECEIVED: { label: 'Waiting to process', tone: 'info' },
   PROCESSED: { label: 'Recorded', tone: 'success' },
-  IGNORED: { label: 'Access changed', tone: 'warning' },
+  IGNORED: { label: 'Not processed', tone: 'warning' },
   FAILED: { label: 'Processing failed', tone: 'error' },
 }
 

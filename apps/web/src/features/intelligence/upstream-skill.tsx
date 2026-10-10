@@ -75,7 +75,7 @@ export function UpstreamSkill({
       <Dialog open={open} onOpenChange={(v) => !busy && setOpen(v)}>
         <DialogContent className='flex max-h-[85svh] flex-col sm:max-w-4xl'>
           <DialogHeader>
-            <DialogTitle>Inspect an upstream skill</DialogTitle>
+            <DialogTitle>Review a skill from GitHub</DialogTitle>
             <DialogDescription>
               Pin a public GitHub commit and review the instructions and
               license. Importing opens a disabled draft.
@@ -140,7 +140,7 @@ export function UpstreamSkill({
                     checked={reviewed}
                     onChange={(e) => setReviewed(e.target.checked)}
                   />
-                  I reviewed these instructions and the upstream license for our
+                  I reviewed these instructions and the source license for our
                   use.
                 </label>
               </>

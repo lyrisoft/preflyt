@@ -56,8 +56,7 @@ export function EvidenceDialog({
                 at commit <code>{sourceSha.slice(0, 12)}</code>
               </>
             ) : null}
-            . Paths are hints from the inspected snapshot, not execution
-            results.
+            . Paths are hints from the inspected commit, not execution results.
           </DialogDescription>
         </DialogHeader>
         <ul className='-mx-6 max-h-[60vh] divide-y overflow-y-auto border-y'>

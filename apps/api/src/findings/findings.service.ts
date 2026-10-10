@@ -57,7 +57,7 @@ export class FindingsService {
     );
     if (repository !== "all" && !selected.length)
       throw new ForbiddenException(
-        "Repository is outside your authorized scope",
+        "You do not have access to this repository. Ask your administrator for access.",
       );
     const records = await this.db.commitAssessment.findMany({
       where: { repositoryId: { in: selected.map((item) => item.id) } },

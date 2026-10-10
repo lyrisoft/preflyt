@@ -21,7 +21,7 @@ vi.mock('../workspace/navigation-session', () => ({
 }))
 vi.mock('./configuration-panel', () => ({
   ConfigurationPanel: () => (
-    <section>Deployment configuration controls</section>
+    <section>System settings controls</section>
   ),
 }))
 vi.mock('@/context/theme-provider', () => ({
@@ -102,7 +102,7 @@ it('keeps deployment configuration available to Super Admin when workspace setti
   const view = await render(<OrganizationSettingsPage />)
   await view.getByRole('tab', { name: 'Configuration' }).click()
   await expect
-    .element(view.getByText('Deployment configuration controls'))
+    .element(view.getByText('System settings controls'))
     .toBeVisible()
 })
 it('hides deployment configuration from organization administrators', async () => {
