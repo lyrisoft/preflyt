@@ -667,3 +667,28 @@ it('findings uses authorized saved commits and rejects invalid filters, foreign 
   await db.commitAssessment.update({ where: { id: assessment.id }, data: { assessmentHash: 'tampered' } })
   await actor(developer, '/findings').expect(409)
 })
+
+it('aggregates findings before pagination with matching filters and repository authorization', async () => {
+  const { assessment } = await complianceFixture()
+  const checks = Array.from({ length: 60 }, (_, index) => ({ id: `check-${index}`, title: `Check ${index}`, required: true, operator: 'configuration_hint_present', capability: 'available', severity: index % 2 ? 'high' : 'medium' }))
+  const plan = { ...(assessment.plan as any), checks }
+  const report = { ...(assessment.report as any), checks: checks.map((check) => ({ ruleId: check.id, title: check.title, required: true, coverage: 'MISSING' })) }
+  const assessmentHash = digest({ request: assessment.request, plan, report })
+  await db.commitAssessment.update({ where: { id: assessment.id }, data: { plan, report, assessmentHash } })
+  const foreign = await db.gitHubRepository.findFirstOrThrow({ where: { githubId: 12n } })
+  await db.commitAssessment.create({ data: { repositoryId: foreign.id, sourceSha: sha, selectionId: assessment.selectionId, requestKey: randomUUID(), inputHash: 'fixture', request: assessment.request as any, plan, report, assessmentHash } })
+  const first = await actor(developer, '/findings?kind=gaps').expect(200)
+  const next = await actor(developer, '/findings?kind=gaps&page=2').expect(200)
+  expect(first.body.rows).toHaveLength(50)
+  expect(next.body.rows).toHaveLength(10)
+  expect(first.body.summary).toEqual(next.body.summary)
+  expect(first.body.summary).toMatchObject({ reportedIssues: 0, affectedRepositories: 1, criticalHigh: 0, evidenceGaps: 60, chartTotal: 60 })
+  expect(first.body.summary.byCheck.reduce((sum: number, item: any) => sum + item.count, 0)).toBe(60)
+  const high = await actor(developer, '/findings?kind=gaps&severity=high').expect(200)
+  expect(high.body.summary.evidenceGaps).toBe(30)
+  const search = await actor(developer, '/findings?kind=gaps&q=Check%2059').expect(200)
+  expect(search.body.summary.evidenceGaps).toBe(1)
+  const issues = await actor(developer, '/findings?kind=findings').expect(200)
+  expect(issues.body.summary.evidenceGaps).toBe(60)
+  expect(issues.body.summary.chartTotal).toBe(0)
+})

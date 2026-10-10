@@ -24,6 +24,7 @@ import { Main } from '@/components/layout/main'
 import { PageHelpDrawer } from '@/components/page-help-drawer'
 import { StatusBadge, type StatusTone } from '@/components/status-badge'
 import { useNavigationSession } from '@/features/workspace/navigation-session'
+import { FindingsOverview, type FindingsSummary } from './findings-summary'
 
 type Finding = {
   id: string
@@ -43,6 +44,7 @@ type Finding = {
   occurrences: number
 }
 type Results = {
+  summary: FindingsSummary
   rows: Finding[]
   total: number
   pageSize: number
@@ -131,6 +133,11 @@ function FindingsWorkspace() {
                   'Reported means a scanner or test report supplied the issue. It is not an independent confirmation. Report source verification is shown in the details. Suppressed means the source report accepted a suppression; it does not waive a Preflyt policy.',
               },
               {
+                title: 'Metrics and charts',
+                content:
+                  'Metrics use all matching entries before pagination and apply the repository, severity and applied search filters across both tabs. Reported issues include failed-check summaries and individual report findings; they are not a count of distinct vulnerabilities. Source-suppressed findings are excluded from metrics and charts, but remain in the list. Affected repositories have an issue or evidence gap. Critical/high counts only issues. Charts follow the selected tab; the check chart groups the top eight checks and combines the rest. Historical commits are included; these are not current-open or resolution metrics. AI suggestions are not counted. Resolution trends are unavailable because finding lifecycle changes are not recorded.',
+              },
+              {
                 title: 'Scope and limits',
                 content:
                   'Only repositories you can assess are included. The latest saved assessment for each commit is used. Up to 200 assessments, 100 reports and 2,000 results are inspected. A partial-results notice appears if a limit is reached. Historical findings are not automatically marked resolved.',
@@ -158,6 +165,7 @@ function FindingsWorkspace() {
           event.preventDefault()
           setQ(search.trim())
           setPage(1)
+          setDetail(null)
         }}
       >
         <Input
@@ -193,6 +201,7 @@ function FindingsWorkspace() {
           onValueChange={(value) => {
             setSeverity(value)
             setPage(1)
+            setDetail(null)
           }}
         >
           <SelectTrigger aria-label='Severity' className='w-44'>
@@ -229,6 +238,17 @@ function FindingsWorkspace() {
               Results are partial. Narrow the repository filter or open the
               repository’s assessments for more evidence.
             </p>
+          )}
+          {result.data.summary && (
+            <FindingsOverview
+              summary={result.data.summary}
+              kind={kind}
+              onSeverity={(value) => {
+                setSeverity(value)
+                setPage(1)
+                setDetail(null)
+              }}
+            />
           )}
           {!result.data.rows.length ? (
             <div className='rounded-xl border bg-card p-8'>

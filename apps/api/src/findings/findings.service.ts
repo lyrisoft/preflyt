@@ -5,6 +5,7 @@ import type { AuthenticatedSession } from '../auth/session.guard.js'
 import { digest } from '../assessments/assessment-digest.js'
 import { previewGate } from '../assessments/gate-preview.js'
 import { normalizeReportFindings } from './normalize-report-findings.js'
+import { summarizeFindings } from './findings-summary.js'
 @Injectable()
 export class FindingsService {
   constructor(@Inject(PrismaService) private readonly db: PrismaService,
@@ -42,16 +43,15 @@ export class FindingsService {
         assessmentId: snapshot.id, assessmentHash: snapshot.assessmentHash, observedAt: snapshot.createdAt.toISOString(),
         pullRequest: request.pullRequest?.number ?? null }
       for (const rule of previewGate(snapshot).rules) {
-        if ((kind === 'gaps' && rule.status === 'INCOMPLETE') || (kind === 'findings' && rule.status === 'BLOCK')) {
+        if (rule.status === 'INCOMPLETE' || rule.status === 'BLOCK') {
           const definition = plan.checks?.find((check: any) => check.id === rule.ruleId)
           if (rows.length >= 2000) { detailTruncated = true; break }
           rows.push({ ...base, id: digest([repo.githubId.toString(), snapshot.sourceSha, rule.ruleId]),
-            title: rule.title, category: kind === 'gaps' ? 'evidence' : 'check', severity: definition?.severity ?? 'unknown',
-            status: kind === 'gaps' ? 'Evidence missing' : 'Failed', path: null, line: null, ruleId: rule.ruleId,
+            title: rule.title, category: rule.status === 'INCOMPLETE' ? 'evidence' : 'check', severity: definition?.severity ?? 'unknown',
+            status: rule.status === 'INCOMPLETE' ? 'Evidence missing' : 'Failed', path: null, line: null, ruleId: rule.ruleId,
             evidence: rule.reasons, artifactId: null, occurrences: 1, verification: 'Assessment verified' })
         }
       }
-      if (kind !== 'findings') continue
       for (const observation of report.observations ?? []) for (const ref of observation.artifacts ?? []) {
         const artifact = artifactById.get(ref.id)
         if (!artifact) { detailTruncated = true; continue }
@@ -68,8 +68,9 @@ export class FindingsService {
     }
     const unique = new Map<string, any>()
     for (const row of rows) { const existing = unique.get(row.id); if (existing) existing.occurrences++; else unique.set(row.id, row) }
-    const filtered = [...unique.values()].filter((row) => (severity === 'all' || row.severity === severity) && (!search || `${row.title} ${row.repository} ${row.ruleId ?? ''} ${row.path ?? ''}`.toLowerCase().includes(search)))
-    return { rows: filtered.slice((page - 1) * 50, page * 50), total: filtered.length, page, pageSize: 50,
+    const matching = [...unique.values()].filter((row) => (severity === 'all' || row.severity === severity) && (!search || `${row.title} ${row.repository} ${row.ruleId ?? ''} ${row.path ?? ''}`.toLowerCase().includes(search)))
+    const filtered = matching.filter((row) => (row.category === 'evidence') === (kind === 'gaps'))
+    return { summary: summarizeFindings(matching, kind), rows: filtered.slice((page - 1) * 50, page * 50), total: filtered.length, page, pageSize: 50,
       truncated: records.length > 200 || new Set(artifactRefs).size > 100 || detailTruncated,
       repositories: scope.map((repo) => ({ githubId: String(repo.githubId), fullName: repo.fullName })),
       assessedRevisions: latest.size }
