@@ -1,3 +1,4 @@
+import { readUpstreamSkill } from "./upstream-skill.js";
 import { createHash, randomUUID } from "node:crypto";
 import {
   BadRequestException,
@@ -45,6 +46,16 @@ export class ReviewSkillsService {
       executionMode: "instructions_only",
       context: "assessment_evidence",
     };
+  }
+  async upstream(session: AuthenticatedSession, input: Parameters<typeof readUpstreamSkill>[0]) {
+    this.available();
+    await this.access.requireOrganization(session,"ai.skills.manage",true);
+    try {
+      const result=await readUpstreamSkill(input);
+      for (const id of result.manifest.repositories) await this.access.requireRepository(session,id,"ai.skills.manage");
+      await this.access.requireOrganization(session,"ai.skills.manage");
+      return result;
+    } catch { throw new BadRequestException("Could not inspect the pinned skill and license. Check the public repository, commit and file paths."); }
   }
   async parseMarkdown(session: AuthenticatedSession, markdown: string) {
     this.available();

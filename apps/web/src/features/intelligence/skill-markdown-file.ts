@@ -4,6 +4,8 @@ import {
 } from '../repositories/governance-api'
 
 export type SkillDocument = {
+  languages?: string[]
+  frameworks?: string[]
   name: string
   description: string
   instructions: string

@@ -1,3 +1,5 @@
+import {disposableDatabase} from './disposable-database.js'
+let fixture: Awaited<ReturnType<typeof disposableDatabase>>
 import { randomUUID } from 'node:crypto'
 import { setTimeout as delay } from 'node:timers/promises'
 import { Queue, Worker } from 'bullmq'
@@ -23,7 +25,8 @@ function config(worker = false) {
 const ids: string[] = []
 
 beforeAll(async () => {
-  prisma = new PrismaService(); await prisma.$connect()
+  fixture = await disposableDatabase('githubeventqueue')
+  prisma = fixture.prisma
   await prisma.gitHubWebhookDelivery.deleteMany()
   queue = new Queue(queueName, config())
   queue.on('error', () => undefined)
@@ -36,7 +39,7 @@ afterAll(async () => {
   await queue?.close()
   connections.forEach(connection => connection.disconnect())
   await prisma?.gitHubWebhookDelivery.deleteMany({ where: { id: { in: ids } } })
-  await prisma?.$disconnect()
+  await fixture?.close()
 })
 async function delivery() {
   const id = randomUUID(); ids.push(id)

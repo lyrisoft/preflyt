@@ -29,8 +29,11 @@ import {
   downloadSkillMarkdown,
   type SkillDocument,
 } from './skill-markdown-file'
+import { UpstreamSkill } from './upstream-skill'
 
 export type ReviewSkill = {
+  languages?: string[]
+  frameworks?: string[]
   id: string
   skillKey: string
   version: number
@@ -164,6 +167,10 @@ export function SkillsCatalogue() {
         </h2>
         {manage && (
           <div className='flex flex-wrap items-center gap-2'>
+            <UpstreamSkill
+              disabled={busy || editing !== undefined}
+              onDocument={setEditing}
+            />
             <SkillUpload
               disabled={busy || editing !== undefined}
               onDocument={setEditing}
@@ -514,7 +521,7 @@ export function SkillsCatalogue() {
                   </dd>
                 </div>
                 <div>
-                  <dt className='text-muted-foreground'>Content digest</dt>
+                  <dt className='text-muted-foreground'>File fingerprint</dt>
                   <dd className='font-mono text-xs break-all'>
                     {selected.contentDigest}
                   </dd>
@@ -693,6 +700,8 @@ export function SkillsCatalogue() {
 }
 function skillDocument(skill: Template | ReviewSkill): SkillDocument {
   return {
+    ...(skill.languages?.length ? { languages: [...skill.languages] } : {}),
+    ...(skill.frameworks?.length ? { frameworks: [...skill.frameworks] } : {}),
     name: skill.name,
     description: skill.description,
     instructions: skill.instructions,
@@ -730,6 +739,10 @@ function SkillForm({
             license: 'Organization-owned',
           }
     ),
+    [selectors, setSelectors] = useState({
+      languages: skill?.languages?.join(', ') ?? '',
+      frameworks: skill?.frameworks?.join(', ') ?? '',
+    }),
     [filter, setFilter] = useState(''),
     [tab, setTab] = useState('write'),
     [importError, setImportError] = useState('')
@@ -785,8 +798,36 @@ function SkillForm({
               />
             </label>
           ))}
+          {(['languages', 'frameworks'] as const).map((key) => (
+            <label key={key} className='block space-y-2 text-sm'>
+              <span>
+                {key === 'languages'
+                  ? 'Languages (optional)'
+                  : 'Frameworks (optional)'}
+              </span>
+              <Input
+                disabled={busy}
+                placeholder={
+                  key === 'languages' ? 'TypeScript, Python' : 'React, NestJS'
+                }
+                value={selectors[key]}
+                onChange={(e) => {
+                  setSelectors((old) => ({ ...old, [key]: e.target.value }))
+                  setDraft((d) => ({
+                    ...d,
+                    [key]: e.target.value
+                      .split(',')
+                      .map((v) => v.trim())
+                      .filter(Boolean),
+                  }))
+                }}
+              />
+            </label>
+          ))}
           <fieldset className='space-y-2 text-sm' disabled={busy}>
-            <legend className='mb-2 font-medium'>Repository scope</legend>
+            <legend className='mb-2 font-medium'>
+              Repositories this skill applies to
+            </legend>
             <label className='flex items-center gap-2'>
               <input
                 type='checkbox'
@@ -835,6 +876,10 @@ function SkillForm({
               onError={setImportError}
               onDocument={(d) => {
                 setDraft(d)
+                setSelectors({
+                  languages: d.languages?.join(', ') ?? '',
+                  frameworks: d.frameworks?.join(', ') ?? '',
+                })
                 setTab('write')
               }}
             />

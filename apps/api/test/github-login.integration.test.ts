@@ -1,3 +1,7 @@
+import { GitHubWebhookService } from '../src/github-events/github-webhook.service.js'
+import { createHmac } from 'node:crypto'
+import { GitHubCredentialService } from '../src/auth/github-credential.service.js'
+import { decryptGitHubUserTokens } from '../src/auth/github-token-cipher.js'
 import 'reflect-metadata'
 import { randomBytes, randomUUID, createHash } from 'node:crypto'
 import { readdir, readFile } from 'node:fs/promises'
@@ -24,6 +28,7 @@ let admin: Client,
 let created = false,
   userId = 101n
 const provider = {
+  refresh: vi.fn(),
   authorizationUrl: vi.fn(
     (state: string, challenge: string) =>
       `https://github.com/login/oauth/authorize?state=${state}&code_challenge=${challenge}`,
@@ -150,6 +155,10 @@ beforeAll(async () => {
   access = new AuthorizationService(db, userAccess)
 }, 30000)
 beforeEach(async () => {
+  await db.teamPolicyAssignment.deleteMany()
+  await db.teamRepositoryScope.deleteMany()
+  await db.teamMember.deleteMany()
+  await db.preflytTeam.deleteMany()
   await db.gitHubOnboardingChallenge.deleteMany()
   await db.gitHubLoginTransaction.deleteMany()
   await db.gitHubUserAccessEvidence.deleteMany()
@@ -662,4 +671,118 @@ it('lets the original recovery admin sync and assign linked GitHub members witho
   await controller.addGitHub({ username: 'developer', role: 'DEVELOPER', active: true, repositoryIds: [] }, req)
   expect(await db.organizationMembership.count({ where: { organizationId: legacy.organization.id, role: 'DEVELOPER', active: true } })).toBe(1)
   expect(await auth.currentSession(legacy.sessionToken)).toMatchObject({ authenticated: true, identityId: legacy.identity.id })
+})
+
+it('serializes consumed refresh tokens across service instances and persists only encrypted rotated credentials', async () => {
+  const { current, session } = await onboard()
+  const account = await db.gitHubUserAccount.findUniqueOrThrow({ where: { identityId_host: { identityId: current.identityId, host: 'github.com' } } })
+  await db.gitHubUserCredential.update({ where: { accountId: account.id }, data: { accessExpiresAt: new Date(Date.now() - 1000) } })
+  const refresh = vi.fn(async () => { await new Promise(resolve => setTimeout(resolve, 30)); return { accessToken: 'new-access', refreshToken: 'new-refresh', accessExpiresAt: new Date(Date.now() + 28800000), refreshExpiresAt: new Date(Date.now() + 86400000) } })
+  const service = () => new GitHubCredentialService(db, { refresh } as unknown as GitHubIdentityProvider)
+  const results = await Promise.all([service().access(account.id), service().access(account.id)])
+  expect(results.map(r => r.token)).toEqual(['new-access', 'new-access'])
+  expect(refresh).toHaveBeenCalledTimes(1)
+  const saved = await db.gitHubUserCredential.findUniqueOrThrow({ where: { accountId: account.id } })
+  expect(saved.encryptedTokens).not.toContain('new-access')
+  expect(decryptGitHubUserTokens(account.id, saved.encryptedTokens).refreshToken).toBe('new-refresh')
+  expect((await auth.currentSession(session.sessionToken)).authenticated).toBe(true)
+})
+it('preserves workspace login on transient refresh failure and clears expired provider evidence on definitive revocation', async () => {
+  const { current, session } = await onboard()
+  const account = await db.gitHubUserAccount.findUniqueOrThrow({ where: { identityId_host: { identityId: current.identityId, host: 'github.com' } } })
+  await db.gitHubUserCredential.update({ where: { accountId: account.id }, data: { accessExpiresAt: new Date(Date.now() - 1000) } })
+  const refresh = vi.fn(async () => { throw new ServiceUnavailableException('outage') })
+  const service = new GitHubCredentialService(db, { refresh } as unknown as GitHubIdentityProvider)
+  await expect(service.access(account.id)).rejects.toThrow('temporarily unavailable')
+  expect(await db.gitHubUserCredential.count({ where: { accountId: account.id } })).toBe(1)
+  refresh.mockImplementation(async () => { throw new ForbiddenException('revoked') })
+  await expect(service.access(account.id)).rejects.toThrow('revoked')
+  expect(await db.gitHubUserCredential.count({ where: { accountId: account.id } })).toBe(0)
+  expect(await db.gitHubUserAccessEvidence.count({ where: { accountId: account.id } })).toBe(0)
+  // Local workspace sessions are never deleted as a side effect of provider refresh.
+  expect(await db.webSession.count({ where: { identityId: current.identityId } })).toBeGreaterThan(0)
+})
+
+it('accepts signed authorization revocation idempotently, rejects delivery reuse and preserves local sessions and installation', async () => {
+  const { current } = await onboard()
+  const account = await db.gitHubUserAccount.findUniqueOrThrow({ where: { identityId_host: { identityId: current.identityId, host: 'github.com' } } })
+  vi.stubEnv('GITHUB_EVENTS_ENABLED', 'true')
+  vi.stubEnv('GITHUB_WEBHOOK_SECRET', 'fixture-webhook-secret-000000000000000')
+  const body = { action: 'revoked', sender: { id: Number(account.githubUserId) } }
+  const raw = Buffer.from(JSON.stringify(body)), id = randomUUID()
+  const sign = (bytes: Buffer) => 'sha256=' + createHmac('sha256', process.env.GITHUB_WEBHOOK_SECRET!).update(bytes).digest('hex')
+  const webhooks = new GitHubWebhookService(db)
+  await expect(webhooks.receive(raw, 'sha256=' + '0'.repeat(64), id, 'github_app_authorization', body)).rejects.toThrow('signature')
+  expect(await db.gitHubUserCredential.count()).toBe(1)
+  expect(await webhooks.receive(raw, sign(raw), id, 'github_app_authorization', body)).toMatchObject({ accepted: true, duplicate: false })
+  expect(await webhooks.receive(raw, sign(raw), id, 'github_app_authorization', body)).toMatchObject({ accepted: true, duplicate: true })
+  expect(await db.gitHubUserCredential.count()).toBe(0)
+  expect(await db.gitHubUserAccessEvidence.count()).toBe(0)
+  expect(await db.webSession.count({ where: { identityId: current.identityId } })).toBeGreaterThan(0)
+  expect((await db.gitHubInstallation.findUniqueOrThrow({ where: { id: 41n } })).active).toBe(true)
+  const changed = Buffer.from(JSON.stringify({ ...body, sender: { id: 102 } }))
+  await expect(webhooks.receive(changed, sign(changed), id, 'github_app_authorization', { ...body, sender: { id: 102 } })).rejects.toThrow('reused')
+})
+it('periodically reconciles expired evidence without granting new workspace access', async () => {
+  const { current } = await onboard()
+  await db.gitHubRepository.create({ data: { githubId: 11n, installationId: 41n, name: 'r', fullName: 'fixture-org/r', ownerLogin: 'fixture-org', selected: true, isPrivate: true } })
+  await userAccess.repositoryIds(current.identityId, current.organizationId, true)
+  await db.gitHubUserAccessEvidence.updateMany({ data: { expiresAt: new Date(0) } })
+  const service = new GitHubUserAccessService(db, provider as unknown as GitHubIdentityProvider)
+  const before = provider.verify.mock.calls.length
+  await service.reconcile()
+  expect(provider.verify.mock.calls.length).toBe(before + 1)
+  expect((await db.gitHubUserAccessEvidence.findFirstOrThrow()).expiresAt.getTime()).toBeGreaterThan(Date.now())
+  await service.reconcile()
+  expect(provider.verify.mock.calls.length).toBe(before + 1)
+})
+
+it('does not restore cached provider access after authorization is revoked during verification', async () => {
+  const { current } = await onboard()
+  provider.verify.mockImplementationOnce(async () => {
+    await db.gitHubUserCredential.deleteMany()
+    return { organizationId: 201n, login: 'fixture-org', owner: true, repositoryIds: [11n], installation: { id: 41n, accountId: 201n, accountLogin: 'fixture-org', accountType: 'Organization', repositorySelection: 'selected', permissions: { members: 'read' } } }
+  })
+  await expect(userAccess.repositoryIds(current.identityId, current.organizationId, true)).rejects.toThrow('authorization changed')
+  expect(await db.gitHubUserAccessEvidence.count()).toBe(0)
+})
+
+it('invalidates signed organization membership changes idempotently without clearing the admin session', async () => {
+  const {current, session} = await onboard()
+  await userAccess.repositoryIds(current.identityId, current.organizationId, true)
+  vi.stubEnv('GITHUB_EVENTS_ENABLED', 'true')
+  vi.stubEnv('GITHUB_WEBHOOK_SECRET', 'fixture-webhook-secret-000000000000000')
+  const before = await db.gitHubInstallation.findUniqueOrThrow({where: {id: 41n}})
+  const team = await db.preflytTeam.create({data: {organizationId: current.organizationId!, name: 'Imported', source: 'GITHUB', githubTeamId: "301", installationId: 41n, createdById: current.identityId, syncState: 'SYNCED', syncedAt: new Date()}})
+  const body = {action: 'removed', installation: {id: 41}, organization: {id: 201}, team: {id: 301}, member: {id: 102}}
+  const id = randomUUID(), raw = Buffer.from(JSON.stringify(body)), sign = (bytes: Buffer) => 'sha256=' + createHmac('sha256', process.env.GITHUB_WEBHOOK_SECRET!).update(bytes).digest('hex')
+  const webhooks = new GitHubWebhookService(db)
+  expect(await webhooks.receive(raw, sign(raw), id, 'membership', body)).toMatchObject({accepted: true, duplicate: false})
+  expect(await db.gitHubUserAccessEvidence.count()).toBe(0)
+  expect((await db.gitHubInstallation.findUniqueOrThrow({where: {id: 41n}})).accessRevision).toBe(before.accessRevision + 1)
+  expect((await db.preflytTeam.findUniqueOrThrow({where: {id: team.id}})).syncState).toBe('STALE')
+  expect((await auth.currentSession(session.sessionToken)).authenticated).toBe(true)
+  expect(await db.webSession.count({where: {identityId: current.identityId}})).toBeGreaterThan(0)
+  expect(await db.gitHubUserCredential.count()).toBe(1)
+  expect(await webhooks.receive(raw, sign(raw), id, 'membership', body)).toMatchObject({duplicate: true})
+  expect((await db.gitHubInstallation.findUniqueOrThrow({where: {id: 41n}})).accessRevision).toBe(before.accessRevision + 1)
+  const changed = Buffer.from(JSON.stringify({...body, action: 'added'}))
+  await expect(webhooks.receive(changed, sign(changed), id, 'membership', {...body, action: 'added'})).rejects.toThrow('reused')
+  const foreign = {...body, organization: {id: 999}}, foreignRaw = Buffer.from(JSON.stringify(foreign))
+  expect(await webhooks.receive(foreignRaw, sign(foreignRaw), randomUUID(), 'membership', foreign)).toMatchObject({accepted: false})
+})
+
+it('uses refreshed credential expiry when onboarding completes after the access token expires', async () => {
+  const result = await callback()
+  const account = await db.gitHubUserAccount.findFirstOrThrow()
+  await db.gitHubUserCredential.update({ where: { accountId: account.id }, data: { accessExpiresAt: new Date(0) } })
+  const expiresAt = new Date(Date.now() + 3600000)
+  const refresh = vi.spyOn(provider, 'refresh')
+  refresh.mockResolvedValue({ accessToken: 'rotated-access', refreshToken: 'rotated-refresh', accessExpiresAt: expiresAt, refreshExpiresAt: new Date(Date.now() + 86400000) })
+  try {
+    const entered = await login.enter(result.challengeToken, '41', 'http://localhost:5173')
+    expect(entered.expiresAt.getTime()).toBe(expiresAt.getTime())
+    expect(await auth.currentSession(entered.sessionToken)).toMatchObject({ authenticated: true, role: 'OWNER' })
+    expect(refresh).toHaveBeenCalledTimes(1)
+  } finally { refresh.mockRestore() }
 })

@@ -1,3 +1,4 @@
+import { configurationValue } from '../configuration/runtime-configuration.js'
 import { verifyTeamContext } from '../teams/team-context.js'
 import { readLatestNativeEvidence } from '../execution/native-evidence.js'
 import { evaluatePublishedPolicy } from './published-policy-evaluation.js'
@@ -42,10 +43,10 @@ export class CheckPublicationService {
     })
     await this.access.requireRepository(session, githubId, 'policy.read')
     return {
-      enabled: process.env.GITHUB_CHECK_PUBLICATION_ENABLED === 'true',
+      enabled: configurationValue('GITHUB_CHECK_PUBLICATION_ENABLED') === 'true',
       publicationMode: 'POLICY_AWARE',
       activationAvailable:
-        process.env.GITHUB_RULESET_ACTIVATION_ENABLED === 'true',
+        configurationValue('GITHUB_RULESET_ACTIVATION_ENABLED') === 'true',
       page,
       hasMore: rows.length > 20,
       publications: rows
@@ -76,9 +77,9 @@ export class CheckPublicationService {
       conclusion: plan.payload.conclusion,
       gateStatus: plan.gate.status,
       output: plan.payload.output,
-      enabled: process.env.GITHUB_CHECK_PUBLICATION_ENABLED === 'true',
+      enabled: configurationValue('GITHUB_CHECK_PUBLICATION_ENABLED') === 'true',
       activationAvailable:
-        process.env.GITHUB_RULESET_ACTIVATION_ENABLED === 'true',
+        configurationValue('GITHUB_RULESET_ACTIVATION_ENABLED') === 'true',
       policy: plan.policy
         ? {
             id: plan.policy.id,
@@ -281,7 +282,7 @@ export class CheckPublicationService {
       expectedPreviewHash: string
     },
   ) {
-    if (process.env.GITHUB_CHECK_PUBLICATION_ENABLED !== 'true')
+    if (configurationValue('GITHUB_CHECK_PUBLICATION_ENABLED') !== 'true')
       throw new ServiceUnavailableException(
         'Check publication is disabled. Configure GITHUB_CHECK_PUBLICATION_ENABLED before publishing.',
       )
@@ -417,7 +418,7 @@ export class CheckPublicationService {
               sourceSha: plan.assessment.sourceSha,
               conclusion: plan.payload.conclusion,
               activationAvailable:
-                process.env.GITHUB_RULESET_ACTIVATION_ENABLED === 'true',
+                configurationValue('GITHUB_RULESET_ACTIVATION_ENABLED') === 'true',
             },
           },
         })

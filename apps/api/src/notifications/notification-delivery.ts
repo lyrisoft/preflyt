@@ -1,3 +1,4 @@
+import { configurationValue } from '../configuration/runtime-configuration.js'
 import { isGovernanceNotification } from "./notification-event.js";
 import { randomUUID } from "node:crypto";
 import type { PrismaService } from "../prisma/prisma.service.js";
@@ -64,6 +65,7 @@ export async function deliverNotification(db: PrismaService, eventId: string) {
           (policy
             ? ["OWNER", "ADMIN", "POLICY_MANAGER"].includes(m.role)
             : ["OWNER", "ADMIN", "ENGINEERING_LEAD"].includes(m.role) ||
+              (event.type === 'CRITICAL_FINDINGS_REPORTED' && m.role === 'SECURITY_ENGINEER') ||
               authors.has(m.identityId)),
       );
       await tx.inboxNotification.createMany({
@@ -75,7 +77,7 @@ export async function deliverNotification(db: PrismaService, eventId: string) {
         skipDuplicates: true,
       });
     }
-    if (process.env.NOTIFICATION_EMAIL_ENABLED === "true") {
+    if (configurationValue('NOTIFICATION_EMAIL_ENABLED') === "true") {
       const inbox = await tx.inboxNotification.findMany({
         where: { eventId: event.id },
       });

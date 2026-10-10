@@ -34,12 +34,21 @@ export async function captureContributors(
         throw new ConflictException(
           'Contributor delivery identifier was reused',
         )
-      return { accepted: true, duplicate: true, deliveryId }
+      if (old.repositoryId === repository.id)
+        return { accepted: true, duplicate: true, deliveryId }
+      // Receipts survive repository removal, while observations cascade away.
+      // A verified replay may recover a reconnected repository, but cannot move
+      // a receipt away from another live repository.
+      if (await tx.gitHubRepository.findUnique({ where: { id: old.repositoryId } }))
+        throw new ConflictException('Contributor delivery belongs to another repository')
+      await tx.contributorDelivery.update({
+        where: { id: deliveryId }, data: { repositoryId: repository.id },
+      })
     }
     const observedAt = activities.length
       ? new Date(Math.max(...activities.map((a) => a.observedAt.getTime())))
       : new Date()
-    await tx.contributorDelivery.create({
+    if (!old) await tx.contributorDelivery.create({
       data: {
         id: deliveryId,
         payloadHash,

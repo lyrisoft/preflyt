@@ -1,3 +1,5 @@
+import { configurationValue } from '../configuration/runtime-configuration.js'
+import { skillApplicability } from "./skill-applicability.js";
 import { GitHubProviderService } from "../github/github-provider.service.js";
 import { readPullRequestContext } from "../github-events/pull-request-context.js";
 import { sameReviewPr, publicPrSource } from "./pr-review-context.js";
@@ -64,11 +66,12 @@ type Snapshot = {
   inputTokens: number;
   maxOutputTokens: number;
 };
-const publicReview = (r: any) => ({
+const publicReview = (r: any, allowUsage = false) => ({
   id: r.id,
   automatic: !!(r.snapshot as Snapshot).automatic,
   feedbackState: r.feedbackState,
   feedbackUrl: r.feedbackUrl,
+  inlineFeedbackUrl: r.inlineFeedbackUrl,
   sourceReviewed: !!(r.snapshot as Snapshot).context.source,
   assessmentId: r.assessmentId,
   state: r.state,
@@ -76,7 +79,8 @@ const publicReview = (r: any) => ({
   providerId: r.providerId,
   result: r.result,
   latencyMs: r.latencyMs,
-  reservedCents: Number(r.reservedMicroCents) / 1000000,
+  usage: allowUsage ? r.usage : null,
+  reservedCents: allowUsage ? Number(r.reservedMicroCents) / 1000000 : null,
   createdAt: r.createdAt,
   finishedAt: r.finishedAt,
   checks: (r.snapshot as Snapshot).checks ?? [],
@@ -104,6 +108,10 @@ export class SkillReviewService {
   close() {
     this.closing = true;
     this.abort.abort();
+  }
+  private async profile(record: { request: unknown; sourceSha: string }, repositoryId: string) {
+    const id = (record.request as { profileSnapshotId?: string })?.profileSnapshotId;
+    return id ? this.db.repositoryProfile.findFirst({ where: { id, repositoryId, sourceSha: record.sourceSha } }) : null;
   }
   async list(
     session: AuthenticatedSession,
@@ -136,7 +144,9 @@ export class SkillReviewService {
         enabled: true,
       },
     });
+    const profile = await this.profile(assessment, repo.id);
     const checks = assigned.map((c) => ({
+      selection: skillApplicability(live.find(s=>s.id===c.skillId) ?? {}, profile, assessment.sourceSha),
       ...c,
       available: live.some(
         (s) =>
@@ -144,7 +154,8 @@ export class SkillReviewService {
           s.version === c.skillVersion &&
           s.contentDigest === c.skillDigest &&
           skillDigest(s) === c.skillDigest &&
-          (!s.repositories.length || s.repositories.includes(repoId)),
+          (!s.repositories.length || s.repositories.includes(repoId)) &&
+          skillApplicability(s, profile, assessment.sourceSha).eligible,
       ),
     }));
     const records = await this.db.aiSkillReview.findMany({
@@ -157,9 +168,11 @@ export class SkillReviewService {
       take: 50,
     });
     await this.access.requireRepository(session, repoId, "assessment.read");
+    let allowUsage = false;
+    try { await this.access.requireOrganization(session,"ai.usage.read"); allowUsage = true; } catch {}
     return {
       enabled: skillReviewsEnabled(),
-      reviews: records.map(publicReview),
+      reviews: records.map(r=>publicReview(r,allowUsage)),
       checks,
     };
   }
@@ -231,6 +244,9 @@ export class SkillReviewService {
       throw new BadRequestException(
         "An assigned skill version is unavailable. Ask an admin to check its approval and enablement",
       );
+    const profile = await this.profile(record, repo.id);
+    if (skills.some(s=> !skillApplicability(s, profile, record.sourceSha).eligible))
+      throw new BadRequestException("The skill language/framework scope does not match this commit. Inspect the skipped review or refresh the repository profile.");
     skills.sort((a, b) => a.id.localeCompare(b.id));
     const route = await this.db.aiStageRoute.findUnique({
       where: {
@@ -412,7 +428,7 @@ export class SkillReviewService {
               fingerprint,
               automaticKey: options.automatic?.key,
               feedbackState:
-                options.automatic && route.publishSummary
+                options.automatic && (route.publishSummary || route.publishInline)
                   ? "PENDING"
                   : "NOT_REQUESTED",
               snapshot: JSON.parse(JSON.stringify(snapshot)),
@@ -772,8 +788,10 @@ export class SkillReviewService {
       checks.some((c) => !published.some((p) => digest(p) === digest(c)))
     )
       return;
-    for (let index = 0; index < checks.length; index += 3) {
-      const selected = checks.slice(index, index + 3);
+    const eligibility = await this.list(session, pr.repository.githubId.toString(), assessment.id);
+    const eligibleChecks = checks.filter(c => eligibility.checks.some(e=>e.id === c.id && e.available));
+    for (let index = 0; index < eligibleChecks.length; index += 3) {
+      const selected = eligibleChecks.slice(index, index + 3);
       const automatic = {
         key: digest({
           organizationId,
@@ -828,7 +846,7 @@ export class SkillReviewService {
     }
   }
   async publishPendingSummary() {
-    if (!this.github || process.env.GITHUB_CHECK_PUBLICATION_ENABLED !== "true")
+    if (!this.github || configurationValue('GITHUB_CHECK_PUBLICATION_ENABLED') !== "true")
       return;
     const job = await this.db.aiSkillReview.findFirst({
       where: {
@@ -872,7 +890,7 @@ export class SkillReviewService {
         job.assessmentId,
         snapshot,
       );
-      if (!route.publishSummary || !snapshot.automatic)
+      if ((!route.publishSummary && !route.publishInline) || !snapshot.automatic)
         throw new Error("Summary disabled");
       await this.verifyLivePr(job.repository, snapshot);
       const result = job.result as {
@@ -909,16 +927,17 @@ export class SkillReviewService {
             ]
           : ["Assessment evidence only; repository source was not shared."]),
       ].join("\n\n");
-      const publication = await this.github.publishAiReviewSummary(
+      const publication = route.publishSummary ? await this.github.publishAiReviewSummary(
         job.repository.installationId,
         job.repository.githubId,
         snapshot.context.sourceSha,
         digest({ kind: "AI_SUMMARY", key: snapshot.automatic.key }),
         summary,
-      );
+      ) : null;
+      const inline = route.publishInline && snapshot.context.source ? await this.github.publishAiInlineReview(job.repository.installationId, job.repository.githubId, snapshot.context.source, digest({kind:"AI_INLINE", key:snapshot.automatic.key}), result.findings) : null;
       await this.db.aiSkillReview.update({
         where: { id: job.id },
-        data: { feedbackState: "PUBLISHED", feedbackUrl: publication.htmlUrl },
+        data: { feedbackState: "PUBLISHED", feedbackUrl: publication?.htmlUrl ?? null, inlineFeedbackUrl: inline?.htmlUrl ?? null },
       });
       await this.db.auditEvent.create({
         data: {
@@ -1015,6 +1034,7 @@ export class SkillReviewService {
       );
       let findings: Awaited<ReturnType<typeof runSkillInference>> | undefined,
         providerId: string | undefined;
+      const usage: import("./skill-inference.js").ProviderUsage[] & { providerId?:string }[] = [];
       for (const pin of snapshot.providers) {
         signal.throwIfAborted();
         const provider = await this.db.aiProviderConnection.findFirst({
@@ -1038,6 +1058,10 @@ export class SkillReviewService {
             snapshot.context,
             snapshot.maxOutputTokens,
             signal,
+            async reported => {
+              usage.push({...reported, providerId:provider.id});
+              await this.db.aiSkillReview.update({where:{id:job.id},data:{usage}});
+            },
           );
           providerId = provider.id;
           break;
