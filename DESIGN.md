@@ -18,10 +18,10 @@ Use an 8px spacing rhythm, modest radius, subtle borders and restrained shadows.
 
 ## Sign-in Illustration
 
-Organization and Super Admin sign-in share a centered developer-tool composition: graphite surfaces in dark mode, a crisp light theme, a compact masthead, restrained monospace metadata and abstract source/commit branch linework. Authentication stays dominant; avoid split marketing heroes, large decorative shields, isometric artwork or resemblance to MaiGuard. Keep forms and readable copy stationary. Decorative geometry never represents live code or assessment results. On mobile, prioritize the form and hide the animated illustration. GitHub onboarding and first Owner setup keep their existing layout.
+Organization and Super Admin sign-in share a centered developer-tool composition: graphite surfaces in dark mode, a crisp light theme, a header-free entry surface with the Preflyt logo centered above the form, rounded frosted-glass forms with readable theme-specific contrast and an opaque fallback, rounded controls, restrained monospace metadata, broad rounded code bands with curved bends, thicker source/commit branch linework, and faded GitHub, GitHub Actions and Azure Pipelines icons. Authentication stays dominant; avoid split marketing heroes, large decorative shields, isometric artwork or resemblance to MaiGuard. Keep forms and readable copy stationary. Decorative geometry and tool icons never represent live code, connected integrations or assessment results. On mobile, prioritize the form and hide the animated illustration. GitHub onboarding and first Owner setup keep their existing layout.
 
 ## Motion
 
-Animate only the illustration, with slow path signals and subtle commit-point pulses. Provide a pause control; pause when the page is hidden or the illustration is offscreen. Reduced motion shows the complete static artwork immediately. No animation delays authentication or changes form geometry.
+Animate only the illustration with a brief entrance of no more than five seconds, then leave the complete artwork static. Do not add a page header or animation controls. Reduced motion shows the complete static artwork immediately. No animation delays authentication or changes form geometry.
 
 Canonical visual guidance: [Enterprise UI Guidelines](docs/design/enterprise-ui-guidelines.md). This file is a context summary, not a second set of component rules.
