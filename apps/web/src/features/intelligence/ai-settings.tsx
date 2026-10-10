@@ -153,7 +153,7 @@ const help = [
   {
     title: 'Current availability',
     content:
-      'These settings prepare model connections. Skill reviews use saved assessment evidence only. Reviews require enabled, tested model routing and configured input/output rates. Reservations enforce the configured daily estimate budget; they are not the provider’s final bill. Source review and GitHub feedback are not available. AI never approves policies or changes deterministic checks.',
+      'AI Reviews use saved assessment results. When source sharing is enabled, PR reviews can also use selected changes from the assessed commit. Published PR policies can run assigned reviews automatically and post summaries or comments to GitHub when those options are enabled. Comments on changed lines also require source sharing. Reviews require an enabled, tested model and configured token prices. Preflyt reserves the estimated cost against your daily budget; this is not the provider’s final bill. AI suggestions never approve policies or count as passed checks.',
   },
 ]
 export function AiSettingsPage() {

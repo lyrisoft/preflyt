@@ -387,3 +387,33 @@ it('keeps model form actions compact and aligned in the footer', async () => {
   document.documentElement.classList.remove('dark')
   await page.viewport(1280, 900)
 })
+
+it('explains conditional PR source review and GitHub feedback without claiming they are absent', async () => {
+  const view = await render(<AiSettingsPage />)
+  await view.getByRole('button', { name: 'Help for AI Intelligence' }).click()
+  await expect
+    .element(view.getByText('Current availability', { exact: true }))
+    .toBeVisible()
+  await expect
+    .element(
+      view.getByText(
+        /PR reviews can also use selected changes from the assessed commit/
+      )
+    )
+    .toBeVisible()
+  await expect
+    .element(
+      view.getByText(/Comments on changed lines also require source sharing/)
+    )
+    .toBeVisible()
+  await expect
+    .element(
+      view.getByText(
+        /AI suggestions never approve policies or count as passed checks/
+      )
+    )
+    .toBeVisible()
+  expect(document.body.textContent).not.toContain(
+    'Source review and GitHub feedback are not available'
+  )
+})

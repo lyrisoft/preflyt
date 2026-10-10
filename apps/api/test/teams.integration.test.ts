@@ -302,6 +302,26 @@ it("previews, creates drafts atomically and reuses independent policy approval/p
     memberIds: [],
     repositoryIds: ["102"],
     expectedRevision: detail.revision,
+  }).expect(409);
+  // Removing scope must not erase mandatory inherited requirements, even for an Owner.
+  const unchanged = (await get(owner, "/" + id).expect(200)).body;
+  expect(unchanged.revision).toBe(detail.revision);
+  await verifyTeamContext(db, draft.repositoryId, definition.teamContext);
+  const removedRepo = await db.gitHubRepository.findUniqueOrThrow({
+    where: { githubId: 103n },
+  });
+  expect(
+    (await db.teamRepositoryScope.findUniqueOrThrow({
+      where: { teamId_repositoryId: { teamId: id, repositoryId: removedRepo.id } },
+    })).policyScopeEnabled,
+  ).toBe(true);
+  // Explicit expansion still invalidates old sources and requires another preview.
+  await post(owner, `/${id}/edit`, {
+    name: detail.name,
+    description: detail.description,
+    memberIds: [],
+    repositoryIds: ["101", "102", "103"],
+    expectedRevision: detail.revision,
   }).expect(201);
   await expect(
     verifyTeamContext(db, draft.repositoryId, definition.teamContext),
@@ -546,4 +566,24 @@ it("upgrades an explicitly selected assignment without rewriting history or weak
   await expect(verifyTeamContext(db, repo.id, (draft.definition as any).teamContext)).resolves.toBeUndefined();
   expect(draft.publishedAt).toBeNull();
   await post(outsider, `/${id}/assign`, {...upgrade, expectedPreviewHash: next.previewHash}).expect(409);
+});
+
+it("allows scope removal before a team has assigned standards", async () => {
+  const id = await create(["101"]);
+  const detail = (await get(owner, "/" + id).expect(200)).body;
+  await post(owner, `/${id}/edit`, {
+    name: detail.name,
+    description: detail.description,
+    memberIds: [],
+    repositoryIds: [],
+    expectedRevision: detail.revision,
+  }).expect(201);
+  const repo = await db.gitHubRepository.findUniqueOrThrow({
+    where: { githubId: 101n },
+  });
+  expect(
+    (await db.teamRepositoryScope.findUniqueOrThrow({
+      where: { teamId_repositoryId: { teamId: id, repositoryId: repo.id } },
+    })).policyScopeEnabled,
+  ).toBe(false);
 });
