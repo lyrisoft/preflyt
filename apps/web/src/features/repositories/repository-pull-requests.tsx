@@ -40,9 +40,9 @@ const reasons: Record<string, string> = {
   FORK_HEAD_UNSUPPORTED: 'Fork-head assessments are not supported yet.',
   STANDARDS_NOT_ADOPTED: 'Adopt repository standards to create assessments.',
   NO_APPLICABLE_ASSESSMENT:
-    'No snapshot matches the current revision and policy. A PR or CI event will create another snapshot.',
+    'No assessment matches the current revision and policy. A PR or CI event will create another assessment.',
   EXECUTION_NOT_VERIFIED:
-    'Matching snapshots are available. Their evidence does not establish verified execution or a quality gate.',
+    'Matching assessments are available. Their evidence does not establish verified execution or a quality gate.',
 }
 
 export function RepositoryPullRequests({
@@ -99,7 +99,7 @@ export function RepositoryPullRequests({
           <h2>Pull requests</h2>
         </CardTitle>
         <CardDescription>
-          Current revisions and their matching snapshots.
+          Current revisions and their matching assessments.
         </CardDescription>
         <CardAction>
           <Button
@@ -150,7 +150,7 @@ export function RepositoryPullRequests({
               <ArrowRight className='size-3.5' aria-hidden='true' />
               <span className='inline-flex items-center gap-1.5'>
                 <Layers className='size-3.5' aria-hidden='true' />
-                Match snapshots
+                Find matching assessments
               </span>
               <ArrowRight className='size-3.5' aria-hidden='true' />
               <span className='inline-flex items-center gap-1.5'>
@@ -308,7 +308,7 @@ export function RepositoryPullRequests({
                           className='mt-2 h-7 px-0 text-xs text-info hover:bg-transparent'
                           onClick={() => setSnapshot(link.id)}
                         >
-                          View snapshot <ArrowRight className='size-3' />
+                          View assessment <ArrowRight className='size-3' />
                         </Button>
                       ) : (
                         <p className='mt-3 text-xs text-muted-foreground'>

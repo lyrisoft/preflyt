@@ -237,7 +237,7 @@ export class AuthorizationService {
       },
     })
     throw new ForbiddenException(
-      'This resource is outside your authorized scope'
+      'You do not have access to this resource. Ask your administrator for access.'
     )
   }
   // SessionGuard calls this after live session validation, before any controller or cache lookup.

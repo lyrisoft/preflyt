@@ -117,7 +117,7 @@ export function ConfigurationPanel() {
     >
       <div className='flex flex-wrap items-start justify-between gap-4'>
         <div>
-          <h2 className='text-base font-semibold'>Deployment configuration</h2>
+          <h2 className='text-base font-semibold'>System settings</h2>
           <p className='mt-1 text-sm text-muted-foreground'>
             Applies to every workspace.
           </p>
