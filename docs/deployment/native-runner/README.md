@@ -89,3 +89,9 @@ kind delete cluster --name preflyt-gap-fixture --kubeconfig /private/tmp/preflyt
 ```
 
 This is a generated-source lifecycle test using ordinary runc, not independent strong-isolation approval. Connected repositories still require a reviewed gVisor/Kata runtime. Kubernetes omits false host-access booleans in API responses; verification normalizes only those documented false defaults, while enabled flags remain rejected. Cleanup has a separate 30-second deadline and never marks evidence complete if deletion cannot be confirmed.
+
+## Versioned scanner publication
+
+The release image workflow builds and verifies the exact Node, Gitleaks, Semgrep, Trivy IaC and offline Trivy dependency images with their generated-source fixtures before pushing them to GHCR. Native images currently target `linux/amd64`; application images support `linux/amd64` and `linux/arm64`. Publication does not approve a runtime or enable connected-repository execution.
+
+Static scanner images use `ghcr.io/lyrisoft/preflyt-native-<tool>:sha-<full-commit>`. The offline dependency image adds `-db-<workflow-run-id>` so refreshed vendor data never overwrites an earlier artifact at the same source revision. Always provision the actual published digest, review its licenses/configuration and verify vendor `UpdatedAt` before admission. Existing immutable images are pulled and fixture-verified rather than overwritten. An expired database still blocks execution; a successful build is not a permanent freshness approval.
