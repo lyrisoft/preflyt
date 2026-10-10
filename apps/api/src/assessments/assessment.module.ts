@@ -1,3 +1,5 @@
+import { PolicyExceptionController } from './policy-exception.controller.js'
+import { PolicyExceptionService } from './policy-exception.service.js'
 import { FindingsController } from '../findings/findings.controller.js'
 import { FindingsService } from '../findings/findings.service.js'
 import { NativeRequestController } from '../execution/native-request.controller.js'
@@ -26,6 +28,7 @@ import { AssessmentService } from './assessment.service.js'
 @Module({
   imports: [AuthModule, PrismaModule, GitHubProviderModule],
   controllers: [
+    PolicyExceptionController,
     FindingsController,
     NativeRequestController,
     NativeStatusController,
@@ -38,6 +41,7 @@ import { AssessmentService } from './assessment.service.js'
     PullRequestController,
   ],
   providers: [
+    PolicyExceptionService,
     FindingsService,
     NativeRequestService,
     NativePlanService,

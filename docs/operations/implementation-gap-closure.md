@@ -24,7 +24,7 @@ Status: active, audited against source and executable checks on 2026-10-10. This
 
 ## Remaining work, in order
 
-1. Finish reviewed time-bound policy exceptions and exception notifications. Explicitly reviewed nested team scope is implemented. Preserve explicit scope expansion, strongest inherited requirements and independent authorization.
+1. Accept reviewed time-bound policy exceptions and their notifications on the clean versioned deployment. The request/independent approval/revocation/expiry workflow, publication integration and scoped notifications are implemented; explicitly reviewed nested team scope is implemented. Preserve strongest inherited requirements and independent authorization.
 2. Accept the implemented explicit legacy identity linking/recovery on a clean versioned deployment. Recent dual proof, historical actors, last-Owner protection and alternate-identity self-approval checks are covered by integration tests; never match by email or username.
 3. Complete the supported native adapter matrix; maintain the implemented fresh offline database image; retain live generated Kubernetes lifecycle acceptance and complete independent effective-isolation review. Keep connected-repository execution disabled without valid review.
 4. Qualify the production organization signer and live webhook transport; private-repository signed-report PASS/FAIL/INCOMPLETE, merge enforcement, drift and rollback service acceptance passed. Fork PR and merge-queue support remain explicit limitations until implemented and accepted.
@@ -97,7 +97,7 @@ GitHub authority preflight verified App 4585551 and organization installation 15
 
 Teams now previews the exact child repository union and approves a pinned source snapshot. It requires current management access to every repository, fresh direct GitHub parent/child relationships, bounded traversal and independent existing policy publication. Cycles, stale previews, revoked child access and implicit coverage removal are rejected. A reviewed refresh can restore a stale NESTED association only when the child still has verified access. Existing policy definitions are never rewritten by scope approval; users reapply standards to generate reviewed drafts.
 
-Verification: full API regression passed 106 files / 1,209 tests with four optional tests skipped; the focused Teams API suite passed 15 tests, the Chromium Teams suite passed 12 tests, API typecheck, frontend build and scoped frontend lint passed. Time-bound policy exceptions and their notifications remain unfinished.
+Verification: full API regression passed 106 files / 1,209 tests with four optional tests skipped; the focused Teams API suite passed 15 tests, the Chromium Teams suite passed 12 tests, API typecheck, frontend build and scoped frontend lint passed. At this checkpoint, time-bound policy exceptions and their notifications remained unfinished; the reviewed-exception increment below supersedes that implementation status.
 
 Protected pre-migration snapshot: `/private/tmp/preflyt-p0-p3-closure-1791629773011.dump`, user-readable only, 211713 bytes; SHA-256 `3aef5b71588e703cbb8e7a72e41186172117409a878a190a9e292b29231d98d1`. Never upload this database snapshot with source.
 
@@ -116,3 +116,11 @@ These are real private-repository workflow/check/merge/ruleset results driven by
 The clean closure checkout based on merged development `e60b831` passed all 106 API files / 1,213 tests with Redis, dashboard cache and offline proof acceptance enabled; no API tests were skipped. All 55 Chromium files / 354 tests passed. API typechecking, web production build and scoped frontend lint passed. Keyboard tests now explicitly focus the selected theme radio before arrow navigation, and the Skills drawer does not restore trigger focus while handing off to the new-version editor. The existing ResizeObserver warning did not fail assertions.
 
 Delivery PRs #75–#80 are merged into development; post-merge GitHub run `38048580613` passed. This verification does not close the remaining exception, release-deployment, native coverage or production qualification work.
+
+## Reviewed policy exceptions (2026-10-10)
+
+Implemented exact-policy/branch/commit/check requests, independent approval, rejection, revocation, expiry, current actor/provider authorization and durable governance notices. The policy UI uses saved-commit selection and custom controls; the merge preview labels qualified waivers **Allowed with exception** and retains original failed/missing outcomes. No new queue or untrusted execution path is introduced. The worker processes expiry and re-evaluates publication at the expiry cutoff. The additive migration was exercised only in owned disposable test databases; it has not yet been applied to the application database. See [operations and limitations](policy-exceptions.md).
+
+Full local API regression passed 109 files / 1,228 tests with all optional acceptance flags enabled. Subsequent focused exception/contract/publication verification passed 21 tests, and automatic refresh/exception verification passed 35 tests, including refresh before the expiry cutoff and disabled-automation denial. Full Chromium regression passed 56 files / 361 tests; API typecheck, web production build and scoped frontend lint passed. The existing ResizeObserver warning did not fail assertions. Remote exact-head CI and release deployment acceptance still need verification. The final complete API run below supersedes the earlier local test count.
+
+Final configured API regression passed 109 files / 1,234 tests with all optional acceptance flags enabled. Focused automatic-refresh and exception tests passed 35 tests after the expiry-audit revision refinement. Both release builds and scoped frontend lint passed. The local acceptance uses disposable databases and isolated queue/cache prefixes; the application database has not been migrated by this increment.

@@ -1,3 +1,7 @@
+import { Optional } from '@nestjs/common'
+import { PolicyExceptionService } from './policy-exception.service.js'
+import { applyApprovedExceptions } from './approved-policy-evaluation.js'
+import { previewGate } from './gate-preview.js'
 import { configurationValue } from '../configuration/runtime-configuration.js'
 import { verifyTeamContext } from '../teams/team-context.js'
 import { readLatestNativeEvidence } from '../execution/native-evidence.js'
@@ -26,6 +30,7 @@ export class CheckPublicationService {
     @Inject(GitHubProviderService)
     private readonly github: GitHubProviderService,
     @Inject(AssessmentService) private readonly assessments: AssessmentService,
+    @Optional() @Inject(PolicyExceptionService) private readonly exceptions?: PolicyExceptionService,
   ) {}
   async list(session: AuthenticatedSession, githubId: string, page = 1) {
     if (!Number.isInteger(page) || page < 1 || page > 1000)
@@ -222,7 +227,7 @@ export class CheckPublicationService {
             selectionId: selection!.id,
           })
         : []
-    const policyEvaluation = policy
+    const observedEvaluation = policy
       ? evaluatePublishedPolicy(
           assessment,
           policy,
@@ -232,6 +237,8 @@ export class CheckPublicationService {
           nativeEvidence,
         )
       : undefined
+    const approvedExceptions = policy && this.exceptions ? await this.exceptions.active(session, githubId, { organizationId: session.organizationId!, repositoryId: repo.id, policyId: policy.id, policyHash: policy.definitionHash, branchRef: `refs/heads/${context.base.ref}`, sourceSha: assessment.sourceSha }) : []
+    const policyEvaluation = observedEvaluation && approvedExceptions.length ? applyApprovedExceptions(observedEvaluation, approvedExceptions, policy!.definition as any, previewGate(assessment).reasons.length === 0) : observedEvaluation
     const id = digest({
       repositoryId: repo.id,
       installationId: repo.installationId.toString(),
@@ -264,6 +271,7 @@ export class CheckPublicationService {
       assessment,
       policy,
       policyEvaluation,
+      exceptionExpiry: approvedExceptions.map(row => row.expiresAt.toISOString()),
       context,
       prNumber,
       appId,
