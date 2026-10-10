@@ -2,6 +2,9 @@ export type StatusTone = 'success' | 'warning' | 'error' | 'info' | 'neutral'
 
 /** Shared semantics take precedence over caller tone for recognized status labels. */
 export const statusTones: Readonly<Record<string, StatusTone>> = {
+  reported: 'info',
+  suppressed: 'neutral',
+  'evidence missing': 'warning',
   synced: 'success',
   approved: 'success',
   active: 'success',

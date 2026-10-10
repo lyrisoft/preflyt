@@ -24,3 +24,9 @@ it('keeps success, failure, pending and inactive states consistent', () => {
   expect(statusTones.enabled).toBe('success')
   expect(statusTones.retired).toBe('neutral')
 })
+
+it('preserves finding trust and gap semantics', () => {
+  expect(statusTones.reported).toBe('info')
+  expect(statusTones.suppressed).toBe('neutral')
+  expect(statusTones['evidence missing']).toBe('warning')
+})
