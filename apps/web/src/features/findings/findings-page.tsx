@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { RefreshCw } from 'lucide-react'
 import { API_BASE_URL } from '@/lib/api'
@@ -20,10 +21,12 @@ import {
   SheetDescription,
 } from '@/components/ui/sheet'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Textarea } from '@/components/ui/textarea'
 import { Main } from '@/components/layout/main'
 import { PageHelpDrawer } from '@/components/page-help-drawer'
 import { StatusBadge, type StatusTone } from '@/components/status-badge'
 import { useNavigationSession } from '@/features/workspace/navigation-session'
+import { FindingsOverview, type FindingsSummary } from './findings-summary'
 
 type Finding = {
   id: string
@@ -41,8 +44,16 @@ type Finding = {
   evidence: string[]
   verification: string
   occurrences: number
+  triage?: {
+    state: string
+    assigneeId: string | null
+    note: string
+    revision: number
+  }
 }
 type Results = {
+  canManage?: boolean
+  summary: FindingsSummary
   rows: Finding[]
   total: number
   pageSize: number
@@ -65,6 +76,7 @@ function FindingsWorkspace() {
   const session = useNavigationSession()
   const [kind, setKind] = useState('findings')
   const [repository, setRepository] = useState('all')
+  const [triageFilter, setTriageFilter] = useState('all')
   const [severity, setSeverity] = useState('all')
   const [search, setSearch] = useState('')
   const [q, setQ] = useState('')
@@ -77,6 +89,7 @@ function FindingsWorkspace() {
       kind,
       repository,
       severity,
+      triageFilter,
       q,
       page,
     ],
@@ -85,7 +98,7 @@ function FindingsWorkspace() {
     gcTime: 0,
     queryFn: async ({ signal }): Promise<Results> => {
       const response = await fetch(
-        `${API_BASE_URL}/findings?${new URLSearchParams({ kind, repository, severity, q, page: String(page) })}`,
+        `${API_BASE_URL}/findings?${new URLSearchParams({ kind, repository, severity, triage: triageFilter, q, page: String(page) })}`,
         { credentials: 'include', cache: 'no-store', signal }
       )
       if (!response.ok) {
@@ -131,6 +144,11 @@ function FindingsWorkspace() {
                   'Reported means a scanner or test report supplied the issue. It is not an independent confirmation. Report source verification is shown in the details. Suppressed means the source report accepted a suppression; it does not waive a Preflyt policy.',
               },
               {
+                title: 'Metrics and charts',
+                content:
+                  'Metrics use all matching entries before pagination and apply the repository, severity and applied search filters across both tabs. Reported issues include failed-check summaries and individual report findings; they are not a count of distinct vulnerabilities. Source-suppressed findings are excluded from metrics and charts, but remain in the list. Affected repositories have an issue or evidence gap. Critical/high counts only issues. Charts follow the selected tab; the check chart groups the top eight checks and combines the rest. Historical commits are included; these are not current-open or resolution metrics. AI suggestions are not counted. Human triage records assignment, review and resolution for the specific commit. A resolution is an audited human decision, not proof that a newer commit passes or a policy waiver.',
+              },
+              {
                 title: 'Scope and limits',
                 content:
                   'Only repositories you can assess are included. The latest saved assessment for each commit is used. Up to 200 assessments, 100 reports and 2,000 results are inspected. A partial-results notice appears if a limit is reached. Historical findings are not automatically marked resolved.',
@@ -149,7 +167,7 @@ function FindingsWorkspace() {
       >
         <TabsList>
           <TabsTrigger value='findings'>Reported issues</TabsTrigger>
-          <TabsTrigger value='gaps'>Evidence gaps</TabsTrigger>
+          <TabsTrigger value='gaps'>Missing or unverified results</TabsTrigger>
         </TabsList>
       </Tabs>
       <form
@@ -158,8 +176,29 @@ function FindingsWorkspace() {
           event.preventDefault()
           setQ(search.trim())
           setPage(1)
+          setDetail(null)
         }}
       >
+        <Select
+          value={triageFilter}
+          onValueChange={(value) => {
+            setTriageFilter(value)
+            setPage(1)
+            setDetail(null)
+          }}
+        >
+          <SelectTrigger aria-label='Issue status' className='w-full sm:w-40'>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value='all'>All issue statuses</SelectItem>
+            {Object.entries(triageLabels).map(([value, label]) => (
+              <SelectItem key={value} value={value}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <Input
           aria-label='Search findings'
           placeholder='Search findings…'
@@ -193,6 +232,7 @@ function FindingsWorkspace() {
           onValueChange={(value) => {
             setSeverity(value)
             setPage(1)
+            setDetail(null)
           }}
         >
           <SelectTrigger aria-label='Severity' className='w-44'>
@@ -229,6 +269,17 @@ function FindingsWorkspace() {
               Results are partial. Narrow the repository filter or open the
               repository’s assessments for more evidence.
             </p>
+          )}
+          {result.data.summary && (
+            <FindingsOverview
+              summary={result.data.summary}
+              kind={kind}
+              onSeverity={(value) => {
+                setSeverity(value)
+                setPage(1)
+                setDetail(null)
+              }}
+            />
           )}
           {!result.data.rows.length ? (
             <div className='rounded-xl border bg-card p-8'>
@@ -387,6 +438,12 @@ function FindingsWorkspace() {
                   ))}
                 </ul>
               </div>
+              <FindingTriage
+                key={detail.id}
+                finding={detail}
+                canManage={!!result.data?.canManage}
+                onSaved={(triage) => setDetail({ ...detail, triage })}
+              />
               <Button size='sm' asChild>
                 <Link
                   to='/repositories/$repositoryId'
@@ -404,5 +461,162 @@ function FindingsWorkspace() {
         </SheetContent>
       </Sheet>
     </Main>
+  )
+}
+
+const triageLabels: Record<string, string> = {
+  REPORTED: 'Reported',
+  IN_REVIEW: 'In review',
+  RESOLVED: 'Resolved',
+}
+function FindingTriage({
+  finding,
+  canManage,
+  onSaved,
+}: {
+  finding: Finding
+  canManage: boolean
+  onSaved: (triage: NonNullable<Finding['triage']>) => void
+}) {
+  const client = useQueryClient()
+  const [state, setState] = useState(finding.triage?.state ?? 'REPORTED')
+  const [assignee, setAssignee] = useState(
+    finding.triage?.assigneeId ?? 'unassigned'
+  )
+  const [note, setNote] = useState(finding.triage?.note ?? '')
+  const assignees = useQuery({
+    queryKey: ['finding-assignees', finding.id],
+    enabled: canManage,
+    retry: false,
+    gcTime: 0,
+    queryFn: async ({ signal }): Promise<{ id: string; label: string }[]> => {
+      const response = await fetch(
+        `${API_BASE_URL}/findings/${finding.id}/assignees`,
+        { credentials: 'include', cache: 'no-store', signal }
+      )
+      if (!response.ok)
+        throw new Error(
+          'Assignees are unavailable. Refresh and check repository access.'
+        )
+      return response.json()
+    },
+  })
+  const save = useMutation({
+    meta: { successMessage: 'Issue updated' },
+    mutationFn: async () => {
+      const response = await fetch(
+        `${API_BASE_URL}/findings/${finding.id}/triage`,
+        {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            state,
+            assigneeId: assignee === 'unassigned' ? null : assignee,
+            note,
+            expectedRevision: finding.triage?.revision ?? 0,
+          }),
+        }
+      )
+      const data = await response.json().catch(() => null)
+      if (!response.ok)
+        throw new Error(
+          data?.message ?? 'Could not update this issue. Try again.'
+        )
+      return data as NonNullable<Finding['triage']>
+    },
+    onSuccess: async (data) => {
+      onSaved(data)
+      await client.invalidateQueries({ queryKey: ['findings'] })
+    },
+  })
+  if (!canManage)
+    return (
+      <div className='space-y-2'>
+        <h3 className='text-sm font-semibold'>Manage issue</h3>
+        <StatusBadge
+          tone={finding.triage?.state === 'RESOLVED' ? 'success' : 'info'}
+        >
+          {triageLabels[finding.triage?.state ?? 'REPORTED']}
+        </StatusBadge>
+        {finding.triage?.note && (
+          <p className='text-sm whitespace-pre-wrap'>{finding.triage.note}</p>
+        )}
+      </div>
+    )
+  return (
+    <form
+      className='space-y-4 rounded-lg border p-4'
+      onSubmit={(event) => {
+        event.preventDefault()
+        save.mutate()
+      }}
+    >
+      <h3 className='text-sm font-semibold'>Manage issue</h3>
+      <div className='grid gap-4 sm:grid-cols-2'>
+        <div className='space-y-2'>
+          <label className='text-sm font-medium' htmlFor='finding-state'>
+            Status
+          </label>
+          <Select value={state} onValueChange={setState}>
+            <SelectTrigger id='finding-state'>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(triageLabels).map(([value, label]) => (
+                <SelectItem key={value} value={value}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className='space-y-2'>
+          <label className='text-sm font-medium' htmlFor='finding-assignee'>
+            Assignee
+          </label>
+          <Select value={assignee} onValueChange={setAssignee}>
+            <SelectTrigger id='finding-assignee'>
+              <SelectValue placeholder='Unassigned' />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value='unassigned'>Unassigned</SelectItem>
+              {assignees.data?.map((member) => (
+                <SelectItem key={member.id} value={member.id}>
+                  {member.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div className='space-y-2'>
+        <label className='text-sm font-medium' htmlFor='finding-note'>
+          Resolution or review note
+        </label>
+        <Textarea
+          id='finding-note'
+          value={note}
+          onChange={(event) => setNote(event.target.value)}
+          maxLength={1000}
+          required={state === 'RESOLVED'}
+          placeholder='Explain the review or how the issue was resolved.'
+        />
+      </div>
+      <p className='text-xs text-muted-foreground'>
+        Your changes apply to this commit. Assessment evidence and gate results
+        stay unchanged.
+      </p>
+      {(save.error || assignees.error) && (
+        <p role='alert' className='text-sm text-destructive'>
+          {(save.error ?? assignees.error)?.message}
+        </p>
+      )}
+      <div className='flex justify-end'>
+        <Button size='sm' disabled={save.isPending || assignees.isFetching}>
+          Save changes
+        </Button>
+      </div>
+    </form>
   )
 }

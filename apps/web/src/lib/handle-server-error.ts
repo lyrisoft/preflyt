@@ -1,7 +1,7 @@
 import { AxiosError } from 'axios'
 import { toast } from 'sonner'
 
-export function handleServerError(error: unknown) {
+export function handleServerError(error: unknown, options?: { id: string }) {
   if (import.meta.env.DEV) {
     // eslint-disable-next-line no-console
     console.log(error)
@@ -28,5 +28,8 @@ export function handleServerError(error: unknown) {
     }
   }
 
-  toast.error(errMsg)
+  if (error instanceof Error && error.name === 'AbortError') return
+
+  if (options) toast.error(errMsg, options)
+  else toast.error(errMsg)
 }

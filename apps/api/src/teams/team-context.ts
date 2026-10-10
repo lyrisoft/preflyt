@@ -38,6 +38,7 @@ export async function verifyTeamContext(
         id: source.assignmentId,
         teamId: source.teamId,
         digest: source.digest,
+        supersededAt: null,
       },
     });
     if (
@@ -66,9 +67,10 @@ export async function inheritedTeamStandards(
 ) {
   const rows = await db.teamPolicyAssignment.findMany({
     where: {
+      supersededAt: null,
       team: {
         organizationId,
-        repositories: { some: { repositoryId, policyScopeEnabled: true } },
+        OR: [{ source: 'ORGANIZATION' }, { repositories: { some: { repositoryId, policyScopeEnabled: true } } }],
       },
     },
     include: { team: true },

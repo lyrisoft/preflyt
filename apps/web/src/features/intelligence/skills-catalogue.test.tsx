@@ -265,8 +265,12 @@ it('downloads the selected database version for a read-only user', async () => {
     const view = await render(<SkillsCatalogue />)
     await view.getByRole('button', { name: 'Review', exact: true }).click()
     await view.getByRole('button', { name: 'Download SKILL.md' }).click()
-    expect(state.download).toHaveBeenCalledWith('/ai/skills/skill/markdown')
-    expect(click.mock.instances[0]).toHaveProperty('download', 'SKILL.md')
+    await expect
+      .poll(() => state.download.mock.calls)
+      .toEqual([['/ai/skills/skill/markdown']])
+    await expect
+      .poll(() => click.mock.instances[0])
+      .toHaveProperty('download', 'SKILL.md')
     const file = objectUrl.mock.calls[0]![0] as Blob
     expect(await file.text()).toContain('# Review instructions')
   } finally {

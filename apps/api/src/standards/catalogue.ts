@@ -1,3 +1,4 @@
+import { checkReportAdapters } from "../assessments/check-report-adapters.js";
 import { digest as contentDigest } from "../assessments/assessment-digest.js";
 import { createHash } from "node:crypto";
 import type { ProfileSignal } from "../github/repository-profile.js";
@@ -200,12 +201,42 @@ function freeze<T>(value: T): T {
   }
   return value;
 }
-export const catalogue = freeze(
+export const legacyCatalogue = freeze(
   packs.map((pack) => ({
     ...pack,
     digest: createHash("sha256").update(JSON.stringify(pack)).digest("hex"),
   })),
 );
+/** New definitions enable implemented CI report adapters; published 1.0.0 stays immutable. */
+export const catalogue = freeze(
+  legacyCatalogue.map(({ digest: _digest, ...pack }) => {
+    const updated = {
+      ...pack,
+      version: "1.1.0",
+      changelog: [
+        "Trusted pipeline report adapters for all engineering checks. Existing selections keep their saved version.",
+      ],
+      rules: pack.rules.map((control) =>
+        control.capability === "planned" && checkReportAdapters[control.id]
+          ? {
+              ...control,
+              version: "1.1.0",
+              capability: "import_only" as const,
+              guidance:
+                "Collect a report from an approved, commit-pinned workflow that executes this named control. Review the workflow's coverage before approving it; missing or unverified execution stays incomplete.",
+            }
+          : control,
+      ),
+    };
+    return {
+      ...updated,
+      digest: createHash("sha256")
+        .update(JSON.stringify(updated))
+        .digest("hex"),
+    };
+  }),
+);
+export const catalogueVersions = freeze([...legacyCatalogue, ...catalogue]);
 export type AiCheck = {
   id: string;
   title: string;
@@ -248,7 +279,8 @@ export function assessmentAiChecks(plan: unknown, stage: string): AiCheck[] {
     throw new Error("Invalid assessment standards");
   for (const pack of packs) {
     if (!pack.aiChecks?.length) continue;
-    if (!organizationPack(pack)) throw new Error("Invalid AI review definition");
+    if (!organizationPack(pack))
+      throw new Error("Invalid AI review definition");
     for (const check of pack.aiChecks) {
       const old = checks.get(check.id);
       if (old && contentDigest(old) !== contentDigest(check))
@@ -308,7 +340,7 @@ export function organizationPack(value: unknown): StandardPack | undefined {
     digest !== packDigest(definition) ||
     pack.rules.some(
       (r) =>
-        !catalogue.some((p) =>
+        !catalogueVersions.some((p) =>
           p.rules.some((known) => contentDigest(known) === contentDigest(r)),
         ),
     )
@@ -319,7 +351,7 @@ export function organizationPack(value: unknown): StandardPack | undefined {
 export function resolvePacks(refs: PackRef[]) {
   return refs.map(
     (ref) =>
-      catalogue.find(
+      catalogueVersions.find(
         (pack) => pack.id === ref.id && pack.version === ref.version,
       ) ??
       (ref.definition &&
@@ -372,7 +404,7 @@ export function recommend(signals: ProfileSignal[]) {
     });
   return refs.map((ref) => ({
     ...ref,
-    version: "1.0.0",
+    version: "1.1.0",
     evidence: ref.signalIds.flatMap((id) => detected.get(id)?.evidence ?? []),
   }));
 }

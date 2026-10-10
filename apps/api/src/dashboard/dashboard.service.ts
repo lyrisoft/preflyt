@@ -1,3 +1,4 @@
+import { configurationValue } from '../configuration/runtime-configuration.js'
 import {
   BadRequestException,
   ForbiddenException,
@@ -72,7 +73,7 @@ export class DashboardService {
         .update(
           JSON.stringify({
             actorId,
-            app: process.env.GITHUB_APP_ID ?? '',
+            app: configurationValue('GITHUB_APP_ID') ?? '',
             day: now.toISOString().slice(0, 10),
             days,
             repository: rawRepository ?? null,

@@ -48,15 +48,28 @@ const queryClient = new QueryClient({
     },
   }),
   queryCache: new QueryCache({
-    onError: (error) => {
+    onError: (error, query) => {
+      // Initial failures remain visible in the page; notify failed background refreshes.
+      if (
+        query.state.data !== undefined &&
+        query.meta?.silent !== true &&
+        !(error instanceof AxiosError && error.response?.status === 401)
+      )
+        handleServerError(error, { id: `query-error:${query.queryHash}` })
       if (error instanceof AxiosError) {
         if (error.response?.status === 401) {
-          toast.error('Session expired!')
+          toast.error('Session expired. Sign in again.', {
+            id: 'session-expired',
+          })
           const redirect = `${router.history.location.href}`
           router.navigate({ to: '/sign-in', search: { redirect } })
         }
         if (error.response?.status === 500) {
-          toast.error('Internal Server Error!')
+          if (query.state.data === undefined)
+            toast.error(
+              'The server could not complete the request. Try again.',
+              { id: 'server-error' }
+            )
           // Only navigate to error page in production to avoid disrupting HMR in development
           if (import.meta.env.PROD) {
             router.navigate({ to: '/500' })

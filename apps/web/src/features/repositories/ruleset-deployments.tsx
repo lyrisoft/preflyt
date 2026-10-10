@@ -302,7 +302,7 @@ export function RulesetDeployments({
                       <TableRow>
                         <TableHead>PR</TableHead>
                         <TableHead>Commit</TableHead>
-                        <TableHead>Readiness</TableHead>
+                        <TableHead>Merge review result</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
