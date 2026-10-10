@@ -71,7 +71,10 @@ if (process.env.SUPER_ADMIN_USERNAME && process.env.SUPER_ADMIN_PASSWORD) {
       assert.equal(response.status, 403, 'Wrong-origin configuration changes must be blocked')
       response = await request('/api/configuration', { method: 'PATCH', headers: { Cookie: cookie, Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify(change) })
       assert.equal(response.status, 200, 'Bundled queue must permit enabling notifications')
+      response = await request('/api/configuration', { headers: { Cookie: cookie } })
+      assert.equal(response.status, 200, 'Saved configuration must be readable')
       const changed = await response.json()
+      assert.equal(changed.fields.find(field => field.key === 'NOTIFICATIONS_ENABLED').value, 'true', 'Notification setting must be saved')
       response = await request('/api/configuration', { method: 'PATCH', headers: { Cookie: cookie, Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ expectedRevision: changed.revision, values: { NOTIFICATIONS_ENABLED: previous }, clearSecrets: [] }) })
       assert.equal(response.status, 200, 'Smoke configuration must be restored')
     }
