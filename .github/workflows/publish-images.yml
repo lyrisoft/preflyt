@@ -147,3 +147,12 @@ jobs:
       - name: Publish only the verified image
         if: steps.existing.outputs.exists != 'true'
         run: docker push "$IMAGE"
+
+  accept-published:
+    needs: [publish, publish-native]
+    permissions:
+      contents: read
+      packages: read
+    uses: ./.github/workflows/compose-acceptance.yml
+    with:
+      published_images: true
