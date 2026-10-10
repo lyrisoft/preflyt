@@ -24,6 +24,15 @@ Build/reuse Preflyt-owned wrappers for AppShell, SidebarGroup, Breadcrumbs, Page
 
 Use existing shadcn/ui and TanStack patterns where available. Reuse one routing/data-fetch architecture; avoid one-off styling or duplicate UI frameworks.
 
+## Shared headers, cards and actions
+
+- Use `apps/web/src/components/page-header.tsx` for workspace page headers. Follow Integrations: restrained tinted surface, section label, 44px icon tile, title, description and grouped actions. Keep the title and actions on separate rows on small screens. Do not build a competing header on each page.
+- Use `SurfaceIcon` for card identity: 40px tile with a 20px icon, rounded-xl border and a shared category accent from `lib/surface-tones.ts`. Header tiles are 44px; compact inline sections may use 32px tiles. Provider logos fit the same tile geometry. Small inline metadata and control icons retain their existing compact sizes.
+- Cards use the shared Card primitive with a clear title, quieter metadata, grouped content and aligned action footers. Use category colors to identify sections; use status colors only for results. Avoid arbitrary card heights, decorative gradients or coloring entire cards.
+- Primary create, activate, save and apply actions use the brand-filled Button. Secondary navigation, refresh, edit and cancel use outline or ghost. Destructive actions use destructive styling. Keep buttons compact and content-sized; align card actions to the right.
+- Badges use `StatusBadge` and `lib/status-tones.ts`: completed/healthy green, failure red, pending/stale amber, information blue and inactive neutral. Never infer success from configuration, missing data or a category accent.
+- Review both themes after color transitions finish. Verify keyboard controls and 320px layouts with the real page padding, and preserve permissions, links and mutation behavior when changing presentation.
+
 ## Design review checklist
 
 - [ ] Page answers an actionable engineering question, not just displaying numbers.

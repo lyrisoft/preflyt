@@ -53,6 +53,7 @@ import {
 } from '@/components/ui/sheet'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { StatusBadge } from '@/components/status-badge'
+import { SurfaceIcon } from '@/components/surface-icon'
 import { RelativeTime } from './relative-time'
 import {
   useStandards,
@@ -347,22 +348,15 @@ function PackCard({
   recommended: boolean
 }) {
   const Icon = packIcons[pack.id] ?? Layers
-  const accent = ['application-security', 'backend-service'].includes(pack.id)
-    ? 'border-teal-500/20 bg-teal-500/10 text-teal-600 dark:text-teal-400'
-    : 'border-blue-500/20 bg-blue-500/10 text-blue-600 dark:text-blue-400'
+  const tone = ['application-security', 'backend-service'].includes(pack.id)
+    ? 'teal'
+    : 'blue'
   const segments = capabilitySegments(pack.rules)
   return (
-    <Card className={cn('gap-4 py-5', selected && 'border-chart-1/40')}>
-      <CardHeader className='gap-3 px-5'>
+    <Card className={cn('gap-4', selected && 'border-chart-1/40')}>
+      <CardHeader className='gap-3'>
         <div className='flex items-start justify-between gap-3'>
-          <span
-            className={cn(
-              'flex size-10 items-center justify-center rounded-lg border',
-              accent
-            )}
-          >
-            <Icon aria-hidden='true' className='size-5' />
-          </span>
+          <SurfaceIcon icon={Icon} tone={tone} />
           {selected ? (
             <StatusBadge tone='info'>Selected</StatusBadge>
           ) : recommended ? (
@@ -373,12 +367,12 @@ function PackCard({
         </div>
         <div>
           <CardTitle asChild>
-            <h3 className='text-sm'>{pack.title}</h3>
+            <h3>{pack.title}</h3>
           </CardTitle>
           <p className='mt-1 text-xs text-muted-foreground'>v{pack.version}</p>
         </div>
       </CardHeader>
-      <CardContent className='space-y-3 px-5'>
+      <CardContent className='space-y-3'>
         <div>
           <div className='mb-1 flex items-center justify-between text-xs'>
             <span className='text-muted-foreground'>Rule capabilities</span>
@@ -484,16 +478,21 @@ export function RepositoryStandards({
       )}
       <div className='grid gap-5 xl:grid-cols-2'>
         <Card className='gap-4'>
-          <CardHeader>
-            <CardTitle asChild>
-              <h2>Standards adoption</h2>
-            </CardTitle>
-            <CardDescription>
-              {data?.selection
-                ? 'Saved requirements for this repository.'
-                : 'Choose the requirements for this repository.'}
-            </CardDescription>
-            <CardAction className='flex gap-2'>
+          <CardHeader className='flex flex-row flex-wrap items-center gap-4'>
+            <div className='flex min-w-0 flex-[1_1_16rem] items-center gap-3'>
+              <SurfaceIcon icon={Layers} tone='teal' />
+              <div className='min-w-0 space-y-1'>
+                <CardTitle asChild>
+                  <h2>Standards adoption</h2>
+                </CardTitle>
+                <CardDescription>
+                  {data?.selection
+                    ? 'Saved requirements for this repository.'
+                    : 'Choose the requirements for this repository.'}
+                </CardDescription>
+              </div>
+            </div>
+            <CardAction className='flex shrink-0 flex-wrap gap-2'>
               <Button
                 variant='outline'
                 size='icon'
@@ -600,15 +599,20 @@ export function RepositoryStandards({
         </Card>
         {data && (
           <Card className='gap-4'>
-            <CardHeader>
-              <CardTitle asChild>
-                <h2>Rule capabilities</h2>
-              </CardTitle>
-              <CardDescription>
-                {data.selection ? 'Saved selection' : 'Recommended preview'} ·
-                rules included in multiple packs are counted once.
-              </CardDescription>
-              <CardAction>
+            <CardHeader className='flex flex-row flex-wrap items-center gap-4'>
+              <div className='flex min-w-0 flex-[1_1_16rem] items-center gap-3'>
+                <SurfaceIcon icon={ListChecks} />
+                <div className='min-w-0 space-y-1'>
+                  <CardTitle asChild>
+                    <h2>Rule capabilities</h2>
+                  </CardTitle>
+                  <CardDescription>
+                    {data.selection ? 'Saved selection' : 'Recommended preview'}{' '}
+                    · rules included in multiple packs are counted once.
+                  </CardDescription>
+                </div>
+              </div>
+              <CardAction className='shrink-0'>
                 <Badge variant='neutral'>{uniqueRules.length} rules</Badge>
               </CardAction>
             </CardHeader>

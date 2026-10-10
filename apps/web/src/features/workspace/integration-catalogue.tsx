@@ -97,7 +97,7 @@ export function IntegrationCatalogue({
             <span className='mb-7 flex items-center justify-between gap-3'>
               <span
                 className={cn(
-                  'flex size-11 shrink-0 items-center justify-center rounded-xl',
+                  'flex size-10 shrink-0 items-center justify-center rounded-xl border border-current/10',
                   item.color
                 )}
               >

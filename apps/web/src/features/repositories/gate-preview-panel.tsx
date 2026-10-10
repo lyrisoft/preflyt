@@ -10,6 +10,7 @@ import {
   CardDescription,
 } from '@/components/ui/card'
 import { StatusBadge } from '@/components/status-badge'
+import { SurfaceIcon } from '@/components/surface-icon'
 import { engineeringRead } from './engineering-queries'
 
 type GatePreview = {
@@ -75,14 +76,18 @@ export function GatePreviewPanel({
   return (
     <Card className='border-info/20 bg-info/5'>
       <CardHeader>
-        <CardTitle className='flex items-center gap-2'>
-          <ShieldCheck className='size-5 text-info' aria-hidden='true' />
-          Merge review result
-        </CardTitle>
-        <CardDescription>
-          Results for this saved assessment. GitHub check publication and merge
-          protection are configured separately in Quality Gates.
-        </CardDescription>
+        <div className='flex min-w-0 items-center gap-3'>
+          <SurfaceIcon icon={ShieldCheck} />
+          <div className='min-w-0 space-y-1'>
+            <CardTitle asChild>
+              <h2>Merge review result</h2>
+            </CardTitle>
+            <CardDescription>
+              Results for this saved assessment. GitHub check publication and
+              merge protection are configured separately in Quality Gates.
+            </CardDescription>
+          </div>
+        </div>
       </CardHeader>
       <CardContent className='space-y-4'>
         {query.isPending ? (

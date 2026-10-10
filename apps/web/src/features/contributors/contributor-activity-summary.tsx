@@ -1,4 +1,5 @@
 import {
+  ChartNoAxesCombined,
   GitPullRequest,
   GitBranch,
   UsersRound,
@@ -15,6 +16,7 @@ import {
 } from 'recharts'
 import { chartAnimation, chartTooltipAnimation } from '@/lib/chart-motion'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { SurfaceIcon } from '@/components/surface-icon'
 
 export type ContributionDay = {
   date: string
@@ -53,7 +55,8 @@ export function ContributorActivitySummary({
   ]
   return (
     <Card className='h-full min-w-0 gap-3'>
-      <CardHeader>
+      <CardHeader className='flex flex-row items-center gap-3'>
+        <SurfaceIcon icon={ChartNoAxesCombined} tone='blue' />
         <CardTitle>Contribution activity</CardTitle>
       </CardHeader>
       <CardContent className='flex flex-1 flex-col gap-4'>

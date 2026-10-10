@@ -1,5 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Bell, Mail } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
+import { SurfaceIcon } from '@/components/surface-icon'
 import { useNavigationSession } from '@/features/workspace/navigation-session'
 import { notificationRequest } from './notification-query'
 
@@ -43,16 +45,20 @@ export function NotificationPreferences() {
     onSuccess: () => client.invalidateQueries({ queryKey: key }),
   })
   return (
-    <section className='space-y-4 rounded-xl border bg-card p-4'>
-      <div className='flex items-center justify-between gap-4'>
+    <section className='overflow-hidden rounded-xl border bg-card shadow-xs'>
+      <div className='flex items-center gap-3 border-b bg-muted/20 px-6 py-5'>
+        <SurfaceIcon icon={Bell} tone='teal' />
+        <h2 className='text-base font-semibold'>Notifications</h2>
+      </div>
+      <div className='flex items-start justify-between gap-6 px-6 py-5'>
         <div>
           <label
             htmlFor='assessment-notifications'
-            className='text-sm font-medium'
+            className='text-sm font-semibold'
           >
             Assessment notifications
           </label>
-          <p className='mt-1 text-xs text-muted-foreground'>
+          <p className='mt-2 max-w-xl text-sm leading-6 text-muted-foreground'>
             Receive new in-app updates for your assessments and repositories you
             lead. Existing notifications stay in your inbox.
           </p>
@@ -64,6 +70,7 @@ export function NotificationPreferences() {
         </div>
         <Switch
           id='assessment-notifications'
+          className='mt-1 shrink-0'
           checked={preference.data?.assessments ?? true}
           disabled={!preference.data || save.isPending}
           onCheckedChange={(v) =>
@@ -74,12 +81,16 @@ export function NotificationPreferences() {
           }
         />
       </div>
-      <div className='flex items-center justify-between gap-4 border-t pt-4'>
+      <div className='flex items-start justify-between gap-6 border-t px-6 py-5'>
         <div>
-          <label htmlFor='email-notifications' className='text-sm font-medium'>
+          <label
+            htmlFor='email-notifications'
+            className='flex items-center gap-2 text-sm font-semibold'
+          >
+            <Mail className='size-4 text-muted-foreground' />
             Email notifications
           </label>
-          <p className='mt-1 text-xs text-muted-foreground'>
+          <p className='mt-2 max-w-xl text-sm leading-6 text-muted-foreground'>
             {!preference.data?.emailEnabled
               ? 'Email delivery is not enabled for this deployment.'
               : !preference.data.emailAddressAvailable
@@ -89,6 +100,7 @@ export function NotificationPreferences() {
         </div>
         <Switch
           id='email-notifications'
+          className='mt-1 shrink-0'
           checked={preference.data?.email ?? false}
           disabled={
             !preference.data?.emailEnabled ||
@@ -103,7 +115,7 @@ export function NotificationPreferences() {
           }
         />
       </div>
-      <p className='text-xs text-muted-foreground'>
+      <p className='border-t bg-muted/20 px-6 py-4 text-xs leading-5 text-muted-foreground'>
         Policy publication notices stay in your in-app inbox even when
         assessment alerts are turned off.
       </p>

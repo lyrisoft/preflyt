@@ -1,5 +1,7 @@
+import { Sparkles } from 'lucide-react'
 import { AppHeader } from '@/components/layout/app-header'
 import { Main } from '@/components/layout/main'
+import { PageHeader } from '@/components/page-header'
 import { PageHelpDrawer } from '@/components/page-help-drawer'
 import { useNavigationSession } from '../workspace/navigation-session'
 import { SkillsCatalogue } from './skills-catalogue'
@@ -38,10 +40,14 @@ export function SkillsPage() {
       <AppHeader breadcrumbs={[{ label: 'Skills' }]} />
       <Main>
         <div className='space-y-6'>
-          <div className='flex items-center justify-between gap-3'>
-            <h1 className='text-2xl font-semibold tracking-tight'>Skills</h1>
-            <PageHelpDrawer title='Review skills' sections={help} />
-          </div>
+          <PageHeader
+            title='Skills'
+            description='Create, review and approve Markdown instructions for AI Reviews.'
+            section='Intelligence'
+            icon={Sparkles}
+            tone='violet'
+            actions={<PageHelpDrawer title='Review skills' sections={help} />}
+          />
           {session.isPending ? (
             <p role='status'>Checking access…</p>
           ) : session.isError ? (

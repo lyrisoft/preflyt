@@ -1,7 +1,20 @@
 import { useState, type FormEvent } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { BookOpen, Download, Loader2, Plus, Save, Pencil } from 'lucide-react'
+import {
+  BookOpen,
+  Download,
+  FileText,
+  FlaskConical,
+  Layers,
+  Loader2,
+  Plus,
+  Save,
+  Pencil,
+  ServerCog,
+  ShieldCheck,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card'
 import {
   Dialog,
   DialogContent,
@@ -19,6 +32,7 @@ import {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { StatusBadge } from '@/components/status-badge'
+import { SurfaceIcon } from '@/components/surface-icon'
 import { governanceRequest } from '../repositories/governance-api'
 import {
   useNavigationSession,
@@ -52,6 +66,15 @@ type Template = Omit<
   ReviewSkill,
   'id' | 'skillKey' | 'version' | 'contentDigest' | 'status' | 'enabled'
 > & { id?: string; category?: string; checks?: string[]; checkIds?: string[] }
+const categoryIcon = (category?: string) =>
+  ({
+    'Application Security': ShieldCheck,
+    'Baseline Engineering': BookOpen,
+    'Testing and Quality': FlaskConical,
+    'Backend Services': ServerCog,
+    'Infrastructure as Code': Layers,
+  })[category ?? ''] ?? FileText
+
 export function SkillsCatalogue() {
   const session = useNavigationSession(),
     manage = canAdminister(session.data?.role),
@@ -159,12 +182,12 @@ export function SkillsCatalogue() {
     }
   }
   return (
-    <section className='space-y-4'>
+    <section className='space-y-6'>
       <div className='flex flex-wrap items-center justify-between gap-3'>
-        <h2 className='flex items-center gap-2 font-semibold'>
-          <BookOpen className='size-4' />
-          Review skills
-        </h2>
+        <div className='flex items-center gap-3'>
+          <SurfaceIcon icon={BookOpen} tone='violet' size='sm' />
+          <h2 className='text-base font-semibold'>Review skills</h2>
+        </div>
         {manage && (
           <div className='flex flex-wrap items-center gap-2'>
             <UpstreamSkill
@@ -237,23 +260,42 @@ export function SkillsCatalogue() {
                   {builtin
                     .slice((builtinPage - 1) * 6, builtinPage * 6)
                     .map((t) => (
-                      <article
-                        key={t.id ?? t.name}
-                        className='flex min-w-0 flex-col rounded-xl border p-5'
-                      >
-                        <div className='flex items-start justify-between gap-3'>
-                          <h3 className='text-sm font-semibold'>{t.name}</h3>
-                          <StatusBadge tone='neutral'>Built-in</StatusBadge>
-                        </div>
-                        <p className='mt-2 text-sm text-muted-foreground'>
-                          {t.description}
-                        </p>
-                        {t.checks?.length ? (
-                          <p className='mt-3 text-xs text-muted-foreground'>
-                            Checks: {t.checks.join(' · ')}
+                      <Card key={t.id ?? t.name} className='min-w-0 gap-4'>
+                        <CardHeader>
+                          <div className='flex items-center justify-between gap-3'>
+                            <SurfaceIcon
+                              icon={categoryIcon(t.category)}
+                              tone='violet'
+                            />
+                            <StatusBadge tone='neutral'>Built-in</StatusBadge>
+                          </div>
+                          {t.category && (
+                            <p className='mt-3 text-xs font-medium text-muted-foreground'>
+                              {t.category}
+                            </p>
+                          )}
+                          <h3 className='text-base font-semibold tracking-tight'>
+                            {t.name}
+                          </h3>
+                        </CardHeader>
+                        <CardContent className='flex-1 space-y-4'>
+                          <p className='text-sm leading-6 text-muted-foreground'>
+                            {t.description}
                           </p>
-                        ) : null}
-                        <div className='mt-auto flex flex-wrap justify-end gap-2 pt-5'>
+                          {t.checks?.length ? (
+                            <div className='border-t pt-3'>
+                              <p className='mb-2 text-xs font-medium text-muted-foreground'>
+                                Checks reviewed
+                              </p>
+                              <ul className='space-y-1.5 text-xs leading-5'>
+                                {t.checks.map((check) => (
+                                  <li key={check}>{check}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          ) : null}
+                        </CardContent>
+                        <CardFooter className='flex-wrap justify-end gap-2 border-t'>
                           <Button
                             size='sm'
                             variant='outline'
@@ -269,7 +311,6 @@ export function SkillsCatalogue() {
                           {manage && (
                             <Button
                               size='sm'
-                              variant='outline'
                               onClick={() => void adoptBuiltin(t)}
                               aria-label={`Use ${t.name}`}
                               disabled={busy || !t.id}
@@ -278,8 +319,8 @@ export function SkillsCatalogue() {
                               Use skill
                             </Button>
                           )}
-                        </div>
-                      </article>
+                        </CardFooter>
+                      </Card>
                     ))}
                 </div>
                 {!builtin.length && (
@@ -329,12 +370,24 @@ export function SkillsCatalogue() {
                       {filtered
                         .slice((current - 1) * 10, current * 10)
                         .map((s) => (
-                          <tr key={s.id} className='border-t'>
+                          <tr
+                            key={s.id}
+                            className='border-t transition-colors hover:bg-muted/20'
+                          >
                             <td className='px-4 py-3'>
-                              <p className='font-medium'>{s.name}</p>
-                              <p className='mt-1 max-w-sm text-xs text-muted-foreground'>
-                                {s.description}
-                              </p>
+                              <div className='flex items-center gap-3'>
+                                <SurfaceIcon
+                                  icon={FileText}
+                                  tone='violet'
+                                  size='sm'
+                                />
+                                <div className='min-w-0'>
+                                  <p className='font-semibold'>{s.name}</p>
+                                  <p className='mt-1 max-w-sm text-xs leading-5 text-muted-foreground'>
+                                    {s.description}
+                                  </p>
+                                </div>
+                              </div>
                             </td>
                             <td className='px-4 py-3'>v{s.version}</td>
 
@@ -629,7 +682,7 @@ export function SkillsCatalogue() {
                   <>
                     <Button
                       size='sm'
-                      variant='outline'
+                      variant='destructive'
                       disabled={busy}
                       onClick={() =>
                         void action(`/${selected.id}/retire`, {
@@ -642,6 +695,7 @@ export function SkillsCatalogue() {
                     </Button>
                     <Button
                       size='sm'
+                      variant={selected.enabled ? 'outline' : 'default'}
                       disabled={busy}
                       onClick={() =>
                         void action(

@@ -421,3 +421,78 @@ it('explains conditional PR source review and GitHub feedback without claiming t
     'Source review and GitHub feedback are not available'
   )
 })
+
+it('keeps provider actions compact and preserves routing labels across themes and mobile', async () => {
+  const builtins = [
+    ['openai', 'OpenAI (ChatGPT)'],
+    ['anthropic', 'Anthropic (Claude)'],
+    ['gemini', 'Google (Gemini)'],
+    ['deepseek', 'DeepSeek'],
+  ]
+  state.query = {
+    ...state.query,
+    data: {
+      ...configuration(),
+      presets: builtins.map(([id, name]) => ({
+        id,
+        name,
+        baseUrl: 'https://provider.example/v1',
+        exampleModel: 'example-model',
+      })),
+      stages: [
+        'laptop',
+        'repository',
+        'pull_request',
+        'qa',
+        'performance',
+        'production',
+      ],
+    },
+  }
+  await page.viewport(1440, 1000)
+  const view = await render(<AiSettingsPage />)
+  await expect
+    .element(view.getByRole('heading', { name: 'Built-in providers' }))
+    .toBeVisible()
+  const activationButtons = [
+    ...document.querySelectorAll<HTMLButtonElement>(
+      '[data-slot="card-footer"] button'
+    ),
+  ]
+  expect(activationButtons).toHaveLength(4)
+  for (const button of activationButtons) {
+    const footer = button.closest('[data-slot="card-footer"]')!
+    expect(button.getBoundingClientRect().width).toBeLessThan(
+      footer.getBoundingClientRect().width * 0.75
+    )
+  }
+  await page.screenshot({ path: '__screenshots__/ai-providers-light.png' })
+  document.documentElement.classList.add('dark')
+  await new Promise<void>((resolve) =>
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+  )
+  await Promise.all(
+    document
+      .getAnimations()
+      .filter(
+        (animation) =>
+          animation.effect?.getComputedTiming().iterations !== Infinity
+      )
+      .map((animation) => animation.finished.catch(() => undefined))
+  )
+  await page.screenshot({ path: '__screenshots__/ai-providers-dark.png' })
+  await view.getByRole('tab', { name: 'Model choices' }).click()
+  await expect
+    .element(view.getByRole('heading', { name: 'Pull requests', exact: true }))
+    .toBeVisible()
+  expect(document.body.textContent).toContain('Primary')
+  expect(document.body.textContent).toContain('Fallback')
+  await page.screenshot({ path: '__screenshots__/ai-model-choices-dark.png' })
+  await page.viewport(390, 844)
+  await expect
+    .poll(() => document.documentElement.scrollWidth <= window.innerWidth)
+    .toBe(true)
+  await page.screenshot({ path: '__screenshots__/ai-model-choices-mobile.png' })
+  document.documentElement.classList.remove('dark')
+  await page.viewport(1280, 900)
+})

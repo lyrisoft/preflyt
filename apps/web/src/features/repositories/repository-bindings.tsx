@@ -35,6 +35,7 @@ import {
   SheetFooter,
 } from '@/components/ui/sheet'
 import { StatusBadge } from '@/components/status-badge'
+import { SurfaceIcon } from '@/components/surface-icon'
 import {
   useBindings,
   engineeringPath,
@@ -321,15 +322,19 @@ export function RepositoryBindings({
   const checkCount = mappings.length - workflowCount
   return (
     <Card className='gap-4'>
-      <CardHeader>
-        <CardTitle className='flex items-center gap-2'>
-          <Link2 className='size-4 text-chart-2' />
-          Check sources
-        </CardTitle>
-        <CardDescription>
-          Choose which CI check or workflow supplies results for each rule.
-        </CardDescription>
-        <CardAction>
+      <CardHeader className='flex flex-row flex-wrap items-center gap-4'>
+        <div className='flex min-w-0 flex-[1_1_16rem] items-center gap-3'>
+          <SurfaceIcon icon={Link2} tone='teal' />
+          <div className='min-w-0 space-y-1'>
+            <CardTitle asChild>
+              <h2>Check sources</h2>
+            </CardTitle>
+            <CardDescription>
+              Choose which CI check or workflow supplies results for each rule.
+            </CardDescription>
+          </div>
+        </div>
+        <CardAction className='shrink-0'>
           <Button
             size='icon'
             variant='outline'
@@ -385,9 +390,7 @@ export function RepositoryBindings({
             </div>
             <div className='grid overflow-hidden rounded-lg border bg-muted/10 sm:grid-cols-3'>
               <div className='flex items-center gap-3 p-4'>
-                <span className='flex size-9 shrink-0 items-center justify-center rounded-lg bg-chart-2/10 text-chart-2'>
-                  <Link2 className='size-4' />
-                </span>
+                <SurfaceIcon icon={Link2} tone='teal' />
                 <div>
                   <p className='text-xl leading-none font-semibold tabular-nums'>
                     {mappings.length}
@@ -398,9 +401,7 @@ export function RepositoryBindings({
                 </div>
               </div>
               <div className='flex items-center gap-3 border-t p-4 sm:border-s sm:border-t-0'>
-                <span className='flex size-9 shrink-0 items-center justify-center rounded-lg bg-chart-1/10 text-chart-1'>
-                  <ListChecks className='size-4' />
-                </span>
+                <SurfaceIcon icon={ListChecks} tone='blue' />
                 <div>
                   <p className='text-xl leading-none font-semibold tabular-nums'>
                     {standards.isPending ||
@@ -415,9 +416,7 @@ export function RepositoryBindings({
                 </div>
               </div>
               <div className='flex items-center gap-3 border-t p-4 sm:border-s sm:border-t-0'>
-                <span className='flex size-9 shrink-0 items-center justify-center rounded-lg bg-chart-4/10 text-chart-4'>
-                  <Workflow className='size-4' />
-                </span>
+                <SurfaceIcon icon={Workflow} tone='violet' />
                 <div>
                   <p className='text-xl leading-none font-semibold tabular-nums'>
                     {workflowCount}

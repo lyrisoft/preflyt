@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { Download } from 'lucide-react'
+import { Download, FolderGit2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -9,6 +9,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { SurfaceIcon } from '@/components/surface-icon'
 import { governanceRequest } from '../repositories/governance-api'
 import { MarkdownInstructions } from './skill-markdown'
 import type { SkillDocument } from './skill-markdown-file'
@@ -75,21 +76,24 @@ export function UpstreamSkill({
       <Dialog open={open} onOpenChange={(v) => !busy && setOpen(v)}>
         <DialogContent className='flex max-h-[85svh] flex-col sm:max-w-4xl'>
           <DialogHeader>
-            <DialogTitle>Review a skill from GitHub</DialogTitle>
+            <DialogTitle className='flex items-center gap-3'>
+              <SurfaceIcon icon={FolderGit2} tone='violet' size='sm' />
+              Review a skill from GitHub
+            </DialogTitle>
             <DialogDescription>
               Pin a public GitHub commit and review the instructions and
               license. Importing opens a disabled draft.
             </DialogDescription>
           </DialogHeader>
           <div className='min-h-0 space-y-4 overflow-y-auto'>
-            <form onSubmit={inspect} className='grid gap-3 sm:grid-cols-2'>
+            <form onSubmit={inspect} className='grid gap-5 sm:grid-cols-2'>
               {[
                 ['repository', 'Repository', 'owner/repository', ''],
                 ['commit', 'Commit SHA', 'Full 40-character commit SHA', ''],
                 ['path', 'Skill path', 'skills/review/SKILL.md', 'SKILL.md'],
                 ['licensePath', 'License path', 'LICENSE', 'LICENSE'],
               ].map(([key, label, placeholder, value]) => (
-                <label className='space-y-1 text-sm' key={key}>
+                <label className='space-y-2 text-sm' key={key}>
                   <span>{label}</span>
                   <Input
                     name={key}

@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import '@/styles/index.css'
 import { afterEach, expect, it, vi } from 'vitest'
 import { render } from 'vitest-browser-react'
+import { page } from 'vitest/browser'
 import { ConfigurationPanel } from './configuration-panel'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -122,4 +123,129 @@ it('uses a custom section selector and shows server errors without leaving Setti
   await expect
     .element(view.getByRole('button', { name: 'Retry' }))
     .toBeVisible()
+})
+
+it('keeps configuration fields and secret controls within the mobile layout', async () => {
+  const visualData = {
+    ...data,
+    fields: [
+      {
+        key: 'GITHUB_APP_ID',
+        label: 'App ID',
+        group: 'GitHub',
+        kind: 'number',
+        configured: true,
+        value: '123456',
+        restart: true,
+      },
+      {
+        key: 'GITHUB_APP_CLIENT_ID',
+        label: 'Client ID',
+        group: 'GitHub',
+        kind: 'text',
+        configured: true,
+        value: 'Iv1.example',
+        restart: true,
+      },
+      {
+        key: 'GITHUB_APP_CLIENT_SECRET',
+        label: 'Client secret',
+        group: 'GitHub',
+        kind: 'secret',
+        configured: true,
+        value: '',
+        restart: true,
+      },
+      {
+        key: 'GITHUB_WEBHOOK_SECRET',
+        label: 'Webhook secret',
+        group: 'GitHub',
+        kind: 'secret',
+        configured: true,
+        value: '',
+        restart: true,
+      },
+      {
+        key: 'GITHUB_APP_PRIVATE_KEY',
+        label: 'Private key',
+        group: 'GitHub',
+        kind: 'secret',
+        configured: true,
+        value: '',
+        restart: true,
+      },
+      {
+        key: 'GITHUB_LOGIN_CALLBACK_URL',
+        label: 'Login callback URL',
+        group: 'GitHub',
+        kind: 'url',
+        configured: true,
+        value: 'https://preflyt.example.com/auth/github/callback',
+        restart: true,
+      },
+      {
+        key: 'GITHUB_LOGIN_ENABLED',
+        label: 'GitHub sign-in',
+        group: 'GitHub',
+        kind: 'boolean',
+        configured: false,
+        value: 'true',
+        restart: true,
+      },
+      {
+        key: 'GITHUB_EVENTS_ENABLED',
+        label: 'GitHub event ingestion',
+        group: 'GitHub',
+        kind: 'boolean',
+        configured: false,
+        value: 'false',
+        restart: false,
+      },
+    ],
+  }
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => new Response(JSON.stringify(visualData)))
+  )
+  await page.viewport(1440, 1000)
+  const view = await mount()
+  await expect.element(view.getByLabelText('App ID')).toBeVisible()
+  try {
+    for (const mobile of [false, true]) {
+      await page.viewport(mobile ? 390 : 1440, mobile ? 844 : 1000)
+      for (const dark of [false, true]) {
+        if (mobile) await page.viewport(390, 844)
+        document.documentElement.classList.toggle('dark', dark)
+        await new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+        )
+        await Promise.all(
+          document
+            .getAnimations()
+            .filter(
+              (animation) =>
+                animation.effect?.getComputedTiming().iterations !== Infinity
+            )
+            .map((animation) => animation.finished.catch(() => undefined))
+        )
+        await expect
+          .poll(() => document.documentElement.scrollWidth <= window.innerWidth)
+          .toBe(true)
+        if (mobile) {
+          // Extend the fixture frame after checking the phone viewport so Playwright
+          // captures the complete narrow layout without iframe clipping.
+          await page.viewport(
+            390,
+            Math.max(844, document.documentElement.scrollHeight)
+          )
+        }
+        await page.screenshot({
+          path: `__screenshots__/configuration-${mobile ? 'mobile' : 'desktop'}-${dark ? 'dark' : 'light'}.png`,
+        })
+      }
+    }
+  } finally {
+    document.documentElement.classList.remove('dark')
+    await page.viewport(1280, 900)
+  }
 })

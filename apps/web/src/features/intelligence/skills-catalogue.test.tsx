@@ -470,3 +470,75 @@ it('uses the existing organization instance of a built-in instead of creating an
     .toBeVisible()
   expect(state.save).toHaveBeenCalledTimes(1)
 })
+
+it('keeps built-in skill cards aligned and readable in both themes and on mobile', async () => {
+  state.query = {
+    data: {
+      skills: [],
+      templates: [
+        {
+          ...template,
+          id: 'security-evidence',
+          category: 'Application Security',
+          checks: [
+            'Secret scanning',
+            'Static application security',
+            'Dependency vulnerability scan',
+          ],
+        },
+        {
+          ...template,
+          id: 'test-review',
+          name: 'Changed-code test review',
+          description:
+            'Review whether changed behavior has meaningful test coverage.',
+          category: 'Testing and Quality',
+          checks: ['Required test execution', 'Component test coverage'],
+        },
+        {
+          ...template,
+          id: 'api-review',
+          name: 'API change and error-handling review',
+          description:
+            'Review API compatibility, error handling and client impact.',
+          category: 'Backend Services',
+          checks: ['Required test execution', 'Type checking'],
+        },
+      ],
+    },
+  }
+  await page.viewport(1440, 1000)
+  const view = await render(<SkillsCatalogue />)
+  await expect
+    .element(view.getByRole('heading', { name: 'Security evidence review' }))
+    .toBeVisible()
+  const footers = [
+    ...document.querySelectorAll<HTMLElement>('[data-slot="card-footer"]'),
+  ]
+  expect(footers).toHaveLength(3)
+  const top = footers[0].getBoundingClientRect().top
+  for (const footer of footers)
+    expect(Math.abs(footer.getBoundingClientRect().top - top)).toBeLessThan(2)
+  await page.screenshot({ path: '__screenshots__/skill-catalogue-light.png' })
+  document.documentElement.classList.add('dark')
+  await new Promise<void>((resolve) =>
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+  )
+  await Promise.all(
+    document
+      .getAnimations()
+      .filter(
+        (animation) =>
+          animation.effect?.getComputedTiming().iterations !== Infinity
+      )
+      .map((animation) => animation.finished.catch(() => undefined))
+  )
+  await page.screenshot({ path: '__screenshots__/skill-catalogue-dark.png' })
+  await page.viewport(390, 844)
+  await expect
+    .poll(() => document.documentElement.scrollWidth <= window.innerWidth)
+    .toBe(true)
+  await page.screenshot({ path: '__screenshots__/skill-catalogue-mobile.png' })
+  document.documentElement.classList.remove('dark')
+  await page.viewport(1280, 900)
+})

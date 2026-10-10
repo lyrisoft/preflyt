@@ -6,14 +6,16 @@ import {
   useNavigate,
 } from '@tanstack/react-router'
 import {
+  ArrowLeft,
   UsersRound,
   GitPullRequest,
   GitBranch,
   GitCommitHorizontal,
   RefreshCw,
-  ArrowLeft,
   ExternalLink,
   Search,
+  Activity,
+  FileSearch,
 } from 'lucide-react'
 import {
   Area,
@@ -37,7 +39,9 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { AppHeader } from '@/components/layout/app-header'
 import { Main } from '@/components/layout/main'
+import { PageHeader } from '@/components/page-header'
 import { RepositoryPicker } from '@/components/repository-picker'
+import { SurfaceIcon } from '@/components/surface-icon'
 import { useNavigationSession } from '../workspace/navigation-session'
 import { canPerform } from '../workspace/scoped-access'
 import {
@@ -393,60 +397,60 @@ export function ContributorsPage({
         }
       />
       <Main className='space-y-6'>
-        <div className='flex flex-wrap items-center justify-between gap-4'>
-          <div>
-            {contributorId && (
-              <Link
-                to='/contributors'
-                search={{ ...filters, page: 1, tab: 'overview' }}
-                className='mb-2 inline-flex items-center gap-1 text-xs text-primary sm:hidden'
-              >
-                <ArrowLeft className='size-3' />
-                Contributors
-              </Link>
-            )}
-            <p className='text-[10px] font-semibold tracking-widest text-muted-foreground uppercase'>
-              Engineering activity
-            </p>
-            <h1 className='mt-1 flex items-center gap-3 text-2xl font-semibold'>
-              {contributorId && c ? (
-                <img
-                  src={c.avatarUrl}
-                  alt=''
-                  className='size-10 rounded-full'
-                />
-              ) : null}
-              {contributorId ? (c?.login ?? 'Contributor') : 'Contributors'}
-            </h1>
-          </div>
-          <div className='flex flex-wrap items-center gap-2'>
-            {importScope.length > 0 && (
+        {contributorId && (
+          <Link
+            to='/contributors'
+            search={{ ...filters, page: 1, tab: 'overview' }}
+            className='inline-flex items-center gap-1 text-xs text-primary sm:hidden'
+          >
+            <ArrowLeft className='size-3' />
+            Contributors
+          </Link>
+        )}
+        <PageHeader
+          title={contributorId ? (c?.login ?? 'Contributor') : 'Contributors'}
+          section='Engineering activity'
+          icon={UsersRound}
+          tone='blue'
+          leading={
+            contributorId && c ? (
+              <img
+                src={c.avatarUrl}
+                alt=''
+                className='size-11 shrink-0 rounded-xl'
+              />
+            ) : undefined
+          }
+          actions={
+            <>
+              {importScope.length > 0 && (
+                <Button
+                  size='sm'
+                  disabled={sync.isPending || query.isFetching}
+                  onClick={() => sync.mutate()}
+                >
+                  <RefreshCw className='size-4' />
+                  {sync.isPending ? 'Importing…' : 'Import GitHub activity'}
+                </Button>
+              )}
               <Button
+                variant='outline'
                 size='sm'
-                disabled={sync.isPending || query.isFetching}
-                onClick={() => sync.mutate()}
+                onClick={() => void query.refetch()}
+                disabled={query.isFetching}
               >
                 <RefreshCw className='size-4' />
-                {sync.isPending ? 'Importing…' : 'Import GitHub activity'}
+                Refresh local data
               </Button>
-            )}
-            <Button
-              variant='outline'
-              size='sm'
-              onClick={() => void query.refetch()}
-              disabled={query.isFetching}
-            >
-              <RefreshCw className='size-4' />
-              Refresh local data
-            </Button>
-            <ContributorHelp
-              profile={!!contributorId}
-              limitations={data?.limitations}
-              lastReceivedAt={data?.lastReceivedAt}
-              collectionEnabled={data?.collectionEnabled}
-            />
-          </div>
-        </div>
+              <ContributorHelp
+                profile={!!contributorId}
+                limitations={data?.limitations}
+                lastReceivedAt={data?.lastReceivedAt}
+                collectionEnabled={data?.collectionEnabled}
+              />
+            </>
+          }
+        />
         <div className='flex flex-wrap gap-3 rounded-xl border bg-card p-4'>
           <label className='flex flex-col gap-1 text-xs text-muted-foreground'>
             Period
@@ -599,9 +603,11 @@ export function ContributorsPage({
                           <p className='text-xs text-muted-foreground'>
                             {m.label}
                           </p>
-                          <m.icon
-                            className='size-4'
-                            style={{ color: `var(--chart-${i + 1})` }}
+                          <SurfaceIcon
+                            icon={m.icon}
+                            tone={
+                              (['blue', 'teal', 'violet', 'amber'] as const)[i]
+                            }
                           />
                         </div>
                         <p className='mt-3 text-2xl font-semibold tabular-nums'>
@@ -667,7 +673,8 @@ export function ContributorsPage({
               {!contributorId && (
                 <div className='grid gap-4 lg:grid-cols-3'>
                   <Card className='lg:col-span-2'>
-                    <CardHeader>
+                    <CardHeader className='flex flex-row items-center gap-3'>
+                      <SurfaceIcon icon={Activity} tone='violet' />
                       <CardTitle>Participation over time</CardTitle>
                     </CardHeader>
                     <CardContent>
@@ -716,7 +723,8 @@ export function ContributorsPage({
                     </CardContent>
                   </Card>
                   <Card>
-                    <CardHeader>
+                    <CardHeader className='flex flex-row items-center gap-3'>
+                      <SurfaceIcon icon={FileSearch} tone='blue' />
                       <CardTitle>PR revision evidence</CardTitle>
                     </CardHeader>
                     <CardContent>
@@ -812,8 +820,11 @@ export function ContributorsPage({
                 )}
               {!contributorId && (
                 <Card>
-                  <CardHeader>
-                    <CardTitle>Contributor directory</CardTitle>
+                  <CardHeader className='flex flex-row flex-wrap items-center gap-3'>
+                    <SurfaceIcon icon={UsersRound} tone='blue' />
+                    <CardTitle className='flex-1'>
+                      Contributor directory
+                    </CardTitle>
                     <p className='text-xs text-muted-foreground'>
                       {data.total} identities · filtered period and scope
                     </p>
@@ -924,7 +935,8 @@ export function ContributorsPage({
               )}
               {contributorId && tab === 'repositories' && (
                 <Card>
-                  <CardHeader>
+                  <CardHeader className='flex flex-row items-center gap-3'>
+                    <SurfaceIcon icon={GitBranch} tone='teal' />
                     <CardTitle>Contributed repositories</CardTitle>
                   </CardHeader>
                   <CardContent>

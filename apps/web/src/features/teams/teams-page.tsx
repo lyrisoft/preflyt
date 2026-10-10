@@ -30,6 +30,7 @@ import {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { AppHeader } from '@/components/layout/app-header'
 import { Main } from '@/components/layout/main'
+import { PageHeader } from '@/components/page-header'
 import { PageHelpDrawer } from '@/components/page-help-drawer'
 import { StatusBadge } from '@/components/status-badge'
 import { governanceRequest } from '../repositories/governance-api'
@@ -346,29 +347,27 @@ export function TeamsWorkspace({
   }
   return (
     <div className='space-y-6'>
-      <header className='flex flex-wrap items-start justify-between gap-3'>
-        <div>
-          <h1 className='flex items-center gap-2 text-2xl font-semibold tracking-tight'>
-            <UsersRound className='size-6 text-muted-foreground' />
-            Teams
-          </h1>
-          <p className='mt-1 text-sm text-muted-foreground'>
-            Manage teams, repository scope and shared engineering standards.
-          </p>
-        </div>
-        <div className='flex flex-wrap gap-2'>
-          <Button
-            size='sm'
-            variant='outline'
-            disabled={query.isFetching}
-            onClick={() => void refresh()}
-          >
-            <RefreshCw className='size-4' />
-            Refresh
-          </Button>
-          <PageHelpDrawer title='Teams' sections={help} />
-        </div>
-      </header>
+      <PageHeader
+        title='Teams'
+        section='Administration'
+        description='Manage teams, repository scope and shared engineering standards.'
+        icon={UsersRound}
+        tone='teal'
+        actions={
+          <>
+            <Button
+              size='sm'
+              variant='outline'
+              disabled={query.isFetching}
+              onClick={() => void refresh()}
+            >
+              <RefreshCw className='size-4' />
+              Refresh
+            </Button>
+            <PageHelpDrawer title='Teams' sections={help} />
+          </>
+        }
+      />
       {(error || query.isError || options.isError) && (
         <p
           role='alert'

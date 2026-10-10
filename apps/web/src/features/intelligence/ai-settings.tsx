@@ -1,7 +1,15 @@
 import { useState, type FormEvent } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  BrainCircuit,
+  BookOpen,
   Cable,
+  FlaskConical,
+  FolderGit2,
+  Gauge,
+  GitPullRequest,
+  Laptop,
+  ServerCog,
   Loader2,
   Pencil,
   PlugZap,
@@ -14,7 +22,9 @@ import {
   ShieldCheck,
 } from 'lucide-react'
 import { siClaude, siGooglegemini, siDeepseek } from 'simple-icons'
+import { surfaceTones } from '@/lib/surface-tones'
 import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card'
 import {
   Dialog,
   DialogContent,
@@ -26,8 +36,10 @@ import { Input } from '@/components/ui/input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { AppHeader } from '@/components/layout/app-header'
 import { Main } from '@/components/layout/main'
+import { PageHeader } from '@/components/page-header'
 import { PageHelpDrawer } from '@/components/page-help-drawer'
 import { StatusBadge } from '@/components/status-badge'
+import { SurfaceIcon } from '@/components/surface-icon'
 import { governanceRequest } from '../repositories/governance-api'
 import {
   useNavigationSession,
@@ -95,10 +107,17 @@ const providerIcons = {
   gemini: siGooglegemini,
   deepseek: siDeepseek,
 }
-function ProviderIcon({ provider }: { provider?: string }) {
+function ProviderIcon({
+  provider,
+  tile = false,
+}: {
+  provider?: string
+  tile?: boolean
+}) {
   const icon = providerIcons[provider as keyof typeof providerIcons]
-  if (!icon) return null
-  return (
+  if (!icon)
+    return tile ? <SurfaceIcon icon={BrainCircuit} tone='violet' /> : null
+  const mark = (
     <svg
       viewBox='0 0 24 24'
       fill='currentColor'
@@ -108,6 +127,15 @@ function ProviderIcon({ provider }: { provider?: string }) {
     >
       <path d={icon.path} />
     </svg>
+  )
+  return tile ? (
+    <span
+      className={`inline-flex size-10 shrink-0 items-center justify-center rounded-xl border ${surfaceTones.violet}`}
+    >
+      {mark}
+    </span>
+  ) : (
+    mark
   )
 }
 const stageName = (stage: string) =>
@@ -119,6 +147,15 @@ const stageName = (stage: string) =>
     performance: 'Performance',
     production: 'Production',
   })[stage] ?? stage
+const stageIcon = (stage: string) =>
+  ({
+    laptop: Laptop,
+    repository: FolderGit2,
+    pull_request: GitPullRequest,
+    qa: FlaskConical,
+    performance: Gauge,
+    production: ServerCog,
+  })[stage] ?? RouteIcon
 const testName = (status: string) =>
   ({
     NOT_TESTED: 'Not tested',
@@ -169,7 +206,16 @@ export function AiSettingsPage() {
           <p role='alert'>Access details unavailable. Refresh and try again.</p>
         ) : !allowed ? (
           <div className='space-y-6'>
-            <h1 className='text-2xl font-semibold'>AI Intelligence</h1>
+            <PageHeader
+              title='AI Intelligence'
+              description='Review skills for your engineering standards.'
+              section='Intelligence'
+              icon={BrainCircuit}
+              tone='violet'
+              actions={
+                <PageHelpDrawer title='AI Intelligence' sections={help} />
+              }
+            />
             <SkillsCatalogue
               key={`${session.data?.identityId}:${session.data?.organizationId}`}
             />
@@ -248,35 +294,34 @@ function AiSettings({
     ) ?? []
   return (
     <div className='space-y-6'>
-      <div className='flex flex-wrap items-start justify-between gap-4'>
-        <div>
-          <h1 className='text-2xl font-semibold tracking-tight'>
-            AI Intelligence
-          </h1>
-          <p className='mt-1 text-sm text-muted-foreground'>
-            Manage approved models and model choices.
-          </p>
-        </div>
-        <div className='flex items-center gap-2'>
-          <Button
-            variant='outline'
-            size='sm'
-            disabled={query.isFetching || busy}
-            onClick={() => void query.refetch()}
-          >
-            <RefreshCw
-              aria-hidden='true'
-              className={
-                query.isFetching
-                  ? 'size-4 animate-spin motion-reduce:animate-none'
-                  : 'size-4'
-              }
-            />
-            Refresh
-          </Button>
-          <PageHelpDrawer title='AI Intelligence' sections={help} />
-        </div>
-      </div>
+      <PageHeader
+        title='AI Intelligence'
+        description='Manage approved models and model choices.'
+        section='Intelligence'
+        icon={BrainCircuit}
+        tone='violet'
+        actions={
+          <div className='flex items-center gap-2'>
+            <Button
+              variant='outline'
+              size='sm'
+              disabled={query.isFetching || busy}
+              onClick={() => void query.refetch()}
+            >
+              <RefreshCw
+                aria-hidden='true'
+                className={
+                  query.isFetching
+                    ? 'size-4 animate-spin motion-reduce:animate-none'
+                    : 'size-4'
+                }
+              />
+              Refresh
+            </Button>
+            <PageHelpDrawer title='AI Intelligence' sections={help} />
+          </div>
+        }
+      />
       {query.isPending && <p role='status'>Loading settings…</p>}
       {query.isError && (
         <p role='alert' className='text-sm text-destructive'>
@@ -294,17 +339,24 @@ function AiSettings({
         </p>
       )}
       {data && !data.enabled && (
-        <section className='rounded-xl border p-6'>
-          <h2 className='font-semibold'>AI is disabled for this deployment</h2>
-          <p className='mt-2 text-sm text-muted-foreground'>
-            Your deployment administrator can enable AI settings. Organization
-            admins then add models here.
-          </p>
-        </section>
+        <Card>
+          <CardContent className='flex items-start gap-4'>
+            <SurfaceIcon icon={BrainCircuit} tone='violet' />
+            <div>
+              <h2 className='text-base font-semibold'>
+                AI is disabled for this deployment
+              </h2>
+              <p className='mt-2 text-sm text-muted-foreground'>
+                Your deployment administrator can enable AI settings.
+                Organization admins then add models here.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
       )}
       {data?.enabled && (
         <>
-          <div className='flex items-center gap-2 rounded-lg border bg-info/5 p-3 text-sm'>
+          <div className='flex items-center gap-3 rounded-lg border border-info/20 bg-info/5 px-4 py-3 text-sm'>
             <ShieldCheck className='size-4 shrink-0 text-info' />
             {data.executionAvailable
               ? 'Model connections and AI assessment reviews are available.'
@@ -316,72 +368,89 @@ function AiSettings({
                 <Cable className='mr-2 size-4' />
                 Models
               </TabsTrigger>
-              <TabsTrigger value='skills'>Review skills</TabsTrigger>
+              <TabsTrigger value='skills'>
+                <BookOpen className='mr-2 size-4' />
+                Review skills
+              </TabsTrigger>
               <TabsTrigger value='routing'>
                 <RouteIcon className='mr-2 size-4' />
                 Model choices
               </TabsTrigger>
             </TabsList>
-            <TabsContent value='connections' className='mt-5 space-y-4'>
+            <TabsContent value='connections' className='mt-5 space-y-6'>
+              <div className='space-y-1'>
+                <h2 className='text-base font-semibold'>Built-in providers</h2>
+                <p className='text-sm text-muted-foreground'>
+                  Connect a provider with your model name and API key.
+                </p>
+              </div>
               <div className='grid gap-4 sm:grid-cols-2 xl:grid-cols-4'>
                 {data.presets?.map((p) => {
                   const connection = data.providers.find(
                     (c) => c.endpoint?.preset === p.id
                   )
                   return (
-                    <section
-                      key={p.id}
-                      className='flex flex-col gap-4 rounded-xl border p-5'
-                    >
-                      <div className='flex items-start justify-between gap-2'>
-                        <div className='flex min-w-0 items-center gap-2.5'>
-                          <ProviderIcon provider={p.id} />
-                          <h2 className='font-semibold'>{p.name}</h2>
+                    <Card key={p.id} className='gap-4'>
+                      <CardHeader>
+                        <div className='flex items-center justify-between gap-3'>
+                          <ProviderIcon provider={p.id} tile />
+                          <StatusBadge
+                            tone={connection?.enabled ? 'success' : 'neutral'}
+                          >
+                            {connection?.enabled ? 'Active' : 'Inactive'}
+                          </StatusBadge>
                         </div>
-                        <StatusBadge
-                          tone={connection?.enabled ? 'success' : 'neutral'}
+                        <h3 className='mt-3 text-base font-semibold tracking-tight'>
+                          {p.name}
+                        </h3>
+                      </CardHeader>
+                      <CardContent className='min-w-0 flex-1'>
+                        <p className='mb-1 text-xs font-medium text-muted-foreground'>
+                          Model name
+                        </p>
+                        <p className='text-sm font-medium break-words'>
+                          {connection?.modelId ?? 'Not connected'}
+                        </p>
+                      </CardContent>
+                      <CardFooter className='justify-end border-t'>
+                        <Button
+                          size='sm'
+                          variant={connection ? 'outline' : 'default'}
+                          disabled={
+                            busy || (!connection && data.providers.length >= 32)
+                          }
+                          onClick={() => {
+                            setError('')
+                            setPreset(p)
+                            setEdit(connection ?? null)
+                          }}
                         >
-                          {connection?.enabled ? 'Active' : 'Inactive'}
-                        </StatusBadge>
-                      </div>
-                      <p className='min-h-10 text-sm text-muted-foreground'>
-                        {connection?.modelId ??
-                          'Enter your model name and API key.'}
-                      </p>
-                      <Button
-                        variant='outline'
-                        className='mt-auto self-end'
-                        disabled={
-                          busy || (!connection && data.providers.length >= 32)
-                        }
-                        onClick={() => {
-                          setError('')
-                          setPreset(p)
-                          setEdit(connection ?? null)
-                        }}
-                      >
-                        {connection ? (
-                          <Settings2 aria-hidden='true' />
-                        ) : (
-                          <Power aria-hidden='true' />
-                        )}
-                        {connection ? 'Configure' : 'Activate'}
-                      </Button>
-                    </section>
+                          {connection ? (
+                            <Settings2 aria-hidden='true' />
+                          ) : (
+                            <Power aria-hidden='true' />
+                          )}
+                          {connection ? 'Configure' : 'Activate'}
+                        </Button>
+                      </CardFooter>
+                    </Card>
                   )
                 })}
               </div>
-              <div className='flex flex-wrap justify-between gap-3'>
-                <Input
-                  aria-label='Filter models'
-                  placeholder='Filter models…'
-                  value={search}
-                  onChange={(e) => {
-                    setSearch(e.target.value)
-                    setPage(1)
-                  }}
-                  className='max-w-xs'
-                />
+              <div className='flex flex-wrap items-end justify-between gap-4'>
+                <div className='space-y-3'>
+                  <h2 className='text-base font-semibold'>Configured models</h2>
+                  <Input
+                    aria-label='Filter models'
+                    placeholder='Filter models…'
+                    value={search}
+                    onChange={(e) => {
+                      setSearch(e.target.value)
+                      setPage(1)
+                    }}
+                    className='w-full sm:w-72'
+                  />
+                </div>
                 <Button
                   disabled={busy || data.providers.length >= 32}
                   onClick={() => {
@@ -420,7 +489,10 @@ function AiSettings({
                         ) * 10
                       )
                       .map((p) => (
-                        <tr key={p.id} className='border-t'>
+                        <tr
+                          key={p.id}
+                          className='border-t transition-colors hover:bg-muted/20'
+                        >
                           <td className='px-4 py-4 font-medium'>
                             <span className='flex items-center gap-2.5'>
                               <ProviderIcon provider={p.endpoint?.preset} />
@@ -465,7 +537,8 @@ function AiSettings({
                           <td className='px-4 py-4'>
                             <div className='flex items-center gap-2'>
                               <Button
-                                className='min-w-24'
+                                className='min-w-20'
+                                size='sm'
                                 variant='outline'
                                 disabled={busy}
                                 onClick={() => {
@@ -482,7 +555,8 @@ function AiSettings({
                                 Edit
                               </Button>
                               <Button
-                                className='min-w-24'
+                                className='min-w-20'
+                                size='sm'
                                 aria-busy={
                                   busy &&
                                   activeAction === `/providers/${p.id}/test`
@@ -566,63 +640,72 @@ function AiSettings({
                 {data.stages.map((stage) => {
                   const r = data.routes.find((r) => r.stage === stage)
                   return (
-                    <section
-                      key={stage}
-                      className='flex flex-col rounded-xl border p-5'
-                    >
-                      <div className='flex items-center justify-between gap-2'>
-                        <h2 className='font-semibold'>{stageName(stage)}</h2>
-                        <StatusBadge tone={r?.enabled ? 'success' : 'neutral'}>
-                          {r?.enabled ? 'Configured' : 'Disabled'}
-                        </StatusBadge>
-                      </div>
-                      <dl className='my-5 space-y-3 text-sm'>
-                        <div className='flex justify-between gap-3'>
-                          <dt className='text-muted-foreground'>Primary</dt>
-                          <dd className='truncate'>
-                            {data.providers.find((p) => p.id === r?.primaryId)
-                              ?.name ?? 'Not selected'}
-                          </dd>
+                    <Card key={stage} className='gap-4'>
+                      <CardHeader>
+                        <div className='flex items-center justify-between gap-3'>
+                          <SurfaceIcon icon={stageIcon(stage)} tone='violet' />
+                          <StatusBadge
+                            tone={r?.enabled ? 'success' : 'neutral'}
+                          >
+                            {r?.enabled ? 'Configured' : 'Disabled'}
+                          </StatusBadge>
                         </div>
-                        <div className='flex justify-between gap-3'>
-                          <dt className='text-muted-foreground'>Fallback</dt>
-                          <dd className='truncate'>
-                            {data.providers.find((p) => p.id === r?.fallbackId)
-                              ?.name ?? 'None'}
-                          </dd>
-                        </div>
-                        <div className='flex justify-between gap-3'>
-                          <dt className='text-muted-foreground'>
-                            Source sharing
-                          </dt>
-                          <dd>{r?.allowSource ? 'Allowed' : 'Off'}</dd>
-                        </div>
-                      </dl>
-                      <Button
-                        variant='outline'
-                        className='mt-auto self-end'
-                        disabled={busy}
-                        onClick={() => {
-                          setError('')
-                          setRouting(
-                            r ?? {
-                              stage,
-                              primaryId: null,
-                              fallbackId: null,
-                              enabled: false,
-                              allowSource: false,
-                              maxInputTokens: 8000,
-                              maxOutputTokens: 1000,
-                              dailyBudgetCents: 1000,
-                              revision: 0,
-                            }
-                          )
-                        }}
-                      >
-                        <Settings2 aria-hidden='true' />
-                        Configure
-                      </Button>
-                    </section>
+                        <h2 className='mt-3 text-base font-semibold tracking-tight'>
+                          {stageName(stage)}
+                        </h2>
+                      </CardHeader>
+                      <CardContent className='flex-1'>
+                        <dl className='divide-y text-sm [&>div]:py-2.5 [&>div:first-child]:pt-0 [&>div:last-child]:pb-0'>
+                          <div className='flex justify-between gap-3'>
+                            <dt className='text-muted-foreground'>Primary</dt>
+                            <dd className='truncate'>
+                              {data.providers.find((p) => p.id === r?.primaryId)
+                                ?.name ?? 'Not selected'}
+                            </dd>
+                          </div>
+                          <div className='flex justify-between gap-3'>
+                            <dt className='text-muted-foreground'>Fallback</dt>
+                            <dd className='truncate'>
+                              {data.providers.find(
+                                (p) => p.id === r?.fallbackId
+                              )?.name ?? 'None'}
+                            </dd>
+                          </div>
+                          <div className='flex justify-between gap-3'>
+                            <dt className='text-muted-foreground'>
+                              Source sharing
+                            </dt>
+                            <dd>{r?.allowSource ? 'Allowed' : 'Off'}</dd>
+                          </div>
+                        </dl>
+                      </CardContent>
+                      <CardFooter className='justify-end border-t'>
+                        <Button
+                          size='sm'
+                          variant={r?.enabled ? 'outline' : 'default'}
+                          disabled={busy}
+                          onClick={() => {
+                            setError('')
+                            setRouting(
+                              r ?? {
+                                stage,
+                                primaryId: null,
+                                fallbackId: null,
+                                enabled: false,
+                                allowSource: false,
+                                maxInputTokens: 8000,
+                                maxOutputTokens: 1000,
+                                dailyBudgetCents: 1000,
+                                revision: 0,
+                              }
+                            )
+                          }}
+                        >
+                          <Settings2 aria-hidden='true' />
+                          Configure
+                        </Button>
+                      </CardFooter>
+                    </Card>
                   )
                 })}
               </div>

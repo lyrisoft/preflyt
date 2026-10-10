@@ -45,6 +45,7 @@ import {
 } from '@/components/ui/select'
 import { AppHeader } from '@/components/layout/app-header'
 import { Main } from '@/components/layout/main'
+import { PageHeader } from '@/components/page-header'
 import { StatusBadge } from '@/components/status-badge'
 import { TechIcon } from '@/features/repositories/tech-icon'
 import { useNavigationSession } from '@/features/workspace/navigation-session'
@@ -85,13 +86,13 @@ function RepositoryCardDetails({
       <div className='flex items-start justify-between gap-3'>
         <span
           className={cn(
-            'flex size-9 shrink-0 items-center justify-center rounded-lg border',
+            'flex size-10 shrink-0 items-center justify-center rounded-xl border',
             repository.selected
               ? 'border-primary/20 bg-primary/10 text-primary'
               : 'bg-muted/40 text-muted-foreground'
           )}
         >
-          <GitBranch aria-hidden='true' className='size-4.5' />
+          <GitBranch aria-hidden='true' className='size-5' />
         </span>
         <div className={cn('flex items-center gap-2', canManage && 'pe-8')}>
           <StatusBadge tone={repository.selected ? 'info' : 'neutral'}>
@@ -440,23 +441,22 @@ export function Apps() {
       <AppHeader breadcrumbs={[{ label: 'Repositories' }]} />
       <Main fixed className='overflow-y-auto'>
         <div className='space-y-6'>
-          <div className='flex flex-wrap items-start justify-between gap-4'>
-            <div>
-              <h1 className='text-2xl font-bold tracking-tight'>
-                Repositories
-              </h1>
-              <p className='mt-1 text-sm text-muted-foreground'>
-                GitHub inventory, repository access and Preflyt selection.
-              </p>
-            </div>
-            {canManage && (
-              <Button asChild>
-                <a href={`${API_BASE_URL}/github/install`}>
-                  <Plug aria-hidden='true' /> Connect GitHub App
-                </a>
-              </Button>
-            )}
-          </div>
+          <PageHeader
+            title='Repositories'
+            section='Workspace'
+            description='GitHub inventory, repository access and Preflyt selection.'
+            icon={GitBranch}
+            tone='blue'
+            actions={
+              canManage ? (
+                <Button asChild>
+                  <a href={`${API_BASE_URL}/github/install`}>
+                    <Plug aria-hidden='true' /> Connect GitHub App
+                  </a>
+                </Button>
+              ) : undefined
+            }
+          />
 
           {github === 'connected' && (
             <div

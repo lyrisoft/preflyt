@@ -47,6 +47,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { StatusBadge } from '@/components/status-badge'
+import { SurfaceIcon } from '@/components/surface-icon'
 import { engineeringPath, engineeringRead } from './engineering-queries'
 import { policyActions } from './policy-actions'
 import { useStandards } from './repository-queries'
@@ -222,15 +223,17 @@ export function GatePolicyPanel({
     <>
       <Card className='overflow-hidden'>
         <CardHeader className='flex flex-row flex-wrap items-center justify-between gap-4'>
-          <div className='space-y-1.5'>
-            <CardTitle className='flex items-center gap-2'>
-              <ShieldCheck className='size-5 text-info' aria-hidden='true' />
-              Policy revisions
-            </CardTitle>
-            <CardDescription>
-              Versioned branch policies. Approval requires a different
-              authorized reviewer.
-            </CardDescription>
+          <div className='flex min-w-0 flex-[1_1_20rem] items-center gap-3'>
+            <SurfaceIcon icon={ShieldCheck} />
+            <div className='min-w-0 space-y-1'>
+              <CardTitle asChild>
+                <h2>Policy revisions</h2>
+              </CardTitle>
+              <CardDescription>
+                Versioned branch policies. Approval requires a different
+                authorized reviewer.
+              </CardDescription>
+            </div>
           </div>
           {canDraft && (
             <Button
