@@ -1,4 +1,6 @@
 import 'reflect-metadata'
+import { ForbiddenException } from '@nestjs/common'
+import { GitHubCredentialService } from '../src/auth/github-credential.service.js'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { GitHubUserAccessService } from '../src/auth/github-user-access.service.js'
 import { GitHubProviderService } from '../src/github/github-provider.service.js'
@@ -99,14 +101,21 @@ it('rejects organization links changed during directory or member resolution', a
     service().resolveMember('admin', 'org', 'developer'),
   ).rejects.toThrow('access changed')
 })
-it('does not fall back to App authority for an expired GitHub user credential', async () => {
+it('does not fall back to App authority when GitHub refresh authorization has expired', async () => {
   db.gitHubUserAccount.findUnique.mockResolvedValue({
     id: 'account',
     credential: { accessExpiresAt: new Date(0) },
   })
-  await expect(service().directory('user', 'org', true)).rejects.toThrow(
-    'expired',
-  )
+  const access = vi
+    .spyOn(GitHubCredentialService.prototype, 'access')
+    .mockRejectedValue(new ForbiddenException('GitHub authorization expired'))
+  try {
+    await expect(service().directory('user', 'org', true)).rejects.toThrow(
+      'expired',
+    )
+  } finally {
+    access.mockRestore()
+  }
   expect(provider.installationMembers).not.toHaveBeenCalled()
 })
 it('requires an explicit organization link even for an admin', async () => {

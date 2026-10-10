@@ -106,3 +106,15 @@ it('uses a safe fallback for unknown errors', () => {
     'Something went wrong. Try again.'
   )
 })
+
+it('deduplicates repeated background failures by query', () => {
+  handleServerError(new Error('Refresh failed'), { id: 'query-error:teams' })
+  expect(toastError).toHaveBeenLastCalledWith('Refresh failed', {
+    id: 'query-error:teams',
+  })
+})
+
+it('does not notify intentional request cancellation', () => {
+  handleServerError(new DOMException('Cancelled', 'AbortError'))
+  expect(toastError).not.toHaveBeenCalled()
+})

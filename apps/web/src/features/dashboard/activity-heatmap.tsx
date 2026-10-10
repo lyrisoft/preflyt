@@ -48,7 +48,7 @@ export function ActivityHeatmap({
       <CardHeader>
         <CardTitle>Assessment activity</CardTitle>
         <CardDescription>
-          {total.toLocaleString()} snapshot{total === 1 ? '' : 's'} recorded ·{' '}
+          {total.toLocaleString()} assessment{total === 1 ? '' : 's'} recorded ·{' '}
           {dateLabel(from)}–{dateLabel(to)}
         </CardDescription>
       </CardHeader>
@@ -96,7 +96,7 @@ export function ActivityHeatmap({
                           <button
                             type='button'
                             onClick={() => setSelected(day)}
-                            aria-label={`${dateLabel(day.date)}: ${day.count} assessment snapshots`}
+                            aria-label={`${dateLabel(day.date)}: ${day.count} saved assessments`}
                             aria-pressed={selected?.date === day.date}
                             className={cn(
                               'size-6 rounded-[3px] chart-cell-motion outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring',
@@ -107,7 +107,7 @@ export function ActivityHeatmap({
                           />
                         </TooltipTrigger>
                         <TooltipContent className='motion-reduce:animate-none motion-reduce:transition-none'>
-                          {dateLabel(day.date)} · {day.count} snapshot
+                          {dateLabel(day.date)} · {day.count} assessment
                           {day.count === 1 ? '' : 's'}
                         </TooltipContent>
                       </Tooltip>
@@ -123,12 +123,12 @@ export function ActivityHeatmap({
         <div className='mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground'>
           <p role='status'>
             {selected
-              ? `${dateLabel(selected.date)}: ${selected.count} snapshots`
+              ? `${dateLabel(selected.date)}: ${selected.count} assessments`
               : 'Select a day to inspect activity. Dates use UTC.'}
           </p>
           <div
             className='flex items-center gap-1.5'
-            aria-label='Activity intensity: none, 1–2, 3–5, 6–10, more than 10 snapshots'
+            aria-label='Activity intensity: none, 1–2, 3–5, 6–10, more than 10 assessments'
           >
             <span>Less</span>
             {tones.map((tone) => (
@@ -143,8 +143,8 @@ export function ActivityHeatmap({
         </div>
         {total === 0 && (
           <p className='mt-4 text-sm text-muted-foreground'>
-            No snapshots recorded in this period. Adopt standards and collect CI
-            evidence to start assessing changes.
+            No assessments saved in this period. Adopt standards and collect
+            check results to start assessing changes.
           </p>
         )}
         <p className='mt-4 text-xs text-muted-foreground'>

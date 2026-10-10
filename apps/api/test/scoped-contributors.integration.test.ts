@@ -1,7 +1,7 @@
 import 'reflect-metadata'
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { NestFactory } from '@nestjs/core'
-import { ValidationPipe, type INestApplication } from '@nestjs/common'
+import { ForbiddenException, ValidationPipe, type INestApplication } from '@nestjs/common'
 import cookieParser from 'cookie-parser'
 import request from 'supertest'
 import { createHash, createHmac, randomUUID } from 'node:crypto'
@@ -24,6 +24,8 @@ import { GitHubWebhookService } from '../src/github-events/github-webhook.servic
 import { GitHubWebhookController } from '../src/github-events/github-webhook.controller.js'
 import { DashboardService } from '../src/dashboard/dashboard.service.js'
 import { DashboardController } from '../src/dashboard/dashboard.controller.js'
+import { FindingsController } from '../src/findings/findings.controller.js'
+import { FindingsService } from '../src/findings/findings.service.js'
 import { digest } from '../src/assessments/assessment-digest.js'
 import { RedisCacheService } from '../src/cache/redis-cache.service.js'
 let db: PrismaService, app: INestApplication, access: AuthorizationService
@@ -71,7 +73,7 @@ beforeAll(async () => {
   const auth = {
     sessionCookieName: 'scope.sid',
     assertOrigin: (value: string) => {
-      if (value !== origin) throw new Error('Invalid origin')
+      if (value !== origin) throw new ForbiddenException('Invalid origin')
     },
     currentSession: async (id?: string) => {
       if (!id) return { authenticated: false }
@@ -98,6 +100,7 @@ beforeAll(async () => {
     {
       module: class TestModule {},
       controllers: [
+        FindingsController,
         OrganizationController,
         AssessmentController,
         ContributorsController,
@@ -108,6 +111,7 @@ beforeAll(async () => {
       providers: [
         SessionGuard,
         OwnerAdminGuard,
+        FindingsService,
         ContributorsService,
         AssessmentService,
         GitHubService,
@@ -632,4 +636,84 @@ it('recovers activity after reconnecting a repository with retained duplicate re
   expect(recovered).toMatchObject({ accepted: true, duplicate: false })
   expect(await db.contributorObservation.count({ where: { repositoryId: reconnected.id, sourceObjectId: '999' } })).toBe(1)
   expect(await captureContributors(db, deliveryId, 'same-payload', 1n, 11n, [activity])).toMatchObject({ duplicate: true })
+})
+
+it('reads scoped settings and audits Owner updates without exposing session secrets', async () => {
+  const settings = await actor(owner, '/organizations/settings').expect(200)
+  expect(settings.body).toMatchObject({ id: orgA, name: 'A', canUpdate: true })
+  expect(settings.body).not.toHaveProperty('authentication')
+  await request(app.getHttpServer()).patch('/organizations/settings').set('Cookie', `scope.sid=${owner}`).set('Origin', origin).send({ name: 'Updated workspace' }).expect(200)
+  expect((await db.organization.findUniqueOrThrow({ where: { id: orgA } })).name).toBe('Updated workspace')
+  expect((await db.organization.findUniqueOrThrow({ where: { id: orgB } })).name).toBe('B')
+  expect(await db.auditEvent.count({ where: { event: 'organization.settings.updated', actorId: owner } })).toBe(1)
+  await actor(developer, '/organizations/settings').expect(403)
+  await request(app.getHttpServer()).patch('/organizations/settings').set('Cookie', `scope.sid=${developer}`).set('Origin', origin).send({ name: 'Denied' }).expect(403)
+  await request(app.getHttpServer()).patch('/organizations/settings').set('Cookie', `scope.sid=${owner}`).set('Origin', 'https://foreign.example').send({ name: 'Denied' }).expect(403)
+})
+
+it('findings uses authorized saved commits and rejects invalid filters, foreign repositories and tampering', async () => {
+  const { assessment } = await complianceFixture()
+  const response = await actor(developer, '/findings').expect(200)
+  expect(response.body).toMatchObject({ rows: [], total: 0, assessedRevisions: 1, truncated: false })
+  expect(response.body.repositories.map((r: any) => r.githubId)).toEqual(['11'])
+  await actor(developer, '/findings?repository=12').expect(403)
+  await actor(developer, '/findings?severity=invalid').expect(400)
+  await actor(developer, '/findings?page=0').expect(400)
+  const report = { ...(assessment.report as any), checks: [{ ruleId: 'ci', required: true, coverage: 'MISSING' }] }
+  await db.commitAssessment.update({ where: { id: assessment.id }, data: { report, assessmentHash: digest({ request: assessment.request, plan: assessment.plan, report }) } })
+  const gaps = await actor(developer, '/findings?kind=gaps').expect(200)
+  expect(gaps.body.rows).toHaveLength(1)
+  expect(gaps.body.rows[0]).toMatchObject({ status: 'Evidence missing', sourceSha: sha, assessmentId: assessment.id, repositoryId: '11' })
+  await db.commitAssessment.update({ where: { id: assessment.id }, data: { assessmentHash: 'tampered' } })
+  await actor(developer, '/findings').expect(409)
+})
+
+it('aggregates findings before pagination with matching filters and repository authorization', async () => {
+  const { assessment } = await complianceFixture()
+  const checks = Array.from({ length: 60 }, (_, index) => ({ id: `check-${index}`, title: `Check ${index}`, required: true, operator: 'configuration_hint_present', capability: 'available', severity: index % 2 ? 'high' : 'medium' }))
+  const plan = { ...(assessment.plan as any), checks }
+  const report = { ...(assessment.report as any), checks: checks.map((check) => ({ ruleId: check.id, title: check.title, required: true, coverage: 'MISSING' })) }
+  const assessmentHash = digest({ request: assessment.request, plan, report })
+  await db.commitAssessment.update({ where: { id: assessment.id }, data: { plan, report, assessmentHash } })
+  const foreign = await db.gitHubRepository.findFirstOrThrow({ where: { githubId: 12n } })
+  await db.commitAssessment.create({ data: { repositoryId: foreign.id, sourceSha: sha, selectionId: assessment.selectionId, requestKey: randomUUID(), inputHash: 'fixture', request: assessment.request as any, plan, report, assessmentHash } })
+  const first = await actor(developer, '/findings?kind=gaps').expect(200)
+  const next = await actor(developer, '/findings?kind=gaps&page=2').expect(200)
+  expect(first.body.rows).toHaveLength(50)
+  expect(next.body.rows).toHaveLength(10)
+  expect(first.body.summary).toEqual(next.body.summary)
+  expect(first.body.summary).toMatchObject({ reportedIssues: 0, affectedRepositories: 1, criticalHigh: 0, evidenceGaps: 60, chartTotal: 60 })
+  expect(first.body.summary.byCheck.reduce((sum: number, item: any) => sum + item.count, 0)).toBe(60)
+  const high = await actor(developer, '/findings?kind=gaps&severity=high').expect(200)
+  expect(high.body.summary.evidenceGaps).toBe(30)
+  const search = await actor(developer, '/findings?kind=gaps&q=Check%2059').expect(200)
+  expect(search.body.summary.evidenceGaps).toBe(1)
+  const issues = await actor(developer, '/findings?kind=findings').expect(200)
+  expect(issues.body.summary.evidenceGaps).toBe(60)
+  expect(issues.body.summary.chartTotal).toBe(0)
+})
+
+it('assigns and resolves finding triage without changing evidence, rejects unauthorized updates and stale revisions', async () => {
+  const { assessment } = await complianceFixture()
+  const report = { ...(assessment.report as any), checks: [{ ruleId: 'ci', required: true, coverage: 'MISSING' }] }
+  const hash = digest({ request: assessment.request, plan: assessment.plan, report })
+  await db.commitAssessment.update({ where: { id: assessment.id }, data: { report, assessmentHash: hash } })
+  const list = await actor(owner, '/findings?kind=gaps').expect(200)
+  const finding = list.body.rows[0]
+  expect(list.body.canManage).toBe(true)
+  const input = { state: 'IN_REVIEW', assigneeId: developer, note: 'Investigating CI evidence', expectedRevision: 0 }
+  await mutate(developer, `/findings/${finding.id}/triage`, input).expect(403)
+  await request(app.getHttpServer()).post(`/findings/${finding.id}/triage`).set('Cookie', `scope.sid=${owner}`).set('Origin', 'https://bad.invalid').send(input).expect(403)
+  await mutate(owner, `/findings/${finding.id}/triage`, { ...input, assigneeId: platform }).expect(400)
+  const created = await mutate(owner, `/findings/${finding.id}/triage`, input).expect(201)
+  expect(created.body).toMatchObject({ state: 'IN_REVIEW', assigneeId: developer, revision: 1 })
+  await mutate(owner, `/findings/${finding.id}/triage`, input).expect(409)
+  await mutate(owner, `/findings/${finding.id}/triage`, { ...input, state: 'RESOLVED', note: '', expectedRevision: 1 }).expect(400)
+  const attempts = await Promise.all([mutate(owner, `/findings/${finding.id}/triage`, { ...input, state: 'RESOLVED', note: 'Reviewed and fixed in a follow-up commit; historical evidence retained', expectedRevision: 1 }),
+    mutate(owner, `/findings/${finding.id}/triage`, { ...input, note: 'Second reviewer', expectedRevision: 1 })])
+  expect(attempts.map(r => r.status).sort()).toEqual([201, 409])
+  const updated = (await actor(owner, '/findings?kind=gaps').expect(200)).body.rows[0]
+  expect(updated.triage.revision).toBe(2)
+  expect((await db.commitAssessment.findUniqueOrThrow({ where: { id: assessment.id } })).assessmentHash).toBe(hash)
+  expect(await db.auditEvent.count({ where: { event: 'finding.triage_updated' } })).toBe(2)
 })

@@ -93,7 +93,14 @@ export function verifyNativeKubernetesPod(
     'securityContext',
     'volumes',
   ])
-    if (digest(actual[key]) !== digest(required[key]))
+    // The API omits false values for these non-pointer boolean fields. Their default is false.
+    if (
+      digest(
+        ['hostNetwork', 'hostPID', 'hostIPC'].includes(key)
+          ? (actual[key] ?? false)
+          : (actual[key] ?? null),
+      ) !== digest(required[key] ?? null)
+    )
       throw new Error('Kubernetes Pod controls changed')
   for (const kind of ['containers', 'initContainers']) {
     const container = actual[kind][0],
@@ -157,41 +164,74 @@ export async function cleanupNativeKubernetesJob(
   ruleId: NativeRuleId,
   tool: NativeToolReview,
 ) {
+  const deadline = AbortSignal.timeout(30000)
   const scopeHash = digest({ scope, ruleId, tool }),
     name = 'pfn-' + scopeHash.slice(0, 40),
     path = paths(approval.namespace, name, scopeHash)
-  const job = await client.json('GET', path.jobs + '/' + name)
+  const job = await client.json(
+    'GET',
+    path.jobs + '/' + name,
+    undefined,
+    deadline,
+  )
   if (job) {
     owned(job, approval.namespace, name, scopeHash)
-    await client.json('DELETE', path.jobs + '/' + name, {
-      apiVersion: 'v1',
-      kind: 'DeleteOptions',
-      propagationPolicy: 'Foreground',
-      preconditions: { uid: job.metadata.uid },
-    })
+    await client.json(
+      'DELETE',
+      path.jobs + '/' + name,
+      {
+        apiVersion: 'v1',
+        kind: 'DeleteOptions',
+        propagationPolicy: 'Foreground',
+        preconditions: { uid: job.metadata.uid },
+      },
+      deadline,
+    )
   }
   let removed = false
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < 60; i++) {
     if (
-      !(await client.json('GET', path.jobs + '/' + name)) &&
-      !(await pods(client, path.pods)).length
+      !(await client.json(
+        'GET',
+        path.jobs + '/' + name,
+        undefined,
+        deadline,
+      )) &&
+      !(await pods(client, path.pods, deadline)).length
     ) {
       removed = true
       break
     }
-    await delay(200)
+    await delay(500, undefined, { signal: deadline })
   }
   if (!removed) throw new Error('Kubernetes cleanup unconfirmed')
-  const source = await client.json('GET', path.source + '/' + name + '-src')
+  const source = await client.json(
+    'GET',
+    path.source + '/' + name + '-src',
+    undefined,
+    deadline,
+  )
   if (source) {
     owned(source, approval.namespace, name + '-src', scopeHash)
-    await client.json('DELETE', path.source + '/' + name + '-src', {
-      apiVersion: 'v1',
-      kind: 'DeleteOptions',
-      preconditions: { uid: source.metadata.uid },
-    })
+    await client.json(
+      'DELETE',
+      path.source + '/' + name + '-src',
+      {
+        apiVersion: 'v1',
+        kind: 'DeleteOptions',
+        preconditions: { uid: source.metadata.uid },
+      },
+      deadline,
+    )
   }
-  if (await client.json('GET', path.source + '/' + name + '-src'))
+  if (
+    await client.json(
+      'GET',
+      path.source + '/' + name + '-src',
+      undefined,
+      deadline,
+    )
+  )
     throw new Error('Kubernetes source cleanup unconfirmed')
 }
 export async function runNativeKubernetesCheck(

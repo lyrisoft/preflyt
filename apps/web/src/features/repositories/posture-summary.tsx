@@ -93,7 +93,7 @@ export function PostureSummary({
   }))
   const stats = [
     {
-      label: 'Selected controls',
+      label: 'Selected checks',
       value: standards.isPending
         ? '—'
         : standards.isError || !selectionValid
@@ -139,7 +139,7 @@ export function PostureSummary({
       tab: 'activity' as const,
     },
     {
-      label: 'Recent snapshots',
+      label: 'Recent assessments',
       value:
         assessments.isPending || assessments.isError
           ? '—'
@@ -210,7 +210,7 @@ export function PostureSummary({
             >
               <p className='text-sm text-warning-text'>
                 Saved standards no longer match the installed catalogue. Review
-                the selection before interpreting control counts.
+                the selection before interpreting check counts.
               </p>
               <Button
                 size='sm'

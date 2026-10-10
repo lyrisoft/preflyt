@@ -1,3 +1,4 @@
+import { configurationValue } from '../configuration/runtime-configuration.js'
 import {
   BadRequestException,
   ForbiddenException,
@@ -107,7 +108,9 @@ export class ContributorsService {
         })
       : null
     if (contributorId && !rows.length && !knownContributor)
-      throw new ForbiddenException('Contributor is outside your authorized scope')
+      throw new ForbiddenException(
+        'You do not have access to this contributor’s activity. Ask your administrator for access.'
+      )
     const truncated = rows.length > 5000,
       observations = rows.slice(0, 5000)
     const repoById = new Map(repositories.map((r) => [r.id, r]))
@@ -337,8 +340,8 @@ export class ContributorsService {
         : data.slice((page - 1) * 20, page * 20),
       lastReceivedAt: receipt?.receivedAt.toISOString() ?? null,
       collectionEnabled:
-        process.env.GITHUB_EVENTS_ENABLED === 'true' &&
-        (process.env.GITHUB_WEBHOOK_SECRET?.length ?? 0) >= 32,
+        configurationValue('GITHUB_EVENTS_ENABLED') === 'true' &&
+        (configurationValue('GITHUB_WEBHOOK_SECRET')?.length ?? 0) >= 32,
       limitations: [
         'Counts describe observed activity, not employee productivity.',
         'Only selected, authorized installed repositories are included.',

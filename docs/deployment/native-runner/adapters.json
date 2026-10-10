@@ -47,6 +47,8 @@
     ],
     "args": [
       "filesystem",
+      "--cache-dir",
+      "/opt/preflyt/trivy-cache",
       "--config",
       "/opt/preflyt/config/trivy.yaml",
       "--scanners",

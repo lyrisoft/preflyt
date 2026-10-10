@@ -1,3 +1,5 @@
+import { configurationValue } from '../configuration/runtime-configuration.js'
+import { GitHubCredentialService } from './github-credential.service.js'
 import { createHash, randomBytes } from 'node:crypto'
 import {
   ConflictException,
@@ -17,7 +19,6 @@ import {
   githubLoginEnabled,
 } from './github-identity-provider.js'
 import {
-  decryptGitHubUserTokens,
   encryptGitHubUserTokens,
   githubUserTokenEncryptionKey,
 } from './github-token-cipher.js'
@@ -51,10 +52,10 @@ export class GitHubLoginService implements OnModuleInit {
     githubLoginCallback()
     githubUserTokenEncryptionKey()
     if (
-      !/^[1-9]\d*$/.test(process.env.GITHUB_APP_ID ?? '') ||
-      !process.env.GITHUB_APP_CLIENT_ID ||
-      !process.env.GITHUB_APP_CLIENT_SECRET ||
-      !process.env.GITHUB_APP_PRIVATE_KEY
+      !/^[1-9]\d*$/.test(configurationValue('GITHUB_APP_ID') ?? '') ||
+      !configurationValue('GITHUB_APP_CLIENT_ID') ||
+      !configurationValue('GITHUB_APP_CLIENT_SECRET') ||
+      !configurationValue('GITHUB_APP_PRIVATE_KEY')
     )
       throw new Error(
         'GitHub login requires the App ID, client ID, client secret and private key',
@@ -323,17 +324,11 @@ export class GitHubLoginService implements OnModuleInit {
     if (
       !challenge ||
       challenge.expiresAt <= new Date() ||
-      !challenge.account.credential ||
-      challenge.account.credential.accessExpiresAt <= new Date()
+      !challenge.account.credential
     )
       throw new UnauthorizedException('GitHub sign-in expired. Start again.')
-    return {
-      challenge,
-      token: decryptGitHubUserTokens(
-        challenge.accountId,
-        challenge.account.credential.encryptedTokens,
-      ).accessToken,
-    }
+    const credential = await new GitHubCredentialService(this.db, this.provider).access(challenge.accountId, challenge.account.credential)
+    return { challenge, token: credential.token, accessExpiresAt: credential.expiresAt }
   }
   async organizations(raw?: string, existingSessionToken?: string) {
     const { challenge, token } = await this.challenge(raw)
@@ -396,7 +391,7 @@ export class GitHubLoginService implements OnModuleInit {
     this.auth.assertOrigin(origin)
     if (!/^[1-9]\d{0,15}$/.test(installationId))
       throw new ForbiddenException('Invalid GitHub installation')
-    const { challenge, token } = await this.challenge(raw)
+    const { challenge, token, accessExpiresAt } = await this.challenge(raw)
     if (challenge.linkingOrganizationId) await this.assertLinkSession(challenge, existingSessionToken)
     const verified = await this.provider.verify(
       token,
@@ -407,7 +402,7 @@ export class GitHubLoginService implements OnModuleInit {
       expiresAt = new Date(
         Math.min(
           Date.now() + 28800000,
-          challenge.account.credential!.accessExpiresAt.getTime(),
+          accessExpiresAt.getTime(),
         ),
       )
     try {
