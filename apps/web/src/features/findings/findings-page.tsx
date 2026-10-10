@@ -331,7 +331,7 @@ function FindingsWorkspace() {
             />
           )}
           {!result.data.rows.length ? (
-            <div className='flex flex-col items-start gap-5 rounded-xl border bg-card p-6 sm:flex-row sm:items-center'>
+            <div className='flex flex-col items-start gap-5 rounded-xl border bg-card p-4 sm:flex-row sm:items-center'>
               <SurfaceIcon icon={FileSearch} tone='amber' size='lg' />
               <div className='min-w-0 flex-1'>
                 <h2 className='text-base font-semibold'>

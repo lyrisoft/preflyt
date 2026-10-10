@@ -1,6 +1,6 @@
-import { ConfigDrawer } from '@/components/config-drawer'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
+import { SettingsLink } from '@/components/settings-link'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { NotificationBell } from '@/features/notifications/inbox'
 import { AppBreadcrumbs, type Crumb } from './app-breadcrumbs'
@@ -17,7 +17,7 @@ export function AppHeader({ breadcrumbs }: { breadcrumbs: Crumb[] }) {
       <Search />
       <NotificationBell />
       <ThemeSwitch />
-      <ConfigDrawer />
+      <SettingsLink />
       <ProfileDropdown />
     </Header>
   )

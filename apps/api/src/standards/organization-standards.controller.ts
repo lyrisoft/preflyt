@@ -42,7 +42,16 @@ class AiCheckDto {
   @IsIn(["repository", "pull_request"], { each: true })
   stages!: string[];
 }
+class CheckDto {
+  @IsString() @MaxLength(80) id!: string;
+  @IsString() @MaxLength(120) title!: string;
+  @IsString() @MaxLength(4000) guidance!: string;
+}
 class StandardDto {
+  @IsOptional() @IsArray() @ArrayMaxSize(64)
+  @ValidateNested({ each: true }) @Type(() => CheckDto)
+  checks?: CheckDto[];
+
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(12)

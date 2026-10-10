@@ -1,3 +1,4 @@
+import { currentStandards } from '../standards/policy-standards.js'
 import { recordNativeExecutionFailure } from '../notifications/notification-event.js'
 import { nativeRequestIntegrity } from './native-request-integrity.js'
 import { ConflictException, NotFoundException } from '@nestjs/common'
@@ -76,10 +77,7 @@ export class NativeResultService {
           throw new ConflictException(
             'Native attempt changed or its worker lease expired',
           )
-        const selection = await tx.repositoryStandardsSelection.findFirst({
-          where: { repositoryId: live.repositoryId },
-          orderBy: { revision: 'desc' },
-        })
+        const selection = await currentStandards(tx, live.repositoryId, { expectedId: live.selectionId })
         if (selection?.id !== live.selectionId)
           throw new ConflictException(
             'Standards changed during native execution',

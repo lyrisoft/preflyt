@@ -1,4 +1,4 @@
-import { checkReportAdapters } from './check-report-adapters.js'
+import { checkReportFormat } from './check-report-adapters.js'
 import { executionContracts } from './execution-contract.js'
 import type { validatedProvenance } from '../github-events/ci-attestation-policy.js'
 import { createHash } from 'node:crypto'
@@ -169,7 +169,7 @@ export function validateRuleEvidence(
   if (truncated) reasons.add('VALIDATION_COLLECTION_TRUNCATED')
   const contracts = executionContracts()
   const contract = contracts?.contracts.find((c) => c.ruleId === ruleId)
-  const expectedFormat = contract?.format ?? checkReportAdapters[ruleId] ?? null
+  const expectedFormat = contract?.format ?? checkReportFormat(ruleId) ?? null
   const reports =
     observation?.reports.filter((r) => r.format === expectedFormat) ?? []
   if (!expectedFormat) reasons.add('RULE_ADAPTER_UNSUPPORTED')

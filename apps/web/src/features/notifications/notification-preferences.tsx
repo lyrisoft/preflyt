@@ -47,11 +47,11 @@ export function NotificationPreferences() {
   })
   return (
     <section className='overflow-hidden rounded-xl border bg-card shadow-xs'>
-      <div className='flex items-center gap-3 border-b bg-muted/20 px-6 py-5'>
+      <div className='flex items-center gap-3 border-b bg-muted/20 px-4 py-4'>
         <SurfaceIcon icon={Bell} tone='teal' />
         <h2 className='text-base font-semibold'>Your notifications</h2>
       </div>
-      <div className='flex items-start justify-between gap-6 px-6 py-5'>
+      <div className='flex items-start justify-between gap-4 px-4 py-4'>
         <div>
           <label
             htmlFor='assessment-notifications'
@@ -82,7 +82,7 @@ export function NotificationPreferences() {
           }
         />
       </div>
-      <div className='flex items-start justify-between gap-6 border-t px-6 py-5'>
+      <div className='flex items-start justify-between gap-4 border-t px-4 py-4'>
         <div>
           <label
             htmlFor='email-notifications'
@@ -116,7 +116,7 @@ export function NotificationPreferences() {
           }
         />
       </div>
-      <p className='border-t bg-muted/20 px-6 py-4 text-xs leading-5 text-muted-foreground'>
+      <p className='border-t bg-muted/20 px-4 py-4 text-xs leading-5 text-muted-foreground'>
         Security, policy and AI configuration notices stay in your in-app inbox
         even when assessment alerts are turned off.
       </p>

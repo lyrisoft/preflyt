@@ -321,9 +321,13 @@ it("previews, creates drafts atomically and reuses independent policy approval/p
     where: { githubId: 103n },
   });
   expect(
-    (await db.teamRepositoryScope.findUniqueOrThrow({
-      where: { teamId_repositoryId: { teamId: id, repositoryId: removedRepo.id } },
-    })).policyScopeEnabled,
+    (
+      await db.teamRepositoryScope.findUniqueOrThrow({
+        where: {
+          teamId_repositoryId: { teamId: id, repositoryId: removedRepo.id },
+        },
+      })
+    ).policyScopeEnabled,
   ).toBe(true);
   // Explicit expansion still invalidates old sources and requires another preview.
   await post(owner, `/${id}/edit`, {
@@ -507,75 +511,203 @@ it("unchanged team scope edits do not invalidate saved policy sources", async ()
 it("creates one organization baseline, previews every connected repository and preserves publication approval", async () => {
   await post(developer, "/baseline", {}).expect(403);
   const baseline = (await post(owner, "/baseline", {}).expect(201)).body;
-  expect((await post(reviewer, "/baseline", {}).expect(201)).body.id).toBe(baseline.id);
+  expect((await post(reviewer, "/baseline", {}).expect(201)).body.id).toBe(
+    baseline.id,
+  );
   const detail = (await get(owner, "/" + baseline.id).expect(200)).body;
   expect(detail.source).toBe("ORGANIZATION");
   expect(detail.repositories).toHaveLength(12);
   expect(detail.members).toHaveLength(0);
   await post(owner, `/${baseline.id}/edit`, {
-    name: detail.name, description: detail.description, memberIds: [],
-    repositoryIds: ["101"], expectedRevision: detail.revision,
+    name: detail.name,
+    description: detail.description,
+    memberIds: [],
+    repositoryIds: ["101"],
+    expectedRevision: detail.revision,
   }).expect(400);
-  const preview = (await post(owner, `/${baseline.id}/preview`, assignment).expect(201)).body;
+  const preview = (
+    await post(owner, `/${baseline.id}/preview`, assignment).expect(201)
+  ).body;
   expect(preview.repositories).toHaveLength(12);
   expect(preview.conflicts).toBe(false);
-  const applied = (await post(owner, `/${baseline.id}/assign`, {
-    ...assignment, expectedPreviewHash: preview.previewHash,
-  }).expect(201)).body;
+  const applied = (
+    await post(owner, `/${baseline.id}/assign`, {
+      ...assignment,
+      expectedPreviewHash: preview.previewHash,
+    }).expect(201)
+  ).body;
   expect(applied.drafts).toHaveLength(12);
   for (const draft of applied.drafts) {
-    const policy = await db.gatePolicyRevision.findUniqueOrThrow({where: {id: draft.policyId}});
+    const policy = await db.gatePolicyRevision.findUniqueOrThrow({
+      where: { id: draft.policyId },
+    });
     expect(policy.approvedAt).toBeNull();
     expect(policy.publishedAt).toBeNull();
-    expect((policy.definition as any).teamContext.some((c: any) => c.teamId === baseline.id)).toBe(true);
+    expect(
+      (policy.definition as any).teamContext.some(
+        (c: any) => c.teamId === baseline.id,
+      ),
+    ).toBe(true);
   }
-  const repo = await db.gitHubRepository.findUniqueOrThrow({where: {githubId: 112n}});
-  const selected = await db.repositoryStandardsSelection.findFirstOrThrow({where: {repositoryId: repo.id}, orderBy: {revision: "desc"}});
-  const {StandardsService} = await import("../src/standards/standards.service.js");
-  await expect(new StandardsService(db).assign("112", {
-    profile: "DEFAULT", packs: assignment.packs, expectedSelectionId: selected.id,
-  }, owner.identityId)).rejects.toThrow("Keep the required team");
-  const newRepo = await db.gitHubRepository.create({data: {
-    githubId: 113n, installationId: 1001n, name: "new-repo", fullName: "fixture-org/new-repo",
-    ownerLogin: "fixture-org", defaultBranch: "main", isPrivate: true, selected: true,
-  }});
-  const {inheritedTeamStandards} = await import("../src/teams/team-context.js");
-  await expect(inheritedTeamStandards(db, newRepo.id, owner.organizationId!)).rejects.toThrow("scope changed");
+  const repo = await db.gitHubRepository.findUniqueOrThrow({
+    where: { githubId: 112n },
+  });
+  const selected = await db.repositoryStandardsSelection.findFirstOrThrow({
+    where: { repositoryId: repo.id },
+    orderBy: { revision: "desc" },
+  });
+  const { StandardsService } =
+    await import("../src/standards/standards.service.js");
+  await expect(
+    new StandardsService(db).assign(
+      "112",
+      {
+        profile: "DEFAULT",
+        packs: assignment.packs,
+        expectedSelectionId: selected.id,
+      },
+      owner.identityId,
+    ),
+  ).rejects.toThrow("Keep the required team");
+  const newRepo = await db.gitHubRepository.create({
+    data: {
+      githubId: 113n,
+      installationId: 1001n,
+      name: "new-repo",
+      fullName: "fixture-org/new-repo",
+      ownerLogin: "fixture-org",
+      defaultBranch: "main",
+      isPrivate: true,
+      selected: true,
+    },
+  });
+  const { inheritedTeamStandards } =
+    await import("../src/teams/team-context.js");
+  await expect(
+    inheritedTeamStandards(db, newRepo.id, owner.organizationId!),
+  ).rejects.toThrow("scope changed");
 });
 it("periodic team reconciliation uses the original authorized importer and runs once per interval", async () => {
-  const reconcileService = new TeamsService(db, access, {} as GitHubProviderService);
-  const sync = vi.spyOn(reconcileService, "sync").mockResolvedValue({id: "fixture"});
-  const imported = await db.preflytTeam.findFirstOrThrow({where: {source: "GITHUB"}});
-  await db.preflytTeam.update({where: {id: imported.id}, data: {syncedAt: new Date(Date.now() - 1000000)}});
+  const reconcileService = new TeamsService(
+    db,
+    access,
+    {} as GitHubProviderService,
+  );
+  const sync = vi
+    .spyOn(reconcileService, "sync")
+    .mockResolvedValue({ id: "fixture" });
+  const imported = await db.preflytTeam.findFirstOrThrow({
+    where: { source: "GITHUB" },
+  });
+  await db.preflytTeam.update({
+    where: { id: imported.id },
+    data: { syncedAt: new Date(Date.now() - 1000000) },
+  });
   await reconcileService.reconcile();
-  expect(sync).toHaveBeenCalledWith(expect.objectContaining({identityId: owner.identityId, platformAdmin: false}), imported.id);
+  expect(sync).toHaveBeenCalledWith(
+    expect.objectContaining({
+      identityId: owner.identityId,
+      platformAdmin: false,
+    }),
+    imported.id,
+  );
   await reconcileService.reconcile();
   expect(sync).toHaveBeenCalledTimes(1);
 });
 
 it("upgrades an explicitly selected assignment without rewriting history or weakening controls", async () => {
-  await db.gitHubInstallation.create({data: {id: 1002n, organizationId: outsider.organizationId!, accountLogin: "other", accountType: "Organization", repositorySelection: "all", permissions: {}, connectedById: outsider.identityId}});
-  const repo = await db.gitHubRepository.create({data: {githubId: 201n, installationId: 1002n, name: "upgrade", fullName: "other/upgrade", ownerLogin: "other", defaultBranch: "main", isPrivate: true, selected: true}});
-  const id = (await post(outsider, "", {name: "Upgrade fixture", description: "", memberIds: [], repositoryIds: ["201"], expectedRevision: 0}).expect(201)).body.id;
-  const preview = (await post(outsider, `/${id}/preview`, assignment).expect(201)).body;
-  const first = (await post(outsider, `/${id}/assign`, {...assignment, expectedPreviewHash: preview.previewHash}).expect(201)).body;
-  const old = await db.teamPolicyAssignment.findUniqueOrThrow({where: {id: first.assignmentId}});
-  const oldDraft = await db.gatePolicyRevision.findUniqueOrThrow({where: {id: first.drafts[0].policyId}});
-  const upgrade = {...assignment, replacesAssignmentId: first.assignmentId, packs: [{id: "baseline-engineering", version: "1.1.0"}]};
-  const next = (await post(outsider, `/${id}/preview`, upgrade).expect(201)).body;
+  await db.gitHubInstallation.create({
+    data: {
+      id: 1002n,
+      organizationId: outsider.organizationId!,
+      accountLogin: "other",
+      accountType: "Organization",
+      repositorySelection: "all",
+      permissions: {},
+      connectedById: outsider.identityId,
+    },
+  });
+  const repo = await db.gitHubRepository.create({
+    data: {
+      githubId: 201n,
+      installationId: 1002n,
+      name: "upgrade",
+      fullName: "other/upgrade",
+      ownerLogin: "other",
+      defaultBranch: "main",
+      isPrivate: true,
+      selected: true,
+    },
+  });
+  const id = (
+    await post(outsider, "", {
+      name: "Upgrade fixture",
+      description: "",
+      memberIds: [],
+      repositoryIds: ["201"],
+      expectedRevision: 0,
+    }).expect(201)
+  ).body.id;
+  const preview = (
+    await post(outsider, `/${id}/preview`, assignment).expect(201)
+  ).body;
+  const first = (
+    await post(outsider, `/${id}/assign`, {
+      ...assignment,
+      expectedPreviewHash: preview.previewHash,
+    }).expect(201)
+  ).body;
+  const old = await db.teamPolicyAssignment.findUniqueOrThrow({
+    where: { id: first.assignmentId },
+  });
+  const oldDraft = await db.gatePolicyRevision.findUniqueOrThrow({
+    where: { id: first.drafts[0].policyId },
+  });
+  const upgrade = {
+    ...assignment,
+    replacesAssignmentId: first.assignmentId,
+    packs: [{ id: "baseline-engineering", version: "1.1.0" }],
+  };
+  const next = (await post(outsider, `/${id}/preview`, upgrade).expect(201))
+    .body;
   expect(next.conflicts).toBe(false);
-  await post(outsider, `/${id}/preview`, {...upgrade, profile: "DEFAULT"}).expect(409);
-  const applied = (await post(outsider, `/${id}/assign`, {...upgrade, expectedPreviewHash: next.previewHash}).expect(201)).body;
-  const retired = await db.teamPolicyAssignment.findUniqueOrThrow({where: {id: first.assignmentId}});
+  await post(outsider, `/${id}/preview`, {
+    ...upgrade,
+    profile: "DEFAULT",
+  }).expect(409);
+  const applied = (
+    await post(outsider, `/${id}/assign`, {
+      ...upgrade,
+      expectedPreviewHash: next.previewHash,
+    }).expect(201)
+  ).body;
+  const retired = await db.teamPolicyAssignment.findUniqueOrThrow({
+    where: { id: first.assignmentId },
+  });
   expect(retired.digest).toBe(old.digest);
   expect(retired.packs).toEqual(old.packs);
   expect(retired.supersededAt).not.toBeNull();
-  expect((await db.gatePolicyRevision.findUniqueOrThrow({where: {id: oldDraft.id}})).definitionHash).toBe(oldDraft.definitionHash);
-  await expect(verifyTeamContext(db, repo.id, (oldDraft.definition as any).teamContext)).rejects.toThrow("scope changed");
-  const draft = await db.gatePolicyRevision.findUniqueOrThrow({where: {id: applied.drafts[0].policyId}});
-  await expect(verifyTeamContext(db, repo.id, (draft.definition as any).teamContext)).resolves.toBeUndefined();
+  expect(
+    (
+      await db.gatePolicyRevision.findUniqueOrThrow({
+        where: { id: oldDraft.id },
+      })
+    ).definitionHash,
+  ).toBe(oldDraft.definitionHash);
+  await expect(
+    verifyTeamContext(db, repo.id, (oldDraft.definition as any).teamContext),
+  ).rejects.toThrow("scope changed");
+  const draft = await db.gatePolicyRevision.findUniqueOrThrow({
+    where: { id: applied.drafts[0].policyId },
+  });
+  await expect(
+    verifyTeamContext(db, repo.id, (draft.definition as any).teamContext),
+  ).resolves.toBeUndefined();
   expect(draft.publishedAt).toBeNull();
-  await post(outsider, `/${id}/assign`, {...upgrade, expectedPreviewHash: next.previewHash}).expect(409);
+  await post(outsider, `/${id}/assign`, {
+    ...upgrade,
+    expectedPreviewHash: next.previewHash,
+  }).expect(409);
 });
 
 it("allows scope removal before a team has assigned standards", async () => {
@@ -592,12 +724,13 @@ it("allows scope removal before a team has assigned standards", async () => {
     where: { githubId: 101n },
   });
   expect(
-    (await db.teamRepositoryScope.findUniqueOrThrow({
-      where: { teamId_repositoryId: { teamId: id, repositoryId: repo.id } },
-    })).policyScopeEnabled,
+    (
+      await db.teamRepositoryScope.findUniqueOrThrow({
+        where: { teamId_repositoryId: { teamId: id, repositoryId: repo.id } },
+      })
+    ).policyScopeEnabled,
   ).toBe(false);
 });
-
 
 it("shows the latest policy independently for every active branch without exposing unauthorized repositories", async () => {
   const repositories = await Promise.all(
@@ -792,4 +925,169 @@ it("shows the latest policy independently for every active branch without exposi
       })
     ).revision,
   ).toBe(2);
+});
+
+it("explicitly previews and approves nested scope without changing existing policies", async () => {
+  const parent = await create(["107"]);
+  const child = await create(["108"]);
+  const before = await db.gatePolicyRevision.count();
+  const preview = (
+    await post(owner, `/${parent}/child-scope/preview`, {
+      childIds: [child],
+    }).expect(201)
+  ).body;
+  expect(preview.repositories.map((r: any) => r.githubId).sort()).toEqual([
+    "107",
+    "108",
+  ]);
+  expect(
+    (await get(owner, `/${parent}`).expect(200)).body.repositories,
+  ).toHaveLength(1);
+  await post(owner, `/${parent}/child-scope/approve`, {
+    childIds: [child],
+    expectedPreviewHash: "a".repeat(64),
+  }).expect(409);
+  await post(owner, `/${parent}/child-scope/approve`, {
+    childIds: [child],
+    expectedPreviewHash: preview.previewHash,
+  }).expect(201);
+  expect(await db.gatePolicyRevision.count()).toBe(before);
+  const scoped = (await get(owner, `/${parent}`).expect(200)).body;
+  expect(
+    scoped.repositories.filter((r: any) => r.policyScopeEnabled),
+  ).toHaveLength(2);
+  const childRepository = await db.gitHubRepository.findUniqueOrThrow({
+    where: { githubId: 108n },
+  });
+  await db.teamRepositoryScope.update({
+    where: {
+      teamId_repositoryId: { teamId: parent, repositoryId: childRepository.id },
+    },
+    data: { providerPresent: false },
+  });
+  const repair = (
+    await post(owner, `/${parent}/child-scope/preview`, {
+      childIds: [child],
+    }).expect(201)
+  ).body;
+  await post(owner, `/${parent}/child-scope/approve`, {
+    childIds: [child],
+    expectedPreviewHash: repair.previewHash,
+  }).expect(201);
+  expect(
+    (
+      await db.teamRepositoryScope.findUniqueOrThrow({
+        where: {
+          teamId_repositoryId: {
+            teamId: parent,
+            repositoryId: childRepository.id,
+          },
+        },
+      })
+    ).providerPresent,
+  ).toBe(true);
+  await db.teamRepositoryScope.update({
+    where: {
+      teamId_repositoryId: { teamId: child, repositoryId: childRepository.id },
+    },
+    data: { providerPresent: false },
+  });
+  await post(owner, `/${parent}/child-scope/preview`, {
+    childIds: [child],
+  }).expect(409);
+  await db.teamRepositoryScope.update({
+    where: {
+      teamId_repositoryId: { teamId: child, repositoryId: childRepository.id },
+    },
+    data: { providerPresent: true },
+  });
+  const input = { ...assignment, branchRef: "refs/heads/nested-acceptance" };
+  const impact = (await post(owner, `/${parent}/preview`, input).expect(201))
+    .body;
+  expect(impact.repositories).toHaveLength(2);
+  const applied = (
+    await post(owner, `/${parent}/assign`, {
+      ...input,
+      expectedPreviewHash: impact.previewHash,
+    }).expect(201)
+  ).body;
+  expect(applied.drafts).toHaveLength(2);
+  await db.preflytTeam.update({
+    where: { id: child },
+    data: { scopeRevision: { increment: 1 } },
+  });
+  await post(owner, `/${parent}/preview`, input).expect(409);
+  const draft = await db.gatePolicyRevision.findUniqueOrThrow({
+    where: { id: applied.drafts[0].policyId },
+  });
+  await expect(
+    verifyTeamContext(
+      db,
+      draft.repositoryId,
+      (draft.definition as any).teamContext,
+    ),
+  ).rejects.toThrow("Child team scope changed");
+  const updated = (
+    await post(owner, `/${parent}/child-scope/preview`, {
+      childIds: [child],
+    }).expect(201)
+  ).body;
+  await post(owner, `/${parent}/child-scope/approve`, {
+    childIds: [child],
+    expectedPreviewHash: updated.previewHash,
+  }).expect(201);
+  await post(owner, `/${parent}/edit`, {
+    name: scoped.name,
+    description: scoped.description,
+    memberIds: [],
+    repositoryIds: ["107"],
+    expectedRevision: scoped.revision + 2,
+  }).expect(409);
+});
+it("rejects nested scope cycles, stale previews, cross-organization and unauthorized approvals", async () => {
+  const parent = await create(["109"]);
+  const child = await create(["110"]);
+  await post(developer, `/${parent}/child-scope/preview`, {
+    childIds: [child],
+  }).expect(403);
+  await post(outsider, `/${parent}/child-scope/preview`, {
+    childIds: [child],
+  }).expect(404);
+  await post(owner, `/${parent}/child-scope/preview`, {
+    childIds: [parent],
+  }).expect(409);
+  const preview = (
+    await post(owner, `/${parent}/child-scope/preview`, {
+      childIds: [child],
+    }).expect(201)
+  ).body;
+  await db.preflytTeam.update({
+    where: { id: child },
+    data: { scopeRevision: { increment: 1 } },
+  });
+  await post(owner, `/${parent}/child-scope/approve`, {
+    childIds: [child],
+    expectedPreviewHash: preview.previewHash,
+  }).expect(409);
+  const current = (
+    await post(owner, `/${parent}/child-scope/preview`, {
+      childIds: [child],
+    }).expect(201)
+  ).body;
+  await post(owner, `/${parent}/child-scope/approve`, {
+    childIds: [child],
+    expectedPreviewHash: current.previewHash,
+  }).expect(201);
+  await post(owner, `/${child}/child-scope/preview`, {
+    childIds: [parent],
+  }).expect(409);
+  await post(owner, `/${parent}/child-scope/preview`, {
+    childIds: [child, child],
+  }).expect(400);
+  await http(app.getHttpServer())
+    .post(`/teams/${parent}/child-scope/approve`)
+    .set("Cookie", `teams.sid=${owner.identityId}`)
+    .set("Origin", "https://attacker.invalid")
+    .send({ childIds: [child], expectedPreviewHash: current.previewHash })
+    .expect(403);
 });

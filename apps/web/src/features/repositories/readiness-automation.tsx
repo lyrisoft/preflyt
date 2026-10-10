@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -34,10 +35,12 @@ export function ReadinessAutomation({
   repositoryId,
   actorId,
   canPublish,
+  settingsOnly = false,
 }: {
   repositoryId: string
   actorId?: string
   canPublish: boolean
+  settingsOnly?: boolean
 }) {
   const [page, setPage] = useState(1),
     [busy, setBusy] = useState(false),
@@ -48,7 +51,7 @@ export function ReadinessAutomation({
     queryFn: ({ signal }) =>
       governanceRequest<Result>(`${root}?page=${page}`, undefined, signal),
     retry: false,
-    refetchInterval: 15_000,
+    refetchInterval: settingsOnly ? false : 15_000,
   })
   const toggle = async () => {
     if (!query.data) return
@@ -59,6 +62,11 @@ export function ReadinessAutomation({
         enabled: !query.data.settings.enabled,
         expectedRevision: query.data.settings.revision,
       })
+      toast.success(
+        query.data.settings.enabled
+          ? 'Automatic PR checks disabled'
+          : 'Automatic PR checks enabled'
+      )
       await query.refetch()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Settings could not be saved')
@@ -69,7 +77,7 @@ export function ReadinessAutomation({
   return (
     <Card className='gap-4'>
       <CardHeader className='flex flex-wrap items-center justify-between gap-3'>
-        <CardTitle>Automatic PR checks</CardTitle>
+        <CardTitle>Automatic publishing</CardTitle>
         <div className='flex gap-2'>
           <Button
             variant='outline'
@@ -85,6 +93,7 @@ export function ReadinessAutomation({
               size='sm'
               disabled={
                 busy ||
+                query.isError ||
                 !query.data ||
                 (!query.data.available && !query.data.settings.enabled)
               }
@@ -98,11 +107,17 @@ export function ReadinessAutomation({
         </div>
       </CardHeader>
       <CardContent className='space-y-4'>
-        <StatusBadge
-          tone={query.data?.settings.enabled ? 'success' : 'neutral'}
-        >
-          {query.data?.settings.enabled ? 'Enabled' : 'Disabled'}
-        </StatusBadge>
+        {query.isPending ? (
+          <p role='status'>Loading publishing settings…</p>
+        ) : (
+          !query.isError && (
+            <StatusBadge
+              tone={query.data?.settings.enabled ? 'success' : 'neutral'}
+            >
+              {query.data?.settings.enabled ? 'Enabled' : 'Disabled'}
+            </StatusBadge>
+          )
+        )}
         {!query.data?.available && !query.isError && query.data && (
           <p className='text-sm text-muted-foreground'>
             Automatic publication is not enabled in this deployment.
@@ -113,7 +128,7 @@ export function ReadinessAutomation({
             {error || query.error?.message}
           </p>
         )}
-        {query.isPending ? (
+        {settingsOnly ? null : query.isPending ? (
           <p role='status'>Loading checks…</p>
         ) : (
           !query.isError &&

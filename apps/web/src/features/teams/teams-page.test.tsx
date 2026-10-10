@@ -164,7 +164,7 @@ it('requires an impact preview before creating drafts', async () => {
     .not.toBeInTheDocument()
   await userEvent.click(view.getByRole('button', { name: 'Preview impact' }))
   await expect
-    .element(view.getByText('Required test execution · recommended profile'))
+    .element(view.getByText('Required test execution · recommended requirements'))
     .toBeVisible()
   await userEvent.click(
     view.getByRole('button', { name: 'Apply and create drafts' })
@@ -343,4 +343,35 @@ it('shows separate impact rows and statuses for branches in the same repository'
       })
     )
     .toBeVisible()
+})
+
+it('reviews exact child repositories before approving scope', async () => {
+  api.request.mockImplementation(async(path:string)=>{
+    if(path==='/teams/options')return {...options,childTeams:[{id:'child',name:'Service delivery'}]}
+    if(path==='/teams/team')return detail
+    if(path==='/teams/team/child-scope/preview')return {previewHash:'c'.repeat(64),repositories:[{githubId:'101',name:'org/service'},{githubId:'102',name:'org/child-service'}]}
+    if(path==='/teams/team/child-scope/approve')return {approved:true}
+    return {teams:[team],total:1,pageSize:20}
+  })
+  const view=await mount()
+  await view.getByRole('button',{name:'Platform',exact:true}).click()
+  await view.getByRole('tab',{name:'Repositories',exact:true}).click()
+  await expect.element(view.getByRole('button',{name:'Approve scope',exact:true})).toBeDisabled()
+  await view.getByRole('checkbox',{name:'Service delivery',exact:true}).click()
+  await view.getByRole('button',{name:'Preview scope',exact:true}).click()
+  await expect.element(view.getByText('org/child-service',{exact:true})).toBeVisible()
+  await view.getByRole('button',{name:'Approve scope',exact:true}).click()
+  await expect.poll(()=>api.request.mock.calls.find(([path])=>path==='/teams/team/child-scope/approve')?.[1]).toEqual({childIds:['child'],expectedPreviewHash:'c'.repeat(64)})
+})
+it('does not approve a failed child-scope preview', async()=>{
+  api.request.mockImplementation(async(path:string)=>{
+    if(path==='/teams/options')return {...options,childTeams:[{id:'child',name:'Service delivery'}]}
+    if(path==='/teams/team')return detail
+    if(path.includes('/child-scope/preview'))throw new Error('Child team scope changed')
+    return {teams:[team],total:1,pageSize:20}
+  })
+  const view=await mount();await view.getByRole('button',{name:'Platform',exact:true}).click();await view.getByRole('tab',{name:'Repositories',exact:true}).click()
+  await view.getByRole('checkbox',{name:'Service delivery',exact:true}).click();await view.getByRole('button',{name:'Preview scope',exact:true}).click()
+  await expect.element(view.getByRole('button',{name:'Approve scope',exact:true})).toBeDisabled()
+  expect(api.request.mock.calls.some(([path])=>path.includes('/child-scope/approve'))).toBe(false)
 })

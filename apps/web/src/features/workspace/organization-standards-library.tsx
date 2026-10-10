@@ -117,17 +117,17 @@ export function OrganizationStandardsLibrary() {
             Refresh
           </Button>
           <PageHelpDrawer
-            title='Engineering standards'
+            title='Standards'
             sections={[
               {
                 title: 'Create and edit',
                 content:
-                  'Owners and Admins can create organization standards, edit them or copy a built-in standard. Choose the checks that apply; Preflyt keeps their supported evaluation and evidence requirements. New standards start with the baseline checks selected.',
+                  'Owners and Admins can create organization standards, edit them or copy a built-in standard. Choose existing checks, add a pipeline test or scan check, or edit check names and guidance. New standards start with the baseline checks selected.',
               },
               {
                 title: 'Versions and adoption',
                 content:
-                  'Saving creates a new version. Existing repository selections, policies and assessments keep their saved version. Use Policies → Standards → Edit selection to adopt a version, then review or update the policy. Editing the library does not change GitHub protections.',
+                  'Saving creates a new version. Existing repository selections, policies and assessments keep their saved version. Choose the standard version when creating a branch policy in Policies. Editing the library does not change GitHub protections.',
               },
               {
                 title: 'Supported checks',
@@ -328,6 +328,19 @@ export function OrganizationStandardsLibrary() {
                   <p className='text-xs text-muted-foreground'>
                     {rule.guidance}
                   </p>
+                  {rule.id.startsWith('custom-') && (
+                    <details className='text-xs text-muted-foreground'>
+                      <summary className='cursor-pointer'>
+                        Pipeline setup details
+                      </summary>
+                      <p className='mt-2'>
+                        Check ID for the approved pipeline report:
+                      </p>
+                      <code className='mt-1 block break-all select-all'>
+                        {rule.id}
+                      </code>
+                    </details>
+                  )}
                 </article>
               ))}
             {details?.aiChecks?.map((check) => (
@@ -371,6 +384,14 @@ function StandardEditor({
   const [selected, setSelected] = useState(
     (pack ?? library.builtIn[0])?.rules.map((r) => r.id) ?? []
   )
+  const [checkEdits, setCheckEdits] = useState<Pack['rules']>(pack?.rules ?? [])
+  const [checkDraft, setCheckDraft] = useState<{
+    id: string | null
+    title: string
+    guidance: string
+    format: 'junit' | 'sarif'
+  } | null>(null)
+  const [checkError, setCheckError] = useState('')
   const [checkSearch, setCheckSearch] = useState('')
   const [checkPage, setCheckPage] = useState(1)
   const [aiPage, setAiPage] = useState(1)
@@ -389,7 +410,10 @@ function StandardEditor({
   const [error, setError] = useState('')
   const rules = [
     ...new Map(
-      library.builtIn.flatMap((p) => p.rules).map((r) => [r.id, r])
+      [...library.builtIn.flatMap((p) => p.rules), ...checkEdits].map((r) => [
+        r.id,
+        r,
+      ])
     ).values(),
   ]
   const filteredRules = rules.filter((r) =>
@@ -397,7 +421,36 @@ function StandardEditor({
   )
   const checkPages = Math.max(1, Math.ceil(filteredRules.length / 6))
   const aiPages = Math.max(1, Math.ceil(aiChecks.length / 2))
+  function saveCheck() {
+    if (!checkDraft?.title.trim()) {
+      setCheckError('Enter a check name.')
+      return
+    }
+    const id =
+      checkDraft.id ?? `custom-${checkDraft.format}-${crypto.randomUUID()}`
+    const previous = rules.find((r) => r.id === id)
+    const check = {
+      ...previous,
+      id,
+      title: checkDraft.title.trim(),
+      guidance: checkDraft.guidance.trim(),
+      capability: previous?.capability ?? 'import_only',
+      requiredIn: previous?.requiredIn ?? ['RECOMMENDED', 'STRICT'],
+    }
+    setCheckEdits((old) => [...old.filter((r) => r.id !== id), check])
+    setSelected((old) =>
+      checkDraft.id || old.includes(id) ? old : [...old, id]
+    )
+    setCheckSearch(check.title)
+    setCheckPage(1)
+    setCheckDraft(null)
+    setCheckError('')
+  }
   async function save() {
+    if (checkDraft) {
+      setError('Save or cancel the check you are editing first.')
+      return
+    }
     setBusy(true)
     setError('')
     try {
@@ -409,6 +462,15 @@ function StandardEditor({
           title,
           description,
           ruleIds: selected,
+          checks: selected.flatMap((id) =>
+            rules
+              .filter((r) => r.id === id)
+              .map(({ id, title, guidance }) => ({
+                id,
+                title,
+                guidance: guidance ?? '',
+              }))
+          ),
           ...(aiChecks.length ? { aiChecks } : {}),
           expectedVersionId: edit ? (pack as Version).versionId : null,
         }
@@ -433,7 +495,7 @@ function StandardEditor({
               ? 'Edit standard'
               : pack
                 ? 'Customize standard'
-                : 'New engineering standard'}
+                : 'New standard'}
           </DialogTitle>
           <DialogDescription>
             Choose the checks and AI Reviews for this standard.
@@ -546,6 +608,121 @@ function StandardEditor({
                 )}
               </div>
               <TabsContent value='checks' className='mt-5 space-y-4'>
+                <div className='flex items-center justify-between gap-3'>
+                  <p className='text-sm font-medium'>Checks</p>
+                  <Button
+                    type='button'
+                    size='sm'
+                    disabled={busy || !!checkDraft || selected.length >= 64}
+                    onClick={() => {
+                      setCheckError('')
+                      setCheckDraft({
+                        id: null,
+                        title: '',
+                        guidance: '',
+                        format: 'junit',
+                      })
+                    }}
+                  >
+                    <Plus className='size-4' />
+                    Add check
+                  </Button>
+                </div>
+                {checkDraft && (
+                  <section
+                    aria-label={checkDraft.id ? 'Edit check' : 'Add check'}
+                    className='space-y-3 rounded-xl border bg-muted/20 p-4'
+                  >
+                    <h3 className='text-sm font-semibold'>
+                      {checkDraft.id ? 'Edit check' : 'New check'}
+                    </h3>
+                    <label className='block space-y-1.5 text-sm'>
+                      <span>Check name</span>
+                      <Input
+                        autoFocus
+                        value={checkDraft.title}
+                        maxLength={120}
+                        placeholder='API contract tests'
+                        onChange={(e) =>
+                          setCheckDraft({
+                            ...checkDraft,
+                            title: e.target.value,
+                          })
+                        }
+                      />
+                    </label>
+                    {!checkDraft.id && (
+                      <div className='space-y-1.5'>
+                        <label htmlFor='check-result-type' className='text-sm'>
+                          Result source
+                        </label>
+                        <Select
+                          value={checkDraft.format}
+                          onValueChange={(format: 'junit' | 'sarif') =>
+                            setCheckDraft({ ...checkDraft, format })
+                          }
+                        >
+                          <SelectTrigger id='check-result-type'>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value='junit'>
+                              Test report (JUnit)
+                            </SelectItem>
+                            <SelectItem value='sarif'>
+                              Scan report (SARIF)
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <p className='text-xs text-muted-foreground'>
+                          Uses verified results from your pipeline. Missing
+                          results stay incomplete.
+                        </p>
+                      </div>
+                    )}
+                    <label className='block space-y-1.5 text-sm'>
+                      <span>Guidance</span>
+                      <textarea
+                        className='flex min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-ring'
+                        value={checkDraft.guidance}
+                        maxLength={4000}
+                        placeholder='What this check covers and how to fix a failure.'
+                        onChange={(e) =>
+                          setCheckDraft({
+                            ...checkDraft,
+                            guidance: e.target.value,
+                          })
+                        }
+                      />
+                    </label>
+                    {checkError && (
+                      <p role='alert' className='text-sm text-destructive'>
+                        {checkError}
+                      </p>
+                    )}
+                    <div className='flex justify-end gap-2'>
+                      <Button
+                        type='button'
+                        size='sm'
+                        variant='outline'
+                        onClick={() => {
+                          setCheckDraft(null)
+                          setCheckError('')
+                        }}
+                      >
+                        Cancel check
+                      </Button>
+                      <Button
+                        type='button'
+                        size='sm'
+                        disabled={!checkDraft.title.trim() || busy}
+                        onClick={saveCheck}
+                      >
+                        {checkDraft.id ? 'Save check' : 'Add check'}
+                      </Button>
+                    </div>
+                  </section>
+                )}
                 <Input
                   aria-label='Filter available checks'
                   placeholder='Filter checks…'
@@ -561,12 +738,14 @@ function StandardEditor({
                     {filteredRules
                       .slice((checkPage - 1) * 6, checkPage * 6)
                       .map((rule) => (
-                        <label
+                        <div
                           key={rule.id}
                           className='flex items-start gap-3 rounded-lg border p-3 text-sm'
                         >
                           <input
                             type='checkbox'
+                            id={`standard-check-${rule.id}`}
+                            aria-label={rule.title}
                             className='mt-0.5 size-4 shrink-0 accent-primary'
                             checked={selected.includes(rule.id)}
                             onChange={(event) =>
@@ -577,7 +756,12 @@ function StandardEditor({
                               )
                             }
                           />
-                          <span className='flex-1'>{rule.title}</span>
+                          <label
+                            htmlFor={`standard-check-${rule.id}`}
+                            className='flex-1 cursor-pointer'
+                          >
+                            {rule.title}
+                          </label>
                           <StatusBadge
                             tone={
                               rule.capability === 'planned' ? 'neutral' : 'info'
@@ -589,7 +773,28 @@ function StandardEditor({
                                 ? 'Configuration'
                                 : 'CI report'}
                           </StatusBadge>
-                        </label>
+                          <Button
+                            type='button'
+                            size='icon'
+                            variant='ghost'
+                            className='size-7 shrink-0'
+                            disabled={busy || !!checkDraft}
+                            aria-label={`Edit check ${rule.title}`}
+                            onClick={() => {
+                              setCheckError('')
+                              setCheckDraft({
+                                id: rule.id,
+                                title: rule.title,
+                                guidance: rule.guidance ?? '',
+                                format: rule.id.startsWith('custom-sarif-')
+                                  ? 'sarif'
+                                  : 'junit',
+                              })
+                            }}
+                          >
+                            <Pencil className='size-3.5' />
+                          </Button>
+                        </div>
                       ))}
                   </div>
                 </fieldset>
@@ -657,7 +862,7 @@ function StandardEditor({
                     .map((check, index) => (
                       <div
                         key={check.id}
-                        className='space-y-5 rounded-xl border p-5'
+                        className='space-y-5 rounded-xl border p-4'
                       >
                         <div className='flex items-end gap-3'>
                           <label className='flex min-w-0 flex-1 flex-col gap-2.5 text-[13px] font-medium'>
@@ -813,6 +1018,7 @@ function StandardEditor({
               type='submit'
               disabled={
                 busy ||
+                !!checkDraft ||
                 !title.trim() ||
                 !selected.length ||
                 aiChecks.some(

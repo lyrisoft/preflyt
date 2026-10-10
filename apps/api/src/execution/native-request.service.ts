@@ -1,3 +1,4 @@
+import { currentStandards } from '../standards/policy-standards.js'
 import { configurationValue } from '../configuration/runtime-configuration.js'
 import { nativeRequestIntegrity } from './native-request-integrity.js'
 import {
@@ -180,10 +181,7 @@ export class NativeRequestService {
           )
         return existing
       }
-      const selection = await tx.repositoryStandardsSelection.findFirst({
-        where: { repositoryId: live.id },
-        orderBy: { revision: 'desc' },
-      })
+      const selection = await currentStandards(tx, live.id, { expectedId: input.expectedSelectionId })
       const profile = await tx.repositoryProfile.findFirst({
         where: { repositoryId: live.id },
         orderBy: { createdAt: 'desc' },

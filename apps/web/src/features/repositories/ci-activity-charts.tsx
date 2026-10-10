@@ -212,7 +212,7 @@ export function CiActivityCharts({
         </div>
         <p className='mt-2 text-[11px] text-muted-foreground'>
           Up to 14 days of the latest 50 deliveries. Provider results are not
-          verified quality gate outcomes.
+          verified merge review results.
         </p>
       </section>
     </div>

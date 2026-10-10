@@ -9,7 +9,7 @@ Preflyt is an **enterprise engineering control center**: precise, restrained, in
 
 - Dark-first with a complete light theme; charcoal/navy neutrals, restrained brand accent, semantic status colors only for actual outcomes.
 - Consistent type hierarchy: page heading, section title, data value, metadata; compact labels and legible dense tables.
-- 8px spacing rhythm, subtle borders, modest radius, minimal shadows. No decorative 3D charts, marketing heroes, huge empty cards or invented KPI values.
+- 8px spacing rhythm, subtle borders, modest radius, minimal shadows. Shared cards use 16px outer/content padding, 12–16px section gaps and 12px above bordered action footers. Place icons beside titles; avoid separate decorative header rows or fixed minimum heights that leave empty space. No decorative 3D charts, marketing heroes, huge empty cards or invented KPI values.
 - Layout: persistent/collapsible desktop sidebar, compact sticky global header, content max-width appropriate for data tables, responsive single-column mobile.
 - Tables: sortable/filterable/paginated when data requires it; explicit timestamps, source, status, ownership, accessible empty/error/loading states and row navigation.
 - Charts: evidence-backed, labeled axes/legend, time windows, denominators, comparable datasets and accessible textual alternatives. Use existing compatible chart components rather than another UI framework.

@@ -1,14 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import {
-  ChevronDown,
-  GitBranch,
-  Link2,
-  ListChecks,
-  RefreshCw,
-  ShieldCheck,
-  Workflow,
-} from 'lucide-react'
+import { ChevronDown, Link2, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -16,8 +8,15 @@ import {
   CardTitle,
   CardDescription,
   CardContent,
-  CardAction,
 } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -26,14 +25,6 @@ import {
   SelectContent,
   SelectItem,
 } from '@/components/ui/select'
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-  SheetFooter,
-} from '@/components/ui/sheet'
 import { StatusBadge } from '@/components/status-badge'
 import { SurfaceIcon } from '@/components/surface-icon'
 import {
@@ -51,70 +42,95 @@ import {
   type Standards,
 } from './repository-queries'
 
+function sourceKey(source: SourceIdentity) {
+  return JSON.stringify(
+    source.kind === 'check_run'
+      ? { kind: source.kind, appId: source.appId, checkName: source.checkName }
+      : { kind: source.kind, workflowId: source.workflowId }
+  )
+}
+function jobName(source: SourceIdentity) {
+  return source.kind === 'check_run'
+    ? source.checkName || 'Unnamed check'
+    : `GitHub workflow #${source.workflowId}`
+}
+function validSource(source: SourceIdentity) {
+  const id = source.kind === 'check_run' ? source.appId : source.workflowId
+  return (
+    (source.kind === 'check_run' || source.kind === 'workflow_run') &&
+    !!id &&
+    /^[1-9]\d{0,15}$/.test(id) &&
+    Number.isSafeInteger(Number(id)) &&
+    (source.kind !== 'check_run' ||
+      (!!source.checkName &&
+        source.checkName.trim().length > 0 &&
+        source.checkName.length <= 256 &&
+        !Array.from(source.checkName).some(
+          (char) => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127
+        )))
+  )
+}
 function BindingEditor({
   repositoryId,
   standards,
   saved,
-  onSaved,
+  onClose,
 }: {
   repositoryId: string
   standards: Standards
   saved: BindingResult
-  onSaved: () => void
+  onClose: () => void
 }) {
   const client = useQueryClient()
   const [bindings, setBindings] = useState<Binding[]>(
     saved.binding?.bindings ?? []
   )
+  const [manualRules, setManualRules] = useState<string[]>([])
   const evidence = useCiEvidence(repositoryId)
   const rules = standards.controls.filter(
-    (r) =>
-      saved.supportedRuleIds?.includes(r.id) ?? r.capability === 'import_only'
+    (rule) =>
+      saved.supportedRuleIds?.includes(rule.id) ??
+      rule.capability === 'import_only'
   )
   const observed = Array.from(
     new Map(
-      (evidence.data?.observations ?? []).flatMap((row) => {
-        const identity = (
-          row as typeof row & { sourceIdentity?: SourceIdentity }
-        ).sourceIdentity
-        return identity
-          ? [
-              [
-                JSON.stringify({
-                  kind: identity.kind,
-                  appId: identity.appId,
-                  checkName: identity.checkName,
-                  workflowId: identity.workflowId,
-                }),
-                identity,
-              ] as const,
-            ]
-          : []
-      })
+      (evidence.isError ? [] : (evidence.data?.observations ?? [])).flatMap(
+        (row) => {
+          const source = (
+            row as typeof row & { sourceIdentity?: SourceIdentity }
+          ).sourceIdentity
+          return source && validSource(source)
+            ? [[sourceKey(source), source] as const]
+            : []
+        }
+      )
     ).values()
   )
+  const currentBindings = bindings.filter((binding) =>
+    rules.some((rule) => rule.id === binding.ruleId)
+  )
+  const original = saved.binding?.bindings ?? []
+  const signature = (items: Binding[]) =>
+    JSON.stringify(
+      items
+        .map((item) => [item.ruleId, sourceKey(item)])
+        .sort((a, b) => a[0].localeCompare(b[0]))
+    )
+  const changed =
+    signature(currentBindings) !== signature(original) ||
+    (!saved.active && currentBindings.length > 0)
+  const removed = original.filter(
+    (item) => !currentBindings.some((binding) => binding.ruleId === item.ruleId)
+  )
+  const valid = currentBindings.every(validSource)
   function update(ruleId: string, binding: Binding | null) {
     setBindings((old) => [
-      ...old.filter((b) => b.ruleId !== ruleId),
+      ...old.filter((item) => item.ruleId !== ruleId),
       ...(binding ? [binding] : []),
     ])
   }
-  const valid = bindings.every((b) => {
-    const id = b.kind === 'check_run' ? b.appId : b.workflowId
-    return (
-      !!id &&
-      /^[1-9]\d{0,15}$/.test(id) &&
-      Number.isSafeInteger(Number(id)) &&
-      (b.kind !== 'check_run' ||
-        (!!b.checkName &&
-          b.checkName.length <= 256 &&
-          !Array.from(b.checkName).some(
-            (char) => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127
-          )))
-    )
-  })
   const mutation = useMutation({
-    meta: { successMessage: 'Check sources saved' },
+    meta: { successMessage: 'CI jobs saved' },
     mutationFn: async () => {
       const response = await fetch(
         engineeringPath(repositoryId, '/ci-bindings'),
@@ -125,19 +141,17 @@ function BindingEditor({
           body: JSON.stringify({
             expectedSelectionId: standards.selection!.id,
             expectedBindingId: saved.binding?.id ?? null,
-            bindings: bindings.filter((b) =>
-              rules.some((r) => r.id === b.ruleId)
-            ),
+            bindings: currentBindings,
           }),
         }
       )
       if (!response.ok)
         throw new Error(
           response.status === 409
-            ? 'Standards or Check sources changed. Close this editor, reload and review again.'
+            ? 'Standards or CI jobs changed. Close this editor, reload and review again.'
             : response.status === 403
               ? 'Your permission or repository access changed.'
-              : 'Approval failed. Check exact source identities and try again.'
+              : 'Could not save CI jobs. Check the job details and try again.'
         )
     },
     onSuccess: async () => {
@@ -145,202 +159,364 @@ function BindingEditor({
         client.invalidateQueries({ queryKey: ['ci-bindings', repositoryId] }),
         client.invalidateQueries({ queryKey: ['pull-request', repositoryId] }),
       ])
-      onSaved()
+      onClose()
     },
   })
   return (
     <form
-      className='flex min-h-0 flex-1 flex-col'
-      onSubmit={(e) => {
-        e.preventDefault()
-        mutation.mutate()
+      className='flex min-h-0 flex-col gap-5'
+      onSubmit={(event) => {
+        event.preventDefault()
+        if (valid && changed && !mutation.isPending) mutation.mutate()
       }}
     >
-      <div className='flex-1 space-y-5 overflow-y-auto px-4 pb-4'>
-        <p className='text-sm text-muted-foreground'>
-          Choose a CI source received from a verified GitHub webhook, or enter
-          its identifiers. Approving a source does not prove that its test or
-          scanner ran.
-        </p>
-        {rules.map((rule) => {
-          const b = bindings.find((item) => item.ruleId === rule.id)
-          return (
-            <fieldset
-              key={rule.id}
-              disabled={mutation.isPending}
-              className='space-y-3 rounded-md border p-3'
-            >
-              <legend className='px-1 text-sm font-medium'>{rule.title}</legend>
-              <Select
-                value={b?.kind ?? 'none'}
-                onValueChange={(kind) =>
-                  update(
-                    rule.id,
-                    kind === 'none'
-                      ? null
-                      : kind === 'check_run'
-                        ? { ruleId: rule.id, kind, appId: '', checkName: '' }
-                        : {
-                            ruleId: rule.id,
-                            kind: 'workflow_run',
-                            workflowId: '',
-                          }
-                  )
-                }
-              >
-                <SelectTrigger
-                  aria-label={`Source type for ${rule.title}`}
-                  className='w-full'
+      <div className='min-h-0 space-y-5 overflow-y-auto'>
+        <div className='flex flex-wrap items-center justify-between gap-3'>
+          <p className='text-xs text-muted-foreground'>
+            Example: Required test execution → Run tests
+          </p>
+          <Button
+            type='button'
+            size='sm'
+            variant='outline'
+            disabled={evidence.isFetching || mutation.isPending}
+            onClick={() => void evidence.refetch()}
+          >
+            <RefreshCw className={evidence.isFetching ? 'animate-spin' : ''} />
+            Refresh jobs
+          </Button>
+        </div>
+        {evidence.isPending ? (
+          <p role='status' className='text-sm text-muted-foreground'>
+            Loading CI jobs…
+          </p>
+        ) : evidence.isError ? (
+          <p
+            role='alert'
+            className='rounded-lg border border-danger/20 bg-danger/5 p-3 text-sm text-danger-text'
+          >
+            CI jobs could not load. Refresh to try again. Saved connections are
+            still shown.
+          </p>
+        ) : evidence.data?.enabled === false ? (
+          <p
+            role='status'
+            className='rounded-lg border border-warning/20 bg-warning/5 p-3 text-sm text-warning-text'
+          >
+            CI job updates are off. Ask a system administrator to enable GitHub
+            event collection and configure its webhook secret in Settings →
+            Configuration.
+          </p>
+        ) : !observed.length ? (
+          <div className='space-y-2 rounded-lg border bg-muted/20 p-4'>
+            <p className='text-sm font-medium'>No CI jobs received yet</p>
+            <p className='text-sm text-muted-foreground'>
+              Run your tests or scans in GitHub, then refresh jobs here.
+            </p>
+            <details className='text-xs text-muted-foreground'>
+              <summary className='cursor-pointer font-medium hover:text-foreground'>
+                Jobs still missing?
+              </summary>
+              <p className='mt-2'>
+                Check that your GitHub App sends check_run and workflow_run
+                webhooks to Preflyt. Use manual job details only if you already
+                know the exact identifiers.
+              </p>
+            </details>
+          </div>
+        ) : null}
+        <div className='divide-y rounded-lg border'>
+          {rules.map((rule) => {
+            const binding = bindings.find((item) => item.ruleId === rule.id)
+            const manual = manualRules.includes(rule.id)
+            const recorded =
+              binding &&
+              observed.some(
+                (source) => sourceKey(source) === sourceKey(binding)
+              )
+            return (
+              <div key={rule.id} className='space-y-3 p-4'>
+                <label
+                  id={`ci-job-${rule.id}`}
+                  className='block text-sm font-medium'
                 >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value='none'>No automatic association</SelectItem>
-                  <SelectItem value='check_run'>GitHub check</SelectItem>
-                  <SelectItem value='workflow_run'>GitHub workflow</SelectItem>
-                </SelectContent>
-              </Select>
-              {observed.length > 0 && (
+                  {rule.title}
+                </label>
                 <Select
-                  value=''
-                  onValueChange={(key) => {
-                    const source = observed[Number(key)]
-                    if (source)
-                      update(rule.id, {
-                        ruleId: rule.id,
-                        kind: source.kind,
-                        ...(source.kind === 'check_run'
-                          ? { appId: source.appId, checkName: source.checkName }
-                          : { workflowId: source.workflowId }),
-                      })
+                  disabled={mutation.isPending}
+                  value={
+                    manual ? 'manual' : binding ? sourceKey(binding) : 'none'
+                  }
+                  onValueChange={(value) => {
+                    setManualRules((old) => [
+                      ...old.filter((id) => id !== rule.id),
+                      ...(value === 'manual' ? [rule.id] : []),
+                    ])
+                    if (value === 'none') update(rule.id, null)
+                    else if (value === 'manual')
+                      update(
+                        rule.id,
+                        binding ?? {
+                          ruleId: rule.id,
+                          kind: 'check_run',
+                          appId: '',
+                          checkName: '',
+                        }
+                      )
+                    else {
+                      const source = observed.find(
+                        (item) => sourceKey(item) === value
+                      )
+                      if (source)
+                        update(
+                          rule.id,
+                          source.kind === 'check_run'
+                            ? {
+                                ruleId: rule.id,
+                                kind: source.kind,
+                                appId: source.appId,
+                                checkName: source.checkName,
+                              }
+                            : {
+                                ruleId: rule.id,
+                                kind: source.kind,
+                                workflowId: source.workflowId,
+                              }
+                        )
+                    }
                   }}
                 >
                   <SelectTrigger
-                    aria-label={`Observed source for ${rule.title}`}
+                    aria-labelledby={`ci-job-${rule.id}`}
                     className='w-full'
                   >
-                    <SelectValue placeholder='Use a recorded CI source' />
+                    <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {observed.map((source, i) => (
-                      <SelectItem key={i} value={String(i)}>
-                        {identityLabel(source)}
+                    <SelectItem value='none'>Not connected</SelectItem>
+                    {observed.map((source) => (
+                      <SelectItem
+                        key={sourceKey(source)}
+                        value={sourceKey(source)}
+                      >
+                        {jobName(source)}
+                        {source.kind === 'check_run' &&
+                        observed.filter(
+                          (item) => jobName(item) === jobName(source)
+                        ).length > 1
+                          ? ` · App ${source.appId}`
+                          : ''}
                       </SelectItem>
                     ))}
+                    {binding && !recorded && (
+                      <SelectItem value={sourceKey(binding)}>
+                        {jobName(binding)} · saved
+                      </SelectItem>
+                    )}
+                    <SelectItem value='manual'>
+                      Enter job details manually…
+                    </SelectItem>
                   </SelectContent>
                 </Select>
-              )}
-              {b?.kind === 'check_run' ? (
-                <>
-                  <label className='block space-y-1 text-sm'>
-                    GitHub App ID
-                    <Input
-                      inputMode='numeric'
-                      maxLength={16}
-                      value={b.appId ?? ''}
-                      onChange={(e) =>
-                        update(rule.id, { ...b, appId: e.target.value })
-                      }
-                    />
-                  </label>
-                  <label className='block space-y-1 text-sm'>
-                    Exact check name
-                    <Input
-                      maxLength={256}
-                      value={b.checkName ?? ''}
-                      onChange={(e) =>
-                        update(rule.id, { ...b, checkName: e.target.value })
-                      }
-                    />
-                  </label>
-                </>
-              ) : b?.kind === 'workflow_run' ? (
-                <label className='block space-y-1 text-sm'>
-                  Workflow ID
-                  <Input
-                    inputMode='numeric'
-                    maxLength={16}
-                    value={b.workflowId ?? ''}
-                    onChange={(e) =>
-                      update(rule.id, { ...b, workflowId: e.target.value })
-                    }
-                  />
-                </label>
-              ) : null}
-            </fieldset>
-          )
-        })}
-        {evidence.isError && (
-          <p className='text-xs text-muted-foreground'>
-            Observed sources could not load. You can enter known identifiers
-            directly.
+                {manual && binding && (
+                  <fieldset
+                    disabled={mutation.isPending}
+                    className='space-y-3 rounded-lg bg-muted/20 p-3'
+                  >
+                    <legend className='sr-only'>
+                      Manual details for {rule.title}
+                    </legend>
+                    <label className='block space-y-2 text-xs text-muted-foreground'>
+                      Job type
+                      <Select
+                        value={binding.kind}
+                        onValueChange={(kind) =>
+                          update(
+                            rule.id,
+                            kind === 'check_run'
+                              ? {
+                                  ruleId: rule.id,
+                                  kind,
+                                  appId: '',
+                                  checkName: '',
+                                }
+                              : {
+                                  ruleId: rule.id,
+                                  kind: 'workflow_run',
+                                  workflowId: '',
+                                }
+                          )
+                        }
+                      >
+                        <SelectTrigger
+                          aria-label={`Job type for ${rule.title}`}
+                          className='w-full'
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value='check_run'>
+                            GitHub check
+                          </SelectItem>
+                          <SelectItem value='workflow_run'>
+                            GitHub workflow
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </label>
+                    {binding.kind === 'check_run' ? (
+                      <div className='grid gap-3 sm:grid-cols-[9rem_1fr]'>
+                        <label className='block space-y-2 text-xs text-muted-foreground'>
+                          GitHub App ID
+                          <Input
+                            aria-label={`GitHub App ID for ${rule.title}`}
+                            inputMode='numeric'
+                            maxLength={16}
+                            placeholder='15368'
+                            value={binding.appId ?? ''}
+                            onChange={(event) =>
+                              update(rule.id, {
+                                ...binding,
+                                appId: event.target.value,
+                              })
+                            }
+                          />
+                        </label>
+                        <label className='block space-y-2 text-xs text-muted-foreground'>
+                          Exact check name
+                          <Input
+                            aria-label={`Exact check name for ${rule.title}`}
+                            maxLength={256}
+                            placeholder='Run tests'
+                            value={binding.checkName ?? ''}
+                            onChange={(event) =>
+                              update(rule.id, {
+                                ...binding,
+                                checkName: event.target.value,
+                              })
+                            }
+                          />
+                        </label>
+                      </div>
+                    ) : (
+                      <label className='block space-y-2 text-xs text-muted-foreground'>
+                        Workflow ID
+                        <Input
+                          aria-label={`Workflow ID for ${rule.title}`}
+                          inputMode='numeric'
+                          maxLength={16}
+                          placeholder='12345678'
+                          value={binding.workflowId ?? ''}
+                          onChange={(event) =>
+                            update(rule.id, {
+                              ...binding,
+                              workflowId: event.target.value,
+                            })
+                          }
+                        />
+                      </label>
+                    )}
+                    <p className='text-xs text-muted-foreground'>
+                      Use the identifiers from GitHub. A similar job name is not
+                      a match.
+                    </p>
+                  </fieldset>
+                )}
+              </div>
+            )
+          })}
+        </div>
+        {!!removed.length && (
+          <p
+            role='status'
+            className='rounded-lg border border-warning/20 bg-warning/5 p-3 text-sm text-warning-text'
+          >
+            Saving will remove {removed.length} existing{' '}
+            {removed.length === 1 ? 'connection' : 'connections'}. Checks
+            without a connected job will need other evidence.
           </p>
         )}
+        <p className='text-xs text-muted-foreground'>
+          Saving approves these jobs for the selected standards. It does not run
+          a job or mark a check as passed.
+        </p>
         {mutation.error && (
           <p role='alert' className='text-sm text-destructive'>
             {mutation.error.message}
           </p>
         )}
       </div>
-      <SheetFooter className='border-t'>
-        <p className='text-xs text-muted-foreground'>
-          {bindings.filter((b) => rules.some((r) => r.id === b.ruleId)).length}{' '}
-          rule-to-source connections will be saved in a new version. Saving
-          without connections removes the existing ones.
-        </p>
-        <Button type='submit' disabled={!valid || mutation.isPending}>
-          {mutation.isPending ? 'Saving…' : 'Approve Check sources'}
+      <DialogFooter className='shrink-0 border-t pt-4'>
+        <Button
+          type='button'
+          variant='outline'
+          disabled={mutation.isPending}
+          onClick={onClose}
+        >
+          Cancel
         </Button>
-      </SheetFooter>
+        <Button
+          type='submit'
+          disabled={!valid || !changed || mutation.isPending}
+        >
+          {mutation.isPending ? 'Saving…' : 'Save connections'}
+        </Button>
+      </DialogFooter>
     </form>
   )
 }
+
 export function RepositoryBindings({
   repositoryId,
   canManage,
+  policyId,
 }: {
   repositoryId: string
   canManage: boolean
+  policyId?: string
 }) {
-  const query = useBindings(repositoryId),
-    standards = useStandards(repositoryId)
+  const query = useBindings(repositoryId, policyId)
+  const standards = useStandards(repositoryId, policyId)
   const [editing, setEditing] = useState(false)
-  const saved = query.data
-  const mappings = saved?.binding?.bindings ?? []
-  const importRules =
-    standards.data?.controls.filter(
+  const saved = query.isError ? undefined : query.data
+  const data = standards.isError ? undefined : standards.data
+  const rules =
+    data?.controls.filter(
       (rule) =>
         saved?.supportedRuleIds?.includes(rule.id) ??
         rule.capability === 'import_only'
     ) ?? []
-  const mappedRules = mappings.filter((mapping) =>
-    importRules.some((rule) => rule.id === mapping.ruleId)
-  ).length
-  const workflowCount = mappings.filter(
-    (mapping) => mapping.kind === 'workflow_run'
-  ).length
-  const checkCount = mappings.length - workflowCount
+  const mappings = saved?.binding?.bindings ?? []
+  const ready =
+    !!data?.selection &&
+    data.selectionIntegrity &&
+    !standards.isError &&
+    !!saved
+  const connected = saved?.active
+    ? rules.filter((rule) =>
+        mappings.some((mapping) => mapping.ruleId === rule.id)
+      ).length
+    : 0
   return (
     <Card className='gap-4'>
-      <CardHeader className='flex flex-row flex-wrap items-center gap-4'>
+      <CardHeader className='flex flex-row flex-wrap items-center justify-between gap-3'>
         <div className='flex min-w-0 flex-[1_1_16rem] items-center gap-3'>
           <SurfaceIcon icon={Link2} tone='teal' />
           <div className='min-w-0 space-y-1'>
             <CardTitle asChild>
-              <h2>Check sources</h2>
+              <h2>CI jobs</h2>
             </CardTitle>
             <CardDescription>
-              Choose which CI check or workflow supplies results for each rule.
+              Connect the jobs that run your tests and scans to your standards.
             </CardDescription>
           </div>
         </div>
-        <CardAction className='shrink-0'>
+        <div className='flex flex-wrap items-center gap-2'>
           <Button
             size='icon'
             variant='outline'
-            className='size-8'
-            aria-label='Reload Check sources'
-            disabled={query.isFetching}
+            aria-label='Refresh CI jobs'
+            disabled={query.isFetching || standards.isFetching}
             onClick={() => {
               setEditing(false)
               void query.refetch()
@@ -349,214 +525,145 @@ export function RepositoryBindings({
           >
             <RefreshCw className={query.isFetching ? 'animate-spin' : ''} />
           </Button>
-        </CardAction>
+          {canManage && (
+            <Button
+              size='sm'
+              variant={mappings.length ? 'outline' : 'default'}
+              disabled={!ready || (!rules.length && !mappings.length)}
+              onClick={() => setEditing(true)}
+            >
+              <Link2 />
+              {mappings.length ? 'Edit CI jobs' : 'Connect CI jobs'}
+            </Button>
+          )}
+        </div>
       </CardHeader>
       <CardContent className='space-y-4'>
-        {query.isPending ? (
+        {query.isPending || standards.isPending ? (
           <p role='status' className='text-sm text-muted-foreground'>
-            Loading Check sources…
+            Loading CI connections…
           </p>
-        ) : query.isError ? (
+        ) : query.isError || standards.isError ? (
           <p role='alert' className='text-sm text-destructive'>
-            {query.error.message}
+            {query.isError ? query.error.message : standards.error?.message}
+          </p>
+        ) : !data?.selection ? (
+          <p className='text-sm text-muted-foreground'>
+            Choose standards above first. Then connect the CI jobs that provide
+            their results.
+          </p>
+        ) : !data.selectionIntegrity ? (
+          <p role='alert' className='text-sm text-warning-text'>
+            Saved standards could not be verified. Review them before connecting
+            CI jobs.
           </p>
         ) : (
           <>
-            <div className='flex flex-wrap items-center justify-between gap-3'>
-              <StatusBadge tone={saved?.active ? 'success' : 'warning'}>
-                {saved?.active
-                  ? `Active · revision ${saved.binding?.revision}`
-                  : saved?.binding
-                    ? 'Approve sources again'
-                    : 'No approved sources'}
-              </StatusBadge>
-              {canManage && (
-                <Button
-                  size='sm'
-                  variant='outline'
-                  disabled={
-                    !standards.data?.selection ||
-                    !standards.data.selectionIntegrity ||
-                    standards.isError
-                  }
-                  onClick={() => setEditing(true)}
-                >
-                  <ShieldCheck className='size-3.5' />
-                  {saved?.binding
-                    ? 'Review Check sources'
-                    : 'Configure Check sources'}
-                </Button>
-              )}
-            </div>
-            <div className='grid overflow-hidden rounded-lg border bg-muted/10 sm:grid-cols-3'>
-              <div className='flex items-center gap-3 p-4'>
-                <SurfaceIcon icon={Link2} tone='teal' />
-                <div>
-                  <p className='text-xl leading-none font-semibold tabular-nums'>
-                    {mappings.length}
-                  </p>
-                  <p className='mt-1.5 text-xs text-muted-foreground'>
-                    Connected checks
-                  </p>
-                </div>
-              </div>
-              <div className='flex items-center gap-3 border-t p-4 sm:border-s sm:border-t-0'>
-                <SurfaceIcon icon={ListChecks} tone='blue' />
-                <div>
-                  <p className='text-xl leading-none font-semibold tabular-nums'>
-                    {standards.isPending ||
-                    standards.isError ||
-                    standards.data?.selectionIntegrity === false
-                      ? '—'
-                      : `${saved?.active ? mappedRules : 0} / ${importRules.length}`}
-                  </p>
-                  <p className='mt-1.5 text-xs text-muted-foreground'>
-                    Current checks connected
-                  </p>
-                </div>
-              </div>
-              <div className='flex items-center gap-3 border-t p-4 sm:border-s sm:border-t-0'>
-                <SurfaceIcon icon={Workflow} tone='violet' />
-                <div>
-                  <p className='text-xl leading-none font-semibold tabular-nums'>
-                    {workflowCount}
-                    <span className='mx-1 text-sm text-muted-foreground'>
-                      /
-                    </span>
-                    {checkCount}
-                  </p>
-                  <p className='mt-1.5 text-xs text-muted-foreground'>
-                    Workflows / checks
-                  </p>
-                </div>
-              </div>
-            </div>
-            {standards.data?.selectionIntegrity === false && (
-              <p
-                role='alert'
-                className='rounded-lg border border-warning/20 bg-warning/5 p-3 text-xs text-warning-text'
-              >
-                Saved standards need review before current check connections can
-                be interpreted.
+            {!!rules.length && (
+              <p className='text-sm text-muted-foreground'>
+                {connected} of {rules.length} checks connected
+                {!canManage && connected < rules.length
+                  ? '. Ask an administrator to connect the missing jobs.'
+                  : '.'}
               </p>
-            )}
-            {standards.isError ? (
-              <p
-                role='alert'
-                className='rounded-lg border border-danger/20 bg-danger/5 p-3 text-xs text-danger-text'
-              >
-                {standards.error.message}
-              </p>
-            ) : (
-              !standards.isPending &&
-              !standards.data?.selection && (
-                <p className='rounded-lg border border-info/20 bg-info/5 px-3 py-2.5 text-xs text-info-text'>
-                  Adopt standards to configure and approve source mappings.
-                </p>
-              )
             )}
             {saved?.binding && !saved.active && (
-              <p
-                role='status'
-                className='rounded-lg border border-warning/20 bg-warning/5 px-3 py-2.5 text-xs text-warning-text'
-              >
-                Standards changed. Review these Check sources and approve them
-                again for your current selection.
-              </p>
+              <div className='flex flex-wrap items-center gap-2 rounded-lg border border-warning/20 bg-warning/5 p-3 text-sm'>
+                <StatusBadge tone='warning'>Needs review</StatusBadge>
+                <p>Standards changed. Review and save the CI jobs again.</p>
+              </div>
             )}
-            {mappings.length ? (
+            {rules.length ? (
               <ul className='divide-y rounded-lg border'>
-                {mappings.map((mapping) => {
-                  const Icon =
-                    mapping.kind === 'workflow_run' ? Workflow : GitBranch
+                {rules.map((rule) => {
+                  const mapping = mappings.find(
+                    (item) => item.ruleId === rule.id
+                  )
                   return (
                     <li
-                      key={mapping.ruleId}
-                      className='flex items-start gap-3 px-4 py-3'
+                      key={rule.id}
+                      className='flex flex-wrap items-center justify-between gap-3 px-4 py-3'
                     >
-                      <span className='flex size-7 shrink-0 items-center justify-center rounded-md bg-chart-2/10 text-chart-2'>
-                        <Icon className='size-3.5' />
-                      </span>
-                      <div className='min-w-0 flex-1'>
-                        <p className='text-sm font-medium'>
-                          {standards.data?.controls.find(
-                            (rule) => rule.id === mapping.ruleId
-                          )?.title ?? mapping.ruleId}
-                        </p>
-                        <p className='mt-0.5 text-xs break-all text-muted-foreground'>
-                          {identityLabel(mapping)}
+                      <div className='min-w-0 flex-[1_1_14rem] space-y-1'>
+                        <p className='text-sm font-medium'>{rule.title}</p>
+                        <p className='text-xs break-words text-muted-foreground'>
+                          {mapping
+                            ? jobName(mapping)
+                            : 'Choose the CI job that runs this check.'}
                         </p>
                       </div>
-                      <span className='rounded-md border px-2 py-0.5 text-[10px] whitespace-nowrap text-muted-foreground'>
-                        {mapping.kind === 'workflow_run' ? 'Workflow' : 'Check'}
-                      </span>
+                      <StatusBadge
+                        tone={mapping && saved?.active ? 'success' : 'warning'}
+                      >
+                        {mapping
+                          ? saved?.active
+                            ? 'Connected'
+                            : 'Needs review'
+                          : 'Not connected'}
+                      </StatusBadge>
                     </li>
                   )
                 })}
               </ul>
             ) : (
-              <div className='flex items-center gap-3 rounded-lg border border-dashed px-4 py-5'>
-                <Link2 className='size-5 shrink-0 text-muted-foreground' />
-                <div>
-                  <p className='text-sm font-medium'>No checks connected</p>
-                  <p className='mt-1 text-xs text-muted-foreground'>
-                    CI results remain available without an automatic connection
-                    between a result source and a check.
+              <p className='text-sm text-muted-foreground'>
+                These standards do not need CI job connections.
+              </p>
+            )}
+            <p className='text-xs text-muted-foreground'>
+              Preflyt uses results from the jobs you select. Connecting a job
+              does not run it or prove that a check passed.
+            </p>
+            {!!saved?.binding && (
+              <details className='group border-t pt-3'>
+                <summary className='inline-flex cursor-pointer list-none items-center gap-1 text-xs text-muted-foreground hover:text-foreground [&::-webkit-details-marker]:hidden'>
+                  Connection details
+                  <ChevronDown className='size-3 transition-transform group-open:rotate-180' />
+                </summary>
+                <div className='mt-3 space-y-3 text-xs text-muted-foreground'>
+                  <p>
+                    Version {saved.binding.revision} · Saved{' '}
+                    <RelativeTime value={saved.binding.createdAt} />
+                  </p>
+                  <ul className='space-y-2'>
+                    {mappings.map((mapping) => (
+                      <li key={mapping.ruleId}>
+                        {data.controls.find(
+                          (rule) => rule.id === mapping.ruleId
+                        )?.title ?? mapping.ruleId}
+                        : {identityLabel(mapping)}
+                      </li>
+                    ))}
+                  </ul>
+                  <p>
+                    Existing assessments keep their saved connections and
+                    evidence.
                   </p>
                 </div>
-              </div>
+              </details>
             )}
-            <details className='group border-t pt-3'>
-              <summary className='inline-flex cursor-pointer list-none items-center gap-1 text-xs text-muted-foreground hover:text-foreground [&::-webkit-details-marker]:hidden'>
-                Approval details and history
-                <ChevronDown className='size-3 transition-transform group-open:rotate-180' />
-              </summary>
-              <div className='mt-3 space-y-3 text-xs text-muted-foreground'>
-                {saved?.binding && (
-                  <dl className='grid gap-x-4 gap-y-2 sm:grid-cols-[max-content_1fr]'>
-                    <dt>Connection version</dt>
-                    <dd className='font-medium text-foreground'>
-                      {saved.binding.revision}
-                    </dd>
-                    <dt>Approved</dt>
-                    <dd className='text-foreground'>
-                      <RelativeTime value={saved.binding.createdAt} />
-                    </dd>
-                    <dt>Selection ID</dt>
-                    <dd className='font-mono break-all'>
-                      {saved.binding.selectionId}
-                    </dd>
-                  </dl>
-                )}
-                <p>
-                  Matching sources identify where results came from; they do not
-                  verify which tools ran. New revisions preserve existing saved
-                  assessments.
-                </p>
-              </div>
-            </details>
           </>
         )}
       </CardContent>
-      <Sheet open={editing} onOpenChange={setEditing}>
-        <SheetContent className='gap-0 sm:max-w-lg'>
-          <SheetHeader>
-            <SheetTitle>Approve Check sources</SheetTitle>
-            <SheetDescription>
-              Review mappings for the current standards selection.
-            </SheetDescription>
-          </SheetHeader>
-          {saved && standards.data?.selection && (
+      <Dialog open={editing && ready && canManage} onOpenChange={setEditing}>
+        <DialogContent className='flex max-h-[85svh] flex-col sm:max-w-2xl'>
+          <DialogHeader className='shrink-0 text-start'>
+            <DialogTitle>Connect CI jobs</DialogTitle>
+            <DialogDescription>
+              For each check, choose the job that provides its result.
+            </DialogDescription>
+          </DialogHeader>
+          {saved && data?.selection && (
             <BindingEditor
-              key={`${standards.data.selection.id}:${saved.binding?.id ?? 'none'}`}
+              key={`${data.selection.id}:${saved.binding?.id ?? 'none'}`}
               repositoryId={repositoryId}
-              standards={standards.data}
+              standards={data}
               saved={saved}
-              onSaved={() => setEditing(false)}
+              onClose={() => setEditing(false)}
             />
           )}
-        </SheetContent>
-      </Sheet>
+        </DialogContent>
+      </Dialog>
     </Card>
   )
 }

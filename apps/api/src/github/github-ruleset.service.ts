@@ -17,6 +17,7 @@ export class GitHubRulesetService {
     session: AuthenticatedSession,
     repositoryId: string,
     page: number,
+    refresh = false,
   ) {
     if (!Number.isInteger(page) || page < 1 || page > 1000)
       throw new BadRequestException("Invalid ruleset page");
@@ -29,6 +30,7 @@ export class GitHubRulesetService {
       repository.installationId,
       repository.githubId,
       page,
+      refresh,
     );
     await this.access.requireRepository(session, repositoryId, "policy.read");
     return result;

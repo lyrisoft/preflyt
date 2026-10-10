@@ -6,9 +6,9 @@ Open **Administration → Teams**. Owners and Admins can create teams from exist
 
 1. Create a local team, or discover/import a GitHub team. Imports are read-only and start with no approved repository policy scope.
 2. Review repositories and explicitly select policy scope. Only authorized, selected repositories are available.
-3. In Standards & policies, choose exact standard versions, a profile and an explicit branch. Preview added checks and conflicts.
+3. Open **Policies**, choose **Apply standards to → Team**, then select the team. Choose exact standard versions, a requirement level and an explicit branch. Preview added checks and conflicts. The same assignment remains available in Teams → Standards & policies.
 4. Apply the unchanged preview to create repository standards selections and policy drafts together. Concurrent changes require another preview.
-5. Review CI source mappings for the new selections, produce fresh assessments, then approve and publish through Policies. Normal independent approval and the audited local Super Admin exception still apply. Ruleset activation remains its separate approved workflow.
+5. Review check sources for the new selections, produce fresh assessments, then approve and publish through Policies. Normal independent approval and the audited local Super Admin exception still apply. Ruleset activation remains its separate approved workflow.
 
 Effective impact links to repository policy status. Published does not mean all checks passed. Assessments and gates retain their existing exact-commit evidence rules; missing required evidence remains incomplete.
 
@@ -26,6 +26,20 @@ Back up the database, run `pnpm --filter @preflyt/api prisma:migrate`, regenerat
 
 Limits: 500 teams per organization; 100 members and scoped repositories per local team; 100 assignments per team; at most five composed packs. GitHub reads are bounded to 1,000 entries per directory and 2 MB per response; exceeding limits fails without partial reconciliation. Team list pages contain 20 rows, detail lists 10; Activity exposes the most recent 100 events.
 
-Use **Organization baseline** to create one shared policy group covering all currently selected repositories. Preview and apply standards through the existing flow. New repository scope requires explicit approval and reapplication; repository edits cannot weaken or silently bypass a baseline. In Standards & policies, select **Upgrade** for an active assignment, choose exact versions, preview and apply. Upgrades retain old assignment records, supersede the old contribution and create new policy drafts. Existing published definitions remain immutable and old inherited sources become stale until reviewed publication. Checks and profile cannot be removed or lowered through an upgrade. Nested scope expansion and scope-removal waivers remain pending. Neither assignment nor import activates GitHub enforcement automatically. Fixture verification does not establish live GitHub import acceptance.
+Use **Organization baseline** to create one shared policy group covering all currently selected repositories. Preview and apply standards through the existing flow. New repository scope requires explicit approval and reapplication; repository edits cannot weaken or silently bypass a baseline. In Standards & policies, select **Upgrade** for an active assignment, choose exact versions, preview and apply. Upgrades retain old assignment records, supersede the old contribution and create new policy drafts. Existing published definitions remain immutable and old inherited sources become stale until reviewed publication. Checks and profile cannot be removed or lowered through an upgrade. Nested scope expansion uses the explicit child-scope review below; scope-removal waivers remain pending. Neither assignment nor import activates GitHub enforcement automatically. Fixture verification does not establish live GitHub import acceptance.
 
 Manual removal of a covered repository is blocked while the team has an active standards assignment. A normal team edit cannot bypass inherited requirements. Scope expansion remains explicit and invalidates earlier policy sources. Reviewed scope-removal exceptions are still pending; this safeguard does not implement or claim exception approval. GitHub access loss continues to mark source evidence unavailable and block publication without deleting scope history.
+
+## Review child team repositories
+
+In the team's Repositories tab, choose child teams, select **Preview scope**, review the exact repository union and select **Approve scope**. This records approved child versions and repository associations. It does not grant access, change an existing policy or activate a GitHub ruleset. Reapply standards through the existing preview and assignment flow to create policy drafts for the expanded scope.
+
+The API requires current management access to every repository. Imported GitHub parents accept only current direct GitHub children from the same organization and installation; sync must be fresh. Child scope changes or revoked repository access invalidate inherited policy evidence until reviewed again. Existing published history is preserved. Cycles are rejected; one review supports up to ten children, eight levels, 100 visited teams and 100 repositories. Removing approved child coverage remains blocked until reviewed exceptions are available.
+
+Migration `20261010143000_reviewed_nested_team_scope` adds one JSONB field with an empty default. Existing teams retain their current scope. It creates no background scope expansion or execution service.
+
+## Assigning organization standards from Policies
+
+Choose **Apply standards to → Organization**. If the organization scope has not been prepared, review the currently selected repository list and explicitly choose **Prepare organization scope**. This uses the existing organization-baseline API and requires management authority over every included repository. Opening the page never creates or expands scope. New repositories remain outside the baseline until reviewed in Teams.
+
+Once scope exists, choose standards and preview each repository before creating drafts. The same server impact hash, inheritance checks and independent approval rules apply to both team and organization assignments. Creating drafts does not publish a policy or activate GitHub rules. **Review** beside a repository takes you to its branch policies; after publication, **Review merge protection** opens the existing ruleset draft review.

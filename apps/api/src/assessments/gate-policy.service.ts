@@ -1,4 +1,8 @@
-import { verifyTeamContext } from '../teams/team-context.js';
+import { sameIdentity } from '../auth/same-identity.js';
+import { inheritedTeamStandards, verifyTeamContext } from '../teams/team-context.js';
+import { composeTeamStandards } from '../teams/team-composition.js';
+import { organizationCatalogue } from '../standards/organization-standards.service.js';
+import { currentStandards, policySelectionId } from '../standards/policy-standards.js';
 import { executionContracts } from "./execution-contract.js";
 import { recordPolicyNotification } from "../notifications/notification-event.js";
 import {
@@ -12,12 +16,14 @@ import { PrismaService } from "../prisma/prisma.service.js";
 import { AuthorizationService } from "../auth/authorization.service.js";
 import type { AuthenticatedSession } from "../auth/session.guard.js";
 import {
+  catalogueVersions,
   adoptionProfiles,
   assessmentAiChecks,
   posture,
   resolvePacks,
   type AdoptionProfile,
   type PackRef,
+  type StandardPack,
 } from "../standards/catalogue.js";
 import { digest } from "./assessment-digest.js";
 
@@ -117,6 +123,13 @@ export function composeGatePolicy(
   };
 }
 
+export type PolicyDraftInput = {
+  expectedSelectionId?: string;
+  standards?: { profile: AdoptionProfile; packs: { id: string; version: string; digest: string }[] };
+  branchRef: string;
+  requiredRules: string[];
+};
+
 @Injectable()
 export class GatePolicyService {
   constructor(
@@ -198,27 +211,17 @@ export class GatePolicyService {
   async draft(
     session: AuthenticatedSession,
     githubId: string,
-    body: {
-      expectedSelectionId: string;
-      branchRef: string;
-      requiredRules: string[];
-    },
+    body: PolicyDraftInput,
   ) {
     return this.change(
       session,
       githubId,
       "policy.draft",
       async (tx, repositoryId) => {
-        const selection = await tx.repositoryStandardsSelection.findFirst({
-          where: { repositoryId },
-          orderBy: { revision: "desc" },
-        });
-        if (!selection || selection.id !== body.expectedSelectionId)
-          throw new ConflictException(
-            "Adopt or reload the current standards baseline first",
-          );
+        const selection = await this.draftStandards(tx, repositoryId, session.organizationId!, body);
         const definition = {
           ...composeGatePolicy(selection, body.branchRef, body.requiredRules),
+          ...(body.standards ? { standardsSource: 'POLICY' } : {}),
           ...(selection.teamContext ? { teamContext: selection.teamContext } : {}),
           organizationId: session.organizationId!,
           repositoryGithubId: githubId,
@@ -249,12 +252,7 @@ export class GatePolicyService {
     session: AuthenticatedSession,
     githubId: string,
     id: string,
-    body: {
-      expectedHash: string;
-      expectedSelectionId: string;
-      branchRef: string;
-      requiredRules: string[];
-    },
+    body: PolicyDraftInput & { expectedHash: string },
   ) {
     return this.change(
       session,
@@ -278,16 +276,10 @@ export class GatePolicyService {
           throw new BadRequestException(
             "Create a new policy to target a different branch",
           );
-        const selection = await tx.repositoryStandardsSelection.findFirst({
-          where: { repositoryId },
-          orderBy: { revision: "desc" },
-        });
-        if (!selection || selection.id !== body.expectedSelectionId)
-          throw new ConflictException(
-            "Standards changed. Reload before saving the draft.",
-          );
+        const selection = await this.draftStandards(tx, repositoryId, session.organizationId!, body);
         const definition = {
           ...composeGatePolicy(selection, policy.branchRef, body.requiredRules),
+          ...(body.standards ? { standardsSource: 'POLICY' } : {}),
           ...(selection.teamContext ? { teamContext: selection.teamContext } : {}),
           organizationId: session.organizationId!,
           repositoryGithubId: githubId,
@@ -347,7 +339,7 @@ export class GatePolicyService {
         );
         if (policy.state !== "DRAFT")
           throw new ConflictException("Policy is not awaiting approval");
-        const selfApproval = policy.draftedById === session.identityId;
+        const selfApproval = await sameIdentity(tx, policy.draftedById, session.identityId);
         if (selfApproval && !(await this.isSuperAdmin(tx, session.identityId)))
           throw new ConflictException(
             "Independent policy approval is required",
@@ -395,7 +387,7 @@ export class GatePolicyService {
         if (
           policy.state !== "APPROVED" ||
           !policy.approvedById ||
-          (policy.approvedById === policy.draftedById &&
+          (await sameIdentity(tx, policy.approvedById, policy.draftedById) &&
             (policy.approvalKind !== "SUPER_ADMIN_SELF_APPROVAL" ||
               !(await this.isSuperAdmin(tx, policy.approvedById))))
         )
@@ -444,6 +436,33 @@ export class GatePolicyService {
       },
     );
   }
+  private async draftStandards(tx: any, repositoryId: string, organizationId: string, body: PolicyDraftInput) {
+    if (!body.standards) {
+      const selection = await tx.repositoryStandardsSelection.findFirst({ where: { repositoryId }, orderBy: { revision: 'desc' } });
+      if (!selection || selection.id !== body.expectedSelectionId)
+        throw new ConflictException('Standards changed. Refresh and try again.');
+      return selection;
+    }
+    if (body.expectedSelectionId !== undefined)
+      throw new BadRequestException('Choose policy standards or repository defaults, not both');
+    const { profile, packs } = body.standards;
+    if (!adoptionProfiles.includes(profile) || !Array.isArray(packs) || !packs.length || packs.length > 5 || new Set(packs.map(p => p.id)).size !== packs.length)
+      throw new BadRequestException('Choose between one and five standards');
+    const library = [...catalogueVersions, ...await organizationCatalogue(tx, organizationId)];
+    const frozen = packs.map(ref => {
+      const pack = library.find(p => p.id === ref.id && p.version === ref.version);
+      if (!pack || pack.digest !== ref.digest)
+        throw new ConflictException('A selected standard changed or is unavailable. Refresh and choose it again.');
+      return { id: pack.id, version: pack.version, digest: pack.digest,
+        ...(pack.id.startsWith('org-standard-') ? { definition: Object.fromEntries(Object.entries(pack).filter(([key]) => !['versionId', 'createdAt'].includes(key))) as unknown as StandardPack } : {}) };
+    }).sort((a, b) => a.id.localeCompare(b.id));
+    const inherited = await inheritedTeamStandards(tx, repositoryId, organizationId);
+    const composed = composeTeamStandards([...inherited.sources, { label: 'Branch policy', profile, packs: frozen }]);
+    if (composed.conflicts.length) throw new ConflictException(composed.conflicts.join('; '));
+    // Include organization/team requirements automatically, rather than asking the user to select them again.
+    const selection = { profile: composed.profile, packs: composed.packs, teamContext: inherited.context };
+    return { ...selection, id: policySelectionId(repositoryId, body.branchRef, selection) };
+  }
   private async isSuperAdmin(tx: any, identityId: string) {
     const member = await tx.membership.findUnique({ where: { identityId } });
     return !!member?.active && member.role === "SUPER_ADMIN";
@@ -459,10 +478,7 @@ export class GatePolicyService {
       where: { id, repositoryId, organizationId: session.organizationId! },
     });
     if (!policy) throw new NotFoundException("Policy is unavailable");
-    const selection = await tx.repositoryStandardsSelection.findFirst({
-      where: { repositoryId },
-      orderBy: { revision: "desc" },
-    });
+    const selection = await currentStandards(tx, repositoryId, { policyId: id, allowDraft: true });
     if (
       policy.definitionHash !== expectedHash ||
       digest(policy.definition) !== policy.definitionHash ||

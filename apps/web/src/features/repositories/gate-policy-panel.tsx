@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link } from '@tanstack/react-router'
 import {
   ArrowRight,
   CheckCheck,
   GitBranch,
   Info,
   Layers,
-  ListChecks,
   Plus,
   Pencil,
   ShieldCheck,
@@ -31,6 +31,13 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
   Sheet,
   SheetContent,
   SheetDescription,
@@ -50,9 +57,9 @@ import { StatusBadge } from '@/components/status-badge'
 import { SurfaceIcon } from '@/components/surface-icon'
 import { engineeringPath, engineeringRead } from './engineering-queries'
 import { policyActions } from './policy-actions'
-import { useStandards } from './repository-queries'
+import { useStandards, type Pack, type Standards } from './repository-queries'
 
-type Revision = {
+export type Revision = {
   id: string
   branchRef: string
   revision: number
@@ -62,6 +69,9 @@ type Revision = {
   draftedById: string
   approvedById: string | null
   definition: {
+    standardsSource?: string
+    adoptionProfile?: string
+    overrides?: string[]
     teamContext?: { teamId: string; teamName?: string; assignmentId: string }[]
     aiChecks?: {
       id: string
@@ -81,7 +91,7 @@ type Revision = {
     }[]
   }
 }
-type Policies = {
+export type Policies = {
   currentSelectionId: string | null
   truncated: boolean
   revisions: Revision[]
@@ -95,17 +105,7 @@ const stateLabel: Record<string, string> = {
 }
 function PolicyState({ policy, stale }: { policy: Revision; stale: boolean }) {
   return (
-    <StatusBadge
-      tone={
-        stale || policy.state === 'DRAFT'
-          ? 'warning'
-          : policy.state === 'PUBLISHED'
-            ? 'success'
-            : policy.state === 'APPROVED'
-              ? 'info'
-              : 'neutral'
-      }
-    >
+    <StatusBadge tone={stale ? 'warning' : 'neutral'}>
       {stale ? 'Standards changed' : (stateLabel[policy.state] ?? policy.state)}
     </StatusBadge>
   )
@@ -116,16 +116,27 @@ export function GatePolicyPanel({
   canPublish,
   actorId,
   platformAdmin = false,
+  initialPolicyId,
+  initialBranch = '',
 }: {
   repositoryId: string
   canDraft: boolean
   canPublish: boolean
   actorId?: string
   platformAdmin?: boolean
+  initialPolicyId?: string
+  initialBranch?: string
 }) {
   const [draftOpen, setDraftOpen] = useState(false)
   const [editing, setEditing] = useState<Revision | null>(null)
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(
+    initialPolicyId ?? null
+  )
+  const [draftPacks, setDraftPacks] = useState<Pack[]>([])
+  const [profile, setProfile] = useState('RECOMMENDED')
+  const [draftCatalogue, setDraftCatalogue] = useState<Pack[] | null>(null)
+  const [loadingEdit, setLoadingEdit] = useState(false)
+  const [page, setPage] = useState(1)
   const [branch, setBranch] = useState('')
   const [required, setRequired] = useState<string[]>([])
   const client = useQueryClient(),
@@ -160,12 +171,13 @@ export function GatePolicyPanel({
       }
       return response.json() as Promise<Revision>
     },
-    onSuccess: async (_result, { path }) => {
+    onSuccess: async (result, { path }) => {
       await client.invalidateQueries({ queryKey: key })
       if (!path || path.endsWith('/edit')) {
         setDraftOpen(false)
         setBranch('')
         setRequired([])
+        setSelectedId(result.id)
       }
       toast.success(
         !path
@@ -182,7 +194,9 @@ export function GatePolicyPanel({
     ? undefined
     : query.data?.revisions.find((policy) => policy.id === selectedId)
   const stale =
-    !!selected && selected.selectionId !== query.data?.currentSelectionId
+    !!selected &&
+    selected.definition.standardsSource !== 'POLICY' &&
+    selected.selectionId !== query.data?.currentSelectionId
   const actions = selected
     ? policyActions({
         state: selected.state,
@@ -198,13 +212,99 @@ export function GatePolicyPanel({
     (policy) =>
       policy.branchRef === selected?.branchRef && policy.state === 'PUBLISHED'
   )
-  const optionalRules =
-    standards.data?.controls.filter((rule) => !rule.required) ?? []
+  const catalogue = draftCatalogue ?? standards.data?.catalogue ?? []
+  const groups = [
+    ...new Map(
+      catalogue.map((pack) => [
+        pack.id,
+        catalogue.filter((v) => v.id === pack.id),
+      ])
+    ).values(),
+  ]
+  const draftRules = [
+    ...new Map(
+      draftPacks
+        .flatMap((pack) => pack.rules)
+        .map((rule) => [
+          rule.id,
+          { ...rule, required: rule.requiredIn.includes(profile) },
+        ])
+    ).values(),
+  ]
+  const optionalRules = draftRules.filter((rule) => !rule.required)
+  const validDraft =
+    !!branch.trim() &&
+    draftPacks.length > 0 &&
+    draftPacks.length <= 5 &&
+    (draftCatalogue !== null || (!standards.isPending && !standards.isError))
+  const togglePack = (pack: Pack, checked: boolean) => {
+    setRequired([])
+    setDraftPacks((previous) =>
+      checked
+        ? [...previous.filter((p) => p.id !== pack.id), pack]
+        : previous.filter((p) => p.id !== pack.id)
+    )
+  }
+  const openEdit = async (policy: Revision) => {
+    mutation.reset()
+    setLoadingEdit(true)
+    try {
+      const data = await client.fetchQuery({
+        queryKey: ['repository-standards', repositoryId, policy.id],
+        staleTime: 0,
+        queryFn: ({ signal }) =>
+          engineeringRead<Standards>(
+            repositoryId,
+            `/standards?policy=${encodeURIComponent(policy.id)}`,
+            signal
+          ),
+      })
+      if (!data.selectionIntegrity)
+        throw new Error(
+          'Saved standards could not be verified. Create a new policy.'
+        )
+      setDraftCatalogue(data.catalogue)
+      setDraftPacks(
+        policy.definition.packs.flatMap((ref) =>
+          data.catalogue.filter(
+            (pack) => pack.id === ref.id && pack.version === ref.version
+          )
+        )
+      )
+      setProfile(policy.definition.adoptionProfile ?? 'RECOMMENDED')
+      setBranch(branchName(policy.branchRef))
+      setRequired(policy.definition.overrides ?? [])
+      setEditing(policy)
+      setSelectedId(null)
+      setDraftOpen(true)
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : 'Could not load policy standards'
+      )
+    } finally {
+      setLoadingEdit(false)
+    }
+  }
   const openDraft = () => {
     mutation.reset()
     setEditing(null)
-    setBranch('')
+    setDraftCatalogue(null)
+    setBranch(initialBranch)
     setRequired([])
+    setProfile(standards.data?.selection?.profile ?? 'RECOMMENDED')
+    const suggested =
+      standards.data?.selection?.packs ?? standards.data?.recommendations ?? []
+    setDraftPacks(
+      suggested
+        .flatMap((ref) =>
+          (standards.data?.catalogue ?? []).filter(
+            (p) => p.id === ref.id && p.version === ref.version
+          )
+        )
+        .slice(0, 5)
+    )
     setDraftOpen(true)
   }
   const openReview = (id: string) => {
@@ -227,11 +327,10 @@ export function GatePolicyPanel({
             <SurfaceIcon icon={ShieldCheck} />
             <div className='min-w-0 space-y-1'>
               <CardTitle asChild>
-                <h2>Policy revisions</h2>
+                <h2>Branch policies</h2>
               </CardTitle>
               <CardDescription>
-                Versioned branch policies. Approval requires a different
-                authorized reviewer.
+                Create a draft, review it, then approve and publish.
               </CardDescription>
             </div>
           </div>
@@ -242,7 +341,8 @@ export function GatePolicyPanel({
               disabled={
                 query.isPending ||
                 query.isError ||
-                !query.data?.currentSelectionId
+                standards.isPending ||
+                standards.isError
               }
             >
               <Plus className='size-4' aria-hidden='true' />
@@ -278,16 +378,14 @@ export function GatePolicyPanel({
                 </p>
               )}
               {!query.data.revisions.length ? (
-                <div className='flex flex-col items-center gap-2 rounded-xl border border-dashed bg-muted/20 px-6 py-10 text-center'>
+                <div className='flex flex-col items-center gap-2 rounded-xl border border-dashed bg-muted/20 px-4 py-10 text-center'>
                   <Layers
                     className='mb-1 size-8 text-info'
                     aria-hidden='true'
                   />
                   <p className='text-sm font-medium'>No branch policies yet</p>
                   <p className='max-w-sm text-sm text-muted-foreground'>
-                    {query.data.currentSelectionId
-                      ? 'Create a policy from your saved standards, then ask another authorized reviewer to approve it.'
-                      : 'Save a standards selection above to start creating branch policies.'}
+                    Choose a branch and the standards it should follow.
                   </p>
                 </div>
               ) : (
@@ -306,68 +404,98 @@ export function GatePolicyPanel({
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {query.data.revisions.map((policy) => (
-                        <TableRow key={policy.id}>
-                          <TableCell className='pl-4'>
-                            <span className='flex items-center gap-2 font-medium'>
-                              <GitBranch
-                                className='size-4 shrink-0 text-info'
-                                aria-hidden='true'
-                              />
-                              <span
-                                className='max-w-64 truncate'
-                                title={branchName(policy.branchRef)}
-                              >
-                                {branchName(policy.branchRef)}
+                      {query.data.revisions
+                        .slice((page - 1) * 5, page * 5)
+                        .map((policy) => (
+                          <TableRow key={policy.id}>
+                            <TableCell className='pl-4'>
+                              <span className='flex items-center gap-2 font-medium'>
+                                <GitBranch
+                                  className='size-4 shrink-0 text-info'
+                                  aria-hidden='true'
+                                />
+                                <span
+                                  className='max-w-64 truncate'
+                                  title={branchName(policy.branchRef)}
+                                >
+                                  {branchName(policy.branchRef)}
+                                </span>
                               </span>
-                            </span>
-                          </TableCell>
-                          <TableCell className='text-muted-foreground tabular-nums'>
-                            v{policy.revision}
-                          </TableCell>
-                          <TableCell>
-                            <span className='font-medium tabular-nums'>
-                              {
-                                policy.definition.rules.filter(
-                                  (rule) => rule.required
-                                ).length
-                              }
-                            </span>
-                            <span className='ml-1 text-xs text-muted-foreground'>
-                              required
-                            </span>
-                          </TableCell>
-                          <TableCell className='text-muted-foreground tabular-nums'>
-                            {policy.definition.packs.length}
-                          </TableCell>
-                          <TableCell>
-                            <PolicyState
-                              policy={policy}
-                              stale={
-                                policy.selectionId !==
-                                query.data.currentSelectionId
-                              }
-                            />
-                          </TableCell>
-                          <TableCell className='pr-4 text-right'>
-                            <Button
-                              variant='ghost'
-                              size='sm'
-                              onClick={() => openReview(policy.id)}
-                              aria-label={`Review ${branchName(policy.branchRef)} version ${policy.revision}`}
-                            >
-                              Review
-                              <ArrowRight
-                                className='size-4'
-                                aria-hidden='true'
+                            </TableCell>
+                            <TableCell className='text-muted-foreground tabular-nums'>
+                              v{policy.revision}
+                            </TableCell>
+                            <TableCell>
+                              <span className='font-medium tabular-nums'>
+                                {
+                                  policy.definition.rules.filter(
+                                    (rule) => rule.required
+                                  ).length
+                                }
+                              </span>
+                              <span className='ml-1 text-xs text-muted-foreground'>
+                                required
+                              </span>
+                            </TableCell>
+                            <TableCell className='text-muted-foreground tabular-nums'>
+                              {policy.definition.packs.length}
+                            </TableCell>
+                            <TableCell>
+                              <PolicyState
+                                policy={policy}
+                                stale={
+                                  policy.definition.standardsSource !==
+                                    'POLICY' &&
+                                  policy.selectionId !==
+                                    query.data.currentSelectionId
+                                }
                               />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                            </TableCell>
+                            <TableCell className='pr-4 text-right'>
+                              <Button
+                                variant='ghost'
+                                size='sm'
+                                onClick={() => openReview(policy.id)}
+                                aria-label={`Review ${branchName(policy.branchRef)} version ${policy.revision}`}
+                              >
+                                Review
+                                <ArrowRight
+                                  className='size-4'
+                                  aria-hidden='true'
+                                />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
                     </TableBody>
                   </Table>
                 </div>
+              )}
+              {query.data.revisions.length > 5 && (
+                <nav
+                  aria-label='Policy revision pages'
+                  className='flex flex-wrap items-center justify-end gap-2'
+                >
+                  <Button
+                    size='sm'
+                    variant='outline'
+                    disabled={page <= 1}
+                    onClick={() => setPage(page - 1)}
+                  >
+                    Previous
+                  </Button>
+                  <span className='text-xs text-muted-foreground'>
+                    Page {page} of {Math.ceil(query.data.revisions.length / 5)}
+                  </span>
+                  <Button
+                    size='sm'
+                    variant='outline'
+                    disabled={page * 5 >= query.data.revisions.length}
+                    onClick={() => setPage(page + 1)}
+                  >
+                    Next
+                  </Button>
+                </nav>
               )}
               <div className='flex items-start gap-2 text-xs text-muted-foreground'>
                 <Info
@@ -375,8 +503,9 @@ export function GatePolicyPanel({
                   aria-hidden='true'
                 />
                 <p>
-                  These policies do not block merges or change assessment
-                  results. Assessments still use the saved standards selection.
+                  Publishing lets Preflyt evaluate PRs against the approved
+                  policy. GitHub blocks merging only after merge protection is
+                  explicitly activated.
                 </p>
               </div>
             </>
@@ -390,29 +519,37 @@ export function GatePolicyPanel({
           if (!mutation.isPending) setDraftOpen(open)
         }}
       >
-        <DialogContent className='sm:max-w-lg'>
+        <DialogContent className='max-h-[90dvh] overflow-y-auto sm:max-w-2xl'>
           <DialogHeader>
             <DialogTitle>
               {editing ? 'Edit policy draft' : 'New branch policy'}
             </DialogTitle>
             <DialogDescription>
-              Use the latest saved standards. Optional checks can be made
-              required.
+              Choose a branch and its standards. You can review the policy
+              before publishing.
             </DialogDescription>
           </DialogHeader>
           <form
-            className='space-y-5'
+            className='space-y-6'
             onSubmit={(event) => {
               event.preventDefault()
+              if (!validDraft || mutation.isPending) return
               const name = branch.trim()
               mutation.mutate({
                 path: editing ? `/${encodeURIComponent(editing.id)}/edit` : '',
                 body: {
                   ...(editing ? { expectedHash: editing.definitionHash } : {}),
-                  expectedSelectionId: query.data?.currentSelectionId,
                   branchRef: name.startsWith('refs/heads/')
                     ? name
                     : `refs/heads/${name}`,
+                  standards: {
+                    profile,
+                    packs: draftPacks.map(({ id, version, digest }) => ({
+                      id,
+                      version,
+                      digest,
+                    })),
+                  },
                   requiredRules: required,
                 },
               })
@@ -434,64 +571,152 @@ export function GatePolicyPanel({
                 onChange={(event) => setBranch(event.target.value)}
                 required
               />
-              <p className='text-xs text-muted-foreground'>
-                Enter the target branch in this repository.
-              </p>
             </div>
-            <div className='rounded-lg border bg-muted/20 p-3'>
-              <p className='flex items-center gap-2 text-sm font-medium'>
-                <ListChecks className='size-4 text-info' aria-hidden='true' />
-                Saved standards
-              </p>
-              <p className='mt-1 text-xs text-muted-foreground'>
-                {standards.isPending
-                  ? 'Loading requirements…'
-                  : standards.isError
-                    ? 'Requirements are unavailable. Retry below.'
-                    : `${standards.data?.controls.filter((rule) => rule.required).length ?? 0} required checks · ${standards.data?.selection?.packs.length ?? 0} standards`}
-              </p>
-              {standards.isError && (
-                <Button
-                  type='button'
-                  size='sm'
-                  variant='ghost'
-                  onClick={() => void standards.refetch()}
-                >
-                  Reload standards
-                </Button>
-              )}
-            </div>
-            {!!optionalRules.length && (
-              <fieldset className='space-y-3'>
-                <legend className='mb-2 text-sm font-medium'>
-                  Additional requirements
-                </legend>
-                <p className='text-xs text-muted-foreground'>
-                  Choose optional checks to make required. Existing required
-                  checks cannot be removed.
+            <fieldset className='space-y-3'>
+              <legend className='text-sm font-medium'>
+                Standards{' '}
+                <span className='ml-2 text-xs text-muted-foreground'>
+                  {draftPacks.length} of 5 selected
+                </span>
+              </legend>
+              <div className='max-h-72 divide-y overflow-y-auto rounded-xl border'>
+                {groups.map((versions) => {
+                  const selectedPack = draftPacks.find(
+                    (p) => p.id === versions[0].id
+                  )
+                  const pack = selectedPack ?? versions[0]
+                  return (
+                    <div
+                      key={pack.id}
+                      className='flex flex-wrap items-center gap-3 p-4'
+                    >
+                      <label className='flex min-w-0 flex-1 cursor-pointer items-center gap-3 text-sm'>
+                        <Checkbox
+                          checked={!!selectedPack}
+                          disabled={!selectedPack && draftPacks.length >= 5}
+                          onCheckedChange={(checked) =>
+                            togglePack(pack, checked === true)
+                          }
+                        />
+                        <span className='min-w-0'>
+                          <span className='block font-medium'>
+                            {pack.title}
+                          </span>
+                          <span className='text-xs text-muted-foreground'>
+                            {pack.rules.length} checks
+                            {pack.aiChecks?.length
+                              ? ` · ${pack.aiChecks.length} AI reviews`
+                              : ''}
+                          </span>
+                        </span>
+                      </label>
+                      {versions.length > 1 ? (
+                        <Select
+                          value={pack.version}
+                          onValueChange={(version) =>
+                            togglePack(
+                              versions.find((p) => p.version === version)!,
+                              true
+                            )
+                          }
+                          disabled={!selectedPack && draftPacks.length >= 5}
+                        >
+                          <SelectTrigger
+                            aria-label={`${pack.title} version`}
+                            className='w-28'
+                          >
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {versions.map((v) => (
+                              <SelectItem key={v.version} value={v.version}>
+                                v{v.version}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <span className='text-xs text-muted-foreground'>
+                          v{pack.version}
+                        </span>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+              {!groups.length && (
+                <p role='status' className='text-sm text-muted-foreground'>
+                  No standards available. Create a standard on the Standards
+                  page.
                 </p>
-                {optionalRules.map((rule) => (
-                  <label
-                    key={rule.id}
-                    className='flex cursor-pointer items-center gap-3 rounded-lg border p-3 text-sm'
+              )}
+              <p className='text-xs text-muted-foreground'>
+                Organization and team requirements are included automatically.
+                Existing policies keep their saved versions.
+              </p>
+            </fieldset>
+            <details className='rounded-xl border p-4'>
+              <summary className='cursor-pointer text-sm font-medium'>
+                Check requirements
+              </summary>
+              <div className='mt-4 space-y-4'>
+                <label className='block space-y-2 text-sm'>
+                  Requirement level
+                  <Select
+                    value={profile}
+                    onValueChange={(value) => {
+                      setProfile(value)
+                      setRequired([])
+                    }}
                   >
-                    <Checkbox
-                      checked={required.includes(rule.id)}
-                      onCheckedChange={(checked) =>
-                        setRequired((previous) =>
-                          checked === true
-                            ? [...new Set([...previous, rule.id])]
-                            : previous.filter((id) => id !== rule.id)
-                        )
-                      }
-                    />
-                    {rule.title}
-                  </label>
-                ))}
-              </fieldset>
-            )}
+                    <SelectTrigger
+                      className='mt-2 w-full'
+                      aria-label='Requirement level'
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {['DEFAULT', 'RECOMMENDED', 'STRICT'].map((value) => (
+                        <SelectItem key={value} value={value}>
+                          {value === 'DEFAULT'
+                            ? 'Default'
+                            : value === 'STRICT'
+                              ? 'Strict'
+                              : 'Recommended'}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </label>
+                {!!optionalRules.length && (
+                  <fieldset className='space-y-3'>
+                    <legend className='mb-2 text-sm'>
+                      Make additional checks required
+                    </legend>
+                    {optionalRules.map((rule) => (
+                      <label
+                        key={rule.id}
+                        className='flex items-center gap-3 text-sm'
+                      >
+                        <Checkbox
+                          checked={required.includes(rule.id)}
+                          onCheckedChange={(checked) =>
+                            setRequired((previous) =>
+                              checked === true
+                                ? [...new Set([...previous, rule.id])]
+                                : previous.filter((id) => id !== rule.id)
+                            )
+                          }
+                        />
+                        {rule.title}
+                      </label>
+                    ))}
+                  </fieldset>
+                )}
+              </div>
+            </details>
             {failure}
-            <DialogFooter>
+            <DialogFooter className='gap-3 border-t pt-4'>
               <Button
                 type='button'
                 variant='outline'
@@ -502,19 +727,13 @@ export function GatePolicyPanel({
               </Button>
               <Button
                 type='submit'
-                disabled={
-                  mutation.isPending ||
-                  !branch.trim() ||
-                  !query.data?.currentSelectionId ||
-                  standards.isPending ||
-                  standards.isError
-                }
+                disabled={mutation.isPending || !validDraft}
               >
                 {mutation.isPending
                   ? 'Saving…'
                   : editing
                     ? 'Save draft'
-                    : 'Create draft'}
+                    : 'Create policy'}
               </Button>
             </DialogFooter>
           </form>
@@ -723,10 +942,30 @@ export function GatePolicyPanel({
                   </p>
                 )}
                 {selected.state === 'PUBLISHED' && (
-                  <p className='flex items-center gap-2 text-sm text-success'>
-                    <CheckCheck className='size-4' aria-hidden='true' />
-                    Policy published
-                  </p>
+                  <div className='space-y-3'>
+                    <p className='flex items-center gap-2 text-sm text-success'>
+                      <CheckCheck className='size-4' aria-hidden='true' />
+                      Policy published
+                    </p>
+                    <p className='text-xs text-muted-foreground'>
+                      Review check sources and a fresh assessment before
+                      requesting merge protection. GitHub ruleset activation has
+                      its own impact review and approval.
+                    </p>
+                    <Button size='sm' variant='outline' asChild>
+                      <Link
+                        to='/quality-gates'
+                        search={{
+                          repository: repositoryId,
+                          gate: 'rulesets',
+                          rulesetView: 'drafts',
+                        }}
+                      >
+                        Review merge protection
+                        <ArrowRight className='size-4' />
+                      </Link>
+                    </Button>
+                  </div>
                 )}
                 <div className='flex flex-wrap justify-end gap-2'>
                   <Button
@@ -739,30 +978,8 @@ export function GatePolicyPanel({
                   {canDraft && selected.state === 'DRAFT' && (
                     <Button
                       variant='outline'
-                      disabled={
-                        mutation.isPending ||
-                        standards.isPending ||
-                        standards.isError ||
-                        !query.data?.currentSelectionId
-                      }
-                      onClick={() => {
-                        mutation.reset()
-                        setEditing(selected)
-                        setBranch(branchName(selected.branchRef))
-                        setRequired(
-                          selected.definition.rules
-                            .filter(
-                              (rule) =>
-                                rule.required &&
-                                optionalRules.some(
-                                  (optional) => optional.id === rule.id
-                                )
-                            )
-                            .map((rule) => rule.id)
-                        )
-                        setSelectedId(null)
-                        setDraftOpen(true)
-                      }}
+                      disabled={mutation.isPending || loadingEdit}
+                      onClick={() => void openEdit(selected)}
                     >
                       <Pencil className='size-4' aria-hidden='true' />
                       Edit draft

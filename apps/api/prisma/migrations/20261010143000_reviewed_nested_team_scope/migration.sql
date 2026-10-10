@@ -1,0 +1,1 @@
+ALTER TABLE "PreflytTeam" ADD COLUMN "nestedScope" JSONB NOT NULL DEFAULT '[]';

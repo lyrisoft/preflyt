@@ -56,5 +56,5 @@ it('keeps platform operations accessible without granting organization administr
     true
   ).flatMap((g) => g.items)
   expect(items.map((i) => i.title)).toContain('Access Control')
-  expect(items.map((i) => i.title)).not.toContain('Settings')
+  expect(items.map((i) => i.title)).toContain('Settings')
 })

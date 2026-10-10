@@ -52,7 +52,7 @@ it('offers an explicit upgrade without counting historical versions as extra pac
     .element(page.getByText('Ask a workspace administrator', { exact: false }))
     .toBeVisible()
   await expect
-    .element(page.getByRole('img', { name: '1 of 1 catalogue packs saved' }))
+    .element(page.getByText('v1.0.0 · 1 check', { exact: true }))
     .toBeVisible()
   expect(state.data.selection).toMatchObject({ packs: [{ version: '1.0.0' }] })
 })

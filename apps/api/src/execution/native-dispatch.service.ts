@@ -1,3 +1,4 @@
+import { currentStandards } from '../standards/policy-standards.js'
 import { recordNativeExecutionFailure } from '../notifications/notification-event.js'
 import { configurationValue } from '../configuration/runtime-configuration.js'
 import { digest } from '../assessments/assessment-digest.js'
@@ -82,10 +83,7 @@ export class NativeDispatchService {
         'execution.run',
       )
       const selection =
-        await this.prisma.repositoryStandardsSelection.findFirst({
-          where: { repositoryId: repo.id },
-          orderBy: { revision: 'desc' },
-        })
+        await currentStandards(this.prisma, repo.id, { expectedId: row.selectionId })
       if (selection?.id !== row.selectionId)
         throw new Error('Native standards changed')
       const preflight = await this.status.status(
@@ -113,10 +111,7 @@ export class NativeDispatchService {
           'execution.run',
         )
         const latestSelection =
-          await this.prisma.repositoryStandardsSelection.findFirst({
-            where: { repositoryId: repo.id },
-            orderBy: { revision: 'desc' },
-          })
+          await currentStandards(this.prisma, repo.id, { expectedId: row.selectionId })
         if (
           latestSelection?.id !== row.selectionId ||
           (row.sourceHash && row.sourceHash !== source.sourceHash) ||

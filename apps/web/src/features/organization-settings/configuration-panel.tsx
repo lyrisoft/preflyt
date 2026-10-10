@@ -142,14 +142,14 @@ export function ConfigurationPanel() {
       {data.restartRequired && (
         <p
           role='status'
-          className='flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-5 py-4 text-sm text-amber-900 dark:text-amber-200'
+          className='flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-4 text-sm text-amber-900 dark:text-amber-200'
         >
           <RotateCw className='mt-0.5 size-4 shrink-0' />
           Restart the API and worker to apply saved connection changes.
         </p>
       )}
-      <div className='grid items-start gap-6 lg:grid-cols-[240px_minmax(0,1fr)]'>
-        <aside className='rounded-xl border bg-muted/20 p-5'>
+      <div className='grid items-start gap-4 lg:grid-cols-[240px_minmax(0,1fr)]'>
+        <aside className='rounded-xl border bg-muted/20 p-4'>
           <div className='mb-5 flex items-center gap-3'>
             <SurfaceIcon icon={SlidersHorizontal} tone='blue' />
             <div>
@@ -176,11 +176,11 @@ export function ConfigurationPanel() {
           </div>
         </aside>
         <section className='overflow-hidden rounded-xl border bg-card shadow-xs'>
-          <div className='flex items-center gap-3 border-b bg-muted/20 px-6 py-5'>
+          <div className='flex items-center gap-3 border-b bg-muted/20 px-4 py-3'>
             <SurfaceIcon icon={groupIcon} tone='teal' />
             <h3 className='text-base font-semibold'>{group}</h3>
           </div>
-          <div className='grid gap-x-8 gap-y-6 p-6 md:grid-cols-2'>
+          <div className='grid gap-x-6 gap-y-4 p-4 md:grid-cols-2'>
             {fields
               .filter((field) => field.kind !== 'boolean')
               .map((field) => {

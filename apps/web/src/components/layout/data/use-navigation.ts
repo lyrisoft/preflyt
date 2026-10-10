@@ -9,12 +9,14 @@ export function useNavigation() {
     sidebarData.navGroups,
     session.data?.role,
     !!session.data?.platformAdmin
-  ).map((group) => ({
-    ...group,
-    items: group.items.filter(
-      (item) =>
-        item.url !== '/contributors' ||
-        canPerform(session.data, 'contributors.read')
-    ),
-  }))
+  )
+    .map((group) => ({
+      ...group,
+      items: group.items.filter(
+        (item) =>
+          item.url !== '/contributors' ||
+          canPerform(session.data, 'contributors.read')
+      ),
+    }))
+    .filter((group) => group.items.length > 0)
 }

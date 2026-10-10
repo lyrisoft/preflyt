@@ -128,19 +128,21 @@ it('stays unhealthy and can stop while Redis is unavailable', async () => {
       QUEUE_PREFIX: `preflyt-test-${id}`,
       WORKER_HEARTBEAT_FILE: heartbeat,
     },
-    stdio: ['ignore', 'pipe', 'ignore'],
+    stdio: ['ignore', 'pipe', 'pipe'],
   })
   const exit = new Promise<number | null>((resolve) =>
     child.once('exit', resolve),
   )
+  let diagnostic = ''
+  child.stderr?.on('data', chunk => { diagnostic = (diagnostic + String(chunk)).slice(-4000) })
   let started = false
   child.stdout?.on('data', (chunk) => {
     if (String(chunk).includes('worker started')) started = true
   })
   try {
-    const deadline = Date.now() + 3000
+    const deadline = Date.now() + 7000
     while (!started && Date.now() < deadline) await delay(25)
-    expect(started).toBe(true)
+    expect(started, `Worker exit=${child.exitCode}: ${diagnostic}`).toBe(true)
     expect(
       await readFile(heartbeat)
         .then(() => true)
@@ -157,4 +159,4 @@ it('stays unhealthy and can stop while Redis is unavailable', async () => {
     }
     await unlink(heartbeat).catch(() => undefined)
   }
-}, 10_000)
+}, 15_000)

@@ -451,3 +451,32 @@ it('serializes simultaneous publication requests across durable leases', async (
   expect((await first).status).toBe(201)
   expect(github.publishReadinessCheck).toHaveBeenCalledTimes(1)
 })
+
+it('combines manual and automatic checks into the latest row per PR with scoped pagination', async () => {
+  await db.gitHubCheckPublication.create({ data: {
+    id: 'older-manual', repositoryId, organizationId, assessmentId,
+    prNumber: 7, sourceSha: sha, installationId: '50', previewHash: 'a'.repeat(64),
+    conclusion: 'success', state: 'PUBLISHED', leaseToken: 'private-lease', actorId: author,
+    updatedAt: new Date('2026-01-01T00:00:00Z'),
+  } })
+  await db.readinessTask.createMany({ data: Array.from({ length: 21 }, (_, index) => ({
+    id: `automatic-${index}`, repositoryId, prNumber: index + 7,
+    assessmentId, sourceSha: sha, branchRef: 'refs/heads/development',
+    state: index === 0 ? 'UNKNOWN' : 'PUBLISHED', conclusion: 'success',
+    leaseToken: 'private-automation-lease',
+    updatedAt: new Date('2026-01-02T00:00:00Z'),
+  })) })
+  const first = (await get(viewer, `${base}/results?page=1`).expect(200)).body
+  expect(first.publications).toHaveLength(20)
+  expect(first.hasMore).toBe(true)
+  const second = (await get(viewer, `${base}/results?page=2`).expect(200)).body
+  expect(second.publications).toHaveLength(1)
+  expect(second.hasMore).toBe(false)
+  const rows = [...first.publications, ...second.publications]
+  expect(new Set(rows.map((row: any) => row.prNumber)).size).toBe(21)
+  expect(rows.find((row: any) => row.prNumber === 7)).toMatchObject({ id: 'automatic-0', state: 'UNKNOWN', branchRef: 'refs/heads/development' })
+  expect(JSON.stringify(rows)).not.toContain('private-')
+  expect(rows.some((row: any) => row.id === 'older-manual')).toBe(false)
+  await get(outsider, `${base}/results`).expect(403)
+  await get(viewer, `${base}/results?page=0`).expect(400)
+})

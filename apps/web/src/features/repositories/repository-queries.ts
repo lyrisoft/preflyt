@@ -69,13 +69,13 @@ export type Standards = {
   controls: StandardsControl[]
 }
 
-export function useStandards(repositoryId: string) {
+export function useStandards(repositoryId: string, policyId?: string) {
   return useQuery<Standards>({
-    queryKey: ['repository-standards', repositoryId],
+    queryKey: policyId ? ['repository-standards', repositoryId, policyId] : ['repository-standards', repositoryId],
     retry: false,
     queryFn: ({ signal }) =>
       read<Standards>(
-        repositoryPath(repositoryId, '/standards'),
+        repositoryPath(repositoryId, `/standards${policyId ? `?policy=${encodeURIComponent(policyId)}` : ''}`),
         signal,
         () =>
           'Could not load standards. Check repository selection and account access.'

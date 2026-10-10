@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { sidebarData } from '../../components/layout/data/sidebar-data'
-import { authorizedNavigation } from './navigation-policy'
+import { authorizedNavigation, primaryDestination } from './navigation-policy'
 import { workspaceSearchSchema } from './search-schema'
 
 const titles = (role?: string) =>
@@ -8,7 +8,7 @@ const titles = (role?: string) =>
     group.items.map((item) => item.title)
   )
 describe('enterprise navigation permissions and scope', () => {
-  it('keeps all specified groups and entries for administrators', () => {
+  it('keeps the familiar sidebar groups and all direct destinations for administrators', () => {
     expect(sidebarData.navGroups.map((group) => group.title)).toEqual([
       'Workspace',
       'Governance',
@@ -22,8 +22,8 @@ describe('enterprise navigation permissions and scope', () => {
         'Assessments',
         'Findings',
         'Contributors',
-        'Quality Gates',
-        'Engineering Standards',
+        'Merge Protection',
+        'Standards',
         'Policies',
         'AI Intelligence',
         'Skills',
@@ -33,14 +33,36 @@ describe('enterprise navigation permissions and scope', () => {
         'Settings',
       ])
     }
+    const routes = sidebarData.navGroups.flatMap((group) =>
+      group.items.map((item) => item.url)
+    )
+    expect(new Set(routes).size).toBe(routes.length)
   })
-  it('fails closed for unknown roles and hides administration actions from readers', () => {
+  it('keeps personal settings available without granting administrative access', () => {
     for (const role of [undefined, 'VIEWER', 'DEVELOPER', 'UNKNOWN']) {
       expect(titles(role)).not.toContain('Access Control')
-      expect(titles(role)).not.toContain('Settings')
+      expect(titles(role)).toContain('Settings')
       expect(titles(role)).toContain('Integrations')
+      expect(titles(role)).toContain('Skills')
     }
-    expect(sidebarData.navGroups[3].items).toHaveLength(4)
+  })
+  it('highlights each page under its direct sidebar entry', () => {
+    for (const [path, parent] of [
+      ['/repositories/123?tab=assessments', '/apps'],
+      ['/contributors/person?days=30', '/contributors'],
+      ['/assessments?repository=123', '/assessments'],
+      ['/quality-gates?repository=123', '/quality-gates'],
+      ['/policies', '/policies'],
+      ['/standards', '/standards'],
+      ['/teams/team-id', '/teams'],
+      ['/intelligence', '/intelligence'],
+      ['/skills', '/skills'],
+      ['/integrations', '/integrations'],
+      ['/organization-settings?tab=notifications', '/organization-settings'],
+      ['/findings', '/findings'],
+    ])
+      expect(primaryDestination(path)).toBe(parent)
+    expect(primaryDestination('/teams-other')).toBe('/teams-other')
   })
   it('distinguishes unfinished modules and excludes theme demo routes', () => {
     const items = sidebarData.navGroups.flatMap((group) => group.items)
@@ -55,6 +77,22 @@ describe('enterprise navigation permissions and scope', () => {
     expect(workspaceSearchSchema.parse({ repository: '1097527174' })).toEqual({
       repository: '1097527174',
     })
+    expect(
+      workspaceSearchSchema.parse({
+        repository: 1097527174,
+        assessment: 'report',
+      })
+    ).toMatchObject({ repository: '1097527174', assessment: 'report' })
+    for (const repository of [
+      -1,
+      1.5,
+      Number.MAX_SAFE_INTEGER + 1,
+      { id: 123 },
+    ]) {
+      expect(
+        workspaceSearchSchema.parse({ repository }).repository
+      ).toBeUndefined()
+    }
     expect(
       workspaceSearchSchema.parse({ repository: ['invalid'] }).repository
     ).toBeUndefined()

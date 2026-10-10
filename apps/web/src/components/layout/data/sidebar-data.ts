@@ -55,12 +55,12 @@ export const sidebarData: SidebarData = {
       title: 'Governance',
       items: [
         {
-          title: 'Quality Gates',
+          title: 'Merge Protection',
           url: '/quality-gates',
           icon: ShieldCheck,
           badge: 'Preview',
         },
-        { title: 'Engineering Standards', url: '/standards', icon: BookOpen },
+        { title: 'Standards', url: '/standards', icon: BookOpen },
         { title: 'Policies', url: '/policies', icon: SlidersHorizontal },
       ],
     },
@@ -91,7 +91,6 @@ export const sidebarData: SidebarData = {
           title: 'Settings',
           url: '/organization-settings',
           icon: Settings,
-          adminOnly: true,
         },
       ],
     },

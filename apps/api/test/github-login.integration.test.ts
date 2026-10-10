@@ -1,3 +1,4 @@
+import { sameIdentity } from '../src/auth/same-identity.js'
 import { GitHubWebhookService } from '../src/github-events/github-webhook.service.js'
 import { createHmac } from 'node:crypto'
 import { GitHubCredentialService } from '../src/auth/github-credential.service.js'
@@ -155,6 +156,7 @@ beforeAll(async () => {
   access = new AuthorizationService(db, userAccess)
 }, 30000)
 beforeEach(async () => {
+  await db.identityLoginLink.deleteMany()
   await db.teamPolicyAssignment.deleteMany()
   await db.teamRepositoryScope.deleteMany()
   await db.teamMember.deleteMany()
@@ -785,4 +787,66 @@ it('uses refreshed credential expiry when onboarding completes after the access 
     expect(await auth.currentSession(entered.sessionToken)).toMatchObject({ authenticated: true, role: 'OWNER' })
     expect(refresh).toHaveBeenCalledTimes(1)
   } finally { refresh.mockRestore() }
+})
+
+async function legacyProof() {
+  const original = await onboard()
+  await db.identity.create({ data: { issuer: 'fixture', subject: 'remaining-owner', organizationMemberships: { create: { organizationId: original.current.organizationId!, role: 'OWNER' } } } })
+  const legacy = await db.identity.create({ data: { issuer: 'https://legacy-oidc.test', subject: 'existing', membership: { create: { role: 'VIEWER' } }, organizationMemberships: { create: { organizationId: original.current.organizationId!, role: 'ADMIN' } } } })
+  const token = randomBytes(32).toString('base64url')
+  await db.webSession.create({ data: { identityId: legacy.id, tokenHash: hash(token), activeOrganizationId: original.current.organizationId!, expiresAt: new Date(Date.now() + 3600000) } })
+  const begun = await login.begin('identity-link', '/organization-settings', undefined, token)
+  const proof = await login.complete(new URL(begun.url).searchParams.get('state')!, begun.browserBinding, 'fixture-code')
+  return { original, legacy, token, proof }
+}
+it('links recent OIDC and GitHub proofs without combining access or rewriting historical actors', async () => {
+  const f = await legacyProof()
+  const preview = await login.identityLinkDetails(f.proof.challengeToken, f.token)
+  expect(preview).toMatchObject({ previousAccessCount: 1, retainedAccessCount: 1 })
+  await expect(login.enter(f.proof.challengeToken, '41', 'http://localhost:5173')).rejects.toThrow('Confirm account linking')
+  await expect(login.confirmIdentityLink(f.proof.challengeToken, f.token, preview.previewHash, 'https://foreign.test')).rejects.toThrow()
+  await login.confirmIdentityLink(f.proof.challengeToken, f.token, preview.previewHash, 'http://localhost:5173')
+  expect(await db.gitHubUserAccount.findFirst()).toMatchObject({ identityId: f.legacy.id })
+  expect(await db.organizationMembership.findFirst({ where: { identityId: f.original.current.identityId } })).toMatchObject({ active: false, role: 'OWNER' })
+  expect(await db.organizationMembership.findFirst({ where: { identityId: f.legacy.id } })).toMatchObject({ active: true, role: 'ADMIN' })
+  expect(await auth.currentSession(f.original.session.sessionToken)).toEqual({ authenticated: false })
+  expect(await sameIdentity(db, f.legacy.id, f.original.current.identityId)).toBe(true)
+  expect(await db.auditEvent.findFirst({ where: { event: 'github_login_succeeded' } })).toMatchObject({ actorId: f.original.current.identityId })
+  await expect(login.confirmIdentityLink(f.proof.challengeToken, f.token, preview.previewHash, 'http://localhost:5173')).rejects.toThrow()
+  const next = await callback()
+  const challenge = await db.gitHubOnboardingChallenge.findFirstOrThrow({ where: { tokenHash: hash(next.challengeToken) }, include: { account: true } })
+  expect(challenge.account.identityId).toBe(f.legacy.id)
+})
+it('rejects wrong-session, stale access preview and old legacy proof before linking', async () => {
+  const f = await legacyProof()
+  const preview = await login.identityLinkDetails(f.proof.challengeToken, f.token)
+  await expect(login.identityLinkDetails(f.proof.challengeToken, f.original.session.sessionToken)).rejects.toThrow()
+  await db.organizationMembership.updateMany({ where: { identityId: f.legacy.id }, data: { role: 'VIEWER' } })
+  await expect(login.confirmIdentityLink(f.proof.challengeToken, f.token, preview.previewHash, 'http://localhost:5173')).rejects.toThrow('access changed')
+  expect(await db.identityLoginLink.count()).toBe(0)
+  await db.webSession.updateMany({ where: { identityId: f.legacy.id }, data: { createdAt: new Date(Date.now() - 301000) } })
+  await expect(login.begin('identity-link', '/', undefined, f.token)).rejects.toThrow('Sign in again')
+})
+it('recovers an ownerless linked workspace only after explicit selection and fresh GitHub owner proof', async () => {
+  const f = await onboard()
+  await db.organizationMembership.updateMany({ where: { organizationId: f.current.organizationId! }, data: { active: false } })
+  const proof = await callback()
+  expect(await login.organizations(proof.challengeToken)).toMatchObject({ organizations: [{ state: 'recovery_available' }] })
+  await expect(login.enter(proof.challengeToken, '41', 'http://localhost:5173')).rejects.toThrow('administrator has not granted')
+  provider.verify.mockResolvedValueOnce({ ...(await provider.verify()), owner: false })
+  await expect(login.enter(proof.challengeToken, '41', 'http://localhost:5173', undefined, true)).rejects.toThrow('verified GitHub organization owner')
+  const recovered = await login.enter(proof.challengeToken, '41', 'http://localhost:5173', undefined, true)
+  expect(await auth.currentSession(recovered.sessionToken)).toMatchObject({ authenticated: true, role: 'OWNER', organizationId: f.current.organizationId })
+  expect(await db.auditEvent.count({ where: { event: 'github_owner_recovered' } })).toBe(1)
+  const again = await callback()
+  await expect(login.enter(again.challengeToken, '41', 'http://localhost:5173', undefined, true)).rejects.toThrow('no active Owner')
+})
+
+it('prevents linking from leaving a workspace without an Owner and permits cancellation', async () => {
+  const f = await legacyProof()
+  await db.organizationMembership.updateMany({ where: { identity: { subject: 'remaining-owner' } }, data: { active: false } })
+  await expect(login.identityLinkDetails(f.proof.challengeToken, f.token)).rejects.toThrow('Assign another workspace Owner')
+  expect(await db.identityLoginLink.count()).toBe(0)
+  await login.cancelIdentityLink(f.proof.challengeToken, f.token)
+  await expect(login.identityLinkDetails(f.proof.challengeToken, f.token)).rejects.toThrow()
 })

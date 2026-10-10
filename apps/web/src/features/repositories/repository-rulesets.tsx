@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   ArrowUpRight,
@@ -102,7 +102,9 @@ function RulesetDrawer({
         signal
       ),
     enabled: id !== null,
-    staleTime: 60_000,
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
+    refetchOnWindowFocus: false,
     retry: false,
   })
   const ruleset = detail.isError ? undefined : detail.data?.ruleset
@@ -259,6 +261,7 @@ export function RepositoryRulesets({
   canDraft,
   canManage,
   repositoryName,
+  initialView = 'github',
 }: {
   repositoryId: string
   actorId?: string
@@ -266,26 +269,36 @@ export function RepositoryRulesets({
   canDraft: boolean
   canManage: boolean
   repositoryName: string
+  initialView?: 'github' | 'drafts' | 'deployments'
 }) {
-  const [view, setView] = useState('github')
+  const [view, setView] = useState<string>(initialView)
   const [page, setPage] = useState(1)
   const [selected, setSelected] = useState<number | null>(null)
+  const refreshRequested = useRef(false)
   const query = useQuery({
     queryKey: ['github-rulesets', actorId, repositoryId, page],
-    queryFn: ({ signal }) =>
-      read<{
+    queryFn: async ({ signal }) => {
+      const refresh = refreshRequested.current
+      refreshRequested.current = false
+      return read<{
         rulesets: Summary[]
         hasMore: boolean
         page: number
         fetchedAt: string
-      }>(`/github/repositories/${repositoryId}/rulesets?page=${page}`, signal),
+      }>(
+        `/github/repositories/${repositoryId}/rulesets?page=${page}${refresh ? '&refresh=true' : ''}`,
+        signal
+      )
+    },
     enabled: canRead && view === 'github',
-    staleTime: 60_000,
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
+    refetchOnWindowFocus: false,
     retry: false,
   })
   if (!canRead)
     return (
-      <p role='alert' className='rounded-xl border p-5 text-sm'>
+      <p role='alert' className='rounded-xl border p-4 text-sm'>
         You need permission to view policies for this repository.
       </p>
     )
@@ -316,7 +329,10 @@ export function RepositoryRulesets({
               variant='outline'
               size='sm'
               disabled={query.isFetching}
-              onClick={() => void query.refetch()}
+              onClick={() => {
+                refreshRequested.current = true
+                void query.refetch()
+              }}
             >
               <RefreshCw className='size-4' />
               Refresh

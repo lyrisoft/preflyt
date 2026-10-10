@@ -77,7 +77,7 @@ export class GitHubProviderService {
   private async installationToken(
     installationId: bigint,
     repositoryId?: bigint,
-    permission: 'contents' | 'pull_requests' | 'metadata' | 'actions' | 'administration' | 'members' = 'contents',
+    permission: 'contents' | 'pull_requests' | 'metadata' | 'actions' | 'checks' | 'administration' | 'members' = 'contents',
   ) {
     const installation = await this.prisma?.gitHubInstallation.findUnique({
       where: { id: installationId },
@@ -393,6 +393,7 @@ export class GitHubProviderService {
     load: (
       reader: Awaited<ReturnType<GitHubProviderService['openRepository']>>,
     ) => Promise<T>,
+    refresh = false,
   ) {
     // Even cached responses require current installation and repository access.
     const reader = await this.openRepository(
@@ -405,7 +406,7 @@ export class GitHubProviderService {
       select: { accessRevision: true },
     })
     const key = `github-rulesets:v1:${this.requireAppId()}:${installationId}:${repositoryId}:${access?.accessRevision ?? 0}:${suffix}`
-    const cached = await this.cache?.get(key)
+    const cached = refresh ? undefined : await this.cache?.get(key)
     if (cached) {
       try {
         return JSON.parse(cached) as T
@@ -413,9 +414,9 @@ export class GitHubProviderService {
         /* Re-read malformed cache. */
       }
     }
-    return this.limiter.singleFlight(key, async () => {
+    return this.limiter.singleFlight(`${key}:${refresh ? 'refresh' : 'read'}`, async () => {
       const result = await load(reader)
-      await this.cache?.set(key, JSON.stringify(result), 60)
+      await this.cache?.set(key, JSON.stringify(result), 300)
       return result
     })
   }
@@ -423,6 +424,7 @@ export class GitHubProviderService {
     installationId: bigint,
     repositoryId: bigint,
     page = 1,
+    refresh = false,
   ) {
     if (!Number.isInteger(page) || page < 1 || page > 1000)
       throw new BadRequestException('Invalid ruleset page')
@@ -445,6 +447,7 @@ export class GitHubProviderService {
           fetchedAt: new Date().toISOString(),
         }
       },
+      refresh,
     )
   }
   async getRepositoryRuleset(
@@ -862,7 +865,7 @@ export class GitHubProviderService {
   async readPublishedReadinessCheck(installationId: bigint, repositoryId: bigint, checkRunId: string, sourceSha: string) {
     if (!/^[1-9]\d{0,15}$/.test(checkRunId)) throw new BadRequestException('Invalid readiness check ID')
     const {appId}=await this.checkPublicationAccess(installationId)
-    const reader=await this.openRepository(installationId, repositoryId, 'metadata')
+    const reader=await this.openRepository(installationId, repositoryId, 'checks')
     const run=await reader.request<Record<string,any>>(`/repos/${encodeURIComponent(reader.metadata.owner.login)}/${encodeURIComponent(reader.metadata.name)}/check-runs/${checkRunId}`)
     if(String(run.id)!==checkRunId || String(run.app?.id)!==appId || run.head_sha!==sourceSha || run.name!=='Preflyt / Engineering Readiness' || run.status!=='completed')throw new ServiceUnavailableException('Current readiness check could not be verified')
     return {appId, conclusion:run.conclusion, externalId:run.external_id, output:run.output}
@@ -1123,7 +1126,7 @@ export class GitHubProviderService {
   private async openRepository(
     installationId: bigint,
     repositoryId: bigint,
-    permission: 'contents' | 'pull_requests' | 'metadata' | 'actions' | 'administration' = 'contents',
+    permission: 'contents' | 'pull_requests' | 'metadata' | 'actions' | 'checks' | 'administration' = 'contents',
     externalSignal?: AbortSignal,
   ) {
     try {

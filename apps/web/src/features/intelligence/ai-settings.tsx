@@ -33,6 +33,13 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { AppHeader } from '@/components/layout/app-header'
 import { Main } from '@/components/layout/main'
@@ -165,9 +172,12 @@ const testName = (status: string) =>
     MODEL_UNAVAILABLE: 'Model unavailable',
     UNAVAILABLE: 'Connection unavailable',
   })[status] ?? 'Not tested'
-const selectClass =
-  'h-9 w-full min-w-0 rounded-md border bg-background px-3 text-sm focus-visible:outline-2 focus-visible:outline-ring'
 const help = [
+  {
+    title: 'Set up AI reviews',
+    content:
+      'Connect a model, add its token prices and test the connection. In Model Router, assign it to the stage you want to review and set a daily budget. Choose a skill in Skills, approve and enable it, then add it as an AI Review in a standard. AI reviews are optional suggestions and do not change check results. Repository code is shared only when you enable it.',
+  },
   {
     title: 'Markdown skill files',
     content:
@@ -181,12 +191,12 @@ const help = [
   {
     title: 'Model router',
     content:
-      'Each stage has a primary model and an optional fallback. Source sharing starts off. A connection must be enabled and successfully tested within the last 24 hours before its route is ready. Switching organizations separates connections and routes.',
+      'Assign a model to each stage where you want AI reviews. Start with Repository or Pull requests. Each stage has a primary model and an optional fallback. Token limits are under Advanced limits; source sharing starts off. A connection must be enabled and successfully tested within the last 24 hours before its route is ready. Switching organizations separates connections and routes.',
   },
   {
     title: 'Review skills',
     content:
-      'Open Built-in skills for ready-to-edit Markdown reviews linked to engineering checks, or create a custom skill. Review its instructions, source and license, then approve and enable it. Changes require a new version. Add an AI Review in Engineering Standards and assign this approved skill version to it. Choose where the review applies; up to three assigned reviews can run in one request. AI output provides suggestions only and never changes check results. Third-party packages and scripts are not automatically imported or executed.',
+      'Open Built-in skills for ready-to-edit Markdown reviews linked to engineering checks, or create a custom skill. Review its instructions, source and license, then approve and enable it. Changes require a new version. Add an AI Review in Standards and assign this approved skill version to it. Choose where the review applies; up to three assigned reviews can run in one request. AI output provides suggestions only and never changes check results. Third-party packages and scripts are not automatically imported or executed.',
   },
   {
     title: 'Current availability',
@@ -216,7 +226,7 @@ export function AiSettingsPage({
           <div className='space-y-6'>
             <PageHeader
               title='AI Intelligence'
-              description='Review skills for your engineering standards.'
+              description='Review skills for your standards.'
               section='Intelligence'
               icon={BrainCircuit}
               tone='violet'
@@ -309,7 +319,7 @@ function AiSettings({
     <div className='space-y-6'>
       <PageHeader
         title='AI Intelligence'
-        description='Manage models, skills and model routing across SDLC stages.'
+        description='Set up optional AI reviews for your development workflow.'
         section='Intelligence'
         icon={BrainCircuit}
         tone='violet'
@@ -341,7 +351,7 @@ function AiSettings({
           {query.error.message}
         </p>
       )}
-      {error && (
+      {error && edit === undefined && !routing && (
         <p role='alert' className='text-sm text-destructive'>
           {error}
         </p>
@@ -369,12 +379,14 @@ function AiSettings({
       )}
       {data?.enabled && (
         <>
-          <div className='flex items-center gap-3 rounded-lg border border-info/20 bg-info/5 px-4 py-3 text-sm'>
-            <ShieldCheck className='size-4 shrink-0 text-info' />
-            {data.executionAvailable
-              ? 'Model connections and AI assessment reviews are available.'
-              : 'Model connections are available. AI Reviews are disabled for this deployment.'}
-          </div>
+          {!data.executionAvailable && (
+            <div className='flex items-center gap-3 rounded-lg border border-info/20 bg-info/5 px-4 py-3 text-sm'>
+              <ShieldCheck className='size-4 shrink-0 text-info' />
+              {data.executionAvailable
+                ? 'Model connections and AI assessment reviews are available.'
+                : 'Model connections are available. AI Reviews are disabled for this deployment.'}
+            </div>
+          )}
           <Tabs
             value={onTabChange ? (tab ?? 'connections') : localTab}
             onValueChange={(value) => {
@@ -410,27 +422,27 @@ function AiSettings({
                     (c) => c.endpoint?.preset === p.id
                   )
                   return (
-                    <Card key={p.id} className='gap-4'>
-                      <CardHeader>
-                        <div className='flex items-center justify-between gap-3'>
-                          <ProviderIcon provider={p.id} tile />
-                          <StatusBadge
-                            tone={connection?.enabled ? 'success' : 'neutral'}
-                          >
-                            {connection?.enabled ? 'Active' : 'Inactive'}
-                          </StatusBadge>
-                        </div>
-                        <h3 className='mt-3 text-base font-semibold tracking-tight'>
+                    <Card key={p.id} className='gap-3'>
+                      <CardHeader className='flex flex-row items-center gap-3'>
+                        <ProviderIcon provider={p.id} tile />
+                        <h3 className='min-w-0 text-sm leading-snug font-semibold'>
                           {p.name}
                         </h3>
                       </CardHeader>
-                      <CardContent className='min-w-0 flex-1'>
-                        <p className='mb-1 text-xs font-medium text-muted-foreground'>
-                          Model name
-                        </p>
-                        <p className='text-sm font-medium break-words'>
-                          {connection?.modelId ?? 'Not connected'}
-                        </p>
+                      <CardContent className='flex flex-1 items-center justify-between gap-3'>
+                        <div className='min-w-0'>
+                          <p className='mb-1 text-xs font-medium text-muted-foreground'>
+                            Model name
+                          </p>
+                          <p className='text-sm font-medium break-words'>
+                            {connection?.modelId ?? 'Not connected'}
+                          </p>
+                        </div>
+                        <StatusBadge
+                          tone={connection?.enabled ? 'success' : 'neutral'}
+                        >
+                          {connection?.enabled ? 'Active' : 'Inactive'}
+                        </StatusBadge>
                       </CardContent>
                       <CardFooter className='justify-end border-t'>
                         <Button
@@ -655,27 +667,23 @@ function AiSettings({
             <TabsContent value='skills' className='mt-5'>
               <SkillsCatalogue />
             </TabsContent>
-            <TabsContent value='routing' className='mt-5'>
+            <TabsContent value='routing' className='mt-5 space-y-4'>
               <div className='grid gap-4 md:grid-cols-2 xl:grid-cols-3'>
                 {data.stages.map((stage) => {
                   const r = data.routes.find((r) => r.stage === stage)
                   return (
-                    <Card key={stage} className='gap-4'>
-                      <CardHeader>
-                        <div className='flex items-center justify-between gap-3'>
-                          <SurfaceIcon icon={stageIcon(stage)} tone='violet' />
-                          <StatusBadge
-                            tone={r?.enabled ? 'success' : 'neutral'}
-                          >
-                            {r?.enabled ? 'Configured' : 'Disabled'}
-                          </StatusBadge>
-                        </div>
-                        <h2 className='mt-3 text-base font-semibold tracking-tight'>
+                    <Card key={stage} className='gap-3'>
+                      <CardHeader className='flex flex-row items-center gap-3'>
+                        <SurfaceIcon icon={stageIcon(stage)} tone='violet' />
+                        <h2 className='min-w-0 flex-1 text-sm leading-snug font-semibold'>
                           {stageName(stage)}
                         </h2>
+                        <StatusBadge tone={r?.enabled ? 'success' : 'neutral'}>
+                          {r?.enabled ? 'Configured' : 'Disabled'}
+                        </StatusBadge>
                       </CardHeader>
                       <CardContent className='flex-1'>
-                        <dl className='divide-y text-sm [&>div]:py-2.5 [&>div:first-child]:pt-0 [&>div:last-child]:pb-0'>
+                        <dl className='divide-y text-sm [&>div]:py-2 [&>div:first-child]:pt-0 [&>div:last-child]:pb-0'>
                           <div className='flex justify-between gap-3'>
                             <dt className='text-muted-foreground'>Primary</dt>
                             <dd className='truncate'>
@@ -890,17 +898,21 @@ function ProviderForm({
           </label>
           <label className='block space-y-2 text-sm'>
             <span>Hosting</span>
-            <select
-              className={selectClass}
+            <Select
               value={locality}
-              onChange={(e) => {
-                setLocality(e.target.value)
-                setRequiresKey(e.target.value !== 'local')
+              onValueChange={(value) => {
+                setLocality(value)
+                setRequiresKey(value !== 'local')
               }}
             >
-              <option value='hosted'>Hosted provider</option>
-              <option value='local'>Self-hosted model</option>
-            </select>
+              <SelectTrigger aria-label='Hosting'>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value='hosted'>Hosted provider</SelectItem>
+                <SelectItem value='local'>Self-hosted model</SelectItem>
+              </SelectContent>
+            </Select>
           </label>
         </>
       )}
@@ -1043,8 +1055,10 @@ function RouteForm({
     e.preventDefault()
     const f = new FormData(e.currentTarget)
     save({
-      primaryId: f.get('primaryId') || null,
-      fallbackId: f.get('fallbackId') || null,
+      primaryId:
+        f.get('primaryId') === 'none' ? null : f.get('primaryId') || null,
+      fallbackId:
+        f.get('fallbackId') === 'none' ? null : f.get('fallbackId') || null,
       enabled: f.get('enabled') === 'on',
       allowSource: f.get('allowSource') === 'on',
       automaticReviews: f.get('automaticReviews') === 'on',
@@ -1057,7 +1071,14 @@ function RouteForm({
     })
   }
   return (
-    <form onSubmit={submit} className='space-y-4'>
+    <form
+      onSubmit={submit}
+      className='space-y-4'
+      onInvalidCapture={(event) => {
+        const section = (event.target as HTMLElement).closest('details')
+        if (section) section.open = true
+      }}
+    >
       {(['primaryId', 'fallbackId'] as const).map((name) => (
         <label key={name} className='block space-y-2 text-sm'>
           <span>
@@ -1065,57 +1086,85 @@ function RouteForm({
               ? 'Primary connection'
               : 'Fallback connection'}
           </span>
-          <select
-            className={selectClass}
+          <Select
             name={name}
-            defaultValue={route[name] ?? ''}
+            defaultValue={route[name] ?? 'none'}
+            disabled={busy}
           >
-            <option value=''>None</option>
-            {providers.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name} · {testName(p.testStatus)}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger
+              aria-label={
+                name === 'primaryId'
+                  ? 'Primary connection'
+                  : 'Fallback connection'
+              }
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value='none'>
+                {name === 'primaryId' ? 'Choose a model' : 'No fallback'}
+              </SelectItem>
+              {providers.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name} · {testName(p.testStatus)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </label>
       ))}
-      <div className='grid grid-cols-2 gap-3'>
-        {(
-          [
-            {
-              name: 'maxInputTokens',
-              label: 'Input token limit',
-              min: 100,
-              max: 32000,
-            },
-            {
-              name: 'maxOutputTokens',
-              label: 'Output token limit',
-              min: 128,
-              max: 8192,
-            },
-            {
-              name: 'dailyBudgetCents',
-              label: 'Daily estimated cost limit (US cents)',
-              min: 1,
-              max: 5000,
-            },
-          ] as const
-        ).map((f) => (
-          <label key={f.name} className='block space-y-2 text-sm'>
-            <span>{f.label}</span>
-            <Input
-              type='number'
-              name={f.name}
-              min={f.min}
-              max={f.max}
-              step={1}
-              required
-              defaultValue={route[f.name]}
-            />
-          </label>
-        ))}
-      </div>
+      <label className='block space-y-2 text-sm'>
+        <span>Daily estimated cost limit (US cents)</span>
+        <Input
+          type='number'
+          name='dailyBudgetCents'
+          min={1}
+          max={5000}
+          step={1}
+          required
+          defaultValue={route.dailyBudgetCents}
+        />
+      </label>
+      <details className='rounded-lg border p-3'>
+        <summary className='cursor-pointer text-sm font-medium'>
+          Advanced limits
+        </summary>
+        <p className='my-3 text-xs text-muted-foreground'>
+          Limit the size and estimated daily cost of reviews. These saved limits
+          apply even when this section is closed.
+        </p>
+        <div className='grid grid-cols-2 gap-3'>
+          {(
+            [
+              {
+                name: 'maxInputTokens',
+                label: 'Input token limit',
+                min: 100,
+                max: 32000,
+              },
+              {
+                name: 'maxOutputTokens',
+                label: 'Output token limit',
+                min: 128,
+                max: 8192,
+              },
+            ] as const
+          ).map((f) => (
+            <label key={f.name} className='block space-y-2 text-sm'>
+              <span>{f.label}</span>
+              <Input
+                type='number'
+                name={f.name}
+                min={f.min}
+                max={f.max}
+                step={1}
+                required
+                defaultValue={route[f.name]}
+              />
+            </label>
+          ))}
+        </div>
+      </details>
       <label className='flex items-center gap-2 text-sm'>
         <input type='checkbox' name='enabled' defaultChecked={route.enabled} />
         Enable reviews for this stage

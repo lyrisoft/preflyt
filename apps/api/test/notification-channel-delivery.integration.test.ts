@@ -27,6 +27,9 @@ afterAll(async () => { await fixture?.close() })
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs() })
 beforeEach(async () => {
   await fixture.reset()
+  // The test endpoint validates durable queue configuration before creating its outbox.
+  vi.stubEnv('QUEUE_REDIS_URL', process.env.NOTIFICATION_TEST_REDIS_URL ?? 'redis://127.0.0.1:6379/2')
+  vi.stubEnv('QUEUE_PREFIX', 'preflyt-channel-loopback-fixture')
   vi.stubEnv('NOTIFICATIONS_ENABLED', 'true'); vi.stubEnv('NOTIFICATION_EMAIL_ENABLED', 'true')
   await db().organization.create({ data: { id: org, name: 'Channel mail fixture' } })
   await db().identity.create({ data: { id: owner, issuer: 'fixture', subject: owner } })

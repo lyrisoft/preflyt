@@ -68,7 +68,7 @@ it('keeps connections and routing separate without promising inference', () => {
   expect(html).toContain('AI Reviews are disabled for this deployment')
   state.query = { data: { ...configuration(), executionAvailable: true } }
   expect(renderToStaticMarkup(<AiSettingsPage />)).toContain(
-    'AI assessment reviews are available'
+    'Built-in providers'
   )
   expect(html).not.toContain('Explain findings')
 })
@@ -134,6 +134,19 @@ it('starts routing disabled with source sharing off and bounded defaults', async
       })
     )
     .not.toBeChecked()
+  await expect
+    .element(view.getByRole('combobox', { name: 'Primary connection' }))
+    .toBeVisible()
+  await expect
+    .element(
+      view.getByRole('spinbutton', {
+        name: 'Daily estimated cost limit (US cents)',
+      })
+    )
+    .toBeVisible()
+  await expect
+    .element(view.getByRole('spinbutton', { name: 'Input token limit' }))
+    .not.toBeVisible()
   await view.getByRole('button', { name: 'Save settings' }).click()
   expect(state.save).toHaveBeenCalledWith(
     '/ai/configuration/routes/pull_request',

@@ -113,7 +113,7 @@ export function NativeExecutionStatus({
               {
                 title: 'Imported CI',
                 content:
-                  'Your existing checks and reports remain available. This status does not change a saved assessment or GitHub quality gate.',
+                  'Your existing checks and reports remain available. This status does not change a saved assessment or GitHub merge protection.',
               },
               {
                 title: 'Sandbox verification',

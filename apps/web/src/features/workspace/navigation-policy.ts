@@ -21,3 +21,10 @@ export function authorizedNavigation(
     }))
     .filter((group) => group.items.length > 0)
 }
+
+/** Highlight the direct sidebar destination of a nested page. */
+export function primaryDestination(href: string) {
+  const path = href.split('?')[0].replace(/\/$/, '') || '/'
+  if (path.startsWith('/repositories/')) return '/apps'
+  return path === '/' ? '/' : `/${path.split('/')[1]}`
+}

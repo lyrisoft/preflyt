@@ -10,6 +10,8 @@ import type { AuthenticatedSession } from "../auth/session.guard.js";
 import { PrismaService } from "../prisma/prisma.service.js";
 import {
   catalogue,
+  customRule,
+  type CheckInput,
   organizationPack,
   packDigest,
   type StandardPack,
@@ -21,6 +23,7 @@ export type StandardInput = {
   title: string;
   description: string;
   ruleIds: string[];
+  checks?: CheckInput[];
   aiChecks?: { id: string; title: string; skillId: string; stages: string[] }[];
   expectedVersionId: string | null;
 };
@@ -97,8 +100,8 @@ export class OrganizationStandardsService {
     const available = new Map(
       catalogue.flatMap((p) => p.rules).map((r) => [r.id, r]),
     );
-    if (input.ruleIds.some((id) => !available.has(id)))
-      throw new BadRequestException("Choose supported checks from the library");
+    if ((input.checks?.length ?? 0) > 64 || new Set((input.checks ?? []).map(c => c.id)).size !== (input.checks?.length ?? 0))
+      throw new BadRequestException("Use up to 64 distinct checks");
     const id = packId ?? `org-standard-${randomUUID()}`;
     try {
       const result = await this.db.$transaction(
@@ -157,6 +160,22 @@ export class OrganizationStandardsService {
             throw new BadRequestException(
               "Choose up to twelve distinct AI reviews",
             );
+          const resolvedRules = new Map(available);
+          if (previous) {
+            const previousPack = organizationPack(previous.definition);
+            if (!previousPack) throw new ConflictException("Saved checks could not be verified");
+            for (const check of previousPack.rules) resolvedRules.set(check.id, check);
+          }
+          for (const check of input.checks ?? []) {
+            if (!input.ruleIds.includes(check.id) || typeof check.title !== 'string' || !check.title.trim() || check.title.length > 120 || typeof check.guidance !== 'string' || check.guidance.length > 4000)
+              throw new BadRequestException("Add a check name and valid guidance");
+            const base = resolvedRules.get(check.id);
+            const updated = check.id.startsWith('custom-') ? customRule(check) : base ? { ...base, title: check.title.trim(), guidance: check.guidance.trim() } : undefined;
+            if (!updated) throw new BadRequestException("Choose a supported check or add a test or scan report check");
+            resolvedRules.set(check.id, updated);
+          }
+          if (input.ruleIds.some(id => !resolvedRules.has(id)))
+            throw new BadRequestException("Choose supported checks or add the missing check details");
           const revision = (previous?.revision ?? 0) + 1;
           const definition: Omit<StandardPack, "digest"> = {
             schemaVersion: 1,
@@ -172,12 +191,12 @@ export class OrganizationStandardsService {
             ...(aiChecks.length
               ? { aiChecks: aiChecks.sort((a, b) => a.id.localeCompare(b.id)) }
               : {}),
-            rules: [...input.ruleIds].sort().map((id) => available.get(id)!),
+            rules: [...input.ruleIds].sort().map((id) => resolvedRules.get(id)!),
           };
           const digest = packDigest(definition);
           if (!organizationPack({ ...definition, digest }))
             throw new BadRequestException(
-              "Enter a review name, skill and review stage for each AI review",
+              "Check definitions or AI reviews could not be verified. Review their details before saving.",
             );
           const saved = await tx.organizationStandardVersion.create({
             data: {

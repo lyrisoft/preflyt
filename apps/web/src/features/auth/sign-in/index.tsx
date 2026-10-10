@@ -54,21 +54,30 @@ export function SignIn() {
     }
   }, [checkAttempt])
 
+  const needsSetup =
+    !loading &&
+    !methodsError &&
+    superAdminEnabled &&
+    !githubEnabled &&
+    !oidcEnabled
+
   return (
     <SignInLayout>
       <Card className='sign-in-card w-full'>
-        <CardHeader className='gap-3 px-6 sm:px-8'>
+        <CardHeader className='gap-3 px-4 sm:px-8'>
           <p className='text-[11px] font-medium tracking-[0.12em] text-muted-foreground uppercase'>
-            Organization access
+            {needsSetup ? 'Get started' : 'Organization access'}
           </p>
           <CardTitle asChild className='text-2xl tracking-tight'>
-            <h1>Sign in to Preflyt</h1>
+            <h1>{needsSetup ? 'Set up Preflyt' : 'Sign in to Preflyt'}</h1>
           </CardTitle>
           <CardDescription className='text-sm leading-relaxed'>
-            Continue with your organization’s sign-in provider.
+            {needsSetup
+              ? 'Connect GitHub and turn your repository checks into clear, actionable reviews.'
+              : 'Continue with your organization’s sign-in provider.'}
           </CardDescription>
         </CardHeader>
-        <CardContent className='space-y-6 px-6 sm:px-8'>
+        <CardContent className='space-y-6 px-4 sm:px-8'>
           {(error === 'oidc' || error === 'github' || methodsError) && (
             <div className='space-y-3'>
               <p
@@ -140,22 +149,39 @@ export function SignIn() {
                     </a>
                   </Button>
                 )}
-                {!githubEnabled && !oidcEnabled && !methodsError && (
-                  <p
-                    role='status'
-                    className='text-sm leading-relaxed text-muted-foreground'
-                  >
-                    Organization sign-in is not configured. Contact your Preflyt
-                    administrator.
-                  </p>
+                {needsSetup && (
+                  <Button asChild className='h-11 w-full justify-start px-4'>
+                    <Link to='/super-admin/login'>
+                      <LockKeyhole aria-hidden='true' className='size-4' />
+                      Start setup
+                      <ArrowRight
+                        aria-hidden='true'
+                        className='ms-auto size-4'
+                      />
+                    </Link>
+                  </Button>
                 )}
+                {!githubEnabled &&
+                  !oidcEnabled &&
+                  !methodsError &&
+                  !needsSetup && (
+                    <p
+                      role='status'
+                      className='text-sm leading-relaxed text-muted-foreground'
+                    >
+                      Organization sign-in is not configured. Contact your
+                      Preflyt administrator.
+                    </p>
+                  )}
               </>
             )}
           </div>
           <p className='text-xs leading-relaxed text-muted-foreground'>
-            Your organization manages your account and repository access.
+            {needsSetup
+              ? 'Sign in with the Super Admin account configured for this installation.'
+              : 'Your organization manages your account and repository access.'}
           </p>
-          {(superAdminEnabled || !!methodsError) && (
+          {!needsSetup && (superAdminEnabled || !!methodsError) && (
             <div className='border-t pt-5'>
               <Link
                 to='/super-admin/login'

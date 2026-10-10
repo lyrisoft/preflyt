@@ -65,7 +65,7 @@ const stackIds = new Set(['languages', 'frameworks'])
 /** Engineering controls are covered by the standards table, not repeated here. */
 const toolingIds = new Set(['manifests', 'containers', 'iac', 'migrations'])
 const profileNotes = [
-  'Config found means a supported file or workflow reference exists at the inspected commit. Nothing was built, tested or scanned.',
+  'Related files found means a supported file or workflow reference exists at the inspected commit. Nothing was built, tested or scanned.',
   'Not found means no supported hint was found. It is not a policy failure.',
 ]
 const evidenceNotes = [
@@ -399,7 +399,7 @@ export function RepositoryProfilePage() {
             icon={GitBranch}
             tone='blue'
             actions={
-              canDiscover && result ? (
+              canDiscover && result && tab !== 'assessments' ? (
                 <div className='flex flex-col gap-2'>
                   <label
                     className='text-xs font-medium text-muted-foreground'
@@ -450,7 +450,7 @@ export function RepositoryProfilePage() {
             }
           >
             <div className='flex flex-wrap items-center gap-x-3 gap-y-2'>
-              {!!technologies.length && (
+              {tab !== 'assessments' && !!technologies.length && (
                 <div
                   className='flex flex-wrap items-center gap-1.5'
                   role='group'
@@ -462,34 +462,38 @@ export function RepositoryProfilePage() {
                 </div>
               )}
             </div>
-            {profile ? (
-              <div className='flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-muted-foreground'>
-                <span className='flex items-center gap-1.5'>
-                  <GitBranch aria-hidden='true' className='size-4' />
-                  Inspected branch: {profile.branch}
-                </span>
-                <span
-                  className='flex items-center gap-1.5'
-                  title={profile.sourceSha}
-                >
-                  <GitCommitHorizontal aria-hidden='true' className='size-4' />
-                  <code className='text-xs'>
-                    {profile.sourceSha.slice(0, 7)}
-                  </code>
-                </span>
-                <span>
-                  Profiled <RelativeTime value={profile.createdAt} />
-                </span>
-                <InspectionBadge profile={profile} />
-              </div>
-            ) : (
-              result && (
-                <p className='text-sm text-muted-foreground'>
-                  No profile discovered yet.
-                </p>
-              )
-            )}
-            {result && (
+            {tab !== 'assessments' &&
+              (profile ? (
+                <div className='flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-muted-foreground'>
+                  <span className='flex items-center gap-1.5'>
+                    <GitBranch aria-hidden='true' className='size-4' />
+                    Inspected branch: {profile.branch}
+                  </span>
+                  <span
+                    className='flex items-center gap-1.5'
+                    title={profile.sourceSha}
+                  >
+                    <GitCommitHorizontal
+                      aria-hidden='true'
+                      className='size-4'
+                    />
+                    <code className='text-xs'>
+                      {profile.sourceSha.slice(0, 7)}
+                    </code>
+                  </span>
+                  <span>
+                    Profiled <RelativeTime value={profile.createdAt} />
+                  </span>
+                  <InspectionBadge profile={profile} />
+                </div>
+              ) : (
+                result && (
+                  <p className='text-sm text-muted-foreground'>
+                    No profile discovered yet.
+                  </p>
+                )
+              ))}
+            {result && tab !== 'assessments' && (
               <p className='flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground'>
                 <StatusBadge tone='info'>No merge blocking</StatusBadge>
                 <ReadingGuide limitations={profile?.report.limitations ?? []} />
@@ -600,8 +604,6 @@ export function RepositoryProfilePage() {
                 />
               </TabsContent>
               <TabsContent value='assessments' className='space-y-5'>
-                <RepositoryActivityPanel repositoryId={repositoryId} />
-                <RepositoryPullRequests repositoryId={repositoryId} />
                 <RepositoryAssessments
                   initialAssessmentId={assessment}
                   key={`${repositoryId}:${assessment ?? ''}`}
@@ -615,6 +617,8 @@ export function RepositoryProfilePage() {
                 />
               </TabsContent>
               <TabsContent value='activity' className='space-y-5'>
+                <RepositoryActivityPanel repositoryId={repositoryId} />
+                <RepositoryPullRequests repositoryId={repositoryId} />
                 <RepositoryCiEvidence
                   canImport={canPerform(
                     sessionQuery.data,

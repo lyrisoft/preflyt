@@ -1,3 +1,4 @@
+import { currentStandards } from '../standards/policy-standards.js';
 import { configurationValue } from '../configuration/runtime-configuration.js'
 import { recordReadinessNotification } from "../notifications/notification-event.js";
 import { randomUUID } from "node:crypto";
@@ -327,10 +328,7 @@ export class ReadinessAutomationService {
         "policy.publish",
       );
       const selection =
-        await this.prisma.repositoryStandardsSelection.findFirst({
-          where: { repositoryId: repo.id },
-          orderBy: { revision: "desc" },
-        });
+        await currentStandards(this.prisma, repo.id, { branchRef: `refs/heads/${context.base.ref}` });
       if (!selection)
         throw new ConflictException(
           "Save engineering standards before enabling readiness checks",

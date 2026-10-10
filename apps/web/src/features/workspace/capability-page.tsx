@@ -15,7 +15,7 @@ const capabilities = {
     admin: false,
   },
   'quality-gates': {
-    title: 'Quality Gates',
+    title: 'Merge Protection',
     description:
       'Preflyt does not decide whether changes can merge yet. Saved assessments show missing or unverified evidence; they do not mean all required checks passed.',
     to: '/assessments',

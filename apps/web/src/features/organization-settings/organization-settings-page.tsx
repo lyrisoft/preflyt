@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link } from '@tanstack/react-router'
+import { Link, getRouteApi, useNavigate } from '@tanstack/react-router'
 import {
   ArrowUpRight,
   Bell,
@@ -14,17 +14,9 @@ import {
   Users,
 } from 'lucide-react'
 import { API_BASE_URL } from '@/lib/api'
-import { useTheme } from '@/context/theme-provider'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Main } from '@/components/layout/main'
 import { PageHeader } from '@/components/page-header'
@@ -33,7 +25,11 @@ import { SurfaceIcon } from '@/components/surface-icon'
 import { NotificationPreferences } from '@/features/notifications/notification-preferences'
 import { OrganizationNotificationChannels } from '@/features/notifications/organization-notification-channels'
 import { useNavigationSession } from '@/features/workspace/navigation-session'
+import { canPerform } from '@/features/workspace/scoped-access'
 import { ConfigurationPanel } from './configuration-panel'
+import { GitHubIdentityLink } from './github-identity-link'
+import { PrCheckSettings } from './pr-check-settings'
+import { ThemeCards } from './theme-cards'
 
 type Settings = {
   id: string
@@ -62,8 +58,31 @@ async function settingsRequest<T>(options: RequestInit = {}): Promise<T> {
 }
 export function OrganizationSettingsPage() {
   const session = useNavigationSession()
+  const { tab } = getRouteApi(
+    '/_authenticated/organization-settings'
+  ).useSearch()
+  const navigate = useNavigate()
+  const canManageWorkspace = canPerform(
+    session.data,
+    'organization.members.manage'
+  )
+  const canPublishChecks = canPerform(session.data, 'policy.publish')
+  const defaultTab = canManageWorkspace
+    ? 'workspace'
+    : session.data?.platformAdmin
+      ? 'configuration'
+      : 'notifications'
+  // Keep old management-directory links valid without retaining a second menu.
+  const requestedTab = tab === 'manage' ? defaultTab : tab
+  const activeTab =
+    requestedTab === 'pr-checks' && !canPublishChecks
+      ? defaultTab
+      : requestedTab === 'configuration' && !session.data?.platformAdmin
+        ? defaultTab
+        : requestedTab === 'workspace' && !canManageWorkspace
+          ? defaultTab
+          : (requestedTab ?? defaultTab)
   const client = useQueryClient()
-  const { theme, setTheme } = useTheme()
   const [draft, setDraft] = useState<{
     organizationId: string
     name: string
@@ -76,7 +95,8 @@ export function OrganizationSettingsPage() {
   const settings = useQuery({
     queryKey: key,
     queryFn: ({ signal }) => settingsRequest<Settings>({ signal }),
-    enabled: session.isSuccess,
+    enabled:
+      session.isSuccess && !!session.data.organizationId && canManageWorkspace,
     meta: { silent: true },
     retry: false,
     gcTime: 0,
@@ -98,7 +118,7 @@ export function OrganizationSettingsPage() {
     },
   })
   return (
-    <Main className='space-y-6'>
+    <Main className='space-y-4'>
       <PageHeader
         title='Settings'
         description='Manage your workspace and personal preferences.'
@@ -112,7 +132,8 @@ export function OrganizationSettingsPage() {
               variant='outline'
               disabled={settings.isFetching}
               onClick={() => {
-                void settings.refetch()
+                if (canManageWorkspace && session.data?.organizationId)
+                  void settings.refetch()
                 void client.invalidateQueries({
                   queryKey: ['deployment-configuration'],
                 })
@@ -130,6 +151,11 @@ export function OrganizationSettingsPage() {
             <PageHelpDrawer
               title='Settings'
               sections={[
+                {
+                  title: 'PR checks',
+                  content:
+                    'Select a repository and enable automatic publishing to put Preflyt policy review results on its GitHub pull requests. Deployment administrators must enable check publication and automatic publication; the GitHub App needs Checks: write. Missing evidence remains incomplete. Publishing is separate from GitHub branch rules requiring the check before merge.',
+                },
                 {
                   title: 'Workspace identity',
                   content:
@@ -155,12 +181,24 @@ export function OrganizationSettingsPage() {
           </div>
         }
       />
-      <Tabs defaultValue='workspace' className='space-y-6'>
+      <GitHubIdentityLink />
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) =>
+          void navigate({
+            to: '/organization-settings',
+            search: (previous) => ({ ...previous, tab: value as typeof tab }),
+          })
+        }
+        className='space-y-4'
+      >
         <TabsList className='flex h-auto flex-wrap justify-start gap-1'>
-          <TabsTrigger value='workspace'>
-            <Building2 className='size-4' />
-            Workspace
-          </TabsTrigger>
+          {canManageWorkspace && (
+            <TabsTrigger value='workspace'>
+              <Building2 className='size-4' />
+              Workspace
+            </TabsTrigger>
+          )}
           <TabsTrigger value='notifications'>
             <Bell className='size-4' />
             Notifications
@@ -175,14 +213,26 @@ export function OrganizationSettingsPage() {
               Configuration
             </TabsTrigger>
           )}
+          {canPublishChecks && (
+            <TabsTrigger value='pr-checks'>PR checks</TabsTrigger>
+          )}
         </TabsList>
         {session.data?.platformAdmin && (
           <TabsContent value='configuration'>
             <ConfigurationPanel />
           </TabsContent>
         )}
-        <TabsContent value='workspace' className='space-y-6'>
-          {settings.isPending ? (
+        {canPublishChecks && (
+          <TabsContent value='pr-checks'>
+            <PrCheckSettings />
+          </TabsContent>
+        )}
+        <TabsContent value='workspace' className='space-y-4'>
+          {session.isSuccess && !session.data.organizationId ? (
+            <p className='text-sm text-muted-foreground'>
+              Connect or select an organization to manage workspace settings.
+            </p>
+          ) : settings.isPending ? (
             <p role='status'>Loading workspace settings…</p>
           ) : settings.isError ? (
             <p role='alert' className='text-sm text-destructive'>
@@ -190,7 +240,7 @@ export function OrganizationSettingsPage() {
             </p>
           ) : (
             settings.data && (
-              <div className='grid items-start gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]'>
+              <div className='grid items-start gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]'>
                 <form
                   onSubmit={(event) => {
                     event.preventDefault()
@@ -198,13 +248,13 @@ export function OrganizationSettingsPage() {
                   }}
                   className='overflow-hidden rounded-xl border bg-card shadow-xs'
                 >
-                  <div className='flex items-center gap-3 border-b bg-muted/20 px-6 py-5'>
+                  <div className='flex items-center gap-3 border-b bg-muted/20 px-4 py-3'>
                     <SurfaceIcon icon={Building2} tone='blue' />
                     <h2 className='text-base font-semibold'>
                       Workspace identity
                     </h2>
                   </div>
-                  <div className='space-y-6 p-6'>
+                  <div className='space-y-4 p-4'>
                     <div className='max-w-xl space-y-2'>
                       <Label htmlFor='workspace-name'>Workspace name</Label>
                       <Input
@@ -233,7 +283,7 @@ export function OrganizationSettingsPage() {
                     </dl>
                   </div>
                   {settings.data.canUpdate && (
-                    <div className='flex justify-end border-t bg-muted/20 px-6 py-4'>
+                    <div className='flex justify-end border-t bg-muted/20 px-4 py-4'>
                       <Button
                         size='sm'
                         disabled={
@@ -249,15 +299,15 @@ export function OrganizationSettingsPage() {
                     </div>
                   )}
                 </form>
-                <aside className='space-y-6'>
+                <aside className='space-y-4'>
                   <section className='overflow-hidden rounded-xl border bg-card shadow-xs'>
-                    <div className='flex items-center gap-3 border-b bg-muted/20 px-5 py-5'>
+                    <div className='flex items-center gap-3 border-b bg-muted/20 px-4 py-3'>
                       <SurfaceIcon icon={Users} tone='teal' />
                       <h2 className='text-base font-semibold'>
                         Workspace details
                       </h2>
                     </div>
-                    <dl className='divide-y px-5 text-sm'>
+                    <dl className='divide-y px-4 text-sm'>
                       <div className='flex items-center justify-between gap-4 py-4'>
                         <dt className='text-muted-foreground'>Your role</dt>
                         <dd className='font-medium'>
@@ -320,35 +370,18 @@ export function OrganizationSettingsPage() {
             )
           )}
         </TabsContent>
-        <TabsContent value='notifications' className='max-w-4xl space-y-8'>
+        <TabsContent value='notifications' className='max-w-4xl space-y-6'>
           <OrganizationNotificationChannels />
           <NotificationPreferences />
         </TabsContent>
         <TabsContent value='appearance' className='max-w-4xl'>
           <section className='overflow-hidden rounded-xl border bg-card shadow-xs'>
-            <div className='flex items-center gap-3 border-b bg-muted/20 px-6 py-5'>
+            <div className='flex items-center gap-3 border-b bg-muted/20 px-4 py-3'>
               <SurfaceIcon icon={Palette} tone='violet' />
               <h2 className='text-base font-semibold'>Appearance</h2>
             </div>
-            <div className='p-6'>
-              <div className='max-w-sm space-y-2'>
-                <Label htmlFor='workspace-theme'>Theme</Label>
-                <Select
-                  value={theme}
-                  onValueChange={(value) =>
-                    setTheme(value as 'light' | 'dark' | 'system')
-                  }
-                >
-                  <SelectTrigger id='workspace-theme'>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value='system'>System</SelectItem>
-                    <SelectItem value='light'>Light</SelectItem>
-                    <SelectItem value='dark'>Dark</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+            <div className='p-4'>
+              <ThemeCards />
             </div>
           </section>
         </TabsContent>

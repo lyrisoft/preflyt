@@ -231,7 +231,7 @@ export function ActivityTrendChart({
             <span className='size-2 rounded-full bg-chart-1' />
             {granularity === 'day' ? 'Daily' : 'Weekly'} assessment count
           </span>
-          <span>Activity volume does not indicate quality gate outcomes.</span>
+          <span>Activity volume does not indicate merge review results.</span>
         </div>
         <details className='mt-3 text-xs text-muted-foreground'>
           <summary className='w-fit cursor-pointer rounded-sm outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring'>

@@ -46,6 +46,15 @@ export class CheckPublicationController {
       page === undefined ? 1 : Number(page),
     )
   }
+  @Get('results')
+  @Header('Cache-Control', 'no-store')
+  results(
+    @Req() req: AuthRequest,
+    @Param('repositoryId') id: string,
+    @Query('page') page?: string,
+  ) {
+    return this.checks.prChecks(req.preflytSession, id, page === undefined ? 1 : Number(page))
+  }
   @Get('preview')
   @Header('Cache-Control', 'no-store')
   preview(

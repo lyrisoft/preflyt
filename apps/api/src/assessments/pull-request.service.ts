@@ -1,3 +1,4 @@
+import { currentStandards, selectionBindingWhere } from '../standards/policy-standards.js'
 import {
   ForbiddenException,
   Inject,
@@ -100,19 +101,16 @@ export class PullRequestService {
       response.reason = 'FORK_HEAD_UNSUPPORTED'
       return response
     }
-    const selection = await this.prisma.repositoryStandardsSelection.findFirst({
-      where: { repositoryId: repo.id },
-      orderBy: { revision: 'desc' },
-    })
+    const selection = await currentStandards(this.prisma, repo.id, { branchRef: `refs/heads/${context.base.ref}` })
     if (!selection) {
       response.reason = 'STANDARDS_NOT_ADOPTED'
       return response
     }
     const binding = await this.prisma.repositoryCiBindings.findFirst({
-      where: { repositoryId: repo.id },
+      where: selectionBindingWhere(repo.id, selection.id),
       orderBy: { revision: 'desc' },
     })
-    const bindingId = binding?.selectionId === selection.id ? binding.id : null
+    const bindingId = binding?.selectionId === selection.id ? binding!.id : null
     const candidates = await this.prisma.commitAssessment.findMany({
       where: {
         repositoryId: repo.id,
@@ -157,12 +155,9 @@ export class PullRequestService {
     // Do not return links if a concurrently processed event or policy edit changed the read context.
     const [current, adoption, approved] = await Promise.all([
       this.prisma.repositoryPullRequest.findUnique({ where: { id: row.id } }),
-      this.prisma.repositoryStandardsSelection.findFirst({
-        where: { repositoryId: repo.id },
-        orderBy: { revision: 'desc' },
-      }),
+      currentStandards(this.prisma, repo.id, { branchRef: `refs/heads/${context.base.ref}` }),
       this.prisma.repositoryCiBindings.findFirst({
-        where: { repositoryId: repo.id },
+        where: selectionBindingWhere(repo.id, selection.id),
         orderBy: { revision: 'desc' },
       }),
     ])
@@ -172,7 +167,7 @@ export class PullRequestService {
       !this.verified(current, access) ||
       current.revision !== row.revision ||
       adoption?.id !== selection.id ||
-      (approved?.selectionId === selection.id ? approved.id : null) !==
+      (approved?.selectionId === selection.id ? approved!.id : null) !==
         bindingId
     ) {
       response.prAssessment = null

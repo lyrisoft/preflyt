@@ -1,4 +1,4 @@
-import { checkReportAdapters } from './check-report-adapters.js'
+import { checkReportFormat } from './check-report-adapters.js'
 import { digest } from './assessment-digest.js'
 export type ExecutionContract = {
   ruleId: string
@@ -25,7 +25,7 @@ export function executionContracts(): {
       contracts.some(
         (c) =>
           !c ||
-          checkReportAdapters[c.ruleId] !== c.format ||
+          checkReportFormat(c.ruleId) !== c.format ||
           !/^[a-f0-9]{40}$/.test(c.signerDigest) ||
           !/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+\/\.github\/workflows\/[a-zA-Z0-9_-]+\.ya?ml$/.test(
             c.signerWorkflow,

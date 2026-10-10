@@ -15,7 +15,7 @@ export function Analytics() {
           <CardTitle>Traffic Overview</CardTitle>
           <CardDescription>Weekly clicks and unique visitors</CardDescription>
         </CardHeader>
-        <CardContent className='px-6'>
+        <CardContent className='px-4'>
           <AnalyticsChart />
         </CardContent>
       </Card>

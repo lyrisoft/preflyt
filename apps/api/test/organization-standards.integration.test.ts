@@ -464,3 +464,24 @@ it('rejects foreign skills, unapproved versions and executable or mandatory AI d
       aiChecks: [{ ...check, ...patch }],
     }).expect(400)
 })
+
+it('adds a pipeline check and edits its guidance without changing the saved version', async () => {
+  const id = `custom-junit-${randomUUID()}`
+  const checks = [{ id, title: 'API contract tests', guidance: 'Verify public response contracts.' }]
+  const first = (await post(owner, root, { ...input, ruleIds: [id], checks }).expect(201)).body
+  const firstPack = first.definition
+  expect(firstPack.rules[0]).toMatchObject({ id, title: checks[0].title, capability: 'import_only', operator: 'verified_check_succeeded', onMissing: 'INCOMPLETE', allowedSources: ['verified_imported_ci'] })
+  const edited = (await post(owner, `${root}/${first.packId}/versions`, { ...input, ruleIds: [id], checks: [{ ...checks[0], title: 'Public API contracts', guidance: 'Fix incompatible responses.' }], expectedVersionId: first.id }).expect(201)).body
+  expect(edited.revision).toBe(2)
+  expect(edited.definition.rules[0].title).toBe('Public API contracts')
+  const old = await db.organizationStandardVersion.findUniqueOrThrow({ where: { id: first.id } })
+  expect(old.definition).toEqual(firstPack)
+  await post(developer, root, { ...input, ruleIds: [id], checks }).expect(403)
+})
+it('rejects arbitrary executors and duplicate custom check definitions', async () => {
+  const id = `custom-sarif-${randomUUID()}`
+  const check = { id, title: 'Architecture scan', guidance: 'Fix reported violations.' }
+  await post(owner, root, { ...input, ruleIds: [id], checks: [{ ...check, command: 'sh' }] }).expect(400)
+  await post(owner, root, { ...input, ruleIds: [id], checks: [check, check] }).expect(400)
+  await post(owner, root, { ...input, ruleIds: ['shell.custom'], checks: [{ ...check, id: 'shell.custom' }] }).expect(400)
+})

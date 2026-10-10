@@ -5,6 +5,7 @@ import {
   Header,
   Inject,
   Param,
+  Query,
   Post,
   Req,
   UseGuards,
@@ -69,8 +70,8 @@ export class StandardsController {
   }
   @Get('github/repositories/:repositoryId/standards')
   @Header('Cache-Control', 'no-store')
-  get(@Param('repositoryId') id: string) {
-    return this.standards.get(id)
+  get(@Param('repositoryId') id: string, @Query('policy') policyId?: string) {
+    return this.standards.get(id, policyId)
   }
   @Post('github/repositories/:repositoryId/standards')
   @UseGuards(OwnerAdminGuard)

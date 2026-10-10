@@ -30,7 +30,7 @@ const help = [
   {
     title: 'Assign and run',
     content:
-      'Assign an approved skill version to an AI Review in Engineering Standards, choose its review stages, then adopt that standard version. Open a new saved assessment, select up to three assigned AI Reviews and run explicitly, or enable automatic reviews on the Pull requests model route for a published branch policy. Skills can restrict repository, language and framework scope. A constrained skill needs the exact-commit profile to match; missing or different-commit detection skips it. A tested model route and configured rates are required. Suggestions stay separate from deterministic gates.',
+      'Assign an approved skill version to an AI Review in Standards, choose its review stages, then select that standard in a branch policy. Open a new saved assessment, select up to three assigned AI Reviews and run explicitly, or enable automatic reviews on the Pull requests model route for a published branch policy. Skills can restrict repository, language and framework scope. A constrained skill needs the exact-commit profile to match; missing or different-commit detection skips it. A tested model route and configured rates are required. Suggestions stay separate from deterministic gates.',
   },
 ]
 export function SkillsPage() {
@@ -42,7 +42,7 @@ export function SkillsPage() {
         <div className='space-y-6'>
           <PageHeader
             title='Skills'
-            description='Create, review and approve Markdown instructions for AI Reviews.'
+            description='Choose reusable instructions for optional AI reviews.'
             section='Intelligence'
             icon={Sparkles}
             tone='violet'

@@ -105,11 +105,11 @@ export function PolicyComplianceSummary({
     : 0
   return (
     <Card className='h-full min-w-0 gap-3 border-primary/20'>
-      <CardHeader className='flex flex-row flex-wrap items-start justify-between gap-3'>
-        <div className='flex min-w-0 flex-1 items-center gap-3'>
+      <CardHeader className='flex flex-col items-start gap-3'>
+        <div className='flex w-full min-w-0 items-start gap-3'>
           <SurfaceIcon icon={ShieldCheck} tone='teal' />
-          <div className='min-w-0 space-y-1'>
-            <CardTitle>Engineering policy compliance</CardTitle>
+          <div className='min-w-0 flex-1 space-y-1'>
+            <CardTitle>Policy Compliance</CardTitle>
             <p className='text-xs text-muted-foreground'>
               {new Date(period.from).toLocaleDateString('en-GB', {
                 day: 'numeric',

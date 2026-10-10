@@ -260,26 +260,26 @@ export function SkillsCatalogue() {
                   {builtin
                     .slice((builtinPage - 1) * 6, builtinPage * 6)
                     .map((t) => (
-                      <Card key={t.id ?? t.name} className='min-w-0 gap-4'>
-                        <CardHeader>
-                          <div className='flex items-center justify-between gap-3'>
-                            <SurfaceIcon
-                              icon={categoryIcon(t.category)}
-                              tone='violet'
-                            />
-                            <StatusBadge tone='neutral'>Built-in</StatusBadge>
+                      <Card key={t.id ?? t.name} className='min-w-0 gap-3'>
+                        <CardHeader className='flex flex-row items-start gap-3'>
+                          <SurfaceIcon
+                            icon={categoryIcon(t.category)}
+                            tone='violet'
+                          />
+                          <div className='min-w-0 flex-1 space-y-1'>
+                            <h3 className='text-sm leading-snug font-semibold'>
+                              {t.name}
+                            </h3>
+                            {t.category && (
+                              <p className='text-xs text-muted-foreground'>
+                                {t.category}
+                              </p>
+                            )}
                           </div>
-                          {t.category && (
-                            <p className='mt-3 text-xs font-medium text-muted-foreground'>
-                              {t.category}
-                            </p>
-                          )}
-                          <h3 className='text-base font-semibold tracking-tight'>
-                            {t.name}
-                          </h3>
+                          <StatusBadge tone='neutral'>Built-in</StatusBadge>
                         </CardHeader>
-                        <CardContent className='flex-1 space-y-4'>
-                          <p className='text-sm leading-6 text-muted-foreground'>
+                        <CardContent className='flex-1 space-y-3'>
+                          <p className='text-sm leading-5 text-muted-foreground'>
                             {t.description}
                           </p>
                           {t.checks?.length ? (

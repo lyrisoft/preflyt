@@ -17,6 +17,7 @@ import {
   SidebarMenuSubItem,
   useSidebar,
 } from '@/components/ui/sidebar'
+import { primaryDestination } from '@/features/workspace/navigation-policy'
 import { Badge } from '../ui/badge'
 import {
   DropdownMenu,
@@ -175,6 +176,7 @@ function SidebarMenuCollapsedDropdown({
 
 function checkIsActive(href: string, item: NavItem, mainNav = false) {
   return (
+    primaryDestination(href) === item.url ||
     href === item.url || // /endpint?search=param
     href.split('?')[0] === item.url || // endpoint
     !!item?.items?.filter((i) => i.url === href).length || // if child nav is active

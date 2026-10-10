@@ -1,3 +1,4 @@
+import { currentStandards, repositoryStandards, selectionBindingWhere } from '../standards/policy-standards.js'
 import { executionContracts } from './execution-contract.js'
 import {
   BadRequestException,
@@ -31,18 +32,10 @@ export class CiBindingService {
     if (!repo) throw new ForbiddenException('Repository is unavailable')
     return repo
   }
-  async get(id: string) {
+  async get(id: string, policyId?: string) {
     const repo = await this.repository(id)
-    const [selection, binding] = await Promise.all([
-      this.prisma.repositoryStandardsSelection.findFirst({
-        where: { repositoryId: repo.id },
-        orderBy: { revision: 'desc' },
-      }),
-      this.prisma.repositoryCiBindings.findFirst({
-        where: { repositoryId: repo.id },
-        orderBy: { revision: 'desc' },
-      }),
-    ])
+    const selection = await repositoryStandards(this.prisma, repo.id, policyId)
+    const binding = await this.prisma.repositoryCiBindings.findFirst({ where: selectionBindingWhere(repo.id, selection?.id), orderBy: { revision: 'desc' } })
     const contracts = executionContracts()
     return {
       supportedRuleIds: selection
@@ -116,12 +109,10 @@ export class CiBindingService {
       })
       if (!installation.count || !selected.count)
         throw new ForbiddenException('Repository access changed')
-      const selection = await tx.repositoryStandardsSelection.findFirst({
-        where: { repositoryId: repo.id },
-        orderBy: { revision: 'desc' },
-      })
+      const selection = await currentStandards(tx, repo.id, { expectedId: input.expectedSelectionId, allowDraft: true })
+      const latest = await tx.repositoryCiBindings.findFirst({ where: { repositoryId: repo.id }, orderBy: { revision: 'desc' } })
       const previous = await tx.repositoryCiBindings.findFirst({
-        where: { repositoryId: repo.id },
+        where: selectionBindingWhere(repo.id, selection?.id),
         orderBy: { revision: 'desc' },
       })
       if (
@@ -155,7 +146,7 @@ export class CiBindingService {
       const binding = await tx.repositoryCiBindings.create({
         data: {
           repositoryId: repo.id,
-          revision: (previous?.revision ?? 0) + 1,
+          revision: (latest?.revision ?? 0) + 1,
           selectionId: selection.id,
           bindings: input.bindings
             .map((b) => ({ ...b }))

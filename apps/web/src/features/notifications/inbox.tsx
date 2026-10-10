@@ -69,7 +69,7 @@ export function NotificationItem({
             }}
             className='font-medium hover:underline'
           >
-            {titles[item.type] ?? 'Quality gate update'}
+            {titles[item.type] ?? 'Merge review update'}
           </Link>
         ) : (
           <Link

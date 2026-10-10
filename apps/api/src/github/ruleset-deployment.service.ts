@@ -1,3 +1,5 @@
+import { currentStandards } from '../standards/policy-standards.js';
+import { sameIdentity } from '../auth/same-identity.js';
 import { configurationValue } from '../configuration/runtime-configuration.js'
 import { recordRulesetNotification } from "../notifications/notification-event.js";
 import { randomUUID } from "node:crypto";
@@ -152,7 +154,7 @@ export class RulesetDeploymentService {
         "Enable automatic publication and ruleset activation on this deployment",
       );
     const repo = await this.authorize(session, id);
-    const [draft, selection, automation] = await Promise.all([
+    const [draft, automation] = await Promise.all([
       this.prisma.gitHubRulesetDraft.findFirst({
         where: {
           id: draftId,
@@ -160,14 +162,12 @@ export class RulesetDeploymentService {
           organizationId: session.organizationId!,
         },
       }),
-      this.prisma.repositoryStandardsSelection.findFirst({
-        where: { repositoryId: repo.id },
-        orderBy: { revision: "desc" },
-      }),
+
       this.prisma.readinessAutomation.findUnique({
         where: { repositoryId: repo.id },
       }),
     ]);
+    const selection = draft ? await currentStandards(this.prisma, repo.id, { expectedId: draft.selectionId ?? undefined }) : null;
     if (
       !draft ||
       !selection ||
@@ -269,10 +269,11 @@ export class RulesetDeploymentService {
         },
         orderBy: [{ publishedAt: "desc" }, { id: "desc" }],
       });
-      if (!policy || policy.selectionId !== selection.id)
+      if (!policy || ((policy.definition as any).standardsSource !== "POLICY" && policy.selectionId !== selection.id))
         throw new ConflictException(
           `Publish a policy for ${branch} using the current standards first`,
         );
+      await currentStandards(this.prisma, repo.id, { expectedId: policy.selectionId, branchRef: ref });
       policies.push({
         branchRef: ref,
         id: policy.id,
@@ -454,7 +455,7 @@ export class RulesetDeploymentService {
     hash: string,
   ) {
     const { row } = await this.row(session, id, deploymentId, hash);
-    if (row.proposedById === session.identityId)
+    if (await sameIdentity(this.prisma, row.proposedById, session.identityId))
       throw new ForbiddenException(
         "Another authorized administrator must approve ruleset activation",
       );
@@ -492,6 +493,7 @@ export class RulesetDeploymentService {
     const { repo, row } = await this.row(session, id, deploymentId, hash);
     if (
       !row.approvedById ||
+      await sameIdentity(this.prisma, row.approvedById, row.proposedById) ||
       !["APPROVED", "UNKNOWN", "DEPLOYING"].includes(row.state)
     )
       throw new ConflictException(

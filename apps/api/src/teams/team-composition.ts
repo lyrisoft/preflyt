@@ -1,6 +1,8 @@
 import { digest } from "../assessments/assessment-digest.js";
 import {
   adoptionProfiles,
+  ruleRequirementsDigest,
+  type Rule,
   resolvePacks,
   type AdoptionProfile,
   type StandardPack,
@@ -46,12 +48,12 @@ export function composeTeamStandards(
     conflicts.push(
       "This repository would exceed the supported limit of five standards. Choose a combined organization standard.",
     );
-  const rules = new Map<string, unknown>();
+  const rules = new Map<string, Rule>();
   const ai = new Map<string, unknown>();
   for (const ref of packs.values()) {
     const pack = resolvePacks([ref])[0]! as StandardPack;
     for (const rule of pack.rules) {
-      if (rules.has(rule.id) && digest(rules.get(rule.id)) !== digest(rule))
+      if (rules.has(rule.id) && ruleRequirementsDigest(rules.get(rule.id)!) !== ruleRequirementsDigest(rule))
         conflicts.push(`Conflicting definitions of ${rule.id}`);
       else rules.set(rule.id, rule);
     }

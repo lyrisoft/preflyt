@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, useNavigate, useSearch } from '@tanstack/react-router'
 import {
+  ArrowLeft,
   ArrowUpRight,
   ClipboardCheck,
   GitBranch,
@@ -25,40 +26,39 @@ import { RepositoryPicker } from '@/components/repository-picker'
 import { StatusBadge } from '@/components/status-badge'
 import { SurfaceIcon } from '@/components/surface-icon'
 import { CheckPublications } from '@/features/repositories/check-publications'
-import { GatePolicyPanel } from '@/features/repositories/gate-policy-panel'
 import { RepositoryActivityPanel } from '@/features/repositories/repository-activity-panel'
 import { RepositoryAssessments } from '@/features/repositories/repository-assessments'
-import { RepositoryBindings } from '@/features/repositories/repository-bindings'
 import { RepositoryCiEvidence } from '@/features/repositories/repository-ci-evidence'
 import { RepositoryPullRequests } from '@/features/repositories/repository-pull-requests'
 import { RepositoryRulesets } from '@/features/repositories/repository-rulesets'
-import { RepositoryStandards } from '@/features/repositories/repository-standards'
 import {
   IntegrationCatalogue,
   type IntegrationId,
 } from './integration-catalogue'
 import { useNavigationSession } from './navigation-session'
 import { OrganizationStandardsLibrary } from './organization-standards-library'
+import { PoliciesWorkspace } from './policies-workspace'
 import { canPerform } from './scoped-access'
 
 type Module =
   'quality-gates' | 'assessments' | 'standards' | 'policies' | 'integrations'
 const modules = {
   'quality-gates': {
-    title: 'Quality Gates',
+    title: 'Merge Protection',
     section: 'Governance',
     icon: ClipboardCheck,
-    description: 'Review saved gate results and GitHub branch rules.',
+    description:
+      'Review branch rules and the checks GitHub requires before merge.',
   },
   assessments: {
     title: 'Assessments',
     section: 'Workspace',
     icon: ClipboardCheck,
     description:
-      'Review activity, tracked commits and the evidence saved with each assessment.',
+      'See what passed, what needs attention and the evidence behind each result.',
   },
   standards: {
-    title: 'Engineering Standards',
+    title: 'Standards',
     section: 'Governance',
     icon: Layers,
     description:
@@ -69,7 +69,7 @@ const modules = {
     section: 'Governance',
     icon: SlidersHorizontal,
     description:
-      'Manage adopted standards and the check sources approved for each check.',
+      'Choose standards, review their impact and publish branch policies.',
   },
   integrations: {
     title: 'Integrations',
@@ -96,15 +96,21 @@ async function read<T>(path: string, signal: AbortSignal): Promise<T> {
 }
 
 export function WorkspaceModule({ module }: { module: Module }) {
-  const [integration, setIntegration] = useState<IntegrationId | null>(null)
+  const [integration, setIntegration] = useState<IntegrationId | null>('github')
   const config = modules[module]
   const search = useSearch({ strict: false }) as {
     repository?: string
+    assessment?: string
+    from?: 'quality-gates'
+    rulesetView?: 'github' | 'drafts' | 'deployments'
     gate?: 'assessments' | 'rulesets' | 'checks'
     tab?: 'commits' | 'pull-requests' | 'activity'
   }
-  const gateView = search.gate ?? 'assessments'
-  const assessmentView = search.tab ?? 'commits'
+  const reportView = module === 'assessments' && !!search.assessment
+  // Legacy results links now open protection controls; assessment history has one home.
+  const gateView = search.gate === 'checks' ? 'checks' : 'rulesets'
+  const assessmentView =
+    search.tab === 'pull-requests' ? 'pull-requests' : 'commits'
   const navigate = useNavigate()
   const inventory = useQuery({
     queryKey: ['workspace-repositories'],
@@ -118,7 +124,9 @@ export function WorkspaceModule({ module }: { module: Module }) {
   // An inaccessible URL selection must never fall through to another repository.
   const repository = search.repository
     ? repositories.find((repo) => repo.githubId === search.repository)
-    : repositories[0]
+    : reportView
+      ? undefined
+      : repositories[0]
   const canManage = canPerform(session.data, 'repository.connect')
   return (
     <Tabs
@@ -144,12 +152,25 @@ export function WorkspaceModule({ module }: { module: Module }) {
       }
       className='contents'
     >
-      <AppHeader breadcrumbs={[{ label: config.title }]} />
+      <AppHeader
+        breadcrumbs={
+          reportView
+            ? [
+                { label: 'Assessments', to: '/assessments' },
+                { label: 'Report' },
+              ]
+            : [{ label: config.title }]
+        }
+      />
       <Main>
         <PageHeader
           className='mb-5'
-          title={config.title}
-          description={config.description}
+          title={reportView ? 'Assessment report' : config.title}
+          description={
+            reportView
+              ? `Checks and evidence for ${repository?.fullName ?? 'the selected repository'}.`
+              : config.description
+          }
           section={config.section}
           icon={config.icon}
           tone={
@@ -159,20 +180,93 @@ export function WorkspaceModule({ module }: { module: Module }) {
           }
           actions={
             <>
-              <Button variant='outline' size='sm' asChild>
-                <Link to='/apps'>
-                  <GitBranch className='size-3.5' aria-hidden='true' />
-                  Manage repositories
-                </Link>
-              </Button>
+              {reportView ? (
+                <Button variant='outline' size='sm' asChild>
+                  {search.from === 'quality-gates' ? (
+                    <Link
+                      to='/quality-gates'
+                      search={{
+                        repository: search.repository,
+                        gate: 'rulesets',
+                      }}
+                    >
+                      <ArrowLeft aria-hidden='true' />
+                      Back to merge protection
+                    </Link>
+                  ) : (
+                    <Link
+                      to='/assessments'
+                      search={{ repository: search.repository, tab: 'commits' }}
+                    >
+                      <ArrowLeft aria-hidden='true' />
+                      Back to assessments
+                    </Link>
+                  )}
+                </Button>
+              ) : (
+                <Button variant='outline' size='sm' asChild>
+                  <Link to='/apps'>
+                    <GitBranch className='size-3.5' aria-hidden='true' />
+                    Manage repositories
+                  </Link>
+                </Button>
+              )}
               {module === 'quality-gates' && (
+                <Button variant='outline' size='sm' asChild>
+                  <Link
+                    to='/assessments'
+                    search={{ repository: repository?.githubId }}
+                  >
+                    <ClipboardCheck aria-hidden='true' />
+                    View assessments
+                  </Link>
+                </Button>
+              )}
+              {module === 'policies' && (
                 <PageHelpDrawer
-                  title='Quality Gates'
+                  title='Policies'
                   sections={[
                     {
-                      title: 'Saved gate results',
+                      title: 'What is a policy?',
                       content:
-                        'Assessment previews use saved evidence for an exact commit. They do not publish GitHub checks or block merges.',
+                        'A branch policy defines which standards a repository branch must follow. Standards group checks; assessments show the results of evaluating those checks.',
+                    },
+                    {
+                      title: 'Create a branch policy',
+                      content:
+                        'Select a repository, open Branch policies and choose New policy. Choose the branch and standards, then save the draft. Review its requirements, obtain approval and publish it. Publishing makes the approved policy available for PR evaluation. Users other than a local Super Admin need another authorized reviewer to approve it.',
+                    },
+                    {
+                      title: 'What are CI jobs?',
+                      content:
+                        'CI jobs are the tests, builds and scans in your GitHub workflows. This tab connects an existing job to the check whose result it supplies. For example, connect your test job to Required test execution. It does not create or run a GitHub workflow, and connecting jobs is not required to create a policy.',
+                    },
+                    {
+                      title: 'When no CI jobs appear',
+                      content:
+                        'Run the repository’s existing GitHub workflow, then refresh jobs. If jobs are still missing, check that the connected GitHub App sends workflow and check events to Preflyt. A successful job alone may not provide the verified report needed to evaluate a check. Missing results stay incomplete.',
+                    },
+                    {
+                      title: 'See results and enable merge protection',
+                      content:
+                        'Open Assessments to see evaluated checks and their evidence. Configure automatic PR check publishing under Settings → PR checks. Publishing a policy does not run tests or block merging by itself. GitHub blocks merging only when active branch rules require the Preflyt check; manage those rules under Merge Protection.',
+                    },
+                    {
+                      title: 'Organization and team scope',
+                      content:
+                        'Organization and team assignments apply shared standards to their authorized repositories. Review the affected repositories before applying changes. Branch policies include inherited requirements alongside the standards you select.',
+                    },
+                  ]}
+                />
+              )}
+              {module === 'quality-gates' && (
+                <PageHelpDrawer
+                  title='Merge Protection'
+                  sections={[
+                    {
+                      title: 'Branch protection and assessment results',
+                      content:
+                        'This page shows GitHub branch rules and manages approved Preflyt protections. GitHub enforces active rules and decides whether merging is allowed. Assessment history and saved check evidence are under Assessments. Use View assessments to open that repository’s reports.',
                     },
                     {
                       title: 'GitHub rulesets',
@@ -240,17 +334,39 @@ export function WorkspaceModule({ module }: { module: Module }) {
               Try again
             </Button>
           </div>
+        ) : reportView ? (
+          repository ? (
+            <RepositoryAssessments
+              key={`${repository.githubId}:${search.assessment}`}
+              repositoryId={repository.githubId}
+              initialSha=''
+              initialAssessmentId={search.assessment}
+              canCreate={false}
+            />
+          ) : (
+            <p role='alert' className='rounded-lg border p-4 text-sm'>
+              This assessment needs an accessible, selected repository. Return
+              to the list and choose a repository.
+            </p>
+          )
+        ) : module === 'policies' ? (
+          repositories.length ? (
+            <PoliciesWorkspace
+              key={`${session.data?.identityId}:${session.data?.organizationId}`}
+              repositories={repositories}
+            />
+          ) : (
+            <div className='space-y-3 rounded-xl border p-4'>
+              <p className='text-sm'>
+                Connect and select a repository before assigning standards.
+              </p>
+              <Button size='sm' variant='outline' asChild>
+                <Link to='/apps'>Manage repositories</Link>
+              </Button>
+            </div>
+          )
         ) : (
           <div className='space-y-6'>
-            {module === 'quality-gates' && (
-              <TabsList>
-                <TabsTrigger value='assessments'>
-                  Assessment previews
-                </TabsTrigger>
-                <TabsTrigger value='rulesets'>GitHub Rulesets</TabsTrigger>
-                <TabsTrigger value='checks'>Merge review result</TabsTrigger>
-              </TabsList>
-            )}
             {module === 'integrations' && (
               <IntegrationCatalogue
                 connected={inventory.data.installations.some(
@@ -269,7 +385,7 @@ export function WorkspaceModule({ module }: { module: Module }) {
                     </span>
                     <div>
                       <CardTitle asChild>
-                        <h2>GitHub installations</h2>
+                        <h2>GitHub connections</h2>
                       </CardTitle>
                       <p className='mt-1 text-xs text-muted-foreground'>
                         Repository access through your GitHub App.
@@ -289,7 +405,7 @@ export function WorkspaceModule({ module }: { module: Module }) {
                   <div className='grid grid-cols-2 gap-3'>
                     <div className='rounded-lg border border-chart-2/15 bg-chart-2/5 px-4 py-3'>
                       <p className='text-xs text-muted-foreground'>
-                        Active installations
+                        Active connections
                       </p>
                       <p className='mt-1 text-2xl font-semibold tabular-nums'>
                         {
@@ -318,9 +434,7 @@ export function WorkspaceModule({ module }: { module: Module }) {
                         aria-hidden='true'
                       />
                       <div>
-                        <p className='text-sm font-medium'>
-                          Connect your first installation
-                        </p>
+                        <p className='text-sm font-medium'>Connect GitHub</p>
                         <p className='mt-1 text-xs text-muted-foreground'>
                           {canManage
                             ? 'Connect the GitHub App, then select the repositories Preflyt can access.'
@@ -349,11 +463,18 @@ export function WorkspaceModule({ module }: { module: Module }) {
                                 {installation.accountLogin}
                               </p>
                               <p className='mt-1 text-xs text-muted-foreground'>
-                                Installation{' '}
-                                <span className='font-mono'>
-                                  {installation.id}
-                                </span>
+                                {installation.active
+                                  ? 'Choose the repositories you want to review.'
+                                  : 'Restore GitHub App access to reconnect this account.'}
                               </p>
+                              <details className='mt-1 text-xs text-muted-foreground'>
+                                <summary className='cursor-pointer'>
+                                  Connection details
+                                </summary>
+                                <span className='font-mono'>
+                                  Installation {installation.id}
+                                </span>
+                              </details>
                             </div>
                           </div>
                           <StatusBadge
@@ -361,6 +482,17 @@ export function WorkspaceModule({ module }: { module: Module }) {
                           >
                             {installation.active ? 'Active' : 'Unavailable'}
                           </StatusBadge>
+                          {canManage && (
+                            <Button size='sm' variant='outline' asChild>
+                              {installation.active ? (
+                                <Link to='/apps'>Manage repositories</Link>
+                              ) : (
+                                <a href={`${API_BASE_URL}/github/install`}>
+                                  Reconnect GitHub
+                                </a>
+                              )}
+                            </Button>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -422,15 +554,17 @@ export function WorkspaceModule({ module }: { module: Module }) {
                       />
                     </div>
                     <div className='flex flex-wrap items-center gap-2'>
-                      <Badge
-                        variant='outline'
-                        className='text-muted-foreground'
-                      >
-                        {repositories.length} selected{' '}
-                        {repositories.length === 1
-                          ? 'repository'
-                          : 'repositories'}
-                      </Badge>
+                      {module === 'integrations' && (
+                        <Badge
+                          variant='outline'
+                          className='text-muted-foreground'
+                        >
+                          {repositories.length} selected{' '}
+                          {repositories.length === 1
+                            ? 'repository'
+                            : 'repositories'}
+                        </Badge>
+                      )}
                       {repository && (
                         <Button variant='ghost' size='sm' asChild>
                           <Link
@@ -452,11 +586,25 @@ export function WorkspaceModule({ module }: { module: Module }) {
                       key={`${module}-${repository.githubId}`}
                       className='space-y-5'
                     >
+                      {module === 'quality-gates' && (
+                        <TabsList
+                          aria-label='Merge protection sections'
+                          className='h-auto max-w-full flex-wrap justify-start'
+                        >
+                          <TabsTrigger value='rulesets'>
+                            Branch rules
+                          </TabsTrigger>
+                          <TabsTrigger value='checks'>PR checks</TabsTrigger>
+                        </TabsList>
+                      )}
                       {module === 'assessments' && (
                         <>
+                          <RepositoryActivityPanel
+                            repositoryId={repository.githubId}
+                          />
                           <TabsList
                             aria-label='Assessment sections'
-                            className='max-w-full'
+                            className='h-auto max-w-full flex-wrap justify-start'
                           >
                             <TabsTrigger value='commits'>
                               Commit assessments
@@ -464,17 +612,7 @@ export function WorkspaceModule({ module }: { module: Module }) {
                             <TabsTrigger value='pull-requests'>
                               Pull requests
                             </TabsTrigger>
-                            <TabsTrigger value='activity'>Activity</TabsTrigger>
                           </TabsList>
-                          <TabsContent
-                            value='activity'
-                            forceMount
-                            className='data-[state=inactive]:hidden'
-                          >
-                            <RepositoryActivityPanel
-                              repositoryId={repository.githubId}
-                            />
-                          </TabsContent>
                           <TabsContent
                             value='pull-requests'
                             forceMount
@@ -502,20 +640,11 @@ export function WorkspaceModule({ module }: { module: Module }) {
                         </>
                       )}
                       {module === 'quality-gates' &&
-                        gateView === 'assessments' && (
-                          <TabsContent value='assessments'>
-                            <RepositoryAssessments
-                              repositoryId={repository.githubId}
-                              canCreate={false}
-                              initialSha=''
-                            />
-                          </TabsContent>
-                        )}
-                      {module === 'quality-gates' &&
                         gateView === 'rulesets' && (
                           <TabsContent value='rulesets'>
                             <RepositoryRulesets
-                              key={repository.githubId}
+                              key={`${repository.githubId}:${search.rulesetView ?? 'github'}`}
+                              initialView={search.rulesetView}
                               repositoryId={repository.githubId}
                               repositoryName={repository.fullName}
                               actorId={session.data?.identityId}
@@ -562,46 +691,6 @@ export function WorkspaceModule({ module }: { module: Module }) {
                             )}
                           />
                         </TabsContent>
-                      )}
-                      {module === 'policies' && (
-                        <>
-                          <RepositoryStandards
-                            repositoryId={repository.githubId}
-                            canManage={canPerform(
-                              session.data,
-                              'policy.draft',
-                              repository.githubId
-                            )}
-                            policyRevisions={
-                              <GatePolicyPanel
-                                key={repository.githubId}
-                                repositoryId={repository.githubId}
-                                canDraft={canPerform(
-                                  session.data,
-                                  'policy.draft',
-                                  repository.githubId
-                                )}
-                                canPublish={canPerform(
-                                  session.data,
-                                  'policy.publish',
-                                  repository.githubId
-                                )}
-                                actorId={session.data?.identityId}
-                                platformAdmin={session.data?.platformAdmin}
-                              />
-                            }
-                            sourceBindings={
-                              <RepositoryBindings
-                                repositoryId={repository.githubId}
-                                canManage={canPerform(
-                                  session.data,
-                                  'policy.draft',
-                                  repository.githubId
-                                )}
-                              />
-                            }
-                          />
-                        </>
                       )}
                       {module === 'integrations' && (
                         <RepositoryCiEvidence

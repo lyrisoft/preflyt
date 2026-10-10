@@ -8,9 +8,16 @@ const state = vi.hoisted(() => ({
   query: {} as Record<string, unknown>,
   session: {
     isSuccess: true,
-    data: { organizationId: 'org', platformAdmin: false },
+    data: {
+      organizationId: 'org',
+      platformAdmin: false,
+      permissions: ['organization.members.manage'],
+    },
   },
   save: vi.fn(),
+  initialTab: undefined as string | undefined,
+  identityLink: undefined as string | undefined,
+  changeTab: (_tab: string | undefined) => {},
 }))
 vi.mock('@tanstack/react-query', () => ({
   useQuery: () => state.query,
@@ -19,6 +26,9 @@ vi.mock('@tanstack/react-query', () => ({
 }))
 vi.mock('../workspace/navigation-session', () => ({
   useNavigationSession: () => state.session,
+}))
+vi.mock('./github-identity-link', () => ({
+  GitHubIdentityLink: () => <section>GitHub account linking</section>,
 }))
 vi.mock('./configuration-panel', () => ({
   ConfigurationPanel: () => <section>System settings controls</section>,
@@ -36,23 +46,43 @@ vi.mock('@/features/notifications/notification-preferences', () => ({
     <section>Existing notification preferences</section>
   ),
 }))
-vi.mock('@tanstack/react-router', () => ({
-  Link: ({
-    children,
-    className,
-  }: {
-    children: React.ReactNode
-    className?: string
-  }) => (
-    <a href='/apps' className={className}>
-      {children}
-    </a>
-  ),
-}))
+vi.mock('@tanstack/react-router', async () => {
+  const { useState } = await import('react')
+  return {
+    getRouteApi: () => ({
+      useSearch: () => {
+        const [tab, setTab] = useState(state.initialTab)
+        state.changeTab = setTab
+        return { tab, identityLink: state.identityLink }
+      },
+    }),
+    useNavigate:
+      () =>
+      ({ search }: { search: (previous: object) => { tab: string } }) =>
+        state.changeTab(search({}).tab),
+    Link: ({
+      children,
+      className,
+    }: {
+      children: React.ReactNode
+      className?: string
+    }) => (
+      <a href='/apps' className={className}>
+        {children}
+      </a>
+    ),
+  }
+})
 beforeEach(() => {
+  state.identityLink = undefined
+  state.initialTab = 'workspace'
   state.session = {
     isSuccess: true,
-    data: { organizationId: 'org', platformAdmin: false },
+    data: {
+      organizationId: 'org',
+      platformAdmin: false,
+      permissions: ['organization.members.manage'],
+    },
   }
   state.query = {
     data: {
@@ -167,5 +197,67 @@ it('keeps workspace settings readable across themes and viewport sizes', async (
   } finally {
     document.documentElement.classList.remove('dark')
     await page.viewport(1280, 900)
+  }
+})
+
+it('opens a configuration deep link only for the deployment admin', async () => {
+  state.initialTab = 'configuration'
+  const ordinary = await render(<OrganizationSettingsPage />)
+  await expect
+    .element(ordinary.getByText('System settings controls'))
+    .not.toBeInTheDocument()
+  await ordinary.unmount()
+  state.session.data.platformAdmin = true
+  const admin = await render(<OrganizationSettingsPage />)
+  await expect
+    .element(admin.getByText('System settings controls'))
+    .toBeVisible()
+})
+
+it('opens personal notifications for readers and keeps settings focused on their contents', async () => {
+  state.initialTab = undefined
+  state.session.data.permissions = []
+  const view = await render(<OrganizationSettingsPage />)
+  await expect
+    .element(view.getByRole('tab', { name: 'Notifications', exact: true }))
+    .toHaveAttribute('aria-selected', 'true')
+  await expect
+    .element(view.getByRole('tab', { name: 'Workspace', exact: true }))
+    .not.toBeInTheDocument()
+  await expect
+    .element(view.getByRole('tab', { name: 'Appearance' }))
+    .toBeVisible()
+  await expect
+    .element(view.getByRole('tab', { name: 'Notifications' }))
+    .toBeVisible()
+  await expect
+    .element(view.getByRole('tab', { name: 'Configuration' }))
+    .not.toBeInTheDocument()
+})
+
+it('keeps identity-link confirmation reachable without a management directory', async () => {
+  state.identityLink = 'confirm'
+  state.session.data.permissions = []
+  const view = await render(<OrganizationSettingsPage />)
+  await expect.element(view.getByText('GitHub account linking')).toBeVisible()
+  await expect
+    .element(view.getByRole('tab', { name: 'Notifications', exact: true }))
+    .toHaveAttribute('aria-selected', 'true')
+})
+
+it('opens workspace settings for managers and resolves old directory deep links', async () => {
+  for (const initial of [undefined, 'manage']) {
+    state.initialTab = initial
+    const view = await render(<OrganizationSettingsPage />)
+    await expect
+      .element(view.getByRole('tab', { name: 'Workspace', exact: true }))
+      .toHaveAttribute('aria-selected', 'true')
+    await expect
+      .element(view.getByRole('tab', { name: 'Manage', exact: true }))
+      .not.toBeInTheDocument()
+    await expect
+      .element(view.getByText('Connections and administration'))
+      .not.toBeInTheDocument()
+    await view.unmount()
   }
 })

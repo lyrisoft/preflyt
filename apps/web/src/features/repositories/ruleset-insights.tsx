@@ -406,7 +406,7 @@ export function RulesetInsights({
             </TableBody>
           </Table>
           {!data.suites.length && (
-            <p className='rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground'>
+            <p className='rounded-xl border border-dashed p-4 text-center text-sm text-muted-foreground'>
               No matching evaluations on this page.
             </p>
           )}

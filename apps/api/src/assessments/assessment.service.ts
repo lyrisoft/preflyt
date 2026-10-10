@@ -1,3 +1,4 @@
+import { currentStandards, selectionBindingWhere } from '../standards/policy-standards.js'
 import {
   freezeNativeEvidence,
   readLatestNativeEvidence,
@@ -225,10 +226,7 @@ export class AssessmentService {
       },
     })
     if (!repo) throw new ForbiddenException('Repository access changed')
-    const selection = await tx.repositoryStandardsSelection.findFirst({
-      where: { repositoryId: repo.id },
-      orderBy: { revision: 'desc' },
-    })
+    const selection = await currentStandards(tx, repo.id, { branchRef: pullRequest ? `refs/heads/${pullRequest.base.ref}` : (repo.defaultBranch ? `refs/heads/${repo.defaultBranch}` : undefined) })
     if (!selection) return { assessment: null, reason: 'standards_not_adopted' }
     const result = await this.persist(
       tx,
@@ -306,10 +304,7 @@ export class AssessmentService {
         )
       return { assessment: existing, duplicate: true }
     }
-    const selection = await tx.repositoryStandardsSelection.findFirst({
-      where: { repositoryId: repo.id },
-      orderBy: { revision: 'desc' },
-    })
+    const selection = await currentStandards(tx, repo.id, { expectedId: input.expectedSelectionId, ...(trigger.pullRequest ? { branchRef: `refs/heads/${trigger.pullRequest.base.ref}` } : {}) })
     if (!selection || selection.id !== input.expectedSelectionId)
       throw new ConflictException(
         'Save or reload the current standards selection first',
@@ -386,7 +381,7 @@ export class AssessmentService {
         'Mappings must reference selected rules and collected evidence from this exact repository commit',
       )
     const binding = await tx.repositoryCiBindings.findFirst({
-      where: { repositoryId: repo.id },
+      where: selectionBindingWhere(repo.id, selection.id),
       orderBy: { revision: 'desc' },
     })
     const bindingActive = binding?.selectionId === selection.id

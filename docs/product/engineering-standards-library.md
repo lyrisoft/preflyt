@@ -168,3 +168,7 @@ The server scopes all library versions to the active organization, validates che
 ### Advisory AI reviews (2026-10-09)
 
 Owners/Admins can add named AI reviews to organization standard versions using approved enabled skills. The server pins skill ID, integer version and content digest; review stages select repository/PR applicability. Definitions are frozen by explicit repository adoption and policy review. AI reviews remain advisory and outside required deterministic gate rules. The current runtime reviews saved check evidence only. The standard editor is a wide responsive dialog with details on the left and separate filtered/paginated Deterministic checks and AI Reviews tabs on the right. No new analyzer, shell command or AI waiver can be authored through this form. See [review skills](../operations/review-skills.md).
+
+## Organization check editing
+
+In the standard editor, use Add check to create a named test-report (JUnit) or scan-report (SARIF) check. Edit check changes its name and remediation guidance. New checks use the existing verified CI evidence path; creating a check does not run commands, grant source trust or mark missing evidence as passed. Connect its pipeline result in Policies → CI jobs and use an approved execution contract for its exact check ID. Saving a standard creates a version; existing policies and assessments retain their frozen definitions. Built-in evaluator requirements cannot be rewritten through this editor.

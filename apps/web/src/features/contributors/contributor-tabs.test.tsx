@@ -125,7 +125,7 @@ it.each([
       <ContributorsPage contributorId='person' />
     )
     expect(html).not.toContain('Contribution activity')
-    expect(html).not.toContain('Engineering policy compliance')
+    expect(html).not.toContain('Policy Compliance')
     expect(html).toContain('role="tablist"')
   }
 )
@@ -133,7 +133,7 @@ it('keeps the dashboard inside Overview and the navigation before it', () => {
   state.tab = 'overview'
   state.page = 1
   const html = renderToStaticMarkup(<ContributorsPage contributorId='person' />)
-  expect(html).toContain('Engineering policy compliance')
+  expect(html).toContain('Policy Compliance')
   expect(html.indexOf('role="tablist"')).toBeLessThan(
     html.indexOf('Contribution activity')
   )

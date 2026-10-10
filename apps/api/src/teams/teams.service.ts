@@ -1,4 +1,9 @@
 import {
+  nestedSnapshot,
+  nestedSources,
+  verifyNestedScope,
+} from "./nested-team-scope.js";
+import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
@@ -109,6 +114,212 @@ export class TeamsService {
         );
       throw e;
     }
+  }
+  private async nestedPreview(
+    tx: Db,
+    s: AuthenticatedSession,
+    id: string,
+    childIds: string[],
+  ) {
+    if (
+      !Array.isArray(childIds) ||
+      !childIds.length ||
+      childIds.length > 10 ||
+      new Set(childIds).size !== childIds.length
+    )
+      throw new BadRequestException("Choose one to ten child teams");
+    const parent = await this.team(tx, id, s.organizationId!);
+    if (parent.source === "ORGANIZATION")
+      throw new ConflictException(
+        "Organization requirements already cover all selected repositories",
+      );
+    if (
+      parent.source === "GITHUB" &&
+      (parent.syncState !== "SYNCED" ||
+        !parent.syncedAt ||
+        Date.now() - parent.syncedAt.getTime() > 86400000)
+    )
+      throw new ConflictException(
+        "Sync this GitHub team before reviewing child scope",
+      );
+    if (
+      nestedSources(parent.nestedScope).some(
+        (child) => !childIds.includes(child.teamId),
+      )
+    )
+      throw new ConflictException(
+        "Removing approved child coverage requires a separately approved exception",
+      );
+    const children = [];
+    const count = { value: 0 };
+    const repositories = new Map<
+      string,
+      { id: string; githubId: string; name: string }
+    >();
+    const access = new AuthorizationService(tx as PrismaService);
+    for (const childId of [...childIds].sort()) {
+      const child = await this.team(tx, childId, s.organizationId!);
+      if (
+        parent.source === "GITHUB" &&
+        (child.source !== "GITHUB" ||
+          child.parentGithubTeamId !== parent.githubTeamId ||
+          child.installationId !== parent.installationId ||
+          child.githubOrganizationId !== parent.githubOrganizationId)
+      )
+        throw new ConflictException(
+          "Choose a current GitHub child of this team",
+        );
+      const source = await nestedSnapshot(
+        tx,
+        childId,
+        s.organizationId!,
+        [id],
+        count,
+      );
+      children.push({ ...source, name: child.name });
+      for (const repositoryId of source.repositoryIds) {
+        const repo = await tx.gitHubRepository.findUniqueOrThrow({
+          where: { id: repositoryId },
+        });
+        await access.requireRepository(
+          s,
+          repo.githubId.toString(),
+          "repository.manage",
+        );
+        repositories.set(repo.id, {
+          id: repo.id,
+          githubId: repo.githubId.toString(),
+          name: repo.fullName,
+        });
+      }
+    }
+    const existing = await tx.teamRepositoryScope.findMany({
+      where: { teamId: id, policyScopeEnabled: true },
+      include: { repository: true },
+    });
+    const approvedChildRepositories = new Set(
+      children.flatMap((child) => child.repositoryIds),
+    );
+    if (
+      existing.some(
+        (scope) =>
+          !scope.providerPresent &&
+          (scope.origin !== "NESTED" ||
+            !approvedChildRepositories.has(scope.repositoryId)),
+      )
+    )
+      throw new ConflictException(
+        "Repository access changed. Sync and review the team before approving child scope",
+      );
+    for (const scope of existing) {
+      await access.requireRepository(
+        s,
+        scope.repository.githubId.toString(),
+        "repository.manage",
+      );
+      repositories.set(scope.repositoryId, {
+        id: scope.repositoryId,
+        githubId: scope.repository.githubId.toString(),
+        name: scope.repository.fullName,
+      });
+    }
+    if (repositories.size > 100 || !repositories.size)
+      throw new ConflictException(
+        "Child scope must cover one to 100 repositories",
+      );
+    const rows = [...repositories.values()].sort((a, b) =>
+      a.id.localeCompare(b.id),
+    );
+    const sources = children.map(({ name, ...source }) => source);
+    const previewHash = digest({
+      teamId: id,
+      organizationId: s.organizationId,
+      revision: parent.revision,
+      scopeRevision: parent.scopeRevision,
+      prior: parent.nestedScope,
+      sources,
+      repositories: rows,
+    });
+    return {
+      previewHash,
+      teamId: id,
+      revision: parent.revision,
+      children,
+      repositories: rows,
+      sources,
+    };
+  }
+  async previewChildScope(
+    s: AuthenticatedSession,
+    id: string,
+    childIds: string[],
+  ) {
+    return this.change(s, "team.manage", (tx) =>
+      this.nestedPreview(tx, s, id, childIds),
+    );
+  }
+  async approveChildScope(
+    s: AuthenticatedSession,
+    id: string,
+    childIds: string[],
+    hash: string,
+  ) {
+    return this.change(s, "team.manage", async (tx) => {
+      const preview = await this.nestedPreview(tx, s, id, childIds);
+      if (hash !== preview.previewHash)
+        throw new ConflictException(
+          "Child scope changed. Preview it again before approving",
+        );
+      const parent = await this.team(tx, id, s.organizationId!);
+      const existing = await tx.teamRepositoryScope.findMany({
+        where: { teamId: id, policyScopeEnabled: true },
+      });
+      if (
+        digest(parent.nestedScope) === digest(preview.sources) &&
+        existing.every((scope) => scope.providerPresent)
+      )
+        return { ...preview, approved: true };
+      for (const repository of preview.repositories) {
+        await tx.teamRepositoryScope.upsert({
+          where: {
+            teamId_repositoryId: { teamId: id, repositoryId: repository.id },
+          },
+          create: {
+            teamId: id,
+            repositoryId: repository.id,
+            origin: "NESTED",
+            policyScopeEnabled: true,
+            providerPresent: true,
+            approvedById: s.identityId,
+            verifiedAt: new Date(),
+          },
+          update:
+            existing.find((scope) => scope.repositoryId === repository.id)
+              ?.origin === "NESTED"
+              ? {
+                  policyScopeEnabled: true,
+                  providerPresent: true,
+                  approvedById: s.identityId,
+                  verifiedAt: new Date(),
+                }
+              : { policyScopeEnabled: true },
+        });
+      }
+      await tx.preflytTeam.update({
+        where: { id },
+        data: {
+          nestedScope: json(preview.sources),
+          revision: { increment: 1 },
+          scopeRevision: { increment: 1 },
+        },
+      });
+      await this.audit(tx, s, "child_scope_approved", id, {
+        previewHash: hash,
+        childIds,
+        repositoryIds: preview.repositories.map((v) => v.githubId),
+      });
+      return { ...preview, approved: true };
+    });
   }
   async baseline(s: AuthenticatedSession) {
     await this.access.requireOrganization(s, "team.manage", true);
@@ -269,6 +480,15 @@ export class TeamsService {
       }),
     ]);
     return {
+      childTeams: await this.db.preflytTeam.findMany({
+        where: {
+          organizationId: s.organizationId!,
+          source: { not: "ORGANIZATION" },
+        },
+        select: { id: true, name: true },
+        orderBy: { name: "asc" },
+        take: 500,
+      }),
       repositories: repositories.map((r) => ({
         id: r.githubId.toString(),
         name: r.fullName,
@@ -432,6 +652,7 @@ export class TeamsService {
                 m.membership.identity.subject,
             }))
           : team.importedMembers,
+      nestedScope: nestedSources(team.nestedScope),
       repositories: scopes.map((r) => ({
         id: r.repository.githubId.toString(),
         name: r.repository.fullName,
@@ -540,6 +761,22 @@ export class TeamsService {
             include: { repository: true },
           })
         : [];
+      if (
+        previous &&
+        nestedSources(previous.nestedScope).some((child) =>
+          child.repositoryIds.some(
+            (repositoryId) =>
+              !authorized.some(
+                (repo) =>
+                  repo.id === repositoryId &&
+                  b.repositoryIds.includes(repo.githubId.toString()),
+              ),
+          ),
+        )
+      )
+        throw new ConflictException(
+          "Keep approved child repositories selected. Removing nested coverage requires an approved exception",
+        );
       const removesAssignedRepository = priorScope.some(
         (scope) =>
           !b.repositoryIds.includes(scope.repository.githubId.toString()),
@@ -1149,6 +1386,7 @@ export class TeamsService {
         );
       }
     }
+    await verifyNestedScope(tx, team);
     const scopes = await tx.teamRepositoryScope.findMany({
       where: { teamId: id, policyScopeEnabled: true },
       include: { repository: true },

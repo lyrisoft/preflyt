@@ -182,8 +182,7 @@ export function SkillReviewPanel({
             {!eligible.length && (
               <p className='text-sm text-muted-foreground'>
                 No AI Reviews are assigned in this assessment. Add them to
-                Engineering Standards, adopt the version and create a new
-                assessment.
+                Standards, adopt the version and create a new assessment.
               </p>
             )}
             {stage === 'pull_request' && (
