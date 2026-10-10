@@ -32,10 +32,13 @@ it('switches themes from cards, supports arrow keys and persists the selection',
   await expect
     .element(view.getByRole('radio', { name: 'Light', exact: true }))
     .toHaveFocus()
-  await userEvent.keyboard('{ArrowRight}')
+  // Radix moves focus asynchronously. Keep the key down until that movement
+  // completes; a zero-delay keyup can clear its selection flag first in CI.
+  await userEvent.keyboard('{ArrowRight>}')
   await expect
     .element(view.getByRole('radio', { name: 'Dark', exact: true }))
     .toHaveAttribute('aria-checked', 'true')
+  await userEvent.keyboard('{/ArrowRight}')
   expect(getCookie(storageKey)).toBe('dark')
   await expect
     .poll(() => document.documentElement.classList.contains('dark'))
