@@ -1,0 +1,26 @@
+# Map explicit aliases to provider model names. Add keys only for models you enable.
+model_list:
+  - model_name: openai-review
+    litellm_params:
+      model: openai/gpt-4.1-mini
+      api_key: os.environ/OPENAI_API_KEY
+  - model_name: claude-review
+    litellm_params:
+      model: anthropic/claude-sonnet-4-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+  - model_name: gemini-review
+    litellm_params:
+      model: gemini/gemini-2.5-flash
+      api_key: os.environ/GEMINI_API_KEY
+  - model_name: deepseek-review
+    litellm_params:
+      model: deepseek/deepseek-chat
+      api_key: os.environ/DEEPSEEK_API_KEY
+litellm_settings:
+  set_verbose: false
+  turn_off_message_logging: true
+  request_timeout: 50
+  num_retries: 0
+  drop_params: false
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY

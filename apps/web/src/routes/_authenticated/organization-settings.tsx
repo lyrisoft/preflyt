@@ -1,6 +1,12 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { CapabilityPage } from '@/features/workspace/capability-page'
+import { AppHeader } from '@/components/layout/app-header'
+import { OrganizationSettingsPage } from '@/features/organization-settings/organization-settings-page'
 
 export const Route = createFileRoute('/_authenticated/organization-settings')({
-  component: () => <CapabilityPage capability='organization-settings' />,
+  component: () => (
+    <>
+      <AppHeader breadcrumbs={[{ label: 'Settings' }]} />
+      <OrganizationSettingsPage />
+    </>
+  ),
 })

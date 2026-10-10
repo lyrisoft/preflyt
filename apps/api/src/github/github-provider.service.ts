@@ -1,3 +1,6 @@
+import { configurationValue } from '../configuration/runtime-configuration.js'
+import { sameReviewPr, prReviewSource } from '../intelligence/pr-review-context.js'
+import type { PullRequestContext } from '../github-events/pull-request-context.js'
 import { readPinnedNativeSource } from '../execution/native-source.js'
 import { attributedSuite, summarizeRulesetSuites, type RulesetSuite } from './ruleset-insights.js'
 import { rulesetSummary, rulesetDetail } from './github-ruleset.js'
@@ -290,7 +293,7 @@ export class GitHubProviderService {
       `${this.requireClientId()}:${this.requireClientSecret()}`,
     ).toString('base64')
     const response = await this.apiFetch(
-      `app:${process.env.GITHUB_APP_ID ?? this.requireClientId()}`,
+      `app:${configurationValue('GITHUB_APP_ID') ?? this.requireClientId()}`,
       `https://api.github.com/applications/${this.requireClientId()}/token`,
       {
         method: 'DELETE',
@@ -710,17 +713,17 @@ export class GitHubProviderService {
       head_sha: string
       external_id: string
       status: 'completed'
-      conclusion: 'failure' | 'action_required' | 'success'
+      conclusion: 'failure' | 'action_required' | 'success' | 'neutral'
       output: { title: string; summary: string }
     },
     verifiedPolicy = false,
     refreshExisting = false,
+    advisory = false,
   ) {
     const { appId } = await this.checkPublicationAccess(installationId)
     // Observe previews cannot publish success; only a verified published-policy evaluation can.
     if (
-      payload.name !== 'Preflyt / Engineering Readiness' ||
-      !(['failure', 'action_required', ...(verifiedPolicy ? ['success'] : [])]).includes(payload.conclusion) ||
+      (advisory ? payload.name !== 'Preflyt / AI Review' || payload.conclusion !== 'neutral' : payload.name !== 'Preflyt / Engineering Readiness' || !(['failure', 'action_required', ...(verifiedPolicy ? ['success'] : [])]).includes(payload.conclusion)) ||
       !/^[a-f0-9]{40}$/.test(payload.head_sha) ||
       !/^[a-f0-9]{64}$/.test(payload.external_id)
     )
@@ -930,6 +933,76 @@ export class GitHubProviderService {
     if(!Array.isArray(rows) || rows.length>=100)throw new ServiceUnavailableException('Open pull request scope exceeds the safe activation limit')
     if(rows.some(row=>!Number.isSafeInteger(row.number)||row.number<1||!/^[a-f0-9]{40}$/.test(row.head?.sha)||String(row.base?.repo?.id)!==repositoryId.toString()||!validProfileBranch(row.base?.ref)))throw new ServiceUnavailableException('Invalid open pull request identity')
     return rows.map(row=>({number:row.number,headSha:row.head?.sha,headRepositoryId:String(row.head?.repo?.id),baseBranch:row.base?.ref,draft:row.draft===true}))
+  }
+
+  /** Publish advisory comments only at verified changed lines on the exact PR revision. */
+  async publishAiInlineReview(installationId: bigint, repositoryId: bigint, source: import('../intelligence/pr-review-context.js').PrReviewSource, key: string, findings: {summary:string;recommendation:string;evidenceRefs:string[]}[]) {
+    if (!/^[a-f0-9]{64}$/.test(key) || findings.length > 20) throw new BadRequestException('Invalid AI review');
+    const safe = (s:string) => s.replace(/[\`*_<>#@\[\]]/g,'');
+    const comments = findings.flatMap(f=> {
+      const line = source.lines.find(l=>f.evidenceRefs.includes(l.ref));
+      return line ? [{path:line.path,line:line.line,side:line.side,body:`Advisory AI suggestion\n\n${safe(f.summary)}\n\n${safe(f.recommendation)}`}]:[];
+    });
+    if (!comments.length) return null;
+    const before = await this.readPullRequest(installationId, repositoryId, source.number);
+    if (!sameReviewPr(source.context,before.context)) throw new ConflictException('PR changed before inline feedback');
+    const reader = await this.openRepository(installationId,repositoryId,'metadata');
+    const auth = await this.appRequest('POST /app/installations/{installation_id}/access_tokens',{installation_id:Number(installationId),repository_ids:[Number(repositoryId)],permissions:{metadata:'read',pull_requests:'write'}});
+    const app = (await this.appRequest('GET /app',{})).data;
+    if (!auth.data.token || typeof app.slug !== 'string') throw new ServiceUnavailableException('GitHub review credentials unavailable');
+    const root = `/repos/${encodeURIComponent(reader.metadata.owner.login)}/${encodeURIComponent(reader.metadata.name)}/pulls/${source.number}`;
+    const call = async (path:string, body?:unknown) => {
+      const response = await this.apiFetch(`installation:${installationId}`,`https://api.github.com${path}`,{method:body===undefined?'GET':'POST',headers:{...this.apiHeaders(auth.data.token),...(body===undefined?{}:{'Content-Type':'application/json'})},signal:AbortSignal.timeout(10000),...(body===undefined?{}:{body:JSON.stringify(body)})});
+      if(!response.ok) throw new ServiceUnavailableException('GitHub inline feedback unavailable');
+      return response.json() as Promise<any>;
+    };
+    const body = `Advisory AI review; does not approve or block merging.\n\n<!-- preflyt-ai:${key} -->`;
+    const matches = (r:any)=>r.body===body && r.commit_id===source.context.head.sha && r.state==='COMMENTED' && r.user?.login===`${app.slug}[bot]` && r.user?.type==='Bot' && typeof r.html_url==='string' && r.html_url.startsWith('https://github.com/');
+    let existing:any;
+    for(let page=1;page<=3;page++) {
+      const reviews=await call(`${root}/reviews?per_page=100&page=${page}`);
+      if(!Array.isArray(reviews)||reviews.length>100)throw new ServiceUnavailableException('Invalid review history');
+      existing=reviews.find(matches);if(existing)break;
+      if(reviews.length<100)break;
+      if(page===3)throw new ServiceUnavailableException('Review history exceeds publication limit');
+    }
+    const id = existing?.id ?? (await call(`${root}/reviews`,{commit_id:source.context.head.sha,event:'COMMENT',body,comments})).id;
+    if(!Number.isSafeInteger(id)||id<1)throw new ServiceUnavailableException('Invalid review receipt');
+    const observed=await call(`${root}/reviews/${id}`);
+    if(!matches(observed))throw new ConflictException('GitHub inline review changed');
+    // The review-comments listing exposes legacy diff positions; fetch each bounded
+    // comment receipt for GitHub's authoritative line/side and review identity.
+    const listedComments=await call(`${root}/reviews/${id}/comments?per_page=100`);
+    if(!Array.isArray(listedComments)||listedComments.length!==comments.length||listedComments.some((v:any)=>!Number.isSafeInteger(v.id)||v.id<1)||new Set(listedComments.map((v:any)=>v.id)).size!==listedComments.length)throw new ConflictException('GitHub inline comments changed');
+    const observedComments: Record<string,any>[]=[];
+    for(const listed of listedComments) observedComments.push(await call(`${root.replace(/\/pulls\/\d+$/,'')}/pulls/comments/${listed.id}`));
+    if(!comments.every(c=>observedComments.some((v:any)=>v.pull_request_review_id===id && v.commit_id===source.context.head.sha && v.user?.login===`${app.slug}[bot]` && v.user?.type==='Bot' && v.path===c.path && v.line===c.line && v.side===c.side && v.body===c.body)))throw new ConflictException('GitHub inline comments changed');
+    const after = await this.readPullRequest(installationId,repositoryId,source.number);
+    if(!sameReviewPr(source.context,after.context))throw new ConflictException('PR changed during inline feedback');
+    return {htmlUrl:observed.html_url as string,reviewId:String(id)};
+  }
+
+  async publishAiReviewSummary(installationId: bigint, repositoryId: bigint, sourceSha: string, externalId: string, summary: string) {
+    if (summary.length > 60000) throw new BadRequestException('AI summary exceeds limit')
+    return this.publishReadinessCheck(installationId, repositoryId, {name:'Preflyt / AI Review',head_sha:sourceSha,external_id:externalId,status:'completed',conclusion:'neutral',output:{title:'Advisory AI review — does not decide merge readiness',summary}},false,true,true)
+  }
+
+  async readPrReviewSource(installationId: bigint, repositoryId: bigint, number: number, expected: PullRequestContext) {
+    const before = await this.readPullRequest(installationId, repositoryId, number)
+    if (!sameReviewPr(expected, before.context) || expected.base.repositoryId !== repositoryId.toString()) throw new ConflictException('PR changed before source review')
+    const reader = await this.openRepository(installationId, repositoryId, 'pull_requests')
+    const root = `/repos/${encodeURIComponent(reader.metadata.owner.login)}/${encodeURIComponent(reader.metadata.name)}/pulls/${number}`
+    const files: unknown[] = []
+    for (let page = 1; page <= 3; page++) {
+      const rows = await reader.request<unknown[]>(`${root}/files?per_page=100&page=${page}`)
+      if (!Array.isArray(rows) || rows.length > 100) throw new ServiceUnavailableException('PR files unavailable')
+      files.push(...rows)
+      if (files.length > 200) throw new ServiceUnavailableException('PR exceeds 200-file source review limit')
+      if (rows.length < 100) break
+    }
+    const after = await this.readPullRequest(installationId, repositoryId, number)
+    if (!sameReviewPr(expected, after.context)) throw new ConflictException('PR changed while reading source')
+    return prReviewSource(number, expected, files)
   }
 
   async readPullRequest(
@@ -1163,7 +1236,7 @@ export class GitHubProviderService {
   private requireApp() {
     if (this.app) return this.app
     const appId = this.requireAppId()
-    const privateKey = process.env.GITHUB_APP_PRIVATE_KEY?.replace(/\\n/g, '\n')
+    const privateKey = configurationValue('GITHUB_APP_PRIVATE_KEY')?.replace(/\\n/g, '\n')
     if (!privateKey)
       throw new ServiceUnavailableException('GitHub App is not configured')
     this.app = new App({
@@ -1180,7 +1253,7 @@ export class GitHubProviderService {
   }
 
   private requireAppId() {
-    const appId = process.env.GITHUB_APP_ID
+    const appId = configurationValue('GITHUB_APP_ID')
     if (!appId || !/^\d+$/.test(appId)) {
       throw new ServiceUnavailableException('GitHub App is not configured')
     }
@@ -1188,21 +1261,21 @@ export class GitHubProviderService {
   }
 
   private requireClientId() {
-    const clientId = process.env.GITHUB_APP_CLIENT_ID
+    const clientId = configurationValue('GITHUB_APP_CLIENT_ID')
     if (!clientId)
       throw new ServiceUnavailableException('GitHub App is not configured')
     return clientId
   }
 
   private requireClientSecret() {
-    const clientSecret = process.env.GITHUB_APP_CLIENT_SECRET
+    const clientSecret = configurationValue('GITHUB_APP_CLIENT_SECRET')
     if (!clientSecret)
       throw new ServiceUnavailableException('GitHub App is not configured')
     return clientSecret
   }
 
   private requireCallbackUrl() {
-    const callback = process.env.GITHUB_APP_OAUTH_CALLBACK_URL
+    const callback = configurationValue('GITHUB_APP_OAUTH_CALLBACK_URL')
     if (!callback)
       throw new ServiceUnavailableException('GitHub App is not configured')
     const url = new URL(callback)

@@ -1,3 +1,4 @@
+import { configurationValue } from '../configuration/runtime-configuration.js'
 import { nativeRequestIntegrity } from './native-request-integrity.js'
 import {
   BadRequestException,
@@ -151,7 +152,7 @@ export class NativeRequestService {
       : missingTool
         ? 'TOOL_REVIEW_REQUIRED'
         : native.executionAvailable &&
-            process.env.NATIVE_EXECUTION_ENABLED === 'true'
+            configurationValue('NATIVE_EXECUTION_ENABLED') === 'true'
           ? null
           : 'DISPATCHER_REQUIRED'
     const { planHash, recordedAt, branch, executionAvailable, ...contract } =

@@ -3,6 +3,10 @@
 **Status:** Activity capture, scoped directory/profile UI and historical saved-standards compliance summaries are implemented. Published-policy adherence, confirmed findings and advanced trends remain planned. See [implemented subset](../operations/scoped-access-contributors.md).
 **Delivery:** P1 data capture → P2 policy attribution → P3 usable Contributors UI → P10/P11 advanced trends. **Existing phase order unchanged.**
 
+## Importing existing activity
+
+The Contributors page header includes **Import GitHub activity** for users with repository-management access. It works with **All repositories** and a single repository scope. Imports run sequentially for authorized repositories, report per-repository failures and preserve partial-history warnings. **Refresh local data** only reloads saved observations; it does not contact GitHub. Imports are bounded to recent PR, review and commit pages and respect the server cooldown. Contributor activity does not create assessment snapshots or populate the Engineering Overview assessment chart.
+
 ## User experience and navigation
 
 Add **Contributors** as a sidebar item under **Engineering**, adjacent to Repositories, Assessments and Findings, **when the P3 feature is usable**. Hide or explicitly mark unavailable before then; no dead-end placeholder.
@@ -56,3 +60,5 @@ The current evaluator is a historical **saved engineering standards preview** in
 The pass-rate denominator is PRs whose latest recorded revision has results for every required rule (including known failures). Coverage divides this fully assessed count by all observed authored PRs in scope. Required-check failure and missing evidence can coexist; the card shows both. Percentages are unavailable when no complete assessment exists or collection limits are reached. Different saved standards selections are reported separately. The first-recorded metric uses the earliest complete assessment available for observed revisions in this window, only when it shares the latest assessment's standards selection; it is not verified lifetime first-pass adherence.
 
 Evidence drill-down lists each PR, commit, required-rule counts, result and exact assessment link. No GitHub API calls are added to profile reads. Backend checks `contributors.policy_evidence.read` separately from activity access, and audits profile access. Existing collection/backfill bounds still apply; narrow filters when partial. Published-policy attribution, verified first-pass/final enforcement compliance and confirmed findings remain pending.
+
+Filtered contributor details return an empty activity state when the contributor is known within the caller's authorized repository scope. Unknown identities and inaccessible repositories remain denied. Reconnecting a repository can recover activity from a verified replay when a retained receipt refers to a deleted repository record; receipts belonging to another live repository remain protected. Import audit metadata records newly captured activity and duplicate receipts.

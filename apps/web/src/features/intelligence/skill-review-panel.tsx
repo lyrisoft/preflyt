@@ -9,9 +9,22 @@ import { useNavigationSession } from '../workspace/navigation-session'
 
 type Review = {
   id: string
+  automatic?: boolean
+  sourceReviewed?: boolean
+  feedbackState?: string
+  feedbackUrl?: string | null
+  inlineFeedbackUrl?: string | null
   state: string
   failure: string | null
-  reservedCents: number
+  usage?:
+    | {
+        providerId: string
+        inputTokens: number | null
+        outputTokens: number | null
+        costMicroCents: string | null
+      }[]
+    | null
+  reservedCents: number | null
   latencyMs: number | null
   checks?: AiCheck[]
   skills: { id: string; name: string; version: number; digest: string }[]
@@ -22,7 +35,14 @@ type Review = {
       recommendation: string
       evidenceRefs: string[]
     }[]
-    context: { evidence: { ref: string; ruleId: string; result: string }[] }
+    context: {
+      evidence: { ref: string; ruleId: string; result: string }[]
+      source?: {
+        omittedFiles: number
+        omittedLines: number
+        lines: { ref: string; path: string; line: number; side: string }[]
+      }
+    }
   }
 }
 export function SkillReviewPanel({
@@ -54,7 +74,10 @@ export function SkillReviewPanel({
       governanceRequest<{
         enabled: boolean
         reviews: Review[]
-        checks: (AiCheck & { available: boolean })[]
+        checks: (AiCheck & {
+          available: boolean
+          selection?: { eligible: boolean; reason: string | null }
+        })[]
       }>(
         `/github/repositories/${repositoryId}/ai-reviews?assessmentId=${encodeURIComponent(assessmentId)}`,
         undefined,
@@ -66,6 +89,7 @@ export function SkillReviewPanel({
         ? 2000
         : false,
   })
+  const [includeSource, setIncludeSource] = useState(false)
   const [selected, setSelected] = useState<string[]>([]),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(''),
@@ -98,10 +122,12 @@ export function SkillReviewPanel({
           <Sparkles className='size-4' />
           Code Quality · AI Review
         </h3>
-        <StatusBadge tone='info'>Advisory</StatusBadge>
+        <StatusBadge tone='info'>Suggestions only</StatusBadge>
       </div>
       <p className='text-xs text-muted-foreground'>
-        Reviews saved assessment evidence. Source code is not sent.
+        {stage === 'pull_request'
+          ? 'Reviews assessment evidence and, when enabled, verified PR changes.'
+          : 'Reviews saved assessment evidence. Source code is not sent.'}
       </p>
       {query.isError && (
         <p role='alert' className='text-sm text-destructive'>
@@ -135,7 +161,9 @@ export function SkillReviewPanel({
                   }
                 />
                 {s.title} · skill v{s.skillVersion}
-                {!s.available ? ' · Unavailable' : ''}
+                {!s.available
+                  ? ` · ${s.selection?.reason ?? 'Unavailable'}`
+                  : ''}
               </label>
             ))}
           </div>
@@ -145,6 +173,17 @@ export function SkillReviewPanel({
               Engineering Standards, adopt the version and create a new
               assessment.
             </p>
+          )}
+          {stage === 'pull_request' && (
+            <label className='flex items-center gap-2 text-sm'>
+              <input
+                type='checkbox'
+                checked={includeSource}
+                disabled={busy}
+                onChange={(e) => setIncludeSource(e.target.checked)}
+              />
+              Include PR changes (requires source sharing)
+            </label>
           )}
           <div className='flex justify-end'>
             <Button
@@ -157,7 +196,11 @@ export function SkillReviewPanel({
                 )
               }
               onClick={() =>
-                void action('', { assessmentId, checkIds: selected })
+                void action('', {
+                  assessmentId,
+                  checkIds: selected,
+                  ...(includeSource ? { includeSource: true } : {}),
+                })
               }
             >
               Run review
@@ -192,6 +235,46 @@ export function SkillReviewPanel({
               {r.state.replace(/_/g, ' ')}
             </StatusBadge>
           </div>
+          <p className='text-xs text-muted-foreground'>
+            {r.automatic
+              ? 'Automatic published-policy review'
+              : 'Requested review'}{' '}
+            ·{' '}
+            {r.sourceReviewed
+              ? 'PR changes reviewed'
+              : 'Assessment evidence only'}
+            {r.feedbackState && r.feedbackState !== 'NOT_REQUESTED'
+              ? ` · GitHub summary: ${r.feedbackState.toLowerCase()}`
+              : ''}
+          </p>
+          {r.inlineFeedbackUrl &&
+            /^https:\/\/github\.com\//.test(r.inlineFeedbackUrl) && (
+              <a
+                href={r.inlineFeedbackUrl}
+                target='_blank'
+                rel='noopener noreferrer'
+                className='text-sm underline'
+              >
+                View inline feedback on GitHub
+              </a>
+            )}
+          {r.feedbackUrl && /^https:\/\/github\.com\//.test(r.feedbackUrl) && (
+            <a
+              href={r.feedbackUrl}
+              target='_blank'
+              rel='noreferrer'
+              className='text-sm underline'
+            >
+              View GitHub summary
+            </a>
+          )}
+          {r.result?.context.source && (
+            <p className='text-xs text-muted-foreground'>
+              Reviewed {r.result.context.source.lines.length} changed lines;{' '}
+              {r.result.context.source.omittedFiles} files and{' '}
+              {r.result.context.source.omittedLines} lines omitted.
+            </p>
+          )}
           {r.failure && (
             <p className='text-sm text-muted-foreground'>{r.failure}</p>
           )}
@@ -209,7 +292,15 @@ export function SkillReviewPanel({
                   .map(
                     (ref) =>
                       r.result?.context.evidence.find((e) => e.ref === ref)
-                        ?.ruleId ?? ref
+                        ?.ruleId ??
+                      (() => {
+                        const line = r.result?.context.source?.lines.find(
+                          (l) => l.ref === ref
+                        )
+                        return line
+                          ? `${line.path}:${line.line} (${line.side.toLowerCase()})`
+                          : ref
+                      })()
                   )
                   .join(', ')}
               </p>
@@ -217,13 +308,23 @@ export function SkillReviewPanel({
           ))}
           {r.state === 'SUCCEEDED' && !r.result?.findings.length && (
             <p className='text-sm text-muted-foreground'>
-              No advisory suggestions returned. This does not change check
-              results.
+              No AI suggestions returned. This does not change check results.
             </p>
           )}
+          {r.usage?.map((u, index) => (
+            <p key={index} className='text-xs text-muted-foreground'>
+              Provider-reported usage: {u.inputTokens ?? 'unknown'} input /{' '}
+              {u.outputTokens ?? 'unknown'} output tokens
+              {u.costMicroCents !== null
+                ? ` · Estimated cost from reported usage: $${(Number(u.costMicroCents) / 100000000).toFixed(6)}`
+                : ' · Cost unavailable'}
+            </p>
+          ))}
           <div className='flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground'>
             <span>
-              Reserved estimate: ${(r.reservedCents / 100).toFixed(4)}
+              {r.reservedCents === null
+                ? 'Usage restricted'
+                : `Reserved estimate: $${(r.reservedCents / 100).toFixed(4)}`}
               {r.latencyMs !== null
                 ? ` · ${(r.latencyMs / 1000).toFixed(1)}s`
                 : ''}

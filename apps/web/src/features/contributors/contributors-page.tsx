@@ -26,6 +26,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import { toast } from 'sonner'
 import { API_BASE_URL } from '@/lib/api'
 import { chartAnimation, chartTooltipAnimation } from '@/lib/chart-motion'
 import { Badge } from '@/components/ui/badge'
@@ -44,6 +45,7 @@ import {
   type ContributionDay,
 } from './contributor-activity-summary'
 import { ContributorHelp } from './contributor-help'
+import { importContributorActivity } from './import-activity'
 import {
   PolicyComplianceSummary,
   PolicyComplianceEvidence,
@@ -92,6 +94,7 @@ type Observation = {
   }[]
 }
 type Result = {
+  emptyActivity?: boolean
   choices: { githubId: string; fullName: string }[]
   period: { days: number; from: string; to: string }
   scope: { githubId: string; fullName: string }[]
@@ -209,7 +212,7 @@ function SourceRows({
                     </div>
                   ) : (
                     <span className='text-muted-foreground'>
-                      No matching PR revision snapshot
+                      No assessment for this PR commit
                     </span>
                   )
                 ) : (
@@ -297,23 +300,30 @@ export function ContributorsPage({
     gcTime: 0,
     enabled: session.isSuccess,
   })
+  const importScope = (query.data?.scope ?? []).filter((repo) =>
+    canPerform(session.data, 'repository.manage', repo.githubId)
+  )
+  const scopeKey = importScope.map((repo) => repo.githubId).join(',')
   const sync = useMutation({
-    mutationFn: async () => {
-      const r = await fetch(
-        `${API_BASE_URL}/contributors/repositories/${repository}/sync`,
-        { method: 'POST', credentials: 'include' }
-      )
-      if (!r.ok)
-        throw new Error(
-          r.status === 429
-            ? 'GitHub rate limit reached. Retry after the cooldown.'
-            : 'Backfill failed. Check repository permission and GitHub App read access.'
+    mutationFn: async () => ({
+      ...(await importContributorActivity(importScope)),
+      scopeKey,
+    }),
+    onSuccess: (result) => {
+      if (result.failures.length)
+        toast.error('Some repository imports failed', {
+          description: result.failures
+            .map((failure) => `${failure.repository}: ${failure.message}`)
+            .join(' · '),
+        })
+      else
+        toast.success(
+          `Imported activity from ${result.imported.length} repositories`
         )
-      return r.json() as Promise<{ truncated: boolean }>
+      void client.invalidateQueries({ queryKey: ['contributors'] })
     },
-    onSuccess: () =>
-      void client.invalidateQueries({ queryKey: ['contributors'] }),
   })
+  const importResult = sync.data?.scopeKey === scopeKey ? sync.data : undefined
   const data = query.data,
     c = data?.contributors[0],
     rows = data?.observations ?? []
@@ -343,7 +353,7 @@ export function ContributorsPage({
         { label: 'Merged PRs', n: c?.mergedPrs, icon: GitBranch },
         { label: 'Recorded reviews', n: c?.reviews, icon: UsersRound },
         {
-          label: 'Attributed commits',
+          label: 'Commits linked to contributor',
           n: c?.commits,
           icon: GitCommitHorizontal,
         },
@@ -365,7 +375,7 @@ export function ContributorsPage({
           icon: GitPullRequest,
         },
         {
-          label: 'PRs with revision snapshots',
+          label: 'PRs with saved assessments',
           n: data?.summary.prsWithSnapshots,
           icon: GitCommitHorizontal,
         },
@@ -409,7 +419,17 @@ export function ContributorsPage({
               {contributorId ? (c?.login ?? 'Contributor') : 'Contributors'}
             </h1>
           </div>
-          <div className='flex items-center gap-2'>
+          <div className='flex flex-wrap items-center gap-2'>
+            {importScope.length > 0 && (
+              <Button
+                size='sm'
+                disabled={sync.isPending || query.isFetching}
+                onClick={() => sync.mutate()}
+              >
+                <RefreshCw className='size-4' />
+                {sync.isPending ? 'Importing…' : 'Import GitHub activity'}
+              </Button>
+            )}
             <Button
               variant='outline'
               size='sm'
@@ -547,6 +567,16 @@ export function ContributorsPage({
         ) : (
           data && (
             <>
+              {data.emptyActivity && (
+                <p
+                  role='status'
+                  className='rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground'
+                >
+                  No recorded activity for this contributor in the selected
+                  repository, period and filters. Import GitHub activity or
+                  widen the filters.
+                </p>
+              )}
               {contributorId && c && tab === 'overview' ? (
                 <div className='grid items-stretch gap-4 xl:grid-cols-[minmax(0,7fr)_minmax(0,3fr)]'>
                   <ContributorActivitySummary
@@ -582,34 +612,29 @@ export function ContributorsPage({
                   ))}
                 </div>
               ) : null}
-              {repository !== 'all' &&
-                canPerform(session.data, 'repository.manage', repository) && (
-                  <div className='flex justify-end'>
-                    <Button
-                      size='sm'
-                      variant='outline'
-                      disabled={sync.isPending}
-                      onClick={() => sync.mutate()}
-                    >
-                      <RefreshCw className='size-3.5' />
-                      {sync.isPending
-                        ? 'Importing…'
-                        : 'Import recent GitHub activity'}
-                    </Button>
-                  </div>
-                )}
-              {sync.isError && (
-                <p role='alert' className='text-sm text-danger-text'>
-                  {sync.error.message}
-                </p>
-              )}
-              {sync.isSuccess && (
-                <p role='status' className='text-sm text-muted-foreground'>
-                  Recent activity imported.{' '}
-                  {sync.data.truncated
-                    ? 'Backfill limit reached; historical coverage remains partial.'
-                    : 'Historical coverage is bounded to recent pages.'}
-                </p>
+              {importResult && (
+                <div
+                  role={importResult.failures.length ? 'alert' : 'status'}
+                  className='space-y-1 text-sm'
+                >
+                  <p
+                    className={
+                      importResult.failures.length
+                        ? 'text-danger-text'
+                        : 'text-muted-foreground'
+                    }
+                  >
+                    Imported activity from {importResult.imported.length} of{' '}
+                    {importScope.length} repositories.
+                    {importResult.truncated &&
+                      ' Historical coverage is partial because the import limit was reached.'}
+                  </p>
+                  {importResult.failures.map((failure) => (
+                    <p key={failure.repository} className='text-danger-text'>
+                      {failure.repository}: {failure.message}
+                    </p>
+                  ))}
+                </div>
               )}
               {data.truncated && (
                 <p
@@ -700,7 +725,7 @@ export function ContributorsPage({
                         <div
                           className='chart-motion h-52'
                           role='img'
-                          aria-label='PR snapshot coverage'
+                          aria-label='PR assessment coverage'
                         >
                           <ResponsiveContainer width='100%' height='100%'>
                             <BarChart
@@ -764,7 +789,7 @@ export function ContributorsPage({
                       {data.permissions.policyEvidence && (
                         <table className='self-start text-left'>
                           <caption className='mb-2 text-left font-medium'>
-                            PR snapshot associations
+                            PR assessment matches
                           </caption>
                           <thead>
                             <tr>
@@ -867,8 +892,9 @@ export function ContributorsPage({
                           No contributors match this scope
                         </h2>
                         <p className='mt-2 text-sm text-muted-foreground'>
-                          Select a repository and import recent activity, or
-                          receive signed PR, review and push events.
+                          Use Import GitHub activity to load recent
+                          contributors, or receive signed PR, review and push
+                          events.
                         </p>
                       </div>
                     )}

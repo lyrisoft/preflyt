@@ -44,6 +44,9 @@ export type RouteInput = {
   fallbackId: string | null;
   enabled: boolean;
   allowSource: boolean;
+  automaticReviews?: boolean;
+  publishSummary?: boolean;
+  publishInline?: boolean;
   maxInputTokens: number;
   maxOutputTokens: number;
   dailyBudgetCents: number;
@@ -409,11 +412,14 @@ export class AiConfigurationService {
     );
     if (
       !aiStages.includes(stage as (typeof aiStages)[number]) ||
-      (input.fallbackId && input.fallbackId === input.primaryId)
+      (input.fallbackId && input.fallbackId === input.primaryId) ||
+      (stage !== "pull_request" && (input.automaticReviews || input.publishSummary || input.publishInline))
     )
       throw new BadRequestException(
         "Choose a lifecycle stage and different primary/fallback connections",
       );
+    if (input.publishInline && (!input.automaticReviews || !input.allowSource))
+      throw new BadRequestException("Inline feedback needs automatic PR reviews and source sharing");
     try {
       const route = await this.db.$transaction(
         async (tx) => {
@@ -460,6 +466,9 @@ export class AiConfigurationService {
             fallbackId: input.fallbackId,
             enabled: input.enabled,
             allowSource: input.allowSource,
+            automaticReviews: input.automaticReviews ?? false,
+            publishSummary: input.publishSummary ?? false,
+            publishInline: input.publishInline ?? false,
             maxInputTokens: input.maxInputTokens,
             maxOutputTokens: input.maxOutputTokens,
             dailyBudgetCents: input.dailyBudgetCents,

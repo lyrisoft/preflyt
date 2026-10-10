@@ -1,3 +1,4 @@
+import { configurationValue } from '../configuration/runtime-configuration.js'
 import { digest } from '../assessments/assessment-digest.js'
 import { verifyNativeReceipt } from './native-receipt.js'
 import { randomUUID } from 'node:crypto'
@@ -28,7 +29,7 @@ export class NativeDispatchService {
   async reconcile() {
     if (
       this.shutdown.signal.aborted ||
-      process.env.NATIVE_EXECUTION_ENABLED !== 'true'
+      configurationValue('NATIVE_EXECUTION_ENABLED') !== 'true'
     )
       return
     const now = new Date()

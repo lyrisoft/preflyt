@@ -24,7 +24,7 @@ export function AssessmentContext({ request }: { request: ContextRequest }) {
         <StatusBadge tone='neutral'>
           {request.subjectKind === 'PULL_REQUEST'
             ? `PR #${request.pullRequest?.number}`
-            : 'Commit snapshot'}
+            : 'Commit assessment'}
         </StatusBadge>
         <StatusBadge tone='info'>{sentence(request.trigger)}</StatusBadge>
       </div>
@@ -73,7 +73,7 @@ export function AssessmentContext({ request }: { request: ContextRequest }) {
         </div>
       ) : (
         <p className='text-xs text-muted-foreground'>
-          No approved CI sources were saved with this assessment.
+          No approved check sources were saved with this assessment.
         </p>
       )}
       <p className='text-xs text-muted-foreground'>
@@ -97,14 +97,14 @@ export function AssessmentSnapshotDialog({
     <Dialog open={!!id} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className='max-h-[85dvh] overflow-y-auto sm:max-w-3xl'>
         <DialogHeader>
-          <DialogTitle>Assessment snapshot</DialogTitle>
+          <DialogTitle>Saved assessment</DialogTitle>
           <DialogDescription>
             Evidence saved for a specific commit. This assessment does not
             decide whether the change can merge.
           </DialogDescription>
         </DialogHeader>
         {query.isPending ? (
-          <p role='status'>Loading snapshot…</p>
+          <p role='status'>Loading assessment…</p>
         ) : query.isError ? (
           <p role='alert' className='text-destructive'>
             {query.error.message}

@@ -1,13 +1,16 @@
 import { AxiosError } from 'axios'
 import { toast } from 'sonner'
 
-export function handleServerError(error: unknown) {
+export function handleServerError(error: unknown, options?: { id: string }) {
   if (import.meta.env.DEV) {
     // eslint-disable-next-line no-console
     console.log(error)
   }
 
-  let errMsg = 'Something went wrong!'
+  let errMsg =
+    error instanceof Error && error.message
+      ? error.message
+      : 'Something went wrong. Try again.'
 
   if (
     error &&
@@ -19,11 +22,14 @@ export function handleServerError(error: unknown) {
   }
 
   if (error instanceof AxiosError) {
-    const title = error.response?.data?.title
+    const title = error.response?.data?.message ?? error.response?.data?.title
     if (typeof title === 'string' && title.length > 0) {
       errMsg = title
     }
   }
 
-  toast.error(errMsg)
+  if (error instanceof Error && error.name === 'AbortError') return
+
+  if (options) toast.error(errMsg, options)
+  else toast.error(errMsg)
 }

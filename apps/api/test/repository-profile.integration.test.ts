@@ -1,3 +1,5 @@
+import {disposableDatabase} from './disposable-database.js'
+let fixture: Awaited<ReturnType<typeof disposableDatabase>>
 import { AuthorizationService } from '../src/auth/authorization.service.js'
 import 'reflect-metadata'
 import {
@@ -46,8 +48,8 @@ const owner = (method: 'get' | 'post') =>
     .set('Origin', 'http://localhost:5173')
 
 beforeAll(async () => {
-  prisma = new PrismaService()
-  await prisma.$connect()
+  fixture = await disposableDatabase('repositoryprofile')
+  prisma = fixture.prisma
   app = await NestFactory.create(
     {
       module: class TestModule {},
@@ -81,6 +83,7 @@ beforeAll(async () => {
                 ? {
                     authenticated: true,
                     identityId: actorId,
+                    organizationId: 'fixture-org',
                     subject: token,
                     email: null,
                     role: token,
@@ -97,9 +100,10 @@ beforeAll(async () => {
 })
 afterAll(async () => {
   await app?.close()
-  await prisma?.$disconnect()
+  await fixture?.close()
 })
 beforeEach(async () => {
+  await fixture.reset()
   await prisma.gitHubRepository.deleteMany()
   await prisma.gitHubInstallation.deleteMany()
   await prisma.gitHubSetupTransaction.deleteMany()
@@ -109,8 +113,11 @@ beforeEach(async () => {
     data: { issuer: 'fixture', subject: 'profile-owner' },
   })
   actorId = identity.id
+  const organization = await prisma.organization.create({data: {id: 'fixture-org', name: 'Fixture'}})
+  await prisma.organizationMembership.create({data: {organizationId: organization.id, identityId: actorId, role: 'OWNER'}})
   await prisma.gitHubInstallation.create({
     data: {
+      organizationId: organization.id,
       id: 500n,
       accountLogin: 'fixture',
       accountType: 'Organization',

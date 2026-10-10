@@ -9,6 +9,8 @@ const fields = new Set([
   "license",
   "stages",
   "repositories",
+  "languages",
+  "frameworks",
 ]);
 
 /** A bounded instruction document, never an executable package or approval record. */
@@ -43,10 +45,12 @@ export function parseSkillMarkdown(markdown: string): SkillManifest {
   }
   if (Object.keys(metadata).some((key) => !fields.has(key)))
     throw new Error(
-      "SKILL.md supports name, description, source, license, stages and repositories. Remove unsupported header fields.",
+      "SKILL.md supports name, description, source, license, stages, repositories, languages and frameworks. Remove unsupported header fields.",
     );
   try {
     const manifest = validateSkill({
+      languages: metadata.languages as string[] | undefined,
+      frameworks: metadata.frameworks as string[] | undefined,
       name: metadata.name as string,
       description: metadata.description as string,
       instructions: match[2]!,
