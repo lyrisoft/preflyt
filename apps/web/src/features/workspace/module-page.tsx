@@ -111,8 +111,10 @@ export function WorkspaceModule({ module }: { module: Module }) {
   const search = useSearch({ strict: false }) as {
     repository?: string
     gate?: 'assessments' | 'rulesets' | 'checks'
+    tab?: 'commits' | 'pull-requests' | 'activity'
   }
   const gateView = search.gate ?? 'assessments'
+  const assessmentView = search.tab ?? 'commits'
   const navigate = useNavigate()
   const inventory = useQuery({
     queryKey: ['workspace-repositories'],
@@ -130,14 +132,24 @@ export function WorkspaceModule({ module }: { module: Module }) {
   const canManage = canPerform(session.data, 'repository.connect')
   return (
     <Tabs
-      value={gateView}
+      value={module === 'assessments' ? assessmentView : gateView}
       onValueChange={(value) =>
         void navigate({
-          to: '/quality-gates',
-          search: {
-            repository: search.repository,
-            gate: value as 'assessments' | 'rulesets' | 'checks',
-          },
+          ...(module === 'assessments'
+            ? {
+                to: '/assessments' as const,
+                search: {
+                  repository: search.repository,
+                  tab: value as 'commits' | 'pull-requests' | 'activity',
+                },
+              }
+            : {
+                to: '/quality-gates' as const,
+                search: {
+                  repository: search.repository,
+                  gate: value as 'assessments' | 'rulesets' | 'checks',
+                },
+              }),
         })
       }
       className='contents'
@@ -432,7 +444,7 @@ export function WorkspaceModule({ module }: { module: Module }) {
                         onValueChange={(value) =>
                           void navigate({
                             to: `/${module}`,
-                            search: { repository: value },
+                            search: { ...search, repository: value },
                           })
                         }
                       />
@@ -470,21 +482,51 @@ export function WorkspaceModule({ module }: { module: Module }) {
                     >
                       {module === 'assessments' && (
                         <>
-                          <RepositoryActivityPanel
-                            repositoryId={repository.githubId}
-                          />
-                          <RepositoryPullRequests
-                            repositoryId={repository.githubId}
-                          />
-                          <RepositoryAssessments
-                            repositoryId={repository.githubId}
-                            canCreate={canPerform(
-                              session.data,
-                              'assessment.run',
-                              repository.githubId
-                            )}
-                            initialSha=''
-                          />
+                          <TabsList
+                            aria-label='Assessment sections'
+                            className='max-w-full'
+                          >
+                            <TabsTrigger value='commits'>
+                              Commit assessments
+                            </TabsTrigger>
+                            <TabsTrigger value='pull-requests'>
+                              Pull requests
+                            </TabsTrigger>
+                            <TabsTrigger value='activity'>Activity</TabsTrigger>
+                          </TabsList>
+                          <TabsContent
+                            value='activity'
+                            forceMount
+                            className='data-[state=inactive]:hidden'
+                          >
+                            <RepositoryActivityPanel
+                              repositoryId={repository.githubId}
+                            />
+                          </TabsContent>
+                          <TabsContent
+                            value='pull-requests'
+                            forceMount
+                            className='data-[state=inactive]:hidden'
+                          >
+                            <RepositoryPullRequests
+                              repositoryId={repository.githubId}
+                            />
+                          </TabsContent>
+                          <TabsContent
+                            value='commits'
+                            forceMount
+                            className='data-[state=inactive]:hidden'
+                          >
+                            <RepositoryAssessments
+                              repositoryId={repository.githubId}
+                              canCreate={canPerform(
+                                session.data,
+                                'assessment.run',
+                                repository.githubId
+                              )}
+                              initialSha=''
+                            />
+                          </TabsContent>
                         </>
                       )}
                       {module === 'quality-gates' &&
