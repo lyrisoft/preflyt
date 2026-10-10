@@ -1,12 +1,12 @@
 # Skill-Based AI Engineering Review
 
-**Status:** Instruction-only catalogue and saved-assessment evidence runtime implemented; contextual PR source review remains a target specification.
+**Status:** Instruction-only catalogue, saved-assessment evidence review, bounded exact-commit PR diff review, automatic published-policy dispatch and opt-in neutral GitHub summaries implemented.
 **Scope:** Read-only pull-request analysis. Not a general coding agent.  
 **Related:** [Code Quality Review](code-quality-review.md), [AI routing](../architecture/ADR-0004-shift-left-assessment-governance.md), [RBAC](rbac-and-authorization.md).
 
 ## Implemented first increment
 
-Intelligence → Skills supports organization-scoped drafts, immutable integer versions and content digests, reviewed approval, enable/disable/retire, repository scope and pagination. Repository assessment details expose explicit AI evidence review using approved model routing, estimated daily budget reservations, cancellation and validated inferred suggestions. First-party evidence-review templates are included; instruction-only SKILL.md uploads open editable drafts and downloads export the selected immutable database version. Candidate third-party packages and scripts are not bundled or executed. No source or PR diff is sent. See [setup, permissions and exact limits](../operations/review-skills.md). The semantic manifests, changed-line mapping, automatic dispatch and GitHub feedback below remain future requirements.
+Intelligence → Skills supports organization-scoped drafts, immutable integer versions and content digests, reviewed approval, enable/disable/retire, repository scope and pagination. Repository assessment details expose explicit AI evidence review using approved model routing, estimated daily budget reservations, cancellation and validated inferred suggestions. The [12 built-in Markdown skills](../skills/README.md) provide concrete review guides linked to every current engineering check; instruction-only SKILL.md uploads open editable drafts and downloads export the selected immutable database version. Candidate third-party packages and scripts are not bundled or executed. PR reviews can include bounded verified changed lines under an enabled source-sharing route. See [setup, permissions and exact limits](../operations/review-skills.md). Language/framework selection and opt-in inline comments are implemented. Administrator-reviewed public GitHub SKILL.md imports pin upstream commits and checksums. Executable-package manifests and script execution remain outside this instruction-only runtime.
 
 ## Markdown file contract
 

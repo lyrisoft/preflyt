@@ -1,5 +1,7 @@
 # GitHub readiness check publication
 
+Application connections and feature switches are now provisioned in **Settings → Configuration** by Super Admin. Environment names below describe the legacy import contract; once stored, database values take precedence. See [deployment configuration](deployment-configuration.md). Infrastructure and execution trust controls remain deployment-managed.
+
 Status: manual publication evaluates the published branch policy when one exists. Verified execution can produce a passing check only under an approved pinned workflow contract. Durable automatic publication and single-repository ruleset activation are implemented behind explicit deployment flags. Live disposable-repository acceptance, forks and merge queues remain pending.
 
 For production, use the [deployment and release-gate runbook](../deployment/github-governance-production.md). It includes the two-App boundary, private-repository plan requirement, container configuration and recovery.

@@ -1,3 +1,4 @@
+import { verifyTeamContext } from '../teams/team-context.js';
 import { executionContracts } from "./execution-contract.js";
 import { recordPolicyNotification } from "../notifications/notification-event.js";
 import {
@@ -218,6 +219,7 @@ export class GatePolicyService {
           );
         const definition = {
           ...composeGatePolicy(selection, body.branchRef, body.requiredRules),
+          ...(selection.teamContext ? { teamContext: selection.teamContext } : {}),
           organizationId: session.organizationId!,
           repositoryGithubId: githubId,
         };
@@ -238,7 +240,8 @@ export class GatePolicyService {
           },
         });
         await this.audit(tx, session, "policy.drafted", policy);
-        return policy;
+        await verifyTeamContext(tx, repositoryId, (policy.definition as any).teamContext);
+    return policy;
       },
     );
   }
@@ -285,6 +288,7 @@ export class GatePolicyService {
           );
         const definition = {
           ...composeGatePolicy(selection, policy.branchRef, body.requiredRules),
+          ...(selection.teamContext ? { teamContext: selection.teamContext } : {}),
           organizationId: session.organizationId!,
           repositoryGithubId: githubId,
         };
@@ -467,6 +471,7 @@ export class GatePolicyService {
       throw new ConflictException(
         "Policy or standards baseline changed; draft and review a new version",
       );
+    await verifyTeamContext(tx, repositoryId, (policy.definition as any).teamContext);
     return policy;
   }
   private audit(

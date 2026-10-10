@@ -44,6 +44,8 @@ export const nativeAdapters = {
     command: ['/usr/local/bin/trivy'],
     args: [
       'filesystem',
+      '--cache-dir',
+      '/opt/preflyt/trivy-cache',
       '--config',
       '/opt/preflyt/config/trivy.yaml',
       '--scanners',

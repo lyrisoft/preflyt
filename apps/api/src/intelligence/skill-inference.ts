@@ -14,6 +14,7 @@ export async function runSkillInference(
   context: ReviewContext,
   maxOutputTokens: number,
   signal: AbortSignal,
+  onUsage?: (usage: ProviderUsage) => Promise<void>,
 ) {
   const endpoint = providerEndpoint(provider);
   if (!endpoint) throw new Error("Connection unavailable");
@@ -80,6 +81,7 @@ export async function runSkillInference(
   );
   if (!response.ok) throw new Error("Model unavailable");
   const value = (await response.json()) as any;
+  await onUsage?.(providerUsage(endpoint.preset, value, provider));
   let raw: unknown;
   if (endpoint.preset === "anthropic") {
     if (
@@ -137,4 +139,69 @@ export function reviewReservation(
   return (
     BigInt(input) * BigInt(inputTokens) + BigInt(output) * BigInt(outputTokens)
   );
+}
+export type ProviderUsage = {
+  inputTokens: number | null;
+  outputTokens: number | null;
+  cachedTokens: number | null;
+  costMicroCents: string | null;
+  costStatus: "ESTIMATED_FROM_REPORTED_USAGE" | "UNAVAILABLE";
+};
+export function providerUsage(
+  preset: string | undefined,
+  value: any,
+  provider: Pick<
+    AiProviderConnection,
+    "inputPriceCentsPerMillion" | "outputPriceCentsPerMillion"
+  >,
+): ProviderUsage {
+  const count = (v: unknown) =>
+    Number.isSafeInteger(v) && (v as number) >= 0 && (v as number) <= 100000000
+      ? (v as number)
+      : null;
+  const inputTokens = count(
+    preset === "anthropic"
+      ? value.usage?.input_tokens
+      : preset === "gemini"
+        ? value.usageMetadata?.promptTokenCount
+        : value.usage?.prompt_tokens,
+  );
+  const candidates = count(value.usageMetadata?.candidatesTokenCount);
+  const thoughts = count(value.usageMetadata?.thoughtsTokenCount ?? 0);
+  const outputTokens =
+    preset === "gemini"
+      ? candidates === null || thoughts === null
+        ? null
+        : count(candidates + thoughts)
+      : count(
+          preset === "anthropic"
+            ? value.usage?.output_tokens
+            : value.usage?.completion_tokens,
+        );
+  const cachedTokens = count(
+    preset === "anthropic"
+      ? (value.usage?.cache_read_input_tokens ?? 0) +
+          (value.usage?.cache_creation_input_tokens ?? 0)
+      : preset === "gemini"
+        ? (value.usageMetadata?.cachedContentTokenCount ?? 0)
+        : (value.usage?.prompt_tokens_details?.cached_tokens ?? 0),
+  );
+  let costMicroCents: string | null = null;
+  if (inputTokens !== null && outputTokens !== null && cachedTokens === 0) {
+    try {
+      costMicroCents = reviewReservation(
+        provider as AiProviderConnection,
+        inputTokens,
+        outputTokens,
+      ).toString();
+    } catch {}
+  }
+  return {
+    inputTokens,
+    outputTokens,
+    cachedTokens,
+    costMicroCents,
+    costStatus:
+      costMicroCents === null ? "UNAVAILABLE" : "ESTIMATED_FROM_REPORTED_USAGE",
+  };
 }

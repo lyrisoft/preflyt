@@ -184,3 +184,33 @@ it('paginates history and hides review requests from viewers', async () => {
     .element(view.getByText('Skill 0 · skill v1', { exact: true }))
     .not.toBeInTheDocument()
 })
+
+it('shares PR changes only when explicitly requested', async () => {
+  state.reviews = {
+    data: {
+      enabled: true,
+      checks: [{ ...check, stages: ['pull_request'] }],
+      reviews: [],
+    },
+  }
+  const view = await render(
+    <SkillReviewPanel
+      repositoryId='123'
+      assessmentId='assessment'
+      stage='pull_request'
+    />
+  )
+  await view
+    .getByRole('checkbox', { name: 'Evidence review · skill v1' })
+    .click()
+  await view.getByRole('checkbox', { name: /Include PR changes/ }).click()
+  await view.getByRole('button', { name: 'Run review' }).click()
+  expect(state.save).toHaveBeenCalledWith(
+    '/github/repositories/123/ai-reviews',
+    {
+      assessmentId: 'assessment',
+      checkIds: ['check'],
+      includeSource: true,
+    }
+  )
+})

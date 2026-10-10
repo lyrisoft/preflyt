@@ -13,6 +13,7 @@ export const rolePermissions: Record<string, string[]> = {
   OWNER: [
     'ai.provider.manage', 'ai.routing.manage', 'ai.usage.read',
     'ai.skills.read', 'ai.skills.manage', 'ai.skills.approve', 'ai.review.run',
+    'team.manage', 'team.import', 'team.policy.assign',
     'standards.manage',
     'organization.members.manage',
     'organization.settings.update',
@@ -22,12 +23,13 @@ export const rolePermissions: Record<string, string[]> = {
     'assessment.read',
     'assessment.run',
     'execution.run',
+    'team.read',
     'policy.read',
     'policy.draft',
     'policy.publish',
     'github.ruleset.manage',
     'policy.enforcement.manage',
-    'evidence.manage',
+    'evidence.manage', 'findings.manage',
     'contributors.read',
     'contributors.activity.read',
     'contributors.policy_evidence.read',
@@ -35,6 +37,7 @@ export const rolePermissions: Record<string, string[]> = {
   ADMIN: [
     'ai.provider.manage', 'ai.routing.manage', 'ai.usage.read',
     'ai.skills.read', 'ai.skills.manage', 'ai.skills.approve', 'ai.review.run',
+    'team.manage', 'team.import', 'team.policy.assign',
     'standards.manage',
     'organization.members.manage',
     'repository.connect',
@@ -43,20 +46,23 @@ export const rolePermissions: Record<string, string[]> = {
     'assessment.read',
     'assessment.run',
     'execution.run',
+    'team.read',
     'policy.read',
     'policy.draft',
     'policy.publish',
     'github.ruleset.manage',
     'policy.enforcement.manage',
-    'evidence.manage',
+    'evidence.manage', 'findings.manage',
     'contributors.read',
     'contributors.activity.read',
     'contributors.policy_evidence.read',
   ],
   POLICY_MANAGER: [
+    'team.policy.assign',
     'ai.skills.read', 'ai.skills.approve', 'ai.review.run',
     'repository.read',
     'assessment.read',
+    'team.read',
     'policy.read',
     'policy.draft',
     'policy.publish',
@@ -69,8 +75,9 @@ export const rolePermissions: Record<string, string[]> = {
     'execution.run',
     'repository.read',
     'assessment.read',
+    'team.read',
     'policy.read',
-    'evidence.manage',
+    'evidence.manage', 'findings.manage',
     'contributors.read',
     'contributors.activity.read',
     'contributors.policy_evidence.read',
@@ -80,6 +87,7 @@ export const rolePermissions: Record<string, string[]> = {
     'repository.read',
     'assessment.read',
     'assessment.run',
+    'team.read',
     'policy.read',
     'contributors.read',
     'contributors.activity.read',
@@ -90,6 +98,7 @@ export const rolePermissions: Record<string, string[]> = {
     'repository.read',
     'assessment.read',
     'assessment.run',
+    'team.read',
     'policy.read',
     'contributors.read',
     'contributors.activity.read',
@@ -100,6 +109,7 @@ export const rolePermissions: Record<string, string[]> = {
     'ai.usage.read',
     'repository.read',
     'assessment.read',
+    'team.read',
     'policy.read',
     'contributors.read',
     'contributors.activity.read',
@@ -109,6 +119,7 @@ export const rolePermissions: Record<string, string[]> = {
     'ai.skills.read',
     'repository.read',
     'assessment.read',
+    'team.read',
     'policy.read',
     'contributors.read',
   ],
@@ -178,6 +189,7 @@ export class AuthorizationService {
           'github.ruleset.manage',
           'policy.enforcement.manage',
           'execution.run',
+          'team.manage', 'team.import', 'team.policy.assign',
           'standards.manage',
           'ai.provider.manage', 'ai.routing.manage', 'ai.skills.manage', 'ai.skills.approve', 'ai.review.run',
         ].includes(permission)
@@ -225,12 +237,20 @@ export class AuthorizationService {
       },
     })
     throw new ForbiddenException(
-      'This resource is outside your authorized scope'
+      'You do not have access to this resource. Ask your administrator for access.'
     )
   }
   // SessionGuard calls this after live session validation, before any controller or cache lookup.
   async authorizeRequest(request: Request, session: AuthenticatedSession) {
     const path = request.path.replace(/\/$/, '')
+    if (path === '/configuration') {
+      if (session.platformAdmin !== true) await this.deny(session, 'deployment.configuration.manage')
+      return true
+    }
+    if (path === '/teams' || path.startsWith('/teams/')) {
+      await this.requireOrganization(session, request.method === 'GET' ? 'team.read' : path.includes('github') || path.endsWith('/sync') ? 'team.import' : path.endsWith('/assign') || path.endsWith('/preview') ? 'team.policy.assign' : 'team.manage')
+      return true
+    }
     if (path === '/ai/skills' || path.startsWith('/ai/skills/')) {
       await this.requireOrganization(session, request.method === 'GET' ? 'ai.skills.read' : path.endsWith('/approve') ? 'ai.skills.approve' : 'ai.skills.manage')
       return true
@@ -318,6 +338,7 @@ export class AuthorizationService {
       path === '/github/repositories' ||
       path === '/github/repositories/overview' ||
       path === '/github/dashboard' ||
+      (path === '/findings' || /^\/findings\/[a-f0-9]{64}\/(triage|assignees)$/.test(path)) ||
       path.startsWith('/contributors') ||
       path.startsWith('/organizations') ||
       path === '/standards/catalogue'

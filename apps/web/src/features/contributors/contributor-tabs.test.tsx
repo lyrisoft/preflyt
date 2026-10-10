@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { expect, it, vi } from 'vitest'
 import { ContributorsPage } from './contributors-page'
 
-const state = vi.hoisted(() => ({ tab: 'activity', page: 1 }))
+const state = vi.hoisted(() => ({ tab: 'activity', page: 1, canImport: false }))
 const data = vi.hoisted(() => ({
   choices: [{ githubId: '11', fullName: 'fixture/repo' }],
   scope: [{ githubId: '11', fullName: 'fixture/repo' }],
@@ -16,6 +16,7 @@ const data = vi.hoisted(() => ({
   pageSize: 20,
   total: 1,
   truncated: false,
+  emptyActivity: false,
   collectionEnabled: true,
   lastReceivedAt: null,
   limitations: [],
@@ -24,7 +25,7 @@ const data = vi.hoisted(() => ({
       id: 'person',
       login: 'developer',
       kind: 'HUMAN',
-      avatarUrl: '',
+      avatarUrl: 'https://avatars.githubusercontent.com/u/11?s=80',
       profileUrl: 'https://github.com/developer',
       authoredPrs: 31,
       mergedPrs: 0,
@@ -101,7 +102,7 @@ vi.mock('@/features/workspace/navigation-session', () => ({
   }),
 }))
 vi.mock('@/features/workspace/scoped-access', () => ({
-  canPerform: () => false,
+  canPerform: () => state.canImport,
 }))
 vi.mock('@/components/layout/app-header', () => ({
   AppHeader: () => <header>Profile header</header>,
@@ -166,4 +167,31 @@ it('puts Help after Refresh and keeps explanatory notes out of the dashboard', (
   expect(html).not.toContain('Data sources and limits')
   expect(html).toContain('items-stretch')
   expect(html).toContain('h-full min-w-0')
+})
+
+it('shows GitHub import in the page header for All repositories only to repository managers', () => {
+  state.canImport = true
+  try {
+    const html = renderToStaticMarkup(<ContributorsPage />)
+    expect(html).toContain('Import GitHub activity')
+    expect(html.indexOf('Import GitHub activity')).toBeLessThan(
+      html.indexOf('Refresh local data')
+    )
+  } finally {
+    state.canImport = false
+  }
+  expect(renderToStaticMarkup(<ContributorsPage />)).not.toContain(
+    'Import GitHub activity'
+  )
+})
+
+it('keeps a known contributor visible with a clear empty-filter state', () => {
+  data.emptyActivity = true
+  try {
+    const html = renderToStaticMarkup(<ContributorsPage />)
+    expect(html).toContain('No recorded activity for this contributor')
+    expect(html).toContain('developer')
+  } finally {
+    data.emptyActivity = false
+  }
 })

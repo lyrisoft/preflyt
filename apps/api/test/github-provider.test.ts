@@ -44,3 +44,13 @@ it('keeps PR and contents token caches separate with least-privilege minting',as
  expect(mint.mock.calls[1][1]).toMatchObject({repository_ids:[501],permissions:{metadata:'read',pull_requests:'read'}})
  expect((mint.mock.calls[1][1] as any).permissions).not.toHaveProperty('contents');provider.close()
 })
+
+it('rejects a PR diff when the live head changes during file collection', async () => {
+  const provider=new GitHubProviderService() as any
+  const context={version:1,head:{repositoryId:'501',ref:'feature',sha:'a'.repeat(40)},base:{repositoryId:'501',ref:'main',sha:'b'.repeat(40)},state:'open',draft:false,merged:false}
+  const read=vi.spyOn(provider,'readPullRequest').mockResolvedValueOnce({context}).mockResolvedValueOnce({context:{...context,head:{...context.head,sha:'c'.repeat(40)}}})
+  vi.spyOn(provider,'openRepository').mockResolvedValue({metadata:{owner:{login:'fixture'},name:'app'},request:vi.fn(async()=>[{filename:'x.ts',patch:'@@ -0,0 +1 @@\n+changed'}])})
+  await expect(provider.readPrReviewSource(500n,501n,7,context)).rejects.toThrow()
+  expect(read).toHaveBeenCalledTimes(2)
+  provider.close()
+})

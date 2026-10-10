@@ -103,7 +103,7 @@ export function GitHubOnboarding() {
               : 'Checking your GitHub account…'}{' '}
             {data?.linkingWorkspace
               ? 'Confirm the organization below to link it to your existing Preflyt workspace.'
-              : 'GitHub organization owners can connect a new workspace. Existing workspaces require a Preflyt access grant.'}
+              : 'GitHub organization owners can connect a new workspace. You need access to join an existing workspace.'}
           </CardDescription>
         </CardHeader>
         <CardContent className='space-y-4'>
@@ -138,7 +138,7 @@ export function GitHubOnboarding() {
                     : org.state === 'migration_required'
                       ? 'This workspace already has connected repositories. A workspace administrator must link it to this GitHub organization before GitHub sign-in can be used. Sign in with your existing administrator account, then open Access Control → GitHub members → Link GitHub organization.'
                       : org.state === 'no_access'
-                        ? 'Ask your Preflyt administrator to grant you access.'
+                        ? 'Ask your Preflyt administrator to give you access.'
                         : org.state === 'new'
                           ? 'An organization owner can connect this workspace. Your ownership will be verified.'
                           : 'Continue with your existing Preflyt role.'}

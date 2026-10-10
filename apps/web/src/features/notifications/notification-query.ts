@@ -30,6 +30,7 @@ type InboxData = {
   repositories: { repositoryGithubId: string; repositoryName: string }[]
 }
 export const titles: Record<string, string> = {
+  CRITICAL_FINDINGS_REPORTED: 'Critical findings reported',
   POLICY_PUBLISHED: 'Policy published',
   READINESS_BLOCKED: 'PR check blocked',
   READINESS_INCOMPLETE: 'PR check needs more evidence',

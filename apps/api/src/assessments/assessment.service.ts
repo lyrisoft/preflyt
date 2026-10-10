@@ -516,6 +516,7 @@ export class AssessmentService {
       actorId,
       selectionId: selection.id,
       selectionRevision: selection.revision,
+      ...(selection.teamContext ? { teamContext: selection.teamContext } : {}),
       profileSnapshotId: snapshot?.id ?? null,
       profileSnapshot: snapshot
         ? {

@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: preflyt-ai-gateway}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: preflyt-ai-gateway}}
+  template:
+    metadata: {labels: {app: preflyt-ai-gateway}}
+    spec:
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532}
+      containers:
+        - name: litellm
+          image: docker.litellm.ai/berriai/litellm:v1.98.0@sha256:20b5044b619055374061a6d5b7b08754cad75aeabbf82ddf4f69cc0cf80ddaf4
+          args: [--config, /app/preflyt-config.yaml, --port, '4000']
+          ports: [{containerPort: 4000}]
+          envFrom: [{secretRef: {name: preflyt-ai-gateway}}]
+          env: [{name: HOME, value: /tmp}, {name: PYTHONDONTWRITEBYTECODE, value: '1'}]
+          resources: {requests: {cpu: 100m, memory: 256Mi}, limits: {cpu: '1', memory: 1Gi}}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          volumeMounts:
+            - {name: config, mountPath: /app/preflyt-config.yaml, subPath: config.yaml, readOnly: true}
+            - {name: tmp, mountPath: /tmp}
+          readinessProbe: {httpGet: {path: /health/liveliness, port: 4000}, periodSeconds: 10}
+          livenessProbe: {httpGet: {path: /health/liveliness, port: 4000}, initialDelaySeconds: 30, periodSeconds: 20}
+      volumes:
+        - {name: config, configMap: {name: preflyt-ai-gateway}}
+        - {name: tmp, emptyDir: {medium: Memory, sizeLimit: 128Mi}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: preflyt-ai-gateway}
+spec:
+  selector: {app: preflyt-ai-gateway}
+  ports: [{port: 4000, targetPort: 4000}]
+  type: ClusterIP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: preflyt-ai-gateway}
+spec:
+  podSelector: {matchLabels: {app: preflyt-ai-gateway}}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from: [{podSelector: {matchLabels: {app: preflyt-api}}}, {podSelector: {matchLabels: {app: preflyt-worker}}}]
+      ports: [{protocol: TCP, port: 4000}]
+  egress:
+    - to: [{namespaceSelector: {}}]
+      ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
+    - to: [{ipBlock: {cidr: 0.0.0.0/0, except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16]}}]
+      ports: [{protocol: TCP, port: 443}]

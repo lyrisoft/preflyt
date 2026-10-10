@@ -139,8 +139,9 @@ export function PolicyComplianceSummary({
           </p>
         ) : !data.eligiblePrs ? (
           <p className='rounded-lg border border-dashed p-5 text-sm text-muted-foreground'>
-            No authored PRs in this period and scope. Broaden the period or
-            import recent GitHub activity. Compliance is not available.
+            No authored PRs match this period and repository filter. Broaden the
+            period or import recent GitHub activity. Compliance is not
+            available.
           </p>
         ) : (
           <>
@@ -158,7 +159,7 @@ export function PolicyComplianceSummary({
                   color: 'text-teal-600 dark:text-teal-400',
                 },
                 {
-                  label: 'Coverage',
+                  label: 'PRs fully assessed',
                   value: percent(data.coverage),
                   detail: `${data.completePrs}/${data.eligiblePrs} PRs assessed`,
                   icon: ShieldCheck,

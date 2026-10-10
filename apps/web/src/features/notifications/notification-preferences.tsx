@@ -25,6 +25,7 @@ export function NotificationPreferences() {
     retry: false,
   })
   const save = useMutation({
+    meta: { successMessage: 'Notification preferences saved' },
     mutationFn: async (updates: { assessments: boolean; email: boolean }) => {
       const { API_BASE_URL } = await import('@/lib/api')
       const response = await fetch(

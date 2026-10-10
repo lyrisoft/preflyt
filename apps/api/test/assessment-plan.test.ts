@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { catalogue } from '../src/standards/catalogue.js'
+import { catalogue, legacyCatalogue } from '../src/standards/catalogue.js'
 import {
   buildAssessment,
   digest,
@@ -93,7 +93,11 @@ describe('frozen assessment contracts', () => {
             observations: [observation(provider)],
           }),
         ),
-      ).toMatchObject({ coverage, providerResult: provider, ruleOutcome: null })
+      ).toMatchObject({
+        coverage,
+        providerResult: provider,
+        ruleOutcome: null,
+      })
     },
   )
   it.each([
@@ -110,7 +114,7 @@ describe('frozen assessment contracts', () => {
       ).coverage,
     ).toBe(coverage)
   })
-  it('shows unmapped and unsupported checks and suppresses superseded observations', () => {
+  it('shows unmapped supported checks and suppresses superseded observations', () => {
     const newer = {
       ...observation('FAILED', new Date('2026-10-08T19:30:00Z')),
       deliveryId: 'delivery-2',
@@ -130,7 +134,7 @@ describe('frozen assessment contracts', () => {
     expect(mapped(empty).coverage).toBe('MISSING')
     expect(
       empty.report.checks.find((c) => c.ruleId === 'secrets.scan')?.coverage,
-    ).toBe('UNSUPPORTED')
+    ).toBe('MISSING')
     expect(
       empty.report.checks.find((c) => c.ruleId === 'ci.configured')?.coverage,
     ).toBe('UNKNOWN')
@@ -192,4 +196,17 @@ describe('frozen assessment contracts', () => {
     const result = buildAssessment({ ...input(), observations: [poisoned] })
     expect(JSON.stringify(result)).not.toContain('never-copy')
   })
+})
+
+it('retains unsupported semantics for the historical planned standard version', () => {
+  const old = legacyCatalogue.find((p) => p.id === 'baseline-engineering')!
+  const snapshot = buildAssessment({
+    ...input(),
+    packs: [{ id: old.id, version: old.version, digest: old.digest }],
+    mappings: [],
+    observations: [],
+  })
+  expect(
+    snapshot.report.checks.find((c) => c.ruleId === 'secrets.scan')?.coverage,
+  ).toBe('UNSUPPORTED')
 })

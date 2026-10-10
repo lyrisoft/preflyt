@@ -47,7 +47,6 @@ export const sidebarData: SidebarData = {
           title: 'Findings',
           url: '/findings',
           icon: ShieldAlert,
-          badge: 'Planned',
         },
         { title: 'Contributors', url: '/contributors', icon: UsersRound },
       ],
@@ -81,6 +80,7 @@ export const sidebarData: SidebarData = {
       title: 'Administration',
       items: [
         { title: 'Integrations', url: '/integrations', icon: Plug },
+        { title: 'Teams', url: '/teams', icon: UsersRound },
         {
           title: 'Access Control',
           url: '/access-control',
@@ -92,7 +92,6 @@ export const sidebarData: SidebarData = {
           url: '/organization-settings',
           icon: Settings,
           adminOnly: true,
-          badge: 'Planned',
         },
       ],
     },

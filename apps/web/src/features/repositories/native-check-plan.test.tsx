@@ -58,7 +58,7 @@ it('shows recorded source and blocked checks without claiming results', () => {
   expect(html).not.toContain('No checks have run')
   expect(html).not.toContain('Checks passed')
   expect(html).toContain('Tool review required')
-  expect(html).toContain('not supported yet')
+  expect(html).toContain('cannot run this check yet')
   expect(html).not.toContain('Run checks')
   expect(html).toContain('aria-expanded="true"')
 })
@@ -95,11 +95,14 @@ it('exposes loading and empty states', () => {
 })
 
 it('shows reviewed execution readiness without presenting a plan as a passing result', () => {
-  const data = state.query.data as any
+  const data = state.query.data as {
+    executionAvailable: boolean
+    steps: { reason: string }[]
+  }
   data.executionAvailable = true
   data.steps[0].reason = 'DISPATCHER_REQUIRED'
   const html = render()
   expect(html).toContain('Ready to run')
-  expect(html).toContain('Native check not supported yet')
+  expect(html).toContain('Preflyt cannot run this check yet')
   expect(html).not.toContain('Checks passed')
 })

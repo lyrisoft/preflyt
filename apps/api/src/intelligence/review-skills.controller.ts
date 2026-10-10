@@ -37,6 +37,8 @@ import { ReviewSkillsService } from "./review-skills.service.js";
 import { SkillReviewService } from "./skill-review.service.js";
 type R = Request & { preflytSession: AuthenticatedSession };
 class SkillDto {
+  @IsOptional() @IsArray() @ArrayMaxSize(20) @IsString({ each: true }) languages?: string[];
+  @IsOptional() @IsArray() @ArrayMaxSize(20) @IsString({ each: true }) frameworks?: string[];
   @IsString() @MaxLength(100) name!: string;
   @IsString() @MaxLength(400) description!: string;
   @IsString() @MaxLength(6000) instructions!: string;
@@ -59,6 +61,12 @@ class SkillDto {
   @IsOptional() @IsUUID() skillKey?: string;
   @IsInt() @Min(0) @Max(199) expectedVersion!: number;
 }
+class UpstreamDto {
+  @IsString() @MaxLength(70) repository!: string;
+  @Matches(/^[a-f0-9]{40}$/) commit!: string;
+  @IsString() @MaxLength(80) path!: string;
+  @IsString() @MaxLength(80) licensePath!: string;
+}
 class MarkdownDto {
   @IsString() @MaxLength(32768) markdown!: string;
 }
@@ -67,6 +75,7 @@ class ActionDto {
   @IsBoolean() reviewed!: boolean;
 }
 class ReviewDto {
+  @IsOptional() @IsBoolean() includeSource?: boolean;
   @IsString() @MaxLength(100) assessmentId!: string;
   @IsArray()
   @ArrayMinSize(1)
@@ -85,12 +94,31 @@ export class ReviewSkillsController {
   @Get() @Header("Cache-Control", "no-store") list(@Req() req: R) {
     return this.skills.list(req.preflytSession);
   }
+  @Post("upstream") @Header("Cache-Control","no-store") upstream(@Req() req:R,@Body() body:UpstreamDto) {
+    this.auth.assertOrigin(req.headers.origin);
+    return this.skills.upstream(req.preflytSession,body);
+  }
   @Post("parse") @Header("Cache-Control", "no-store") parse(
     @Req() req: R,
     @Body() body: MarkdownDto,
   ) {
     this.auth.assertOrigin(req.headers.origin);
     return this.skills.parseMarkdown(req.preflytSession, body.markdown);
+  }
+  @Get("builtins/:id/markdown")
+  @Header("Cache-Control", "no-store")
+  @Header("Content-Type", "text/markdown; charset=utf-8")
+  @Header("Content-Disposition", 'attachment; filename="SKILL.md"')
+  @Header("X-Content-Type-Options", "nosniff")
+  builtinMarkdown(@Req() req: R, @Param("id") id: string) {
+    return this.skills.builtinMarkdown(req.preflytSession, id);
+  }
+  @Post("builtins/:id/use") @Header("Cache-Control", "no-store") useBuiltin(
+    @Req() req: R,
+    @Param("id") id: string,
+  ) {
+    this.auth.assertOrigin(req.headers.origin);
+    return this.skills.useBuiltin(req.preflytSession, id);
   }
   @Get(":id/markdown")
   @Header("Cache-Control", "no-store")
@@ -150,6 +178,7 @@ export class SkillReviewController {
       repo,
       body.assessmentId,
       body.checkIds,
+      { includeSource: body.includeSource ?? false },
     );
   }
   @Post(":id/cancel") @Header("Cache-Control", "no-store") cancel(

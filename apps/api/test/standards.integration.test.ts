@@ -1,3 +1,6 @@
+import { randomUUID } from 'node:crypto'
+import { readdir, readFile } from 'node:fs/promises'
+import { Client } from 'pg'
 import { AuthorizationService } from '../src/auth/authorization.service.js'
 import 'reflect-metadata'
 import { ForbiddenException, ValidationPipe } from '@nestjs/common'
@@ -12,6 +15,11 @@ import { SessionGuard, OwnerAdminGuard } from '../src/auth/session.guard.js'
 import { StandardsController } from '../src/standards/standards.controller.js'
 import { StandardsService } from '../src/standards/standards.service.js'
 let app: INestApplication, prisma: PrismaService, actorId: string
+let databaseAdmin: Client | undefined
+let databaseCreated = false
+const testDatabase =
+  'preflyt_standards_test_' + randomUUID().replaceAll('-', '')
+const originalDatabaseUrl = process.env.DATABASE_URL
 const body = (
   expectedSelectionId: string | null = null,
   profile = 'RECOMMENDED',
@@ -37,8 +45,26 @@ const get = (id = '501') =>
     .set('Cookie', 'test.sid=VIEWER')
 beforeAll(async () => {
   const url = new URL(process.env.DATABASE_URL!)
-  if (!['127.0.0.1', 'localhost'].includes(url.hostname) || !/^\/preflyt_(?:[a-z0-9_]+_)?test(?:_[a-z0-9_]+)?$/.test(url.pathname))
-    throw new Error('Disposable test database required')
+  if (!['127.0.0.1', 'localhost'].includes(url.hostname))
+    throw new Error('Local disposable database required')
+  databaseAdmin = new Client({ connectionString: url.toString() })
+  await databaseAdmin.connect()
+  await databaseAdmin.query(`CREATE DATABASE "${testDatabase}"`)
+  databaseCreated = true
+  url.pathname = '/' + testDatabase
+  const sql = new Client({ connectionString: url.toString() })
+  await sql.connect()
+  try {
+    for (const entry of (await readdir('prisma/migrations'))
+      .filter((name) => /^\d/.test(name))
+      .sort())
+      await sql.query(
+        await readFile(`prisma/migrations/${entry}/migration.sql`, 'utf8'),
+      )
+  } finally {
+    await sql.end()
+  }
+  process.env.DATABASE_URL = url.toString()
   prisma = new PrismaService()
   await prisma.$connect()
   app = await NestFactory.create(
@@ -95,6 +121,10 @@ beforeAll(async () => {
 afterAll(async () => {
   await app?.close()
   await prisma?.$disconnect()
+  if (databaseCreated)
+    await databaseAdmin?.query(`DROP DATABASE "${testDatabase}" WITH (FORCE)`)
+  await databaseAdmin?.end()
+  process.env.DATABASE_URL = originalDatabaseUrl
 })
 beforeEach(async () => {
   await prisma.gitHubRepository.deleteMany()
@@ -320,4 +350,30 @@ describe('standards assignment and access', () => {
       ),
     ).toBe(true)
   })
+})
+
+it('adopts current report adapters while keeping a saved old version intact until explicitly changed', async () => {
+  const old = await post().expect(201)
+  const selectionId = old.body.id
+  const library = await get().expect(200)
+  expect(
+    library.body.catalogue.some(
+      (p: any) => p.id === 'baseline-engineering' && p.version === '1.1.0',
+    ),
+  ).toBe(true)
+  expect(
+    library.body.catalogue.some(
+      (p: any) => p.id === 'baseline-engineering' && p.version === '1.0.0',
+    ),
+  ).toBe(true)
+  expect(library.body.selection.id).toBe(selectionId)
+  const updated = await post({
+    ...body(selectionId),
+    packs: [{ id: 'baseline-engineering', version: '1.1.0' }],
+  }).expect(201)
+  expect(updated.body.packs[0].version).toBe('1.1.0')
+  const history = await prisma.repositoryStandardsSelection.findUniqueOrThrow({
+    where: { id: selectionId },
+  })
+  expect((history.packs as any)[0].version).toBe('1.0.0')
 })

@@ -31,6 +31,7 @@ import { Route as AuthenticatedQualityGatesRouteImport } from './routes/_authent
 import { Route as AuthenticatedSettingsRouteRouteImport } from './routes/_authenticated/settings/route'
 import { Route as AuthenticatedSkillsRouteImport } from './routes/_authenticated/skills'
 import { Route as AuthenticatedStandardsRouteImport } from './routes/_authenticated/standards'
+import { Route as AuthenticatedTeamsRouteImport } from './routes/_authenticated/teams'
 import { Route as authSuperAdminLoginRouteImport } from './routes/(auth)/super-admin/login'
 import { Route as AuthenticatedAppsIndexRouteImport } from './routes/_authenticated/apps/index'
 import { Route as AuthenticatedChatsIndexRouteImport } from './routes/_authenticated/chats/index'
@@ -164,6 +165,11 @@ const AuthenticatedStandardsRoute = AuthenticatedStandardsRouteImport.update({
   path: '/standards',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedTeamsRoute = AuthenticatedTeamsRouteImport.update({
+  id: '/teams',
+  path: '/teams',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const authSuperAdminLoginRoute = authSuperAdminLoginRouteImport.update({
   id: '/(auth)/super-admin/login',
   path: '/super-admin/login',
@@ -272,6 +278,7 @@ export interface FileRoutesByFullPath {
   '/quality-gates': typeof AuthenticatedQualityGatesRoute
   '/skills': typeof AuthenticatedSkillsRoute
   '/standards': typeof AuthenticatedStandardsRoute
+  '/teams': typeof AuthenticatedTeamsRoute
   '/super-admin/login': typeof authSuperAdminLoginRoute
   '/contributors/$contributorId': typeof AuthenticatedContributorsContributorIdRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
@@ -308,6 +315,7 @@ export interface FileRoutesByTo {
   '/quality-gates': typeof AuthenticatedQualityGatesRoute
   '/skills': typeof AuthenticatedSkillsRoute
   '/standards': typeof AuthenticatedStandardsRoute
+  '/teams': typeof AuthenticatedTeamsRoute
   '/': typeof AuthenticatedIndexRoute
   '/super-admin/login': typeof authSuperAdminLoginRoute
   '/contributors/$contributorId': typeof AuthenticatedContributorsContributorIdRoute
@@ -348,6 +356,7 @@ export interface FileRoutesById {
   '/_authenticated/quality-gates': typeof AuthenticatedQualityGatesRoute
   '/_authenticated/skills': typeof AuthenticatedSkillsRoute
   '/_authenticated/standards': typeof AuthenticatedStandardsRoute
+  '/_authenticated/teams': typeof AuthenticatedTeamsRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/(auth)/super-admin/login': typeof authSuperAdminLoginRoute
   '/_authenticated/contributors/$contributorId': typeof AuthenticatedContributorsContributorIdRoute
@@ -389,6 +398,7 @@ export interface FileRouteTypes {
     | '/quality-gates'
     | '/skills'
     | '/standards'
+    | '/teams'
     | '/super-admin/login'
     | '/contributors/$contributorId'
     | '/errors/$error'
@@ -425,6 +435,7 @@ export interface FileRouteTypes {
     | '/quality-gates'
     | '/skills'
     | '/standards'
+    | '/teams'
     | '/'
     | '/super-admin/login'
     | '/contributors/$contributorId'
@@ -464,6 +475,7 @@ export interface FileRouteTypes {
     | '/_authenticated/quality-gates'
     | '/_authenticated/skills'
     | '/_authenticated/standards'
+    | '/_authenticated/teams'
     | '/_authenticated/'
     | '/(auth)/super-admin/login'
     | '/_authenticated/contributors/$contributorId'
@@ -651,6 +663,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedStandardsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/teams': {
+      id: '/_authenticated/teams'
+      path: '/teams'
+      fullPath: '/teams'
+      preLoaderRoute: typeof AuthenticatedTeamsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/(auth)/super-admin/login': {
       id: '/(auth)/super-admin/login'
       path: '/super-admin/login'
@@ -795,6 +814,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedQualityGatesRoute: typeof AuthenticatedQualityGatesRoute
   AuthenticatedSkillsRoute: typeof AuthenticatedSkillsRoute
   AuthenticatedStandardsRoute: typeof AuthenticatedStandardsRoute
+  AuthenticatedTeamsRoute: typeof AuthenticatedTeamsRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedContributorsContributorIdRoute: typeof AuthenticatedContributorsContributorIdRoute
   AuthenticatedErrorsErrorRoute: typeof AuthenticatedErrorsErrorRoute
@@ -821,6 +841,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedQualityGatesRoute: AuthenticatedQualityGatesRoute,
   AuthenticatedSkillsRoute: AuthenticatedSkillsRoute,
   AuthenticatedStandardsRoute: AuthenticatedStandardsRoute,
+  AuthenticatedTeamsRoute: AuthenticatedTeamsRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedContributorsContributorIdRoute:
     AuthenticatedContributorsContributorIdRoute,

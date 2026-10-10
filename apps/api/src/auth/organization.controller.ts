@@ -1,3 +1,4 @@
+import { configurationValue } from '../configuration/runtime-configuration.js'
 import { githubLoginEnabled } from './github-identity-provider.js'
 import { GitHubUserAccessService } from './github-user-access.service.js'
 import {
@@ -78,6 +79,38 @@ export class OrganizationController {
     @Inject(GitHubUserAccessService)
     private readonly github?: GitHubUserAccessService
   ) {}
+  @Get('settings') @Header('Cache-Control', 'no-store')
+  async settings(@Req() req: R) {
+    const member = await this.access.requireOrganization(req.preflytSession, 'organization.members.manage')
+    const organization = await this.db.organization.findUniqueOrThrow({
+      where: { id: member.organizationId },
+      select: { id: true, name: true, createdAt: true,
+        githubLink: { select: { login: true } },
+        installations: { where: { active: true }, select: { accountLogin: true, accountType: true } },
+      },
+    })
+    return {
+      id: organization.id, name: organization.name, createdAt: organization.createdAt,
+      githubOrganization: organization.githubLink?.login ??
+        organization.installations.find((installation) => installation.accountType === 'Organization')?.accountLogin ?? null,
+      role: member.role,
+      canUpdate: rolePermissions[member.role]?.includes('organization.settings.update') ?? false,
+
+    }
+  }
+  @Patch('settings') @Header('Cache-Control', 'no-store')
+  async saveSettings(@Req() req: R, @Body() body: CreateOrganizationDto) {
+    this.auth.assertOrigin(req.headers.origin)
+    const member = await this.access.requireOrganization(req.preflytSession, 'organization.settings.update')
+    const name = body.name.trim()
+    if (!name) throw new BadRequestException('Workspace name is required')
+    await this.db.$transaction(async (tx) => {
+      await tx.organization.update({ where: { id: member.organizationId }, data: { name } })
+      await tx.auditEvent.create({ data: { event: 'organization.settings.updated', actorId: req.preflytSession.identityId,
+        metadata: { organizationId: member.organizationId, fields: ['name'] } } })
+    })
+    return { saved: true }
+  }
   @Get() @Header('Cache-Control', 'no-store') async list(@Req() req: R) {
     const memberships = await this.db.organizationMembership.findMany({
       where: { identityId: req.preflytSession.identityId, active: true },
@@ -521,10 +554,11 @@ export class OrganizationController {
         throw new BadRequestException(
           'Repository grants must belong to this organization'
         )
+      const oidcIssuer = configurationValue('OIDC_ISSUER')
       const issuer = githubUser
         ? 'https://github.com'
-        : process.env.OIDC_ISSUER
-          ? new URL(process.env.OIDC_ISSUER).href
+        : oidcIssuer
+          ? new URL(oidcIssuer).href
           : null
       if (!previous && !issuer)
         throw new BadRequestException(
