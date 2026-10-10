@@ -20,6 +20,7 @@ vi.mock('./notification-query', () => ({
     AI_MODEL_UNAVAILABLE: 'Model requests keep failing',
     AI_REVIEW_BUDGET_REACHED: 'Daily AI review reservation limit reached',
     NATIVE_EXECUTION_FAILED: 'Check execution failed',
+    POLICY_EXCEPTION_APPROVED: 'Policy exception approved',
   },
 }))
 vi.mock('@tanstack/react-router', () => ({
@@ -154,4 +155,28 @@ it('uses an informational blue indicator for informational updates', () => {
   )
   expect(html).toContain('bg-blue-500')
   expect(html).not.toContain('bg-teal-500')
+})
+
+it('links an exception notice to repository policies without requiring a publication-only policy event id', () => {
+  const html = renderToStaticMarkup(
+    <NotificationItem
+      item={{
+        id: 'exception-notice',
+        type: 'POLICY_EXCEPTION_APPROVED',
+        severity: 'warning',
+        readAt: null,
+        createdAt: new Date().toISOString(),
+        repository: 'fixture/app',
+        repositoryId: '51',
+        sourceSha: 'a'.repeat(40),
+        assessmentId: null,
+        policyId: null,
+      }}
+      onRead={() => {}}
+      busy={false}
+    />
+  )
+  expect(html).toContain('href="/policies"')
+  expect(html).toContain('Policy exception approved')
+  expect(html).toContain('&quot;repository&quot;:&quot;51&quot;')
 })

@@ -63,3 +63,12 @@ it('uses shared delivery colors for email notification states', () => {
   expect(statusTones['email failed']).toBe('error')
   expect(statusTones['email skipped']).toBe('neutral')
 })
+
+it('uses semantic colors for the policy exception lifecycle', () => {
+  expect(statusTones['pending review']).toBe('warning')
+  expect(statusTones.approved).toBe('success')
+  expect(statusTones.rejected).toBe('error')
+  expect(statusTones.revoked).toBe('neutral')
+  expect(statusTones.expired).toBe('warning')
+  expect(statusTones['allowed with exception']).toBe('warning')
+})

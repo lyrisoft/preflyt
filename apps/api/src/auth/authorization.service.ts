@@ -127,6 +127,13 @@ export const rolePermissions: Record<string, string[]> = {
   ],
 }
 
+for (const role of ['OWNER', 'ADMIN', 'POLICY_MANAGER', 'SECURITY_ENGINEER', 'ENGINEERING_LEAD', 'DEVELOPER']) {
+  rolePermissions[role].push('policy.exception.request')
+}
+for (const role of ['OWNER', 'ADMIN', 'POLICY_MANAGER']) {
+  rolePermissions[role].push('policy.exception.approve')
+}
+
 @Injectable()
 export class AuthorizationService {
   constructor(
@@ -188,6 +195,7 @@ export class AuthorizationService {
           'organization.settings.update',
           'repository.connect',
           'policy.publish',
+          'policy.exception.request', 'policy.exception.approve',
           'github.ruleset.manage',
           'policy.enforcement.manage',
           'execution.run',
@@ -285,6 +293,12 @@ export class AuthorizationService {
       }
       if (part === 'ruleset-deployments' || part.startsWith('ruleset-deployments/')) {
         await this.requireRepository(session, repo[1], request.method === 'GET' ? 'policy.read' : 'github.ruleset.manage')
+        return true
+      }
+      if (/^gate-policies\/[^/]+\/exceptions(?:\/|$)/.test(part)) {
+        const permission = request.method === 'GET' ? 'policy.read' :
+          /\/(approve|reject)$/.test(part) ? 'policy.exception.approve' : 'policy.exception.request'
+        await this.requireRepository(session, repo[1], permission)
         return true
       }
       if (part === 'gate-policies' || part.startsWith('gate-policies/')) {

@@ -51,13 +51,13 @@ export function NotificationItem({
           >
             {titles[item.type] ?? 'AI configuration needs attention'}
           </Link>
-        ) : item.policyId ? (
+        ) : item.policyId || item.type.startsWith('POLICY_EXCEPTION_') ? (
           <Link
             to='/policies'
             search={{ repository: item.repositoryId }}
             className='font-medium hover:underline'
           >
-            Policy published
+            {titles[item.type] ?? 'Policy update'}
           </Link>
         ) : item.type.startsWith('READINESS_') ||
           item.type.startsWith('RULESET_') ? (

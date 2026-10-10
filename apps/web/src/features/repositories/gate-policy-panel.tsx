@@ -50,6 +50,7 @@ import { StatusBadge } from '@/components/status-badge'
 import { SurfaceIcon } from '@/components/surface-icon'
 import { engineeringPath, engineeringRead } from './engineering-queries'
 import { policyActions } from './policy-actions'
+import { PolicyExceptions } from './policy-exceptions'
 import { useStandards } from './repository-queries'
 
 type Revision = {
@@ -116,12 +117,16 @@ export function GatePolicyPanel({
   canPublish,
   actorId,
   platformAdmin = false,
+  canRequestExceptions,
+  canApproveExceptions,
 }: {
   repositoryId: string
   canDraft: boolean
   canPublish: boolean
   actorId?: string
   platformAdmin?: boolean
+  canRequestExceptions?: boolean
+  canApproveExceptions?: boolean
 }) {
   const [draftOpen, setDraftOpen] = useState(false)
   const [editing, setEditing] = useState<Revision | null>(null)
@@ -673,6 +678,17 @@ export function GatePolicyPanel({
                     ))}
                   </div>
                 </section>
+                {selected.state === 'PUBLISHED' &&
+                  canRequestExceptions !== undefined && (
+                    <PolicyExceptions
+                      key={selected.id}
+                      repositoryId={repositoryId}
+                      policy={selected}
+                      actorId={actorId}
+                      canRequest={canRequestExceptions}
+                      canApprove={!!canApproveExceptions}
+                    />
+                  )}
                 <details className='rounded-lg border p-3'>
                   <summary className='cursor-pointer text-xs font-medium text-muted-foreground'>
                     Technical details

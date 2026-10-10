@@ -7,6 +7,7 @@ import { NativeResultService } from './execution/native-result.service.js'
 import { NativeStatusService } from './execution/native-status.service.js'
 import { RulesetDeploymentService } from './github/ruleset-deployment.service.js'
 import { RulesetHistoryService } from './github/ruleset-history.service.js'
+import { PolicyExceptionService } from './assessments/policy-exception.service.js'
 import { ReadinessAutomationService } from './assessments/readiness-automation.service.js'
 import { AssessmentService } from './assessments/assessment.service.js'
 import { CheckPublicationService } from './assessments/check-publication.service.js'
@@ -134,10 +135,11 @@ async function start() {
   let aiReviewRun: Promise<void> | undefined
   const native = new NativeDispatchService(prisma, emailAuthorization, githubProvider, new NativeStatusService(emailAuthorization), new NativeResultService(prisma, emailAuthorization, assessments))
   let nativeRun: Promise<void> | undefined
-  const checks = new CheckPublicationService(prisma, emailAuthorization, githubProvider, assessments)
+  const exceptions = new PolicyExceptionService(prisma, emailAuthorization)
+  const checks = new CheckPublicationService(prisma, emailAuthorization, githubProvider, assessments, exceptions)
   const deployments = new RulesetDeploymentService(prisma, emailAuthorization, githubProvider, checks)
   let driftRun: Promise<void> | undefined
-  const automation = new ReadinessAutomationService(prisma, emailAuthorization, githubProvider, assessments, checks)
+  const automation = new ReadinessAutomationService(prisma, emailAuthorization, githubProvider, assessments, checks, exceptions)
   let automationRun: Promise<void> | undefined
   let lastWarning = 0
   const warn = () => {

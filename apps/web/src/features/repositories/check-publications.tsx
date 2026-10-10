@@ -314,18 +314,22 @@ export function CheckPublications({
                 <h3 className='text-sm font-semibold'>{preview.name}</h3>
                 <StatusBadge
                   tone={
-                    preview.conclusion === 'success'
-                      ? 'success'
-                      : preview.conclusion === 'failure'
-                        ? 'error'
-                        : 'warning'
+                    preview.gateStatus === 'PASS_WITH_EXCEPTION'
+                      ? 'warning'
+                      : preview.conclusion === 'success'
+                        ? 'success'
+                        : preview.conclusion === 'failure'
+                          ? 'error'
+                          : 'warning'
                   }
                 >
-                  {preview.conclusion === 'success'
-                    ? 'Passed'
-                    : preview.conclusion === 'failure'
-                      ? 'Failure'
-                      : 'Action required'}
+                  {preview.gateStatus === 'PASS_WITH_EXCEPTION'
+                    ? 'Allowed with exception'
+                    : preview.conclusion === 'success'
+                      ? 'Passed'
+                      : preview.conclusion === 'failure'
+                        ? 'Failure'
+                        : 'Action required'}
                 </StatusBadge>
               </div>
               <dl className='grid gap-4 text-sm sm:grid-cols-3'>

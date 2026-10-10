@@ -586,6 +586,16 @@ export function WorkspaceModule({ module }: { module: Module }) {
                                   'policy.publish',
                                   repository.githubId
                                 )}
+                                canRequestExceptions={canPerform(
+                                  session.data,
+                                  'policy.exception.request',
+                                  repository.githubId
+                                )}
+                                canApproveExceptions={canPerform(
+                                  session.data,
+                                  'policy.exception.approve',
+                                  repository.githubId
+                                )}
                                 actorId={session.data?.identityId}
                                 platformAdmin={session.data?.platformAdmin}
                               />
