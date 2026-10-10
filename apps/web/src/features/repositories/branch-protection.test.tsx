@@ -63,11 +63,15 @@ it('shows verified legacy requirements separately from active rulesets', () => {
 })
 
 it('keeps requirements readable without horizontal overflow on mobile in both themes', async () => {
+  const data = state.query.data as { branch: string }
+  data.branch = `feature/${'long-branch-name-'.repeat(8)}`
   await page.viewport(320, 800)
   for (const theme of ['light', 'dark']) {
     document.documentElement.classList.toggle('dark', theme === 'dark')
     const screen = await renderBrowser(<BranchProtection repositoryId='repo' />)
-    await expect.element(page.getByText('Active rules for main')).toBeVisible()
+    await expect
+      .element(page.getByText(`Active rules for ${data.branch}`))
+      .toBeVisible()
     expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(320)
     await screen.unmount()
   }

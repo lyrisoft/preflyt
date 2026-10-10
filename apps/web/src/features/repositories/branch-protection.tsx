@@ -105,7 +105,7 @@ export function BranchProtection({
         {data && (
           <>
             <section className='space-y-3'>
-              <h3 className='text-sm font-semibold'>
+              <h3 className='text-sm font-semibold break-all'>
                 Active rules for {data.branch}
               </h3>
               {data.rules.length ? (
