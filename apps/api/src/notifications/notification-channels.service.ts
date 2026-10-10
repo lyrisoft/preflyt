@@ -1,3 +1,4 @@
+import { notificationQueueConfigured } from "./notification-queue.js";
 import {
   BadRequestException,
   ConflictException,
@@ -233,6 +234,7 @@ export class NotificationChannelsService {
       notificationsEnabled: notificationsEnabled(),
       emailEnabled: emailNotificationsEnabled(),
       emailConfigured: emailNotificationsConfigured(),
+      queueConfigured: notificationQueueConfigured(),
       canManage: true,
       items: items.map((channel) =>
         result(
@@ -381,6 +383,10 @@ export class NotificationChannelsService {
     )
       throw new ServiceUnavailableException(
         "Email delivery is not configured. Ask your deployment administrator to enable notifications and configure email delivery.",
+      );
+    if (!notificationQueueConfigured())
+      throw new ServiceUnavailableException(
+        "The email delivery queue is not configured. Ask a Super Admin to configure the queue connection and start the background worker.",
       );
     return this.db.$transaction(async (tx) => {
       await this.lock(tx, organizationId, session.identityId);

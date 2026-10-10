@@ -1,3 +1,4 @@
+import { queueConfig } from '../github-events/github-event-queue.js'
 import type { Queue } from 'bullmq'
 import type { PrismaService } from '../prisma/prisma.service.js'
 export const notificationJobOptions = { attempts: 5, backoff: { type: 'exponential', delay: 1000 }, removeOnComplete: true, removeOnFail: 1000 }
@@ -39,4 +40,12 @@ export async function dispatchNotificationChannelEmails(db: PrismaService, queue
     if (previous && ['completed', 'failed'].includes(await previous.getState())) await previous.remove()
     await queue.add('channel-email', { deliveryId: delivery.id, channel: true }, { jobId, attempts: 1, removeOnComplete: true, removeOnFail: 1000 })
   }
+}
+
+/** Configuration only; does not claim that a worker is running or contact Redis. */
+export function notificationQueueConfigured() {
+  try {
+    queueConfig(process.env.QUEUE_REDIS_URL ?? '', process.env.QUEUE_PREFIX ?? 'preflyt:queue')
+    return true
+  } catch { return false }
 }

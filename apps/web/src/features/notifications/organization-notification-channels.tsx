@@ -53,6 +53,7 @@ type Channels = {
   notificationsEnabled: boolean
   emailEnabled: boolean
   emailConfigured: boolean
+  queueConfigured: boolean
   canManage: boolean
   items: Channel[]
 }
@@ -287,7 +288,7 @@ function ChannelSettings({ organizationId }: { organizationId: string }) {
     validRecipients(recipients)
   const refresh = async () => {
     const result = await channels.refetch()
-    if (result.isError)
+    if (result.isError && channels.data)
       toast.error(result.error.message, {
         id: `channel-refresh:${organizationId}`,
       })
@@ -346,17 +347,12 @@ function ChannelSettings({ organizationId }: { organizationId: string }) {
         <p role='status' className='text-sm text-muted-foreground'>
           Loading notification channels…
         </p>
-      ) : channels.isError ? (
+      ) : channels.isError && !channels.data ? (
         <div
           role='alert'
           className='rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm'
         >
           <p className='text-destructive'>{channels.error.message}</p>
-          {channels.data && (
-            <p className='mt-1 text-muted-foreground'>
-              Channel details may be out of date. Retry before making changes.
-            </p>
-          )}
           <Button
             variant='outline'
             size='sm'
@@ -375,7 +371,8 @@ function ChannelSettings({ organizationId }: { organizationId: string }) {
         <>
           {!data.notificationsEnabled ||
           !data.emailEnabled ||
-          !data.emailConfigured ? (
+          !data.emailConfigured ||
+          !data.queueConfigured ? (
             <div
               role='status'
               className='rounded-xl border bg-muted/30 px-4 py-3 text-sm leading-6'
@@ -383,8 +380,9 @@ function ChannelSettings({ organizationId }: { organizationId: string }) {
               <p className='font-medium'>Email delivery is not ready</p>
               <p className='text-muted-foreground'>
                 You can save channels now. Your deployment administrator must
-                enable notifications and email delivery and configure SMTP
-                before emails can be sent.
+                enable notifications and email delivery, configure SMTP and the
+                delivery queue, and run the background worker before emails can
+                be sent.
               </p>
             </div>
           ) : null}
@@ -462,6 +460,7 @@ function ChannelSettings({ organizationId }: { organizationId: string }) {
                         !data.notificationsEnabled ||
                         !data.emailEnabled ||
                         !data.emailConfigured ||
+                        !data.queueConfigured ||
                         channel.pendingDeliveries > 0
                       }
                       aria-label={`Send test to ${channel.name}`}
@@ -506,11 +505,6 @@ function ChannelSettings({ organizationId }: { organizationId: string }) {
             {data.items.length} of 10 channels. Up to 20 recipients per channel.
             Emails link to Preflyt; repository access is still required.
           </p>
-          {action.isError && !draft && !removing && (
-            <p role='alert' className='text-sm text-destructive'>
-              {action.error.message}
-            </p>
-          )}
         </>
       )}
       <Dialog
@@ -596,11 +590,6 @@ function ChannelSettings({ organizationId }: { organizationId: string }) {
                 </p>
               )}
             </div>
-            {action.isError && (
-              <p role='alert' className='text-sm text-destructive'>
-                {action.error.message}
-              </p>
-            )}
             <DialogFooter className='flex-row flex-wrap justify-end border-t pt-4'>
               <Button
                 type='button'
@@ -632,11 +621,6 @@ function ChannelSettings({ organizationId }: { organizationId: string }) {
               preferences and in-app notifications stay unchanged.
             </DialogDescription>
           </DialogHeader>
-          {action.isError && (
-            <p role='alert' className='text-sm text-destructive'>
-              {action.error.message}
-            </p>
-          )}
           <DialogFooter className='flex-row flex-wrap justify-end'>
             <Button
               size='sm'

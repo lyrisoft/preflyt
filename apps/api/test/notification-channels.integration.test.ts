@@ -117,6 +117,7 @@ beforeEach(async () => {
   freshGithub.mockClear();
   vi.stubEnv("NOTIFICATIONS_ENABLED", "true");
   vi.stubEnv("NOTIFICATION_EMAIL_ENABLED", "true");
+  vi.stubEnv("QUEUE_REDIS_URL", "redis://127.0.0.1:6379/1");
   vi.stubEnv("SMTP_HOST", "localhost");
   vi.stubEnv("SMTP_PORT", "1025");
   vi.stubEnv("SMTP_FROM", "preflyt@example.com");
@@ -580,4 +581,18 @@ it("allows the browser removal preflight with the displayed-organization request
   expect(
     response.headers["access-control-allow-headers"].toLowerCase().split(","),
   ).toContain("x-preflyt-organization");
+});
+
+it("rejects tests without a queue connection while retaining editable channels", async () => {
+  const channel = await create();
+  for (const connection of ["", "https://queue.example.com"]) {
+    vi.stubEnv("QUEUE_REDIS_URL", connection);
+    expect((await http("get").expect(200)).body.queueConfigured).toBe(false);
+    const rejected = await http("post", "/" + channel.id + "/test")
+      .send({ expectedRevision: 1 }).expect(503);
+    expect(rejected.body.message).toContain("queue");
+    expect(await db.notificationChannelDelivery.count()).toBe(0);
+  }
+  await http("patch", "/" + channel.id)
+    .send({ expectedRevision: 1, name: "Saved before queue setup" }).expect(200);
 });

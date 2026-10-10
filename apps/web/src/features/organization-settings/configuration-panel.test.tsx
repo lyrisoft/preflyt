@@ -1,11 +1,21 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import {
+  MutationCache,
+  QueryClient,
+  QueryClientProvider,
+} from '@tanstack/react-query'
 import '@/styles/index.css'
 import { afterEach, expect, it, vi } from 'vitest'
 import { render } from 'vitest-browser-react'
 import { page } from 'vitest/browser'
+import { handleServerError } from '@/lib/handle-server-error'
 import { ConfigurationPanel } from './configuration-panel'
 
-afterEach(() => vi.unstubAllGlobals())
+const toastError = vi.hoisted(() => vi.fn())
+vi.mock('sonner', () => ({ toast: { error: toastError } }))
+afterEach(() => {
+  vi.unstubAllGlobals()
+  toastError.mockReset()
+})
 const data = {
   revision: 1,
   restartRequired: true,
@@ -45,7 +55,12 @@ const mount = () =>
   render(
     <QueryClientProvider
       client={
-        new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        new QueryClient({
+          mutationCache: new MutationCache({
+            onError: (error) => handleServerError(error),
+          }),
+          defaultOptions: { queries: { retry: false } },
+        })
       }
     >
       <ConfigurationPanel />
@@ -248,4 +263,26 @@ it('keeps configuration fields and secret controls within the mobile layout', as
     document.documentElement.classList.remove('dark')
     await page.viewport(1280, 900)
   }
+})
+
+it('reports failed saves once through the global toast and preserves unsaved changes', async () => {
+  const message =
+    'Set QUEUE_REDIS_URL and restart the API and worker before enabling GitHub events'
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (_url, options) =>
+      options?.method === 'PATCH'
+        ? new Response(JSON.stringify({ message }), { status: 400 })
+        : new Response(JSON.stringify(data))
+    )
+  )
+  const view = await mount()
+  await view.getByRole('switch', { name: 'GitHub event ingestion' }).click()
+  await view.getByRole('button', { name: 'Save changes' }).click()
+  await expect.poll(() => toastError.mock.calls.length).toBe(1)
+  expect(toastError).toHaveBeenCalledExactlyOnceWith(message)
+  await expect.element(view.getByRole('alert')).not.toBeInTheDocument()
+  await expect
+    .element(view.getByRole('switch', { name: 'GitHub event ingestion' }))
+    .toBeChecked()
 })

@@ -1,4 +1,5 @@
 import { SMTPServer } from 'smtp-server'
+import { notificationEmailTemplate } from '../src/notifications/notification-email-template.js'
 import { afterEach, expect, it, vi } from 'vitest'
 import { NotificationMailer, emailNotificationsConfigured, validNotificationEmail } from '../src/notifications/notification-mail.js'
 let server: SMTPServer | undefined, mail: NotificationMailer | undefined
@@ -25,6 +26,9 @@ it('sends through real local SMTP with a stable message ID and no repository/rep
   await sender.send('owner@example.test', 'delivery-1')
   await sender.send('owner@example.test', 'delivery-1')
   expect(messages).toHaveLength(2)
+  expect(messages[0]).toContain('multipart/alternative')
+  expect(messages[0]).toContain('Content-Type: text/html')
+  expect(messages[0]).toContain('Content-Type: text/plain')
   expect(messages[0]).toContain('http://localhost:5173/notifications')
   expect(messages[0].match(/Message-ID: (.*)/)?.[1]).toBe(messages[1].match(/Message-ID: (.*)/)?.[1])
   expect(messages[0]).not.toContain('fixture/repo'); expect(messages[0]).not.toContain('a'.repeat(40))
@@ -45,4 +49,20 @@ it('checks transport readiness without connecting and rejects incomplete credent
   vi.stubEnv('SMTP_PORT', '587'); vi.stubEnv('NODE_ENV', 'production'); expect(emailNotificationsConfigured()).toBe(false)
   vi.stubEnv('WEB_ORIGIN', 'https://preflyt.example.test'); expect(emailNotificationsConfigured()).toBe(true)
   vi.stubEnv('WEB_ORIGIN', 'bad-url'); expect(emailNotificationsConfigured()).toBe(false)
+})
+
+it.each(['PERSONAL', 'ORGANIZATION', 'TEST'] as const)('renders a minimal %s email with a plain-text fallback', (kind) => {
+  const template = notificationEmailTemplate('https://preflyt.example.test', kind)
+  expect(template.html).toContain('max-width:560px')
+  expect(template.html).toContain('href="https://preflyt.example.test/notifications"')
+  expect(template.html.match(/<a /g)).toHaveLength(1)
+  expect(template.text).toContain('https://preflyt.example.test/notifications')
+  expect(template.html).not.toMatch(/<script|<img|<form/)
+  expect(template.html).toContain(kind === 'TEST' ? 'Your email channel is connected' : 'You have a new update')
+  expect(template.text).toContain(kind === 'PERSONAL' ? 'Manage your email preferences' : 'organization admin manages')
+})
+it('rejects unsafe link schemes and normalizes the notification URL', () => {
+  expect(() => notificationEmailTemplate('javascript:alert(1)', 'TEST')).toThrow('SMTP_CONFIGURATION_INVALID')
+  expect(notificationEmailTemplate('https://preflyt.example.test:443/path?q=unused', 'TEST').html)
+    .toContain('href="https://preflyt.example.test/notifications"')
 })

@@ -2,6 +2,8 @@ import { configurationValue } from '../configuration/runtime-configuration.js'
 import nodemailer, { type Transporter } from 'nodemailer'
 import { createHash } from 'node:crypto'
 import { resolveWebOrigin } from '../config/web-origin.js'
+import { notificationEmailTemplate, type NotificationEmailKind } from './notification-email-template.js'
+export type { NotificationEmailKind } from './notification-email-template.js'
 export const emailNotificationsEnabled = () => configurationValue('NOTIFICATION_EMAIL_ENABLED') === 'true'
 export function validNotificationEmail(value: string | null | undefined): value is string {
   return typeof value === 'string' && value.length <= 254 && /^[a-zA-Z0-9.!#$%&'*+\/=?^_`{|}~-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(value)
@@ -18,7 +20,6 @@ export function emailNotificationsConfigured() {
       (process.env.NODE_ENV !== 'production' || origin.protocol === 'https:')
   } catch { return false }
 }
-export type NotificationEmailKind = 'PERSONAL' | 'ORGANIZATION' | 'TEST'
 export class NotificationMailer {
   private transport?: Transporter
   async send(to: string, deliveryId: string, kind: NotificationEmailKind = 'PERSONAL') {
@@ -36,9 +37,9 @@ export class NotificationMailer {
       ...(configurationValue('SMTP_USER') ? { auth: { user: configurationValue('SMTP_USER'), pass: configurationValue('SMTP_PASSWORD') } } : {}),
       logger: false, debug: false, disableFileAccess: true, disableUrlAccess: true,
     })
-    const result = await this.transport.sendMail({ from, to, subject: kind === 'TEST' ? 'Preflyt email channel test' : 'New Preflyt notification',
+    const result = await this.transport.sendMail({ from, to,
+      ...notificationEmailTemplate(origin, kind),
       messageId: `<${createHash('sha256').update(deliveryId).digest('hex')}@preflyt.local>`,
-      text: `${kind === 'TEST' ? 'This is a test of your Preflyt organization email channel.' : 'You have a new Preflyt update. Sign in to view details.'}\n\n${origin}/notifications\n\n${kind === 'PERSONAL' ? 'Manage optional email notifications in your Preflyt inbox.' : 'This message was sent to an organization notification channel. Contact your organization admin to change its recipients.'}`,
     })
     if (!result.accepted?.length || result.rejected?.length) throw new Error('SMTP_RECIPIENT_REJECTED')
   }
