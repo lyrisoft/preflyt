@@ -1,10 +1,12 @@
 import 'reflect-metadata'
-import { afterAll, beforeAll, beforeEach, expect, it } from 'vitest'
+import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { NestFactory } from '@nestjs/core'
 import { ValidationPipe, type INestApplication } from '@nestjs/common'
 import cookieParser from 'cookie-parser'
 import request from 'supertest'
 import { createHash, createHmac, randomUUID } from 'node:crypto'
+import { readdir, readFile } from 'node:fs/promises'
+import { Client } from 'pg'
 import { PrismaService } from '../src/prisma/prisma.service.js'
 import { AuthorizationService } from '../src/auth/authorization.service.js'
 import { AuthService } from '../src/auth/auth.service.js'
@@ -32,6 +34,8 @@ let orgA: string,
   viewer: string,
   platform: string,
   memberId: string
+let beforeBackfill = async () => {}
+let backfillObservations: { event: string; body: any }[] = []
 const origin = 'http://localhost:5173',
   sha = 'a'.repeat(40)
 const actor = (id: string, path: string) =>
@@ -42,13 +46,25 @@ const mutate = (id: string, path: string, body: object) =>
     .set('Cookie', `scope.sid=${id}`)
     .set('Origin', origin)
     .send(body)
+const testDatabase = 'preflyt_scope_test_' + randomUUID().replaceAll('-', '')
+let databaseAdmin: Client | undefined
+let databaseCreated = false
 beforeAll(async () => {
-  if (
-    !new URL(process.env.DATABASE_URL!).pathname.startsWith(
-      '/preflyt_scope_test_',
-    )
-  )
-    throw new Error('Use a disposable scope test database')
+  const url = new URL(process.env.DATABASE_URL!)
+  if (!['localhost', '127.0.0.1'].includes(url.hostname))
+    throw new Error('Local disposable database required')
+  databaseAdmin = new Client({ connectionString: url.toString() })
+  await databaseAdmin.connect()
+  await databaseAdmin.query(`CREATE DATABASE "${testDatabase}"`)
+  databaseCreated = true
+  url.pathname = '/' + testDatabase
+  const sql = new Client({ connectionString: url.toString() })
+  await sql.connect()
+  try {
+    for (const entry of (await readdir('prisma/migrations')).filter((n) => /^\d/.test(n)).sort())
+      await sql.query(await readFile(`prisma/migrations/${entry}/migration.sql`, 'utf8'))
+  } finally { await sql.end() }
+  vi.stubEnv('DATABASE_URL', url.toString())
   db = new PrismaService()
   await db.$connect()
   access = new AuthorizationService(db)
@@ -107,11 +123,14 @@ beforeAll(async () => {
         {
           provide: GitHubProviderService,
           useValue: {
-            readContributorBackfill: async () => ({
-              observations: [],
+            readContributorBackfill: async () => {
+              await beforeBackfill()
+              return {
+              observations: backfillObservations,
               truncated: false,
               limits: { pullRequests: 30 },
-            }),
+              }
+            },
           },
         },
       ],
@@ -133,8 +152,13 @@ beforeAll(async () => {
 afterAll(async () => {
   await app?.close()
   await db?.$disconnect()
+  if (databaseCreated) await databaseAdmin?.query(`DROP DATABASE "${testDatabase}" WITH (FORCE)`)
+  await databaseAdmin?.end()
+  vi.unstubAllEnvs()
 })
 beforeEach(async () => {
+  beforeBackfill = async () => {}
+  backfillObservations = []
   await db.contributorObservation.deleteMany()
   await db.contributor.deleteMany()
   await db.contributorDelivery.deleteMany()
@@ -543,7 +567,10 @@ it('returns authorized contributor compliance with exact PR evidence and preserv
   expect(profile.body.contributionActivity.reduce((total: number, day: any) => total + day.authoredPrs, 0)).toBe(profile.body.contributors[0].authoredPrs)
   expect(profile.body.contributionActivity.reduce((total: number, day: any) => total + day.mergedPrs, 0)).toBe(profile.body.contributors[0].mergedPrs)
   expect(profile.body.contributionActivity).toHaveLength(30)
-  await actor(developer, `/contributors/${contributor.id}?relationship=REVIEWER`).expect(403)
+  const empty = await actor(developer, `/contributors/${contributor.id}?relationship=REVIEWER`).expect(200)
+  expect(empty.body.emptyActivity).toBe(true)
+  expect(empty.body.contributors[0]).toMatchObject({ id: contributor.id, authoredPrs: 0, reviews: 0 })
+  expect(empty.body.observations).toEqual([])
   await actor(developer, `/contributors/${contributor.id}?repository=12`).expect(403)
 })
 it('hides compliance after permission/grant revocation and excludes tampered evidence', async () => {
@@ -553,4 +580,56 @@ it('hides compliance after permission/grant revocation and excludes tampered evi
   expect(profile.body.policyCompliance).toMatchObject({ completePrs: 0, passRate: null, rows: [{ status: 'INVALID' }] })
   await db.repositoryGrant.deleteMany({ where: { membershipId: memberId } })
   await actor(developer, `/contributors/${contributor.id}`).expect(403)
+})
+
+it('returns an empty profile for another authorized repository while hiding unknown and inaccessible contributors', async () => {
+  const { contributor } = await complianceFixture()
+  const empty = await actor(owner, `/contributors/${contributor.id}?repository=12`).expect(200)
+  expect(empty.body.emptyActivity).toBe(true)
+  expect(empty.body.contributors[0]).toMatchObject({ id: contributor.id, repositoryCount: 0 })
+  expect(empty.body.observations).toEqual([])
+  await actor(owner, '/contributors/unknown-person?repository=12').expect(403)
+  await actor(developer, `/contributors/${contributor.id}?repository=12`).expect(403)
+})
+
+const backfillPr = (repositoryId: number) => ({
+  event: 'pull_request',
+  body: {
+    installation: { id: 1 }, repository: { id: repositoryId }, action: 'edited',
+    pull_request: {
+      id: 999, number: 999, base: { repo: { id: repositoryId } }, head: { sha },
+      user: { id: 999, login: 'imported-person', type: 'User' },
+      state: 'open', merged: false, updated_at: new Date().toISOString(),
+    },
+  },
+})
+it('persists upstream contributor activity and reports verified capture counts', async () => {
+  backfillObservations = [backfillPr(11)]
+  const response = await mutate(owner, '/contributors/repositories/11/sync', {}).expect(201)
+  expect(response.body.importedRecords).toBe(1)
+  expect(await db.contributorObservation.count({ where: { sourceObjectId: '999' } })).toBe(1)
+})
+it('does not report success when upstream activity belongs to an unselected repository', async () => {
+  backfillObservations = [backfillPr(99)]
+  await mutate(owner, '/contributors/repositories/11/sync', {}).expect(403)
+  expect(await db.auditEvent.count({ where: { event: 'contributors_backfilled' } })).toBe(0)
+})
+
+it('recovers activity after reconnecting a repository with retained duplicate receipts', async () => {
+  const oldRepo = await db.gitHubRepository.findUniqueOrThrow({ where: { githubId: 11n } })
+  const deliveryId = randomUUID()
+  const activity = {
+    actor: { githubUserId: '999', login: 'recovered-person', kind: 'HUMAN' as const },
+    relationship: 'PR_AUTHOR', sourceObjectId: '999', sourceSha: sha,
+    pullRequestNumber: 999, action: 'edited', state: 'open', merged: false,
+    observedAt: new Date(),
+  }
+  await captureContributors(db, deliveryId, 'same-payload', 1n, 11n, [activity])
+  await db.gitHubRepository.delete({ where: { id: oldRepo.id } })
+  const { id, ...fields } = oldRepo
+  const reconnected = await db.gitHubRepository.create({ data: fields })
+  const recovered = await captureContributors(db, deliveryId, 'same-payload', 1n, 11n, [activity])
+  expect(recovered).toMatchObject({ accepted: true, duplicate: false })
+  expect(await db.contributorObservation.count({ where: { repositoryId: reconnected.id, sourceObjectId: '999' } })).toBe(1)
+  expect(await captureContributors(db, deliveryId, 'same-payload', 1n, 11n, [activity])).toMatchObject({ duplicate: true })
 })

@@ -15,10 +15,10 @@ beforeEach(() => {
 })
 
 describe('handleServerError', () => {
-  it('shows a generic message when the error is not recognised', () => {
+  it('shows the message from a fetch error', () => {
     handleServerError(new Error('network'))
 
-    expect(toastError).toHaveBeenCalledWith('Something went wrong!')
+    expect(toastError).toHaveBeenCalledWith('network')
   })
 
   it('maps a plain object with status 204 to the no-content message', () => {
@@ -48,7 +48,7 @@ describe('handleServerError', () => {
 
     handleServerError(error)
 
-    expect(toastError).toHaveBeenCalledWith('Something went wrong!')
+    expect(toastError).toHaveBeenCalledWith('Request failed')
   })
 
   it('falls back to the generic message when Axios data.title is an empty string', () => {
@@ -60,7 +60,7 @@ describe('handleServerError', () => {
 
     handleServerError(error)
 
-    expect(toastError).toHaveBeenCalledWith('Something went wrong!')
+    expect(toastError).toHaveBeenCalledWith('Bad request')
   })
 
   it('logs the error to the console in development', () => {
@@ -87,4 +87,22 @@ describe('handleServerError', () => {
 
     log.mockRestore()
   })
+})
+
+it('prefers actionable API messages over transport errors', () => {
+  const error = new AxiosError('Request failed')
+  error.response = {
+    status: 403,
+    data: { message: 'Repository access is unavailable' },
+  } as AxiosError['response']
+  handleServerError(error)
+  expect(toastError).toHaveBeenLastCalledWith(
+    'Repository access is unavailable'
+  )
+})
+it('uses a safe fallback for unknown errors', () => {
+  handleServerError(null)
+  expect(toastError).toHaveBeenLastCalledWith(
+    'Something went wrong. Try again.'
+  )
 })
