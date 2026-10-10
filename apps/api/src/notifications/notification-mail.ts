@@ -6,26 +6,39 @@ export const emailNotificationsEnabled = () => configurationValue('NOTIFICATION_
 export function validNotificationEmail(value: string | null | undefined): value is string {
   return typeof value === 'string' && value.length <= 254 && /^[a-zA-Z0-9.!#$%&'*+\/=?^_`{|}~-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(value)
 }
+/** Checks transport prerequisites without making a network request or returning secrets. */
+export function emailNotificationsConfigured() {
+  try {
+    const port = Number(configurationValue('SMTP_PORT') ?? 587)
+    const user = configurationValue('SMTP_USER'), password = configurationValue('SMTP_PASSWORD')
+    const origin = new URL(resolveWebOrigin())
+    return validNotificationEmail(configurationValue('SMTP_FROM')) && !!configurationValue('SMTP_HOST')?.trim() &&
+      Number.isInteger(port) && port >= 1 && port <= 65535 &&
+      (!user || !!password) && (!password || !!user) && ['http:', 'https:'].includes(origin.protocol) &&
+      (process.env.NODE_ENV !== 'production' || origin.protocol === 'https:')
+  } catch { return false }
+}
+export type NotificationEmailKind = 'PERSONAL' | 'ORGANIZATION' | 'TEST'
 export class NotificationMailer {
   private transport?: Transporter
-  async send(to: string, deliveryId: string) {
+  async send(to: string, deliveryId: string, kind: NotificationEmailKind = 'PERSONAL') {
     const from = configurationValue('SMTP_FROM')
     const host = configurationValue('SMTP_HOST')
     const port = Number(configurationValue('SMTP_PORT') ?? 587)
-    if (!validNotificationEmail(to) || !validNotificationEmail(from) || !host || !Number.isInteger(port) || port < 1 || port > 65535)
+    if (!validNotificationEmail(to) || !emailNotificationsConfigured())
       throw new Error('SMTP_CONFIGURATION_INVALID')
     const origin = resolveWebOrigin()
     if (process.env.NODE_ENV === 'production' && new URL(origin).protocol !== 'https:') throw new Error('SMTP_CONFIGURATION_INVALID')
-    const insecureLocal = process.env.NODE_ENV !== 'production' && process.env.SMTP_ALLOW_INSECURE_LOCAL === 'true' && ['localhost', '127.0.0.1', '::1'].includes(host)
+    const insecureLocal = process.env.NODE_ENV !== 'production' && process.env.SMTP_ALLOW_INSECURE_LOCAL === 'true' && ['localhost', '127.0.0.1', '::1'].includes(host ?? '')
     if (!this.transport) this.transport = nodemailer.createTransport({
       host, port, secure: port === 465, requireTLS: !insecureLocal && port !== 465,
       ignoreTLS: insecureLocal, connectionTimeout: 5000, greetingTimeout: 5000, socketTimeout: 10000,
       ...(configurationValue('SMTP_USER') ? { auth: { user: configurationValue('SMTP_USER'), pass: configurationValue('SMTP_PASSWORD') } } : {}),
       logger: false, debug: false, disableFileAccess: true, disableUrlAccess: true,
     })
-    const result = await this.transport.sendMail({ from, to, subject: 'New Preflyt notification',
+    const result = await this.transport.sendMail({ from, to, subject: kind === 'TEST' ? 'Preflyt email channel test' : 'New Preflyt notification',
       messageId: `<${createHash('sha256').update(deliveryId).digest('hex')}@preflyt.local>`,
-      text: `You have a new Preflyt update. Sign in to view details.\n\n${origin}/notifications\n\nManage optional email notifications in your Preflyt inbox.`,
+      text: `${kind === 'TEST' ? 'This is a test of your Preflyt organization email channel.' : 'You have a new Preflyt update. Sign in to view details.'}\n\n${origin}/notifications\n\n${kind === 'PERSONAL' ? 'Manage optional email notifications in your Preflyt inbox.' : 'This message was sent to an organization notification channel. Contact your organization admin to change its recipients.'}`,
     })
     if (!result.accepted?.length || result.rejected?.length) throw new Error('SMTP_RECIPIENT_REJECTED')
   }
