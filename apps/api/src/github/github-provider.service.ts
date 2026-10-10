@@ -697,8 +697,287 @@ export class GitHubProviderService {
     const root=`/repos/${encodeURIComponent(reader.metadata.owner.login)}/${encodeURIComponent(reader.metadata.name)}`
     const run=await reader.request<Record<string,any>>(`${root}/actions/runs/${runId}`)
     if(String(run.id)!==runId || String(run.repository?.id)!==repositoryId.toString() || String(run.head_repository?.id)!==repositoryId.toString() || !Number.isSafeInteger(run.run_attempt) || run.run_attempt<1 || !Number.isSafeInteger(run.workflow_id) || run.workflow_id<1 || !/^[a-f0-9]{40}$/.test(run.head_sha))throw new ServiceUnavailableException('Workflow run identity could not be verified')
-    return {sourceSha:run.head_sha,runAttempt:run.run_attempt,status:run.status,conclusion:run.conclusion,workflowId:String(run.workflow_id)}
+    return {sourceSha:run.head_sha,runAttempt:run.run_attempt,status:run.status,conclusion:run.conclusion,workflowId:String(run.workflow_id),event:String(run.event),workflowPath:typeof run.path === "string" ? run.path.split("@")[0] : ""}
   }
+  /** Cache display/setup sources only. Callers verify current upstream access first. */
+  private async readPipelineCache<T>(
+    installationId: bigint,
+    repositoryId: bigint,
+    suffix: string,
+    refresh: boolean,
+    load: () => Promise<T>,
+    valid: (value: T) => boolean,
+  ): Promise<T> {
+    if (!this.cache) return load()
+    const access = await this.prisma?.gitHubInstallation.findUnique({
+      where: { id: installationId },
+      select: { accessRevision: true },
+    })
+    const key = `github-pipeline:v1:${this.requireAppId()}:${installationId}:${repositoryId}:${access?.accessRevision ?? 0}:${suffix}`
+    const cached = refresh ? null : await this.cache.get(key)
+    if (cached) {
+      try {
+        const value = JSON.parse(cached) as T
+        if (valid(value)) return value
+      } catch {
+        // Invalid cache entries are replaced with verified upstream data.
+      }
+    }
+    return this.limiter.singleFlight(
+      `${key}:${refresh ? 'refresh' : 'read'}`,
+      async () => {
+        const result = await load()
+        await this.cache!.set(key, JSON.stringify(result), 300)
+        return result
+      },
+    )
+  }
+
+  async discoverPipelineWorkflows(
+    installationId: bigint,
+    repositoryId: bigint,
+    refresh = false,
+  ) {
+    const reader = await this.openRepository(
+      installationId,
+      repositoryId,
+      'actions',
+    )
+    return this.readPipelineCache(
+      installationId,
+      repositoryId,
+      'workflows',
+      refresh,
+      async () => {
+        const root = `/repos/${encodeURIComponent(reader.metadata.owner.login)}/${encodeURIComponent(reader.metadata.name)}`
+        const response = await reader.request<{
+          total_count: number
+          workflows: { id: number; name: string; path: string; state: string }[]
+        }>(`${root}/actions/workflows?per_page=100`)
+        if (
+          !Array.isArray(response.workflows) ||
+          response.workflows.length > 100
+        )
+          throw new ServiceUnavailableException(
+            'Workflow discovery is unavailable',
+          )
+        return {
+          workflows: response.workflows
+            .filter(
+              (w) =>
+                Number.isSafeInteger(w.id) &&
+                w.id > 0 &&
+                w.state === 'active' &&
+                /^\.github\/workflows\/[a-zA-Z0-9_-]+\.ya?ml$/.test(w.path),
+            )
+            .map((w) => ({ id: String(w.id), name: w.name, path: w.path })),
+          truncated: response.total_count > 100,
+        }
+      },
+      (value) =>
+        !!value &&
+        typeof value.truncated === 'boolean' &&
+        Array.isArray(value.workflows) &&
+        value.workflows.length <= 100 &&
+        value.workflows.every(
+          (w) =>
+            !!w &&
+            typeof w.id === 'string' &&
+            /^[1-9]\d{0,15}$/.test(w.id) &&
+            typeof w.name === 'string' &&
+            typeof w.path === 'string' &&
+            /^\.github\/workflows\/[a-zA-Z0-9_-]+\.ya?ml$/.test(w.path),
+        ),
+    )
+  }
+
+  async readPipelineWorkflow(
+    installationId: bigint,
+    repositoryId: bigint,
+    workflowId: string,
+    branch: string,
+    refresh = false,
+  ) {
+    branch = branch.replace(/^refs\/heads\//, '')
+    if (!/^[1-9]\d{0,15}$/.test(workflowId) || !validProfileBranch(branch))
+      throw new BadRequestException('Choose a repository workflow and branch')
+    const reader = await this.openRepository(
+      installationId,
+      repositoryId,
+      'contents',
+    )
+    return this.readPipelineCache(
+      installationId,
+      repositoryId,
+      `workflow:${workflowId}:${encodeURIComponent(branch)}`,
+      refresh,
+      async () => {
+        const workflows = await this.discoverPipelineWorkflows(
+          installationId,
+          repositoryId,
+          refresh,
+        )
+        const workflow = workflows.workflows.find((w) => w.id === workflowId)
+        if (!workflow)
+          throw new BadRequestException('Choose a repository workflow')
+        const root = `/repos/${encodeURIComponent(reader.metadata.owner.login)}/${encodeURIComponent(reader.metadata.name)}`
+        const branchState = await reader.request<{ commit: { sha: string } }>(
+          `${root}/branches/${encodeURIComponent(branch)}`,
+        )
+        if (!/^[a-f0-9]{40}$/.test(branchState.commit?.sha))
+          throw new ServiceUnavailableException(
+            'Workflow branch could not be verified',
+          )
+        const file = await reader.request<{
+          type: string
+          encoding: string
+          content: string
+          size: number
+          sha: string
+          path: string
+        }>(
+          `${root}/contents/${workflow.path.split('/').map(encodeURIComponent).join('/')}?ref=${branchState.commit.sha}`,
+        )
+        if (
+          file.type !== 'file' ||
+          file.encoding !== 'base64' ||
+          file.path !== workflow.path ||
+          !Number.isInteger(file.size) ||
+          file.size < 1 ||
+          file.size > 32768 ||
+          !/^[a-f0-9]{40}$/.test(file.sha) ||
+          typeof file.content !== 'string'
+        )
+          throw new BadRequestException(
+            'The workflow must be a YAML file under 32 KB',
+          )
+        const encoded = file.content.replace(/\s/g, ''),
+          bytes = Buffer.from(encoded, 'base64')
+        if (bytes.toString('base64') !== encoded || bytes.length !== file.size)
+          throw new ServiceUnavailableException(
+            'Workflow content could not be verified',
+          )
+        const content = bytes.toString('utf8')
+        if (
+          Buffer.from(content).length !== bytes.length ||
+          content.includes('\0')
+        )
+          throw new BadRequestException('Workflow content must be UTF-8')
+        return {
+          ...workflow,
+          workflow: content,
+          fileSha: file.sha,
+          baseSha: branchState.commit.sha,
+          branch,
+        }
+      },
+      (value) =>
+        !!value &&
+        value.id === workflowId &&
+        value.branch === branch &&
+        typeof value.name === 'string' &&
+        typeof value.path === 'string' &&
+        /^\.github\/workflows\/[a-zA-Z0-9_-]+\.ya?ml$/.test(value.path) &&
+        /^[a-f0-9]{40}$/.test(value.baseSha) &&
+        /^[a-f0-9]{40}$/.test(value.fileSha) &&
+        typeof value.workflow === 'string' &&
+        Buffer.byteLength(value.workflow) > 0 &&
+        Buffer.byteLength(value.workflow) <= 32768 &&
+        !value.workflow.includes('\0'),
+    )
+  }
+
+  async pipelineWriteAvailability(installationId: bigint) {
+    const installation = await this.verifyInstallation(installationId)
+    const available = ['contents', 'workflows', 'pull_requests'].every(key => installation.permissions[key] === 'write')
+    return { available, reason: available ? null : 'Creating a setup PR requires GitHub App Contents, Workflows and Pull requests write permissions.' }
+  }
+
+  /** Called only after the user reviews YAML and explicitly requests a setup PR. Never writes the base branch. */
+  async createPipelineSetupPr(installationId: bigint, repositoryId: bigint, branch: string, baseSha: string, files: Record<string, string>, requestId: string) {
+    branch = branch.replace(/^refs\/heads\//, '')
+    if (!/^[a-f0-9]{40}$/.test(baseSha) || !/^[a-f0-9-]{36}$/.test(requestId) || Object.keys(files).length !== 4 ||
+      Object.entries(files).some(([path, content]) => (!/^\.github\/workflows\/[a-zA-Z0-9_-]+\.ya?ml$/.test(path) && !/^\.github\/actions\/preflyt-policy\/(action.yml|run.py|transport.py)$/.test(path)) || Buffer.byteLength(content) > 65536))
+      throw new BadRequestException('Invalid reviewed workflow files')
+    const write = await this.pipelineWriteAvailability(installationId)
+    if (!write.available) throw new ForbiddenException(write.reason!)
+    const reader = await this.openRepository(installationId, repositoryId, 'contents')
+    const root = `/repos/${encodeURIComponent(reader.metadata.owner.login)}/${encodeURIComponent(reader.metadata.name)}`
+    const current = await reader.request<{ commit: { sha: string } }>(`${root}/branches/${encodeURIComponent(branch)}`)
+    if (current.commit?.sha !== baseSha) throw new ConflictException('The repository branch changed. Reload the workflow before creating a PR.')
+    const token = (await this.appRequest('POST /app/installations/{installation_id}/access_tokens', { installation_id: Number(installationId), repository_ids: [Number(repositoryId)], permissions: { metadata: 'read', contents: 'write', workflows: 'write', pull_requests: 'write' } })).data.token
+    if (typeof token !== 'string' || !token) throw new ForbiddenException('GitHub workflow write permission is unavailable')
+    const call = async (path: string, method = 'GET', body?: unknown): Promise<any> => {
+      const response = await this.apiFetch(`installation:${installationId}`, `https://api.github.com${root}${path}`, { method, redirect: 'error', signal: AbortSignal.timeout(15000), headers: { ...this.apiHeaders(token), 'Content-Type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) })
+      if (!response.ok) throw new ServiceUnavailableException('GitHub could not complete the setup PR. Retry with the same request or check the repository.')
+      return response.json()
+    }
+    const fingerprint = createHash('sha256').update(JSON.stringify(Object.entries(files).sort())).digest('hex').slice(0, 12)
+    const head = `preflyt/setup-${requestId}-${fingerprint}`
+    const existing = await call(`/pulls?state=open&head=${encodeURIComponent(reader.metadata.owner.login + ':' + head)}&base=${encodeURIComponent(branch)}&per_page=1`)
+    const refs = await call(`/git/matching-refs/heads/${head}`)
+    let commitSha: string
+    if (Array.isArray(refs) && refs.length) {
+      const ref = refs.find((entry: any) => entry.ref === `refs/heads/${head}`)
+      if (!ref || !/^[a-f0-9]{40}$/.test(ref.object?.sha)) throw new ConflictException('Setup branch changed')
+      commitSha = ref.object.sha
+      // Recover a previous uncertain attempt only when every proposed file still matches.
+      for (const [path, content] of Object.entries(files)) {
+        const file = await reader.request<{ sha: string }>(`${root}/contents/${path.split('/').map(encodeURIComponent).join('/')}?ref=${commitSha}`)
+        const blob = createHash('sha1').update(Buffer.concat([Buffer.from(`blob ${Buffer.byteLength(content)}\0`), Buffer.from(content)])).digest('hex')
+        if (file.sha !== blob) throw new ConflictException('The setup branch changed. Start a new review.')
+      }
+    } else {
+      const parent = await call(`/git/commits/${baseSha}`)
+      if (!/^[a-f0-9]{40}$/.test(parent.tree?.sha)) throw new ServiceUnavailableException('Repository tree could not be verified')
+      const tree = await call('/git/trees', 'POST', { base_tree: parent.tree.sha, tree: Object.entries(files).map(([path, content]) => ({ path, mode: '100644', type: 'blob', content })) })
+      if (!/^[a-f0-9]{40}$/.test(tree.sha)) throw new ServiceUnavailableException('Workflow tree could not be created')
+      const commit = await call('/git/commits', 'POST', { message: 'Connect Preflyt policy checks', tree: tree.sha, parents: [baseSha] })
+      if (!/^[a-f0-9]{40}$/.test(commit.sha)) throw new ServiceUnavailableException('Workflow commit could not be created')
+      commitSha = commit.sha
+      // No force push; a duplicate concurrent request stops here and can recover on retry.
+      await call('/git/refs', 'POST', { ref: `refs/heads/${head}`, sha: commitSha })
+    }
+    const pr = existing[0] ?? await call('/pulls', 'POST', { title: 'Connect Preflyt policy checks', head, base: branch, body: 'Adds the reviewed Preflyt workflow changes and local Action files. Review the YAML, tool reports and existing execution-proof configuration before merging. Existing branch protection remains unchanged.' })
+    const expected = `https://github.com/${reader.metadata.owner.login}/${reader.metadata.name}/pull/`
+    if (!Number.isSafeInteger(pr.number) || pr.number < 1 || pr.html_url !== expected + pr.number || pr.head?.sha !== commitSha || pr.base?.ref !== branch)
+      throw new ServiceUnavailableException('Setup PR could not be verified; check the repository before retrying')
+    return { number: pr.number as number, url: pr.html_url as string }
+  }
+
+  async publishPipelineComment(installationId: bigint, repositoryId: bigint, number: number, headSha: string, body: string) {
+    if (!Number.isSafeInteger(number) || number < 1 || !/^[a-f0-9]{40}$/.test(headSha) || !body.startsWith('<!-- preflyt-policy-summary -->') || body.length > 30000) throw new BadRequestException('Invalid pipeline summary')
+    const before = await this.readPullRequest(installationId, repositoryId, number)
+    if (before.context.state !== 'open' || before.context.head.sha !== headSha || before.context.head.repositoryId !== repositoryId.toString()) throw new ConflictException('Pull request changed before comment publication')
+    const app = (await this.appRequest('GET /app', {})).data
+    const reader = await this.openRepository(installationId, repositoryId, 'pull_requests')
+    const root = `/repos/${encodeURIComponent(reader.metadata.owner.login)}/${encodeURIComponent(reader.metadata.name)}`
+    const token = (await this.appRequest('POST /app/installations/{installation_id}/access_tokens', { installation_id: Number(installationId), repository_ids: [Number(repositoryId)], permissions: { metadata: 'read', pull_requests: 'write' } })).data.token
+    if (typeof token !== 'string' || !token) throw new ServiceUnavailableException('GitHub PR comment permission is unavailable')
+    const call = async (path: string, method = 'GET', payload?: unknown) => {
+      const response = await this.apiFetch(`installation:${installationId}`, `https://api.github.com${path}`, { method, redirect: 'error', signal: AbortSignal.timeout(10000), headers: { ...this.apiHeaders(token), 'Content-Type': 'application/json' }, ...(payload === undefined ? {} : { body: JSON.stringify(payload) }) })
+      if (!response.ok) throw new ServiceUnavailableException('GitHub PR comment could not be published or verified')
+      return response.json() as Promise<any>
+    }
+    let existing: any
+    for (let page = 1; page <= 5; page++) {
+      const comments = await call(`${root}/issues/${number}/comments?per_page=100&page=${page}`)
+      if (!Array.isArray(comments) || comments.length > 100) throw new ServiceUnavailableException('GitHub comment history is unavailable')
+      existing ??= comments.find(c => c.user?.type === 'Bot' && c.user?.login === `${app.slug}[bot]` && typeof c.body === 'string' && c.body.startsWith('<!-- preflyt-policy-summary -->'))
+      if (existing || comments.length < 100) break
+      if (page === 5) throw new ServiceUnavailableException('Comment discovery limit reached; refusing a duplicate summary')
+    }
+    const current = await this.readPullRequest(installationId, repositoryId, number)
+    if (current.context.head.sha !== headSha || current.context.state !== 'open') throw new ConflictException('Pull request changed')
+    const result = existing ? await call(`${root}/issues/comments/${existing.id}`, 'PATCH', { body }) : await call(`${root}/issues/${number}/comments`, 'POST', { body })
+    if (!Number.isSafeInteger(result.id) || result.id < 1) throw new ServiceUnavailableException('Invalid comment receipt')
+    const observed = await call(`${root}/issues/comments/${result.id}`)
+    const url = new URL(String(observed.html_url))
+    if (observed.body !== body || observed.user?.login !== `${app.slug}[bot]` || observed.user?.type !== 'Bot' || url.protocol !== 'https:' || url.hostname !== 'github.com' || url.username || url.password) throw new ServiceUnavailableException('PR summary read-back failed')
+    if ((await this.readPullRequest(installationId, repositoryId, number)).context.head.sha !== headSha) throw new ConflictException('Pull request changed during summary publication')
+    return { htmlUrl: url.href }
+  }
+
   async checkPublicationAccess(installationId: bigint) {
     const installation = await this.verifyInstallation(installationId)
     if (installation.permissions.checks !== 'write')

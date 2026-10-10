@@ -1,0 +1,54 @@
+name: Preflyt policy check
+description: Run the checks in a reviewed Preflyt policy and return results automatically through GitHub.
+inputs:
+  api-url:
+    description: Public HTTPS Preflyt API URL (including its API prefix, if configured).
+    required: true
+  checks:
+    description: Inline JSON of reviewed check commands and report paths, or a repository JSON file path.
+    required: true
+  proofs:
+    description: Optional JSON mapping report paths to existing signed proof bundle paths.
+    required: false
+    default: '{}'
+outputs:
+  result:
+    description: passed, failed, or incomplete
+    value: ${{ steps.execute.outputs.result }}
+runs:
+  using: composite
+  steps:
+    - name: Fetch published PR policy
+      id: policy
+      shell: bash
+      env:
+        PREFLYT_ACTION_PATH: ${{ github.action_path }}
+        PREFLYT_API_URL: ${{ inputs.api-url }}
+      run: python3 "$PREFLYT_ACTION_PATH/transport.py" fetch
+    - name: Run policy checks
+      id: execute
+      shell: bash
+      env:
+        PREFLYT_ACTION_PATH: ${{ github.action_path }}
+        PREFLYT_POLICY_PATH: ${{ steps.policy.outputs.policy }}
+        PREFLYT_CHECKS_PATH: ${{ inputs.checks }}
+        PREFLYT_PROOFS: ${{ inputs.proofs }}
+      run: python3 "$PREFLYT_ACTION_PATH/run.py"
+    - name: Send results to Preflyt
+      if: ${{ always() && steps.execute.outputs.bundle != '' }}
+      shell: bash
+      env:
+        PREFLYT_ACTION_PATH: ${{ github.action_path }}
+        PREFLYT_API_URL: ${{ inputs.api-url }}
+        PREFLYT_BUNDLE_PATH: ${{ steps.execute.outputs.bundle }}
+      run: python3 "$PREFLYT_ACTION_PATH/transport.py" submit
+    - name: Apply policy result
+      if: ${{ always() }}
+      shell: bash
+      env:
+        PREFLYT_RESULT: ${{ steps.execute.outputs.result }}
+      run: |
+        if [ "$PREFLYT_RESULT" != "passed" ]; then
+          echo "Policy checks failed or required results are incomplete. See the job summary."
+          exit 1
+        fi

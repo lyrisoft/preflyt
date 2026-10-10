@@ -8,6 +8,29 @@ import {
 import { aiHttpRequest, AiTransportError } from "./ai-http.js";
 import type { ReviewContext } from "./review-skills.js";
 import { reviewPrompt, validateSkillOutput } from "./review-skills.js";
+// Fixed provider response bound; users do not configure token limits or prices.
+export const aiResponseTokenLimit = 8192;
+
+/** Safe response diagnostics; never retain provider bodies or credentials. */
+export class AiResponseError extends Error {
+  constructor(
+    readonly code:
+      | "MODEL_UNAVAILABLE"
+      | "TRUNCATED"
+      | "INVALID_RESPONSE"
+      | "UNSAFE_RESPONSE"
+      | "REFUSED",
+    readonly status?: number,
+  ) {
+    super(
+      code === "TRUNCATED"
+        ? "Model response was cut off"
+        : "Model response unavailable",
+    );
+    this.name = "AiResponseError";
+  }
+}
+
 export async function runSkillInference(
   provider: AiProviderConnection,
   skills: { id: string; version: number; instructions: string }[],
@@ -16,6 +39,30 @@ export async function runSkillInference(
   signal: AbortSignal,
   onUsage?: (usage: ProviderUsage) => Promise<void>,
 ) {
+  return runPromptInference(
+    provider,
+    reviewPrompt(skills, context),
+    maxOutputTokens,
+    signal,
+    (raw, key) =>
+      validateSkillOutput(
+        raw,
+        context,
+        skills.map((s) => s.id),
+        key,
+      ),
+    onUsage,
+  );
+}
+export async function runPromptInference<T>(
+  provider: AiProviderConnection,
+  prompt: { system: string; user: string },
+  maxOutputTokens: number,
+  signal: AbortSignal,
+  validate: (raw: string, credential?: string) => T,
+  onUsage?: (usage: ProviderUsage) => Promise<void>,
+  options?: { jsonOutput?: boolean },
+): Promise<T> {
   const endpoint = providerEndpoint(provider);
   if (!endpoint) throw new Error("Connection unavailable");
   const key = provider.encryptedCredential
@@ -26,7 +73,6 @@ export async function runSkillInference(
         aiCredentialEndpointDigest(endpoint),
       )
     : undefined;
-  const prompt = reviewPrompt(skills, context);
   let path = "/chat/completions",
     headers: Record<string, string> = {
       "content-type": "application/json",
@@ -41,6 +87,10 @@ export async function runSkillInference(
     ...(endpoint.preset === "openai"
       ? { max_completion_tokens: maxOutputTokens }
       : { max_tokens: maxOutputTokens }),
+    ...(options?.jsonOutput &&
+    ["openai", "deepseek"].includes(endpoint.preset ?? "")
+      ? { response_format: { type: "json_object" } }
+      : {}),
     stream: false,
   };
   if (endpoint.preset === "anthropic") {
@@ -86,88 +136,79 @@ export async function runSkillInference(
     // The inference deadline is a transport failure; caller cancellation and access
     // revocation are not. Never retain a provider URL, response body or key here.
     if (signal.aborted) {
-      if (signal.reason?.name === "TimeoutError") throw new AiTransportError("TIMEOUT");
+      if (signal.reason?.name === "TimeoutError")
+        throw new AiTransportError("TIMEOUT");
       signal.throwIfAborted();
     }
     throw error;
   }
   if (response.status === 429 || response.status >= 500)
     throw new AiTransportError("UPSTREAM_UNAVAILABLE");
-  if (!response.ok) throw new Error("Model unavailable");
-  const value = (await response.json()) as any;
-  await onUsage?.(providerUsage(endpoint.preset, value, provider));
+  if (!response.ok)
+    throw new AiResponseError("MODEL_UNAVAILABLE", response.status);
+  let value: any;
+  try {
+    value = await response.json();
+  } catch {
+    throw new AiResponseError("INVALID_RESPONSE");
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new AiResponseError("INVALID_RESPONSE");
+  await onUsage?.(providerUsage(endpoint.preset, value));
   let raw: unknown;
   if (endpoint.preset === "anthropic") {
+    if (value.stop_reason === "max_tokens")
+      throw new AiResponseError("TRUNCATED");
+    if (value.stop_reason === "refusal") throw new AiResponseError("REFUSED");
     if (
       !Array.isArray(value.content) ||
       value.content.some((c: any) => c.type !== "text") ||
       value.stop_reason !== "end_turn"
     )
-      throw new Error("Unsupported response");
+      throw new AiResponseError("INVALID_RESPONSE");
     raw = value.content.map((c: any) => c.text).join("");
   } else if (endpoint.preset === "gemini") {
     const candidate = value.candidates?.[0];
+    if (candidate?.finishReason === "MAX_TOKENS")
+      throw new AiResponseError("TRUNCATED");
+    if (
+      value.promptFeedback?.blockReason ||
+      candidate?.finishReason === "SAFETY"
+    )
+      throw new AiResponseError("REFUSED");
     if (
       candidate?.finishReason !== "STOP" ||
       !Array.isArray(candidate.content?.parts) ||
       candidate.content.parts.some((p: any) => typeof p.text !== "string")
     )
-      throw new Error("Unsupported response");
+      throw new AiResponseError("INVALID_RESPONSE");
     raw = candidate.content.parts.map((p: any) => p.text).join("");
   } else {
     const choice = value.choices?.[0];
+    if (choice?.finish_reason === "length")
+      throw new AiResponseError("TRUNCATED");
+    if (choice?.finish_reason === "content_filter" || choice?.message?.refusal)
+      throw new AiResponseError("REFUSED");
     if (
       choice?.finish_reason !== "stop" ||
       choice.message?.tool_calls ||
       choice.message?.function_call
     )
-      throw new Error("Unsupported response");
+      throw new AiResponseError("INVALID_RESPONSE");
     raw = choice.message?.content;
   }
-  if (typeof raw !== "string") throw new Error("Invalid response");
-  return validateSkillOutput(
-    raw,
-    context,
-    skills.map((s) => s.id),
-    key,
-  );
-}
-export function reviewReservation(
-  provider: AiProviderConnection,
-  inputTokens: number,
-  outputTokens: number,
-) {
-  const input = provider.inputPriceCentsPerMillion,
-    output = provider.outputPriceCentsPerMillion;
-  if (
-    input === null ||
-    output === null ||
-    !Number.isInteger(input) ||
-    !Number.isInteger(output) ||
-    input < 0 ||
-    output < 0 ||
-    input > 100000000 ||
-    output > 100000000
-  )
-    throw new Error("Set model rates before running reviews");
-  return (
-    BigInt(input) * BigInt(inputTokens) + BigInt(output) * BigInt(outputTokens)
-  );
+  if (typeof raw !== "string") throw new AiResponseError("INVALID_RESPONSE");
+  if (key && raw.includes(key)) throw new AiResponseError("UNSAFE_RESPONSE");
+  return validate(raw, key);
 }
 export type ProviderUsage = {
   inputTokens: number | null;
   outputTokens: number | null;
   cachedTokens: number | null;
-  costMicroCents: string | null;
-  costStatus: "ESTIMATED_FROM_REPORTED_USAGE" | "UNAVAILABLE";
 };
 export function providerUsage(
   preset: string | undefined,
   value: any,
-  provider: Pick<
-    AiProviderConnection,
-    "inputPriceCentsPerMillion" | "outputPriceCentsPerMillion"
-  >,
 ): ProviderUsage {
   const count = (v: unknown) =>
     Number.isSafeInteger(v) && (v as number) >= 0 && (v as number) <= 100000000
@@ -200,22 +241,9 @@ export function providerUsage(
         ? (value.usageMetadata?.cachedContentTokenCount ?? 0)
         : (value.usage?.prompt_tokens_details?.cached_tokens ?? 0),
   );
-  let costMicroCents: string | null = null;
-  if (inputTokens !== null && outputTokens !== null && cachedTokens === 0) {
-    try {
-      costMicroCents = reviewReservation(
-        provider as AiProviderConnection,
-        inputTokens,
-        outputTokens,
-      ).toString();
-    } catch {}
-  }
   return {
     inputTokens,
     outputTokens,
     cachedTokens,
-    costMicroCents,
-    costStatus:
-      costMicroCents === null ? "UNAVAILABLE" : "ESTIMATED_FROM_REPORTED_USAGE",
   };
 }

@@ -4,18 +4,11 @@ import {
   BrainCircuit,
   BookOpen,
   Cable,
-  FlaskConical,
-  FolderGit2,
-  Gauge,
-  GitPullRequest,
-  Laptop,
-  ServerCog,
   Loader2,
   Pencil,
   PlugZap,
   Power,
   Save,
-  Settings2,
   Plus,
   RefreshCw,
   Route as RouteIcon,
@@ -80,8 +73,6 @@ type Provider = {
   revision: number
   testStatus: string
   approved: boolean
-  inputPriceCentsPerMillion?: number | null
-  outputPriceCentsPerMillion?: number | null
   apiKeySet: boolean
 }
 type StageRoute = {
@@ -93,9 +84,6 @@ type StageRoute = {
   automaticReviews?: boolean
   publishSummary?: boolean
   publishInline?: boolean
-  maxInputTokens: number
-  maxOutputTokens: number
-  dailyBudgetCents: number
   revision: number
 }
 type Configuration = {
@@ -148,6 +136,7 @@ function ProviderIcon({
 }
 const stageName = (stage: string) =>
   ({
+    default: 'Default',
     laptop: 'Local development',
     repository: 'Repository',
     pull_request: 'Pull requests',
@@ -155,15 +144,6 @@ const stageName = (stage: string) =>
     performance: 'Performance',
     production: 'Production',
   })[stage] ?? stage
-const stageIcon = (stage: string) =>
-  ({
-    laptop: Laptop,
-    repository: FolderGit2,
-    pull_request: GitPullRequest,
-    qa: FlaskConical,
-    performance: Gauge,
-    production: ServerCog,
-  })[stage] ?? RouteIcon
 const testName = (status: string) =>
   ({
     NOT_TESTED: 'Not tested',
@@ -176,7 +156,7 @@ const help = [
   {
     title: 'Set up AI reviews',
     content:
-      'Connect a model, add its token prices and test the connection. In Model Router, assign it to the stage you want to review and set a daily budget. Choose a skill in Skills, approve and enable it, then add it as an AI Review in a standard. AI reviews are optional suggestions and do not change check results. Repository code is shared only when you enable it.',
+      'Connect a model and test the connection. Choose it as the default in Model Router. Choose a skill in Skills, approve and enable it, then add it as an AI Review in a standard. AI reviews are optional suggestions and do not change check results. Repository code is shared only when you enable it.',
   },
   {
     title: 'Markdown skill files',
@@ -191,7 +171,7 @@ const help = [
   {
     title: 'Model router',
     content:
-      'Assign a model to each stage where you want AI reviews. Start with Repository or Pull requests. Each stage has a primary model and an optional fallback. Token limits are under Advanced limits; source sharing starts off. A connection must be enabled and successfully tested within the last 24 hours before its route is ready. Switching organizations separates connections and routes.',
+      'Choose one default model for AI reviews and workflow rewriting. Stage overrides are optional. Source sharing starts off. Saving a model tests its connection; configuration changes require another test. Connections do not expire after 24 hours. PR feedback is configured in Settings. Switching organizations separates connections and routes.',
   },
   {
     title: 'Review skills',
@@ -201,7 +181,7 @@ const help = [
   {
     title: 'Current availability',
     content:
-      'AI Reviews use saved assessment results. When source sharing is enabled, PR reviews can also use selected changes from the assessed commit. Published PR policies can run assigned reviews automatically and post summaries or comments to GitHub when those options are enabled. Comments on changed lines also require source sharing. Reviews require an enabled, tested model and configured token prices. Preflyt reserves the estimated cost against your daily budget; this is not the provider’s final bill. AI suggestions never approve policies or count as passed checks.',
+      'AI Reviews use saved assessment results. When source sharing is enabled, PR reviews can also use selected changes from the assessed commit. Published PR policies can run assigned reviews automatically and post summaries or comments to GitHub when those options are enabled. Comments on changed lines also require source sharing. Reviews require an enabled, tested model. AI suggestions never approve policies or count as passed checks.',
   },
 ]
 type AiSettingsNavigation = {
@@ -291,10 +271,39 @@ function AiSettings({
     setError('')
     setNotice('')
     try {
-      const result = await governanceRequest<{ status?: string }>(
+      const result = await governanceRequest<{ id?: string; status?: string }>(
         '/ai/configuration' + path,
         body
       )
+      if (
+        path.startsWith('/providers') &&
+        !path.endsWith('/test') &&
+        result.id
+      ) {
+        done?.()
+        try {
+          const tested = await governanceRequest<{ status: string }>(
+            `/ai/configuration/providers/${result.id}/test`,
+            {}
+          )
+          if (tested.status !== 'CONNECTED') {
+            setError(
+              `Model saved. ${testName(tested.status)}. Check the connection details.`
+            )
+            await client.invalidateQueries({ queryKey: key })
+            return
+          }
+        } catch {
+          setError(
+            'Model saved. Its connection could not be tested. Use Test to retry.'
+          )
+          await client.invalidateQueries({ queryKey: key })
+          return
+        }
+        await client.invalidateQueries({ queryKey: key })
+        setNotice('Model saved and connection tested.')
+        return
+      }
       done?.()
       await client.invalidateQueries({ queryKey: key })
       if (path.endsWith('/test')) {
@@ -410,68 +419,9 @@ function AiSettings({
               </TabsTrigger>
             </TabsList>
             <TabsContent value='connections' className='mt-5 space-y-6'>
-              <div className='space-y-1'>
-                <h2 className='text-base font-semibold'>Built-in providers</h2>
-                <p className='text-sm text-muted-foreground'>
-                  Connect a provider with your model name and API key.
-                </p>
-              </div>
-              <div className='grid gap-4 sm:grid-cols-2 xl:grid-cols-4'>
-                {data.presets?.map((p) => {
-                  const connection = data.providers.find(
-                    (c) => c.endpoint?.preset === p.id
-                  )
-                  return (
-                    <Card key={p.id} className='gap-3'>
-                      <CardHeader className='flex flex-row items-center gap-3'>
-                        <ProviderIcon provider={p.id} tile />
-                        <h3 className='min-w-0 text-sm leading-snug font-semibold'>
-                          {p.name}
-                        </h3>
-                      </CardHeader>
-                      <CardContent className='flex flex-1 items-center justify-between gap-3'>
-                        <div className='min-w-0'>
-                          <p className='mb-1 text-xs font-medium text-muted-foreground'>
-                            Model name
-                          </p>
-                          <p className='text-sm font-medium break-words'>
-                            {connection?.modelId ?? 'Not connected'}
-                          </p>
-                        </div>
-                        <StatusBadge
-                          tone={connection?.enabled ? 'success' : 'neutral'}
-                        >
-                          {connection?.enabled ? 'Active' : 'Inactive'}
-                        </StatusBadge>
-                      </CardContent>
-                      <CardFooter className='justify-end border-t'>
-                        <Button
-                          size='sm'
-                          variant={connection ? 'outline' : 'default'}
-                          disabled={
-                            busy || (!connection && data.providers.length >= 32)
-                          }
-                          onClick={() => {
-                            setError('')
-                            setPreset(p)
-                            setEdit(connection ?? null)
-                          }}
-                        >
-                          {connection ? (
-                            <Settings2 aria-hidden='true' />
-                          ) : (
-                            <Power aria-hidden='true' />
-                          )}
-                          {connection ? 'Configure' : 'Activate'}
-                        </Button>
-                      </CardFooter>
-                    </Card>
-                  )
-                })}
-              </div>
               <div className='flex flex-wrap items-end justify-between gap-4'>
                 <div className='space-y-3'>
-                  <h2 className='text-base font-semibold'>Configured models</h2>
+                  <h2 className='text-base font-semibold'>Models</h2>
                   <Input
                     aria-label='Filter models'
                     placeholder='Filter models…'
@@ -668,75 +618,113 @@ function AiSettings({
               <SkillsCatalogue />
             </TabsContent>
             <TabsContent value='routing' className='mt-5 space-y-4'>
-              <div className='grid gap-4 md:grid-cols-2 xl:grid-cols-3'>
-                {data.stages.map((stage) => {
-                  const r = data.routes.find((r) => r.stage === stage)
-                  return (
-                    <Card key={stage} className='gap-3'>
-                      <CardHeader className='flex flex-row items-center gap-3'>
-                        <SurfaceIcon icon={stageIcon(stage)} tone='violet' />
-                        <h2 className='min-w-0 flex-1 text-sm leading-snug font-semibold'>
-                          {stageName(stage)}
-                        </h2>
-                        <StatusBadge tone={r?.enabled ? 'success' : 'neutral'}>
-                          {r?.enabled ? 'Configured' : 'Disabled'}
-                        </StatusBadge>
-                      </CardHeader>
-                      <CardContent className='flex-1'>
-                        <dl className='divide-y text-sm [&>div]:py-2 [&>div:first-child]:pt-0 [&>div:last-child]:pb-0'>
-                          <div className='flex justify-between gap-3'>
-                            <dt className='text-muted-foreground'>Primary</dt>
-                            <dd className='truncate'>
-                              {data.providers.find((p) => p.id === r?.primaryId)
-                                ?.name ?? 'Not selected'}
-                            </dd>
-                          </div>
-                          <div className='flex justify-between gap-3'>
-                            <dt className='text-muted-foreground'>Fallback</dt>
-                            <dd className='truncate'>
-                              {data.providers.find(
-                                (p) => p.id === r?.fallbackId
-                              )?.name ?? 'None'}
-                            </dd>
-                          </div>
-                          <div className='flex justify-between gap-3'>
-                            <dt className='text-muted-foreground'>
-                              Source sharing
-                            </dt>
-                            <dd>{r?.allowSource ? 'Allowed' : 'Off'}</dd>
-                          </div>
-                        </dl>
-                      </CardContent>
-                      <CardFooter className='justify-end border-t'>
-                        <Button
-                          size='sm'
-                          variant={r?.enabled ? 'outline' : 'default'}
-                          disabled={busy}
-                          onClick={() => {
-                            setError('')
-                            setRouting(
-                              r ?? {
-                                stage,
-                                primaryId: null,
-                                fallbackId: null,
-                                enabled: false,
-                                allowSource: false,
-                                maxInputTokens: 8000,
-                                maxOutputTokens: 1000,
-                                dailyBudgetCents: 1000,
-                                revision: 0,
-                              }
-                            )
-                          }}
-                        >
-                          <Settings2 aria-hidden='true' />
-                          Configure
-                        </Button>
-                      </CardFooter>
-                    </Card>
-                  )
-                })}
+              <div className='flex flex-wrap items-center justify-between gap-4 rounded-xl border p-4'>
+                <div className='space-y-1'>
+                  <h2 className='text-sm font-semibold'>Default model</h2>
+                  <p className='text-sm text-muted-foreground'>
+                    {data.providers.find(
+                      (p) =>
+                        p.id ===
+                        data.routes.find((r) => r.stage === 'default')
+                          ?.primaryId
+                    )?.name ?? 'Choose a model to use across Preflyt.'}
+                  </p>
+                </div>
+                <Button
+                  disabled={busy}
+                  onClick={() => {
+                    setError('')
+                    setRouting(
+                      data.routes.find((r) => r.stage === 'default') ?? {
+                        stage: 'default',
+                        primaryId: null,
+                        fallbackId: null,
+                        enabled: true,
+                        allowSource: false,
+                        revision: 0,
+                      }
+                    )
+                  }}
+                >
+                  Configure default
+                </Button>
               </div>
+              <details className='rounded-xl border p-4'>
+                <summary className='cursor-pointer text-sm font-medium'>
+                  Stage overrides (optional)
+                </summary>
+                <div className='mt-3 divide-y'>
+                  {data.stages.map((stage) => {
+                    const r = data.routes.find((r) => r.stage === stage)
+                    return (
+                      <div
+                        key={stage}
+                        className='flex flex-wrap items-center justify-between gap-3 py-3'
+                      >
+                        <div>
+                          <p className='text-sm font-medium'>
+                            {stageName(stage)}
+                          </p>
+                          <p className='text-xs text-muted-foreground'>
+                            {r
+                              ? r.enabled
+                                ? (data.providers.find(
+                                    (p) => p.id === r.primaryId
+                                  )?.name ?? 'Model unavailable')
+                                : 'Disabled for this stage'
+                              : 'Uses default model'}
+                          </p>
+                        </div>
+                        <div className='flex gap-2'>
+                          {r && (
+                            <Button
+                              size='sm'
+                              variant='ghost'
+                              disabled={busy}
+                              onClick={() =>
+                                void action(`/routes/${stage}/inherit`, {
+                                  expectedRevision: r.revision,
+                                })
+                              }
+                            >
+                              Use default
+                            </Button>
+                          )}
+                          <Button
+                            size='sm'
+                            variant='outline'
+                            disabled={busy}
+                            onClick={() => {
+                              setError('')
+                              setRouting(
+                                r ?? {
+                                  ...data.routes.find(
+                                    (r) => r.stage === 'default'
+                                  ),
+                                  stage,
+                                  revision: 0,
+                                  primaryId:
+                                    data.routes.find(
+                                      (r) => r.stage === 'default'
+                                    )?.primaryId ?? null,
+                                  fallbackId:
+                                    data.routes.find(
+                                      (r) => r.stage === 'default'
+                                    )?.fallbackId ?? null,
+                                  enabled: false,
+                                  allowSource: false,
+                                }
+                              )
+                            }}
+                          >
+                            Edit
+                          </Button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </details>
             </TabsContent>
           </Tabs>
         </>
@@ -758,14 +746,39 @@ function AiSettings({
                   : 'Add model'}
             </DialogTitle>
             <DialogDescription>
-              Saving approves this model for your organization. Keys stay
-              private.
+              Saving tests and approves this model for your organization. Keys
+              stay private.
             </DialogDescription>
           </DialogHeader>
+          {data && edit === null && (
+            <label className='block space-y-1.5 text-sm'>
+              <span>Provider</span>
+              <Select
+                value={preset?.id ?? 'custom'}
+                onValueChange={(value) =>
+                  setPreset(data.presets?.find((p) => p.id === value))
+                }
+              >
+                <SelectTrigger aria-label='Provider'>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {data.presets?.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value='custom'>
+                    OpenAI-compatible endpoint
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </label>
+          )}
           {data && edit !== undefined && (
             <ProviderForm
               preset={preset}
-              key={edit?.id ?? 'new'}
+              key={`${edit?.id ?? 'new'}:${preset?.id ?? 'custom'}`}
               provider={edit}
               busy={busy}
               error={error}
@@ -793,7 +806,7 @@ function AiSettings({
               {stageName(routing?.stage ?? '')} model routing
             </DialogTitle>
             <DialogDescription>
-              Set the models, review options and limits for this stage.
+              Choose the primary model, optional fallback and source sharing.
             </DialogDescription>
           </DialogHeader>
           {data && routing && (
@@ -856,14 +869,6 @@ function ProviderForm({
       modelId: f.get('modelId'),
       enabled: preset && !provider ? true : f.get('enabled') === 'on',
       expectedRevision: provider?.revision ?? 0,
-      inputPriceCentsPerMillion:
-        f.get('inputRate') === null || f.get('inputRate') === ''
-          ? (provider?.inputPriceCentsPerMillion ?? null)
-          : Number(f.get('inputRate')),
-      outputPriceCentsPerMillion:
-        f.get('outputRate') === null || f.get('outputRate') === ''
-          ? (provider?.outputPriceCentsPerMillion ?? null)
-          : Number(f.get('outputRate')),
       ...(apiKey ? { apiKey } : {}),
     })
   }
@@ -965,37 +970,6 @@ function ProviderForm({
           Enable model
         </label>
       )}
-      {provider && (
-        <fieldset className='space-y-3 rounded-lg border p-3'>
-          <legend className='px-1 text-sm font-medium'>
-            Review budget rates
-          </legend>
-          <div className='grid gap-3 sm:grid-cols-2'>
-            <label className='space-y-2 text-sm'>
-              <span>Input · cents per million tokens</span>
-              <Input
-                type='number'
-                name='inputRate'
-                min={0}
-                max={100000000}
-                placeholder='200'
-                defaultValue={provider.inputPriceCentsPerMillion ?? ''}
-              />
-            </label>
-            <label className='space-y-2 text-sm'>
-              <span>Output · cents per million tokens</span>
-              <Input
-                type='number'
-                name='outputRate'
-                min={0}
-                max={100000000}
-                placeholder='800'
-                defaultValue={provider.outputPriceCentsPerMillion ?? ''}
-              />
-            </label>
-          </div>
-        </fieldset>
-      )}
       {error && (
         <p role='alert' className='text-sm text-destructive'>
           {error}
@@ -1061,24 +1035,14 @@ function RouteForm({
         f.get('fallbackId') === 'none' ? null : f.get('fallbackId') || null,
       enabled: f.get('enabled') === 'on',
       allowSource: f.get('allowSource') === 'on',
-      automaticReviews: f.get('automaticReviews') === 'on',
-      publishSummary: f.get('publishSummary') === 'on',
-      publishInline: f.get('publishInline') === 'on',
-      maxInputTokens: Number(f.get('maxInputTokens')),
-      maxOutputTokens: Number(f.get('maxOutputTokens')),
-      dailyBudgetCents: Number(f.get('dailyBudgetCents')),
+      automaticReviews: route.automaticReviews ?? false,
+      publishSummary: route.publishSummary ?? false,
+      publishInline: route.publishInline ?? false,
       expectedRevision: route.revision,
     })
   }
   return (
-    <form
-      onSubmit={submit}
-      className='space-y-4'
-      onInvalidCapture={(event) => {
-        const section = (event.target as HTMLElement).closest('details')
-        if (section) section.open = true
-      }}
-    >
+    <form onSubmit={submit} className='space-y-4'>
       {(['primaryId', 'fallbackId'] as const).map((name) => (
         <label key={name} className='block space-y-2 text-sm'>
           <span>
@@ -1113,61 +1077,11 @@ function RouteForm({
           </Select>
         </label>
       ))}
-      <label className='block space-y-2 text-sm'>
-        <span>Daily estimated cost limit (US cents)</span>
-        <Input
-          type='number'
-          name='dailyBudgetCents'
-          min={1}
-          max={5000}
-          step={1}
-          required
-          defaultValue={route.dailyBudgetCents}
-        />
-      </label>
-      <details className='rounded-lg border p-3'>
-        <summary className='cursor-pointer text-sm font-medium'>
-          Advanced limits
-        </summary>
-        <p className='my-3 text-xs text-muted-foreground'>
-          Limit the size and estimated daily cost of reviews. These saved limits
-          apply even when this section is closed.
-        </p>
-        <div className='grid grid-cols-2 gap-3'>
-          {(
-            [
-              {
-                name: 'maxInputTokens',
-                label: 'Input token limit',
-                min: 100,
-                max: 32000,
-              },
-              {
-                name: 'maxOutputTokens',
-                label: 'Output token limit',
-                min: 128,
-                max: 8192,
-              },
-            ] as const
-          ).map((f) => (
-            <label key={f.name} className='block space-y-2 text-sm'>
-              <span>{f.label}</span>
-              <Input
-                type='number'
-                name={f.name}
-                min={f.min}
-                max={f.max}
-                step={1}
-                required
-                defaultValue={route[f.name]}
-              />
-            </label>
-          ))}
-        </div>
-      </details>
       <label className='flex items-center gap-2 text-sm'>
         <input type='checkbox' name='enabled' defaultChecked={route.enabled} />
-        Enable reviews for this stage
+        {route.stage === 'default'
+          ? 'Enable AI reviews'
+          : 'Enable reviews for this stage'}
       </label>
       <label className='flex items-center gap-2 text-sm'>
         <input
@@ -1177,42 +1091,6 @@ function RouteForm({
         />
         Send repository code to the selected AI model
       </label>
-      {route.stage === 'pull_request' && (
-        <fieldset className='space-y-3 rounded-lg border p-4'>
-          <legend className='px-1 text-sm font-medium'>
-            Published PR policies
-          </legend>
-          <label className='flex items-center gap-2 text-sm'>
-            <input
-              type='checkbox'
-              name='automaticReviews'
-              defaultChecked={route.automaticReviews ?? false}
-            />
-            Run assigned AI Reviews automatically
-          </label>
-          <label className='flex items-center gap-2 text-sm'>
-            <input
-              type='checkbox'
-              name='publishSummary'
-              defaultChecked={route.publishSummary ?? false}
-            />
-            Post AI review summary to GitHub
-          </label>
-          <label className='flex items-center gap-2 text-sm'>
-            <input
-              type='checkbox'
-              name='publishInline'
-              defaultChecked={route.publishInline ?? false}
-            />
-            Post AI review comments on changed lines
-          </label>
-          <p className='text-xs text-muted-foreground'>
-            Uses approved skills and your budget. Source sharing adds verified
-            PR changes; otherwise only assessment evidence is sent. AI summaries
-            do not decide merge readiness.
-          </p>
-        </fieldset>
-      )}
       {error && (
         <p role='alert' className='text-sm text-destructive'>
           {error}

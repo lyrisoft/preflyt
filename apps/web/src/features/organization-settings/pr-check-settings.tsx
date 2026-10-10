@@ -5,6 +5,7 @@ import { RepositoryPicker } from '@/components/repository-picker'
 import { ReadinessAutomation } from '@/features/repositories/readiness-automation'
 import { useNavigationSession } from '@/features/workspace/navigation-session'
 import { canPerform } from '@/features/workspace/scoped-access'
+import { AiPrFeedback } from './ai-pr-feedback'
 
 export function PrCheckSettings() {
   const session = useNavigationSession()
@@ -34,12 +35,7 @@ export function PrCheckSettings() {
       return response.json()
     },
   })
-  if (!canPerform(session.data, 'policy.publish'))
-    return (
-      <p role='alert'>
-        You need policy publishing permission to change PR check settings.
-      </p>
-    )
+  if (!canPerform(session.data, 'policy.publish')) return <AiPrFeedback />
   if (inventory.isPending) return <p role='status'>Loading repositories…</p>
   if (inventory.isError)
     return (
@@ -55,6 +51,7 @@ export function PrCheckSettings() {
     repositories.find((repo) => repo.githubId === selected) ?? repositories[0]
   return (
     <section className='space-y-4'>
+      <AiPrFeedback />
       {repository ? (
         <>
           <RepositoryPicker

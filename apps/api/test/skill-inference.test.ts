@@ -5,7 +5,11 @@ import {
   aiCredentialEndpointDigest,
   encryptAiCredential,
 } from "../src/intelligence/ai-configuration.js";
-import { runSkillInference } from "../src/intelligence/skill-inference.js";
+import {
+  AiResponseError,
+  runPromptInference,
+  runSkillInference,
+} from "../src/intelligence/skill-inference.js";
 const transport = vi.hoisted(() => vi.fn());
 vi.mock("../src/intelligence/ai-http.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/intelligence/ai-http.js")>()),
@@ -177,45 +181,236 @@ it("rejects tool calls, truncated responses, unknown evidence and provider error
 
 it("uses the same /v1 base for keyless Ollama reviews as connection testing", async () => {
   const provider = {
-    id: "provider", organizationId: "org", modelId: "llama3.2:3b", encryptedCredential: null,
-    endpoint: { id: "provider", name: "Ollama", baseUrl: "http://localhost:11434", locality: "local", requiresKey: false, models: ["llama3.2:3b"] },
+    id: "provider",
+    organizationId: "org",
+    modelId: "llama3.2:3b",
+    encryptedCredential: null,
+    endpoint: {
+      id: "provider",
+      name: "Ollama",
+      baseUrl: "http://localhost:11434",
+      locality: "local",
+      requiresKey: false,
+      models: ["llama3.2:3b"],
+    },
   } as any;
-  transport.mockResolvedValue(new Response(JSON.stringify({ choices: [{ finish_reason: "stop", message: { content: output } }] })));
-  await runSkillInference(provider, skills, context, 400, AbortSignal.timeout(1000));
+  transport.mockResolvedValue(
+    new Response(
+      JSON.stringify({
+        choices: [{ finish_reason: "stop", message: { content: output } }],
+      }),
+    ),
+  );
+  await runSkillInference(
+    provider,
+    skills,
+    context,
+    400,
+    AbortSignal.timeout(1000),
+  );
   const [url, locality, options] = transport.mock.calls[0]!;
   expect(url.href).toBe("http://localhost:11434/v1/chat/completions");
   expect(locality).toBe("local");
   expect(options.headers.authorization).toBeUndefined();
-  expect(JSON.parse(options.body)).toMatchObject({ model: "llama3.2:3b", max_tokens: 400, stream: false });
+  expect(JSON.parse(options.body)).toMatchObject({
+    model: "llama3.2:3b",
+    max_tokens: 400,
+    stream: false,
+  });
 });
 
-
-it('classifies only failed transport and upstream availability as outage signals, with redacted errors', async () => {
-  const { AiTransportError } = await import('../src/intelligence/ai-http.js');
-  const provider = { id: 'provider', organizationId: 'org', modelId: 'model', encryptedCredential: null,
-    endpoint: { id: 'provider', name: 'Local', baseUrl: 'http://localhost:11434/v1', locality: 'local', requiresKey: false, models: ['model'] } } as any;
+it("classifies only failed transport and upstream availability as outage signals, with redacted errors", async () => {
+  const { AiTransportError } = await import("../src/intelligence/ai-http.js");
+  const provider = {
+    id: "provider",
+    organizationId: "org",
+    modelId: "model",
+    encryptedCredential: null,
+    endpoint: {
+      id: "provider",
+      name: "Local",
+      baseUrl: "http://localhost:11434/v1",
+      locality: "local",
+      requiresKey: false,
+      models: ["model"],
+    },
+  } as any;
   for (const status of [429, 502, 503]) {
-    transport.mockResolvedValueOnce(new Response('private-provider-text', { status }));
-    const error = await runSkillInference(provider, skills, context, 1000, new AbortController().signal).catch(e => e);
+    transport.mockResolvedValueOnce(
+      new Response("private-provider-text", { status }),
+    );
+    const error = await runSkillInference(
+      provider,
+      skills,
+      context,
+      1000,
+      new AbortController().signal,
+    ).catch((e) => e);
     expect(error).toBeInstanceOf(AiTransportError);
-    expect(error.message).not.toContain('private-provider-text');
+    expect(error.message).not.toContain("private-provider-text");
   }
-  for (const response of [new Response('private-key', { status: 401 }), new Response('invalid JSON'), new Response(JSON.stringify({ choices: [{ finish_reason: 'length' }] }))]) {
+  for (const response of [
+    new Response("private-key", { status: 401 }),
+    new Response("invalid JSON"),
+    new Response(JSON.stringify({ choices: [{ finish_reason: "length" }] })),
+  ]) {
     transport.mockResolvedValueOnce(response);
-    const error = await runSkillInference(provider, skills, context, 1000, new AbortController().signal).catch(e => e);
+    const error = await runSkillInference(
+      provider,
+      skills,
+      context,
+      1000,
+      new AbortController().signal,
+    ).catch((e) => e);
     expect(error).not.toBeInstanceOf(AiTransportError);
   }
-  transport.mockRejectedValueOnce(new Error('Model endpoint address is not allowed'));
-  await expect(runSkillInference(provider, skills, context, 1000, new AbortController().signal)).rejects.not.toBeInstanceOf(AiTransportError);
+  transport.mockRejectedValueOnce(
+    new Error("Model endpoint address is not allowed"),
+  );
+  await expect(
+    runSkillInference(
+      provider,
+      skills,
+      context,
+      1000,
+      new AbortController().signal,
+    ),
+  ).rejects.not.toBeInstanceOf(AiTransportError);
 });
-it('distinguishes an inference timeout from caller cancellation', async () => {
-  const { AiTransportError } = await import('../src/intelligence/ai-http.js');
-  const provider = { id: 'provider', organizationId: 'org', modelId: 'model', encryptedCredential: null,
-    endpoint: { id: 'provider', name: 'Local', baseUrl: 'http://localhost:11434/v1', locality: 'local', requiresKey: false, models: ['model'] } } as any;
+it("distinguishes an inference timeout from caller cancellation", async () => {
+  const { AiTransportError } = await import("../src/intelligence/ai-http.js");
+  const provider = {
+    id: "provider",
+    organizationId: "org",
+    modelId: "model",
+    encryptedCredential: null,
+    endpoint: {
+      id: "provider",
+      name: "Local",
+      baseUrl: "http://localhost:11434/v1",
+      locality: "local",
+      requiresKey: false,
+      models: ["model"],
+    },
+  } as any;
   const controller = new AbortController();
-  transport.mockImplementationOnce(async () => { controller.abort(new DOMException('deadline', 'TimeoutError')); throw new Error('AbortError'); });
-  await expect(runSkillInference(provider, skills, context, 1000, controller.signal)).rejects.toMatchObject({ code: 'TIMEOUT', name: 'AiTransportError' });
+  transport.mockImplementationOnce(async () => {
+    controller.abort(new DOMException("deadline", "TimeoutError"));
+    throw new Error("AbortError");
+  });
+  await expect(
+    runSkillInference(provider, skills, context, 1000, controller.signal),
+  ).rejects.toMatchObject({ code: "TIMEOUT", name: "AiTransportError" });
   const cancelled = new AbortController();
-  transport.mockImplementationOnce(async () => { cancelled.abort(); throw new Error('AbortError'); });
-  await expect(runSkillInference(provider, skills, context, 1000, cancelled.signal)).rejects.not.toBeInstanceOf(AiTransportError);
+  transport.mockImplementationOnce(async () => {
+    cancelled.abort();
+    throw new Error("AbortError");
+  });
+  await expect(
+    runSkillInference(provider, skills, context, 1000, cancelled.signal),
+  ).rejects.not.toBeInstanceOf(AiTransportError);
 });
+
+it.each(["openai", "deepseek"])(
+  "requests JSON for workflow rewriting with %s",
+  async (presetId) => {
+    const preset = aiProviderPresets.find((p) => p.id === presetId)!;
+    const provider = {
+      id: "provider",
+      organizationId: "org",
+      modelId: preset.exampleModel,
+      encryptedCredential: null,
+      endpoint: {
+        id: "provider",
+        name: preset.name,
+        baseUrl: preset.baseUrl,
+        locality: "hosted",
+        requiresKey: true,
+        models: [preset.exampleModel],
+        preset: preset.id,
+      },
+    } as any;
+    transport.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              finish_reason: "stop",
+              message: { content: '{"workflow":"yaml","summary":"Added"}' },
+            },
+          ],
+        }),
+      ),
+    );
+    await runPromptInference(
+      provider,
+      { system: "Return JSON", user: "{}" },
+      32768,
+      new AbortController().signal,
+      (raw) => JSON.parse(raw),
+      undefined,
+      { jsonOutput: true },
+    );
+    expect(JSON.parse(transport.mock.lastCall![2].body)).toMatchObject({
+      response_format: { type: "json_object" },
+      [presetId === "openai" ? "max_completion_tokens" : "max_tokens"]: 32768,
+    });
+  },
+);
+
+it.each(["openai", "anthropic", "gemini"])(
+  "identifies truncated %s output before validating partial workflow YAML",
+  async (presetId) => {
+    const preset = aiProviderPresets.find((p) => p.id === presetId)!;
+    const provider = {
+      id: "provider",
+      organizationId: "org",
+      modelId: preset.exampleModel,
+      encryptedCredential: null,
+      endpoint: {
+        id: "provider",
+        name: preset.name,
+        baseUrl: preset.baseUrl,
+        locality: "hosted",
+        requiresKey: true,
+        models: [preset.exampleModel],
+        preset: preset.id,
+      },
+    } as any;
+    const response =
+      presetId === "anthropic"
+        ? {
+            stop_reason: "max_tokens",
+            content: [{ type: "text", text: '{"workflow":' }],
+          }
+        : presetId === "gemini"
+          ? {
+              candidates: [
+                {
+                  finishReason: "MAX_TOKENS",
+                  content: { parts: [{ text: '{"workflow":' }] },
+                },
+              ],
+            }
+          : {
+              choices: [
+                {
+                  finish_reason: "length",
+                  message: { content: '{"workflow":' },
+                },
+              ],
+            };
+    transport.mockResolvedValue(new Response(JSON.stringify(response)));
+    const validate = vi.fn();
+    const error = await runPromptInference(
+      provider,
+      { system: "Return JSON", user: "{}" },
+      8192,
+      new AbortController().signal,
+      validate,
+    ).catch((e) => e);
+    expect(error).toBeInstanceOf(AiResponseError);
+    expect(error.code).toBe("TRUNCATED");
+    expect(validate).not.toHaveBeenCalled();
+  },
+);

@@ -25,6 +25,15 @@ const field = (
   example,
 });
 export const configurationFields: ConfigurationField[] = [
+  field(
+    "PREFLYT_PUBLIC_API_URL",
+    "Public Preflyt API URL",
+    "GitHub",
+    "url",
+    "",
+    false,
+    "https://api.preflyt.example.com",
+  ),
   field("GITHUB_APP_ID", "App ID", "GitHub", "number", "", true, "4585551"),
   field(
     "GITHUB_APP_CLIENT_ID",

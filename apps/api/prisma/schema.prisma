@@ -178,6 +178,7 @@ model GitHubRepository {
   checkPublications GitHubCheckPublication[]
   readinessAutomation ReadinessAutomation?
   readinessTasks ReadinessTask[]
+  pipelineSubmissions PipelineRunSubmission[]
   rulesetDeployments GitHubRulesetDeployment[]
   ruleSuiteSnapshots GitHubRuleSuiteSnapshot[]
   insightsSync GitHubInsightsSync?
@@ -725,6 +726,7 @@ model ReadinessAutomation {
  organizationId String
  actorId String
  enabled Boolean @default(false)
+ pipelineComments Boolean @default(false)
  revision Int @default(1)
  createdAt DateTime @default(now())
  updatedAt DateTime @updatedAt
@@ -1122,4 +1124,34 @@ model NotificationChannelDelivery {
   @@unique([channelId, eventId, recipient])
   @@index([channelId, createdAt])
   @@index([state, nextAttemptAt, leaseUntil])
+}
+
+// Runner assertions await completed-run and evidence verification before gate use.
+model PipelineRunSubmission {
+  id String @id
+  repositoryId String
+  repository GitHubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  organizationId String
+  policyId String
+  policyHash String
+  sourceSha String
+  workflowSha String
+  runId String
+  runAttempt Int
+  prNumber Int
+  inputHash String
+  payload Json
+  submittedById String
+  state String @default("PENDING")
+  assessmentId String?
+  commentUrl String?
+  failureCode String?
+  attempts Int @default(0)
+  nextAttemptAt DateTime @default(now())
+  leaseToken String?
+  leaseUntil DateTime?
+  createdAt DateTime @default(now())
+  @@index([repositoryId, createdAt])
+  @@index([state, createdAt])
+  @@index([nextAttemptAt])
 }

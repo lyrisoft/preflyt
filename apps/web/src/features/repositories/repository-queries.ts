@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { API_BASE_URL } from '@/lib/api'
 import type { CiResult } from './repository-vocabulary'
+import type { WorkflowSnippetData } from './workflow-snippet'
 
 const repositoryPath = (repositoryId: string, path: string) =>
   `${API_BASE_URL}/github/repositories/${encodeURIComponent(repositoryId)}${path}`
@@ -20,6 +21,9 @@ type Rule = {
   title: string
   capability: string
   guidance: string
+  workflowCommand?: string
+  reportPath?: string
+  workflowSetup?: WorkflowSnippetData
   requiredIn: string[]
 }
 export type AiCheck = {
@@ -33,6 +37,7 @@ export type AiCheck = {
   stages: ('repository' | 'pull_request')[]
 }
 export type Pack = {
+  workflowSetup?: WorkflowSnippetData
   aiChecks?: AiCheck[]
   id: string
   version: string
@@ -71,11 +76,16 @@ export type Standards = {
 
 export function useStandards(repositoryId: string, policyId?: string) {
   return useQuery<Standards>({
-    queryKey: policyId ? ['repository-standards', repositoryId, policyId] : ['repository-standards', repositoryId],
+    queryKey: policyId
+      ? ['repository-standards', repositoryId, policyId]
+      : ['repository-standards', repositoryId],
     retry: false,
     queryFn: ({ signal }) =>
       read<Standards>(
-        repositoryPath(repositoryId, `/standards${policyId ? `?policy=${encodeURIComponent(policyId)}` : ''}`),
+        repositoryPath(
+          repositoryId,
+          `/standards${policyId ? `?policy=${encodeURIComponent(policyId)}` : ''}`
+        ),
         signal,
         () =>
           'Could not load standards. Check repository selection and account access.'

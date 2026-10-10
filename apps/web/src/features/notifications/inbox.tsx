@@ -91,9 +91,7 @@ export function NotificationItem({
         </p>
         {item.type === 'AI_REVIEW_BUDGET_REACHED' && (
           <p className='mt-2 text-sm text-muted-foreground'>
-            A review could not start because its reservation would exceed the
-            configured daily limit. Reservations are estimates, not provider
-            invoices.
+            This review was blocked by previous AI settings.
           </p>
         )}
         {item.type === 'AI_MODEL_UNAVAILABLE' && (

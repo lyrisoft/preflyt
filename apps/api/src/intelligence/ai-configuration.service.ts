@@ -1,3 +1,4 @@
+import { effectiveAiRoute } from "./effective-ai-route.js";
 import { randomUUID, createHash } from "node:crypto";
 import {
   BadRequestException,
@@ -11,7 +12,10 @@ import {
 import { PrismaService } from "../prisma/prisma.service.js";
 import { AuthorizationService } from "../auth/authorization.service.js";
 import type { AuthenticatedSession } from "../auth/session.guard.js";
-import type { AiProviderConnection } from "../generated/prisma/client.js";
+import type {
+  AiProviderConnection,
+  AiStageRoute,
+} from "../generated/prisma/client.js";
 import {
   aiConfigurationEnabled,
   aiReviewsEnabled,
@@ -27,8 +31,6 @@ import {
   testAiEndpoint,
 } from "./ai-configuration.js";
 export type ProviderInput = {
-  inputPriceCentsPerMillion?: number | null;
-  outputPriceCentsPerMillion?: number | null;
   preset?: string;
   name: string;
   baseUrl: string;
@@ -47,18 +49,26 @@ export type RouteInput = {
   automaticReviews?: boolean;
   publishSummary?: boolean;
   publishInline?: boolean;
-  maxInputTokens: number;
-  maxOutputTokens: number;
-  dailyBudgetCents: number;
   expectedRevision: number;
 };
 export function publicProvider(p: AiProviderConnection) {
-  const { encryptedCredential, credentialEndpointDigest, ...safe } = p;
+  const {
+    encryptedCredential,
+    credentialEndpointDigest,
+    inputPriceCentsPerMillion,
+    outputPriceCentsPerMillion,
+    ...safe
+  } = p;
   return {
     ...safe,
     apiKeySet: !!encryptedCredential,
     approved: !!providerEndpoint(p),
   };
+}
+// Retain historical database fields without exposing obsolete model setup.
+export function publicRoute(route: AiStageRoute) {
+  const { maxInputTokens, maxOutputTokens, dailyBudgetCents, ...safe } = route;
+  return safe;
 }
 @Injectable()
 export class AiConfigurationService {
@@ -103,7 +113,7 @@ export class AiConfigurationService {
       enabled: true,
       executionAvailable: aiReviewsEnabled(),
       providers: providers.map(publicProvider),
-      routes,
+      routes: routes.map(publicRoute),
       stages: aiStages,
       presets: aiProviderPresets,
     };
@@ -122,7 +132,13 @@ export class AiConfigurationService {
     if (input.preset !== undefined) {
       const preset = aiProviderPresets.find((p) => p.id === input.preset);
       if (!preset) throw new BadRequestException("Choose a supported provider");
-      input = { ...input, name: preset.name, baseUrl: preset.baseUrl, locality: "hosted", requiresKey: true };
+      input = {
+        ...input,
+        name: preset.name,
+        baseUrl: preset.baseUrl,
+        locality: "hosted",
+        requiresKey: true,
+      };
     }
     const providerId = id ?? randomUUID();
     let endpoint;
@@ -191,8 +207,6 @@ export class AiConfigurationService {
               "This endpoint requires a provider key",
             );
           const data = {
-            inputPriceCentsPerMillion: input.inputPriceCentsPerMillion ?? null,
-            outputPriceCentsPerMillion: input.outputPriceCentsPerMillion ?? null,
             name: input.name.trim(),
             endpointId: providerId,
             endpoint,
@@ -395,8 +409,7 @@ export class AiConfigurationService {
       provider.testStatus === "CONNECTED" &&
       provider.testedRevision === provider.revision &&
       provider.testedEndpointDigest === endpointDigest(endpoint) &&
-      !!provider.testedAt &&
-      provider.testedAt.getTime() > Date.now() - 86400000
+      !!provider.testedAt
     );
   }
   async saveRoute(
@@ -411,15 +424,19 @@ export class AiConfigurationService {
       true,
     );
     if (
-      !aiStages.includes(stage as (typeof aiStages)[number]) ||
+      (stage !== "default" &&
+        !aiStages.includes(stage as (typeof aiStages)[number])) ||
       (input.fallbackId && input.fallbackId === input.primaryId) ||
-      (stage !== "pull_request" && (input.automaticReviews || input.publishSummary || input.publishInline))
+      (stage !== "pull_request" &&
+        (input.automaticReviews || input.publishSummary || input.publishInline))
     )
       throw new BadRequestException(
         "Choose a lifecycle stage and different primary/fallback connections",
       );
     if (input.publishInline && (!input.automaticReviews || !input.allowSource))
-      throw new BadRequestException("Inline feedback needs automatic PR reviews and source sharing");
+      throw new BadRequestException(
+        "Inline feedback needs automatic PR reviews and source sharing",
+      );
     try {
       const route = await this.db.$transaction(
         async (tx) => {
@@ -469,9 +486,6 @@ export class AiConfigurationService {
             automaticReviews: input.automaticReviews ?? false,
             publishSummary: input.publishSummary ?? false,
             publishInline: input.publishInline ?? false,
-            maxInputTokens: input.maxInputTokens,
-            maxOutputTokens: input.maxOutputTokens,
-            dailyBudgetCents: input.dailyBudgetCents,
             revision: (previous?.revision ?? 0) + 1,
             updatedById: session.identityId,
           };
@@ -501,16 +515,61 @@ export class AiConfigurationService {
         { isolationLevel: "Serializable" },
       );
       await this.access.requireOrganization(session, "ai.routing.manage", true);
-      return route;
+      return publicRoute(route);
     } catch (error) {
       this.concurrent(error);
     }
+  }
+  async inheritRoute(
+    session: AuthenticatedSession,
+    stage: string,
+    expectedRevision: number,
+  ) {
+    this.available();
+    const member = await this.access.requireOrganization(
+      session,
+      "ai.routing.manage",
+      true,
+    );
+    if (!aiStages.includes(stage as (typeof aiStages)[number]))
+      throw new BadRequestException("Choose a lifecycle stage");
+    await this.db.$transaction(
+      async (tx) => {
+        await new AuthorizationService(tx as PrismaService).requireOrganization(
+          session,
+          "ai.routing.manage",
+        );
+        const removed = await tx.aiStageRoute.deleteMany({
+          where: {
+            organizationId: member.organizationId,
+            stage,
+            revision: expectedRevision,
+          },
+        });
+        if (!removed.count)
+          throw new ConflictException(
+            "Stage settings changed. Refresh and try again.",
+          );
+        await tx.auditEvent.create({
+          data: {
+            event: "ai.route.inherits-default",
+            actorId: session.identityId,
+            metadata: {
+              organizationId: member.organizationId,
+              stage,
+              expectedRevision,
+            },
+          },
+        });
+      },
+      { isolationLevel: "Serializable" },
+    );
+    return { inherited: true };
   }
   async preview(
     session: AuthenticatedSession,
     stage: string,
     containsSource: boolean,
-    inputTokens: number,
   ) {
     this.available();
     const member = await this.access.requireOrganization(
@@ -519,11 +578,7 @@ export class AiConfigurationService {
     );
     if (!aiStages.includes(stage as (typeof aiStages)[number]))
       throw new BadRequestException("Choose a lifecycle stage");
-    const route = await this.db.aiStageRoute.findUnique({
-      where: {
-        organizationId_stage: { organizationId: member.organizationId, stage },
-      },
-    });
+    const route = await effectiveAiRoute(this.db, member.organizationId, stage);
     const providers = await this.db.aiProviderConnection.findMany({
       where: {
         organizationId: member.organizationId,
@@ -541,19 +596,15 @@ export class AiConfigurationService {
       ? "ROUTE_DISABLED"
       : containsSource && !route.allowSource
         ? "SOURCE_SHARING_DISABLED"
-        : inputTokens > route.maxInputTokens
-          ? "INPUT_LIMIT_EXCEEDED"
-          : !id
-            ? "CONNECTION_UNAVAILABLE"
-            : "CONFIGURATION_READY";
+        : !id
+          ? "CONNECTION_UNAVAILABLE"
+          : "CONFIGURATION_READY";
     await this.access.requireOrganization(session, "ai.usage.read");
     return {
       reason,
       providerId: reason === "CONFIGURATION_READY" ? id : null,
       routeRevision: route?.revision ?? null,
       executionAvailable: aiReviewsEnabled(),
-      maxOutputTokens: route?.maxOutputTokens ?? null,
-      dailyBudgetCents: route?.dailyBudgetCents ?? null,
     };
   }
 }

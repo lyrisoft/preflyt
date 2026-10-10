@@ -32,7 +32,7 @@ type InboxData = {
 export const titles: Record<string, string> = {
   NATIVE_EXECUTION_FAILED: 'Check execution failed',
   AI_MODEL_UNAVAILABLE: 'Model requests keep failing',
-  AI_REVIEW_BUDGET_REACHED: 'Daily AI review reservation limit reached',
+  AI_REVIEW_BUDGET_REACHED: 'Previous AI review could not start',
   CRITICAL_FINDINGS_REPORTED: 'Critical findings reported',
   POLICY_PUBLISHED: 'Policy published',
   READINESS_BLOCKED: 'PR check blocked',

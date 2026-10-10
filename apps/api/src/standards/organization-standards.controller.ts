@@ -43,13 +43,18 @@ class AiCheckDto {
   stages!: string[];
 }
 class CheckDto {
+  @IsOptional() @IsString() @MaxLength(4000) workflowCommand?: string;
+  @IsOptional() @IsString() @MaxLength(512) reportPath?: string;
   @IsString() @MaxLength(80) id!: string;
   @IsString() @MaxLength(120) title!: string;
   @IsString() @MaxLength(4000) guidance!: string;
 }
 class StandardDto {
-  @IsOptional() @IsArray() @ArrayMaxSize(64)
-  @ValidateNested({ each: true }) @Type(() => CheckDto)
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(64)
+  @ValidateNested({ each: true })
+  @Type(() => CheckDto)
   checks?: CheckDto[];
 
   @IsOptional()

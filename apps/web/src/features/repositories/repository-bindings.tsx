@@ -504,10 +504,10 @@ export function RepositoryBindings({
           <SurfaceIcon icon={Link2} tone='teal' />
           <div className='min-w-0 space-y-1'>
             <CardTitle asChild>
-              <h2>CI jobs</h2>
+              <h2>{policyId ? 'Check source mappings' : 'CI jobs'}</h2>
             </CardTitle>
             <CardDescription>
-              Connect the jobs that run your tests and scans to your standards.
+              Choose which CI job supplies the result for each check.
             </CardDescription>
           </div>
         </div>

@@ -271,6 +271,10 @@ export class AuthorizationService {
     )
     if (repo) {
       const part = repo[2] ?? ''
+      if (part === 'pipeline-setup' || part.startsWith('pipeline-setup/')) {
+        await this.requireRepository(session, repo[1], request.method === 'GET' ? 'policy.read' : 'policy.publish')
+        return true
+      }
       if (part === 'ai-reviews' || part.startsWith('ai-reviews/')) {
         await this.requireRepository(session, repo[1], request.method === 'GET' ? 'assessment.read' : 'ai.review.run')
         return true

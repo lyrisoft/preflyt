@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { Link } from '@tanstack/react-router'
 import { RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Switch } from '@/components/ui/switch'
 import {
   Table,
   TableBody,
@@ -27,7 +29,7 @@ type Task = {
 }
 type Result = {
   available: boolean
-  settings: { enabled: boolean; revision: number }
+  settings: { enabled: boolean; revision: number; pipelineComments?: boolean }
   tasks: Task[]
   hasMore: boolean
 }
@@ -53,19 +55,25 @@ export function ReadinessAutomation({
     retry: false,
     refetchInterval: settingsOnly ? false : 15_000,
   })
-  const toggle = async () => {
+  const toggle = async (pipelineComments?: boolean) => {
     if (!query.data) return
     setBusy(true)
     setError('')
     try {
       await governanceRequest(root, {
-        enabled: !query.data.settings.enabled,
+        enabled:
+          pipelineComments === undefined
+            ? !query.data.settings.enabled
+            : query.data.settings.enabled,
+        ...(pipelineComments !== undefined ? { pipelineComments } : {}),
         expectedRevision: query.data.settings.revision,
       })
       toast.success(
-        query.data.settings.enabled
-          ? 'Automatic PR checks disabled'
-          : 'Automatic PR checks enabled'
+        pipelineComments !== undefined
+          ? 'PR summary preference saved'
+          : query.data.settings.enabled
+            ? 'PR checks disabled'
+            : 'PR checks enabled'
       )
       await query.refetch()
     } catch (e) {
@@ -77,7 +85,9 @@ export function ReadinessAutomation({
   return (
     <Card className='gap-4'>
       <CardHeader className='flex flex-wrap items-center justify-between gap-3'>
-        <CardTitle>Automatic publishing</CardTitle>
+        <CardTitle>
+          {settingsOnly ? 'Policy results on GitHub' : 'PR checks'}
+        </CardTitle>
         <div className='flex gap-2'>
           <Button
             variant='outline'
@@ -88,7 +98,7 @@ export function ReadinessAutomation({
             <RefreshCw className='size-4' />
             Refresh
           </Button>
-          {canPublish && (
+          {canPublish && settingsOnly && (
             <Button
               size='sm'
               disabled={
@@ -107,6 +117,25 @@ export function ReadinessAutomation({
         </div>
       </CardHeader>
       <CardContent className='space-y-4'>
+        {!settingsOnly && (
+          <Link
+            to='/organization-settings'
+            search={{ tab: 'pr-checks' }}
+            className='text-sm underline'
+          >
+            PR feedback settings
+          </Link>
+        )}
+        {settingsOnly && query.data && !query.isError && (
+          <label className='flex items-center justify-between gap-3 text-sm'>
+            <span>Post a policy summary comment on the PR</span>
+            <Switch
+              checked={query.data.settings.pipelineComments ?? false}
+              disabled={!canPublish || busy}
+              onCheckedChange={(value) => void toggle(value)}
+            />
+          </label>
+        )}
         {query.isPending ? (
           <p role='status'>Loading publishing settings…</p>
         ) : (

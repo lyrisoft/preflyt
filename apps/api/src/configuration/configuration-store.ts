@@ -125,6 +125,9 @@ export function validateConfiguration(
       try {
         const url = new URL(value);
         if (
+          (name === "PREFLYT_PUBLIC_API_URL" &&
+            (url.protocol !== "https:" ||
+              ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname))) ||
           url.username ||
           url.password ||
           url.hash ||
@@ -139,7 +142,11 @@ export function validateConfiguration(
           throw new Error();
       } catch {
         throw new BadRequestException(
-          "Invalid " + field.label + "; use HTTPS or a local development URL",
+          "Invalid " +
+            field.label +
+            (name === "PREFLYT_PUBLIC_API_URL"
+              ? "; use a public HTTPS API URL"
+              : "; use HTTPS or a local development URL"),
         );
       }
     }

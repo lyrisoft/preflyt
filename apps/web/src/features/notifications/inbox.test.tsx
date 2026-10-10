@@ -18,7 +18,7 @@ vi.mock('./notification-query', () => ({
   useInbox: () => inbox,
   titles: {
     AI_MODEL_UNAVAILABLE: 'Model requests keep failing',
-    AI_REVIEW_BUDGET_REACHED: 'Daily AI review reservation limit reached',
+    AI_REVIEW_BUDGET_REACHED: 'Previous AI review could not start',
     NATIVE_EXECUTION_FAILED: 'Check execution failed',
   },
 }))
@@ -79,11 +79,7 @@ const item = {
 }
 it.each([
   ['AI_MODEL_UNAVAILABLE', 'connections', 'Model requests keep failing'],
-  [
-    'AI_REVIEW_BUDGET_REACHED',
-    'routing',
-    'Daily AI review reservation limit reached',
-  ],
+  ['AI_REVIEW_BUDGET_REACHED', 'routing', 'Previous AI review could not start'],
 ])('links %s to the right AI settings tab', (type, tab, label) => {
   const html = renderToStaticMarkup(
     <NotificationItem
@@ -96,7 +92,7 @@ it.each([
   expect(html).toContain(`&quot;tab&quot;:&quot;${tab}&quot;`)
   expect(html).toContain(label)
   if (type === 'AI_REVIEW_BUDGET_REACHED')
-    expect(html).toContain('estimates, not provider invoices')
+    expect(html).toContain('blocked by previous AI settings')
 })
 it('links native execution failures to saved commit assessments without inventing an assessment result', () => {
   const html = renderToStaticMarkup(

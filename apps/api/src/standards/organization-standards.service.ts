@@ -1,3 +1,4 @@
+import { workflowSnippet } from "../assessments/workflow-snippets.js";
 import { randomUUID } from "node:crypto";
 import {
   BadRequestException,
@@ -11,6 +12,8 @@ import { PrismaService } from "../prisma/prisma.service.js";
 import {
   catalogue,
   customRule,
+  checkWorkflow,
+  validCheckWorkflow,
   type CheckInput,
   organizationPack,
   packDigest,
@@ -74,7 +77,19 @@ export class OrganizationStandardsService {
       select: { id: true, name: true, version: true, contentDigest: true },
     });
     await this.access.requireOrganization(session, "policy.read");
-    return { builtIn: catalogue, versions, reviewSkills };
+    const snippets = <T extends StandardPack>(pack: T) => ({
+      ...pack,
+      workflowSetup: workflowSnippet(pack.rules),
+      rules: pack.rules.map((rule) => ({
+        ...rule,
+        workflowSetup: workflowSnippet([rule]),
+      })),
+    });
+    return {
+      builtIn: catalogue.map(snippets),
+      versions: versions.map(snippets),
+      reviewSkills,
+    };
   }
   async save(
     session: AuthenticatedSession,
@@ -100,7 +115,11 @@ export class OrganizationStandardsService {
     const available = new Map(
       catalogue.flatMap((p) => p.rules).map((r) => [r.id, r]),
     );
-    if ((input.checks?.length ?? 0) > 64 || new Set((input.checks ?? []).map(c => c.id)).size !== (input.checks?.length ?? 0))
+    if (
+      (input.checks?.length ?? 0) > 64 ||
+      new Set((input.checks ?? []).map((c) => c.id)).size !==
+        (input.checks?.length ?? 0)
+    )
       throw new BadRequestException("Use up to 64 distinct checks");
     const id = packId ?? `org-standard-${randomUUID()}`;
     try {
@@ -163,19 +182,47 @@ export class OrganizationStandardsService {
           const resolvedRules = new Map(available);
           if (previous) {
             const previousPack = organizationPack(previous.definition);
-            if (!previousPack) throw new ConflictException("Saved checks could not be verified");
-            for (const check of previousPack.rules) resolvedRules.set(check.id, check);
+            if (!previousPack)
+              throw new ConflictException("Saved checks could not be verified");
+            for (const check of previousPack.rules)
+              resolvedRules.set(check.id, check);
           }
           for (const check of input.checks ?? []) {
-            if (!input.ruleIds.includes(check.id) || typeof check.title !== 'string' || !check.title.trim() || check.title.length > 120 || typeof check.guidance !== 'string' || check.guidance.length > 4000)
-              throw new BadRequestException("Add a check name and valid guidance");
+            if (
+              !input.ruleIds.includes(check.id) ||
+              typeof check.title !== "string" ||
+              !check.title.trim() ||
+              check.title.length > 120 ||
+              typeof check.guidance !== "string" ||
+              check.guidance.length > 4000 ||
+              !validCheckWorkflow(check)
+            )
+              throw new BadRequestException(
+                "Add a check name and valid guidance",
+              );
             const base = resolvedRules.get(check.id);
-            const updated = check.id.startsWith('custom-') ? customRule(check) : base ? { ...base, title: check.title.trim(), guidance: check.guidance.trim() } : undefined;
-            if (!updated) throw new BadRequestException("Choose a supported check or add a test or scan report check");
+            const updated = check.id.startsWith("custom-")
+              ? customRule(check)
+              : base
+                ? {
+                    ...base,
+                    workflowCommand: undefined,
+                    reportPath: undefined,
+                    title: check.title.trim(),
+                    guidance: check.guidance.trim(),
+                    ...checkWorkflow(check),
+                  }
+                : undefined;
+            if (!updated)
+              throw new BadRequestException(
+                "Choose a supported check or add a test or scan report check",
+              );
             resolvedRules.set(check.id, updated);
           }
-          if (input.ruleIds.some(id => !resolvedRules.has(id)))
-            throw new BadRequestException("Choose supported checks or add the missing check details");
+          if (input.ruleIds.some((id) => !resolvedRules.has(id)))
+            throw new BadRequestException(
+              "Choose supported checks or add the missing check details",
+            );
           const revision = (previous?.revision ?? 0) + 1;
           const definition: Omit<StandardPack, "digest"> = {
             schemaVersion: 1,
@@ -191,7 +238,9 @@ export class OrganizationStandardsService {
             ...(aiChecks.length
               ? { aiChecks: aiChecks.sort((a, b) => a.id.localeCompare(b.id)) }
               : {}),
-            rules: [...input.ruleIds].sort().map((id) => resolvedRules.get(id)!),
+            rules: [...input.ruleIds]
+              .sort()
+              .map((id) => resolvedRules.get(id)!),
           };
           const digest = packDigest(definition);
           if (!organizationPack({ ...definition, digest }))

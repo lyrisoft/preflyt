@@ -23,6 +23,17 @@ export const workspaceSearchSchema = z.object({
     .catch(undefined),
   team: z.string().optional().catch(undefined),
   policy: z.string().optional().catch(undefined),
+  ruleset: z
+    .union([
+      z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+      z
+        .string()
+        .regex(/^[1-9][0-9]*$/)
+        .transform(Number)
+        .pipe(z.number().int().positive().max(Number.MAX_SAFE_INTEGER)),
+    ])
+    .optional()
+    .catch(undefined),
   rulesetView: z
     .enum(['github', 'drafts', 'deployments'])
     .optional()

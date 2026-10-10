@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   Pencil,
@@ -40,6 +40,7 @@ import { PageHelpDrawer } from '@/components/page-help-drawer'
 import { StatusBadge } from '@/components/status-badge'
 import { governanceRequest } from '../repositories/governance-api'
 import type { Pack } from '../repositories/repository-queries'
+import { WorkflowSnippet } from '../repositories/workflow-snippet'
 import { useNavigationSession } from './navigation-session'
 import { canPerform } from './scoped-access'
 
@@ -49,7 +50,11 @@ type Library = {
   versions: Version[]
   reviewSkills?: { id: string; name: string; version: number }[]
 }
-export function OrganizationStandardsLibrary() {
+export function OrganizationStandardsLibrary({
+  renderHeader,
+}: {
+  renderHeader?: (actions: ReactNode) => ReactNode
+} = {}) {
   const session = useNavigationSession()
   const allowed = canPerform(session.data, 'standards.manage')
   const [tab, setTab] = useState('organization')
@@ -83,8 +88,52 @@ export function OrganizationStandardsLibrary() {
     `${p.title} ${p.description}`.toLowerCase().includes(search.toLowerCase())
   )
   const pages = Math.max(1, Math.ceil(packs.length / 12))
+  const actions = (
+    <>
+      {allowed && data && (
+        <Button size='sm' onClick={() => setEditor({ edit: false })}>
+          <Plus className='size-4' />
+          New standard
+        </Button>
+      )}
+      <Button
+        size='sm'
+        variant='outline'
+        disabled={query.isFetching}
+        onClick={() => void query.refetch()}
+      >
+        <RefreshCw className='size-4' />
+        Refresh
+      </Button>
+      <PageHelpDrawer
+        title='Standards'
+        sections={[
+          {
+            title: 'Create and edit',
+            content:
+              'Owners and Admins can create organization standards, edit them or copy a built-in standard. Choose existing checks, add a pipeline test or scan check, or edit check names and guidance. New standards start with the baseline checks selected.',
+          },
+          {
+            title: 'Versions and adoption',
+            content:
+              'Saving creates a new version. Existing repository selections, policies and assessments keep their saved version. Choose the standard version when creating a branch policy in Policies. Editing the library does not change GitHub protections.',
+          },
+          {
+            title: 'Supported checks',
+            content:
+              'Standards group rule-based checks and advisory AI Reviews. Each AI Review uses an approved skill version and chooses when it runs. AI suggestions cannot satisfy required rule-based checks. Reviews use saved check evidence and may include verified PR changes when source sharing is enabled.',
+          },
+        ]}
+      />
+    </>
+  )
   return (
     <section className='space-y-5'>
+      {renderHeader ? (
+        renderHeader(actions)
+      ) : (
+        <div className='flex flex-wrap items-center gap-2'>{actions}</div>
+      )}
       <div className='flex flex-wrap items-center justify-between gap-3'>
         <Tabs
           value={tab}
@@ -100,43 +149,6 @@ export function OrganizationStandardsLibrary() {
             <TabsTrigger value='built-in'>Built-in standards</TabsTrigger>
           </TabsList>
         </Tabs>
-        <div className='flex items-center gap-2'>
-          {allowed && data && (
-            <Button size='sm' onClick={() => setEditor({ edit: false })}>
-              <Plus className='size-4' />
-              New standard
-            </Button>
-          )}
-          <Button
-            size='sm'
-            variant='outline'
-            disabled={query.isFetching}
-            onClick={() => void query.refetch()}
-          >
-            <RefreshCw className='size-4' />
-            Refresh
-          </Button>
-          <PageHelpDrawer
-            title='Standards'
-            sections={[
-              {
-                title: 'Create and edit',
-                content:
-                  'Owners and Admins can create organization standards, edit them or copy a built-in standard. Choose existing checks, add a pipeline test or scan check, or edit check names and guidance. New standards start with the baseline checks selected.',
-              },
-              {
-                title: 'Versions and adoption',
-                content:
-                  'Saving creates a new version. Existing repository selections, policies and assessments keep their saved version. Choose the standard version when creating a branch policy in Policies. Editing the library does not change GitHub protections.',
-              },
-              {
-                title: 'Supported checks',
-                content:
-                  'Standards group rule-based checks and advisory AI Reviews. Each AI Review uses an approved skill version and chooses when it runs. AI suggestions cannot satisfy required rule-based checks. Reviews use saved check evidence and may include verified PR changes when source sharing is enabled.',
-              },
-            ]}
-          />
-        </div>
       </div>
       <Input
         aria-label='Filter standards'
@@ -307,6 +319,10 @@ export function OrganizationStandardsLibrary() {
             <SheetDescription>{details?.description}</SheetDescription>
           </SheetHeader>
           <div className='flex-1 space-y-3 overflow-y-auto px-4 pb-6'>
+            <WorkflowSnippet
+              setup={details?.workflowSetup}
+              title='Standard workflow snippet'
+            />
             {data &&
               details?.rules.map((rule) => (
                 <article
@@ -328,6 +344,10 @@ export function OrganizationStandardsLibrary() {
                   <p className='text-xs text-muted-foreground'>
                     {rule.guidance}
                   </p>
+                  <WorkflowSnippet
+                    setup={rule.workflowSetup}
+                    title='Check workflow snippet'
+                  />
                   {rule.id.startsWith('custom-') && (
                     <details className='text-xs text-muted-foreground'>
                       <summary className='cursor-pointer'>
@@ -390,6 +410,8 @@ function StandardEditor({
     title: string
     guidance: string
     format: 'junit' | 'sarif'
+    workflowCommand?: string
+    reportPath?: string
   } | null>(null)
   const [checkError, setCheckError] = useState('')
   const [checkSearch, setCheckSearch] = useState('')
@@ -434,6 +456,8 @@ function StandardEditor({
       id,
       title: checkDraft.title.trim(),
       guidance: checkDraft.guidance.trim(),
+      workflowCommand: checkDraft.workflowCommand?.trim() || undefined,
+      reportPath: checkDraft.reportPath?.trim() || undefined,
       capability: previous?.capability ?? 'import_only',
       requiredIn: previous?.requiredIn ?? ['RECOMMENDED', 'STRICT'],
     }
@@ -465,10 +489,12 @@ function StandardEditor({
           checks: selected.flatMap((id) =>
             rules
               .filter((r) => r.id === id)
-              .map(({ id, title, guidance }) => ({
+              .map(({ id, title, guidance, workflowCommand, reportPath }) => ({
                 id,
                 title,
                 guidance: guidance ?? '',
+                workflowCommand,
+                reportPath,
               }))
           ),
           ...(aiChecks.length ? { aiChecks } : {}),
@@ -695,6 +721,42 @@ function StandardEditor({
                         }
                       />
                     </label>
+                    <label className='block space-y-1.5 text-sm'>
+                      <span>Workflow command (optional)</span>
+                      <textarea
+                        value={checkDraft.workflowCommand ?? ''}
+                        maxLength={4000}
+                        rows={2}
+                        className='w-full rounded-md border bg-background px-3 py-2 font-mono text-xs'
+                        placeholder='Use the built-in recipe, or enter your own test or scan command.'
+                        onChange={(e) =>
+                          setCheckDraft({
+                            ...checkDraft,
+                            workflowCommand: e.target.value,
+                          })
+                        }
+                      />
+                    </label>
+                    {checkDraft.workflowCommand && (
+                      <label className='block space-y-1.5 text-sm'>
+                        <span>Result file (optional)</span>
+                        <Input
+                          value={checkDraft.reportPath ?? ''}
+                          maxLength={512}
+                          placeholder='Example: reports/tests.xml or reports/scan.sarif'
+                          onChange={(e) =>
+                            setCheckDraft({
+                              ...checkDraft,
+                              reportPath: e.target.value,
+                            })
+                          }
+                        />
+                        <span className='block text-xs text-muted-foreground'>
+                          Use the file your command produces. The snippet uses
+                          this path automatically.
+                        </span>
+                      </label>
+                    )}
                     {checkError && (
                       <p role='alert' className='text-sm text-destructive'>
                         {checkError}
@@ -786,6 +848,8 @@ function StandardEditor({
                                 id: rule.id,
                                 title: rule.title,
                                 guidance: rule.guidance ?? '',
+                                workflowCommand: rule.workflowCommand,
+                                reportPath: rule.reportPath,
                                 format: rule.id.startsWith('custom-sarif-')
                                   ? 'sarif'
                                   : 'junit',
@@ -1125,7 +1189,12 @@ export function StandardLibraryCard({
           {pack.aiChecks?.length ? ` · ${pack.aiChecks.length} AI reviews` : ''}
           <ChevronRight className='size-3.5' aria-hidden />
         </Button>
-        <div className='flex gap-1'>
+        <div className='flex flex-wrap gap-1'>
+          <WorkflowSnippet
+            compact
+            setup={pack.workflowSetup}
+            title={`${pack.title} · v${pack.version} — Workflow YAML`}
+          />
           {organization && (
             <Button
               size='sm'

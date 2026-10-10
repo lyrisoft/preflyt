@@ -108,3 +108,16 @@ it('never displays a stale stored success as the current result of an unverified
   expect(html).toContain('Not evaluated')
   expect(html).not.toContain('Passed')
 })
+
+it('offers no manual publishing flow even to publishers when publication is enabled', () => {
+  state.history = {
+    ...state.history,
+    data: { enabled: true, hasMore: false, publications: [] },
+  }
+  const html = renderToStaticMarkup(
+    <CheckPublications repositoryId='51' canRead canPublish />
+  )
+  expect(html).not.toContain('Publish check')
+  expect(html).not.toContain('Publish PR check')
+  expect(html).toContain('No Preflyt checks published yet.')
+})

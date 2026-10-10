@@ -1,5 +1,5 @@
-import { currentStandards } from '../standards/policy-standards.js';
-import { configurationValue } from '../configuration/runtime-configuration.js'
+import { currentStandards } from "../standards/policy-standards.js";
+import { configurationValue } from "../configuration/runtime-configuration.js";
 import { recordReadinessNotification } from "../notifications/notification-event.js";
 import { randomUUID } from "node:crypto";
 import {
@@ -19,8 +19,8 @@ import { CheckPublicationService } from "./check-publication.service.js";
 import { digest } from "./assessment-digest.js";
 import { readinessCheck } from "../github/ruleset-draft.js";
 export const automationEnabled = () =>
-  configurationValue('GITHUB_CHECK_PUBLICATION_ENABLED') === "true" &&
-  configurationValue('AUTOMATIC_CHECK_PUBLICATION_ENABLED') === "true";
+  configurationValue("GITHUB_CHECK_PUBLICATION_ENABLED") === "true" &&
+  configurationValue("AUTOMATIC_CHECK_PUBLICATION_ENABLED") === "true";
 export function automaticExternalId(
   repositoryId: string,
   prNumber: number,
@@ -78,9 +78,12 @@ export class ReadinessAutomationService {
     githubId: string,
     enabled: boolean,
     expectedRevision: number,
+    pipelineComments?: boolean,
   ) {
     if (
       typeof enabled !== "boolean" ||
+      (pipelineComments !== undefined &&
+        typeof pipelineComments !== "boolean") ||
       !Number.isInteger(expectedRevision) ||
       expectedRevision < 0
     )
@@ -123,6 +126,7 @@ export class ReadinessAutomationService {
       if ((previous?.revision ?? 0) !== expectedRevision)
         throw new ConflictException("Settings changed. Refresh and try again");
       const data = {
+        ...(pipelineComments !== undefined ? { pipelineComments } : {}),
         enabled,
         actorId: session.identityId,
         organizationId: session.organizationId!,
@@ -144,6 +148,7 @@ export class ReadinessAutomationService {
           metadata: {
             repositoryGithubId: githubId,
             enabled,
+            pipelineComments: row.pipelineComments,
             revision: row.revision,
           },
         },
@@ -327,8 +332,9 @@ export class ReadinessAutomationService {
         repo.githubId.toString(),
         "policy.publish",
       );
-      const selection =
-        await currentStandards(this.prisma, repo.id, { branchRef: `refs/heads/${context.base.ref}` });
+      const selection = await currentStandards(this.prisma, repo.id, {
+        branchRef: `refs/heads/${context.base.ref}`,
+      });
       if (!selection)
         throw new ConflictException(
           "Save engineering standards before enabling readiness checks",

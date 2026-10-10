@@ -66,7 +66,9 @@ export function OrganizationSettingsPage() {
     session.data,
     'organization.members.manage'
   )
-  const canPublishChecks = canPerform(session.data, 'policy.publish')
+  const canPublishChecks =
+    canPerform(session.data, 'policy.publish') ||
+    canPerform(session.data, 'ai.routing.manage')
   const defaultTab = canManageWorkspace
     ? 'workspace'
     : session.data?.platformAdmin
@@ -152,7 +154,7 @@ export function OrganizationSettingsPage() {
               title='Settings'
               sections={[
                 {
-                  title: 'PR checks',
+                  title: 'PR feedback',
                   content:
                     'Select a repository and enable automatic publishing to put Preflyt policy review results on its GitHub pull requests. Deployment administrators must enable check publication and automatic publication; the GitHub App needs Checks: write. Missing evidence remains incomplete. Publishing is separate from GitHub branch rules requiring the check before merge.',
                 },
@@ -214,7 +216,7 @@ export function OrganizationSettingsPage() {
             </TabsTrigger>
           )}
           {canPublishChecks && (
-            <TabsTrigger value='pr-checks'>PR checks</TabsTrigger>
+            <TabsTrigger value='pr-checks'>PR feedback</TabsTrigger>
           )}
         </TabsList>
         {session.data?.platformAdmin && (

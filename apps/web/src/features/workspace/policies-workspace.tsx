@@ -1,8 +1,15 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useSearch } from '@tanstack/react-router'
-import { ArrowRight } from 'lucide-react'
+import { ArrowRight, Link2, Workflow } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+} from '@/components/ui/card'
 import {
   Select,
   SelectContent,
@@ -10,16 +17,26 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { RepositoryPicker } from '@/components/repository-picker'
 import { StatusBadge } from '@/components/status-badge'
+import { SurfaceIcon } from '@/components/surface-icon'
 import { engineeringRead } from '../repositories/engineering-queries'
 import {
   GatePolicyPanel,
   type Policies,
 } from '../repositories/gate-policy-panel'
 import { governanceRequest } from '../repositories/governance-api'
+import { PipelineWorkflowSetup } from '../repositories/pipeline-workflow-setup'
 import { RepositoryBindings } from '../repositories/repository-bindings'
 import { TeamPolicyAssignment } from '../teams/team-policy-assignment'
 import type { Detail, Options, Team } from '../teams/teams-page'
@@ -38,6 +55,7 @@ export function PoliciesWorkspace({
   repositories: Repository[]
 }) {
   const session = useNavigationSession()
+  const [policyTab, setPolicyTab] = useState('branches')
   const search = useSearch({ strict: false }) as {
     repository?: string
     policyScope?: 'repository' | 'team' | 'organization'
@@ -118,13 +136,10 @@ export function PoliciesWorkspace({
   }
   const team = detail.isError ? undefined : detail.data
   return (
-    <div className='space-y-6'>
-      <div className='flex flex-wrap items-end gap-4 rounded-xl border p-4'>
-        <div className='w-full space-y-2 sm:w-44'>
-          <label
-            className='text-xs font-medium text-muted-foreground'
-            htmlFor='policy-scope'
-          >
+    <Tabs value={policyTab} onValueChange={setPolicyTab} className='gap-3'>
+      <div className='flex flex-wrap items-center gap-2 rounded-xl border p-2.5'>
+        <div className='w-full sm:w-36'>
+          <label className='sr-only' htmlFor='policy-scope'>
             Policy scope
           </label>
           <Select
@@ -154,12 +169,12 @@ export function PoliciesWorkspace({
           </Select>
         </div>
         {scope === 'repository' && (
-          <div className='min-w-0 flex-1'>
+          <div className='w-full min-w-0 sm:w-auto sm:flex-1'>
             <RepositoryPicker
               repositories={repositories}
               value={search.repository ?? repository?.githubId ?? ''}
               aria-label='Repository'
-              className='w-full'
+              className='w-full sm:max-w-xl'
               onValueChange={(repository) =>
                 void navigate({
                   to: '/policies',
@@ -206,18 +221,26 @@ export function PoliciesWorkspace({
               </Select>
             </div>
           )}
+        {scope === 'repository' && repository && (
+          <TabsList className='w-full p-1 sm:ml-auto sm:w-auto'>
+            <TabsTrigger
+              value='branches'
+              className='min-h-8 flex-1 py-1 sm:flex-none'
+            >
+              Branch policies
+            </TabsTrigger>
+            <TabsTrigger
+              value='ci'
+              className='min-h-8 flex-1 py-1 sm:flex-none'
+            >
+              CI jobs
+            </TabsTrigger>
+          </TabsList>
+        )}
       </div>
       {scope === 'repository' ? (
         repository ? (
-          <Tabs
-            key={repository.githubId}
-            defaultValue='branches'
-            className='space-y-6'
-          >
-            <TabsList>
-              <TabsTrigger value='branches'>Branch policies</TabsTrigger>
-              <TabsTrigger value='ci'>CI jobs</TabsTrigger>
-            </TabsList>
+          <>
             <TabsContent value='branches'>
               <GatePolicyPanel
                 key={`${repository.githubId}:${search.policy ?? ''}`}
@@ -240,6 +263,8 @@ export function PoliciesWorkspace({
             </TabsContent>
             <TabsContent value='ci'>
               <PolicyCiJobs
+                key={repository.githubId}
+                onChoosePolicy={() => setPolicyTab('branches')}
                 repositoryId={repository.githubId}
                 canManage={canPerform(
                   session.data,
@@ -248,7 +273,7 @@ export function PoliciesWorkspace({
                 )}
               />
             </TabsContent>
-          </Tabs>
+          </>
         ) : (
           <p role='alert' className='text-sm'>
             This repository is no longer selected or accessible. Choose another
@@ -438,17 +463,20 @@ export function PoliciesWorkspace({
           </div>
         )
       )}
-    </div>
+    </Tabs>
   )
 }
 
 function PolicyCiJobs({
   repositoryId,
   canManage,
+  onChoosePolicy,
 }: {
   repositoryId: string
   canManage: boolean
+  onChoosePolicy: () => void
 }) {
+  const session = useNavigationSession()
   const [chosen, setChosen] = useState<string | null>(null)
   const policies = useQuery({
     queryKey: ['gate-policies', repositoryId],
@@ -457,8 +485,16 @@ function PolicyCiJobs({
       engineeringRead<Policies>(repositoryId, '/gate-policies', signal),
   })
   const active =
-    policies.data?.revisions.filter((policy) =>
-      ['DRAFT', 'APPROVED', 'PUBLISHED'].includes(policy.state)
+    policies.data?.revisions.filter(
+      (policy) =>
+        ['DRAFT', 'APPROVED', 'PUBLISHED'].includes(policy.state) &&
+        (policy.state !== 'PUBLISHED' ||
+          !policies.data?.revisions.some(
+            (other) =>
+              other.state === 'PUBLISHED' &&
+              other.branchRef === policy.branchRef &&
+              other.revision > policy.revision
+          ))
     ) ?? []
   const selected =
     active.find((policy) => policy.id === chosen) ??
@@ -480,24 +516,61 @@ function PolicyCiJobs({
       </div>
     )
   return (
-    <div className='space-y-5'>
-      <p className='max-w-2xl text-sm text-muted-foreground'>
-        Use this when a policy should read test or scan results from your
-        existing pipeline. These connections do not create or run jobs.
-      </p>
-      {!selected ? (
-        <p className='rounded-xl border p-4 text-sm'>
-          No branch policies yet. Create a policy in the Branch policies tab,
-          then connect pipeline results here if needed.
-        </p>
-      ) : (
+    <div className='space-y-3'>
+      {(!selected || selected.state !== 'PUBLISHED') && (
+        <Card>
+          <CardHeader>
+            <div className='flex items-center gap-3'>
+              <SurfaceIcon icon={Workflow} tone='teal' />
+              <div>
+                <CardTitle>Connect GitHub Actions</CardTitle>
+                <CardDescription>
+                  Run your policy in an existing workflow and see its results in
+                  Preflyt.
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className='space-y-3'>
+            <div className='grid gap-3 text-sm sm:grid-cols-3'>
+              <div className='rounded-lg border p-3'>
+                <p className='font-medium'>1. Choose a policy</p>
+                <p className='mt-1 text-muted-foreground'>
+                  Create and publish the standards for your PR target branch.
+                </p>
+              </div>
+              <div className='rounded-lg border p-3'>
+                <p className='font-medium'>2. Connect a workflow</p>
+                <p className='mt-1 text-muted-foreground'>
+                  Open your GitHub workflow, add the policy checks and review a
+                  setup PR.
+                </p>
+              </div>
+              <div className='rounded-lg border p-3'>
+                <p className='font-medium'>3. See results</p>
+                <p className='mt-1 text-muted-foreground'>
+                  Completed runs become assessments, with optional PR summary
+                  comments.
+                </p>
+              </div>
+            </div>
+            <Button onClick={onChoosePolicy}>
+              Choose branch policy <ArrowRight className='size-4' />
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+      {!selected ? null : (
         <>
-          <div className='max-w-md space-y-2'>
-            <label htmlFor='ci-policy' className='text-sm font-medium'>
+          <div className='flex flex-wrap items-center gap-2'>
+            <label
+              htmlFor='ci-policy'
+              className='text-xs font-medium text-muted-foreground'
+            >
               Branch policy
             </label>
             <Select value={selected.id} onValueChange={setChosen}>
-              <SelectTrigger id='ci-policy'>
+              <SelectTrigger id='ci-policy' className='w-full sm:w-80'>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -509,13 +582,42 @@ function PolicyCiJobs({
                 ))}
               </SelectContent>
             </Select>
+            <Sheet key={`sources:${selected.id}`}>
+              <SheetTrigger asChild>
+                <Button variant='outline' size='sm' className='sm:ml-auto'>
+                  <Link2 className='size-4' /> Check sources
+                </Button>
+              </SheetTrigger>
+              <SheetContent className='w-full gap-0 sm:max-w-2xl'>
+                <SheetHeader className='border-b pr-12'>
+                  <SheetTitle>Check sources</SheetTitle>
+                  <SheetDescription>
+                    Workflow setup connects sources automatically. Review or
+                    change them here when reusing existing CI jobs.
+                  </SheetDescription>
+                </SheetHeader>
+                <div className='min-h-0 flex-1 overflow-y-auto p-4'>
+                  <RepositoryBindings
+                    key={`${selected.id}:${selected.selectionId}`}
+                    repositoryId={repositoryId}
+                    policyId={selected.id}
+                    canManage={canManage}
+                  />
+                </div>
+              </SheetContent>
+            </Sheet>
           </div>
-          <RepositoryBindings
-            key={`${selected.id}:${selected.selectionId}`}
-            repositoryId={repositoryId}
-            policyId={selected.id}
-            canManage={canManage}
-          />
+          {selected.state === 'PUBLISHED' && (
+            <PipelineWorkflowSetup
+              key={`pipeline:${selected.id}`}
+              repositoryId={repositoryId}
+              policyId={selected.id}
+              canManage={
+                canManage &&
+                canPerform(session.data, 'policy.publish', repositoryId)
+              }
+            />
+          )}
         </>
       )}
     </div>

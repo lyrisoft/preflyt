@@ -12,6 +12,7 @@ import {
   Pencil,
   ServerCog,
   ShieldCheck,
+  Workflow,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card'
@@ -65,7 +66,14 @@ export type ReviewSkill = {
 type Template = Omit<
   ReviewSkill,
   'id' | 'skillKey' | 'version' | 'contentDigest' | 'status' | 'enabled'
-> & { id?: string; category?: string; checks?: string[]; checkIds?: string[] }
+> & {
+  id?: string
+  category?: string
+  checks?: string[]
+  checkIds?: string[]
+  purpose?: 'workflow_edit'
+  version?: number
+}
 const categoryIcon = (category?: string) =>
   ({
     'Application Security': ShieldCheck,
@@ -73,6 +81,7 @@ const categoryIcon = (category?: string) =>
     'Testing and Quality': FlaskConical,
     'Backend Services': ServerCog,
     'Infrastructure as Code': Layers,
+    'GitHub Actions': Workflow,
   })[category ?? ''] ?? FileText
 
 export function SkillsCatalogue() {
@@ -161,7 +170,7 @@ export function SkillsCatalogue() {
     }
   }
   async function adoptBuiltin(template: Template) {
-    if (!template.id) return
+    if (!template.id || template.purpose === 'workflow_edit') return
     setBusy(true)
     setError('')
     try {
@@ -186,7 +195,7 @@ export function SkillsCatalogue() {
       <div className='flex flex-wrap items-center justify-between gap-3'>
         <div className='flex items-center gap-3'>
           <SurfaceIcon icon={BookOpen} tone='violet' size='sm' />
-          <h2 className='text-base font-semibold'>Review skills</h2>
+          <h2 className='text-base font-semibold'>Skills</h2>
         </div>
         {manage && (
           <div className='flex flex-wrap items-center gap-2'>
@@ -282,6 +291,12 @@ export function SkillsCatalogue() {
                           <p className='text-sm leading-5 text-muted-foreground'>
                             {t.description}
                           </p>
+                          {t.purpose === 'workflow_edit' && (
+                            <p className='border-t pt-3 text-xs text-muted-foreground'>
+                              v{t.version} · Used automatically by Rewrite
+                              workflow in Policies.
+                            </p>
+                          )}
                           {t.checks?.length ? (
                             <div className='border-t pt-3'>
                               <p className='mb-2 text-xs font-medium text-muted-foreground'>
@@ -308,7 +323,7 @@ export function SkillsCatalogue() {
                           >
                             View
                           </Button>
-                          {manage && (
+                          {manage && t.purpose !== 'workflow_edit' && (
                             <Button
                               size='sm'
                               onClick={() => void adoptBuiltin(t)}
@@ -479,6 +494,12 @@ export function SkillsCatalogue() {
           <DialogHeader>
             <DialogTitle>{preview?.name}</DialogTitle>
           </DialogHeader>
+          {preview?.purpose === 'workflow_edit' && (
+            <p className='text-xs text-muted-foreground'>
+              v{preview.version} · Used automatically by Rewrite workflow in
+              Policies.
+            </p>
+          )}
           {preview && (
             <div className='min-h-0 overflow-y-auto'>
               <MarkdownInstructions>
@@ -517,7 +538,7 @@ export function SkillsCatalogue() {
                   Download SKILL.md
                 </Button>
               )}
-              {manage && (
+              {manage && preview.purpose !== 'workflow_edit' && (
                 <Button
                   variant='outline'
                   onClick={() => {

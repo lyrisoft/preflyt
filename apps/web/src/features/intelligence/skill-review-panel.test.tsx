@@ -48,7 +48,6 @@ const review = {
   id: 'review',
   state: 'SUCCEEDED',
   failure: null,
-  reservedCents: 2,
   latencyMs: 1000,
   skills: [skill],
   checks: [check],

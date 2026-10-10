@@ -1,6 +1,10 @@
-import { recordAiBudgetNotification, recordAiInferenceOutcome, recordAiInferenceOutcomeInTransaction } from '../notifications/ai-notification.js';
-import { AiTransportError } from './ai-http.js';
-import { configurationValue } from '../configuration/runtime-configuration.js'
+import { effectiveAiRoute } from "./effective-ai-route.js";
+import {
+  recordAiInferenceOutcome,
+  recordAiInferenceOutcomeInTransaction,
+} from "../notifications/ai-notification.js";
+import { AiTransportError } from "./ai-http.js";
+import { configurationValue } from "../configuration/runtime-configuration.js";
 import { skillApplicability } from "./skill-applicability.js";
 import { GitHubProviderService } from "../github/github-provider.service.js";
 import { readPullRequestContext } from "../github-events/pull-request-context.js";
@@ -29,14 +33,12 @@ import {
 } from "./ai-configuration.js";
 import {
   reviewContext,
-  reviewPrompt,
   skillDigest,
   type ReviewContext,
 } from "./review-skills.js";
-import { reviewReservation, runSkillInference } from "./skill-inference.js";
+import { aiResponseTokenLimit, runSkillInference } from "./skill-inference.js";
 import type {
   AiReviewSkill,
-  AiStageRoute,
   AiProviderConnection,
 } from "../generated/prisma/client.js";
 import { assessmentAiChecks, type AiCheck } from "../standards/catalogue.js";
@@ -65,8 +67,6 @@ type Snapshot = {
   checks: AiCheck[];
   route: { id: string; revision: number };
   providers: { id: string; revision: number; endpointDigest: string }[];
-  inputTokens: number;
-  maxOutputTokens: number;
 };
 const publicReview = (r: any, allowUsage = false) => ({
   id: r.id,
@@ -81,8 +81,17 @@ const publicReview = (r: any, allowUsage = false) => ({
   providerId: r.providerId,
   result: r.result,
   latencyMs: r.latencyMs,
-  usage: allowUsage ? r.usage : null,
-  reservedCents: allowUsage ? Number(r.reservedMicroCents) / 1000000 : null,
+  usage:
+    allowUsage && Array.isArray(r.usage)
+      ? r.usage.map(
+          ({ providerId, inputTokens, outputTokens, cachedTokens }: any) => ({
+            providerId,
+            inputTokens,
+            outputTokens,
+            cachedTokens,
+          }),
+        )
+      : null,
   createdAt: r.createdAt,
   finishedAt: r.finishedAt,
   checks: (r.snapshot as Snapshot).checks ?? [],
@@ -111,9 +120,17 @@ export class SkillReviewService {
     this.closing = true;
     this.abort.abort();
   }
-  private async profile(record: { request: unknown; sourceSha: string }, repositoryId: string) {
-    const id = (record.request as { profileSnapshotId?: string })?.profileSnapshotId;
-    return id ? this.db.repositoryProfile.findFirst({ where: { id, repositoryId, sourceSha: record.sourceSha } }) : null;
+  private async profile(
+    record: { request: unknown; sourceSha: string },
+    repositoryId: string,
+  ) {
+    const id = (record.request as { profileSnapshotId?: string })
+      ?.profileSnapshotId;
+    return id
+      ? this.db.repositoryProfile.findFirst({
+          where: { id, repositoryId, sourceSha: record.sourceSha },
+        })
+      : null;
   }
   async list(
     session: AuthenticatedSession,
@@ -148,7 +165,11 @@ export class SkillReviewService {
     });
     const profile = await this.profile(assessment, repo.id);
     const checks = assigned.map((c) => ({
-      selection: skillApplicability(live.find(s=>s.id===c.skillId) ?? {}, profile, assessment.sourceSha),
+      selection: skillApplicability(
+        live.find((s) => s.id === c.skillId) ?? {},
+        profile,
+        assessment.sourceSha,
+      ),
       ...c,
       available: live.some(
         (s) =>
@@ -171,10 +192,13 @@ export class SkillReviewService {
     });
     await this.access.requireRepository(session, repoId, "assessment.read");
     let allowUsage = false;
-    try { await this.access.requireOrganization(session,"ai.usage.read"); allowUsage = true; } catch {}
+    try {
+      await this.access.requireOrganization(session, "ai.usage.read");
+      allowUsage = true;
+    } catch {}
     return {
       enabled: skillReviewsEnabled(),
-      reviews: records.map(r=>publicReview(r,allowUsage)),
+      reviews: records.map((r) => publicReview(r, allowUsage)),
       checks,
     };
   }
@@ -247,20 +271,23 @@ export class SkillReviewService {
         "An assigned skill version is unavailable. Ask an admin to check its approval and enablement",
       );
     const profile = await this.profile(record, repo.id);
-    if (skills.some(s=> !skillApplicability(s, profile, record.sourceSha).eligible))
-      throw new BadRequestException("The skill language/framework scope does not match this commit. Inspect the skipped review or refresh the repository profile.");
+    if (
+      skills.some(
+        (s) => !skillApplicability(s, profile, record.sourceSha).eligible,
+      )
+    )
+      throw new BadRequestException(
+        "The skill language/framework scope does not match this commit. Inspect the skipped review or refresh the repository profile.",
+      );
     skills.sort((a, b) => a.id.localeCompare(b.id));
-    const route = await this.db.aiStageRoute.findUnique({
-      where: {
-        organizationId_stage: {
-          organizationId: session.organizationId!,
-          stage,
-        },
-      },
-    });
+    const route = await effectiveAiRoute(
+      this.db,
+      session.organizationId!,
+      stage,
+    );
     if (!route?.enabled)
       throw new ConflictException(
-        "Configure an enabled model route for this stage",
+        "Choose an enabled default model in Model Router",
       );
     if (
       options.automatic &&
@@ -295,12 +322,6 @@ export class SkillReviewService {
         expected,
       );
     }
-    const prompt = reviewPrompt(reviewTasks(checks, skills), context),
-      inputTokens = Buffer.byteLength(prompt.system + prompt.user) + 1024;
-    if (inputTokens > route.maxInputTokens)
-      throw new BadRequestException(
-        "Review context exceeds the configured input limit",
-      );
     const providers: AiProviderConnection[] = [];
     for (const id of [route.primaryId, route.fallbackId]) {
       if (!id) continue;
@@ -313,15 +334,6 @@ export class SkillReviewService {
       throw new ConflictException(
         "Test and enable a model connection before running reviews",
       );
-    let reserved = 0n;
-    try {
-      for (const p of providers)
-        reserved += reviewReservation(p, inputTokens, route.maxOutputTokens);
-    } catch {
-      throw new BadRequestException(
-        "Configure model input/output rates before running a review",
-      );
-    }
     const snapshot: Snapshot = {
       ...(options.automatic ? { automatic: options.automatic } : {}),
       context,
@@ -333,11 +345,8 @@ export class SkillReviewService {
         revision: p.revision,
         endpointDigest: endpointDigest(providerEndpoint(p)!),
       })),
-      inputTokens,
-      maxOutputTokens: route.maxOutputTokens,
     };
-    const fingerprint = digest(snapshot),
-      day = new Date().toISOString().slice(0, 10);
+    const fingerprint = digest(snapshot);
     try {
       const review = await this.db.$transaction(
         async (tx) => {
@@ -386,7 +395,14 @@ export class SkillReviewService {
               throw new ConflictException(
                 "Skill changed before review admission",
               );
+          const effective = await effectiveAiRoute(
+            tx as PrismaService,
+            session.organizationId!,
+            stage,
+          );
           if (
+            effective?.id !== route.id ||
+            effective.revision !== route.revision ||
             !(await tx.aiStageRoute.findFirst({
               where: {
                 id: route.id,
@@ -399,24 +415,6 @@ export class SkillReviewService {
             throw new ConflictException(
               "Route changed before review admission",
             );
-          // Decide admission before incrementing. A rejected request records its
-          // outbox event in this transaction but reserves nothing and calls no model.
-          const budget = await tx.aiReviewBudget.findUnique({
-            where: { organizationId_stage_day: {
-              organizationId: session.organizationId!, stage, day,
-            } },
-          });
-          if ((budget?.reservedMicroCents ?? 0n) + reserved > BigInt(route.dailyBudgetCents) * 1000000n) {
-            await recordAiBudgetNotification(tx, repo, session.organizationId!, session.identityId, route, day);
-            return { budgetRejected: true as const };
-          }
-          await tx.aiReviewBudget.upsert({
-            where: { organizationId_stage_day: {
-              organizationId: session.organizationId!, stage, day,
-            } },
-            create: { organizationId: session.organizationId!, stage, day, reservedMicroCents: reserved },
-            update: { reservedMicroCents: { increment: reserved } },
-          });
           const result = await tx.aiSkillReview.create({
             data: {
               organizationId: session.organizationId!,
@@ -427,11 +425,13 @@ export class SkillReviewService {
               fingerprint,
               automaticKey: options.automatic?.key,
               feedbackState:
-                options.automatic && (route.publishSummary || route.publishInline)
+                options.automatic &&
+                (route.publishSummary || route.publishInline)
                   ? "PENDING"
                   : "NOT_REQUESTED",
               snapshot: JSON.parse(JSON.stringify(snapshot)),
-              reservedMicroCents: reserved,
+              // Required legacy column retained for historical records.
+              reservedMicroCents: 0n,
             },
           });
           await tx.auditEvent.create({
@@ -452,7 +452,6 @@ export class SkillReviewService {
         },
         { isolationLevel: "Serializable" },
       );
-      if ('budgetRejected' in review) throw new ConflictException("Daily review budget reached");
       return publicReview(review);
     } catch (e) {
       if (["P2034", "P2002"].includes((e as { code?: string }).code ?? ""))
@@ -527,6 +526,19 @@ export class SkillReviewService {
       .sort((a, b) => a.id.localeCompare(b.id));
     if (digest(assigned) !== digest(snapshot.checks))
       throw new Error("AI review assignment changed");
+    const effective = await effectiveAiRoute(
+      this.db,
+      session.organizationId!,
+      (assessment.request as { subjectKind?: string }).subjectKind ===
+        "PULL_REQUEST"
+        ? "pull_request"
+        : "repository",
+    );
+    if (
+      effective?.id !== snapshot.route.id ||
+      effective.revision !== snapshot.route.revision
+    )
+      throw new Error("Model settings changed");
     const route = await this.db.aiStageRoute.findFirst({
       where: {
         id: snapshot.route.id,
@@ -703,11 +715,11 @@ export class SkillReviewService {
       !organizationId
     )
       return;
-    const route = await this.db.aiStageRoute.findUnique({
-      where: {
-        organizationId_stage: { organizationId, stage: "pull_request" },
-      },
-    });
+    const route = await effectiveAiRoute(
+      this.db,
+      organizationId,
+      "pull_request",
+    );
     const policy = await this.db.gatePolicyRevision.findFirst({
       where: {
         repositoryId: pr.repositoryId,
@@ -788,8 +800,14 @@ export class SkillReviewService {
       checks.some((c) => !published.some((p) => digest(p) === digest(c)))
     )
       return;
-    const eligibility = await this.list(session, pr.repository.githubId.toString(), assessment.id);
-    const eligibleChecks = checks.filter(c => eligibility.checks.some(e=>e.id === c.id && e.available));
+    const eligibility = await this.list(
+      session,
+      pr.repository.githubId.toString(),
+      assessment.id,
+    );
+    const eligibleChecks = checks.filter((c) =>
+      eligibility.checks.some((e) => e.id === c.id && e.available),
+    );
     for (let index = 0; index < eligibleChecks.length; index += 3) {
       const selected = eligibleChecks.slice(index, index + 3);
       const automatic = {
@@ -846,7 +864,10 @@ export class SkillReviewService {
     }
   }
   async publishPendingSummary() {
-    if (!this.github || configurationValue('GITHUB_CHECK_PUBLICATION_ENABLED') !== "true")
+    if (
+      !this.github ||
+      configurationValue("GITHUB_CHECK_PUBLICATION_ENABLED") !== "true"
+    )
       return;
     const job = await this.db.aiSkillReview.findFirst({
       where: {
@@ -890,7 +911,10 @@ export class SkillReviewService {
         job.assessmentId,
         snapshot,
       );
-      if ((!route.publishSummary && !route.publishInline) || !snapshot.automatic)
+      if (
+        (!route.publishSummary && !route.publishInline) ||
+        !snapshot.automatic
+      )
         throw new Error("Summary disabled");
       await this.verifyLivePr(job.repository, snapshot);
       const result = job.result as {
@@ -927,17 +951,32 @@ export class SkillReviewService {
             ]
           : ["Assessment evidence only; repository source was not shared."]),
       ].join("\n\n");
-      const publication = route.publishSummary ? await this.github.publishAiReviewSummary(
-        job.repository.installationId,
-        job.repository.githubId,
-        snapshot.context.sourceSha,
-        digest({ kind: "AI_SUMMARY", key: snapshot.automatic.key }),
-        summary,
-      ) : null;
-      const inline = route.publishInline && snapshot.context.source ? await this.github.publishAiInlineReview(job.repository.installationId, job.repository.githubId, snapshot.context.source, digest({kind:"AI_INLINE", key:snapshot.automatic.key}), result.findings) : null;
+      const publication = route.publishSummary
+        ? await this.github.publishAiReviewSummary(
+            job.repository.installationId,
+            job.repository.githubId,
+            snapshot.context.sourceSha,
+            digest({ kind: "AI_SUMMARY", key: snapshot.automatic.key }),
+            summary,
+          )
+        : null;
+      const inline =
+        route.publishInline && snapshot.context.source
+          ? await this.github.publishAiInlineReview(
+              job.repository.installationId,
+              job.repository.githubId,
+              snapshot.context.source,
+              digest({ kind: "AI_INLINE", key: snapshot.automatic.key }),
+              result.findings,
+            )
+          : null;
       await this.db.aiSkillReview.update({
         where: { id: job.id },
-        data: { feedbackState: "PUBLISHED", feedbackUrl: publication?.htmlUrl ?? null, inlineFeedbackUrl: inline?.htmlUrl ?? null },
+        data: {
+          feedbackState: "PUBLISHED",
+          feedbackUrl: publication?.htmlUrl ?? null,
+          inlineFeedbackUrl: inline?.htmlUrl ?? null,
+        },
       });
       await this.db.auditEvent.create({
         data: {
@@ -1034,7 +1073,8 @@ export class SkillReviewService {
       );
       let findings: Awaited<ReturnType<typeof runSkillInference>> | undefined,
         providerId: string | undefined;
-      const usage: import("./skill-inference.js").ProviderUsage[] & { providerId?:string }[] = [];
+      const usage: import("./skill-inference.js").ProviderUsage[] &
+        { providerId?: string }[] = [];
       for (const pin of snapshot.providers) {
         signal.throwIfAborted();
         const provider = await this.db.aiProviderConnection.findFirst({
@@ -1056,23 +1096,38 @@ export class SkillReviewService {
             provider,
             reviewTasks(snapshot.checks, snapshot.skills),
             snapshot.context,
-            snapshot.maxOutputTokens,
+            aiResponseTokenLimit,
             signal,
-            async reported => {
-              usage.push({...reported, providerId:provider.id});
-              await this.db.aiSkillReview.update({where:{id:job.id},data:{usage}});
+            async (reported) => {
+              usage.push({ ...reported, providerId: provider.id });
+              await this.db.aiSkillReview.update({
+                where: { id: job.id },
+                data: { usage },
+              });
             },
           );
           providerId = provider.id;
           break;
         } catch (error) {
-          if (error instanceof AiTransportError && (!signal.aborted || signal.reason?.name === 'TimeoutError')) {
+          if (
+            error instanceof AiTransportError &&
+            (!signal.aborted || signal.reason?.name === "TimeoutError")
+          ) {
             // Recheck access/configuration before retaining a redacted outage signal.
-            await this.current(session, job.repository.githubId.toString(), job.assessmentId, snapshot);
+            await this.current(
+              session,
+              job.repository.githubId.toString(),
+              job.assessmentId,
+              snapshot,
+            );
             await recordAiInferenceOutcome(this.db, {
-              reviewId: job.id, organizationId: job.organizationId, actorId: job.actorId,
-              repositoryId: job.repositoryId, providerId: provider.id, providerRevision: provider.revision,
-              outcome: 'transport_failed',
+              reviewId: job.id,
+              organizationId: job.organizationId,
+              actorId: job.actorId,
+              repositoryId: job.repositoryId,
+              providerId: provider.id,
+              providerRevision: provider.revision,
+              outcome: "transport_failed",
             });
           }
           signal.throwIfAborted();
@@ -1096,7 +1151,14 @@ export class SkillReviewService {
             job.repository.githubId.toString(),
             "ai.review.run",
           );
+          const effective = await effectiveAiRoute(
+            tx as PrismaService,
+            job.organizationId,
+            job.stage,
+          );
           if (
+            effective?.id !== snapshot.route.id ||
+            effective.revision !== snapshot.route.revision ||
             !(await tx.aiStageRoute.findFirst({
               where: {
                 id: snapshot.route.id,
@@ -1158,14 +1220,20 @@ export class SkillReviewService {
             )
               throw new Error("Provider changed");
           }
-          const successfulProvider = snapshot.providers.find(pin => pin.id === providerId);
+          const successfulProvider = snapshot.providers.find(
+            (pin) => pin.id === providerId,
+          );
           if (!successfulProvider) throw new Error("Model unavailable");
           // Persist availability with the verified review result. A notification
           // storage failure never falls through to another inference call.
           await recordAiInferenceOutcomeInTransaction(tx, {
-            reviewId: job.id, organizationId: job.organizationId, actorId: job.actorId,
-            repositoryId: job.repositoryId, providerId: successfulProvider.id, providerRevision: successfulProvider.revision,
-            outcome: 'succeeded',
+            reviewId: job.id,
+            organizationId: job.organizationId,
+            actorId: job.actorId,
+            repositoryId: job.repositoryId,
+            providerId: successfulProvider.id,
+            providerRevision: successfulProvider.revision,
+            outcome: "succeeded",
           });
           await tx.aiSkillReview.updateMany({
             where: { id: job.id, state: "RUNNING" },
@@ -1181,8 +1249,6 @@ export class SkillReviewService {
                     : {}),
                 },
                 classification: "ADVISORY",
-                inputTokenEstimate: snapshot.inputTokens,
-                maxOutputTokens: snapshot.maxOutputTokens,
               },
               latencyMs: Date.now() - start,
               finishedAt: new Date(),

@@ -30,7 +30,10 @@ import { RepositoryActivityPanel } from '@/features/repositories/repository-acti
 import { RepositoryAssessments } from '@/features/repositories/repository-assessments'
 import { RepositoryCiEvidence } from '@/features/repositories/repository-ci-evidence'
 import { RepositoryPullRequests } from '@/features/repositories/repository-pull-requests'
-import { RepositoryRulesets } from '@/features/repositories/repository-rulesets'
+import {
+  RepositoryRulesets,
+  RulesetDetail,
+} from '@/features/repositories/repository-rulesets'
 import {
   IntegrationCatalogue,
   type IntegrationId,
@@ -69,7 +72,7 @@ const modules = {
     section: 'Governance',
     icon: SlidersHorizontal,
     description:
-      'Choose standards, review their impact and publish branch policies.',
+      'Define branch requirements and connect them to GitHub Actions.',
   },
   integrations: {
     title: 'Integrations',
@@ -102,10 +105,12 @@ export function WorkspaceModule({ module }: { module: Module }) {
     repository?: string
     assessment?: string
     from?: 'quality-gates'
+    ruleset?: number
     rulesetView?: 'github' | 'drafts' | 'deployments'
     gate?: 'assessments' | 'rulesets' | 'checks'
     tab?: 'commits' | 'pull-requests' | 'activity'
   }
+  const rulesetDetailView = module === 'quality-gates' && !!search.ruleset
   const reportView = module === 'assessments' && !!search.assessment
   // Legacy results links now open protection controls; assessment history has one home.
   const gateView = search.gate === 'checks' ? 'checks' : 'rulesets'
@@ -124,10 +129,108 @@ export function WorkspaceModule({ module }: { module: Module }) {
   // An inaccessible URL selection must never fall through to another repository.
   const repository = search.repository
     ? repositories.find((repo) => repo.githubId === search.repository)
-    : reportView
+    : reportView || rulesetDetailView
       ? undefined
       : repositories[0]
   const canManage = canPerform(session.data, 'repository.connect')
+  if (rulesetDetailView)
+    return (
+      <>
+        <AppHeader
+          breadcrumbs={[
+            { label: 'Merge Protection', to: '/quality-gates' },
+            { label: 'Ruleset details' },
+          ]}
+        />
+        <Main>
+          <PageHeader
+            className='mb-5'
+            title='Ruleset details'
+            description={`Rules reported by GitHub for ${repository?.fullName ?? 'the selected repository'}.`}
+            section='Governance'
+            icon={ClipboardCheck}
+            tone='blue'
+            actions={
+              <>
+                <Button variant='outline' size='sm' asChild>
+                  <Link
+                    to='/quality-gates'
+                    search={{
+                      repository: search.repository,
+                      gate: 'rulesets',
+                      rulesetView: 'github',
+                    }}
+                  >
+                    <ArrowLeft className='size-4' />
+                    Back to rulesets
+                  </Link>
+                </Button>
+                <PageHelpDrawer
+                  title='Ruleset details help'
+                  sections={[
+                    {
+                      title: 'Configuration',
+                      content: (
+                        <p>
+                          Shows the branch patterns and rules GitHub reports for
+                          this repository. Use View on GitHub to manage the
+                          ruleset.
+                        </p>
+                      ),
+                    },
+                    {
+                      title: 'Insights',
+                      content: (
+                        <p>
+                          The graph and counts cover the matching rule results
+                          on the current page, grouped by UTC date or hour. Use
+                          Filter to choose the history source, period, result,
+                          branch and user. Use Next to view more evaluations.
+                          These are GitHub ruleset results; Preflyt policy
+                          results are available under Assessments.
+                        </p>
+                      ),
+                    },
+                  ]}
+                />
+              </>
+            }
+          />
+          {inventory.isPending ? (
+            <Skeleton className='h-48' />
+          ) : inventory.isError ? (
+            <Card>
+              <CardContent className='space-y-3'>
+                <p role='alert'>{inventory.error.message}</p>
+                <Button
+                  variant='outline'
+                  onClick={() => void inventory.refetch()}
+                >
+                  Try again
+                </Button>
+              </CardContent>
+            </Card>
+          ) : repository ? (
+            <RulesetDetail
+              key={`${repository.githubId}-${search.ruleset}`}
+              repositoryId={repository.githubId}
+              actorId={session.data?.identityId}
+              id={search.ruleset!}
+              canRead={canPerform(
+                session.data,
+                'policy.read',
+                repository.githubId
+              )}
+            />
+          ) : (
+            <p role='alert' className='rounded-lg border p-4 text-sm'>
+              This ruleset needs an accessible, selected repository. Return to
+              the list and choose a repository.
+            </p>
+          )}
+        </Main>
+      </>
+    )
   return (
     <Tabs
       value={module === 'assessments' ? assessmentView : gateView}
@@ -163,150 +266,171 @@ export function WorkspaceModule({ module }: { module: Module }) {
         }
       />
       <Main>
-        <PageHeader
-          className='mb-5'
-          title={reportView ? 'Assessment report' : config.title}
-          description={
-            reportView
-              ? `Checks and evidence for ${repository?.fullName ?? 'the selected repository'}.`
-              : config.description
-          }
-          section={config.section}
-          icon={config.icon}
-          tone={
-            module === 'standards' || module === 'integrations'
-              ? 'teal'
-              : 'blue'
-          }
-          actions={
-            <>
-              {reportView ? (
-                <Button variant='outline' size='sm' asChild>
-                  {search.from === 'quality-gates' ? (
-                    <Link
-                      to='/quality-gates'
-                      search={{
-                        repository: search.repository,
-                        gate: 'rulesets',
-                      }}
-                    >
-                      <ArrowLeft aria-hidden='true' />
-                      Back to merge protection
+        {module !== 'standards' && (
+          <PageHeader
+            className={module === 'policies' ? 'mb-3 gap-3 p-3' : 'mb-5'}
+            title={reportView ? 'Assessment report' : config.title}
+            description={
+              reportView
+                ? `Checks and evidence for ${repository?.fullName ?? 'the selected repository'}.`
+                : config.description
+            }
+            section={module === 'policies' ? undefined : config.section}
+            icon={config.icon}
+            tone={module === 'integrations' ? 'teal' : 'blue'}
+            actions={
+              <>
+                {reportView ? (
+                  <Button variant='outline' size='sm' asChild>
+                    {search.from === 'quality-gates' ? (
+                      <Link
+                        to='/quality-gates'
+                        search={{
+                          repository: search.repository,
+                          gate: 'rulesets',
+                        }}
+                      >
+                        <ArrowLeft aria-hidden='true' />
+                        Back to merge protection
+                      </Link>
+                    ) : (
+                      <Link
+                        to='/assessments'
+                        search={{
+                          repository: search.repository,
+                          tab: 'commits',
+                        }}
+                      >
+                        <ArrowLeft aria-hidden='true' />
+                        Back to assessments
+                      </Link>
+                    )}
+                  </Button>
+                ) : (
+                  <Button variant='outline' size='sm' asChild>
+                    <Link to='/apps'>
+                      <GitBranch className='size-3.5' aria-hidden='true' />
+                      Manage repositories
                     </Link>
-                  ) : (
+                  </Button>
+                )}
+                {module === 'quality-gates' && (
+                  <Button variant='outline' size='sm' asChild>
                     <Link
                       to='/assessments'
-                      search={{ repository: search.repository, tab: 'commits' }}
+                      search={{ repository: repository?.githubId }}
                     >
-                      <ArrowLeft aria-hidden='true' />
-                      Back to assessments
+                      <ClipboardCheck aria-hidden='true' />
+                      View assessments
                     </Link>
-                  )}
-                </Button>
-              ) : (
-                <Button variant='outline' size='sm' asChild>
-                  <Link to='/apps'>
-                    <GitBranch className='size-3.5' aria-hidden='true' />
-                    Manage repositories
-                  </Link>
-                </Button>
-              )}
-              {module === 'quality-gates' && (
-                <Button variant='outline' size='sm' asChild>
-                  <Link
-                    to='/assessments'
-                    search={{ repository: repository?.githubId }}
-                  >
-                    <ClipboardCheck aria-hidden='true' />
-                    View assessments
-                  </Link>
-                </Button>
-              )}
-              {module === 'policies' && (
-                <PageHelpDrawer
-                  title='Policies'
-                  sections={[
-                    {
-                      title: 'What is a policy?',
-                      content:
-                        'A branch policy defines which standards a repository branch must follow. Standards group checks; assessments show the results of evaluating those checks.',
-                    },
-                    {
-                      title: 'Create a branch policy',
-                      content:
-                        'Select a repository, open Branch policies and choose New policy. Choose the branch and standards, then save the draft. Review its requirements, obtain approval and publish it. Publishing makes the approved policy available for PR evaluation. Users other than a local Super Admin need another authorized reviewer to approve it.',
-                    },
-                    {
-                      title: 'What are CI jobs?',
-                      content:
-                        'CI jobs are the tests, builds and scans in your GitHub workflows. This tab connects an existing job to the check whose result it supplies. For example, connect your test job to Required test execution. It does not create or run a GitHub workflow, and connecting jobs is not required to create a policy.',
-                    },
-                    {
-                      title: 'When no CI jobs appear',
-                      content:
-                        'Run the repository’s existing GitHub workflow, then refresh jobs. If jobs are still missing, check that the connected GitHub App sends workflow and check events to Preflyt. A successful job alone may not provide the verified report needed to evaluate a check. Missing results stay incomplete.',
-                    },
-                    {
-                      title: 'See results and enable merge protection',
-                      content:
-                        'Open Assessments to see evaluated checks and their evidence. Configure automatic PR check publishing under Settings → PR checks. Publishing a policy does not run tests or block merging by itself. GitHub blocks merging only when active branch rules require the Preflyt check; manage those rules under Merge Protection.',
-                    },
-                    {
-                      title: 'Organization and team scope',
-                      content:
-                        'Organization and team assignments apply shared standards to their authorized repositories. Review the affected repositories before applying changes. Branch policies include inherited requirements alongside the standards you select.',
-                    },
-                  ]}
-                />
-              )}
-              {module === 'quality-gates' && (
-                <PageHelpDrawer
-                  title='Merge Protection'
-                  sections={[
-                    {
-                      title: 'Branch protection and assessment results',
-                      content:
-                        'This page shows GitHub branch rules and manages approved Preflyt protections. GitHub enforces active rules and decides whether merging is allowed. Assessment history and saved check evidence are under Assessments. Use View assessments to open that repository’s reports.',
-                    },
-                    {
-                      title: 'GitHub rulesets',
-                      content:
-                        'Rulesets come from GitHub for the selected repository, including inherited organization or enterprise rules. Active rules are enforced by GitHub; Evaluate records evaluations without blocking, and Disabled rules are not enforced. The discovery view does not report legacy branch protection. Deployments manages only the dedicated Preflyt ruleset.',
-                    },
-                    {
-                      title: 'Publishing merge review results',
-                      content:
-                        'Automatic checks evaluate the published policy against current PR and workflow evidence. Only verified passing execution can produce success. Missing evidence remains incomplete. The worker invalidates old results before reevaluation and retries failed requests. Checks are refreshed at least once per polling cycle; GitHub outages can delay updates. Manual reviewed publication remains available. Forks, draft PRs and merge queues are unsupported.',
-                    },
-                    {
-                      title: 'Ruleset Insights',
-                      content:
-                        'Open a GitHub ruleset and choose Insights to see GitHub rule evaluations. Counts cover matching rule results on the current page, not all activity in the selected period. Active failures can block pushes; Evaluate mode records failures without blocking. Suite-wide bypasses do not prove this particular ruleset was bypassed. Preflyt readiness results are shown separately in Merge review result. Insights needs repository Administration: read on the assessment App. Choose Current GitHub history for an on-demand page or Saved GitHub history for evaluations collected by the worker. Saved history shows collection freshness, failures and retention. It cannot recover older evaluations that were never collected; a completed collection sweep does not prove complete period coverage.',
-                    },
-                    {
-                      title: 'Local ruleset drafts',
-                      content:
-                        'Choose one repository, select up to 20 exact branches, and use a Standard, Strict or Custom profile. The server generates the preview and saves the current standards version with the draft. If standards or the draft change while you edit, reload and review again. Drafts do not change GitHub protections. In Deployments, review affected PRs and exact GitHub configuration, obtain independent administrator approval, then activate. Every target branch needs a recent automatically verified passing check. Old drafts may need saving again to refresh their verification hash.',
-                    },
-                    {
-                      title: 'Scope and freshness',
-                      content:
-                        'Lists show 20 rulesets per page. Open a ruleset to see branch patterns, rule types and required check sources. GitHub patterns such as ~DEFAULT_BRANCH and ~ALL retain their GitHub meaning. Data is cached for up to one minute; the fetched time reflects the source read. Ruleset absence does not prove the branch is unprotected.',
-                    },
-                    {
-                      title: 'Access and limitations',
-                      content:
-                        'Only authorized, selected repositories are shown. This uses read-only repository metadata permission. The GitHub discovery view omits bypass actors and full rule parameters. Local drafts show their complete generated configuration. Activation requires separate governance credentials and both ruleset management and enforcement permissions. GitHub changes outside Preflyt are reported as drift and never overwritten. Rollback disables only the dedicated managed ruleset after verifying its current state. Organization-wide targeting and legacy protection remain outside this slice. Unavailable access, plans or throttled requests are reported as errors.',
-                    },
-                  ]}
-                />
-              )}
-            </>
-          }
-        />
+                  </Button>
+                )}
+                {module === 'policies' && (
+                  <PageHelpDrawer
+                    title='Policies'
+                    sections={[
+                      {
+                        title: 'What is a policy?',
+                        content:
+                          'A branch policy defines which standards a repository branch must follow. Standards group checks; assessments show the results of evaluating those checks.',
+                      },
+                      {
+                        title: 'Create a branch policy',
+                        content:
+                          'Select a repository, open Branch policies and choose New policy. Choose the branch and standards, then save the draft. Review its requirements, obtain approval and publish it. Publishing makes the approved policy available for PR evaluation. Users other than a local Super Admin need another authorized reviewer to approve it.',
+                      },
+                      {
+                        title: 'What are CI jobs?',
+                        content:
+                          'Choose a published policy and open its repository workflow in the YAML editor. Add checks from the policy panel or request an AI proposal, review the changes, then create a setup PR. The PR includes the workflow and Preflyt Action files. GitHub runs your checks; Preflyt verifies results and saves assessments. Workflow setup connects check sources automatically. Use Check sources beside the policy selector to review existing CI job mappings. PR summary comments are optional.',
+                      },
+                      {
+                        title: 'When no CI jobs appear',
+                        content:
+                          'Run the repository’s existing GitHub workflow, then refresh jobs. If jobs are still missing, check that the connected GitHub App sends workflow and check events to Preflyt. A successful job alone may not provide the verified report needed to evaluate a check. Missing results stay incomplete.',
+                      },
+                      {
+                        title: 'See results and enable merge protection',
+                        content:
+                          'Open Assessments to see evaluated checks and their evidence. Configure automatic PR check publishing under Settings → PR checks. Publishing a policy does not run tests or block merging by itself. GitHub blocks merging only when active branch rules require the Preflyt check; manage those rules under Merge Protection.',
+                      },
+                      {
+                        title: 'Organization and team scope',
+                        content:
+                          'Organization and team assignments apply shared standards to their authorized repositories. Review the affected repositories before applying changes. Branch policies include inherited requirements alongside the standards you select.',
+                      },
+                    ]}
+                  />
+                )}
+                {module === 'quality-gates' && (
+                  <PageHelpDrawer
+                    title='Merge Protection'
+                    sections={[
+                      {
+                        title: 'Branch protection and assessment results',
+                        content:
+                          'This page shows GitHub branch rules and manages approved Preflyt protections. GitHub enforces active rules and decides whether merging is allowed. Assessment history and saved check evidence are under Assessments. Use View assessments to open that repository’s reports.',
+                      },
+                      {
+                        title: 'GitHub rulesets',
+                        content:
+                          'Rulesets come from GitHub for the selected repository, including inherited organization or enterprise rules. Active rules are enforced by GitHub; Evaluate records evaluations without blocking, and Disabled rules are not enforced. The discovery view does not report legacy branch protection. Deployments manages only the dedicated Preflyt ruleset.',
+                      },
+                      {
+                        title: 'Publishing merge review results',
+                        content:
+                          'Automatic checks evaluate the published policy against current PR and workflow evidence. Only verified passing execution can produce success. Missing evidence remains incomplete. The worker invalidates old results before reevaluation and retries failed requests. Checks are refreshed at least once per polling cycle; GitHub outages can delay updates. Manual reviewed publication remains available. Forks, draft PRs and merge queues are unsupported.',
+                      },
+                      {
+                        title: 'Ruleset Insights',
+                        content:
+                          'Open a GitHub ruleset and choose Insights to see GitHub rule evaluations. Counts cover matching rule results on the current page, not all activity in the selected period. Active failures can block pushes; Evaluate mode records failures without blocking. Suite-wide bypasses do not prove this particular ruleset was bypassed. Preflyt readiness results are shown separately in Merge review result. Insights needs repository Administration: read on the assessment App. Choose Current GitHub history for an on-demand page or Saved GitHub history for evaluations collected by the worker. Saved history shows collection freshness, failures and retention. It cannot recover older evaluations that were never collected; a completed collection sweep does not prove complete period coverage.',
+                      },
+                      {
+                        title: 'Local ruleset drafts',
+                        content:
+                          'Choose one repository, select up to 20 exact branches, and use a Standard, Strict or Custom profile. The server generates the preview and saves the current standards version with the draft. If standards or the draft change while you edit, reload and review again. Drafts do not change GitHub protections. In Deployments, review affected PRs and exact GitHub configuration, obtain independent administrator approval, then activate. Every target branch needs a recent automatically verified passing check. Old drafts may need saving again to refresh their verification hash.',
+                      },
+                      {
+                        title: 'Scope and freshness',
+                        content:
+                          'Lists show 20 rulesets per page. Open a ruleset to see branch patterns, rule types and required check sources. GitHub patterns such as ~DEFAULT_BRANCH and ~ALL retain their GitHub meaning. Data is cached for up to one minute; the fetched time reflects the source read. Ruleset absence does not prove the branch is unprotected.',
+                      },
+                      {
+                        title: 'Access and limitations',
+                        content:
+                          'Only authorized, selected repositories are shown. This uses read-only repository metadata permission. The GitHub discovery view omits bypass actors and full rule parameters. Local drafts show their complete generated configuration. Activation requires separate governance credentials and both ruleset management and enforcement permissions. GitHub changes outside Preflyt are reported as drift and never overwritten. Rollback disables only the dedicated managed ruleset after verifying its current state. Organization-wide targeting and legacy protection remain outside this slice. Unavailable access, plans or throttled requests are reported as errors.',
+                      },
+                    ]}
+                  />
+                )}
+              </>
+            }
+          />
+        )}
         {module === 'standards' ? (
           <OrganizationStandardsLibrary
             key={`${session.data?.identityId}:${session.data?.organizationId}`}
+            renderHeader={(actions) => (
+              <PageHeader
+                title={config.title}
+                description={config.description}
+                section={config.section}
+                icon={config.icon}
+                tone='teal'
+                actions={
+                  <>
+                    <Button variant='outline' size='sm' asChild>
+                      <Link to='/apps'>
+                        <GitBranch className='size-3.5' aria-hidden='true' />
+                        Manage repositories
+                      </Link>
+                    </Button>
+                    {actions}
+                  </>
+                }
+              />
+            )}
           />
         ) : inventory.isPending ? (
           <div
