@@ -1,3 +1,4 @@
+import { queueOrganizationChannelEmails } from './notification-channel-delivery.js'
 import { configurationValue } from '../configuration/runtime-configuration.js'
 import { isMandatoryNotification } from "./notification-classification.js";
 import { isAiNotification } from "./ai-notification.js";
@@ -73,6 +74,7 @@ export async function deliverNotification(db: PrismaService, eventId: string) {
               (['CRITICAL_FINDINGS_REPORTED', 'NATIVE_EXECUTION_FAILED'].includes(event.type) && m.role === 'SECURITY_ENGINEER') ||
               authors.has(m.identityId)),
       );
+      await queueOrganizationChannelEmails(tx, event);
       await tx.inboxNotification.createMany({
         data: recipients.map((m) => ({
           id: randomUUID(),
