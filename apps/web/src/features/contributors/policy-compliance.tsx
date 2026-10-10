@@ -9,6 +9,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { SurfaceIcon } from '@/components/surface-icon'
 import { paginateCollection } from './pull-request-pagination'
 import { TabPagination } from './tab-pagination'
 
@@ -105,27 +106,27 @@ export function PolicyComplianceSummary({
   return (
     <Card className='h-full min-w-0 gap-3 border-primary/20'>
       <CardHeader className='flex flex-row flex-wrap items-start justify-between gap-3'>
-        <div className='space-y-1'>
-          <CardTitle className='flex items-center gap-2'>
-            <ShieldCheck className='size-4 text-primary' />
-            Engineering policy compliance
-          </CardTitle>
-          <p className='text-xs text-muted-foreground'>
-            {new Date(period.from).toLocaleDateString('en-GB', {
-              day: 'numeric',
-              month: 'short',
-              year: 'numeric',
-              timeZone: 'UTC',
-            })}
-            –
-            {new Date(period.to).toLocaleDateString('en-GB', {
-              day: 'numeric',
-              month: 'short',
-              year: 'numeric',
-              timeZone: 'UTC',
-            })}{' '}
-            · Authorized repositories
-          </p>
+        <div className='flex min-w-0 flex-1 items-center gap-3'>
+          <SurfaceIcon icon={ShieldCheck} tone='teal' />
+          <div className='min-w-0 space-y-1'>
+            <CardTitle>Engineering policy compliance</CardTitle>
+            <p className='text-xs text-muted-foreground'>
+              {new Date(period.from).toLocaleDateString('en-GB', {
+                day: 'numeric',
+                month: 'short',
+                year: 'numeric',
+                timeZone: 'UTC',
+              })}
+              –
+              {new Date(period.to).toLocaleDateString('en-GB', {
+                day: 'numeric',
+                month: 'short',
+                year: 'numeric',
+                timeZone: 'UTC',
+              })}{' '}
+              · Authorized repositories
+            </p>
+          </div>
         </div>
         <Button size='sm' variant='outline' onClick={onEvidence}>
           View evidence

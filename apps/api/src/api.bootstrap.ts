@@ -5,6 +5,7 @@ import { NestFactory } from '@nestjs/core'
 import type { NestExpressApplication } from '@nestjs/platform-express'
 import cookieParser from 'cookie-parser'
 import { AppModule } from './app.module.js'
+import { apiCorsOptions } from './config/api-cors.js'
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { bufferLogs: true, rawBody: true })
   app.useBodyParser('json', { limit: '1mb' })
@@ -19,11 +20,7 @@ async function bootstrap() {
     (process.env.NODE_ENV !== 'production'
       ? 'http://localhost:5173'
       : undefined)
-  app.enableCors({
-    origin: webOrigin,
-    credentials: true,
-    methods: ['GET', 'POST', 'PATCH', 'OPTIONS'],
-  })
+  app.enableCors(apiCorsOptions(webOrigin))
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,

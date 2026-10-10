@@ -1,10 +1,21 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import {
+  MutationCache,
+  QueryClient,
+  QueryClientProvider,
+} from '@tanstack/react-query'
 import '@/styles/index.css'
 import { afterEach, expect, it, vi } from 'vitest'
 import { render } from 'vitest-browser-react'
+import { page } from 'vitest/browser'
+import { handleServerError } from '@/lib/handle-server-error'
 import { ConfigurationPanel } from './configuration-panel'
 
-afterEach(() => vi.unstubAllGlobals())
+const toastError = vi.hoisted(() => vi.fn())
+vi.mock('sonner', () => ({ toast: { error: toastError } }))
+afterEach(() => {
+  vi.unstubAllGlobals()
+  toastError.mockReset()
+})
 const data = {
   revision: 1,
   restartRequired: true,
@@ -44,7 +55,12 @@ const mount = () =>
   render(
     <QueryClientProvider
       client={
-        new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        new QueryClient({
+          mutationCache: new MutationCache({
+            onError: (error) => handleServerError(error),
+          }),
+          defaultOptions: { queries: { retry: false } },
+        })
       }
     >
       <ConfigurationPanel />
@@ -122,4 +138,151 @@ it('uses a custom section selector and shows server errors without leaving Setti
   await expect
     .element(view.getByRole('button', { name: 'Retry' }))
     .toBeVisible()
+})
+
+it('keeps configuration fields and secret controls within the mobile layout', async () => {
+  const visualData = {
+    ...data,
+    fields: [
+      {
+        key: 'GITHUB_APP_ID',
+        label: 'App ID',
+        group: 'GitHub',
+        kind: 'number',
+        configured: true,
+        value: '123456',
+        restart: true,
+      },
+      {
+        key: 'GITHUB_APP_CLIENT_ID',
+        label: 'Client ID',
+        group: 'GitHub',
+        kind: 'text',
+        configured: true,
+        value: 'Iv1.example',
+        restart: true,
+      },
+      {
+        key: 'GITHUB_APP_CLIENT_SECRET',
+        label: 'Client secret',
+        group: 'GitHub',
+        kind: 'secret',
+        configured: true,
+        value: '',
+        restart: true,
+      },
+      {
+        key: 'GITHUB_WEBHOOK_SECRET',
+        label: 'Webhook secret',
+        group: 'GitHub',
+        kind: 'secret',
+        configured: true,
+        value: '',
+        restart: true,
+      },
+      {
+        key: 'GITHUB_APP_PRIVATE_KEY',
+        label: 'Private key',
+        group: 'GitHub',
+        kind: 'secret',
+        configured: true,
+        value: '',
+        restart: true,
+      },
+      {
+        key: 'GITHUB_LOGIN_CALLBACK_URL',
+        label: 'Login callback URL',
+        group: 'GitHub',
+        kind: 'url',
+        configured: true,
+        value: 'https://preflyt.example.com/auth/github/callback',
+        restart: true,
+      },
+      {
+        key: 'GITHUB_LOGIN_ENABLED',
+        label: 'GitHub sign-in',
+        group: 'GitHub',
+        kind: 'boolean',
+        configured: false,
+        value: 'true',
+        restart: true,
+      },
+      {
+        key: 'GITHUB_EVENTS_ENABLED',
+        label: 'GitHub event ingestion',
+        group: 'GitHub',
+        kind: 'boolean',
+        configured: false,
+        value: 'false',
+        restart: false,
+      },
+    ],
+  }
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => new Response(JSON.stringify(visualData)))
+  )
+  await page.viewport(1440, 1000)
+  const view = await mount()
+  await expect.element(view.getByLabelText('App ID')).toBeVisible()
+  try {
+    for (const mobile of [false, true]) {
+      await page.viewport(mobile ? 390 : 1440, mobile ? 844 : 1000)
+      for (const dark of [false, true]) {
+        if (mobile) await page.viewport(390, 844)
+        document.documentElement.classList.toggle('dark', dark)
+        await new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+        )
+        await Promise.all(
+          document
+            .getAnimations()
+            .filter(
+              (animation) =>
+                animation.effect?.getComputedTiming().iterations !== Infinity
+            )
+            .map((animation) => animation.finished.catch(() => undefined))
+        )
+        await expect
+          .poll(() => document.documentElement.scrollWidth <= window.innerWidth)
+          .toBe(true)
+        if (mobile) {
+          // Extend the fixture frame after checking the phone viewport so Playwright
+          // captures the complete narrow layout without iframe clipping.
+          await page.viewport(
+            390,
+            Math.max(844, document.documentElement.scrollHeight)
+          )
+        }
+        await page.screenshot({
+          path: `__screenshots__/configuration-${mobile ? 'mobile' : 'desktop'}-${dark ? 'dark' : 'light'}.png`,
+        })
+      }
+    }
+  } finally {
+    document.documentElement.classList.remove('dark')
+    await page.viewport(1280, 900)
+  }
+})
+
+it('reports failed saves once through the global toast and preserves unsaved changes', async () => {
+  const message =
+    'Set QUEUE_REDIS_URL and restart the API and worker before enabling GitHub events'
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (_url, options) =>
+      options?.method === 'PATCH'
+        ? new Response(JSON.stringify({ message }), { status: 400 })
+        : new Response(JSON.stringify(data))
+    )
+  )
+  const view = await mount()
+  await view.getByRole('switch', { name: 'GitHub event ingestion' }).click()
+  await view.getByRole('button', { name: 'Save changes' }).click()
+  await expect.poll(() => toastError.mock.calls.length).toBe(1)
+  expect(toastError).toHaveBeenCalledExactlyOnceWith(message)
+  await expect.element(view.getByRole('alert')).not.toBeInTheDocument()
+  await expect
+    .element(view.getByRole('switch', { name: 'GitHub event ingestion' }))
+    .toBeChecked()
 })

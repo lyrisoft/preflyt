@@ -15,6 +15,7 @@ export const rolePermissions: Record<string, string[]> = {
     'ai.skills.read', 'ai.skills.manage', 'ai.skills.approve', 'ai.review.run',
     'team.manage', 'team.import', 'team.policy.assign',
     'standards.manage',
+    'notifications.manage',
     'organization.members.manage',
     'organization.settings.update',
     'repository.connect',
@@ -39,6 +40,7 @@ export const rolePermissions: Record<string, string[]> = {
     'ai.skills.read', 'ai.skills.manage', 'ai.skills.approve', 'ai.review.run',
     'team.manage', 'team.import', 'team.policy.assign',
     'standards.manage',
+    'notifications.manage',
     'organization.members.manage',
     'repository.connect',
     'repository.read',
@@ -190,7 +192,7 @@ export class AuthorizationService {
           'policy.enforcement.manage',
           'execution.run',
           'team.manage', 'team.import', 'team.policy.assign',
-          'standards.manage',
+          'standards.manage', 'notifications.manage',
           'ai.provider.manage', 'ai.routing.manage', 'ai.skills.manage', 'ai.skills.approve', 'ai.review.run',
         ].includes(permission)
     )
@@ -330,6 +332,10 @@ export class AuthorizationService {
     }
     if (path === '/github/install') {
       await this.requireOrganization(session, 'repository.connect')
+      return true
+    }
+    if (path === '/notifications/channels' || /^\/notifications\/channels\/[a-zA-Z0-9-]{1,80}(?:\/test)?$/.test(path)) {
+      await this.requireOrganization(session, 'notifications.manage', true)
       return true
     }
     if (

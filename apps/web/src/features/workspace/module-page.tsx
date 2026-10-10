@@ -12,7 +12,6 @@ import {
 } from 'lucide-react'
 import { IconGithub } from '@/assets/brand-icons'
 import { API_BASE_URL } from '@/lib/api'
-import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -20,9 +19,11 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { AppHeader } from '@/components/layout/app-header'
 import { Main } from '@/components/layout/main'
+import { PageHeader } from '@/components/page-header'
 import { PageHelpDrawer } from '@/components/page-help-drawer'
 import { RepositoryPicker } from '@/components/repository-picker'
 import { StatusBadge } from '@/components/status-badge'
+import { SurfaceIcon } from '@/components/surface-icon'
 import { CheckPublications } from '@/features/repositories/check-publications'
 import { GatePolicyPanel } from '@/features/repositories/gate-policy-panel'
 import { RepositoryActivityPanel } from '@/features/repositories/repository-activity-panel'
@@ -48,8 +49,6 @@ const modules = {
     section: 'Governance',
     icon: ClipboardCheck,
     description: 'Review saved gate results and GitHub branch rules.',
-    accent: 'border-info/20 bg-info/5',
-    iconAccent: 'bg-info/15 text-info',
   },
   assessments: {
     title: 'Assessments',
@@ -57,8 +56,6 @@ const modules = {
     icon: ClipboardCheck,
     description:
       'Review activity, tracked commits and the evidence saved with each assessment.',
-    accent: 'border-chart-1/20 bg-chart-1/5',
-    iconAccent: 'bg-chart-1/15 text-chart-1',
   },
   standards: {
     title: 'Engineering Standards',
@@ -66,8 +63,6 @@ const modules = {
     icon: Layers,
     description:
       'Create, edit and adopt versioned standards for your organization.',
-    accent: 'border-chart-2/20 bg-chart-2/5',
-    iconAccent: 'bg-chart-2/15 text-chart-2',
   },
   policies: {
     title: 'Policies',
@@ -75,8 +70,6 @@ const modules = {
     icon: SlidersHorizontal,
     description:
       'Manage adopted standards and the check sources approved for each check.',
-    accent: 'border-chart-1/20 bg-chart-1/5',
-    iconAccent: 'bg-chart-1/15 text-chart-1',
   },
   integrations: {
     title: 'Integrations',
@@ -84,8 +77,6 @@ const modules = {
     icon: PlugZap,
     description:
       'Review GitHub access and the check results and reports available to Preflyt.',
-    accent: 'border-chart-2/20 bg-chart-2/5',
-    iconAccent: 'bg-chart-2/15 text-chart-2',
   },
 }
 type Repository = { githubId: string; fullName: string; selected: boolean }
@@ -107,7 +98,6 @@ async function read<T>(path: string, signal: AbortSignal): Promise<T> {
 export function WorkspaceModule({ module }: { module: Module }) {
   const [integration, setIntegration] = useState<IntegrationId | null>(null)
   const config = modules[module]
-  const ModuleIcon = config.icon
   const search = useSearch({ strict: false }) as {
     repository?: string
     gate?: 'assessments' | 'rulesets' | 'checks'
@@ -156,84 +146,70 @@ export function WorkspaceModule({ module }: { module: Module }) {
     >
       <AppHeader breadcrumbs={[{ label: config.title }]} />
       <Main>
-        <div
-          className={cn(
-            'mb-5 flex flex-wrap items-center justify-between gap-4 rounded-xl border px-5 py-4',
-            config.accent
-          )}
-        >
-          <div className='flex min-w-0 items-center gap-3.5'>
-            <span
-              className={cn(
-                'flex size-11 shrink-0 items-center justify-center rounded-xl',
-                config.iconAccent
+        <PageHeader
+          className='mb-5'
+          title={config.title}
+          description={config.description}
+          section={config.section}
+          icon={config.icon}
+          tone={
+            module === 'standards' || module === 'integrations'
+              ? 'teal'
+              : 'blue'
+          }
+          actions={
+            <>
+              <Button variant='outline' size='sm' asChild>
+                <Link to='/apps'>
+                  <GitBranch className='size-3.5' aria-hidden='true' />
+                  Manage repositories
+                </Link>
+              </Button>
+              {module === 'quality-gates' && (
+                <PageHelpDrawer
+                  title='Quality Gates'
+                  sections={[
+                    {
+                      title: 'Saved gate results',
+                      content:
+                        'Assessment previews use saved evidence for an exact commit. They do not publish GitHub checks or block merges.',
+                    },
+                    {
+                      title: 'GitHub rulesets',
+                      content:
+                        'Rulesets come from GitHub for the selected repository, including inherited organization or enterprise rules. Active rules are enforced by GitHub; Evaluate records evaluations without blocking, and Disabled rules are not enforced. The discovery view does not report legacy branch protection. Deployments manages only the dedicated Preflyt ruleset.',
+                    },
+                    {
+                      title: 'Publishing merge review results',
+                      content:
+                        'Automatic checks evaluate the published policy against current PR and workflow evidence. Only verified passing execution can produce success. Missing evidence remains incomplete. The worker invalidates old results before reevaluation and retries failed requests. Checks are refreshed at least once per polling cycle; GitHub outages can delay updates. Manual reviewed publication remains available. Forks, draft PRs and merge queues are unsupported.',
+                    },
+                    {
+                      title: 'Ruleset Insights',
+                      content:
+                        'Open a GitHub ruleset and choose Insights to see GitHub rule evaluations. Counts cover matching rule results on the current page, not all activity in the selected period. Active failures can block pushes; Evaluate mode records failures without blocking. Suite-wide bypasses do not prove this particular ruleset was bypassed. Preflyt readiness results are shown separately in Merge review result. Insights needs repository Administration: read on the assessment App. Choose Current GitHub history for an on-demand page or Saved GitHub history for evaluations collected by the worker. Saved history shows collection freshness, failures and retention. It cannot recover older evaluations that were never collected; a completed collection sweep does not prove complete period coverage.',
+                    },
+                    {
+                      title: 'Local ruleset drafts',
+                      content:
+                        'Choose one repository, select up to 20 exact branches, and use a Standard, Strict or Custom profile. The server generates the preview and saves the current standards version with the draft. If standards or the draft change while you edit, reload and review again. Drafts do not change GitHub protections. In Deployments, review affected PRs and exact GitHub configuration, obtain independent administrator approval, then activate. Every target branch needs a recent automatically verified passing check. Old drafts may need saving again to refresh their verification hash.',
+                    },
+                    {
+                      title: 'Scope and freshness',
+                      content:
+                        'Lists show 20 rulesets per page. Open a ruleset to see branch patterns, rule types and required check sources. GitHub patterns such as ~DEFAULT_BRANCH and ~ALL retain their GitHub meaning. Data is cached for up to one minute; the fetched time reflects the source read. Ruleset absence does not prove the branch is unprotected.',
+                    },
+                    {
+                      title: 'Access and limitations',
+                      content:
+                        'Only authorized, selected repositories are shown. This uses read-only repository metadata permission. The GitHub discovery view omits bypass actors and full rule parameters. Local drafts show their complete generated configuration. Activation requires separate governance credentials and both ruleset management and enforcement permissions. GitHub changes outside Preflyt are reported as drift and never overwritten. Rollback disables only the dedicated managed ruleset after verifying its current state. Organization-wide targeting and legacy protection remain outside this slice. Unavailable access, plans or throttled requests are reported as errors.',
+                    },
+                  ]}
+                />
               )}
-            >
-              <ModuleIcon className='size-5' aria-hidden='true' />
-            </span>
-            <div className='min-w-0'>
-              <p className='mb-1 text-[10px] font-semibold tracking-widest text-muted-foreground uppercase'>
-                {config.section}
-              </p>
-              <h1 className='text-xl font-semibold tracking-tight sm:text-2xl'>
-                {config.title}
-              </h1>
-              <p className='mt-1 text-sm text-muted-foreground'>
-                {config.description}
-              </p>
-            </div>
-          </div>
-          <div className='flex items-center gap-2'>
-            <Button variant='outline' size='sm' asChild>
-              <Link to='/apps'>
-                <GitBranch className='size-3.5' aria-hidden='true' />
-                Manage repositories
-              </Link>
-            </Button>
-            {module === 'quality-gates' && (
-              <PageHelpDrawer
-                title='Quality Gates'
-                sections={[
-                  {
-                    title: 'Saved gate results',
-                    content:
-                      'Assessment previews use saved evidence for an exact commit. They do not publish GitHub checks or block merges.',
-                  },
-                  {
-                    title: 'GitHub rulesets',
-                    content:
-                      'Rulesets come from GitHub for the selected repository, including inherited organization or enterprise rules. Active rules are enforced by GitHub; Evaluate records evaluations without blocking, and Disabled rules are not enforced. The discovery view does not report legacy branch protection. Deployments manages only the dedicated Preflyt ruleset.',
-                  },
-                  {
-                    title: 'Publishing merge review results',
-                    content:
-                      'Automatic checks evaluate the published policy against current PR and workflow evidence. Only verified passing execution can produce success. Missing evidence remains incomplete. The worker invalidates old results before reevaluation and retries failed requests. Checks are refreshed at least once per polling cycle; GitHub outages can delay updates. Manual reviewed publication remains available. Forks, draft PRs and merge queues are unsupported.',
-                  },
-                  {
-                    title: 'Ruleset Insights',
-                    content:
-                      'Open a GitHub ruleset and choose Insights to see GitHub rule evaluations. Counts cover matching rule results on the current page, not all activity in the selected period. Active failures can block pushes; Evaluate mode records failures without blocking. Suite-wide bypasses do not prove this particular ruleset was bypassed. Preflyt readiness results are shown separately in Merge review result. Insights needs repository Administration: read on the assessment App. Choose Current GitHub history for an on-demand page or Saved GitHub history for evaluations collected by the worker. Saved history shows collection freshness, failures and retention. It cannot recover older evaluations that were never collected; a completed collection sweep does not prove complete period coverage.',
-                  },
-                  {
-                    title: 'Local ruleset drafts',
-                    content:
-                      'Choose one repository, select up to 20 exact branches, and use a Standard, Strict or Custom profile. The server generates the preview and saves the current standards version with the draft. If standards or the draft change while you edit, reload and review again. Drafts do not change GitHub protections. In Deployments, review affected PRs and exact GitHub configuration, obtain independent administrator approval, then activate. Every target branch needs a recent automatically verified passing check. Old drafts may need saving again to refresh their verification hash.',
-                  },
-                  {
-                    title: 'Scope and freshness',
-                    content:
-                      'Lists show 20 rulesets per page. Open a ruleset to see branch patterns, rule types and required check sources. GitHub patterns such as ~DEFAULT_BRANCH and ~ALL retain their GitHub meaning. Data is cached for up to one minute; the fetched time reflects the source read. Ruleset absence does not prove the branch is unprotected.',
-                  },
-                  {
-                    title: 'Access and limitations',
-                    content:
-                      'Only authorized, selected repositories are shown. This uses read-only repository metadata permission. The GitHub discovery view omits bypass actors and full rule parameters. Local drafts show their complete generated configuration. Activation requires separate governance credentials and both ruleset management and enforcement permissions. GitHub changes outside Preflyt are reported as drift and never overwritten. Rollback disables only the dedicated managed ruleset after verifying its current state. Organization-wide targeting and legacy protection remain outside this slice. Unavailable access, plans or throttled requests are reported as errors.',
-                  },
-                ]}
-              />
-            )}
-          </div>
-        </div>
+            </>
+          }
+        />
         {module === 'standards' ? (
           <OrganizationStandardsLibrary
             key={`${session.data?.identityId}:${session.data?.organizationId}`}
@@ -397,11 +373,7 @@ export function WorkspaceModule({ module }: { module: Module }) {
                 <Card>
                   <CardContent className='flex flex-wrap items-center justify-between gap-4 pt-1'>
                     <div className='flex items-start gap-3'>
-                      <span
-                        className={cn('rounded-lg p-2.5', config.iconAccent)}
-                      >
-                        <GitBranch className='size-5' aria-hidden='true' />
-                      </span>
+                      <SurfaceIcon icon={GitBranch} tone='blue' />
                       <div>
                         <h2 className='text-sm font-semibold'>
                           Select a repository to get started

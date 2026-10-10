@@ -29,6 +29,7 @@ import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { AppHeader } from '@/components/layout/app-header'
 import { Main } from '@/components/layout/main'
+import { PageHeader } from '@/components/page-header'
 import { StatusBadge } from '@/components/status-badge'
 import { canPerform, type ScopedSession } from '../workspace/scoped-access'
 import { BranchPicker } from './branch-picker'
@@ -392,112 +393,109 @@ export function RepositoryProfilePage() {
               Repositories
             </Link>
           </Button>
-          <div className='flex flex-wrap items-start justify-between gap-4'>
-            <div className='min-w-0 flex-1 space-y-2'>
-              <div className='flex flex-wrap items-center gap-x-3 gap-y-2'>
-                <h1 className='min-w-0 text-2xl font-bold tracking-tight break-words'>
-                  {result?.repository.fullName ?? 'Repository'}
-                </h1>
-                {!!technologies.length && (
-                  <div
-                    className='flex flex-wrap items-center gap-1.5'
-                    role='group'
-                    aria-label='Detected languages and frameworks'
+          <PageHeader
+            title={result?.repository.fullName ?? 'Repository'}
+            section='Workspace'
+            icon={GitBranch}
+            tone='blue'
+            actions={
+              canDiscover && result ? (
+                <div className='flex flex-col gap-2'>
+                  <label
+                    className='text-xs font-medium text-muted-foreground'
+                    htmlFor='profile-branch'
                   >
-                    {technologies.map((name) => (
-                      <TechIcon key={name} name={name} compact />
-                    ))}
-                  </div>
-                )}
-              </div>
-              {profile ? (
-                <div className='flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-muted-foreground'>
-                  <span className='flex items-center gap-1.5'>
-                    <GitBranch aria-hidden='true' className='size-4' />
-                    Inspected branch: {profile.branch}
-                  </span>
-                  <span
-                    className='flex items-center gap-1.5'
-                    title={profile.sourceSha}
-                  >
-                    <GitCommitHorizontal
-                      aria-hidden='true'
-                      className='size-4'
+                    Inspect branch
+                  </label>
+                  <div className='flex flex-wrap items-center gap-2'>
+                    <BranchPicker
+                      repositoryId={repositoryId}
+                      actorId={sessionQuery.data?.identityId}
+                      value={inspectionBranch}
+                      disabled={discovering}
+                      onValueChange={(branch) =>
+                        setBranchChoice({ repositoryId, branch })
+                      }
                     />
-                    <code className='text-xs'>
-                      {profile.sourceSha.slice(0, 7)}
-                    </code>
-                  </span>
-                  <span>
-                    Profiled <RelativeTime value={profile.createdAt} />
-                  </span>
-                  <InspectionBadge profile={profile} />
-                </div>
-              ) : (
-                result && (
-                  <p className='text-sm text-muted-foreground'>
-                    No profile discovered yet.
+                    <Button
+                      size='sm'
+                      variant='outline'
+                      disabled={
+                        loading || discovering || !inspectionBranch.trim()
+                      }
+                      onClick={() =>
+                        discovery.mutate({
+                          id: repositoryId,
+                          branch: inspectionBranch.trim(),
+                        })
+                      }
+                    >
+                      {discovering ? (
+                        <LoaderCircle className='animate-spin' />
+                      ) : (
+                        <RefreshCw />
+                      )}
+                      {discovering
+                        ? 'Discovering…'
+                        : profile
+                          ? 'Refresh profile'
+                          : 'Discover profile'}
+                    </Button>
+                  </div>
+                  <p className='text-xs text-muted-foreground'>
+                    Select a branch. Only that branch will be inspected.
                   </p>
-                )
-              )}
-              {result && (
-                <p className='flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground'>
-                  <StatusBadge tone='info'>No merge blocking</StatusBadge>
-                  <ReadingGuide
-                    limitations={profile?.report.limitations ?? []}
-                  />
-                </p>
+                </div>
+              ) : undefined
+            }
+          >
+            <div className='flex flex-wrap items-center gap-x-3 gap-y-2'>
+              {!!technologies.length && (
+                <div
+                  className='flex flex-wrap items-center gap-1.5'
+                  role='group'
+                  aria-label='Detected languages and frameworks'
+                >
+                  {technologies.map((name) => (
+                    <TechIcon key={name} name={name} compact />
+                  ))}
+                </div>
               )}
             </div>
-            {canDiscover && result && (
-              <div className='flex flex-col gap-2'>
-                <label
-                  className='text-xs font-medium text-muted-foreground'
-                  htmlFor='profile-branch'
+            {profile ? (
+              <div className='flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-muted-foreground'>
+                <span className='flex items-center gap-1.5'>
+                  <GitBranch aria-hidden='true' className='size-4' />
+                  Inspected branch: {profile.branch}
+                </span>
+                <span
+                  className='flex items-center gap-1.5'
+                  title={profile.sourceSha}
                 >
-                  Inspect branch
-                </label>
-                <div className='flex flex-wrap items-center gap-2'>
-                  <BranchPicker
-                    repositoryId={repositoryId}
-                    actorId={sessionQuery.data?.identityId}
-                    value={inspectionBranch}
-                    disabled={discovering}
-                    onValueChange={(branch) =>
-                      setBranchChoice({ repositoryId, branch })
-                    }
-                  />
-                  <Button
-                    size='sm'
-                    variant='outline'
-                    disabled={
-                      loading || discovering || !inspectionBranch.trim()
-                    }
-                    onClick={() =>
-                      discovery.mutate({
-                        id: repositoryId,
-                        branch: inspectionBranch.trim(),
-                      })
-                    }
-                  >
-                    {discovering ? (
-                      <LoaderCircle className='animate-spin' />
-                    ) : (
-                      <RefreshCw />
-                    )}
-                    {discovering
-                      ? 'Discovering…'
-                      : profile
-                        ? 'Refresh profile'
-                        : 'Discover profile'}
-                  </Button>
-                </div>
-                <p className='text-xs text-muted-foreground'>
-                  Select a branch. Only that branch will be inspected.
-                </p>
+                  <GitCommitHorizontal aria-hidden='true' className='size-4' />
+                  <code className='text-xs'>
+                    {profile.sourceSha.slice(0, 7)}
+                  </code>
+                </span>
+                <span>
+                  Profiled <RelativeTime value={profile.createdAt} />
+                </span>
+                <InspectionBadge profile={profile} />
               </div>
+            ) : (
+              result && (
+                <p className='text-sm text-muted-foreground'>
+                  No profile discovered yet.
+                </p>
+              )
             )}
-          </div>
+            {result && (
+              <p className='flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground'>
+                <StatusBadge tone='info'>No merge blocking</StatusBadge>
+                <ReadingGuide limitations={profile?.report.limitations ?? []} />
+              </p>
+            )}
+          </PageHeader>
         </div>
         {error && (
           <div

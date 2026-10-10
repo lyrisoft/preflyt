@@ -1,3 +1,4 @@
+import { aiNotificationTypes } from "./ai-notification.js";
 import { configurationValue } from '../configuration/runtime-configuration.js'
 import { validNotificationEmail } from "./notification-mail.js";
 import {
@@ -35,7 +36,7 @@ export class NotificationsService {
   private async scope(
     session: AuthenticatedSession,
   ): Promise<Prisma.InboxNotificationWhereInput> {
-    const [assessments, policies] = await Promise.all([
+    const [assessments, policies, member] = await Promise.all([
       this.authorization.repositoryScope(
         session.identityId,
         session.organizationId,
@@ -46,12 +47,17 @@ export class NotificationsService {
         session.organizationId,
         "policy.read",
       ),
+      this.authorization.membership(session.identityId, session.organizationId),
     ]);
     return {
       identityId: session.identityId,
       event: {
         organizationId: session.organizationId ?? "",
         OR: [
+          ...(['OWNER', 'ADMIN'].includes(member?.role ?? '') ? [{
+            type: { in: aiNotificationTypes },
+            repositoryId: { in: assessments.map((r) => r.id) },
+          }] : []),
           {
             type: { in: assessmentNotificationTypes },
             repositoryId: { in: assessments.map((r) => r.id) },
@@ -89,6 +95,7 @@ export class NotificationsService {
         ![
           ...assessmentNotificationTypes,
           ...governanceNotificationTypes,
+          ...aiNotificationTypes,
         ].includes(filters.type)) ||
       (filters.repository && !/^[1-9]\d{0,15}$/.test(filters.repository))
     )

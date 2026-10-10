@@ -68,6 +68,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { AppHeader } from '@/components/layout/app-header'
 import { Main } from '@/components/layout/main'
+import { PageHeader } from '@/components/page-header'
 import { StatusBadge } from '@/components/status-badge'
 import { useNavigationSession } from '../workspace/navigation-session'
 import { canPerform } from '../workspace/scoped-access'
@@ -350,40 +351,41 @@ export function AccessControlPage() {
     <>
       <AppHeader breadcrumbs={[{ label: 'Access control' }]} />
       <Main className='space-y-6'>
-        <div className='flex flex-wrap items-start justify-between gap-4'>
-          <div>
-            <p className='text-[10px] font-semibold tracking-widest text-muted-foreground uppercase'>
-              Administration
-            </p>
-            <h1 className='mt-1 flex items-center gap-2 text-2xl font-semibold tracking-tight'>
-              <ShieldCheck className='size-6 text-primary' />
-              Access Control
-            </h1>
-            <p className='mt-2 text-sm text-muted-foreground'>
-              Manage who can access{' '}
-              {access.data?.organization?.name ?? 'your workspace'} and what
-              they can do.
-            </p>
-          </div>
-          <div className='flex gap-2'>
-            {session.data?.platformAdmin &&
+        <PageHeader
+          title='Access Control'
+          section='Administration'
+          description={`Manage who can access ${access.data?.organization?.name ?? 'your workspace'} and what they can do.`}
+          icon={ShieldCheck}
+          tone='teal'
+          actions={
+            canManage ||
+            (session.data?.platformAdmin &&
               access.data &&
-              !access.data.githubLinked && (
-                <Button variant='outline' onClick={() => setLegacyOpen(true)}>
-                  Create legacy workspace
-                </Button>
-              )}
-            {canManage && (
-              <Button
-                disabled={!access.data?.githubLinked}
-                onClick={() => start()}
-              >
-                <Plus className='size-4' />
-                Give access
-              </Button>
-            )}
-          </div>
-        </div>
+              !access.data.githubLinked) ? (
+              <>
+                {session.data?.platformAdmin &&
+                  access.data &&
+                  !access.data.githubLinked && (
+                    <Button
+                      variant='outline'
+                      onClick={() => setLegacyOpen(true)}
+                    >
+                      Create legacy workspace
+                    </Button>
+                  )}
+                {canManage && (
+                  <Button
+                    disabled={!access.data?.githubLinked}
+                    onClick={() => start()}
+                  >
+                    <Plus className='size-4' />
+                    Give access
+                  </Button>
+                )}
+              </>
+            ) : undefined
+          }
+        />
         {access.isError && (
           <p
             role='alert'
@@ -435,7 +437,7 @@ export function AccessControlPage() {
                 <span
                   className={`flex size-10 shrink-0 items-center justify-center rounded-xl ${tone}`}
                 >
-                  <Icon className='size-4' aria-hidden='true' />
+                  <Icon className='size-5' aria-hidden='true' />
                 </span>
                 <div>
                   <p className='text-xs text-muted-foreground'>{label}</p>

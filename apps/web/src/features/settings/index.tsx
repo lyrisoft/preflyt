@@ -1,8 +1,16 @@
 import { Outlet } from '@tanstack/react-router'
-import { Monitor, Bell, Palette, Wrench, UserCog } from 'lucide-react'
+import {
+  Monitor,
+  Bell,
+  Palette,
+  Wrench,
+  UserCog,
+  Settings2,
+} from 'lucide-react'
 import { Separator } from '@/components/ui/separator'
 import { AppHeader } from '@/components/layout/app-header'
 import { Main } from '@/components/layout/main'
+import { PageHeader } from '@/components/page-header'
 import { SidebarNav } from './components/sidebar-nav'
 
 const sidebarNavItems = [
@@ -40,14 +48,13 @@ export function Settings() {
       <AppHeader breadcrumbs={[{ label: 'Settings' }]} />
 
       <Main fixed>
-        <div className='space-y-0.5'>
-          <h1 className='text-2xl font-bold tracking-tight md:text-3xl'>
-            Settings
-          </h1>
-          <p className='text-muted-foreground'>
-            Manage your account settings and set e-mail preferences.
-          </p>
-        </div>
+        <PageHeader
+          title='Settings'
+          section='Account'
+          description='Manage your account and personal preferences.'
+          icon={Settings2}
+          tone='blue'
+        />
         <Separator className='my-4 lg:my-6' />
         <div className='flex flex-1 flex-col space-y-2 overflow-hidden md:space-y-2 lg:flex-row lg:space-y-0 lg:space-x-12'>
           <aside className='top-0 lg:sticky lg:w-1/5'>

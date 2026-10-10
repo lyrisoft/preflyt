@@ -879,7 +879,7 @@ export function StandardLibraryCard({
       <div className='flex-1 space-y-4 p-5'>
         <div className='flex items-start gap-3'>
           <span
-            className={`flex size-10 shrink-0 items-center justify-center rounded-lg ${color}`}
+            className={`flex size-10 shrink-0 items-center justify-center rounded-xl border border-current/10 ${color}`}
           >
             <Icon className='size-5' aria-hidden />
           </span>

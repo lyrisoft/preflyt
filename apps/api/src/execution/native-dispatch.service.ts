@@ -1,3 +1,4 @@
+import { recordNativeExecutionFailure } from '../notifications/notification-event.js'
 import { configurationValue } from '../configuration/runtime-configuration.js'
 import { digest } from '../assessments/assessment-digest.js'
 import { verifyNativeReceipt } from './native-receipt.js'
@@ -164,14 +165,30 @@ export class NativeDispatchService {
       if (result.state === 'COMPLETE' && result.signature) {
         await this.results.complete(id, result.signature)
       } else if (result.state === 'COMPLETE') {
-        await this.prisma.nativeExecutionRequest.updateMany({
-          where: { id, leaseUntil: lease },
-          data: {
-            state: 'BLOCKED',
-            reason: 'CURRENT_NATIVE_EXECUTION_NOT_VERIFIED',
-            finishedAt: new Date(),
-            leaseUntil: null,
-          },
+        await this.prisma.$transaction(async (tx) => {
+          const live = await tx.nativeExecutionRequest.findUniqueOrThrow({
+            where: { id },
+          })
+          const failed =
+            live.state === 'RUNNING' &&
+            !live.cancelledById &&
+            nativeRequestIntegrity(live)
+          const changed = await tx.nativeExecutionRequest.updateMany({
+            where: {
+              id,
+              leaseUntil: lease,
+              state: live.state,
+              cancelledById: live.cancelledById,
+            },
+            data: {
+              state: failed ? 'FAILED' : 'BLOCKED',
+              reason: 'CURRENT_NATIVE_EXECUTION_NOT_VERIFIED',
+              finishedAt: new Date(),
+              leaseUntil: null,
+            },
+          })
+          if (changed.count && failed)
+            await recordNativeExecutionFailure(tx, live)
         })
       } else {
         await this.prisma.nativeExecutionRequest.updateMany({
@@ -193,54 +210,103 @@ export class NativeDispatchService {
           receipt?.cancelled &&
           receipt.checks.every((c) => c.cleanupConfirmed)
         ) {
-          // Cleanup acknowledgement creates no assessment and needs no revoked execution permission.
+          // Cleanup acknowledgement needs no revoked execution permission. A worker
+          // interruption is a failure; explicit user cancellation remains silent.
           await this.prisma.$transaction(async (tx) => {
+            const live = await tx.nativeExecutionRequest.findUniqueOrThrow({
+              where: { id },
+            })
+            const admitted =
+              live.state === 'RUNNING' ||
+              (live.state === 'CANCEL_REQUESTED' &&
+                live.reason === 'EXECUTION_INTERRUPTED')
+            const failed =
+              admitted && !live.cancelledById && nativeRequestIntegrity(live)
+            const timedOut = Date.now() - live.requestedAt.getTime() > 1800000
+            const state = failed
+              ? timedOut
+                ? 'TIMED_OUT'
+                : 'FAILED'
+              : 'CANCELLED'
             const changed = await tx.nativeExecutionRequest.updateMany({
-              where: { id, leaseUntil: lease },
+              where: {
+                id,
+                leaseUntil: lease,
+                state: live.state,
+                cancelledById: live.cancelledById,
+              },
               data: {
-                state: 'CANCELLED',
-                reason: 'EXECUTION_CANCELLED',
+                state,
+                reason: failed
+                  ? timedOut
+                    ? 'EXECUTION_TIMED_OUT'
+                    : 'EXECUTION_UNAVAILABLE'
+                  : 'EXECUTION_CANCELLED',
                 leaseUntil: null,
                 finishedAt: new Date(),
                 receiptHash: digest(result!.signature!),
                 receiptSignature: result!.signature!,
               },
             })
-            if (changed.count)
+            if (changed.count) {
               await tx.auditEvent.create({
                 data: {
-                  event: 'native.execution.cancelled',
-                  actorId: row.actorId,
+                  event: failed
+                    ? 'native.execution.failed'
+                    : 'native.execution.cancelled',
+                  actorId: live.actorId,
                   metadata: {
                     requestId: id,
-                    organizationId: row.organizationId,
-                    repositoryGithubId: row.repositoryGithubId,
-                    attemptId: row.controllerJobId,
+                    organizationId: live.organizationId,
+                    repositoryGithubId: live.repositoryGithubId,
+                    attemptId: live.controllerJobId,
                   },
                 },
               })
+              if (failed) await recordNativeExecutionFailure(tx, live)
+            }
           })
           return
         }
       }
-      const timedOut = Date.now() - row.requestedAt.getTime() > 1800000
       // Fail closed while retaining attempt identity for controller cleanup reconciliation.
-      await this.prisma.nativeExecutionRequest.updateMany({
-        where: { id, leaseUntil: lease },
-        data: {
-          state: timedOut
-            ? 'TIMED_OUT'
-            : expected
-              ? 'CANCEL_REQUESTED'
-              : 'BLOCKED',
-          reason:
-            timedOut && expected
-              ? 'CLEANUP_UNCONFIRMED'
-              : 'EXECUTION_UNAVAILABLE',
-          leaseUntil:
-            expected && !timedOut ? new Date(Date.now() + 15000) : null,
-          finishedAt: expected && !timedOut ? null : new Date(),
-        },
+      await this.prisma.$transaction(async (tx) => {
+        const live = await tx.nativeExecutionRequest.findUniqueOrThrow({
+          where: { id },
+        })
+        const timedOut = Date.now() - live.requestedAt.getTime() > 1800000
+        const admitted =
+          live.state === 'RUNNING' ||
+          (live.state === 'CANCEL_REQUESTED' &&
+            live.reason === 'EXECUTION_INTERRUPTED')
+        const failed =
+          admitted && !live.cancelledById && nativeRequestIntegrity(live)
+        const changed = await tx.nativeExecutionRequest.updateMany({
+          where: {
+            id,
+            leaseUntil: lease,
+            state: live.state,
+            cancelledById: live.cancelledById,
+          },
+          data: {
+            state: timedOut
+              ? 'TIMED_OUT'
+              : expected
+                ? 'CANCEL_REQUESTED'
+                : 'BLOCKED',
+            reason:
+              timedOut && expected
+                ? 'CLEANUP_UNCONFIRMED'
+                : failed
+                  ? 'EXECUTION_INTERRUPTED'
+                  : 'EXECUTION_UNAVAILABLE',
+            leaseUntil:
+              expected && !timedOut ? new Date(Date.now() + 15000) : null,
+            finishedAt: expected && !timedOut ? null : new Date(),
+          },
+        })
+        if (changed.count && timedOut && failed)
+          await recordNativeExecutionFailure(tx, live)
       })
     }
   }

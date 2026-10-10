@@ -1,8 +1,15 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { RefreshCw } from 'lucide-react'
+import {
+  AlertCircle,
+  ArrowUpRight,
+  FileSearch,
+  ListFilter,
+  RefreshCw,
+  Search,
+  ShieldAlert,
+} from 'lucide-react'
 import { API_BASE_URL } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -20,11 +27,14 @@ import {
   SheetTitle,
   SheetDescription,
 } from '@/components/ui/sheet'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { Main } from '@/components/layout/main'
+import { PageHeader } from '@/components/page-header'
 import { PageHelpDrawer } from '@/components/page-help-drawer'
 import { StatusBadge, type StatusTone } from '@/components/status-badge'
+import { SurfaceIcon } from '@/components/surface-icon'
 import { useNavigationSession } from '@/features/workspace/navigation-session'
 import { FindingsOverview, type FindingsSummary } from './findings-summary'
 
@@ -113,50 +123,51 @@ function FindingsWorkspace() {
   })
   return (
     <Main className='space-y-6'>
-      <div className='flex flex-wrap items-center justify-between gap-4'>
-        <div>
-          <h1 className='text-2xl font-semibold tracking-tight'>Findings</h1>
-          <p className='mt-1 text-sm text-muted-foreground'>
-            Review reported issues and missing assessment evidence.
-          </p>
-        </div>
-        <div className='flex gap-2'>
-          <Button
-            size='sm'
-            variant='outline'
-            disabled={result.isFetching}
-            onClick={() => void result.refetch()}
-          >
-            <RefreshCw className='size-4' />
-            Refresh
-          </Button>
-          <PageHelpDrawer
-            title='Findings'
-            sections={[
-              {
-                title: 'Where findings come from',
-                content:
-                  'Failed assessment checks and SARIF or JUnit reports linked to saved assessments. Each result belongs to a repository and exact commit. Importing activity alone does not create an assessment.',
-              },
-              {
-                title: 'Evidence and trust',
-                content:
-                  'Reported means a scanner or test report supplied the issue. It is not an independent confirmation. Report source verification is shown in the details. Suppressed means the source report accepted a suppression; it does not waive a Preflyt policy.',
-              },
-              {
-                title: 'Metrics and charts',
-                content:
-                  'Metrics use all matching entries before pagination and apply the repository, severity and applied search filters across both tabs. Reported issues include failed-check summaries and individual report findings; they are not a count of distinct vulnerabilities. Source-suppressed findings are excluded from metrics and charts, but remain in the list. Affected repositories have an issue or evidence gap. Critical/high counts only issues. Charts follow the selected tab; the check chart groups the top eight checks and combines the rest. Historical commits are included; these are not current-open or resolution metrics. AI suggestions are not counted. Human triage records assignment, review and resolution for the specific commit. A resolution is an audited human decision, not proof that a newer commit passes or a policy waiver.',
-              },
-              {
-                title: 'Scope and limits',
-                content:
-                  'Only repositories you can assess are included. The latest saved assessment for each commit is used. Up to 200 assessments, 100 reports and 2,000 results are inspected. A partial-results notice appears if a limit is reached. Historical findings are not automatically marked resolved.',
-              },
-            ]}
-          />
-        </div>
-      </div>
+      <PageHeader
+        title='Findings'
+        description='Review reported issues and missing assessment evidence.'
+        section='Workspace'
+        icon={ShieldAlert}
+        tone='amber'
+        actions={
+          <>
+            <Button
+              size='sm'
+              variant='outline'
+              disabled={result.isFetching}
+              onClick={() => void result.refetch()}
+            >
+              <RefreshCw className='size-4' />
+              Refresh
+            </Button>
+            <PageHelpDrawer
+              title='Findings'
+              sections={[
+                {
+                  title: 'Where findings come from',
+                  content:
+                    'Failed assessment checks and SARIF or JUnit reports linked to saved assessments. Each result belongs to a repository and exact commit. Importing activity alone does not create an assessment.',
+                },
+                {
+                  title: 'Evidence and trust',
+                  content:
+                    'Reported means a scanner or test report supplied the issue. It is not an independent confirmation. Report source verification is shown in the details. Suppressed means the source report accepted a suppression; it does not waive a Preflyt policy.',
+                },
+                {
+                  title: 'Metrics and charts',
+                  content:
+                    'Metrics use all matching entries before pagination and apply the repository, severity and applied search filters across both tabs. Reported issues include failed-check summaries and individual report findings; they are not a count of distinct vulnerabilities. Source-suppressed findings are excluded from metrics and charts, but remain in the list. Affected repositories have an issue or evidence gap. Critical/high counts only issues. Charts follow the selected tab; the check chart groups the top eight checks and combines the rest. Historical commits are included; these are not current-open or resolution metrics. AI suggestions are not counted. Human triage records assignment, review and resolution for the specific commit. A resolution is an audited human decision, not proof that a newer commit passes or a policy waiver.',
+                },
+                {
+                  title: 'Scope and limits',
+                  content:
+                    'Only repositories you can assess are included. The latest saved assessment for each commit is used. Up to 200 assessments, 100 reports and 2,000 results are inspected. A partial-results notice appears if a limit is reached. Historical findings are not automatically marked resolved.',
+                },
+              ]}
+            />
+          </>
+        }
+      />
       <Tabs
         value={kind}
         onValueChange={(value) => {
@@ -165,13 +176,20 @@ function FindingsWorkspace() {
           setDetail(null)
         }}
       >
-        <TabsList>
-          <TabsTrigger value='findings'>Reported issues</TabsTrigger>
-          <TabsTrigger value='gaps'>Missing or unverified results</TabsTrigger>
+        <TabsList className='grid h-auto w-full max-w-full grid-cols-2 sm:w-fit'>
+          <TabsTrigger value='findings' className='h-full whitespace-normal'>
+            <ShieldAlert className='size-4' aria-hidden='true' />
+            Reported issues
+          </TabsTrigger>
+          <TabsTrigger value='gaps' className='h-full whitespace-normal'>
+            <FileSearch className='size-4' aria-hidden='true' />
+            Missing or unverified results
+          </TabsTrigger>
         </TabsList>
       </Tabs>
       <form
-        className='flex flex-wrap items-center gap-3'
+        aria-label='Filter findings'
+        className='flex flex-wrap items-center gap-3 rounded-xl border bg-card p-4'
         onSubmit={(event) => {
           event.preventDefault()
           setQ(search.trim())
@@ -179,6 +197,10 @@ function FindingsWorkspace() {
           setDetail(null)
         }}
       >
+        <ListFilter
+          className='hidden size-4 shrink-0 text-muted-foreground xl:block'
+          aria-hidden='true'
+        />
         <Select
           value={triageFilter}
           onValueChange={(value) => {
@@ -199,14 +221,20 @@ function FindingsWorkspace() {
             ))}
           </SelectContent>
         </Select>
-        <Input
-          aria-label='Search findings'
-          placeholder='Search findings…'
-          maxLength={100}
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          className='w-full sm:w-72'
-        />
+        <div className='relative w-full min-w-0 sm:w-60 sm:flex-1'>
+          <Search
+            className='pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground'
+            aria-hidden='true'
+          />
+          <Input
+            aria-label='Search findings'
+            placeholder='Search findings…'
+            maxLength={100}
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            className='w-full pl-9'
+          />
+        </div>
         <Select
           value={repository}
           onValueChange={(value) => {
@@ -215,7 +243,7 @@ function FindingsWorkspace() {
             setDetail(null)
           }}
         >
-          <SelectTrigger aria-label='Repository' className='w-full sm:w-72'>
+          <SelectTrigger aria-label='Repository' className='w-full sm:w-64'>
             <SelectValue placeholder='All repositories' />
           </SelectTrigger>
           <SelectContent>
@@ -235,7 +263,7 @@ function FindingsWorkspace() {
             setDetail(null)
           }}
         >
-          <SelectTrigger aria-label='Severity' className='w-44'>
+          <SelectTrigger aria-label='Severity' className='w-full sm:w-40'>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -250,24 +278,45 @@ function FindingsWorkspace() {
             )}
           </SelectContent>
         </Select>
-        <Button size='sm' variant='outline'>
+        <Button size='sm' type='submit' className='ml-auto'>
           Apply
         </Button>
       </form>
       {(session.isError || result.isError) && (
-        <p role='alert' className='text-sm text-destructive'>
+        <div
+          role='alert'
+          className='flex items-start gap-3 rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive'
+        >
+          <AlertCircle className='mt-0.5 size-4 shrink-0' aria-hidden='true' />
           {session.error?.message ?? result.error?.message}
-        </p>
+        </div>
       )}
       {result.isPending && !session.isError && (
-        <p role='status'>Loading findings…</p>
+        <div role='status' aria-label='Loading findings' className='space-y-5'>
+          <span className='sr-only'>Loading findings…</span>
+          <div className='grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4'>
+            {Array.from({ length: 4 }, (_, index) => (
+              <Skeleton key={index} className='h-32 rounded-xl' />
+            ))}
+          </div>
+          <Skeleton className='h-64 rounded-xl' />
+        </div>
       )}
       {result.data && (
         <>
           {result.data.truncated && (
-            <p role='status' className='rounded-lg border p-3 text-sm'>
-              Results are partial. Narrow the repository filter or open the
-              repository’s assessments for more evidence.
+            <p
+              role='status'
+              className='flex items-start gap-3 rounded-xl border border-warning/20 bg-warning/5 p-4 text-sm'
+            >
+              <AlertCircle
+                className='mt-0.5 size-4 shrink-0 text-warning-text'
+                aria-hidden='true'
+              />
+              <span>
+                Results are partial. Narrow the repository filter or open the
+                repository’s assessments for more evidence.
+              </span>
             </p>
           )}
           {result.data.summary && (
@@ -282,83 +331,114 @@ function FindingsWorkspace() {
             />
           )}
           {!result.data.rows.length ? (
-            <div className='rounded-xl border bg-card p-8'>
-              <h2 className='font-semibold'>
-                {result.data.assessedRevisions === 0
-                  ? 'No saved assessments yet'
-                  : 'No matching results'}
-              </h2>
-              <p className='mt-2 text-sm text-muted-foreground'>
-                {result.data.assessedRevisions === 0
-                  ? 'Run an assessment from a repository to collect check outcomes and report findings.'
-                  : 'Try another filter or inspect a saved assessment for its full evidence.'}
-              </p>
-              <Button size='sm' variant='outline' className='mt-4' asChild>
-                <Link to='/apps'>View repositories</Link>
+            <div className='flex flex-col items-start gap-5 rounded-xl border bg-card p-6 sm:flex-row sm:items-center'>
+              <SurfaceIcon icon={FileSearch} tone='amber' size='lg' />
+              <div className='min-w-0 flex-1'>
+                <h2 className='text-base font-semibold'>
+                  {result.data.assessedRevisions === 0
+                    ? 'No saved assessments yet'
+                    : 'No matching results'}
+                </h2>
+                <p className='mt-1 max-w-2xl text-sm leading-relaxed text-muted-foreground'>
+                  {result.data.assessedRevisions === 0
+                    ? 'Create an assessment from a repository to collect check outcomes and findings from imported reports.'
+                    : 'Try another filter or open a saved assessment to review its full evidence.'}
+                </p>
+              </div>
+              <Button size='sm' className='shrink-0' asChild>
+                <Link to='/apps'>
+                  View repositories
+                  <ArrowUpRight className='size-4' />
+                </Link>
               </Button>
             </div>
           ) : (
-            <div className='overflow-x-auto rounded-xl border'>
-              <table className='w-full text-left text-sm'>
-                <thead className='bg-muted/50 text-muted-foreground'>
-                  <tr>
-                    <th className='p-4'>Finding</th>
-                    <th className='p-4'>Severity</th>
-                    <th className='p-4'>Status</th>
-                    <th className='p-4'>Repository / commit</th>
-                    <th className='p-4'>Evidence</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {result.data.rows.map((row) => (
-                    <tr key={row.id} className='border-t'>
-                      <td className='min-w-64 p-4'>
-                        <button
-                          type='button'
-                          className='text-left font-medium underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2'
-                          onClick={() => setDetail(row)}
-                        >
-                          {row.title}
-                        </button>
-                        {row.path && (
-                          <p className='mt-1 text-xs break-all text-muted-foreground'>
-                            {row.path}
-                            {row.line ? `:${row.line}` : ''}
-                          </p>
-                        )}
-                      </td>
-                      <td className='p-4'>
-                        <StatusBadge
-                          tone={severityTone[row.severity] ?? 'neutral'}
-                        >
-                          {row.severity}
-                        </StatusBadge>
-                      </td>
-                      <td className='p-4 whitespace-nowrap'>
-                        <StatusBadge tone='neutral'>{row.status}</StatusBadge>
-                      </td>
-                      <td className='p-4'>
-                        <p>{row.repository}</p>
-                        <code className='text-xs text-muted-foreground'>
-                          {row.sourceSha.slice(0, 12)}
-                        </code>
-                      </td>
-                      <td className='p-4'>
-                        <Button
-                          size='sm'
-                          variant='outline'
-                          onClick={() => setDetail(row)}
-                        >
-                          Details
-                        </Button>
-                      </td>
+            <section
+              aria-label='Findings results'
+              className='min-w-0 overflow-hidden rounded-xl border bg-card'
+            >
+              <div className='flex items-center justify-between gap-3 border-b px-5 py-4'>
+                <div className='flex items-center gap-3'>
+                  <SurfaceIcon
+                    icon={kind === 'gaps' ? FileSearch : ShieldAlert}
+                    tone={kind === 'gaps' ? 'amber' : 'blue'}
+                    size='sm'
+                  />
+                  <h2 className='text-sm font-semibold'>
+                    {kind === 'gaps'
+                      ? 'Missing or unverified results'
+                      : 'Reported issues'}
+                  </h2>
+                </div>
+                <p className='text-xs text-muted-foreground tabular-nums'>
+                  {result.data.total.toLocaleString()} results
+                </p>
+              </div>
+              <div className='overflow-x-auto'>
+                <table className='w-full text-left text-sm'>
+                  <thead className='bg-muted/50 text-muted-foreground'>
+                    <tr>
+                      <th className='p-4'>Finding</th>
+                      <th className='p-4'>Severity</th>
+                      <th className='p-4'>Status</th>
+                      <th className='p-4'>Repository / commit</th>
+                      <th className='p-4'>Evidence</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {result.data.rows.map((row) => (
+                      <tr
+                        key={row.id}
+                        className='border-t transition-colors hover:bg-muted/30'
+                      >
+                        <td className='min-w-64 p-4'>
+                          <button
+                            type='button'
+                            className='text-left leading-snug font-medium underline-offset-4 hover:text-primary hover:underline focus-visible:outline focus-visible:outline-2'
+                            onClick={() => setDetail(row)}
+                          >
+                            {row.title}
+                          </button>
+                          {row.path && (
+                            <p className='mt-1 text-xs break-all text-muted-foreground'>
+                              {row.path}
+                              {row.line ? `:${row.line}` : ''}
+                            </p>
+                          )}
+                        </td>
+                        <td className='p-4'>
+                          <StatusBadge
+                            tone={severityTone[row.severity] ?? 'neutral'}
+                          >
+                            {row.severity}
+                          </StatusBadge>
+                        </td>
+                        <td className='p-4 whitespace-nowrap'>
+                          <StatusBadge tone='neutral'>{row.status}</StatusBadge>
+                        </td>
+                        <td className='p-4'>
+                          <p>{row.repository}</p>
+                          <code className='text-xs text-muted-foreground'>
+                            {row.sourceSha.slice(0, 12)}
+                          </code>
+                        </td>
+                        <td className='p-4'>
+                          <Button
+                            size='sm'
+                            variant='outline'
+                            onClick={() => setDetail(row)}
+                          >
+                            Details
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
           )}
-          <div className='flex items-center justify-between gap-3 text-sm'>
+          <div className='flex flex-wrap items-center justify-between gap-3 text-sm'>
             <p className='text-muted-foreground'>
               {result.data.total} results · {result.data.assessedRevisions}{' '}
               assessed commits

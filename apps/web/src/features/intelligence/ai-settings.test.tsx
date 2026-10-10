@@ -4,6 +4,7 @@ import { beforeEach, expect, it, vi } from 'vitest'
 import { render } from 'vitest-browser-react'
 import { page } from 'vitest/browser'
 import { AiSettingsPage } from './ai-settings'
+import { validateIntelligenceSearch } from './intelligence-search'
 
 const state = vi.hoisted(() => ({
   role: 'OWNER',
@@ -63,7 +64,7 @@ beforeEach(() => {
 it('keeps connections and routing separate without promising inference', () => {
   const html = renderToStaticMarkup(<AiSettingsPage />)
   expect(html).toContain('Models')
-  expect(html).toContain('Model choices')
+  expect(html).toContain('Model router')
   expect(html).toContain('AI Reviews are disabled for this deployment')
   state.query = { data: { ...configuration(), executionAvailable: true } }
   expect(renderToStaticMarkup(<AiSettingsPage />)).toContain(
@@ -119,7 +120,7 @@ it('starts new provider connections disabled and keeps errors in the form', asyn
 })
 it('starts routing disabled with source sharing off and bounded defaults', async () => {
   const view = await render(<AiSettingsPage />)
-  await view.getByRole('tab', { name: 'Model choices' }).click()
+  await view.getByRole('tab', { name: 'Model router' }).click()
   await view.getByRole('button', { name: 'Configure' }).click()
   await expect
     .element(
@@ -133,7 +134,7 @@ it('starts routing disabled with source sharing off and bounded defaults', async
       })
     )
     .not.toBeChecked()
-  await view.getByRole('button', { name: 'Save model choices' }).click()
+  await view.getByRole('button', { name: 'Save settings' }).click()
   expect(state.save).toHaveBeenCalledWith(
     '/ai/configuration/routes/pull_request',
     expect.objectContaining({
@@ -354,7 +355,7 @@ it('cancels model and routing forms without saving', async () => {
   await view.getByRole('button', { name: 'Add model', exact: true }).click()
   await view.getByRole('button', { name: 'Cancel', exact: true }).click()
   await expect.element(view.getByRole('dialog')).not.toBeInTheDocument()
-  await view.getByRole('tab', { name: 'Model choices', exact: true }).click()
+  await view.getByRole('tab', { name: 'Model router', exact: true }).click()
   await view.getByRole('button', { name: 'Configure', exact: true }).click()
   await view.getByRole('button', { name: 'Cancel', exact: true }).click()
   await expect.element(view.getByRole('dialog')).not.toBeInTheDocument()
@@ -420,4 +421,126 @@ it('explains conditional PR source review and GitHub feedback without claiming t
   expect(document.body.textContent).not.toContain(
     'Source review and GitHub feedback are not available'
   )
+})
+
+it('keeps provider actions compact and preserves routing labels across themes and mobile', async () => {
+  const builtins = [
+    ['openai', 'OpenAI (ChatGPT)'],
+    ['anthropic', 'Anthropic (Claude)'],
+    ['gemini', 'Google (Gemini)'],
+    ['deepseek', 'DeepSeek'],
+  ]
+  state.query = {
+    ...state.query,
+    data: {
+      ...configuration(),
+      presets: builtins.map(([id, name]) => ({
+        id,
+        name,
+        baseUrl: 'https://provider.example/v1',
+        exampleModel: 'example-model',
+      })),
+      stages: [
+        'laptop',
+        'repository',
+        'pull_request',
+        'qa',
+        'performance',
+        'production',
+      ],
+    },
+  }
+  await page.viewport(1440, 1000)
+  const view = await render(<AiSettingsPage />)
+  await expect
+    .element(view.getByRole('heading', { name: 'Built-in providers' }))
+    .toBeVisible()
+  const activationButtons = [
+    ...document.querySelectorAll<HTMLButtonElement>(
+      '[data-slot="card-footer"] button'
+    ),
+  ]
+  expect(activationButtons).toHaveLength(4)
+  for (const button of activationButtons) {
+    const footer = button.closest('[data-slot="card-footer"]')!
+    expect(button.getBoundingClientRect().width).toBeLessThan(
+      footer.getBoundingClientRect().width * 0.75
+    )
+  }
+  await page.screenshot({ path: '__screenshots__/ai-providers-light.png' })
+  document.documentElement.classList.add('dark')
+  await new Promise<void>((resolve) =>
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+  )
+  await Promise.all(
+    document
+      .getAnimations()
+      .filter(
+        (animation) =>
+          animation.effect?.getComputedTiming().iterations !== Infinity
+      )
+      .map((animation) => animation.finished.catch(() => undefined))
+  )
+  await page.screenshot({ path: '__screenshots__/ai-providers-dark.png' })
+  await view.getByRole('tab', { name: 'Model router' }).click()
+  await expect
+    .element(view.getByRole('heading', { name: 'Pull requests', exact: true }))
+    .toBeVisible()
+  expect(document.body.textContent).toContain('Primary')
+  expect(document.body.textContent).toContain('Fallback')
+  await page.screenshot({ path: '__screenshots__/ai-model-choices-dark.png' })
+  await page.viewport(390, 844)
+  await expect
+    .poll(() => document.documentElement.scrollWidth <= window.innerWidth)
+    .toBe(true)
+  await page.screenshot({ path: '__screenshots__/ai-model-choices-mobile.png' })
+  document.documentElement.classList.remove('dark')
+  await page.viewport(1280, 900)
+})
+
+it('opens notification links at the requested model or routing tab', async () => {
+  const view = await render(<AiSettingsPage tab='routing' />)
+  await expect
+    .element(view.getByRole('tab', { name: 'Model router' }))
+    .toHaveAttribute('data-state', 'active')
+  await expect
+    .element(view.getByRole('button', { name: 'Configure' }))
+    .toBeVisible()
+  await view.getByRole('tab', { name: 'Models', exact: true }).click()
+  await expect
+    .element(view.getByRole('button', { name: 'Add model' }))
+    .toBeVisible()
+})
+
+it('keeps routing selection in sync with controlled URL changes', async () => {
+  const changed = vi.fn()
+  const view = await render(
+    <AiSettingsPage tab='routing' onTabChange={changed} />
+  )
+  await view.getByRole('tab', { name: 'Models', exact: true }).click()
+  expect(changed).toHaveBeenCalledWith('connections')
+  await view.rerender(
+    <AiSettingsPage tab='connections' onTabChange={changed} />
+  )
+  await expect
+    .element(view.getByRole('tab', { name: 'Models', exact: true }))
+    .toHaveAttribute('data-state', 'active')
+})
+
+it('accepts only known intelligence tabs in notification URLs', () => {
+  expect(validateIntelligenceSearch({ tab: 'routing' })).toEqual({
+    tab: 'routing',
+  })
+  expect(validateIntelligenceSearch({ tab: 'skills' })).toEqual({
+    tab: 'skills',
+  })
+  for (const tab of [
+    undefined,
+    'unknown',
+    ['routing'],
+    1,
+    { value: 'routing' },
+  ]) {
+    expect(validateIntelligenceSearch({ tab })).toEqual({ tab: 'connections' })
+  }
 })

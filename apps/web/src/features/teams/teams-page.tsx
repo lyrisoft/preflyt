@@ -30,6 +30,7 @@ import {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { AppHeader } from '@/components/layout/app-header'
 import { Main } from '@/components/layout/main'
+import { PageHeader } from '@/components/page-header'
 import { PageHelpDrawer } from '@/components/page-help-drawer'
 import { StatusBadge } from '@/components/status-badge'
 import { governanceRequest } from '../repositories/governance-api'
@@ -117,7 +118,7 @@ const help = [
   {
     title: 'GitHub import and sync',
     content:
-      'Link your organization in Access Control first. Your GitHub App needs Organization Members: read. Imported identity and members are read-only. Imported repositories start outside policy scope. Sync adds new repositories for review, retains removed associations as warnings, and never expands approved scope. Sync is manual in this release; synchronize before applying policies and at least every 24 hours.',
+      'Link your organization in Access Control first. Your GitHub App needs Organization Members: read. Imported identity and members are read-only. Imported repositories start outside policy scope. Sync adds new repositories for review, retains removed associations as warnings, and never expands approved scope. Manual Sync remains available. The worker checks up to five stale teams per minute, targeting a 15-minute refresh, using the original importer’s current authority. If that authority is lost, an authorized administrator must sync. Failed snapshots or snapshots older than 24 hours block assigning or publishing inherited policies.',
   },
   {
     title: 'Assign standards and review impact',
@@ -346,29 +347,27 @@ export function TeamsWorkspace({
   }
   return (
     <div className='space-y-6'>
-      <header className='flex flex-wrap items-start justify-between gap-3'>
-        <div>
-          <h1 className='flex items-center gap-2 text-2xl font-semibold tracking-tight'>
-            <UsersRound className='size-6 text-muted-foreground' />
-            Teams
-          </h1>
-          <p className='mt-1 text-sm text-muted-foreground'>
-            Manage teams, repository scope and shared engineering standards.
-          </p>
-        </div>
-        <div className='flex flex-wrap gap-2'>
-          <Button
-            size='sm'
-            variant='outline'
-            disabled={query.isFetching}
-            onClick={() => void refresh()}
-          >
-            <RefreshCw className='size-4' />
-            Refresh
-          </Button>
-          <PageHelpDrawer title='Teams' sections={help} />
-        </div>
-      </header>
+      <PageHeader
+        title='Teams'
+        section='Administration'
+        description='Manage teams, repository scope and shared engineering standards.'
+        icon={UsersRound}
+        tone='teal'
+        actions={
+          <>
+            <Button
+              size='sm'
+              variant='outline'
+              disabled={query.isFetching}
+              onClick={() => void refresh()}
+            >
+              <RefreshCw className='size-4' />
+              Refresh
+            </Button>
+            <PageHelpDrawer title='Teams' sections={help} />
+          </>
+        }
+      />
       {(error || query.isError || options.isError) && (
         <p
           role='alert'
@@ -997,7 +996,10 @@ function TeamDetail({
             </thead>
             <tbody>
               {team.impact?.slice((page - 1) * 10, page * 10).map((row) => (
-                <tr key={row.githubId} className='border-t'>
+                <tr
+                  key={`${row.githubId}:${row.branchRef ?? 'unassigned'}`}
+                  className='border-t'
+                >
                   <td className='p-3'>{row.name}</td>
                   <td className='p-3'>
                     {row.branchRef?.replace('refs/heads/', '') ?? '—'}

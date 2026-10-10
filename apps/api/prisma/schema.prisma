@@ -403,6 +403,7 @@ model Organization {
   skillReviews AiSkillReview[]
   teams PreflytTeam[]
   reviewBudgets AiReviewBudget[]
+  notificationChannels OrganizationNotificationChannel[]
 }
 
 model OrganizationMembership {
@@ -618,6 +619,7 @@ model NotificationEvent {
   attempts Int @default(0)
   failedAt DateTime?
   notifications InboxNotification[]
+  channelDeliveries NotificationChannelDelivery[]
   @@index([deliveredAt, failedAt, createdAt])
 }
 model InboxNotification {
@@ -1062,4 +1064,46 @@ model DeploymentConfiguration {
   updatedById String?
   updatedAt DateTime @updatedAt
   createdAt DateTime @default(now())
+}
+
+
+// Organization-managed destinations; independent of personal inbox preferences.
+model OrganizationNotificationChannel {
+  id String @id @default(cuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  type String @default("EMAIL")
+  name String
+  recipients String[]
+  enabled Boolean @default(true)
+  revision Int @default(1)
+  createdById String
+  updatedById String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+  deliveries NotificationChannelDelivery[]
+  @@index([organizationId, deletedAt, createdAt])
+}
+
+model NotificationChannelDelivery {
+  id String @id @default(cuid())
+  channelId String
+  channel OrganizationNotificationChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  eventId String?
+  event NotificationEvent? @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  organizationId String
+  recipient String
+  requestedById String?
+  kind String @default("EVENT")
+  state String @default("PENDING")
+  attempts Int @default(0)
+  nextAttemptAt DateTime @default(now())
+  leaseUntil DateTime?
+  sentAt DateTime?
+  failureCode String?
+  createdAt DateTime @default(now())
+  @@unique([channelId, eventId, recipient])
+  @@index([channelId, createdAt])
+  @@index([state, nextAttemptAt, leaseUntil])
 }

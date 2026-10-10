@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { AppHeader } from '@/components/layout/app-header'
 import { Main } from '@/components/layout/main'
+import { PageHeader } from '@/components/page-header'
 import { NotificationItem } from './inbox'
 import { NotificationPreferences } from './notification-preferences'
 import { useInbox, titles } from './notification-query'
@@ -22,33 +23,32 @@ export function NotificationsPage() {
     <>
       <AppHeader breadcrumbs={[{ label: 'Notifications' }]} />
       <Main fluid className='space-y-6'>
-        <div className='flex flex-wrap items-center justify-between gap-3'>
-          <div>
-            <h1 className='text-2xl font-semibold tracking-tight'>
-              Notifications
-            </h1>
-            <p className='mt-1 text-sm text-muted-foreground'>
-              Assessment and policy updates from repositories you can access.
-            </p>
-          </div>
-          <div className='flex gap-2'>
-            <Button
-              variant='outline'
-              disabled={query.isFetching}
-              onClick={() => void query.refetch()}
-            >
-              <RefreshCw className='size-4' />
-              Refresh
-            </Button>
-            <Button
-              disabled={!query.data?.unreadCount || read.isPending}
-              onClick={() => read.mutate(null)}
-            >
-              <CheckCheck className='size-4' />
-              Mark all read
-            </Button>
-          </div>
-        </div>
+        <PageHeader
+          title='Notifications'
+          section='Workspace'
+          description='Assessment, policy and AI configuration updates from repositories you can access.'
+          icon={Inbox}
+          tone='blue'
+          actions={
+            <>
+              <Button
+                variant='outline'
+                disabled={query.isFetching}
+                onClick={() => void query.refetch()}
+              >
+                <RefreshCw className='size-4' />
+                Refresh
+              </Button>
+              <Button
+                disabled={!query.data?.unreadCount || read.isPending}
+                onClick={() => read.mutate(null)}
+              >
+                <CheckCheck className='size-4' />
+                Mark all read
+              </Button>
+            </>
+          }
+        />
         <div className='flex flex-wrap gap-3 rounded-xl border bg-card p-4'>
           <Filter
             label='Read status'
@@ -67,7 +67,7 @@ export function NotificationsPage() {
               ['', 'All severities'],
               ['info', 'Information'],
               ['warning', 'Needs attention'],
-              ['error', 'CI failure'],
+              ['error', 'Failure'],
             ]}
           />
           <NotificationRepositoryFilter

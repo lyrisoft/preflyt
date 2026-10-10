@@ -30,11 +30,6 @@ vi.mock('@tanstack/react-router', () => ({
     <a href='/apps'>{children}</a>
   ),
 }))
-vi.mock('@/components/layout/main', () => ({
-  Main: ({ children }: { children: React.ReactNode }) => (
-    <main>{children}</main>
-  ),
-}))
 const summary = {
   reportedIssues: 0,
   affectedRepositories: 0,
@@ -65,6 +60,18 @@ beforeEach(async () => {
 it('shows a useful empty state without fabricated findings', async () => {
   const view = await render(<FindingsPage />)
   await expect.element(view.getByText('No saved assessments yet')).toBeVisible()
+  await expect
+    .element(view.getByRole('heading', { name: 'Findings', level: 1 }))
+    .toBeVisible()
+  await expect
+    .element(view.getByRole('button', { name: 'Apply', exact: true }))
+    .toHaveClass('bg-primary')
+  await expect
+    .element(view.getByRole('button', { name: 'Refresh', exact: true }))
+    .not.toHaveClass('bg-primary')
+  await expect
+    .element(view.getByRole('link', { name: 'View repositories' }))
+    .toBeVisible()
   await expect
     .element(view.getByRole('tab', { name: 'Missing or unverified results' }))
     .toBeVisible()
@@ -177,7 +184,16 @@ it('shows full-result metrics, keyboard severity filtering and mobile charts', a
   const view = await render(<FindingsPage />)
   await expect
     .element(view.getByRole('region', { name: 'Findings overview' }))
-    .toHaveTextContent('Reported issues60')
+    .toHaveTextContent('Reported issues')
+  expect(
+    Array.from(
+      document.querySelectorAll('[aria-label="Findings overview"] dd'),
+      (item) => item.textContent?.trim()
+    )
+  ).toEqual(['60', '3', '20', '7'])
+  expect(
+    document.querySelectorAll('[aria-label="Findings overview"] dd')[2]
+  ).toHaveClass('text-danger-text')
   await expect
     .element(view.getByRole('heading', { name: 'Issues by check' }))
     .toBeVisible()
@@ -194,7 +210,7 @@ it('shows full-result metrics, keyboard severity filtering and mobile charts', a
       view.getByText('2 source-suppressed entries excluded', { exact: false })
     )
     .toBeVisible()
-  await page.viewport(390, 844)
+  await page.viewport(320, 844)
   await expect
     .poll(() => document.documentElement.scrollWidth <= window.innerWidth)
     .toBe(true)
@@ -258,4 +274,48 @@ it('provides compact custom triage controls with required resolution notes on mo
   await view.getByRole('button', { name: 'Save changes' }).click()
   expect(state.save).toHaveBeenCalledOnce()
   expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390)
+})
+
+it('applies search and tab changes without changing findings query scope', async () => {
+  const view = await render(<FindingsPage />)
+  await view
+    .getByRole('textbox', { name: 'Search findings' })
+    .fill('  unsafe query  ')
+  expect(state.key).toContain('')
+  await view.getByRole('button', { name: 'Apply', exact: true }).click()
+  expect(state.key).toEqual([
+    'findings',
+    'org',
+    'findings',
+    'all',
+    'all',
+    'all',
+    'unsafe query',
+    1,
+  ])
+  await view.getByRole('tab', { name: 'Missing or unverified results' }).click()
+  expect(state.key).toEqual([
+    'findings',
+    'org',
+    'gaps',
+    'all',
+    'all',
+    'all',
+    'unsafe query',
+    1,
+  ])
+})
+
+it('shows a loading surface before metrics are available', async () => {
+  state.query = { isPending: true, refetch: vi.fn() }
+  const view = await render(<FindingsPage />)
+  await expect
+    .element(view.getByRole('status', { name: 'Loading findings' }))
+    .toBeVisible()
+  await expect
+    .element(view.getByRole('region', { name: 'Findings overview' }))
+    .not.toBeInTheDocument()
+  await expect
+    .element(view.getByText('No saved assessments yet'))
+    .not.toBeInTheDocument()
 })

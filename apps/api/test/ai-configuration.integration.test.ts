@@ -857,3 +857,62 @@ it('dispatches language-constrained reviews only with an exact-commit profile',a
  await db.repositoryPullRequest.update({where:{id:f.pr.id},data:{aiReviewAttemptAt:null}});
  await f.reviews.dispatchAutomatic();expect(await db.aiSkillReview.count({where:{assessmentId:f.assessment.id}})).toBe(1);
 });
+
+
+it('emits one reservation-limit alert only after actual daily admission rejection, without reserving or running a model', async () => {
+  const f = await reviewFixture();
+  vi.stubEnv('NOTIFICATIONS_ENABLED', 'true');
+  await db.aiStageRoute.update({ where: { organizationId_stage: { organizationId: owner.organizationId!, stage: 'repository' } }, data: { dailyBudgetCents: 1 } });
+  fetchMock.mockClear();
+  await f.call('', { assessmentId: f.assessment.id, checkIds: [f.check.id] }).expect(409);
+  await f.call('', { assessmentId: f.assessment.id, checkIds: [f.check.id] }).expect(409);
+  expect(fetchMock).not.toHaveBeenCalled();
+  expect(await db.aiReviewBudget.count({ where: { organizationId: owner.organizationId! } })).toBe(0);
+  expect(await db.aiSkillReview.count({ where: { organizationId: owner.organizationId! } })).toBe(0);
+  const events = await db.notificationEvent.findMany({ where: { organizationId: owner.organizationId!, type: 'AI_REVIEW_BUDGET_REACHED' } });
+  expect(events).toHaveLength(1);
+  expect(events[0]).toMatchObject({ severity: 'warning', repositoryId: f.repo.id, actorId: owner.identityId, assessmentId: null, sourceSha: null });
+  expect(JSON.stringify(events)).not.toContain('fixture-key');
+});
+it('records actual failed inference transport but excludes invalid output, cancellation and access rejection', async () => {
+  const f = await reviewFixture();
+  vi.stubEnv('NOTIFICATIONS_ENABLED', 'true');
+  const review = (await f.call('', { assessmentId: f.assessment.id, checkIds: [f.check.id] }).expect(201)).body;
+  await db.aiSkillReview.updateMany({ where: { state: 'QUEUED', id: { not: review.id } }, data: { state: 'CANCELLED' } });
+  fetchMock.mockResolvedValueOnce(new Response('private-provider-body', { status: 503 }));
+  await f.reviews.reconcile();
+  const signals = await db.auditEvent.findMany({ where: { event: 'ai.inference.transport_failed', metadata: { path: ['organizationId'], equals: owner.organizationId! } } });
+  expect(signals).toHaveLength(1);
+  expect(signals[0].metadata).toMatchObject({ reviewId: review.id, providerId: f.provider.id });
+  expect(JSON.stringify(signals)).not.toContain('private-provider-body');
+  expect(await db.notificationEvent.count({ where: { organizationId: owner.organizationId!, type: 'AI_MODEL_UNAVAILABLE' } })).toBe(0);
+  await db.aiSkillReview.update({ where: { id: review.id }, data: { state: 'QUEUED' } });
+  fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ choices: [{ finish_reason: 'length' }] })));
+  await f.reviews.reconcile();
+  expect(await db.auditEvent.count({ where: { event: 'ai.inference.transport_failed', metadata: { path: ['organizationId'], equals: owner.organizationId! } } })).toBe(1);
+  await db.aiSkillReview.update({ where: { id: review.id }, data: { state: 'QUEUED' } });
+  await db.organizationMembership.updateMany({ where: { organizationId: owner.organizationId!, identityId: owner.identityId }, data: { active: false } });
+  fetchMock.mockClear();
+  await f.reviews.reconcile();
+  expect(fetchMock).not.toHaveBeenCalled();
+  expect(await db.auditEvent.count({ where: { event: 'ai.inference.transport_failed', metadata: { path: ['organizationId'], equals: owner.organizationId! } } })).toBe(1);
+});
+
+
+it('never invokes fallback because successful inference notification persistence failed', async () => {
+  vi.stubEnv('NOTIFICATIONS_ENABLED', 'true')
+  const f = await reviewFixture()
+  const fallback = (await post(owner, '/providers', { ...input, name: 'Fallback', inputPriceCentsPerMillion: 200, outputPriceCentsPerMillion: 800 }).expect(201)).body
+  await post(owner, `/providers/${fallback.id}/test`, {}).expect(201)
+  await post(owner, '/routes/repository', route(f.provider.id, { fallbackId: fallback.id, expectedRevision: 1 })).expect(201)
+  const job = (await f.call('', { assessmentId: f.assessment.id, checkIds: [f.check.id] }).expect(201)).body
+  await db.aiSkillReview.updateMany({ where: { state: 'QUEUED', id: { not: job.id } }, data: { state: 'CANCELLED' } });
+  const notifications = await import('../src/notifications/ai-notification.js')
+  const write = vi.spyOn(notifications, 'recordAiInferenceOutcomeInTransaction').mockRejectedValueOnce(new Error('Notification storage unavailable'))
+  try {
+    fetchMock.mockClear(); f.infer(); await f.reviews.reconcile()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(write).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ providerId: f.provider.id, outcome: 'succeeded' }))
+    expect((await db.aiSkillReview.findUniqueOrThrow({ where: { id: job.id } })).state).toBe('UNAVAILABLE')
+  } finally { write.mockRestore() }
+})

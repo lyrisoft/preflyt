@@ -1,3 +1,5 @@
+import { recordAiBudgetNotification, recordAiInferenceOutcome, recordAiInferenceOutcomeInTransaction } from '../notifications/ai-notification.js';
+import { AiTransportError } from './ai-http.js';
 import { configurationValue } from '../configuration/runtime-configuration.js'
 import { skillApplicability } from "./skill-applicability.js";
 import { GitHubProviderService } from "../github/github-provider.service.js";
@@ -397,27 +399,24 @@ export class SkillReviewService {
             throw new ConflictException(
               "Route changed before review admission",
             );
-          const budget = await tx.aiReviewBudget.upsert({
-            where: {
-              organizationId_stage_day: {
-                organizationId: session.organizationId!,
-                stage,
-                day,
-              },
-            },
-            create: {
-              organizationId: session.organizationId!,
-              stage,
-              day,
-              reservedMicroCents: reserved,
-            },
+          // Decide admission before incrementing. A rejected request records its
+          // outbox event in this transaction but reserves nothing and calls no model.
+          const budget = await tx.aiReviewBudget.findUnique({
+            where: { organizationId_stage_day: {
+              organizationId: session.organizationId!, stage, day,
+            } },
+          });
+          if ((budget?.reservedMicroCents ?? 0n) + reserved > BigInt(route.dailyBudgetCents) * 1000000n) {
+            await recordAiBudgetNotification(tx, repo, session.organizationId!, session.identityId, route, day);
+            return { budgetRejected: true as const };
+          }
+          await tx.aiReviewBudget.upsert({
+            where: { organizationId_stage_day: {
+              organizationId: session.organizationId!, stage, day,
+            } },
+            create: { organizationId: session.organizationId!, stage, day, reservedMicroCents: reserved },
             update: { reservedMicroCents: { increment: reserved } },
           });
-          if (
-            budget.reservedMicroCents >
-            BigInt(route.dailyBudgetCents) * 1000000n
-          )
-            throw new ConflictException("Daily review budget reached");
           const result = await tx.aiSkillReview.create({
             data: {
               organizationId: session.organizationId!,
@@ -453,6 +452,7 @@ export class SkillReviewService {
         },
         { isolationLevel: "Serializable" },
       );
+      if ('budgetRejected' in review) throw new ConflictException("Daily review budget reached");
       return publicReview(review);
     } catch (e) {
       if (["P2034", "P2002"].includes((e as { code?: string }).code ?? ""))
@@ -1050,8 +1050,8 @@ export class SkillReviewService {
           endpointDigest(providerEndpoint(provider)!) !== pin.endpointDigest
         )
           throw new Error("Provider changed");
+        await this.verifyLivePr(job.repository, snapshot);
         try {
-          await this.verifyLivePr(job.repository, snapshot);
           findings = await runSkillInference(
             provider,
             reviewTasks(snapshot.checks, snapshot.skills),
@@ -1065,7 +1065,16 @@ export class SkillReviewService {
           );
           providerId = provider.id;
           break;
-        } catch {
+        } catch (error) {
+          if (error instanceof AiTransportError && (!signal.aborted || signal.reason?.name === 'TimeoutError')) {
+            // Recheck access/configuration before retaining a redacted outage signal.
+            await this.current(session, job.repository.githubId.toString(), job.assessmentId, snapshot);
+            await recordAiInferenceOutcome(this.db, {
+              reviewId: job.id, organizationId: job.organizationId, actorId: job.actorId,
+              repositoryId: job.repositoryId, providerId: provider.id, providerRevision: provider.revision,
+              outcome: 'transport_failed',
+            });
+          }
           signal.throwIfAborted();
         }
       }
@@ -1149,6 +1158,15 @@ export class SkillReviewService {
             )
               throw new Error("Provider changed");
           }
+          const successfulProvider = snapshot.providers.find(pin => pin.id === providerId);
+          if (!successfulProvider) throw new Error("Model unavailable");
+          // Persist availability with the verified review result. A notification
+          // storage failure never falls through to another inference call.
+          await recordAiInferenceOutcomeInTransaction(tx, {
+            reviewId: job.id, organizationId: job.organizationId, actorId: job.actorId,
+            repositoryId: job.repositoryId, providerId: successfulProvider.id, providerRevision: successfulProvider.revision,
+            outcome: 'succeeded',
+          });
           await tx.aiSkillReview.updateMany({
             where: { id: job.id, state: "RUNNING" },
             data: {

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { CalendarDays } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   Card,
@@ -12,6 +13,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { SurfaceIcon } from '@/components/surface-icon'
 import {
   activityLevel,
   activityWeeks,
@@ -45,12 +47,15 @@ export function ActivityHeatmap({
   const total = activity.reduce((sum, day) => sum + day.count, 0)
   return (
     <Card className='min-w-0'>
-      <CardHeader>
-        <CardTitle>Assessment activity</CardTitle>
-        <CardDescription>
-          {total.toLocaleString()} assessment{total === 1 ? '' : 's'} recorded ·{' '}
-          {dateLabel(from)}–{dateLabel(to)}
-        </CardDescription>
+      <CardHeader className='flex flex-row items-center gap-3'>
+        <SurfaceIcon icon={CalendarDays} tone='teal' />
+        <div>
+          <CardTitle>Assessment activity</CardTitle>
+          <CardDescription>
+            {total.toLocaleString()} assessment{total === 1 ? '' : 's'} recorded
+            · {dateLabel(from)}–{dateLabel(to)}
+          </CardDescription>
+        </div>
       </CardHeader>
       <CardContent>
         <div className='overflow-x-auto pb-2'>

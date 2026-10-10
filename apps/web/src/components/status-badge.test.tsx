@@ -56,3 +56,10 @@ it('preserves evidence colors after wording changes', () => {
   expect(statusTones['not run']).toBe('neutral')
   expect(statusTones['suggestions only']).toBe('info')
 })
+
+it('uses shared delivery colors for email notification states', () => {
+  expect(statusTones['email sent']).toBe('success')
+  expect(statusTones['email queued']).toBe('warning')
+  expect(statusTones['email failed']).toBe('error')
+  expect(statusTones['email skipped']).toBe('neutral')
+})

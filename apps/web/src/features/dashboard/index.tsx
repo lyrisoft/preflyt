@@ -45,9 +45,11 @@ import {
 } from '@/components/ui/tooltip'
 import { AppHeader } from '@/components/layout/app-header'
 import { Main } from '@/components/layout/main'
+import { PageHeader } from '@/components/page-header'
 import { PageHelpDrawer } from '@/components/page-help-drawer'
 import { RepositoryPicker } from '@/components/repository-picker'
 import { StatusBadge } from '@/components/status-badge'
+import { SurfaceIcon } from '@/components/surface-icon'
 import { RelativeTime } from '@/features/repositories/relative-time'
 import { TechIcon } from '@/features/repositories/tech-icon'
 import { ActivityHeatmap } from './activity-heatmap'
@@ -127,83 +129,81 @@ export function Dashboard() {
     <>
       <AppHeader breadcrumbs={[{ label: 'Overview' }]} />
       <Main className='space-y-6'>
-        <div className='flex flex-wrap items-start justify-between gap-4'>
-          <div>
-            <h1 className='text-2xl font-bold tracking-tight'>
-              Engineering Overview
-            </h1>
-            <p className='mt-1 text-sm text-muted-foreground'>
-              Review repository evidence, assessment activity, and changes
-              requiring attention.
-            </p>
-          </div>
-          <div className='flex flex-wrap items-center gap-2'>
-            <RepositoryPicker
-              repositories={data?.choices ?? []}
-              value={repository ?? 'all'}
-              allowAll
-              aria-label='Filter repositories'
-              onValueChange={(value) =>
-                filters({ repository: value === 'all' ? undefined : value })
-              }
-            />
-            <Select
-              value={days}
-              onValueChange={(value) =>
-                filters({ days: value as '7' | '30' | '90' | '180' })
-              }
-            >
-              <SelectTrigger className='w-56' aria-label='Assessment period'>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value='7'>Last 7 days</SelectItem>
-                <SelectItem value='30'>Last 30 days</SelectItem>
-                <SelectItem value='90'>Last 90 days</SelectItem>
-                <SelectItem value='180'>Last 6 months (180 days)</SelectItem>
-              </SelectContent>
-            </Select>
-            <Button
-              variant='outline'
-              size='icon'
-              aria-label='Refresh overview'
-              disabled={query.isFetching}
-              onClick={() => void query.refetch()}
-            >
-              <RefreshCw className={query.isFetching ? 'animate-spin' : ''} />
-            </Button>
-            <PageHelpDrawer
-              title='Engineering Overview'
-              sections={[
-                {
-                  title: 'Summary metrics',
-                  content:
-                    'Repositories counts selected, available repositories in your authorized scope. PRs assessed counts distinct pull requests with a saved assessment in the selected period. Saved assessments count all saved assessments in that period. Standards adopted counts repositories with a saved standards selection; it is not verified check coverage.',
-                },
-                {
-                  title: 'Assessment activity',
-                  content:
-                    'The calendar counts saved assessments per day, using UTC. Select a day to inspect its activity. A darker or brighter cell indicates assessment volume, not passing checks or merge readiness.',
-                },
-                {
-                  title: 'Repository status',
-                  content:
-                    'The repository list shows the latest saved inspection, standards selection and assessment across all time. Partially inspected means some supported configuration could not be inspected and may be unknown. Inspection does not run tests or scanners.',
-                },
-                {
-                  title: 'Pull requests',
-                  content:
-                    'This is a summary of up to 10 recently updated tracked open pull requests from the last GitHub sync, not a complete PR list. Open Assessments for the full repository view. The date filter changes assessment counts and calendar activity; it does not limit repository status or tracked open PRs.',
-                },
-                {
-                  title: 'Data sources and limits',
-                  content:
-                    'This page reads saved Preflyt data from repositories you can access. Refresh reloads local data; it does not start a GitHub sync. A saved assessment or successful CI result alone does not prove a change is ready to merge. Readiness and missing evidence must be reviewed at the exact PR revision.',
-                },
-              ]}
-            />
-          </div>
-        </div>
+        <PageHeader
+          title='Engineering Overview'
+          section='Workspace'
+          description='Review repository evidence, assessment activity, and changes requiring attention.'
+          icon={LayoutDashboard}
+          tone='blue'
+          actions={
+            <>
+              <RepositoryPicker
+                repositories={data?.choices ?? []}
+                value={repository ?? 'all'}
+                allowAll
+                aria-label='Filter repositories'
+                onValueChange={(value) =>
+                  filters({ repository: value === 'all' ? undefined : value })
+                }
+              />
+              <Select
+                value={days}
+                onValueChange={(value) =>
+                  filters({ days: value as '7' | '30' | '90' | '180' })
+                }
+              >
+                <SelectTrigger className='w-56' aria-label='Assessment period'>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value='7'>Last 7 days</SelectItem>
+                  <SelectItem value='30'>Last 30 days</SelectItem>
+                  <SelectItem value='90'>Last 90 days</SelectItem>
+                  <SelectItem value='180'>Last 6 months (180 days)</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button
+                variant='outline'
+                size='icon'
+                aria-label='Refresh overview'
+                disabled={query.isFetching}
+                onClick={() => void query.refetch()}
+              >
+                <RefreshCw className={query.isFetching ? 'animate-spin' : ''} />
+              </Button>
+              <PageHelpDrawer
+                title='Engineering Overview'
+                sections={[
+                  {
+                    title: 'Summary metrics',
+                    content:
+                      'Repositories counts selected, available repositories in your authorized scope. PRs assessed counts distinct pull requests with a saved assessment in the selected period. Saved assessments count all saved assessments in that period. Standards adopted counts repositories with a saved standards selection; it is not verified check coverage.',
+                  },
+                  {
+                    title: 'Assessment activity',
+                    content:
+                      'The calendar counts saved assessments per day, using UTC. Select a day to inspect its activity. A darker or brighter cell indicates assessment volume, not passing checks or merge readiness.',
+                  },
+                  {
+                    title: 'Repository status',
+                    content:
+                      'The repository list shows the latest saved inspection, standards selection and assessment across all time. Partially inspected means some supported configuration could not be inspected and may be unknown. Inspection does not run tests or scanners.',
+                  },
+                  {
+                    title: 'Pull requests',
+                    content:
+                      'This is a summary of up to 10 recently updated tracked open pull requests from the last GitHub sync, not a complete PR list. Open Assessments for the full repository view. The date filter changes assessment counts and calendar activity; it does not limit repository status or tracked open PRs.',
+                  },
+                  {
+                    title: 'Data sources and limits',
+                    content:
+                      'This page reads saved Preflyt data from repositories you can access. Refresh reloads local data; it does not start a GitHub sync. A saved assessment or successful CI result alone does not prove a change is ready to merge. Readiness and missing evidence must be reviewed at the exact PR revision.',
+                  },
+                ]}
+              />
+            </>
+          }
+        />
         {query.isPending ? (
           <div
             role='status'
@@ -271,9 +271,15 @@ export function Dashboard() {
                           <CardTitle className='text-sm font-medium'>
                             {stat.label}
                           </CardTitle>
-                          <stat.icon
-                            aria-hidden='true'
-                            className='size-4 text-muted-foreground'
+                          <SurfaceIcon
+                            icon={stat.icon}
+                            tone={
+                              stat.icon === BookOpen
+                                ? 'teal'
+                                : stat.icon === ListChecks
+                                  ? 'violet'
+                                  : 'blue'
+                            }
                           />
                         </CardHeader>
                         <CardContent>
@@ -327,11 +333,14 @@ export function Dashboard() {
                           />
                         </div>
                         <Card>
-                          <CardHeader>
-                            <CardTitle>Evidence overview</CardTitle>
-                            <CardDescription>
-                              Repository assessments across all time
-                            </CardDescription>
+                          <CardHeader className='flex flex-row items-center gap-3'>
+                            <SurfaceIcon icon={ListChecks} tone='violet' />
+                            <div>
+                              <CardTitle>Evidence overview</CardTitle>
+                              <CardDescription>
+                                Repository assessments across all time
+                              </CardDescription>
+                            </div>
                           </CardHeader>
                           <CardContent className='space-y-4'>
                             <div className='space-y-3 text-sm'>
@@ -363,9 +372,9 @@ export function Dashboard() {
                               </div>
                             </div>
                             <p className='border-t pt-4 text-xs text-muted-foreground'>
-                              Verified gates and findings are not available yet.
-                              A successful CI result alone does not mean a
-                              change is ready to merge.
+                              Open Quality Gates or Findings for detailed
+                              results. A successful CI result alone does not
+                              mean a change is ready to merge.
                             </p>
                             <Button variant='outline' size='sm' asChild>
                               <Link to='/policies' search={{ repository }}>
@@ -380,14 +389,17 @@ export function Dashboard() {
                     <TabsContent value='pull-requests'>
                       <Card>
                         <CardHeader className='flex flex-row flex-wrap items-start justify-between gap-3'>
-                          <div>
-                            <CardTitle>
-                              Pull requests requiring attention
-                            </CardTitle>
-                            <CardDescription>
-                              Tracked open PRs from the last GitHub sync. Gate
-                              status remains unevaluated.
-                            </CardDescription>
+                          <div className='flex min-w-0 items-center gap-3'>
+                            <SurfaceIcon icon={GitPullRequest} tone='blue' />
+                            <div>
+                              <CardTitle>
+                                Pull requests requiring attention
+                              </CardTitle>
+                              <CardDescription>
+                                Tracked open PRs from the last GitHub sync. Gate
+                                status remains unevaluated.
+                              </CardDescription>
+                            </div>
                           </div>
                           <Button variant='ghost' size='sm' asChild>
                             <Link to='/assessments' search={{ repository }}>
@@ -472,12 +484,15 @@ export function Dashboard() {
                     <TabsContent value='repositories'>
                       <Card>
                         <CardHeader className='flex flex-row flex-wrap items-start justify-between gap-3'>
-                          <div>
-                            <CardTitle>Repository status</CardTitle>
-                            <CardDescription>
-                              Latest recorded profile, standards selection, and
-                              assessment
-                            </CardDescription>
+                          <div className='flex min-w-0 items-center gap-3'>
+                            <SurfaceIcon icon={GitBranch} tone='teal' />
+                            <div>
+                              <CardTitle>Repository status</CardTitle>
+                              <CardDescription>
+                                Latest recorded profile, standards selection,
+                                and assessment
+                              </CardDescription>
+                            </div>
                           </div>
                           <Button variant='ghost' size='sm' asChild>
                             <Link to='/apps'>
