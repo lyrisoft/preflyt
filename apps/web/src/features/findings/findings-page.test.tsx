@@ -7,9 +7,14 @@ import { FindingsPage } from './findings-page'
 const state = vi.hoisted(() => ({
   query: {} as Record<string, unknown>,
   key: [] as unknown[],
+  save: vi.fn(),
 }))
 vi.mock('@tanstack/react-query', () => ({
+  useQueryClient: () => ({ invalidateQueries: vi.fn() }),
+  useMutation: () => ({ mutate: state.save, isPending: false }),
   useQuery: (options: { queryKey: unknown[] }) => {
+    if (options.queryKey[0] === 'finding-assignees')
+      return { data: [{ id: 'developer', label: 'developer' }] }
     state.key = options.queryKey
     return state.query
   },
@@ -95,7 +100,7 @@ it('opens exact commit evidence and preserves unverified report status', async (
   }
   const view = await render(<FindingsPage />)
   await expect
-    .element(view.getByText('Reported', { exact: true }))
+    .element(view.getByRole('table').getByText('Reported', { exact: true }))
     .toHaveClass('text-info-text')
   await view.getByRole('button', { name: 'Details', exact: true }).click()
   await expect
@@ -197,4 +202,60 @@ it('shows full-result metrics, keyboard severity filtering and mobile charts', a
     .element(view.getByRole('heading', { name: 'Issues by severity' }))
     .toBeVisible()
   await page.viewport(1280, 800)
+})
+
+it('provides compact custom triage controls with required resolution notes on mobile', async () => {
+  await page.viewport(390, 844)
+  state.save.mockClear()
+  state.query = {
+    data: {
+      summary,
+      canManage: true,
+      rows: [
+        {
+          id: 'a'.repeat(64),
+          title: 'Missing tests',
+          repositoryId: '1',
+          repository: 'org/repo',
+          sourceSha: 'b'.repeat(40),
+          assessmentId: 'saved',
+          observedAt: '2026-10-10T00:00:00Z',
+          severity: 'high',
+          status: 'Reported',
+          path: null,
+          line: null,
+          ruleId: 'tests.required',
+          evidence: [],
+          verification: 'ADMIN_ASSOCIATED_UNVERIFIED',
+          occurrences: 1,
+          triage: {
+            state: 'REPORTED',
+            assigneeId: null,
+            note: '',
+            revision: 0,
+          },
+        },
+      ],
+      total: 1,
+      repositories: [],
+      pageSize: 50,
+      assessedRevisions: 1,
+    },
+    refetch: vi.fn(),
+  }
+  const view = await render(<FindingsPage />)
+  await view.getByRole('button', { name: 'Details' }).click()
+  await view.getByLabelText('Status', { exact: true }).click()
+  await view.getByRole('option', { name: 'Resolved', exact: true }).click()
+  await expect
+    .element(view.getByLabelText('Resolution or review note'))
+    .toBeRequired()
+  await view
+    .getByLabelText('Resolution or review note')
+    .fill('Fixed in the next commit; historical evidence retained')
+  await view.getByLabelText('Assignee', { exact: true }).click()
+  await view.getByRole('option', { name: 'developer', exact: true }).click()
+  await view.getByRole('button', { name: 'Save triage' }).click()
+  expect(state.save).toHaveBeenCalledOnce()
+  expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390)
 })

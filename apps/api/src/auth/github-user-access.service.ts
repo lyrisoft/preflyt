@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service.js'
 import { GitHubIdentityProvider } from './github-identity-provider.js'
+import { GitHubCredentialService } from './github-credential.service.js'
 import { decryptGitHubUserTokens } from './github-token-cipher.js'
 @Injectable()
 export class GitHubUserAccessService {
@@ -95,10 +96,7 @@ export class GitHubUserAccessService {
     const request = (async () => {
       const members = account
         ? await this.provider.members(
-            decryptGitHubUserTokens(
-              account.id,
-              account.credential!.encryptedTokens
-            ).accessToken,
+            (await new GitHubCredentialService(this.db, this.provider).access(account.id)).token,
             link.login
           )
         : await this.provider.installationMembers(
@@ -177,8 +175,7 @@ export class GitHubUserAccessService {
         'Your GitHub authorization has expired. Sign in with GitHub again.'
       )
     return this.provider.resolveMember(
-      decryptGitHubUserTokens(account.id, account.credential.encryptedTokens)
-        .accessToken,
+      (await new GitHubCredentialService(this.db, this.provider).access(account.id)).token,
       link.login,
       link.githubOrganizationId,
       username
@@ -221,6 +218,27 @@ export class GitHubUserAccessService {
         'GitHub access changed during sync. Try again.'
       )
   }
+  private lastReconciliation = 0
+  private reconciliationCursor: string | undefined
+  async reconcile() {
+    if (process.env.GITHUB_LOGIN_ENABLED !== 'true' || Date.now() - this.lastReconciliation < 60000) return
+    this.lastReconciliation = Date.now()
+    const rows = await this.db.gitHubUserAccessEvidence.findMany({
+      where: { expiresAt: { lte: new Date() } }, orderBy: { id: 'asc' }, take: 10,
+      ...(this.reconciliationCursor ? { cursor: { id: this.reconciliationCursor }, skip: 1 } : {}),
+      include: { account: true },
+    })
+    this.reconciliationCursor = rows.at(-1)?.id
+    for (const row of rows) {
+      const member = await this.db.organizationMembership.findUnique({ where: { organizationId_identityId: { organizationId: row.organizationId, identityId: row.account.identityId } } })
+      if (!member?.active) {
+        await this.db.gitHubUserAccessEvidence.deleteMany({ where: { id: row.id } })
+        continue
+      }
+      // Failure never extends stale authorization evidence or deletes local sessions.
+      await this.repositoryIds(row.account.identityId, row.organizationId, true).catch(() => undefined)
+    }
+  }
   async repositoryIds(
     identityId: string,
     organizationId: string,
@@ -243,10 +261,7 @@ export class GitHubUserAccessService {
       throw new ForbiddenException(
         'This organization has no active GitHub connection'
       )
-    if (!account.credential || account.credential.accessExpiresAt <= new Date())
-      throw new ServiceUnavailableException(
-        'Your GitHub authorization has expired. Sign in with GitHub again.'
-      )
+    const credential = await new GitHubCredentialService(this.db, this.provider).access(account.id, account.credential)
     const evidence = await this.db.gitHubUserAccessEvidence.findUnique({
       where: {
         accountId_organizationId: { accountId: account.id, organizationId },
@@ -265,10 +280,7 @@ export class GitHubUserAccessService {
     if (pending) return pending
     const refresh = (async () => {
       try {
-        const token = decryptGitHubUserTokens(
-          account.id,
-          account.credential!.encryptedTokens
-        ).accessToken
+        const token = credential.token
         const verified = await this.provider.verify(
           token,
           installation.id,
@@ -295,16 +307,20 @@ export class GitHubUserAccessService {
           expiresAt: new Date(
             Math.min(
               Date.now() + 300000,
-              account.credential!.accessExpiresAt.getTime()
+              credential.expiresAt.getTime()
             )
           ),
         }
-        await this.db.gitHubUserAccessEvidence.upsert({
-          where: {
-            accountId_organizationId: { accountId: account.id, organizationId },
-          },
-          create: { accountId: account.id, organizationId, ...data },
-          update: data,
+        await this.db.$transaction(async tx => {
+          await tx.$queryRaw`SELECT "id" FROM "GitHubUserAccount" WHERE "id" = ${account.id} FOR UPDATE`
+          await tx.$queryRaw`SELECT "accountId" FROM "GitHubUserCredential" WHERE "accountId" = ${account.id} FOR UPDATE`
+          const live = await tx.gitHubUserCredential.findUnique({ where: { accountId: account.id } })
+          if (!live || live.accessExpiresAt <= new Date() || decryptGitHubUserTokens(account.id, live.encryptedTokens).accessToken !== token)
+            throw new ForbiddenException('GitHub authorization changed during verification. Try again.')
+          await tx.gitHubUserAccessEvidence.upsert({
+            where: { accountId_organizationId: { accountId: account.id, organizationId } },
+            create: { accountId: account.id, organizationId, ...data }, update: data,
+          })
         })
         return verified.repositoryIds
       } catch (error) {

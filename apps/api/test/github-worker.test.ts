@@ -1,3 +1,8 @@
+import {disposableDatabase} from './disposable-database.js'
+import {beforeAll, afterAll} from 'vitest'
+let fixture: Awaited<ReturnType<typeof disposableDatabase>>
+beforeAll(async () => { fixture = await disposableDatabase('worker') })
+afterAll(async () => { await fixture?.close() })
 import { spawn } from 'node:child_process'
 import { readFile, unlink } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'

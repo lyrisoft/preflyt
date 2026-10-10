@@ -281,3 +281,26 @@ it('keeps the editor usable at mobile width and exposes effective impact', async
     .toBeVisible()
   await page.viewport(1280, 900)
 })
+
+it('opens the organization baseline through an explicit action', async () => {
+  api.request.mockImplementation(async (path: string, body?: unknown) => {
+    if (path === '/teams/options') return options
+    if (path === '/teams/baseline' && body) return { id: 'baseline' }
+    if (path === '/teams/baseline/edit') return { id: 'baseline' }
+    if (path === '/teams/baseline')
+      return { ...detail, id: 'baseline', source: 'ORGANIZATION', members: [] }
+    return { teams: [team], total: 1, pageSize: 20 }
+  })
+  const view = await mount()
+  await userEvent.click(
+    view.getByRole('button', { name: 'Organization baseline', exact: true })
+  )
+  await expect
+    .poll(() =>
+      api.request.mock.calls.some(
+        ([path, body]) =>
+          path === '/teams/baseline' && JSON.stringify(body) === '{}'
+      )
+    )
+    .toBe(true)
+})

@@ -535,7 +535,7 @@ model GitHubOrganizationLink {
 }
 
 // AES-256-GCM envelope bound to the account ID; never store plaintext provider tokens.
-// Refresh ownership remains pending; authorization evidence is stored separately.
+// Rotation is serialized by the credential row lock; authorization evidence is stored separately.
 model GitHubUserCredential {
   accountId        String @id
   account          GitHubUserAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
@@ -1033,4 +1033,22 @@ model TeamPolicyAssignment {
   createdById String
   createdAt DateTime @default(now())
   @@index([teamId, branchRef, createdAt])
+  supersededAt DateTime?
+}
+
+// Human triage belongs to a specific saved finding; it never changes gate evidence.
+model FindingDisposition {
+  id String @id
+  organizationId String
+  repositoryGithubId String
+  assessmentId String
+  sourceSha String
+  state String @default("REPORTED")
+  assigneeId String?
+  note String @default("")
+  revision Int @default(1)
+  updatedById String
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+  @@index([organizationId, repositoryGithubId, state])
 }

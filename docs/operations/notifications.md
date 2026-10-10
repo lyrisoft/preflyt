@@ -80,3 +80,9 @@ The next reconciliation retries it with fresh authorization. Never replay unconf
 
 
 Confirmed automatic BLOCK/INCOMPLETE publication, managed activation/rollback and GitHub drift verification use the existing notification outbox and email worker. Repeated polling does not duplicate the same PR/head/policy/result notice. Unknown or failed deployment writes never appear as successful activation notices. Keep `NOTIFICATIONS_ENABLED=true` on API and worker for recording and delivery; optional SMTP configuration and opt-in still apply. The inbox links open the relevant Quality Gates tab. Manual **Verify GitHub** discovers drift; periodic governance drift synchronization remains pending.
+
+## Critical reports and human triage
+
+New assessments with current repository/install/commit-bound imported evidence that reports an unsuppressed critical finding enqueue `CRITICAL_FINDINGS_REPORTED` through the existing transactional outbox. Notification payloads contain links and identifiers, not report text. Scoped Security Engineers join the existing authorized recipients; preferences and current access checks still apply. A reported critical finding is not an independently confirmed vulnerability.
+
+Findings supports assignment, In review and Resolved against the saved finding digest and commit. Resolution requires a note; optimistic revisions reject conflicting edits. Changing triage never rewrites an assessment, suppresses source evidence, waives a requirement or changes a gate conclusion. New commits require fresh triage.

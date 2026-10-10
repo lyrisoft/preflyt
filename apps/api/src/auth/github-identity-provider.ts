@@ -146,6 +146,31 @@ export class GitHubIdentityProvider {
       ),
     }
   }
+  async refresh(refreshToken: string) {
+    const response = await this.request(() => this.limiter.run(
+      `oauth:${process.env.GITHUB_APP_CLIENT_ID}`,
+      () => fetch('https://github.com/login/oauth/access_token', {
+        method: 'POST',
+        headers: { accept: 'application/json', 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ client_id: process.env.GITHUB_APP_CLIENT_ID!,
+          client_secret: process.env.GITHUB_APP_CLIENT_SECRET!, grant_type: 'refresh_token', refresh_token: refreshToken }),
+        signal: AbortSignal.timeout(10000),
+      }), false,
+    ))
+    if (!response.ok) throw new ServiceUnavailableException('GitHub token refresh is temporarily unavailable. Try again.')
+    const data = await this.request(() => response.json()) as Record<string, unknown>
+    if (['bad_refresh_token', 'bad_verification_code', 'expired_token'].includes(String(data.error)))
+      throw new ForbiddenException('GitHub authorization has expired or was revoked. Sign in with GitHub again.')
+    if (data.error || typeof data.access_token !== 'string' || !data.access_token || data.access_token.length > 8192 ||
+        typeof data.refresh_token !== 'string' || !data.refresh_token || data.refresh_token.length > 8192 || data.token_type !== 'bearer' ||
+        !Number.isInteger(data.expires_in) || Number(data.expires_in) < 60 || Number(data.expires_in) > 28800 ||
+        !Number.isInteger(data.refresh_token_expires_in) || Number(data.refresh_token_expires_in) < Number(data.expires_in) ||
+        Number(data.refresh_token_expires_in) > 15897600)
+      throw new ServiceUnavailableException('GitHub returned an invalid token refresh response. Try again.')
+    return { accessToken: data.access_token, refreshToken: data.refresh_token,
+      accessExpiresAt: new Date(Date.now() + Number(data.expires_in) * 1000),
+      refreshExpiresAt: new Date(Date.now() + Number(data.refresh_token_expires_in) * 1000) }
+  }
   private async get(token: string, path: string) {
     const response = await this.request(() =>
       this.limiter.run(`user:${token}`, () =>

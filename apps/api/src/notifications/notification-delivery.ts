@@ -64,6 +64,7 @@ export async function deliverNotification(db: PrismaService, eventId: string) {
           (policy
             ? ["OWNER", "ADMIN", "POLICY_MANAGER"].includes(m.role)
             : ["OWNER", "ADMIN", "ENGINEERING_LEAD"].includes(m.role) ||
+              (event.type === 'CRITICAL_FINDINGS_REPORTED' && m.role === 'SECURITY_ENGINEER') ||
               authors.has(m.identityId)),
       );
       await tx.inboxNotification.createMany({

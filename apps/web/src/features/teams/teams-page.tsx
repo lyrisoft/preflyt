@@ -10,6 +10,7 @@ import {
   ShieldCheck,
 } from 'lucide-react'
 import { siGithub } from 'simple-icons'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -19,6 +20,13 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from '@/components/ui/select'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { AppHeader } from '@/components/layout/app-header'
 import { Main } from '@/components/layout/main'
@@ -76,6 +84,7 @@ type Detail = Omit<Team, 'members' | 'repositories' | 'assignments'> & {
     profile: string
     packs: Ref[]
     createdAt: string
+    supersededAt?: string | null
   }[]
   impact: {
     githubId: string
@@ -317,6 +326,24 @@ export function TeamsWorkspace({
       setBusy(false)
     }
   }
+  async function openBaseline() {
+    setBusy(true)
+    setError('')
+    try {
+      const result = await governanceRequest<{ id: string }>(
+        '/teams/baseline',
+        {}
+      )
+      setId(result.id)
+      toast.success('Organization baseline ready')
+      await refresh()
+    } catch (error) {
+      setError((error as Error).message)
+      toast.error((error as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
   return (
     <div className='space-y-6'>
       <header className='flex flex-wrap items-start justify-between gap-3'>
@@ -381,6 +408,17 @@ export function TeamsWorkspace({
           {canManage && (
             <Button
               size='sm'
+              variant='outline'
+              disabled={busy || !options.data}
+              onClick={() => void openBaseline()}
+            >
+              <ShieldCheck className='size-4' />
+              Organization baseline
+            </Button>
+          )}
+          {canManage && (
+            <Button
+              size='sm'
               disabled={!options.data}
               onClick={() => setEditor('new')}
             >
@@ -424,7 +462,11 @@ export function TeamsWorkspace({
                   <td className='px-4 py-3'>
                     <span className='inline-flex items-center gap-2'>
                       {t.source === 'GITHUB' && <Github className='size-4' />}
-                      {t.source === 'GITHUB' ? 'GitHub' : 'Preflyt'}
+                      {t.source === 'GITHUB'
+                        ? 'GitHub'
+                        : t.source === 'ORGANIZATION'
+                          ? 'Organization'
+                          : 'Preflyt'}
                     </span>
                   </td>
                   <td className='px-4 py-3 tabular-nums'>{t.members}</td>
@@ -442,13 +484,15 @@ export function TeamsWorkspace({
                       tone={
                         t.syncState === 'STALE'
                           ? 'warning'
-                          : t.source === 'LOCAL'
+                          : t.source !== 'GITHUB'
                             ? 'neutral'
                             : 'success'
                       }
                     >
-                      {t.source === 'LOCAL'
-                        ? 'Local team'
+                      {t.source !== 'GITHUB'
+                        ? t.source === 'ORGANIZATION'
+                          ? 'Organization baseline'
+                          : 'Local team'
                         : t.syncState === 'STALE'
                           ? 'Sync needed'
                           : 'Synced'}
@@ -509,9 +553,11 @@ export function TeamsWorkspace({
           <DialogHeader className='border-b p-5'>
             <DialogTitle>{detail.data?.name ?? 'Team'}</DialogTitle>
             <DialogDescription>
-              {detail.data?.source === 'GITHUB'
-                ? 'GitHub team · membership managed in GitHub'
-                : 'Preflyt team · membership does not grant access'}
+              {detail.data?.source === 'ORGANIZATION'
+                ? 'Organization baseline · shared mandatory standards'
+                : detail.data?.source === 'GITHUB'
+                  ? 'GitHub team · membership managed in GitHub'
+                  : 'Preflyt team · membership does not grant access'}
             </DialogDescription>
           </DialogHeader>
           <div className='min-h-0 flex-1 overflow-y-auto p-5'>
@@ -611,6 +657,7 @@ function TeamEditor({
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const imported = team?.source === 'GITHUB'
+  const baseline = team?.source === 'ORGANIZATION'
   const available = imported
     ? options.repositories.filter((r) =>
         team.repositories.some(
@@ -651,9 +698,11 @@ function TeamEditor({
         <DialogHeader className='border-b p-5'>
           <DialogTitle>{team ? 'Edit team scope' : 'Create team'}</DialogTitle>
           <DialogDescription>
-            {imported
-              ? 'Approve the repositories that should receive this team’s policies.'
-              : 'Group existing organization members and select repositories for team policies.'}
+            {baseline
+              ? 'Include all connected repositories. Review impact before applying the shared standards.'
+              : imported
+                ? 'Approve the repositories that should receive this team’s policies.'
+                : 'Group existing organization members and select repositories for team policies.'}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={(e) => void save(e)} className='flex min-h-0 flex-col'>
@@ -688,9 +737,9 @@ function TeamEditor({
             </div>
             <fieldset
               disabled={busy}
-              className={`grid gap-6 ${imported ? '' : 'md:grid-cols-2'}`}
+              className={`grid gap-6 ${imported || baseline ? '' : 'md:grid-cols-2'}`}
             >
-              {!imported && (
+              {!imported && !baseline && (
                 <PickList
                   label='Members'
                   items={options.members}
@@ -867,7 +916,7 @@ function TeamDetail({
                   <td className='p-3'>{r.name}</td>
                   <td className='p-3'>
                     <StatusBadge
-                      tone={r.policyScopeEnabled ? 'info' : 'neutral'}
+                      tone={r.policyScopeEnabled ? 'success' : 'neutral'}
                     >
                       {r.policyScopeEnabled ? 'Approved' : 'Not selected'}
                     </StatusBadge>
@@ -912,7 +961,10 @@ function TeamDetail({
                 {a.profile.toLowerCase()} · {a.packs.length} standards
               </span>
               <span className='text-xs text-muted-foreground'>
-                {date(a.createdAt)}
+                {date(a.createdAt)}{' '}
+                {a.supersededAt && (
+                  <StatusBadge tone='neutral'>Superseded</StatusBadge>
+                )}
               </span>
             </div>
           ))}
@@ -1044,13 +1096,20 @@ function Assignment({
     )?.defaultBranch ?? 'main'
   )
   const [profile, setProfile] = useState('RECOMMENDED')
-  const [packs, setPacks] = useState<string[]>(['baseline-engineering@1.0.0'])
+  const [packs, setPacks] = useState<string[]>(() => {
+    const baseline =
+      options.standards.find((p) => p.id === 'baseline-engineering') ??
+      options.standards[0]
+    return baseline ? [`${baseline.id}@${baseline.version}`] : []
+  })
+  const [replacement, setReplacement] = useState('new')
   const [impact, setImpact] = useState<Impact | null>(null)
   const [page, setPage] = useState(1)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const input = {
     branchRef: `refs/heads/${branch}`,
+    ...(replacement !== 'new' ? { replacesAssignmentId: replacement } : {}),
     profile,
     packs: packs.map((value) => {
       const [id, version] = value.split('@')
@@ -1067,6 +1126,8 @@ function Assignment({
           expectedPreviewHash: impact?.previewHash,
         })
         setImpact(null)
+        setReplacement('new')
+        toast.success('Policy drafts created')
         await onApplied()
       } else {
         setImpact(
@@ -1092,6 +1153,44 @@ function Assignment({
           {error}
         </p>
       )}
+      <label className='block space-y-2 text-sm font-medium'>
+        Assignment
+        <Select
+          value={replacement}
+          disabled={busy}
+          onValueChange={(value) => {
+            setReplacement(value)
+            setImpact(null)
+            const previous = team.assignments.find((a) => a.id === value)
+            if (previous) {
+              setBranch(previous.branchRef.replace('refs/heads/', ''))
+              setProfile(previous.profile)
+              setPacks(
+                previous.packs.map((ref) => {
+                  const latest =
+                    options.standards.find((p) => p.id === ref.id) ?? ref
+                  return `${latest.id}@${latest.version}`
+                })
+              )
+            }
+          }}
+        >
+          <SelectTrigger className='w-full'>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value='new'>New assignment</SelectItem>
+            {team.assignments
+              .filter((a) => !a.supersededAt)
+              .map((a) => (
+                <SelectItem value={a.id} key={a.id}>
+                  Upgrade {a.branchRef.replace('refs/heads/', '')} ·{' '}
+                  {date(a.createdAt)}
+                </SelectItem>
+              ))}
+          </SelectContent>
+        </Select>
+      </label>
       <fieldset disabled={busy} className='grid gap-4 sm:grid-cols-2'>
         <label className='space-y-2 text-sm font-medium'>
           Branch
@@ -1106,20 +1205,24 @@ function Assignment({
         </label>
         <label className='space-y-2 text-sm font-medium'>
           Profile
-          <select
-            className='h-9 w-full rounded-md border bg-background px-3 text-sm'
+          <Select
             value={profile}
-            onChange={(e) => {
-              setProfile(e.target.value)
+            onValueChange={(value) => {
+              setProfile(value)
               setImpact(null)
             }}
           >
-            {['DEFAULT', 'RECOMMENDED', 'STRICT'].map((p) => (
-              <option key={p} value={p}>
-                {p[0] + p.slice(1).toLowerCase()}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger className='w-full'>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {['DEFAULT', 'RECOMMENDED', 'STRICT'].map((p) => (
+                <SelectItem key={p} value={p}>
+                  {p[0] + p.slice(1).toLowerCase()}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </label>
       </fieldset>
       <PickList

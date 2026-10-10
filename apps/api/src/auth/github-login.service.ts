@@ -1,3 +1,4 @@
+import { GitHubCredentialService } from './github-credential.service.js'
 import { createHash, randomBytes } from 'node:crypto'
 import {
   ConflictException,
@@ -17,7 +18,6 @@ import {
   githubLoginEnabled,
 } from './github-identity-provider.js'
 import {
-  decryptGitHubUserTokens,
   encryptGitHubUserTokens,
   githubUserTokenEncryptionKey,
 } from './github-token-cipher.js'
@@ -323,16 +323,12 @@ export class GitHubLoginService implements OnModuleInit {
     if (
       !challenge ||
       challenge.expiresAt <= new Date() ||
-      !challenge.account.credential ||
-      challenge.account.credential.accessExpiresAt <= new Date()
+      !challenge.account.credential
     )
       throw new UnauthorizedException('GitHub sign-in expired. Start again.')
     return {
       challenge,
-      token: decryptGitHubUserTokens(
-        challenge.accountId,
-        challenge.account.credential.encryptedTokens,
-      ).accessToken,
+      token: (await new GitHubCredentialService(this.db, this.provider).access(challenge.accountId, challenge.account.credential)).token,
     }
   }
   async organizations(raw?: string, existingSessionToken?: string) {

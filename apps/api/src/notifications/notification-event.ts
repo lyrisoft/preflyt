@@ -1,3 +1,4 @@
+import { normalizeReportFindings } from '../findings/normalize-report-findings.js'
 import { digest } from "../assessments/assessment-digest.js";
 import type { Prisma } from "../generated/prisma/client.js";
 
@@ -34,6 +35,13 @@ export async function recordAssessmentNotification(
   const installation = await tx.gitHubInstallation.findUniqueOrThrow({
     where: { id: repo.installationId },
   });
+  const observations = (assessment.report as { observations?: { deliveryId: string; artifacts?: { id: string; sha256: string }[] }[] }).observations ?? []
+  const references = observations.flatMap(observation => (observation.artifacts ?? []).map(ref => ({ ...ref, deliveryId: observation.deliveryId }))).slice(0, 100)
+  const artifacts = references.length ? await tx.ciArtifactImport.findMany({ where: { id: { in: references.map(ref => ref.id) }, evidence: { repositoryGithubId: repo.githubId, installationId: repo.installationId, sourceSha: assessment.sourceSha } }, take: 100 }) : []
+  const critical = artifacts.some(artifact => {
+    if (!references.some(ref => ref.id === artifact.id && ref.sha256 === artifact.sha256 && ref.deliveryId === artifact.deliveryId)) return false
+    return normalizeReportFindings(artifact.format, artifact.content, artifact.sha256).some(finding => finding.severity === 'critical' && !finding.suppressed)
+  })
   await tx.notificationEvent.create({
     data: {
       assessmentId: assessment.id,
@@ -43,7 +51,7 @@ export async function recordAssessmentNotification(
       repositoryName: repo.fullName,
       sourceSha: assessment.sourceSha,
       actorId,
-      ...assessmentNotification(assessment.report),
+      ...(critical ? { type: 'CRITICAL_FINDINGS_REPORTED', severity: 'error' } : assessmentNotification(assessment.report)),
     },
   });
 }
@@ -79,6 +87,7 @@ export const governanceNotificationTypes = [
   "RULESET_DRIFTED",
 ];
 export const assessmentNotificationTypes = [
+  "CRITICAL_FINDINGS_REPORTED",
   "ASSESSMENT_COMPLETED",
   "ASSESSMENT_FAILED",
   "ASSESSMENT_INCOMPLETE",

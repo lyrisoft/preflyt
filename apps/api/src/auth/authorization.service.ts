@@ -29,7 +29,7 @@ export const rolePermissions: Record<string, string[]> = {
     'policy.publish',
     'github.ruleset.manage',
     'policy.enforcement.manage',
-    'evidence.manage',
+    'evidence.manage', 'findings.manage',
     'contributors.read',
     'contributors.activity.read',
     'contributors.policy_evidence.read',
@@ -52,7 +52,7 @@ export const rolePermissions: Record<string, string[]> = {
     'policy.publish',
     'github.ruleset.manage',
     'policy.enforcement.manage',
-    'evidence.manage',
+    'evidence.manage', 'findings.manage',
     'contributors.read',
     'contributors.activity.read',
     'contributors.policy_evidence.read',
@@ -77,7 +77,7 @@ export const rolePermissions: Record<string, string[]> = {
     'assessment.read',
     'team.read',
     'policy.read',
-    'evidence.manage',
+    'evidence.manage', 'findings.manage',
     'contributors.read',
     'contributors.activity.read',
     'contributors.policy_evidence.read',
@@ -334,7 +334,7 @@ export class AuthorizationService {
       path === '/github/repositories' ||
       path === '/github/repositories/overview' ||
       path === '/github/dashboard' ||
-      path === '/findings' ||
+      (path === '/findings' || /^\/findings\/[a-f0-9]{64}\/(triage|assignees)$/.test(path)) ||
       path.startsWith('/contributors') ||
       path.startsWith('/organizations') ||
       path === '/standards/catalogue'
