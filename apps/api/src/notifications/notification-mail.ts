@@ -1,16 +1,17 @@
+import { configurationValue } from '../configuration/runtime-configuration.js'
 import nodemailer, { type Transporter } from 'nodemailer'
 import { createHash } from 'node:crypto'
 import { resolveWebOrigin } from '../config/web-origin.js'
-export const emailNotificationsEnabled = () => process.env.NOTIFICATION_EMAIL_ENABLED === 'true'
+export const emailNotificationsEnabled = () => configurationValue('NOTIFICATION_EMAIL_ENABLED') === 'true'
 export function validNotificationEmail(value: string | null | undefined): value is string {
   return typeof value === 'string' && value.length <= 254 && /^[a-zA-Z0-9.!#$%&'*+\/=?^_`{|}~-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(value)
 }
 export class NotificationMailer {
   private transport?: Transporter
   async send(to: string, deliveryId: string) {
-    const from = process.env.SMTP_FROM
-    const host = process.env.SMTP_HOST
-    const port = Number(process.env.SMTP_PORT ?? 587)
+    const from = configurationValue('SMTP_FROM')
+    const host = configurationValue('SMTP_HOST')
+    const port = Number(configurationValue('SMTP_PORT') ?? 587)
     if (!validNotificationEmail(to) || !validNotificationEmail(from) || !host || !Number.isInteger(port) || port < 1 || port > 65535)
       throw new Error('SMTP_CONFIGURATION_INVALID')
     const origin = resolveWebOrigin()
@@ -19,7 +20,7 @@ export class NotificationMailer {
     if (!this.transport) this.transport = nodemailer.createTransport({
       host, port, secure: port === 465, requireTLS: !insecureLocal && port !== 465,
       ignoreTLS: insecureLocal, connectionTimeout: 5000, greetingTimeout: 5000, socketTimeout: 10000,
-      ...(process.env.SMTP_USER ? { auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASSWORD } } : {}),
+      ...(configurationValue('SMTP_USER') ? { auth: { user: configurationValue('SMTP_USER'), pass: configurationValue('SMTP_PASSWORD') } } : {}),
       logger: false, debug: false, disableFileAccess: true, disableUrlAccess: true,
     })
     const result = await this.transport.sendMail({ from, to, subject: 'New Preflyt notification',

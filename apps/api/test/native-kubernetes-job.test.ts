@@ -1,5 +1,6 @@
 import { randomUUID, createHash } from 'node:crypto'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+vi.mock('node:timers/promises', () => ({ setTimeout: vi.fn(async () => {}) }))
 vi.mock('../src/execution/native-runtime.js', () => ({
   nativeRuntimeApproval: vi.fn(),
 }))
@@ -372,4 +373,29 @@ it('rejects old, oversized, noncanonical and mismatched report envelopes', () =>
         0,
       ),
     ).toThrow()
+})
+
+it('accepts API-default omitted false host flags and still rejects true flags', async () => {
+  const omitted = fixture({
+    mutation: (pod) => {
+      delete pod.spec.hostNetwork
+      delete pod.spec.hostPID
+      delete pod.spec.hostIPC
+    },
+  })
+  expect(await omitted.run()).toMatchObject({
+    state: 'PASS',
+    cleanupConfirmed: true,
+  })
+  for (const key of ['hostNetwork', 'hostPID', 'hostIPC']) {
+    const enabled = fixture({
+      mutation: (pod) => {
+        pod.spec[key] = true
+      },
+    })
+    expect(await enabled.run()).toMatchObject({
+      state: 'INCOMPLETE',
+      cleanupConfirmed: true,
+    })
+  }
 })

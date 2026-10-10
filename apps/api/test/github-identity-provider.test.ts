@@ -242,3 +242,21 @@ it('turns request and response-body timeouts into retryable service errors', asy
     status: 503,
   })
 })
+
+it('rotates expiring GitHub credentials with the OAuth refresh grant', async () => {
+  const fetcher = vi.fn(async () => response({ access_token: 'rotated-access', refresh_token: 'rotated-refresh', token_type: 'bearer', expires_in: 28800, refresh_token_expires_in: 15897600 }))
+  vi.stubGlobal('fetch', fetcher)
+  expect(await provider().refresh('old-refresh')).toMatchObject({ accessToken: 'rotated-access', refreshToken: 'rotated-refresh' })
+  const form = (fetcher.mock.calls[0] as unknown as [string, RequestInit])[1].body as URLSearchParams
+  expect(form.get('grant_type')).toBe('refresh_token')
+  expect(form.get('refresh_token')).toBe('old-refresh')
+  expect(form.has('code')).toBe(false)
+})
+it('distinguishes revoked refresh credentials from transient provider failures without leaking tokens', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => response({ error: 'bad_refresh_token', error_description: 'secret-token' })))
+  await expect(provider().refresh('secret-token')).rejects.toThrow('revoked')
+  vi.stubGlobal('fetch', vi.fn(async () => response({}, 503)))
+  await expect(provider().refresh('secret-token')).rejects.toThrow('temporarily unavailable')
+  vi.stubGlobal('fetch', vi.fn(async () => response({ access_token: 'secret-token', expires_in: '28800' })))
+  await expect(provider().refresh('secret-token')).rejects.toThrow('invalid token refresh response')
+})

@@ -1,3 +1,5 @@
+import {disposableDatabase} from './disposable-database.js'
+let fixture: Awaited<ReturnType<typeof disposableDatabase>>
 import { AuthorizationService } from '../src/auth/authorization.service.js'
 import { CiAttestationController } from '../src/github-events/ci-attestation.controller.js'
 import { CiAttestationService } from '../src/github-events/ci-attestation.service.js'
@@ -62,8 +64,8 @@ const get = (id = '501') =>
     .get(`/github/repositories/${id}/standards`)
     .set('Cookie', 'test.sid=VIEWER')
 beforeAll(async () => {
-  prisma = new PrismaService()
-  await prisma.$connect()
+  fixture = await disposableDatabase('assessments')
+  prisma = fixture.prisma
   app = await NestFactory.create(
     {
       module: class TestModule {},
@@ -108,7 +110,7 @@ beforeAll(async () => {
             },
             currentSession: async (token?: string) =>
               ['OWNER', 'ADMIN', 'SUPER_ADMIN', 'VIEWER'].includes(token ?? '')
-                ? { authenticated: true, identityId: actorId, role: token }
+                ? { authenticated: true, identityId: actorId, organizationId: 'fixture-org', role: token }
                 : { authenticated: false },
           },
         },
@@ -129,9 +131,10 @@ beforeAll(async () => {
 afterAll(async () => {
   vi.unstubAllEnvs()
   await app?.close()
-  await prisma?.$disconnect()
+  await fixture?.close()
 })
 beforeEach(async () => {
+  await fixture.reset()
   vi.unstubAllEnvs()
   verifyProof.mockReset()
   await prisma.gitHubWebhookDelivery.deleteMany()
@@ -145,8 +148,11 @@ beforeEach(async () => {
       data: { issuer: 'test', subject: 'standards-owner' },
     })
   ).id
+  const organization = await prisma.organization.create({data: {id: 'fixture-org', name: 'Fixture'}})
+  await prisma.organizationMembership.create({data: {organizationId: organization.id, identityId: actorId, role: 'OWNER'}})
   await prisma.gitHubInstallation.create({
     data: {
+      organizationId: organization.id,
       id: 500n,
       accountLogin: 'fixture',
       accountType: 'Organization',

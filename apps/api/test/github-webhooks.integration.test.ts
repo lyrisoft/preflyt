@@ -1,3 +1,4 @@
+import {disposableDatabase} from './disposable-database.js'
 import { AuthorizationService } from '../src/auth/authorization.service.js'
 import 'reflect-metadata'
 import { ForbiddenException, ValidationPipe } from '@nestjs/common'
@@ -22,6 +23,8 @@ const originals = { enabled: process.env.GITHUB_EVENTS_ENABLED, secret: process.
 let app: NestExpressApplication
 let prisma: PrismaService
 let identityId: string
+let organizationId: string
+let fixture: Awaited<ReturnType<typeof disposableDatabase>>
 const payload = (sha = 'a'.repeat(40)) => ({
   action: 'synchronize', installation: { id: 77 }, repository: { id: 501 },
   pull_request: { id: 1001, number: 3, head: { sha, repo: { id: 999 } }, base: { repo: { id: 501 } },
@@ -35,15 +38,15 @@ function send(body: unknown = payload(), deliveryId = randomUUID(), event = 'pul
 }
 
 beforeAll(async () => {
-  prisma = new PrismaService()
-  await prisma.$connect()
+  fixture = await disposableDatabase('webhooks')
+  prisma = fixture.prisma
   app = await NestFactory.create<NestExpressApplication>({
     module: class TestModule {}, controllers: [GitHubWebhookController, CiArtifactController],
     providers: [{ provide: AuthorizationService, useValue: { authorizeRequest: async () => false } }, GitHubWebhookService, CiArtifactService, OwnerAdminGuard, SessionGuard, { provide: PrismaService, useValue: prisma },
       { provide: AuthService, useValue: {
         sessionCookieName: 'test.sid', assertOrigin: (origin?: string) => { if (origin !== 'http://localhost:5173') throw new ForbiddenException() },
         currentSession: async (token?: string) => ['VIEWER', 'OWNER', 'SUPER_ADMIN'].includes(token ?? '')
-          ? { authenticated: true, identityId, role: token } : { authenticated: false },
+          ? { authenticated: true, identityId, role: token, organizationId } : { authenticated: false },
       } }],
   }, { logger: false, rawBody: true })
   app.useBodyParser('json', { limit: '1mb' })
@@ -53,13 +56,14 @@ beforeAll(async () => {
 })
 afterAll(async () => {
   await app?.close()
-  await prisma?.$disconnect()
+  await fixture?.close()
   if (originals.enabled === undefined) delete process.env.GITHUB_EVENTS_ENABLED
   else process.env.GITHUB_EVENTS_ENABLED = originals.enabled
   if (originals.secret === undefined) delete process.env.GITHUB_WEBHOOK_SECRET
   else process.env.GITHUB_WEBHOOK_SECRET = originals.secret
 })
 beforeEach(async () => {
+  await fixture.reset()
   process.env.GITHUB_EVENTS_ENABLED = 'true'
   process.env.GITHUB_WEBHOOK_SECRET = secret
   await prisma.gitHubWebhookDelivery.deleteMany()
@@ -71,7 +75,9 @@ beforeEach(async () => {
   await prisma.identity.deleteMany()
   const identity = await prisma.identity.create({ data: { issuer: 'test', subject: randomUUID(), membership: { create: { role: 'OWNER' } } } })
   identityId = identity.id
-  await prisma.gitHubInstallation.create({ data: { id: 77n, accountLogin: 'fixture', accountType: 'Organization',
+  organizationId = (await prisma.organization.create({data: {name: 'Webhook fixture'}})).id
+  await prisma.organizationMembership.create({data: {organizationId, identityId, role: 'OWNER'}})
+  await prisma.gitHubInstallation.create({ data: { id: 77n, organizationId, accountLogin: 'fixture', accountType: 'Organization',
     repositorySelection: 'selected', permissions: {}, connectedById: identityId, active: true } })
   await prisma.gitHubRepository.create({ data: { githubId: 501n, installationId: 77n, name: 'app', fullName: 'fixture/app', ownerLogin: 'fixture', isPrivate: true, selected: true } })
 })

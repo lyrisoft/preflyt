@@ -692,3 +692,28 @@ it('aggregates findings before pagination with matching filters and repository a
   expect(issues.body.summary.evidenceGaps).toBe(60)
   expect(issues.body.summary.chartTotal).toBe(0)
 })
+
+it('assigns and resolves finding triage without changing evidence, rejects unauthorized updates and stale revisions', async () => {
+  const { assessment } = await complianceFixture()
+  const report = { ...(assessment.report as any), checks: [{ ruleId: 'ci', required: true, coverage: 'MISSING' }] }
+  const hash = digest({ request: assessment.request, plan: assessment.plan, report })
+  await db.commitAssessment.update({ where: { id: assessment.id }, data: { report, assessmentHash: hash } })
+  const list = await actor(owner, '/findings?kind=gaps').expect(200)
+  const finding = list.body.rows[0]
+  expect(list.body.canManage).toBe(true)
+  const input = { state: 'IN_REVIEW', assigneeId: developer, note: 'Investigating CI evidence', expectedRevision: 0 }
+  await mutate(developer, `/findings/${finding.id}/triage`, input).expect(403)
+  await request(app.getHttpServer()).post(`/findings/${finding.id}/triage`).set('Cookie', `scope.sid=${owner}`).set('Origin', 'https://bad.invalid').send(input).expect(403)
+  await mutate(owner, `/findings/${finding.id}/triage`, { ...input, assigneeId: platform }).expect(400)
+  const created = await mutate(owner, `/findings/${finding.id}/triage`, input).expect(201)
+  expect(created.body).toMatchObject({ state: 'IN_REVIEW', assigneeId: developer, revision: 1 })
+  await mutate(owner, `/findings/${finding.id}/triage`, input).expect(409)
+  await mutate(owner, `/findings/${finding.id}/triage`, { ...input, state: 'RESOLVED', note: '', expectedRevision: 1 }).expect(400)
+  const attempts = await Promise.all([mutate(owner, `/findings/${finding.id}/triage`, { ...input, state: 'RESOLVED', note: 'Reviewed and fixed in a follow-up commit; historical evidence retained', expectedRevision: 1 }),
+    mutate(owner, `/findings/${finding.id}/triage`, { ...input, note: 'Second reviewer', expectedRevision: 1 })])
+  expect(attempts.map(r => r.status).sort()).toEqual([201, 409])
+  const updated = (await actor(owner, '/findings?kind=gaps').expect(200)).body.rows[0]
+  expect(updated.triage.revision).toBe(2)
+  expect((await db.commitAssessment.findUniqueOrThrow({ where: { id: assessment.id } })).assessmentHash).toBe(hash)
+  expect(await db.auditEvent.count({ where: { event: 'finding.triage_updated' } })).toBe(2)
+})
