@@ -63,7 +63,7 @@ Full login, bootstrap, revocation, migration and acceptance contracts: [ADR-0007
 
 ## Current implementation
 
-See [organization access and contributors](../operations/scoped-access-contributors.md) for shipped workflows, the explicit compatibility migration, live-request revocation behavior, contributor permission boundaries and remaining limitations. Scoped policy publication and managed ruleset activation permissions are implemented, as are separate native-request permissions and signed runtime preflight. Native Docker/Kubernetes dispatch and bounded advisory AI egress are implemented behind deployment controls. Policy exceptions, team inheritance and live native acceptance remain pending. Preflight is not execution acceptance.
+See [organization access and contributors](../operations/scoped-access-contributors.md) for shipped workflows, the explicit compatibility migration, live-request revocation behavior, contributor permission boundaries and remaining limitations. Scoped policy publication and managed ruleset activation permissions are implemented, as are separate native-request permissions and signed runtime preflight. Native Docker/Kubernetes dispatch and bounded advisory AI egress are implemented behind deployment controls. Organization baselines, explicit team scope and version-pinned inheritance are implemented. Nested scope, policy exceptions and live native acceptance remain pending. Preflight is not execution acceptance.
 
 ## Access Control interface
 

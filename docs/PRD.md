@@ -310,7 +310,7 @@ The PoC does **not** need to generate a patch or remediation PR. If a future sep
 
 **MVP target outcomes, delivered incrementally by P0–P3:**
 
-- Self-hosted initial organization onboarding inherited from a verified GitHub organization installation, GitHub user login, scoped authorization and audit; retain current OIDC as a compatibility option during migration. GitHub login, verified owner onboarding, workspace linking and member grants are implemented behind the login flag. Legacy identity merging, revocation events, reconciliation and full migration acceptance remain pending.
+- Self-hosted initial organization onboarding inherited from a verified GitHub organization installation, GitHub user login, scoped authorization and audit; retain current OIDC as a compatibility option during migration. GitHub login, verified owner onboarding, workspace linking and member grants are implemented behind the login flag. Serialized token refresh, signed revocation/relationship invalidation and bounded reconciliation are implemented. Explicit legacy identity linking, owner recovery and full migration acceptance remain pending.
 - GitHub integration, selected-repository onboarding, webhook signatures and idempotent PR/CI event ingestion.
 - Repository Engineering Profile and changed-path applicability detection.
 - Versioned baseline engineering policy with inherited repo scope, mandatory/advisory checks, enforcement mode.
