@@ -27,14 +27,14 @@ export function SignInIllustration() {
         <path d={merge} pathLength='100' />
       </g>
       <g className='sign-in-commit-points'>
-        <circle cx='152' cy='128' r='7' />
-        <circle cx='152' cy='220' r='7' />
-        <circle cx='152' cy='384' r='7' />
-        <circle cx='152' cy='552' r='7' />
-        <circle cx='152' cy='680' r='7' />
-        <circle cx='264' cy='348' r='7' />
-        <circle cx='264' cy='500' r='7' />
-        <circle cx='352' cy='568' r='7' />
+        <circle cx='152' cy='128' r='9' />
+        <circle cx='152' cy='220' r='9' />
+        <circle cx='152' cy='384' r='9' />
+        <circle cx='152' cy='552' r='9' />
+        <circle cx='152' cy='680' r='9' />
+        <circle cx='264' cy='348' r='9' />
+        <circle cx='264' cy='500' r='9' />
+        <circle cx='352' cy='568' r='9' />
       </g>
       <g className='sign-in-float' data-ambient='true'>
         <circle cx='264' cy='348' r='15' />
