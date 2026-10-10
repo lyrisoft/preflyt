@@ -11,7 +11,7 @@ This is the deployment contract for the policy-aware readiness publisher introdu
 | No published policy | Historical observe preview; never publishes success. |
 | Check publication | Disabled by default; manual reviewed publication and explicitly enabled automatic publication are available. |
 | Automatic publication and invalidation after changes | Implemented with durable jobs, per-repository enablement and bounded invalidation/retry polling. |
-| Organization ruleset deployment, activation, drift recovery and rollback | Single-repository activation, independent approval, current-state verification and managed rollback are implemented behind an explicit flag. Broader targeting and scheduled drift sync remain pending. |
+| Organization ruleset deployment, activation, drift recovery and rollback | Single-repository activation, independent approval, current-state verification and managed rollback are implemented behind an explicit flag. Bounded worker drift verification is implemented. Broader targeting and live private-repository enforcement acceptance remain pending. |
 | Fork PRs and merge queues | Not supported by the current publisher. |
 | Live end-to-end acceptance | Not completed. Local unit/integration checks do not establish production acceptance. |
 
@@ -38,7 +38,7 @@ See the official [Checks API](https://docs.github.com/en/rest/checks/runs) and [
 
 GitHub-native artifact attestations for private/internal repositories require **GitHub Enterprise Cloud**. GitHub Free, Pro and Team support them only for public repositories. See [GitHub attestation availability](https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations/use-artifact-attestations).
 
-For private production repositories on GitHub Team, this signed-report path cannot establish verified passing execution. Keep results incomplete and production required-check activation unavailable. Do not make production repositories public, weaken proof validation, or treat an administrator upload as verified evidence to bypass the plan limitation. A public disposable test validates only that test environment; it does not demonstrate private-repository support on Team.
+For private production repositories on GitHub Team, the GitHub-native attestation path cannot establish verified passing execution. Use the implemented organization-key/KMS-compatible adapter with an independently reviewed signer isolated from untrusted PR code; see [private report setup](../operations/organization-signed-ci-reports.md). Until that signer and live enforcement acceptance are verified, keep results incomplete and production activation unavailable. Do not make repositories public or treat administrator uploads as verified execution. A public disposable test does not demonstrate private-repository support on Team.
 
 In native mode, the workflow must execute the test/scanner and attest the exact original JUnit/SARIF report bytes. Organization-key mode has its own separately isolated signer contract documented below. Pin third-party Actions and signing workflow code to reviewed commit SHAs. Attestation generation requires workflow `id-token: write`, `attestations: write` and `contents: read`; these belong to the workflow's GitHub token and are distinct from Preflyt App permissions. No repository workflow editing permission is required by the current Preflyt publisher.
 
@@ -92,7 +92,7 @@ Contract example (replace every placeholder through reviewed deployment configur
 ]
 ```
 
-A contract approves reviewed workflow execution, not an arbitrary report label. Review the actual command, installed tool/version, failure behavior and report generation at the pinned commit. Keep the signer in the attestation allowlist. Supported contracts are `tests.required` with JUnit and `security.sast`, `secrets.scan`, `security.dependencies`, `containers.scan` with SARIF. Other execution rules remain unsupported. JUnit needs at least one executed test and no failures; SARIF needs the expected tool/version, zero findings and complete coverage. Every required rule in the saved policy still needs evidence.
+A contract approves reviewed workflow execution, not an arbitrary report label. Review the actual command, installed tool/version, failure behavior and report generation at the pinned commit. Keep the signer in the attestation allowlist. Current built-in v1.1.0 definitions support trusted report adapters for every catalogue check; see [engineering check adapters](../operations/engineering-check-adapters.md) for the exact rule, format, completeness and tool contracts. Earlier saved versions retain their original supported-check limits. Native execution coverage is separate. JUnit needs at least one executed test and no failures; SARIF needs the expected tool/version, zero findings and complete coverage. Every required rule in the saved policy still needs evidence.
 
 After changing contracts, create/edit a policy draft against current standards and complete approval/publication again. The policy freezes the contract digest. Trust-root, verifier or allowlist changes invalidate older receipt trust for new evaluations; collect a fresh assessment after re-verification. Historical assessments are immutable.
 

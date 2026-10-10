@@ -3,7 +3,10 @@ import { beforeEach, expect, it, vi } from 'vitest'
 import { RulesetDrafts } from './ruleset-drafts'
 
 const query = vi.hoisted(() => ({ value: {} as Record<string, unknown> }))
-vi.mock('@tanstack/react-query', () => ({ useQuery: () => query.value }))
+vi.mock('@tanstack/react-query', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@tanstack/react-query')>()),
+  useQuery: () => query.value,
+}))
 const render = (canDraft = false) =>
   renderToStaticMarkup(
     <RulesetDrafts

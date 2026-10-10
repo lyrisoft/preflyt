@@ -314,7 +314,7 @@ describe('ruleset route permission mapping', () => {
         { path: '/github/repositories/2/rulesets', method: 'GET' } as never,
         session,
       ),
-    ).rejects.toThrow('outside your authorized scope')
+    ).rejects.toThrow('You do not have access to this resource. Ask your administrator for access.')
     expect(findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({

@@ -1,3 +1,4 @@
+import {disposableDatabase} from './disposable-database.js'
 import { GatePolicyService } from '../src/assessments/gate-policy.service.js'
 import { deliverNotificationEmail } from '../src/notifications/notification-email-delivery.js'
 import { dispatchNotificationEmails } from '../src/notifications/notification-queue.js'
@@ -23,6 +24,7 @@ import { NotificationsController } from '../src/notifications/notifications.cont
 import { recordAssessmentNotification, assessmentNotification } from '../src/notifications/notification-event.js'
 import { dispatchNotifications, recordDeliveryFailure, notificationJobOptions } from '../src/notifications/notification-queue.js'
 import { deliverNotification } from '../src/notifications/notification-delivery.js'
+let fixture: Awaited<ReturnType<typeof disposableDatabase>>
 let db: PrismaService, service: NotificationsService, app: INestApplication
 const org = 'notifications-org', repoId = 'notification-repo', owner = 'notification-owner', developer = 'notification-dev'
 const session = (identityId = owner): AuthenticatedSession => ({ authenticated: true, identityId, subject: identityId, email: null, role: 'OWNER', organizationId: org })
@@ -33,8 +35,8 @@ const create = async (report: unknown = { coverage: 'INCOMPLETE' }) => {
   return db.notificationEvent.findUniqueOrThrow({ where: { assessmentId: assessment.id } })
 }
 beforeAll(async () => {
-  if (!new URL(process.env.DATABASE_URL!).pathname.startsWith('/preflyt_notifications_test_')) throw new Error('Use a disposable notification test database')
-  db = new PrismaService(); await db.$connect()
+  fixture = await disposableDatabase('notifications')
+  db = fixture.prisma
   const authz = new AuthorizationService(db)
   service = new NotificationsService(db, authz)
   app = await NestFactory.create({ module: class TestModule {}, controllers: [NotificationsController], providers: [
@@ -43,8 +45,9 @@ beforeAll(async () => {
   ] }, { logger: false })
   app.use(cookieParser()); await app.init()
 })
-afterAll(async () => { await app?.close(); await db?.$disconnect(); vi.unstubAllEnvs() })
+afterAll(async () => { await app?.close(); await fixture?.close(); vi.unstubAllEnvs() })
 beforeEach(async () => {
+  await fixture.reset()
   vi.stubEnv('NOTIFICATIONS_ENABLED', 'true')
   vi.stubEnv('NOTIFICATION_EMAIL_ENABLED', 'false')
   await db.notificationPreference.deleteMany(); await db.auditEvent.deleteMany();

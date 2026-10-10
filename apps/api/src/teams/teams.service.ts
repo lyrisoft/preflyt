@@ -13,6 +13,8 @@ import type { AuthenticatedSession } from "../auth/session.guard.js";
 import { GitHubProviderService } from "../github/github-provider.service.js";
 import {
   catalogue,
+  catalogueVersions,
+  resolvePacks,
   type AdoptionProfile,
   type StandardPack,
   type PackRef,
@@ -39,6 +41,7 @@ type AssignmentInput = {
   profile: AdoptionProfile;
   packs: PackRef[];
   expectedPreviewHash?: string;
+  replacesAssignmentId?: string;
 };
 const json = (value: unknown) =>
   JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
@@ -106,6 +109,76 @@ export class TeamsService {
         );
       throw e;
     }
+  }
+  async baseline(s: AuthenticatedSession) {
+    await this.access.requireOrganization(s, "team.manage", true);
+    const existing = await this.db.preflytTeam.findFirst({
+      where: { organizationId: s.organizationId!, source: "ORGANIZATION" },
+    });
+    if (existing) return { id: existing.id };
+    const repos = await this.access.repositoryScope(
+      s.identityId,
+      s.organizationId,
+      "repository.manage",
+    );
+    if (!repos.length || repos.length > 100)
+      throw new ConflictException(
+        "An organization baseline supports one to 100 selected repositories. Review the connected repository scope first.",
+      );
+    const connected = await this.db.gitHubRepository.count({
+      where: {
+        selected: true,
+        available: true,
+        installation: { organizationId: s.organizationId!, active: true },
+      },
+    });
+    if (repos.length !== connected)
+      throw new ForbiddenException(
+        "An organization baseline requires management access to every selected repository",
+      );
+    return this.change(s, "team.manage", async (tx, access) => {
+      const id = digest({
+        purpose: "organization-policy-baseline",
+        organizationId: s.organizationId!,
+      });
+      const team = await tx.preflytTeam.upsert({
+        where: { id },
+        update: {},
+        create: {
+          id,
+          organizationId: s.organizationId!,
+          source: "ORGANIZATION",
+          name: "Organization baseline",
+          description:
+            "Mandatory shared standards for the organization. Review impact before applying; policy publication stays separate.",
+          createdById: s.identityId,
+        },
+      });
+      for (const repo of repos) {
+        await access.requireRepository(
+          s,
+          repo.githubId.toString(),
+          "repository.manage",
+        );
+        await tx.teamRepositoryScope.upsert({
+          where: { teamId_repositoryId: { teamId: id, repositoryId: repo.id } },
+          update: {},
+          create: {
+            teamId: id,
+            repositoryId: repo.id,
+            origin: "ORGANIZATION",
+            providerPresent: true,
+            policyScopeEnabled: true,
+            approvedById: s.identityId,
+            verifiedAt: new Date(),
+          },
+        });
+      }
+      await this.audit(tx, s, "baseline_created", team.id, {
+        repositories: repos.length,
+      });
+      return { id: team.id };
+    });
   }
   async list(s: AuthenticatedSession, page?: string, q = "") {
     await this.access.requireOrganization(s, "team.read");
@@ -333,6 +406,7 @@ export class TeamsService {
         packs: a.packs,
         digest: a.digest,
         createdAt: a.createdAt,
+        supersededAt: a.supersededAt,
       })),
       activity: audit.map((a) => ({
         id: a.id,
@@ -393,6 +467,29 @@ export class TeamsService {
         throw new BadRequestException("Choose active organization members");
       for (const r of b.repositoryIds)
         await access.requireRepository(s, r, "repository.manage");
+      if (previous?.source === "ORGANIZATION") {
+        if (b.memberIds.length)
+          throw new BadRequestException(
+            "Organization baseline does not manage team membership",
+          );
+        const connected = await tx.gitHubRepository.findMany({
+          where: {
+            selected: true,
+            available: true,
+            installation: { organizationId: s.organizationId!, active: true },
+          },
+          select: { githubId: true },
+        });
+        if (
+          connected.length !== b.repositoryIds.length ||
+          connected.some(
+            (repo) => !b.repositoryIds.includes(repo.githubId.toString()),
+          )
+        )
+          throw new BadRequestException(
+            "The organization baseline must include every selected repository. Review newly connected repositories before saving.",
+          );
+      }
       const priorScope = previous
         ? await tx.teamRepositoryScope.findMany({
             where: {
@@ -403,6 +500,19 @@ export class TeamsService {
             include: { repository: true },
           })
         : [];
+      const removesAssignedRepository = priorScope.some(
+        (scope) => !b.repositoryIds.includes(scope.repository.githubId.toString()),
+      );
+      if (
+        previous &&
+        removesAssignedRepository &&
+        (await tx.teamPolicyAssignment.count({
+          where: { teamId: previous.id, supersededAt: null },
+        }))
+      )
+        throw new ConflictException(
+          "This team has assigned standards. Removing a covered repository needs an approved exception. Keep the repository selected; exception approval is not available yet.",
+        );
       const scopeChanged =
         digest(
           priorScope.map((r) => r.repository.githubId.toString()).sort(),
@@ -811,6 +921,55 @@ export class TeamsService {
       return { id: team.id };
     });
   }
+  private lastReconciliation = 0;
+  private reconciliationCursor: string | undefined;
+  /** Read-only GitHub reconciliation never approves newly discovered policy scope. */
+  async reconcile() {
+    if (Date.now() - this.lastReconciliation < 60000) return;
+    this.lastReconciliation = Date.now();
+    const teams = await this.db.preflytTeam.findMany({
+      where: {
+        source: "GITHUB",
+        OR: [
+          { syncedAt: null },
+          { syncedAt: { lt: new Date(Date.now() - 900000) } },
+        ],
+      },
+      orderBy: { id: "asc" },
+      take: 5,
+      ...(this.reconciliationCursor
+        ? { cursor: { id: this.reconciliationCursor }, skip: 1 }
+        : {}),
+    });
+    this.reconciliationCursor = teams.at(-1)?.id;
+    for (const team of teams) {
+      const member = await this.db.organizationMembership.findFirst({
+        where: {
+          organizationId: team.organizationId,
+          identityId: team.createdById,
+          active: true,
+        },
+        include: { identity: true },
+      });
+      if (!member) continue;
+      const actor: AuthenticatedSession = {
+        authenticated: true,
+        identityId: member.identityId,
+        organizationId: member.organizationId,
+        subject: member.identity.subject,
+        email: null,
+        role: member.role,
+        platformAdmin: false,
+      };
+      // Recheck the original importer's current role/provider access. No synthetic
+      // Super Admin authority or replacement actor may expand the verified scope.
+      try {
+        await this.sync(actor, team.id);
+      } catch {
+        /* sync records stale state; unchanged scope remains reviewable */
+      }
+    }
+  }
   async sync(s: AuthenticatedSession, id: string) {
     await this.access.requireOrganization(s, "team.import", true);
     const team = await this.team(this.db, id, s.organizationId!);
@@ -859,7 +1018,7 @@ export class TeamsService {
         "Choose an explicit branch and up to five distinct standard versions",
       );
     const library: StandardPack[] = [
-      ...catalogue,
+      ...catalogueVersions,
       ...(await organizationCatalogue(tx, s.organizationId!)),
     ];
     const frozen = b.packs.map((ref) => {
@@ -885,6 +1044,70 @@ export class TeamsService {
           : {}),
       };
     });
+    const replacing = b.replacesAssignmentId
+      ? await tx.teamPolicyAssignment.findFirst({
+          where: {
+            id: b.replacesAssignmentId,
+            teamId: id,
+            branchRef: b.branchRef,
+            supersededAt: null,
+          },
+        })
+      : null;
+    if (b.replacesAssignmentId && !replacing)
+      throw new ConflictException(
+        "The assignment changed. Choose a current assignment to replace.",
+      );
+    if (replacing) {
+      const oldPacks = replacing.packs as (PackRef & { digest: string })[];
+      const resolved = resolvePacks(oldPacks);
+      if (
+        resolved.some(
+          (pack, index) => !pack || pack.digest !== oldPacks[index].digest,
+        )
+      )
+        throw new ConflictException(
+          "The previous standard versions could not be verified.",
+        );
+      const oldDefinitions = resolved as StandardPack[];
+      const nextDefinitions: StandardPack[] = frozen.flatMap(
+        (ref) =>
+          library.find((p) => p.id === ref.id && p.version === ref.version) ??
+          [],
+      );
+      const ranks = ["DEFAULT", "RECOMMENDED", "STRICT"];
+      if (
+        ranks.indexOf(b.profile) < ranks.indexOf(replacing.profile) ||
+        oldPacks.some((ref) => !frozen.some((p) => p.id === ref.id)) ||
+        oldDefinitions.some((pack) =>
+          pack.rules.some(
+            (rule) =>
+              !nextDefinitions.some((p) =>
+                p.rules.some(
+                  (next) =>
+                    next.id === rule.id &&
+                    (!rule.requiredIn.includes(
+                      replacing.profile as AdoptionProfile,
+                    ) ||
+                      next.requiredIn.includes(b.profile)),
+                ),
+              ),
+          ),
+        ) ||
+        oldDefinitions.some((pack) =>
+          (pack.aiChecks ?? []).some(
+            (check) =>
+              !nextDefinitions.some((p) =>
+                (p.aiChecks ?? []).some((next) => next.id === check.id),
+              ),
+          ),
+        )
+      ) {
+        throw new ConflictException(
+          "An upgrade must preserve inherited checks and profile. Removing inherited requirements needs a separately approved exception.",
+        );
+      }
+    }
     const scopes = await tx.teamRepositoryScope.findMany({
       where: { teamId: id, policyScopeEnabled: true },
       include: { repository: true },
@@ -909,24 +1132,53 @@ export class TeamsService {
       const others = await tx.teamPolicyAssignment.findMany({
         where: {
           branchRef: b.branchRef,
+          supersededAt: null,
+          ...(replacing ? { id: { not: replacing.id } } : {}),
           team: {
             organizationId: s.organizationId!,
-            repositories: {
-              some: { repositoryId: repo.id, policyScopeEnabled: true },
-            },
+            OR: [
+              { source: "ORGANIZATION" },
+              {
+                repositories: {
+                  some: { repositoryId: repo.id, policyScopeEnabled: true },
+                },
+              },
+            ],
           },
         },
         include: { team: true },
         orderBy: [{ createdAt: "asc" }, { id: "asc" }],
         take: 101,
       });
+      // Only replace the frozen contribution from the explicitly selected assignment.
+      // Other teams and repository additions still participate and can conflict.
+      const replacesCurrent =
+        replacing &&
+        Array.isArray(current?.teamContext) &&
+        (current.teamContext as any[]).some(
+          (source) => source.assignmentId === replacing.id,
+        );
+      const currentPacks = (current?.packs ?? []) as (PackRef & {
+        digest: string;
+      })[];
+      const repositoryPacks = replacesCurrent
+        ? currentPacks.filter(
+            (ref) =>
+              !(replacing.packs as (PackRef & { digest: string })[]).some(
+                (old) =>
+                  old.id === ref.id &&
+                  old.version === ref.version &&
+                  old.digest === ref.digest,
+              ),
+          )
+        : currentPacks;
       const composed = composeTeamStandards([
         ...(current
           ? [
               {
                 label: "Repository standards",
                 profile: current.profile,
-                packs: current.packs as (PackRef & { digest: string })[],
+                packs: repositoryPacks,
               },
             ]
           : []),
@@ -1039,6 +1291,7 @@ export class TeamsService {
       branchRef: b.branchRef,
       profile: b.profile,
       packs: frozen,
+      replacesAssignmentId: replacing?.id ?? null,
       repositories: repos,
     };
     return {
@@ -1100,6 +1353,19 @@ export class TeamsService {
           createdById: s.identityId,
         },
       });
+      if (b.replacesAssignmentId) {
+        const retired = await tx.teamPolicyAssignment.updateMany({
+          where: { id: b.replacesAssignmentId, teamId: id, supersededAt: null },
+          data: { supersededAt: new Date() },
+        });
+        if (retired.count !== 1)
+          throw new ConflictException("The assignment changed. Preview again.");
+        await this.audit(tx, s, "policy_upgraded", id, {
+          previousAssignmentId: b.replacesAssignmentId,
+          assignmentId: assignment.id,
+          previewHash: impact.previewHash,
+        });
+      }
       const drafts = [];
       for (const repo of impact.repositories) {
         const teamContext = [

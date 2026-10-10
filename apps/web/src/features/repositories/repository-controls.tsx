@@ -82,7 +82,7 @@ function ControlDetails({
             </DialogHeader>
             <div className='flex flex-wrap items-center gap-2'>
               <Badge variant={control.required ? 'info' : 'neutral'}>
-                {control.required ? 'Required' : 'Advisory'}
+                {control.required ? 'Required' : 'Optional'}
               </Badge>
               <StatusBadge tone={status.tone}>{status.label}</StatusBadge>
               <Badge variant='neutral'>{sentence(control.capability)}</Badge>
@@ -317,7 +317,7 @@ export function RepositoryControls({
                             <Badge
                               variant={control.required ? 'info' : 'neutral'}
                             >
-                              {control.required ? 'Required' : 'Advisory'}
+                              {control.required ? 'Required' : 'Optional'}
                             </Badge>
                           </div>
                         </TableCell>
@@ -325,7 +325,7 @@ export function RepositoryControls({
                           <Badge
                             variant={control.required ? 'info' : 'neutral'}
                           >
-                            {control.required ? 'Required' : 'Advisory'}
+                            {control.required ? 'Required' : 'Optional'}
                           </Badge>
                         </TableCell>
                         <TableCell className='hidden sm:table-cell'>

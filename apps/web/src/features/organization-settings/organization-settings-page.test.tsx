@@ -5,6 +5,10 @@ import { OrganizationSettingsPage } from './organization-settings-page'
 
 const state = vi.hoisted(() => ({
   query: {} as Record<string, unknown>,
+  session: {
+    isSuccess: true,
+    data: { organizationId: 'org', platformAdmin: false },
+  },
   save: vi.fn(),
 }))
 vi.mock('@tanstack/react-query', () => ({
@@ -13,10 +17,12 @@ vi.mock('@tanstack/react-query', () => ({
   useMutation: () => ({ mutate: state.save }),
 }))
 vi.mock('../workspace/navigation-session', () => ({
-  useNavigationSession: () => ({
-    isSuccess: true,
-    data: { organizationId: 'org' },
-  }),
+  useNavigationSession: () => state.session,
+}))
+vi.mock('./configuration-panel', () => ({
+  ConfigurationPanel: () => (
+    <section>System settings controls</section>
+  ),
 }))
 vi.mock('@/context/theme-provider', () => ({
   useTheme: () => ({ theme: 'system', setTheme: vi.fn() }),
@@ -37,6 +43,10 @@ vi.mock('@/components/layout/main', () => ({
   ),
 }))
 beforeEach(() => {
+  state.session = {
+    isSuccess: true,
+    data: { organizationId: 'org', platformAdmin: false },
+  }
   state.query = {
     data: {
       id: 'org',
@@ -80,4 +90,24 @@ it('keeps administrator workspace settings read-only according to backend permis
   await expect
     .element(view.getByText('Existing notification preferences'))
     .toBeVisible()
+})
+
+it('keeps deployment configuration available to Super Admin when workspace settings are unavailable', async () => {
+  state.session.data.platformAdmin = true
+  state.query = {
+    isError: true,
+    error: new Error('No workspace selected'),
+    refetch: vi.fn(),
+  }
+  const view = await render(<OrganizationSettingsPage />)
+  await view.getByRole('tab', { name: 'Configuration' }).click()
+  await expect
+    .element(view.getByText('System settings controls'))
+    .toBeVisible()
+})
+it('hides deployment configuration from organization administrators', async () => {
+  const view = await render(<OrganizationSettingsPage />)
+  await expect
+    .element(view.getByRole('tab', { name: 'Configuration' }))
+    .not.toBeInTheDocument()
 })

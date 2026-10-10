@@ -61,6 +61,7 @@ class AssignmentDto {
   @Type(() => RefDto)
   packs!: RefDto[];
   @IsOptional() @Matches(/^[a-f0-9]{64}$/) expectedPreviewHash?: string;
+  @IsOptional() @IsString() @MaxLength(100) replacesAssignmentId?: string;
 }
 class DiscoveryDto {
   @IsString() @Matches(/^[1-9]\d{0,15}$/) installationId!: string;
@@ -100,6 +101,10 @@ export class TeamsController {
   ) {
     this.auth.assertOrigin(r.headers.origin);
     return this.teams.importTeam(r.preflytSession, b.installationId, b.teamId);
+  }
+  @Header('Cache-Control', 'no-store') @Post('baseline') baseline(@Req() r: R) {
+    this.auth.assertOrigin(r.headers.origin);
+    return this.teams.baseline(r.preflytSession);
   }
   @Header("Cache-Control", "no-store") @Get(":id") detail(
     @Req() r: R,

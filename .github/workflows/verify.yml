@@ -1,0 +1,58 @@
+name: Verify implementation
+on:
+  workflow_call:
+  pull_request:
+  push:
+    branches: [development, main]
+permissions:
+  contents: read
+concurrency:
+  group: preflyt-verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: preflyt
+          POSTGRES_PASSWORD: fixture-only
+          POSTGRES_DB: preflyt_ci_test
+        ports: ['5432:5432']
+        options: --health-cmd "pg_isready -U preflyt -d preflyt_ci_test" --health-interval 5s --health-timeout 5s --health-retries 12
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      DATABASE_URL: postgresql://preflyt:fixture-only@127.0.0.1:5432/preflyt_ci_test
+      REDIS_URL: redis://127.0.0.1:6379/3
+      REDIS_CACHE_PREFIX: preflyt-ci-${{ github.run_id }}-${{ github.run_attempt }}
+      PREFLYT_DASHBOARD_REDIS_TEST: 'true'
+      TEST_QUEUE_REDIS_URL: redis://127.0.0.1:6379/1
+      NOTIFICATION_TEST_REDIS_URL: redis://127.0.0.1:6379/2
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24.4.1
+      - name: Install locked dependencies
+        run: |
+          npm install --global pnpm@10.15.1
+          pnpm install --frozen-lockfile --ignore-scripts
+      - name: Install Chromium
+        run: pnpm --filter @preflyt/web exec playwright install --with-deps chromium
+      - name: Generate client and build applications
+        run: |
+          pnpm --filter @preflyt/api build
+          pnpm --filter @preflyt/web build
+      - name: Enable offline attestation acceptance
+        run: |
+          gh_path="$(command -v gh)"
+          echo "PREFLYT_TEST_GH_PATH=$gh_path" >> "$GITHUB_ENV"
+      - name: API regression
+        run: pnpm --filter @preflyt/api test
+      - name: Browser regression
+        run: pnpm --filter @preflyt/web test

@@ -1,3 +1,4 @@
+import { configurationValue } from '../configuration/runtime-configuration.js'
 import { skillApplicability } from "./skill-applicability.js";
 import { GitHubProviderService } from "../github/github-provider.service.js";
 import { readPullRequestContext } from "../github-events/pull-request-context.js";
@@ -845,7 +846,7 @@ export class SkillReviewService {
     }
   }
   async publishPendingSummary() {
-    if (!this.github || process.env.GITHUB_CHECK_PUBLICATION_ENABLED !== "true")
+    if (!this.github || configurationValue('GITHUB_CHECK_PUBLICATION_ENABLED') !== "true")
       return;
     const job = await this.db.aiSkillReview.findFirst({
       where: {

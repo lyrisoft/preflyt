@@ -19,6 +19,7 @@ import { Main } from '@/components/layout/main'
 import { PageHelpDrawer } from '@/components/page-help-drawer'
 import { NotificationPreferences } from '@/features/notifications/notification-preferences'
 import { useNavigationSession } from '@/features/workspace/navigation-session'
+import { ConfigurationPanel } from './configuration-panel'
 
 type Settings = {
   id: string
@@ -95,7 +96,12 @@ export function OrganizationSettingsPage() {
             size='sm'
             variant='outline'
             disabled={settings.isFetching}
-            onClick={() => void settings.refetch()}
+            onClick={() => {
+              void settings.refetch()
+              void client.invalidateQueries({
+                queryKey: ['deployment-configuration'],
+              })
+            }}
           >
             <RefreshCw className='size-4' />
             Refresh
@@ -109,6 +115,11 @@ export function OrganizationSettingsPage() {
                   'The connected GitHub organization supplies the sidebar identity. The Preflyt workspace name is a local display label. Only workspace Owners can change it; changing it does not rename your GitHub organization.',
               },
               {
+                title: 'Deployment configuration',
+                content:
+                  'Super Admin can configure system-wide GitHub connections, single sign-on, SMTP and feature switches here. Saved secrets are encrypted and never returned to the browser. An empty secret field keeps its saved value; Clear saved removes it on save. Connection changes need an API and worker restart. Feature switches and history retention refresh every five seconds; background work applies them on its next run. Preflyt-run checks still require approved execution setup and tool reviews; AI reviews still require approved models and skills. Database, queue, origins, encryption keys and execution trust approvals remain deployment secrets. Existing environment settings are imported once on first startup; stored settings then take precedence.',
+              },
+              {
                 title: 'Personal preferences',
                 content:
                   'Notifications apply to your account in this workspace. Appearance is saved in this browser. Model credentials and access permissions are managed in their existing administration pages.',
@@ -117,130 +128,140 @@ export function OrganizationSettingsPage() {
           />
         </div>
       </div>
-      {settings.isPending ? (
-        <p role='status'>Loading workspace settings…</p>
-      ) : settings.isError ? (
-        <p role='alert' className='text-sm text-destructive'>
-          {settings.error.message}
-        </p>
-      ) : (
-        settings.data && (
-          <Tabs defaultValue='workspace' className='space-y-6'>
-            <TabsList>
-              <TabsTrigger value='workspace'>Workspace</TabsTrigger>
-              <TabsTrigger value='notifications'>Notifications</TabsTrigger>
-              <TabsTrigger value='appearance'>Appearance</TabsTrigger>
-            </TabsList>
-            <TabsContent value='workspace' className='space-y-6'>
-              <form
-                onSubmit={(event) => {
-                  event.preventDefault()
-                  save.mutate()
-                }}
-                className='max-w-3xl space-y-6 rounded-xl border bg-card p-6'
-              >
-                <div className='grid gap-6 sm:grid-cols-2'>
-                  <div className='space-y-2'>
-                    <Label htmlFor='workspace-name'>Workspace name</Label>
-                    <Input
-                      id='workspace-name'
-                      maxLength={120}
-                      value={name ?? settings.data.name}
-                      disabled={!settings.data.canUpdate || save.isPending}
-                      onChange={(event) =>
-                        setDraft({
-                          organizationId: settings.data.id,
-                          name: event.target.value,
-                        })
-                      }
-                      required
-                    />
+      <Tabs defaultValue='workspace' className='space-y-6'>
+        <TabsList className='flex h-auto flex-wrap justify-start'>
+          <TabsTrigger value='workspace'>Workspace</TabsTrigger>
+          <TabsTrigger value='notifications'>Notifications</TabsTrigger>
+          <TabsTrigger value='appearance'>Appearance</TabsTrigger>
+          {session.data?.platformAdmin && (
+            <TabsTrigger value='configuration'>Configuration</TabsTrigger>
+          )}
+        </TabsList>
+        {session.data?.platformAdmin && (
+          <TabsContent value='configuration'>
+            <ConfigurationPanel />
+          </TabsContent>
+        )}
+        <TabsContent value='workspace' className='space-y-6'>
+          {settings.isPending ? (
+            <p role='status'>Loading workspace settings…</p>
+          ) : settings.isError ? (
+            <p role='alert' className='text-sm text-destructive'>
+              {settings.error.message}
+            </p>
+          ) : (
+            settings.data && (
+              <>
+                <form
+                  onSubmit={(event) => {
+                    event.preventDefault()
+                    save.mutate()
+                  }}
+                  className='max-w-3xl space-y-6 rounded-xl border bg-card p-6'
+                >
+                  <div className='grid gap-6 sm:grid-cols-2'>
+                    <div className='space-y-2'>
+                      <Label htmlFor='workspace-name'>Workspace name</Label>
+                      <Input
+                        id='workspace-name'
+                        maxLength={120}
+                        value={name ?? settings.data.name}
+                        disabled={!settings.data.canUpdate || save.isPending}
+                        onChange={(event) =>
+                          setDraft({
+                            organizationId: settings.data.id,
+                            name: event.target.value,
+                          })
+                        }
+                        required
+                      />
+                    </div>
+                    <div className='space-y-2'>
+                      <Label>GitHub organization</Label>
+                      <p className='flex h-9 items-center text-sm'>
+                        {settings.data.githubOrganization ?? 'Not linked'}
+                      </p>
+                    </div>
                   </div>
-                  <div className='space-y-2'>
-                    <Label>GitHub organization</Label>
-                    <p className='flex h-9 items-center text-sm'>
-                      {settings.data.githubOrganization ?? 'Not linked'}
+                  <dl className='grid gap-4 border-t pt-4 text-sm sm:grid-cols-2'>
+                    <div>
+                      <dt className='text-muted-foreground'>Your role</dt>
+                      <dd className='mt-1'>
+                        {settings.data.role.replace(/_/g, ' ')}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className='text-muted-foreground'>Created</dt>
+                      <dd className='mt-1'>
+                        {new Date(settings.data.createdAt).toLocaleDateString()}
+                      </dd>
+                    </div>
+                  </dl>
+                  {save.isError && (
+                    <p role='alert' className='text-sm text-destructive'>
+                      {save.error.message}
                     </p>
-                  </div>
+                  )}
+                  {settings.data.canUpdate && (
+                    <div className='flex justify-end'>
+                      <Button
+                        size='sm'
+                        disabled={
+                          save.isPending ||
+                          name === null ||
+                          !name.trim() ||
+                          name.trim() === settings.data.name
+                        }
+                      >
+                        {save.isPending ? 'Saving…' : 'Save changes'}
+                      </Button>
+                    </div>
+                  )}
+                </form>
+                <div className='flex flex-wrap gap-3'>
+                  <Button size='sm' variant='outline' asChild>
+                    <Link to='/access-control' search={{ tab: 'people' }}>
+                      Access Control
+                    </Link>
+                  </Button>
+                  <Button size='sm' variant='outline' asChild>
+                    <Link to='/intelligence'>AI models</Link>
+                  </Button>
+                  <Button size='sm' variant='outline' asChild>
+                    <Link to='/integrations'>Integrations</Link>
+                  </Button>
                 </div>
-                <dl className='grid gap-4 border-t pt-4 text-sm sm:grid-cols-2'>
-                  <div>
-                    <dt className='text-muted-foreground'>Your role</dt>
-                    <dd className='mt-1'>
-                      {settings.data.role.replace(/_/g, ' ')}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className='text-muted-foreground'>Created</dt>
-                    <dd className='mt-1'>
-                      {new Date(settings.data.createdAt).toLocaleDateString()}
-                    </dd>
-                  </div>
-                </dl>
-                {save.isError && (
-                  <p role='alert' className='text-sm text-destructive'>
-                    {save.error.message}
-                  </p>
-                )}
-                {settings.data.canUpdate && (
-                  <div className='flex justify-end'>
-                    <Button
-                      size='sm'
-                      disabled={
-                        save.isPending ||
-                        name === null ||
-                        !name.trim() ||
-                        name.trim() === settings.data.name
-                      }
-                    >
-                      {save.isPending ? 'Saving…' : 'Save changes'}
-                    </Button>
-                  </div>
-                )}
-              </form>
-              <div className='flex flex-wrap gap-3'>
-                <Button size='sm' variant='outline' asChild>
-                  <Link to='/access-control' search={{ tab: 'people' }}>
-                    Access Control
-                  </Link>
-                </Button>
-                <Button size='sm' variant='outline' asChild>
-                  <Link to='/intelligence'>AI models</Link>
-                </Button>
-                <Button size='sm' variant='outline' asChild>
-                  <Link to='/integrations'>Integrations</Link>
-                </Button>
-              </div>
-            </TabsContent>
-            <TabsContent value='notifications' className='max-w-3xl'>
-              <NotificationPreferences />
-            </TabsContent>
-            <TabsContent value='appearance' className='max-w-3xl'>
-              <section className='space-y-4 rounded-xl border bg-card p-6'>
-                <h2 className='text-base font-semibold'>Appearance</h2>
-                <div className='max-w-xs space-y-2'>
-                  <Label htmlFor='workspace-theme'>Theme</Label>
-                  <Select
-                    value={theme}
-                    onValueChange={(value) =>
-                      setTheme(value as 'light' | 'dark' | 'system')
-                    }
-                  >
-                    <SelectTrigger id='workspace-theme'>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value='system'>System</SelectItem>
-                      <SelectItem value='light'>Light</SelectItem>
-                      <SelectItem value='dark'>Dark</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </section>
-            </TabsContent>
-          </Tabs>
-        )
-      )}
+              </>
+            )
+          )}
+        </TabsContent>
+        <TabsContent value='notifications' className='max-w-3xl'>
+          <NotificationPreferences />
+        </TabsContent>
+        <TabsContent value='appearance' className='max-w-3xl'>
+          <section className='space-y-4 rounded-xl border bg-card p-6'>
+            <h2 className='text-base font-semibold'>Appearance</h2>
+            <div className='max-w-xs space-y-2'>
+              <Label htmlFor='workspace-theme'>Theme</Label>
+              <Select
+                value={theme}
+                onValueChange={(value) =>
+                  setTheme(value as 'light' | 'dark' | 'system')
+                }
+              >
+                <SelectTrigger id='workspace-theme'>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value='system'>System</SelectItem>
+                  <SelectItem value='light'>Light</SelectItem>
+                  <SelectItem value='dark'>Dark</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </section>
+        </TabsContent>
+      </Tabs>
     </Main>
   )
 }
