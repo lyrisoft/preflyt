@@ -1,8 +1,10 @@
-import { builtinReviewSkills } from './builtin-review-skills.js';
-import type { PrReviewSource } from './pr-review-context.js';
+import { builtinReviewSkills } from "./builtin-review-skills.js";
+import type { PrReviewSource } from "./pr-review-context.js";
 import { digest } from "../assessments/assessment-digest.js";
 import { aiStages } from "./ai-configuration.js";
 export type SkillManifest = {
+  languages?: string[];
+  frameworks?: string[];
   name: string;
   description: string;
   instructions: string;
@@ -40,7 +42,27 @@ export function validateSkill(input: SkillManifest): SkillManifest {
     throw new Error(
       "Enter instructions, provenance and valid stage/repository assignments",
     );
+  const selectors: Record<string, string[]> = {};
+  for (const key of ["languages", "frameworks"] as const) {
+    const values = input[key] ?? [];
+    if (
+      !Array.isArray(values) ||
+      values.length > 20 ||
+      values.some(
+        (v) =>
+          typeof v !== "string" ||
+          !v.trim() ||
+          !/^[a-zA-Z0-9+#. -]{1,60}$/.test(v),
+      )
+    )
+      throw new Error("Enter up to 20 language or framework names");
+    const normalized = [
+      ...new Set(values.map((v) => v.trim().toLowerCase())),
+    ].sort();
+    if (normalized.length) selectors[key] = normalized;
+  }
   return {
+    ...selectors,
     name: input.name.trim(),
     description: input.description.trim(),
     instructions: input.instructions.trim(),
@@ -154,7 +176,10 @@ export function validateSkillOutput(
     value.findings.length > 20
   )
     throw new Error("Invalid model output");
-  const refs = new Set([...context.evidence.map((e) => e.ref), ...(context.source?.lines.map(l=>l.ref) ?? [])]),
+  const refs = new Set([
+      ...context.evidence.map((e) => e.ref),
+      ...(context.source?.lines.map((l) => l.ref) ?? []),
+    ]),
     unique = new Map<string, ReviewFinding>();
   for (const item of value.findings) {
     if (

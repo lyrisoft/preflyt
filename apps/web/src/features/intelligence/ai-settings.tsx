@@ -72,6 +72,7 @@ type StageRoute = {
   allowSource: boolean
   automaticReviews?: boolean
   publishSummary?: boolean
+  publishInline?: boolean
   maxInputTokens: number
   maxOutputTokens: number
   dailyBudgetCents: number
@@ -945,6 +946,7 @@ function RouteForm({
       allowSource: f.get('allowSource') === 'on',
       automaticReviews: f.get('automaticReviews') === 'on',
       publishSummary: f.get('publishSummary') === 'on',
+      publishInline: f.get('publishInline') === 'on',
       maxInputTokens: Number(f.get('maxInputTokens')),
       maxOutputTokens: Number(f.get('maxOutputTokens')),
       dailyBudgetCents: Number(f.get('dailyBudgetCents')),
@@ -1043,6 +1045,14 @@ function RouteForm({
               defaultChecked={route.publishSummary ?? false}
             />
             Publish advisory summary to GitHub
+          </label>
+          <label className='flex items-center gap-2 text-sm'>
+            <input
+              type='checkbox'
+              name='publishInline'
+              defaultChecked={route.publishInline ?? false}
+            />
+            Publish advisory comments on changed lines
           </label>
           <p className='text-xs text-muted-foreground'>
             Uses approved skills and your budget. Source sharing adds verified

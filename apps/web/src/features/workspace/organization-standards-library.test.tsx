@@ -149,18 +149,22 @@ it('authors an AI Review with an approved pinned skill in the wide tabbed editor
     .fill('Service standard')
   await view.getByRole('tab', { name: 'AI Reviews', exact: true }).click()
   await view.getByRole('button', { name: 'Add AI Review' }).click()
-  await view
-    .getByRole('textbox', { name: 'AI Review name' })
-    .fill('Review security evidence')
+  await expect
+    .element(view.getByRole('textbox', { name: 'AI Review name' }))
+    .not.toBeInTheDocument()
+  await expect
+    .element(view.getByRole('combobox', { name: 'Skill', exact: true }))
+    .toHaveTextContent('Security review · v2')
+  await view.getByRole('checkbox', { name: 'Repository', exact: true }).click()
   await view.getByRole('button', { name: 'Save standard' }).click()
   expect(state.save).toHaveBeenCalledWith(
     '/standards/library',
     expect.objectContaining({
       aiChecks: [
         expect.objectContaining({
-          title: 'Review security evidence',
+          title: 'Security review',
           skillId: 'skill',
-          stages: ['pull_request'],
+          stages: ['pull_request', 'repository'],
         }),
       ],
     })
@@ -258,4 +262,73 @@ it('explains missing skills and refreshes them without losing the standard draft
   await expect
     .element(view.getByRole('textbox', { name: 'Name', exact: true }))
     .toHaveValue('Keep my draft')
+})
+
+it('aligns the AI toolbar and uses the shared keyboard-accessible skill dropdown', async () => {
+  await page.viewport(1280, 800)
+  state.query = {
+    data: {
+      builtIn: [pack],
+      versions: [],
+      reviewSkills: [
+        { id: 'security', name: 'Security review', version: 2 },
+        { id: 'migration', name: 'Migration review', version: 3 },
+      ],
+    },
+  }
+  const view = await render(<OrganizationStandardsLibrary />)
+  await view.getByRole('button', { name: 'New standard' }).click()
+  await view.getByRole('tab', { name: 'AI Reviews', exact: true }).click()
+  await view.getByRole('button', { name: 'Add AI Review' }).click()
+  const trigger = view.getByRole('combobox', { name: 'Skill', exact: true })
+  await expect.element(trigger).toHaveAttribute('data-slot', 'select-trigger')
+  await expect
+    .poll(() => {
+      const dropdown = document
+        .querySelector('[data-slot="select-trigger"]')!
+        .getBoundingClientRect()
+      const remove = document
+        .querySelector('[aria-label="Remove AI Review 1"]')!
+        .getBoundingClientRect()
+      const tabs = document
+        .querySelector('[role="dialog"] [role="tablist"]')!
+        .getBoundingClientRect()
+      const refresh = document
+        .querySelector('[aria-label="Refresh skills"]')!
+        .getBoundingClientRect()
+      return (
+        dropdown.height >= 40 &&
+        Math.abs(dropdown.bottom - remove.bottom) <= 1 &&
+        Math.abs(
+          tabs.top + tabs.height / 2 - (refresh.top + refresh.height / 2)
+        ) <= 1
+      )
+    })
+    .toBe(true)
+  await trigger.click()
+  await expect
+    .element(page.getByRole('option', { name: 'Migration review · v3' }))
+    .toBeVisible()
+  await page.getByRole('option', { name: 'Migration review · v3' }).click()
+  await expect.element(trigger).toHaveTextContent('Migration review · v3')
+  await userEvent.keyboard('{Enter}')
+  await expect
+    .element(page.getByRole('option', { name: 'Migration review · v3' }))
+    .toBeVisible()
+  await expect
+    .element(page.getByRole('option', { name: 'Migration review · v3' }))
+    .toHaveFocus()
+  await userEvent.keyboard('{ArrowUp}')
+  await expect
+    .element(page.getByRole('option', { name: 'Security review · v2' }))
+    .toHaveFocus()
+  await userEvent.keyboard('{Enter}')
+  await expect.element(trigger).toHaveTextContent('Security review · v2')
+  await page.viewport(390, 844)
+  await expect
+    .poll(() => document.documentElement.scrollWidth <= window.innerWidth)
+    .toBe(true)
+  await expect
+    .element(view.getByRole('button', { name: 'Save standard' }))
+    .toBeVisible()
 })

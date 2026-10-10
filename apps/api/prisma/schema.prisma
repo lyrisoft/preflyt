@@ -886,6 +886,7 @@ model AiProviderConnection {
   @@index([organizationId, updatedAt])
 }
 model AiStageRoute {
+  publishInline Boolean @default(false)
   automaticReviews Boolean @default(false)
   publishSummary Boolean @default(false)
   id String @id @default(uuid())
@@ -906,6 +907,8 @@ model AiStageRoute {
 }
 
 model AiReviewSkill {
+  languages String[] @default([])
+  frameworks String[] @default([])
   id String @id @default(uuid())
   organizationId String
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
@@ -930,6 +933,8 @@ model AiReviewSkill {
   @@index([organizationId, createdAt])
 }
 model AiSkillReview {
+  usage Json?
+  inlineFeedbackUrl String?
   automaticKey String? @unique
   feedbackState String @default("NOT_REQUESTED")
   feedbackUrl String?

@@ -509,8 +509,8 @@ it("resolves built-in endpoints on the server and requires keys before activatio
 });
 const skillPost = (actor: AuthenticatedSession, path: string, body: unknown) => http(app.getHttpServer()).post('/ai/skills' + path).set('Cookie', `ai.sid=${actor.identityId}`).set('Origin', 'http://localhost:5173').send(body)
 const skillInput = () => ({ ...validateSkill(skillTemplates[0]!), expectedVersion: 0 })
-const approvedSkill = async () => {
-  const skill = (await skillPost(owner, '', skillInput()).expect(201)).body
+const approvedSkill = async (selectors: object = {}) => {
+  const skill = (await skillPost(owner, '', { ...skillInput(), ...selectors }).expect(201)).body
   await skillPost(owner, `/${skill.id}/approve`, { expectedDigest: skill.contentDigest, reviewed: true }).expect(201)
   await skillPost(owner, `/${skill.id}/enable`, { expectedDigest: skill.contentDigest, reviewed: false }).expect(201)
   return skill
@@ -530,12 +530,12 @@ it('keeps versions immutable and requires reviewed approval before enablement', 
   await skillPost(owner, '', { ...skillInput(), shellCommand: 'arbitrary' }).expect(400)
 })
 let repoCounter = 88000000
-async function reviewFixture() {
+async function reviewFixture(selectors: object = {}) {
   vi.stubEnv('AI_REVIEWS_ENABLED', 'true')
   const id = BigInt(++repoCounter)
   await db.gitHubInstallation.create({ data: { id, organizationId: owner.organizationId!, accountLogin: 'fixture', accountType: 'Organization', repositorySelection: 'selected', permissions: {}, connectedById: owner.identityId } })
   const repo = await db.gitHubRepository.create({ data: { githubId: id, installationId: id, ownerLogin: 'fixture', name: 'review', fullName: 'fixture/review', selected: true, isPrivate: true } })
-  const skill = await approvedSkill()
+  const skill = await approvedSkill(selectors)
   const check = { id: `ai-review-${randomUUID()}`, title: 'Security evidence check', kind: 'AI_REVIEW' as const, mode: 'ADVISORY' as const, skillId: skill.id, skillVersion: skill.version, skillDigest: skill.contentDigest, stages: ['repository' as const] }
   const { digest: ignored, ...builtIn } = catalogue[0]!
   const definition = { ...builtIn, id: `org-standard-${randomUUID()}`, owner: 'Organization', version: '1.0.1', changelog: ['Organization-managed version.'], aiChecks: [check] }
@@ -684,8 +684,8 @@ it('downloads an authorized exact version and imports changed text into a separa
 });
 
 // PR review fixtures execute the real admission/worker/storage path against this disposable database.
-async function prFixture(patch: {source?:boolean; automatic?:boolean; summary?:boolean} = {}) {
-  const f = await reviewFixture()
+async function prFixture(patch: {source?:boolean; automatic?:boolean; summary?:boolean; selectors?:object} = {}) {
+  const f = await reviewFixture(patch.selectors)
   const check = {...f.check,stages:['pull_request' as const]}
   const oldPlan = f.assessment.plan as any
   const {digest: _digest,...oldPack}=oldPlan.packs[0]
@@ -805,3 +805,55 @@ it("reuses one built-in skill lineage per organization without approving or dupl
   expect(parallel.map(result=>result.status)).toEqual([201,201]);
   expect(parallel[0]!.body.id).toBe(parallel[1]!.body.id);
 })
+
+it('stores provider usage even when model output is rejected and restricts usage visibility',async()=>{
+ const f=await reviewFixture(),gate=previewGate(f.assessment);
+ const job=(await f.call('',{assessmentId:f.assessment.id,checkIds:[f.check.id]}).expect(201)).body;
+ fetchMock.mockResolvedValue(new Response(JSON.stringify({usage:{prompt_tokens:40,completion_tokens:20},choices:[{finish_reason:'stop',message:{content:'invalid'}}]})));
+ await f.reviews.reconcile();
+ const saved=await db.aiSkillReview.findUniqueOrThrow({where:{id:job.id}});
+ expect(saved.state).toBe('UNAVAILABLE');expect(saved.usage).toEqual([expect.objectContaining({inputTokens:40,outputTokens:20,costStatus:'ESTIMATED_FROM_REPORTED_USAGE'})]);
+ expect(previewGate(await db.commitAssessment.findUniqueOrThrow({where:{id:f.assessment.id}}))).toEqual(gate);
+ const ownerList=await http(app.getHttpServer()).get(f.base+'?assessmentId='+f.assessment.id).set('Cookie',`ai.sid=${owner.identityId}`).expect(200);
+ expect(ownerList.body.reviews[0].usage).toBeTruthy();
+ const membership=await db.organizationMembership.findFirstOrThrow({where:{organizationId:owner.organizationId!,identityId:developer.identityId}});
+ await db.repositoryGrant.create({data:{membershipId:membership.id,repositoryId:f.repo.id}});
+ const developerList=await http(app.getHttpServer()).get(f.base+'?assessmentId='+f.assessment.id).set('Cookie',`ai.sid=${developer.identityId}`).expect(200);
+ expect(developerList.body.reviews[0].usage).toBeNull();expect(developerList.body.reviews[0].reservedCents).toBeNull();
+});
+it('requires explicit source sharing and automatic reviews for inline publication',async()=>{
+ const f=await reviewFixture();
+ await post(owner,'/routes/pull_request',route(f.provider.id,{publishInline:true,automaticReviews:true})).expect(400);
+ await post(owner,'/routes/pull_request',route(f.provider.id,{publishInline:true,allowSource:true,automaticReviews:true})).expect(201);
+});
+it('publishes automatic inline feedback separately from summary publication and keeps gates unchanged',async()=>{
+ vi.stubEnv('GITHUB_CHECK_PUBLICATION_ENABLED','true');
+ const f=await prFixture({summary:false}),gate=previewGate(f.assessment);
+ await db.aiStageRoute.update({where:{id:f.routeRow.id},data:{publishInline:true}});
+ const inline=vi.fn(async()=>({htmlUrl:'https://github.com/fixture/review/pull/1#pullrequestreview-1',reviewId:'1'}));
+ (f.github as any).publishAiInlineReview=inline;
+ await f.reviews.dispatchAutomatic();f.infer();await f.reviews.reconcile();await f.reviews.publishPendingSummary();
+ expect(inline).toHaveBeenCalledTimes(1);expect(f.github.publishAiReviewSummary).not.toHaveBeenCalled();
+ const stored=await db.aiSkillReview.findFirstOrThrow({where:{assessmentId:f.assessment.id}});
+ expect(stored.inlineFeedbackUrl).toContain('pullrequestreview');expect(stored.feedbackState).toBe('PUBLISHED');expect(previewGate(await db.commitAssessment.findUniqueOrThrow({where:{id:f.assessment.id}}))).toEqual(gate);
+});
+it('imports only pinned public upstream instructions with explicit management permission',async()=>{
+ const input={repository:'example/reviews',commit:'c'.repeat(40),path:'SKILL.md',licensePath:'LICENSE'};
+ await skillPost(developer,'/upstream',input).expect(403);
+ fetchMock.mockResolvedValueOnce(new Response('---\nname: Review inputs\ndescription: Input handling\n---\n\nInspect supplied inputs.')).mockResolvedValueOnce(new Response('MIT License'));
+ const before=await db.aiReviewSkill.count();
+ const parsed=(await skillPost(owner,'/upstream',input).expect(201)).body;
+ expect(parsed.manifest.source).toContain(input.commit);expect(parsed.manifest.license).toBe('');expect(await db.aiReviewSkill.count()).toBe(before);
+});
+
+it('dispatches language-constrained reviews only with an exact-commit profile',async()=>{
+ const f=await prFixture({selectors:{languages:['TypeScript']}});
+ const skipped=await f.reviews.list(owner,f.repo.githubId.toString(),f.assessment.id);
+ expect(skipped.checks[0]!.available).toBe(false);expect(skipped.checks[0]!.selection.reason).toContain('no language/framework profile');
+ await f.reviews.dispatchAutomatic();expect(await db.aiSkillReview.count({where:{assessmentId:f.assessment.id}})).toBe(0);
+ const profile=await db.repositoryProfile.create({data:{repositoryId:f.repo.id,sourceSha:f.assessment.sourceSha,treeSha:'b'.repeat(40),branch:'feature',fullName:f.repo.fullName,version:1,complete:true,report:{signals:[{id:'languages',state:'detected',observations:['TypeScript']}]}}});
+ const request={...(f.assessment.request as object),profileSnapshotId:profile.id};
+ await db.commitAssessment.update({where:{id:f.assessment.id},data:{request,assessmentHash:digest({request,plan:f.assessment.plan,report:f.assessment.report})}});
+ await db.repositoryPullRequest.update({where:{id:f.pr.id},data:{aiReviewAttemptAt:null}});
+ await f.reviews.dispatchAutomatic();expect(await db.aiSkillReview.count({where:{assessmentId:f.assessment.id}})).toBe(1);
+});
