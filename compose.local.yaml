@@ -1,6 +1,11 @@
 # Loopback-only development: never use this override for an external deployment.
+# Development mode permits http://localhost callback URLs, which production
+# configuration validation rejects, so both configuration readers need it.
 services:
   api:
     environment:
-      NODE_ENV: production
+      NODE_ENV: development
       COOKIE_SECURE: 'false'
+  worker:
+    environment:
+      NODE_ENV: development
