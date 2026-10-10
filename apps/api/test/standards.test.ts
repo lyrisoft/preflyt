@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { catalogue, posture, recommend } from '../src/standards/catalogue.js'
+import {
+  legacyCatalogue as catalogue,
+  catalogue as currentCatalogue,
+  posture,
+  recommend,
+  resolvePacks,
+} from '../src/standards/catalogue.js'
 import type { ProfileSignal } from '../src/github/repository-profile.js'
 const signal = (
   id: string,
@@ -108,4 +114,18 @@ describe('versioned engineering catalogue and posture', () => {
       posture([{ id: 'unknown', version: '1' }], 'DEFAULT', []),
     ).toThrow()
   })
+})
+
+it('publishes implemented report checks as new immutable versions while retaining old policies', () => {
+  expect(currentCatalogue).toHaveLength(5)
+  for (const pack of currentCatalogue) {
+    expect(pack.version).toBe('1.1.0')
+    expect(pack.rules.some((rule) => rule.capability === 'planned')).toBe(false)
+    expect(Object.isFrozen(pack)).toBe(true)
+    const old = resolvePacks([{ id: pack.id, version: '1.0.0' }])[0]!
+    expect(old.digest).toBe(
+      catalogue.find((item) => item.id === pack.id)!.digest,
+    )
+    expect(old.digest).not.toBe(pack.digest)
+  }
 })

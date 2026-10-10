@@ -135,6 +135,7 @@ function AssessmentCreator({
   const standards = useStandards(repositoryId)
   const evidence = useCiEvidence(repositoryId, sha, { enabled: valid })
   const mutation = useMutation({
+    meta: { successMessage: 'Assessment saved' },
     mutationFn: async () => {
       const response = await fetch(
         `${API_BASE_URL}/github/repositories/${encodeURIComponent(repositoryId)}/assessments`,

@@ -87,6 +87,7 @@ function SelectionEditor({
       data.recommendations.map(({ id, version }) => ({ id, version }))
   )
   const mutation = useMutation({
+    meta: { successMessage: 'Standards selection saved' },
     mutationFn: async () => {
       const response = await fetch(
         `${API_BASE_URL}/github/repositories/${encodeURIComponent(repositoryId)}/standards`,
@@ -435,6 +436,15 @@ export function RepositoryStandards({
   const query = useStandards(repositoryId)
   const [editing, setEditing] = useState(false)
   const data = query.data
+  const upgradesAvailable = data?.selection?.packs.some((saved) =>
+    data.catalogue.some(
+      (pack) =>
+        pack.id === saved.id &&
+        pack.version.localeCompare(saved.version, undefined, {
+          numeric: true,
+        }) > 0
+    )
+  )
   const selectedIds = new Set(
     data?.selection?.packs.map((ref) => `${ref.id}@${ref.version}`)
   )
@@ -522,6 +532,14 @@ export function RepositoryStandards({
             </CardAction>
           </CardHeader>
           <CardContent>
+            {upgradesAvailable && (
+              <p role='status' className='mb-4 text-sm text-muted-foreground'>
+                New standard versions are available.{' '}
+                {canManage
+                  ? 'Use Edit selection to choose them, then publish a new policy revision to adopt the changes.'
+                  : 'Ask a workspace administrator to update the selection and publish a new policy revision.'}
+              </p>
+            )}
             {query.isPending ? (
               <p role='status' className='text-sm text-muted-foreground'>
                 Loading standards…
@@ -535,7 +553,7 @@ export function RepositoryStandards({
                 <div className='flex flex-wrap items-center gap-5'>
                   <PackAdoption
                     selected={savedPacks}
-                    total={data.catalogue.length}
+                    total={new Set(data.catalogue.map((pack) => pack.id)).size}
                   />
                   <dl className='grid min-w-40 flex-1 grid-cols-2 gap-x-6 gap-y-4 text-sm'>
                     <div>

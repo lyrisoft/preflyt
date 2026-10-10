@@ -236,6 +236,7 @@ export function AccessControlPage() {
     staleTime: 60000,
   })
   const sync = useMutation({
+    meta: { successMessage: 'GitHub members synchronized' },
     mutationFn: () => change('/github-directory/sync', {}),
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: ['github-member-directory'] })
@@ -298,6 +299,7 @@ export function AccessControlPage() {
     (r) => session.data?.role === 'OWNER' || !['OWNER', 'ADMIN'].includes(r.id)
   )
   const save = useMutation({
+    meta: { successMessage: 'Access settings saved' },
     mutationFn: () => {
       const github = access.data?.githubLinked && !editing
       return change(

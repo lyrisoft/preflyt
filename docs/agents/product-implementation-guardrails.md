@@ -47,3 +47,7 @@ For a workspace that already has the GitHub App connected, use **Access Control 
 ## Mandatory badge colors
 
 Use `StatusBadge` for status labels and the shared `apps/web/src/lib/status-tones.ts` mapping. Completed or healthy states (Synced, Approved, Active, Passed, Published, Connection tested) are green; failures are red; pending, stale or draft states are amber; information or ongoing work is blue; inactive, disabled or planned states are neutral. Never use blue for a successful sync. Add each new fixed status to the shared mapping and verify it in a regression test. Do not override semantic colors with custom CSS.
+
+## Global action notifications
+
+Reuse the existing Sonner `Toaster` mounted once in the root route. Successful React Query mutations declare a specific `meta.successMessage`; the global mutation cache displays it. Do not also emit a success toast in the same action. Use `meta.silent` for background housekeeping. Direct fetch actions must emit their own Sonner notification on user-triggered success/failure. Keep actionable validation and permission errors visible in the form or page. Query refresh failures use stable toast IDs to avoid stacking duplicates; cancelled requests are silent. Do not toast every initial query or successful polling refresh.

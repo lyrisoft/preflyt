@@ -113,6 +113,7 @@ function BindingEditor({
     )
   })
   const mutation = useMutation({
+    meta: { successMessage: 'CI sources saved' },
     mutationFn: async () => {
       const response = await fetch(
         engineeringPath(repositoryId, '/ci-bindings'),
