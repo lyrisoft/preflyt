@@ -335,7 +335,7 @@ export function TeamsWorkspace({
         {}
       )
       setId(result.id)
-      toast.success('Organization baseline ready')
+      toast.success('Organization-wide requirements ready')
       await refresh()
     } catch (error) {
       setError((error as Error).message)
@@ -413,7 +413,7 @@ export function TeamsWorkspace({
               onClick={() => void openBaseline()}
             >
               <ShieldCheck className='size-4' />
-              Organization baseline
+              Organization-wide requirements
             </Button>
           )}
           {canManage && (
@@ -436,7 +436,7 @@ export function TeamsWorkspace({
                 'Team',
                 'Source',
                 'Members',
-                'Policy scope',
+                'Repositories covered',
                 'Assignments',
                 'Sync',
                 '',
@@ -491,7 +491,7 @@ export function TeamsWorkspace({
                     >
                       {t.source !== 'GITHUB'
                         ? t.source === 'ORGANIZATION'
-                          ? 'Organization baseline'
+                          ? 'Organization-wide requirements'
                           : 'Local team'
                         : t.syncState === 'STALE'
                           ? 'Sync needed'
@@ -554,7 +554,7 @@ export function TeamsWorkspace({
             <DialogTitle>{detail.data?.name ?? 'Team'}</DialogTitle>
             <DialogDescription>
               {detail.data?.source === 'ORGANIZATION'
-                ? 'Organization baseline · shared mandatory standards'
+                ? 'Organization-wide requirements · shared mandatory standards'
                 : detail.data?.source === 'GITHUB'
                   ? 'GitHub team · membership managed in GitHub'
                   : 'Preflyt team · membership does not grant access'}
@@ -906,7 +906,7 @@ function TeamDetail({
             <thead className='bg-muted/40'>
               <tr>
                 <th className='p-3 font-medium'>Repository</th>
-                <th className='p-3 font-medium'>Policy scope</th>
+                <th className='p-3 font-medium'>Repositories covered</th>
                 <th className='p-3 font-medium'>GitHub access</th>
               </tr>
             </thead>
@@ -963,7 +963,7 @@ function TeamDetail({
               <span className='text-xs text-muted-foreground'>
                 {date(a.createdAt)}{' '}
                 {a.supersededAt && (
-                  <StatusBadge tone='neutral'>Superseded</StatusBadge>
+                  <StatusBadge tone='neutral'>Replaced</StatusBadge>
                 )}
               </span>
             </div>
@@ -1367,8 +1367,8 @@ function ImportTeams({
         <DialogHeader>
           <DialogTitle>Import GitHub team</DialogTitle>
           <DialogDescription>
-            Import membership and repository associations. Policy scope starts
-            empty.
+            Import members and repository associations. No repositories are
+            covered until you approve them.
           </DialogDescription>
         </DialogHeader>
         <div className='min-h-0 space-y-4 overflow-y-auto'>

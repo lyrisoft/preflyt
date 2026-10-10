@@ -112,7 +112,7 @@ export function Dashboard() {
           icon: GitPullRequest,
         },
         {
-          label: 'Assessment snapshots',
+          label: 'Saved assessments',
           value: data.metrics.snapshots.toLocaleString(),
           icon: ListChecks,
         },
@@ -178,7 +178,7 @@ export function Dashboard() {
                 {
                   title: 'Summary metrics',
                   content:
-                    'Repositories counts selected, available repositories in your authorized scope. PRs assessed counts distinct pull requests with a saved assessment in the selected period. Assessment snapshots counts all saved assessments in that period. Standards adopted counts repositories with a saved standards selection; it is not verified check coverage.',
+                    'Repositories counts selected, available repositories in your authorized scope. PRs assessed counts distinct pull requests with a saved assessment in the selected period. Saved assessments count all saved assessments in that period. Standards adopted counts repositories with a saved standards selection; it is not verified check coverage.',
                 },
                 {
                   title: 'Assessment activity',
@@ -250,7 +250,7 @@ export function Dashboard() {
                     <CardTitle>Connect your first repository</CardTitle>
                     <CardDescription>
                       Start with GitHub access, then adopt engineering standards
-                      and collect CI evidence.
+                      and collect check results and reports.
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
@@ -330,7 +330,7 @@ export function Dashboard() {
                           <CardHeader>
                             <CardTitle>Evidence overview</CardTitle>
                             <CardDescription>
-                              Repository snapshots across all time
+                              Repository assessments across all time
                             </CardDescription>
                           </CardHeader>
                           <CardContent className='space-y-4'>
@@ -495,7 +495,7 @@ export function Dashboard() {
                                 <TableHead>Profile status</TableHead>
                                 <TableHead>Policy profile</TableHead>
                                 <TableHead>Last assessment</TableHead>
-                                <TableHead>Readiness</TableHead>
+                                <TableHead>Merge review result</TableHead>
                               </TableRow>
                             </TableHeader>
                             <TableBody>

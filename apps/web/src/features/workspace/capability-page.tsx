@@ -9,9 +9,9 @@ const capabilities = {
   findings: {
     title: 'Findings',
     description:
-      'The findings list is not available yet. Review imported security and test reports in CI evidence.',
+      'Review security and test issues from imported check results and reports.',
     to: '/integrations',
-    action: 'Review CI evidence',
+    action: 'Review check results and reports',
     admin: false,
   },
   'quality-gates': {
