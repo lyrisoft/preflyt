@@ -143,7 +143,7 @@ const permissionName: Record<string, string> = {
   'repository.connect': 'Connect GitHub repositories',
   'repository.read': 'View repositories',
   'repository.manage': 'Manage repository selection and profiles',
-  'assessment.read': 'Read assessments and CI evidence',
+  'assessment.read': 'Read assessments and check results',
   'assessment.run': 'Create assessments',
   'policy.read': 'Read policies and standards',
   'team.read': 'View teams and authorized policy scope',
@@ -379,7 +379,7 @@ export function AccessControlPage() {
                 onClick={() => start()}
               >
                 <Plus className='size-4' />
-                Grant access
+                Give access
               </Button>
             )}
           </div>
@@ -648,7 +648,7 @@ export function AccessControlPage() {
                         <p className='mt-1 text-xs text-muted-foreground'>
                           {data.length
                             ? 'Change your filters to see more people.'
-                            : 'Grant access and choose a built-in role to get started.'}
+                            : 'Give access and choose a built-in role to get started.'}
                         </p>
                       </div>
                     )}
@@ -821,10 +821,10 @@ export function AccessControlPage() {
                                 }
                               >
                                 {person.active
-                                  ? 'Granted'
+                                  ? 'Access given'
                                   : person.membershipId
                                     ? 'Revoked'
-                                    : 'Not granted'}
+                                    : 'No access'}
                               </StatusBadge>
                             </TableCell>
                             <TableCell className='text-right'>
@@ -1034,7 +1034,7 @@ export function AccessControlPage() {
           <SheetContent className='flex flex-col sm:max-w-lg'>
             <SheetHeader className='border-b p-6'>
               <SheetTitle>
-                {editing ? 'Edit access' : 'Grant workspace access'}
+                {editing ? 'Edit access' : 'Give workspace access'}
               </SheetTitle>
               <SheetDescription>
                 {editing
@@ -1313,7 +1313,7 @@ export function AccessControlPage() {
                     ? 'Saving…'
                     : editing
                       ? 'Save changes'
-                      : 'Grant access'}
+                      : 'Give access'}
                 </Button>
               </SheetFooter>
             </form>

@@ -1,3 +1,4 @@
+import { configurationValue } from '../configuration/runtime-configuration.js'
 import { RedisCacheService } from '../cache/redis-cache.service.js'
 import {
   ForbiddenException,
@@ -221,7 +222,7 @@ export class GitHubUserAccessService {
   private lastReconciliation = 0
   private reconciliationCursor: string | undefined
   async reconcile() {
-    if (process.env.GITHUB_LOGIN_ENABLED !== 'true' || Date.now() - this.lastReconciliation < 60000) return
+    if (configurationValue('GITHUB_LOGIN_ENABLED') !== 'true' || Date.now() - this.lastReconciliation < 60000) return
     this.lastReconciliation = Date.now()
     const rows = await this.db.gitHubUserAccessEvidence.findMany({
       where: { expiresAt: { lte: new Date() } }, orderBy: { id: 'asc' }, take: 10,

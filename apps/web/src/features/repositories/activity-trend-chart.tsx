@@ -61,7 +61,7 @@ export function ActivityTrendChart({
           <div>
             <CardTitle className='text-base'>Assessment activity</CardTitle>
             <CardDescription className='mt-1'>
-              Recorded snapshots · {labelDate(from)}–{labelDate(to)} · UTC
+              Saved assessments · {labelDate(from)}–{labelDate(to)} · UTC
             </CardDescription>
           </div>
         </div>
@@ -135,7 +135,7 @@ export function ActivityTrendChart({
         <div
           className='relative h-56 min-w-0'
           role='img'
-          aria-label={`${summary.total} snapshots over ${days} days; ${summary.activeDays} days with activity. Peak daily volume ${summary.peak}. Exact counts are in the chart data table below.`}
+          aria-label={`${summary.total} assessments over ${days} days; ${summary.activeDays} days with activity. Peak daily volume ${summary.peak}. Exact counts are in the chart data table below.`}
         >
           <ResponsiveContainer width='100%' height='100%'>
             <AreaChart
@@ -221,7 +221,7 @@ export function ActivityTrendChart({
             <div className='pointer-events-none absolute inset-x-12 top-12 text-center'>
               <p className='text-sm font-medium'>No assessment activity yet</p>
               <p className='mt-1 text-xs text-muted-foreground'>
-                New snapshots will appear here when assessments are recorded.
+                New assessments will appear here when they are saved.
               </p>
             </div>
           )}
@@ -229,7 +229,7 @@ export function ActivityTrendChart({
         <div className='mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground'>
           <span className='inline-flex items-center gap-2'>
             <span className='size-2 rounded-full bg-chart-1' />
-            {granularity === 'day' ? 'Daily' : 'Weekly'} snapshot volume
+            {granularity === 'day' ? 'Daily' : 'Weekly'} assessment count
           </span>
           <span>Activity volume does not indicate quality gate outcomes.</span>
         </div>
@@ -240,7 +240,7 @@ export function ActivityTrendChart({
           <div className='mt-2 max-h-40 overflow-auto rounded-lg border'>
             <table className='w-full text-start'>
               <caption className='sr-only'>
-                Assessment snapshot counts in UTC
+                Saved assessment counts in UTC
               </caption>
               <thead>
                 <tr className='border-b bg-muted/30'>

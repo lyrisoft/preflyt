@@ -1,9 +1,10 @@
+import { configurationValue } from '../configuration/runtime-configuration.js'
 import { normalizeReportFindings } from '../findings/normalize-report-findings.js'
 import { digest } from "../assessments/assessment-digest.js";
 import type { Prisma } from "../generated/prisma/client.js";
 
 export const notificationsEnabled = () =>
-  process.env.NOTIFICATIONS_ENABLED === "true";
+  configurationValue('NOTIFICATIONS_ENABLED') === "true";
 export function assessmentNotification(report: unknown) {
   const value = report as {
     coverage?: string;

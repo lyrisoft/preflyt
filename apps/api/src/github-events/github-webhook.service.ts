@@ -1,3 +1,4 @@
+import { configurationValue } from '../configuration/runtime-configuration.js'
 import { normalizeContributorEvent } from './contributor-event.js'
 import { captureContributors } from '../contributors/capture.js'
 import { artifactSummarySelect } from './ci-artifact.service.js'
@@ -22,8 +23,8 @@ export class GitHubWebhookService {
 
   get enabled() {
     return (
-      process.env.GITHUB_EVENTS_ENABLED === 'true' &&
-      (process.env.GITHUB_WEBHOOK_SECRET?.length ?? 0) >= 32
+      configurationValue('GITHUB_EVENTS_ENABLED') === 'true' &&
+      (configurationValue('GITHUB_WEBHOOK_SECRET')?.length ?? 0) >= 32
     )
   }
 
@@ -40,7 +41,7 @@ export class GitHubWebhookService {
       )
     if (!raw || !signature || !/^sha256=[a-f0-9]{64}$/i.test(signature))
       throw new UnauthorizedException('GitHub webhook signature is invalid')
-    const expected = createHmac('sha256', process.env.GITHUB_WEBHOOK_SECRET!)
+    const expected = createHmac('sha256', configurationValue('GITHUB_WEBHOOK_SECRET')!)
       .update(raw)
       .digest()
     if (!timingSafeEqual(expected, Buffer.from(signature.slice(7), 'hex')))

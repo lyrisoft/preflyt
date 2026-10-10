@@ -1052,3 +1052,14 @@ model FindingDisposition {
   createdAt DateTime @default(now())
   @@index([organizationId, repositoryGithubId, state])
 }
+
+// Deployment-wide operational settings; connection roots and encryption keys stay outside the database.
+model DeploymentConfiguration {
+  id String @id
+  revision Int @default(1)
+  values Json
+  encryptedSecrets String?
+  updatedById String?
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+}

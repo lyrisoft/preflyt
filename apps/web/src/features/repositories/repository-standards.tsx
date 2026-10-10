@@ -657,7 +657,7 @@ export function RepositoryStandards({
           <div className='flex items-center justify-between gap-3'>
             <div>
               <h2 id='pack-catalogue-title' className='text-base font-semibold'>
-                Pack catalogue
+                Standards library
               </h2>
               <p className='mt-1 text-xs text-muted-foreground'>
                 See which rules Preflyt supports and choose packs for this
@@ -692,11 +692,11 @@ export function RepositoryStandards({
         </TabsTrigger>
         <TabsTrigger value='bindings' className='gap-2'>
           <Workflow aria-hidden='true' className='size-4' />
-          CI sources
+          Check sources
         </TabsTrigger>
         <TabsTrigger value='catalogue' className='gap-2'>
           <Layers aria-hidden='true' className='size-4' />
-          Pack catalogue
+          Standards library
         </TabsTrigger>
       </TabsList>
       <TabsContent value='standards'>{standardsContent}</TabsContent>

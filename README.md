@@ -1,5 +1,7 @@
 # Preflyt
 
+Application connections and feature switches are now provisioned in **Settings → Configuration** by Super Admin. Environment names below describe the legacy import contract; once stored, database values take precedence. See [deployment configuration](docs/operations/deployment-configuration.md). Infrastructure and execution trust controls remain deployment-managed.
+
 **Engineering confidence before production.**
 
 Preflyt is a **self-hosted, AI-native Shift Left engineering platform** under active development. It helps engineering teams detect and prevent security vulnerabilities, software defects, reliability failures and infrastructure risks **earlier in the software development lifecycle**, using continuous assessments, explicit engineering standards, policy-based quality gates and actionable developer feedback.

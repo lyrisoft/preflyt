@@ -500,6 +500,19 @@ export class TeamsService {
             include: { repository: true },
           })
         : [];
+      const removesAssignedRepository = priorScope.some(
+        (scope) => !b.repositoryIds.includes(scope.repository.githubId.toString()),
+      );
+      if (
+        previous &&
+        removesAssignedRepository &&
+        (await tx.teamPolicyAssignment.count({
+          where: { teamId: previous.id, supersededAt: null },
+        }))
+      )
+        throw new ConflictException(
+          "This team has assigned standards. Removing a covered repository needs an approved exception. Keep the repository selected; exception approval is not available yet.",
+        );
       const scopeChanged =
         digest(
           priorScope.map((r) => r.repository.githubId.toString()).sort(),

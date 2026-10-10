@@ -212,7 +212,7 @@ function SourceRows({
                     </div>
                   ) : (
                     <span className='text-muted-foreground'>
-                      No matching PR revision snapshot
+                      No assessment for this PR commit
                     </span>
                   )
                 ) : (
@@ -353,7 +353,7 @@ export function ContributorsPage({
         { label: 'Merged PRs', n: c?.mergedPrs, icon: GitBranch },
         { label: 'Recorded reviews', n: c?.reviews, icon: UsersRound },
         {
-          label: 'Attributed commits',
+          label: 'Commits linked to contributor',
           n: c?.commits,
           icon: GitCommitHorizontal,
         },
@@ -375,7 +375,7 @@ export function ContributorsPage({
           icon: GitPullRequest,
         },
         {
-          label: 'PRs with revision snapshots',
+          label: 'PRs with saved assessments',
           n: data?.summary.prsWithSnapshots,
           icon: GitCommitHorizontal,
         },
@@ -725,7 +725,7 @@ export function ContributorsPage({
                         <div
                           className='chart-motion h-52'
                           role='img'
-                          aria-label='PR snapshot coverage'
+                          aria-label='PR assessment coverage'
                         >
                           <ResponsiveContainer width='100%' height='100%'>
                             <BarChart
@@ -789,7 +789,7 @@ export function ContributorsPage({
                       {data.permissions.policyEvidence && (
                         <table className='self-start text-left'>
                           <caption className='mb-2 text-left font-medium'>
-                            PR snapshot associations
+                            PR assessment matches
                           </caption>
                           <thead>
                             <tr>

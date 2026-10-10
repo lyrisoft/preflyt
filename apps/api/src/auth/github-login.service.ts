@@ -1,3 +1,4 @@
+import { configurationValue } from '../configuration/runtime-configuration.js'
 import { GitHubCredentialService } from './github-credential.service.js'
 import { createHash, randomBytes } from 'node:crypto'
 import {
@@ -51,10 +52,10 @@ export class GitHubLoginService implements OnModuleInit {
     githubLoginCallback()
     githubUserTokenEncryptionKey()
     if (
-      !/^[1-9]\d*$/.test(process.env.GITHUB_APP_ID ?? '') ||
-      !process.env.GITHUB_APP_CLIENT_ID ||
-      !process.env.GITHUB_APP_CLIENT_SECRET ||
-      !process.env.GITHUB_APP_PRIVATE_KEY
+      !/^[1-9]\d*$/.test(configurationValue('GITHUB_APP_ID') ?? '') ||
+      !configurationValue('GITHUB_APP_CLIENT_ID') ||
+      !configurationValue('GITHUB_APP_CLIENT_SECRET') ||
+      !configurationValue('GITHUB_APP_PRIVATE_KEY')
     )
       throw new Error(
         'GitHub login requires the App ID, client ID, client secret and private key',

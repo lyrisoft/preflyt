@@ -62,9 +62,13 @@ export function FindingsOverview({
       value: summary.criticalHigh,
       icon: AlertTriangle,
     },
-    { name: 'Evidence gaps', value: summary.evidenceGaps, icon: FileWarning },
+    {
+      name: 'Missing or unverified results',
+      value: summary.evidenceGaps,
+      icon: FileWarning,
+    },
   ]
-  const subject = kind === 'gaps' ? 'Evidence gaps' : 'Issues'
+  const subject = kind === 'gaps' ? 'Missing or unverified results' : 'Issues'
   return (
     <section aria-label='Findings overview' className='space-y-5'>
       <dl className='grid grid-cols-2 gap-4 xl:grid-cols-4'>
