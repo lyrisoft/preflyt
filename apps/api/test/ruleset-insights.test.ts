@@ -79,3 +79,12 @@ describe('Insights authorization',()=>{
   expect(access.requireRepository).not.toHaveBeenCalled()
  })
 })
+
+it('rechecks assessment permissions after linking exact commit evidence', async () => {
+ const access = { requireRepository: vi.fn().mockResolvedValue({ id: 'internal', installationId: 500n, githubId: 501n }) };
+ const provider = { getRepositoryRuleset: vi.fn().mockResolvedValue({}), readRulesetInsights: vi.fn().mockResolvedValue({ suites: [] }) };
+ const history = { linkAssessments: vi.fn(async () => { access.requireRepository.mockRejectedValue(new Error('Access revoked')); return []; }) };
+ await expect(new GitHubRulesetService(access as any, provider as any, history as any).insights({} as any, '501', 7, { page: 1, period: 'week' })).rejects.toThrow('Access revoked');
+ expect(history.linkAssessments).toHaveBeenCalledWith('internal', []);
+ expect(access.requireRepository).toHaveBeenCalledWith({}, '501', 'assessment.read');
+});

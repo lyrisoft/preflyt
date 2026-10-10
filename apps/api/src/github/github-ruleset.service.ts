@@ -90,6 +90,13 @@ export class GitHubRulesetService {
             id,
             options,
           );
+    if (this.history) {
+      await this.access.requireRepository(session, repositoryId, 'assessment.read');
+      const suites = await this.history.linkAssessments(repository.id, result.suites);
+      await this.access.requireRepository(session, repositoryId, 'assessment.read');
+      await this.access.requireRepository(session, repositoryId, 'policy.read');
+      return { ...result, suites };
+    }
     await this.access.requireRepository(session, repositoryId, "policy.read");
     return result;
   }

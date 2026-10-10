@@ -5,11 +5,11 @@ import {
   ServiceUnavailableException,
 } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
-import { Prisma } from "../generated/prisma/client.js";
+import { Prisma, type GitHubRuleSuiteSnapshot } from "../generated/prisma/client.js";
 import { digest } from "../assessments/assessment-digest.js";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { GitHubProviderService } from "./github-provider.service.js";
-import { attributedSuite, summarizeRulesetSuites } from "./ruleset-insights.js";
+import { attributedSuite, summarizeRulesetSuites, type RulesetSuite } from "./ruleset-insights.js";
 export function insightsHistoryEnabled() {
   return configurationValue('RULESET_INSIGHTS_SYNC_ENABLED') === "true";
 }
@@ -63,6 +63,29 @@ export class RulesetHistoryService {
   ) {}
   close() {
     this.stopped = true;
+  }
+  async linkAssessments(repositoryId: string, suites: RulesetSuite[]) {
+    return Promise.all(suites.map(async suite => {
+      const records = await this.prisma.commitAssessment.findMany({
+        where: { repositoryId, sourceSha: suite.sourceSha },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 6,
+      });
+      for (const record of records) {
+        if (digest({ request: record.request, plan: record.plan, report: record.report }) !== record.assessmentHash)
+          throw new ServiceUnavailableException('Saved assessment could not be verified');
+      }
+      return { ...suite, assessments: records.slice(0, 5).map(record => ({ id: record.id, createdAt: record.createdAt.toISOString() })), moreAssessments: records.length > 5 };
+    }));
+  }
+  private verifiedSuite(row: GitHubRuleSuiteSnapshot, githubId: bigint, rulesetId: number, result?: string) {
+    if (digest(row.raw) !== row.digest) throw new ServiceUnavailableException('Retained evaluation could not be verified');
+    const checked = snapshotDetail(row.raw as Record<string, any>, githubId.toString());
+    if (checked.suiteId !== row.suiteId || checked.sourceSha !== row.sourceSha || checked.actor !== row.actor || checked.ref !== row.ref || checked.pushedAt.getTime() !== row.pushedAt.getTime())
+      throw new ServiceUnavailableException('Retained evaluation identity changed');
+    const suite = attributedSuite(row.raw as Record<string, any>, githubId.toString(), rulesetId);
+    if (!suite) throw new ServiceUnavailableException('Retained ruleset attribution changed');
+    const rules = result && result !== 'all' ? suite.rules.filter(rule => rule.result === result) : suite.rules;
+    return rules.length ? [{ ...suite, rules }] : [];
   }
   async reconcile() {
     if (!insightsHistoryEnabled() || this.stopped) return;
@@ -233,17 +256,18 @@ export class RulesetHistoryService {
         quarter: 90,
       },
       retention = insightsRetentionDays();
-    const cutoff = new Date(
-      Date.now() - Math.min(days[options.period], retention) * 86400000,
-    );
+    const now = new Date();
+    const duration = days[options.period] * 86400000;
+    const cutoff = new Date(now.getTime() - Math.min(days[options.period], retention) * 86400000);
+    const previousSince = new Date(Math.max(now.getTime() - duration * 2, now.getTime() - retention * 86400000));
     const where = {
       repositoryId,
       rulesetIds: { has: BigInt(rulesetId) },
-      pushedAt: { gte: cutoff },
+      pushedAt: { gte: cutoff, lte: now },
       ...(options.ref ? { ref: options.ref } : {}),
       ...(options.actor ? { actor: options.actor } : {}),
     };
-    const [rows, sync] = await Promise.all([
+    const [rows, sync, trendRows] = await Promise.all([
       this.prisma.gitHubRuleSuiteSnapshot.findMany({
         where,
         orderBy: [{ pushedAt: "desc" }, { suiteId: "desc" }],
@@ -251,41 +275,30 @@ export class RulesetHistoryService {
         take: 21,
       }),
       this.prisma.gitHubInsightsSync.findUnique({ where: { repositoryId } }),
+      this.prisma.gitHubRuleSuiteSnapshot.findMany({
+        where: { ...where, pushedAt: { gte: previousSince, lte: now } },
+        orderBy: [{ pushedAt: 'desc' }, { suiteId: 'desc' }], take: 1001,
+      }),
     ]);
-    const suites = rows.slice(0, 20).flatMap((row) => {
-      if (digest(row.raw) !== row.digest)
-        throw new ServiceUnavailableException(
-          "Retained evaluation could not be verified",
-        );
-      const checked = snapshotDetail(
-        row.raw as Record<string, any>,
-        githubId.toString(),
-      );
-      if (
-        checked.suiteId !== row.suiteId ||
-        checked.sourceSha !== row.sourceSha ||
-        checked.actor !== row.actor ||
-        checked.ref !== row.ref ||
-        checked.pushedAt.getTime() !== row.pushedAt.getTime()
-      )
-        throw new ServiceUnavailableException(
-          "Retained evaluation identity changed",
-        );
-      const suite = attributedSuite(
-        row.raw as Record<string, any>,
-        githubId.toString(),
-        rulesetId,
-      );
-      if (!suite)
-        throw new ServiceUnavailableException(
-          "Retained ruleset attribution changed",
-        );
-      const rules =
-        options.result && options.result !== "all"
-          ? suite.rules.filter((rule) => rule.result === options.result)
-          : suite.rules;
-      return rules.length ? [{ ...suite, rules }] : [];
-    });
+    const suites = rows.slice(0, 20).flatMap(row => this.verifiedSuite(row, githubId, rulesetId, options.result));
+    const checkedTrend = trendRows.slice(0, 1000).flatMap(row => this.verifiedSuite(row, githubId, rulesetId, options.result));
+    const current = checkedTrend.filter(suite => new Date(suite.pushedAt) >= cutoff);
+    const previous = checkedTrend.filter(suite => new Date(suite.pushedAt) < cutoff);
+    const buckets = new Map<string, RulesetSuite[]>();
+    for (const suite of current) {
+      const day = suite.pushedAt.slice(0, 10);
+      buckets.set(day, [...(buckets.get(day) ?? []), suite]);
+    }
+    const trend = {
+      scope: 'BOUNDED_COLLECTED_EVALUATIONS', counting: 'MATCHED_RULE_OCCURRENCES',
+      since: cutoff.toISOString(), until: now.toISOString(),
+      previousSince: previousSince.toISOString(), previousUntil: cutoff.toISOString(),
+      previousWindowLimitedByRetention: previousSince.getTime() > now.getTime() - duration * 2,
+      limit: 1000, truncated: trendRows.length > 1000,
+      scannedSuites: Math.min(trendRows.length, 1000),
+      current: summarizeRulesetSuites(current), previous: summarizeRulesetSuites(previous),
+      days: [...buckets].sort(([a], [b]) => a.localeCompare(b)).map(([day, suites]) => ({ day, ...summarizeRulesetSuites(suites) })),
+    };
     return {
       source: "RETAINED_GITHUB_RULE_SUITES",
       scope: "CURRENT_RETAINED_PAGE",
@@ -295,6 +308,7 @@ export class RulesetHistoryService {
       hasMore: rows.length > 20,
       scannedSuites: Math.min(rows.length, 20),
       suites,
+      trend,
       summary: summarizeRulesetSuites(suites),
       fetchedAt: sync?.lastFetchedAt?.toISOString() ?? null,
       repositoryName,
