@@ -1,0 +1,46 @@
+/* Brand colour follows the application's primary (#29465b). */
+:root {
+  --ifm-color-primary: #29465b;
+  --ifm-color-primary-dark: #253f52;
+  --ifm-color-primary-darker: #233d4f;
+  --ifm-color-primary-darkest: #1d3241;
+  --ifm-color-primary-light: #2d4d64;
+  --ifm-color-primary-lighter: #2f5068;
+  --ifm-color-primary-lightest: #365c78;
+  --ifm-code-font-size: 95%;
+  --ifm-font-family-base:
+    Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+[data-theme='dark'] {
+  --ifm-color-primary: #7fb4d6;
+  --ifm-color-primary-dark: #66a5cd;
+  --ifm-color-primary-darker: #5a9dc9;
+  --ifm-color-primary-darkest: #3a83b0;
+  --ifm-color-primary-light: #98c3de;
+  --ifm-color-primary-lighter: #a4cae2;
+  --ifm-color-primary-lightest: #c6dfee;
+}
+
+.badge-status {
+  display: inline-block;
+  padding: 0.1rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border: 1px solid var(--ifm-color-emphasis-300);
+  background: var(--ifm-color-emphasis-100);
+}
+.badge-available {
+  color: #166534;
+  border-color: #86c9a0;
+  background: #e8f6ee;
+}
+.badge-planned {
+  color: #475569;
+}
+[data-theme='dark'] .badge-available {
+  color: #86efac;
+  border-color: #166534;
+  background: #0f2a1a;
+}
