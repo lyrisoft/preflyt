@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { Link } from '@tanstack/react-router'
+import { TrendingUp } from 'lucide-react'
 import {
   Bar,
   BarChart,
@@ -11,6 +13,7 @@ import {
 } from 'recharts'
 import { chartAnimation, chartTooltipAnimation } from '@/lib/chart-motion'
 import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -29,6 +32,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { StatusBadge } from '@/components/status-badge'
+import { SurfaceIcon } from '@/components/surface-icon'
 import { governanceRequest } from './governance-api'
 
 type Suite = {
@@ -38,6 +42,8 @@ type Suite = {
   sourceSha: string
   pushedAt: string
   suiteResult: string
+  assessments?: { id: string; createdAt: string }[]
+  moreAssessments?: boolean
   rules: {
     type: string
     result: string
@@ -57,6 +63,31 @@ type Insights = {
   }
   scannedSuites: number
   repositoryName: string
+  trend?: {
+    truncated: boolean
+    previousWindowLimitedByRetention: boolean
+    scannedSuites: number
+    limit: number
+    current: {
+      activePass: number
+      activeFail: number
+      evaluateFail: number
+      attributedBypass: number
+    }
+    previous: {
+      activePass: number
+      activeFail: number
+      evaluateFail: number
+      attributedBypass: number
+    }
+    days: {
+      day: string
+      activePass: number
+      activeFail: number
+      evaluateFail: number
+      attributedBypass: number
+    }[]
+  }
   summary: {
     ruleEvaluations: number
     activePass: number
@@ -251,6 +282,129 @@ export function RulesetInsights({
               Retention: {data.collection.retentionDays} days.
             </div>
           )}
+          {data.trend && (
+            <Card>
+              <CardHeader className='flex-row items-center gap-3'>
+                <SurfaceIcon icon={TrendingUp} tone='teal' />
+                <div>
+                  <CardTitle className='text-sm'>Saved rule history</CardTitle>
+                  <p className='mt-1 text-xs text-muted-foreground'>
+                    Selected period · UTC days · Collected evaluations only
+                  </p>
+                </div>
+              </CardHeader>
+              <CardContent className='space-y-4'>
+                {(data.trend.truncated ||
+                  data.trend.previousWindowLimitedByRetention) && (
+                  <p role='status' className='text-xs text-warning'>
+                    {data.trend.truncated &&
+                      `Showing the newest ${data.trend.limit} saved suites. Earlier results may be omitted. `}
+                    {data.trend.previousWindowLimitedByRetention &&
+                      'Retention covers only part of the previous period.'}
+                  </p>
+                )}
+                {data.trend.days.length ? (
+                  <div
+                    className='h-52'
+                    role='img'
+                    aria-label={data.trend.days
+                      .map(
+                        (day) =>
+                          `${day.day}: ${day.activePass} active passes, ${day.activeFail} active failures, ${day.evaluateFail} evaluation-mode failures, ${day.attributedBypass} confirmed bypasses`
+                      )
+                      .join('; ')}
+                  >
+                    <ResponsiveContainer width='100%' height='100%'>
+                      <BarChart data={data.trend.days} accessibilityLayer>
+                        <CartesianGrid
+                          vertical={false}
+                          stroke='var(--border)'
+                        />
+                        <XAxis
+                          dataKey='day'
+                          tick={{
+                            fontSize: 10,
+                            fill: 'var(--muted-foreground)',
+                          }}
+                          tickFormatter={(day) => day.slice(5)}
+                        />
+                        <YAxis
+                          allowDecimals={false}
+                          width={28}
+                          tick={{
+                            fontSize: 10,
+                            fill: 'var(--muted-foreground)',
+                          }}
+                        />
+                        <Tooltip
+                          {...chartTooltipAnimation}
+                          contentStyle={{
+                            background: 'var(--popover)',
+                            borderColor: 'var(--border)',
+                            borderRadius: 10,
+                            color: 'var(--foreground)',
+                          }}
+                        />
+                        <Bar
+                          dataKey='activePass'
+                          name='Active passed'
+                          fill='var(--success)'
+                          {...chartAnimation}
+                        />
+                        <Bar
+                          dataKey='activeFail'
+                          name='Active failed'
+                          fill='var(--danger)'
+                          {...chartAnimation}
+                        />
+                        <Bar
+                          dataKey='evaluateFail'
+                          name='Evaluate mode failed'
+                          fill='var(--warning)'
+                          {...chartAnimation}
+                        />
+                        <Bar
+                          dataKey='attributedBypass'
+                          name='Confirmed bypass'
+                          fill='var(--info)'
+                          {...chartAnimation}
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  <p className='text-sm text-muted-foreground'>
+                    No saved evaluations match this period.
+                  </p>
+                )}
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Rule result</TableHead>
+                      <TableHead>Selected period</TableHead>
+                      <TableHead>Previous period</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(
+                      [
+                        ['activePass', 'Active passed'],
+                        ['activeFail', 'Active failed'],
+                        ['evaluateFail', 'Evaluate mode failed'],
+                        ['attributedBypass', 'Confirmed bypass'],
+                      ] as const
+                    ).map(([key, text]) => (
+                      <TableRow key={key}>
+                        <TableCell>{text}</TableCell>
+                        <TableCell>{data.trend!.current[key]}</TableCell>
+                        <TableCell>{data.trend!.previous[key]}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
           <div className='grid grid-cols-2 gap-3'>
             {[
               {
@@ -400,6 +554,37 @@ export function RulesetInsights({
                     <code className='block text-xs text-muted-foreground'>
                       Suite {suite.id}
                     </code>
+                    {suite.assessments?.map((assessment) => (
+                      <Button
+                        key={assessment.id}
+                        variant='outline'
+                        size='sm'
+                        className='mt-2'
+                        asChild
+                      >
+                        <Link
+                          to='/repositories/$repositoryId'
+                          params={{ repositoryId }}
+                          search={{
+                            tab: 'assessments',
+                            assessment: assessment.id,
+                          }}
+                        >
+                          Assessment ·{' '}
+                          {new Date(assessment.createdAt).toLocaleDateString()}
+                        </Link>
+                      </Button>
+                    ))}
+                    {suite.assessments && !suite.assessments.length && (
+                      <p className='mt-2 text-xs text-muted-foreground'>
+                        No saved assessment for this commit.
+                      </p>
+                    )}
+                    {suite.moreAssessments && (
+                      <p className='mt-2 text-xs text-muted-foreground'>
+                        Showing the five latest assessments for this commit.
+                      </p>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
