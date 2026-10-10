@@ -71,6 +71,7 @@ export function ConfigurationPanel() {
     queryKey: ['deployment-configuration'],
     queryFn: ({ signal }) => request<Configuration>({ signal }),
     retry: false,
+    meta: { silent: true },
     gcTime: 0,
   })
   const save = useMutation({
@@ -308,11 +309,6 @@ export function ConfigurationPanel() {
         <p role='alert' className='text-sm text-destructive'>
           Configuration changed elsewhere. Discard your changes and reload
           before saving.
-        </p>
-      )}
-      {save.isError && (
-        <p role='alert' className='text-sm text-destructive'>
-          {save.error.message}
         </p>
       )}
       <div className='flex flex-wrap justify-end gap-2 border-t pt-5'>

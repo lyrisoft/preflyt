@@ -23,6 +23,7 @@ export function NotificationPreferences() {
         emailAddressAvailable: boolean
       }>('/preferences', signal),
     enabled: !!session.data?.identityId,
+    meta: { silent: true },
     gcTime: 0,
     retry: false,
   })
@@ -62,9 +63,9 @@ export function NotificationPreferences() {
             Receive new in-app updates for your assessments and repositories you
             lead. Existing notifications stay in your inbox.
           </p>
-          {(save.isError || preference.isError) && (
+          {preference.isError && (
             <p role='alert' className='mt-2 text-xs text-destructive'>
-              Could not load or save preferences. Try again.
+              Could not load preferences. Try again.
             </p>
           )}
         </div>
@@ -94,7 +95,7 @@ export function NotificationPreferences() {
             {!preference.data?.emailEnabled
               ? 'Email delivery is not enabled for this deployment.'
               : !preference.data.emailAddressAvailable
-                ? 'Your sign-in account does not provide an email address for personal alerts. Organization channels use their own recipients; in-app notifications still work.'
+                ? 'Your account has no email address for personal alerts. Organization channels above use their own recipients; in-app notifications still work.'
                 : 'Receive a short email linking to your inbox. Repository and report details stay in Preflyt.'}
           </p>
         </div>

@@ -125,3 +125,13 @@ An admitted native attempt that fails, times out or cannot provide its completio
 AI model availability notices target only current organization Owners/Admins who retain repository and model-configuration access. Three distinct review requests with actual network, deadline or upstream availability failures within ten minutes, spanning at least one minute since the latest successful inference, produce an alert. A connection revision has a thirty-minute cooldown; retries do not create repeated signals. Invalid output, rejected endpoint addresses, provider configuration changes, revoked access and user cancellation do not count as provider outages. A successful inference resets the failure sequence. The notice opens **AI Intelligence → Models**.
 
 A review rejected by the configured daily reservation limit records one **AI review budget reached** notice per route revision and UTC day. The rejected request reserves nothing and sends no model request. This is an estimated admission reservation limit, not billed provider spend. The notice opens **AI Intelligence → Model router**. No provider response, key, prompt or review source is stored in these notification payloads. Optional assessment mute does not suppress AI administration notices; personal email remains opt-in and rechecks current role and access. Organization channel email uses the separate explicit admin configuration above.
+
+### Local queued-email troubleshooting
+
+A queued message is saved in PostgreSQL and waits for the background worker. Set `QUEUE_REDIS_URL` in the API and worker deployment environment, using persistent Redis/Valkey with `noeviction`, then restart both processes. The local development worker command is `pnpm --filter @preflyt/api start:worker:dev`; this starts real background processing and can send already queued emails. Never reset the database or delete delivery records to unblock the queue. Notification channel tests are unavailable when the queue connection is missing or invalid.
+
+A Super Admin recovery account without an email address cannot receive personal email alerts. Organization channels use explicitly configured recipients and are independent of that account's personal preferences.
+
+### Email presentation
+
+Personal alerts, organization alerts and channel tests share a minimal HTML template: Preflyt branding, a short message and one **View notifications** button. Every message also includes a plain-text alternative. The link uses the deployment’s `WEB_ORIGIN`; email contains no repository names, findings or review contents, and no remote images or tracking pixels. Restart the worker after deploying template changes.
