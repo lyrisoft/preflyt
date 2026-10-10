@@ -77,6 +77,7 @@ export function OrganizationSettingsPage() {
     queryKey: key,
     queryFn: ({ signal }) => settingsRequest<Settings>({ signal }),
     enabled: session.isSuccess,
+    meta: { silent: true },
     retry: false,
     gcTime: 0,
   })
@@ -230,11 +231,6 @@ export function OrganizationSettingsPage() {
                         </dd>
                       </div>
                     </dl>
-                    {save.isError && (
-                      <p role='alert' className='text-sm text-destructive'>
-                        {save.error.message}
-                      </p>
-                    )}
                   </div>
                   {settings.data.canUpdate && (
                     <div className='flex justify-end border-t bg-muted/20 px-6 py-4'>

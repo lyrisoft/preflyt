@@ -44,6 +44,7 @@ const initial = {
   notificationsEnabled: true,
   emailEnabled: true,
   emailConfigured: true,
+  queueConfigured: true,
   canManage: true,
   items: [channel],
 }
@@ -288,7 +289,7 @@ it('allows saving channels when SMTP is unavailable and disables tests', async (
     )
     .toBeDisabled()
 })
-it('keeps authorization and stale revision failures in the form and toast without dismissing it', async () => {
+it('reports action failures once in a toast and keeps the draft open', async () => {
   mutationResponse = {
     status: 409,
     body: { message: 'This channel changed. Refresh and try again.' },
@@ -296,9 +297,8 @@ it('keeps authorization and stale revision failures in the form and toast withou
   const { view } = await mount()
   await view.getByRole('button', { name: 'Edit Engineering alerts' }).click()
   await view.getByRole('button', { name: 'Save channel' }).click()
-  await expect
-    .element(view.getByRole('alert'))
-    .toHaveTextContent('This channel changed. Refresh and try again.')
+  await expect.poll(() => state.error.mock.calls.length).toBe(1)
+  await expect.element(view.getByRole('alert')).not.toBeInTheDocument()
   await expect.element(view.getByRole('dialog')).toBeVisible()
   expect(state.error).toHaveBeenCalledExactlyOnceWith(
     'This channel changed. Refresh and try again.'
@@ -459,16 +459,11 @@ it('keeps stale data disabled when a background refresh fails', async () => {
   await view
     .getByRole('button', { name: 'Refresh notification channels' })
     .click()
-  await expect
-    .element(view.getByRole('alert'))
-    .toHaveTextContent('Email settings are temporarily unavailable.')
-  await expect
-    .element(
-      view.getByText(
-        'Channel details may be out of date. Retry before making changes.'
-      )
-    )
-    .toBeVisible()
+  await vi.waitFor(() => expect(state.error).toHaveBeenCalledTimes(1))
+  expect(state.error.mock.calls[0][0]).toBe(
+    'Email settings are temporarily unavailable.'
+  )
+  await expect.element(view.getByRole('alert')).not.toBeInTheDocument()
   await expect
     .element(view.getByRole('button', { name: 'Add email channel' }))
     .toBeDisabled()
@@ -539,3 +534,20 @@ it('keeps polling and tests disabled while another recipient remains queued afte
     )
     .toBeEnabled()
 }, 10000)
+
+it('shows queue setup guidance and disables testing without a queue connection', async () => {
+  response.queueConfigured = false
+  const { view } = await mount()
+  await expect
+    .element(view.getByText('Email delivery is not ready'))
+    .toBeVisible()
+  await expect
+    .element(
+      view.getByRole('button', { name: 'Send test to Engineering alerts' })
+    )
+    .toBeDisabled()
+  await expect
+    .element(view.getByRole('button', { name: 'Add email channel' }))
+    .toBeEnabled()
+  expect(state.error).not.toHaveBeenCalled()
+})
