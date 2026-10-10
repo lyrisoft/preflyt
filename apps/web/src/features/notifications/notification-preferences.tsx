@@ -116,8 +116,8 @@ export function NotificationPreferences() {
         />
       </div>
       <p className='border-t bg-muted/20 px-6 py-4 text-xs leading-5 text-muted-foreground'>
-        Policy publication notices stay in your in-app inbox even when
-        assessment alerts are turned off.
+        Security, policy and AI configuration notices stay in your in-app inbox
+        even when assessment alerts are turned off.
       </p>
     </section>
   )

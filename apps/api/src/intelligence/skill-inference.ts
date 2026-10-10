@@ -5,7 +5,7 @@ import {
   decryptAiCredential,
   providerEndpoint,
 } from "./ai-configuration.js";
-import { aiHttpRequest } from "./ai-http.js";
+import { aiHttpRequest, AiTransportError } from "./ai-http.js";
 import type { ReviewContext } from "./review-skills.js";
 import { reviewPrompt, validateSkillOutput } from "./review-skills.js";
 export async function runSkillInference(
@@ -74,11 +74,25 @@ export async function runSkillInference(
       },
     };
   }
-  const response = await aiHttpRequest(
-    new URL(aiApiBaseUrl(endpoint) + path),
-    endpoint.locality,
-    { headers, body: JSON.stringify(body), signal },
-  );
+  signal.throwIfAborted();
+  let response: Response;
+  try {
+    response = await aiHttpRequest(
+      new URL(aiApiBaseUrl(endpoint) + path),
+      endpoint.locality,
+      { headers, body: JSON.stringify(body), signal },
+    );
+  } catch (error) {
+    // The inference deadline is a transport failure; caller cancellation and access
+    // revocation are not. Never retain a provider URL, response body or key here.
+    if (signal.aborted) {
+      if (signal.reason?.name === "TimeoutError") throw new AiTransportError("TIMEOUT");
+      signal.throwIfAborted();
+    }
+    throw error;
+  }
+  if (response.status === 429 || response.status >= 500)
+    throw new AiTransportError("UPSTREAM_UNAVAILABLE");
   if (!response.ok) throw new Error("Model unavailable");
   const value = (await response.json()) as any;
   await onUsage?.(providerUsage(endpoint.preset, value, provider));

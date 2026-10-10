@@ -293,7 +293,10 @@ it('opens the organization baseline through an explicit action', async () => {
   })
   const view = await mount()
   await userEvent.click(
-    view.getByRole('button', { name: 'Organization-wide requirements', exact: true })
+    view.getByRole('button', {
+      name: 'Organization-wide requirements',
+      exact: true,
+    })
   )
   await expect
     .poll(() =>
@@ -303,4 +306,41 @@ it('opens the organization baseline through an explicit action', async () => {
       )
     )
     .toBe(true)
+})
+
+it('shows separate impact rows and statuses for branches in the same repository', async () => {
+  const request = api.request.getMockImplementation()!
+  api.request.mockImplementation(async (path: string, ...args: unknown[]) => {
+    if (path === '/teams/team')
+      return {
+        ...detail,
+        impact: [
+          {
+            ...detail.impact[0],
+            state: 'PUBLISHED',
+            revision: 2,
+            current: false,
+          },
+          { ...detail.impact[0], branchRef: 'refs/heads/develop' },
+        ],
+      }
+    return request(path, ...args)
+  })
+  const view = await mount()
+  await view.getByRole('button', { name: 'Platform', exact: true }).click()
+  await view.getByRole('tab', { name: 'Effective impact' }).click()
+  await expect
+    .element(
+      view.getByRole('row', {
+        name: 'org/service main Needs review v2 Open policies',
+      })
+    )
+    .toBeVisible()
+  await expect
+    .element(
+      view.getByRole('row', {
+        name: 'org/service develop Draft v1 Open policies',
+      })
+    )
+    .toBeVisible()
 })

@@ -1,4 +1,6 @@
 import { configurationValue } from '../configuration/runtime-configuration.js'
+import { isMandatoryNotification } from "./notification-classification.js";
+import { isAiNotification } from "./ai-notification.js";
 import { isGovernanceNotification } from "./notification-event.js";
 import { randomUUID } from "node:crypto";
 import type { PrismaService } from "../prisma/prisma.service.js";
@@ -27,6 +29,7 @@ export async function deliverNotification(db: PrismaService, eventId: string) {
     });
     if (repo) {
       const policy = isGovernanceNotification(event.type);
+      const ai = isAiNotification(event.type);
       const observations = await tx.contributorObservation.findMany({
         where: {
           repositoryId: repo.id,
@@ -56,16 +59,18 @@ export async function deliverNotification(db: PrismaService, eventId: string) {
       const muted = new Set(preferences.map((p) => p.identityId));
       const recipients = members.filter(
         (m) =>
-          (policy || !muted.has(m.identityId)) &&
+          (isMandatoryNotification(event.type) || !muted.has(m.identityId)) &&
           rolePermissions[m.role]?.includes(
             policy ? "policy.read" : "assessment.read",
           ) &&
           (["OWNER", "ADMIN"].includes(m.role) ||
             m.grants.some((g) => g.repositoryId === repo.id)) &&
-          (policy
+          (ai
+            ? ["OWNER", "ADMIN"].includes(m.role)
+            : policy
             ? ["OWNER", "ADMIN", "POLICY_MANAGER"].includes(m.role)
             : ["OWNER", "ADMIN", "ENGINEERING_LEAD"].includes(m.role) ||
-              (event.type === 'CRITICAL_FINDINGS_REPORTED' && m.role === 'SECURITY_ENGINEER') ||
+              (['CRITICAL_FINDINGS_REPORTED', 'NATIVE_EXECUTION_FAILED'].includes(event.type) && m.role === 'SECURITY_ENGINEER') ||
               authors.has(m.identityId)),
       );
       await tx.inboxNotification.createMany({

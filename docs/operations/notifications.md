@@ -5,8 +5,8 @@ Application connections and feature switches are now provisioned in **Settings �
 ## Enable
 
 1. Apply database migrations: `pnpm --filter @preflyt/api prisma:migrate` from the repository root. Compose runs migrations through its existing migrate service.
-2. Set `NOTIFICATIONS_ENABLED=true` for **both API and worker**. For host development, add it to `apps/api/.env`; configure `QUEUE_REDIS_URL` with your local Redis URL, for example `redis://127.0.0.1:6379/0`. Keep API and worker on the same database and queue prefix.
-3. Restart the API and worker yourself: `pnpm dev:api` and `pnpm dev:worker`. For Compose, configure the root `.env` and recreate `api` and `worker` services.
+2. As Super Admin, enable **Workspace notifications** in **Settings → Configuration**. The API and worker load the same database setting and refresh it within five seconds. Legacy `NOTIFICATIONS_ENABLED` values are used only on the first configuration import. Keep API and worker on the same database and persistent queue prefix; `QUEUE_REDIS_URL` remains deployment-managed.
+3. Start the API and worker with their documented deployment commands. A notification switch change does not require restart; connection changes, including SMTP, require restarting both processes. See [deployment configuration](deployment-configuration.md).
 4. Create a new assessment, or let a signed PR/CI delivery produce one. The worker reconciles pending events every five seconds. The bell checks for updates every thirty seconds; Refresh fetches immediately.
 
 The bell stays visible between Search and the theme toggle. Its panel explains when notifications are disabled. Existing assessments are not backfilled. No historical or fabricated alerts are generated.
@@ -15,7 +15,7 @@ The bell stays visible between Search and the theme toggle. Its panel explains w
 
 Active organization Owners/Admins, repository-assigned Engineering Leads, the manual requester and linked GitHub PR authors can receive an alert. Each recipient needs assessment access. Signed contributor observations at the same repository commit establish GitHub authorship. Every inbox read, count and read action rechecks current repository scope; membership/grant/provider-access revocation hides prior alerts. GitHub access evidence uses the existing five-minute maximum freshness contract.
 
-The inbox supports repository search, unread/severity/event/date filters, 25 items per page, read actions and an assessment-alert switch. The switch affects future alerts only. Policy-publication notices go to currently authorized Owners/Admins and repository Policy Managers. Muting assessment alerts does not suppress policy notices.
+The inbox supports repository search, unread/severity/event/date filters, 25 items per page, read actions and an assessment-alert switch. The switch affects future alerts only. Policy-publication notices go to currently authorized Owners/Admins and repository Policy Managers. Muting optional assessment alerts does not suppress governance, critical finding, native execution failure or AI administration notices. Scoped Security Engineers also receive critical finding and native failure notices. These inbox notices still require current repository access; email remains separately opt-in.
 
 ## Delivery and recovery
 
@@ -52,7 +52,7 @@ Focused integration tests cover the actual assessment producer, duplicate/concur
 
 ## Optional email setup
 
-Set `NOTIFICATION_EMAIL_ENABLED=true` in API and worker. In the worker environment configure `SMTP_HOST`, `SMTP_PORT` (default 587), `SMTP_FROM`, and any required `SMTP_USER` / `SMTP_PASSWORD`. Set `WEB_ORIGIN` to the user-facing Preflyt origin; production requires HTTPS. Keep SMTP credentials in server secrets. Both notification flags must be enabled. Restart the API and worker after configuration changes.
+As Super Admin, enable email notifications and configure SMTP host, port (default 587), sender and any required credentials in **Settings → Configuration**. These credentials are encrypted in the database and masked in the browser. Keep `WEB_ORIGIN` in deployment configuration; production requires HTTPS. Workspace notifications must also be enabled. Restart both API and worker after SMTP connection changes; the email switch itself refreshes live.
 
 SMTP requires TLS. Development can use `SMTP_ALLOW_INSECURE_LOCAL=true` only with a loopback SMTP server; production ignores this exception. Delivery requires each user to enable **Email updates** in inbox preferences and have a valid email address. GitHub-backed recipients require the worker's GitHub App and encrypted-user-token configuration for fresh authorization checks.
 
@@ -81,10 +81,19 @@ WHERE id = '<reviewed-delivery-id>' AND state = 'FAILED';
 The next reconciliation retries it with fresh authorization. Never replay unconfirmed deliveries without considering duplicate email. Outbox and inbox state stay intact when SMTP is unavailable.
 
 
-Confirmed automatic BLOCK/INCOMPLETE publication, managed activation/rollback and GitHub drift verification use the existing notification outbox and email worker. Repeated polling does not duplicate the same PR/head/policy/result notice. Unknown or failed deployment writes never appear as successful activation notices. Keep `NOTIFICATIONS_ENABLED=true` on API and worker for recording and delivery; optional SMTP configuration and opt-in still apply. The inbox links open the relevant Quality Gates tab. Manual **Verify GitHub** discovers drift; periodic governance drift synchronization remains pending.
+Confirmed automatic BLOCK/INCOMPLETE publication, managed activation/rollback and GitHub drift verification use the existing notification outbox and email worker. Repeated polling does not duplicate the same PR/head/policy/result notice. Unknown or failed deployment writes never appear as successful activation notices. Keep `NOTIFICATIONS_ENABLED=true` on API and worker for recording and delivery; optional SMTP configuration and opt-in still apply. The inbox links open the relevant Quality Gates tab. Manual **Verify GitHub** discovers drift; the worker also performs bounded, read-only verification of due managed deployments. It never repairs or disables an externally changed protection automatically.
 
 ## Critical reports and human triage
 
-New assessments with current repository/install/commit-bound imported evidence that reports an unsuppressed critical finding enqueue `CRITICAL_FINDINGS_REPORTED` through the existing transactional outbox. Notification payloads contain links and identifiers, not report text. Scoped Security Engineers join the existing authorized recipients; preferences and current access checks still apply. A reported critical finding is not an independently confirmed vulnerability.
+New assessments with current repository/install/commit-bound imported evidence that reports an unsuppressed critical finding enqueue `CRITICAL_FINDINGS_REPORTED` through the existing transactional outbox. Notification payloads contain links and identifiers, not report text. Scoped Security Engineers join the existing authorized recipients. Current access is required; optional assessment mute does not suppress these security notices, while email remains opt-in. A reported critical finding is not an independently confirmed vulnerability.
 
 Findings supports assignment, In review and Resolved against the saved finding digest and commit. Resolution requires a note; optimistic revisions reject conflicting edits. Changing triage never rewrites an assessment, suppresses source evidence, waives a requirement or changes a gate conclusion. New commits require fresh triage.
+
+
+## Native execution and AI availability
+
+An admitted native attempt that fails, times out or cannot provide its completion proof records **Check execution failed** in the same transaction as its terminal state. One event per request/attempt prevents retry and assessment-creation duplicates. Explicit user cancellation and blocked admission do not create failure alerts. Check conclusions and partial evidence remain unchanged. The alert opens the repository's Assessments tab and contains no scanner logs, source text or secrets.
+
+AI model availability notices target only current organization Owners/Admins who retain repository and model-configuration access. Three distinct review requests with actual network, deadline or upstream availability failures within ten minutes, spanning at least one minute since the latest successful inference, produce an alert. A connection revision has a thirty-minute cooldown; retries do not create repeated signals. Invalid output, rejected endpoint addresses, provider configuration changes, revoked access and user cancellation do not count as provider outages. A successful inference resets the failure sequence. The notice opens **AI Intelligence → Models**.
+
+A review rejected by the configured daily reservation limit records one **AI review budget reached** notice per route revision and UTC day. The rejected request reserves nothing and sends no model request. This is an estimated admission reservation limit, not billed provider spend. The notice opens **AI Intelligence → Model router**. No provider response, key, prompt or review source is stored in these notification payloads. Optional assessment mute does not suppress AI administration notices; email remains opt-in and rechecks current role and access.

@@ -45,6 +45,7 @@ import {
   useNavigationSession,
   canAdminister,
 } from '../workspace/navigation-session'
+import { isAiSettingsTab, type AiSettingsTab } from './intelligence-search'
 import { SkillsCatalogue } from './skills-catalogue'
 
 type Preset = {
@@ -193,7 +194,14 @@ const help = [
       'AI Reviews use saved assessment results. When source sharing is enabled, PR reviews can also use selected changes from the assessed commit. Published PR policies can run assigned reviews automatically and post summaries or comments to GitHub when those options are enabled. Comments on changed lines also require source sharing. Reviews require an enabled, tested model and configured token prices. Preflyt reserves the estimated cost against your daily budget; this is not the provider’s final bill. AI suggestions never approve policies or count as passed checks.',
   },
 ]
-export function AiSettingsPage() {
+type AiSettingsNavigation = {
+  tab?: AiSettingsTab
+  onTabChange?: (tab: AiSettingsTab) => void
+}
+export function AiSettingsPage({
+  tab,
+  onTabChange,
+}: AiSettingsNavigation = {}) {
   const session = useNavigationSession(),
     allowed = canAdminister(session.data?.role)
   return (
@@ -225,6 +233,8 @@ export function AiSettingsPage() {
             key={`${session.data?.identityId}:${session.data?.organizationId}`}
             identityId={session.data?.identityId ?? ''}
             organizationId={session.data?.organizationId ?? ''}
+            tab={tab}
+            onTabChange={onTabChange}
           />
         )}
       </Main>
@@ -234,10 +244,12 @@ export function AiSettingsPage() {
 function AiSettings({
   identityId,
   organizationId,
+  tab,
+  onTabChange,
 }: {
   identityId: string
   organizationId: string
-}) {
+} & AiSettingsNavigation) {
   const client = useQueryClient(),
     key = ['ai-configuration', identityId, organizationId],
     query = useQuery({
@@ -252,6 +264,7 @@ function AiSettings({
       staleTime: 0,
       refetchOnWindowFocus: false,
     })
+  const [localTab, setLocalTab] = useState<AiSettingsTab>(tab ?? 'connections')
   const [preset, setPreset] = useState<Preset>(),
     [edit, setEdit] = useState<Provider | null | undefined>(),
     [routing, setRouting] = useState<StageRoute | undefined>(),
@@ -362,7 +375,14 @@ function AiSettings({
               ? 'Model connections and AI assessment reviews are available.'
               : 'Model connections are available. AI Reviews are disabled for this deployment.'}
           </div>
-          <Tabs defaultValue='connections'>
+          <Tabs
+            value={onTabChange ? (tab ?? 'connections') : localTab}
+            onValueChange={(value) => {
+              if (!isAiSettingsTab(value)) return
+              setLocalTab(value)
+              onTabChange?.(value)
+            }}
+          >
             <TabsList>
               <TabsTrigger value='connections'>
                 <Cable className='mr-2 size-4' />

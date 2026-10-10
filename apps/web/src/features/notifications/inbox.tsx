@@ -7,6 +7,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
+import { StatusBadge } from '@/components/status-badge'
 import { useInbox, titles, type Item } from './notification-query'
 
 export function NotificationItem({
@@ -32,12 +33,25 @@ export function NotificationItem({
             ? 'bg-red-500'
             : item.severity === 'warning'
               ? 'bg-amber-500'
-              : 'bg-teal-500'
+              : 'bg-blue-500'
         )}
         aria-label={item.severity}
       />
       <div className='min-w-0 flex-1'>
-        {item.policyId ? (
+        {item.type.startsWith('AI_') ? (
+          <Link
+            to='/intelligence'
+            search={{
+              tab:
+                item.type === 'AI_REVIEW_BUDGET_REACHED'
+                  ? 'routing'
+                  : 'connections',
+            }}
+            className='font-medium hover:underline'
+          >
+            {titles[item.type] ?? 'AI configuration needs attention'}
+          </Link>
+        ) : item.policyId ? (
           <Link
             to='/policies'
             search={{ repository: item.repositoryId }}
@@ -75,27 +89,45 @@ export function NotificationItem({
           {item.sourceSha ? ' · ' : ''}
           <span className='font-mono'>{item.sourceSha?.slice(0, 7)}</span>
         </p>
+        {item.type === 'AI_REVIEW_BUDGET_REACHED' && (
+          <p className='mt-2 text-sm text-muted-foreground'>
+            A review could not start because its reservation would exceed the
+            configured daily limit. Reservations are estimates, not provider
+            invoices.
+          </p>
+        )}
+        {item.type === 'AI_MODEL_UNAVAILABLE' && (
+          <p className='mt-2 text-sm text-muted-foreground'>
+            Repeated model request failures were recorded. Test your connections
+            and check the primary and fallback model.
+          </p>
+        )}
         {item.emailDelivery && (
-          <span
-            className={cn(
-              'mt-2 inline-flex rounded-md px-2 py-0.5 text-xs font-medium',
-              item.emailDelivery.state === 'SENT'
-                ? 'bg-teal-500/10 text-teal-600 dark:text-teal-400'
-                : item.emailDelivery.state === 'FAILED'
-                  ? 'bg-red-500/10 text-red-600 dark:text-red-400'
-                  : 'bg-muted text-muted-foreground'
-            )}
+          <div
+            className='mt-2'
             title={`Email attempts: ${item.emailDelivery.attempts}`}
           >
-            {(
-              {
-                SENT: 'Email sent',
-                PENDING: 'Email queued',
-                FAILED: 'Email failed',
-                SKIPPED: 'Email skipped',
-              } as Record<string, string>
-            )[item.emailDelivery.state] ?? 'Email pending'}
-          </span>
+            <StatusBadge
+              tone={
+                item.emailDelivery.state === 'SENT'
+                  ? 'success'
+                  : item.emailDelivery.state === 'FAILED'
+                    ? 'error'
+                    : item.emailDelivery.state === 'PENDING'
+                      ? 'warning'
+                      : 'neutral'
+              }
+            >
+              {(
+                {
+                  SENT: 'Email sent',
+                  PENDING: 'Email queued',
+                  FAILED: 'Email failed',
+                  SKIPPED: 'Email skipped',
+                } as Record<string, string>
+              )[item.emailDelivery.state] ?? 'Email queued'}
+            </StatusBadge>
+          </div>
         )}
         <time
           dateTime={item.createdAt}

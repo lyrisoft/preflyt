@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { expect, it, vi } from 'vitest'
-import { NotificationBell } from './inbox'
+import { NotificationBell, NotificationItem } from './inbox'
 
 const inbox = vi.hoisted(() => ({
   query: {
@@ -16,10 +16,32 @@ const inbox = vi.hoisted(() => ({
 }))
 vi.mock('./notification-query', () => ({
   useInbox: () => inbox,
-  titles: {},
+  titles: {
+    AI_MODEL_UNAVAILABLE: 'Model requests keep failing',
+    AI_REVIEW_BUDGET_REACHED: 'Daily AI review reservation limit reached',
+    NATIVE_EXECUTION_FAILED: 'Check execution failed',
+  },
 }))
 vi.mock('@tanstack/react-router', () => ({
-  Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a>,
+  Link: ({
+    children,
+    to,
+    search,
+    params,
+  }: {
+    children: React.ReactNode
+    to: string
+    search?: unknown
+    params?: unknown
+  }) => (
+    <a
+      href={to}
+      data-search={JSON.stringify(search)}
+      data-params={JSON.stringify(params)}
+    >
+      {children}
+    </a>
+  ),
 }))
 
 it.each(['loading', 'disabled', 'empty', 'session error', 'unread'])(
@@ -43,3 +65,93 @@ it.each(['loading', 'disabled', 'empty', 'session error', 'unread'])(
     if (state === 'unread') expect(html).toContain('>3</span>')
   }
 )
+
+const item = {
+  id: 'item',
+  createdAt: '2026-10-10T10:00:00.000Z',
+  readAt: null,
+  type: 'AI_MODEL_UNAVAILABLE',
+  severity: 'error',
+  repository: 'fixture/review',
+  repositoryId: '81818',
+  assessmentId: null,
+  sourceSha: null,
+}
+it.each([
+  ['AI_MODEL_UNAVAILABLE', 'connections', 'Model requests keep failing'],
+  [
+    'AI_REVIEW_BUDGET_REACHED',
+    'routing',
+    'Daily AI review reservation limit reached',
+  ],
+])('links %s to the right AI settings tab', (type, tab, label) => {
+  const html = renderToStaticMarkup(
+    <NotificationItem
+      item={{ ...item, type }}
+      busy={false}
+      onRead={() => undefined}
+    />
+  )
+  expect(html).toContain('href="/intelligence"')
+  expect(html).toContain(`&quot;tab&quot;:&quot;${tab}&quot;`)
+  expect(html).toContain(label)
+  if (type === 'AI_REVIEW_BUDGET_REACHED')
+    expect(html).toContain('estimates, not provider invoices')
+})
+it('links native execution failures to saved commit assessments without inventing an assessment result', () => {
+  const html = renderToStaticMarkup(
+    <NotificationItem
+      item={{
+        ...item,
+        type: 'NATIVE_EXECUTION_FAILED',
+        sourceSha: 'a'.repeat(40),
+      }}
+      busy={false}
+      onRead={() => undefined}
+    />
+  )
+  expect(html).toContain('Check execution failed')
+  expect(html).toContain('href="/repositories/$repositoryId"')
+  expect(html).toContain('&quot;tab&quot;:&quot;assessments&quot;')
+  expect(html).toContain('&quot;repositoryId&quot;:&quot;81818&quot;')
+})
+it.each([
+  ['SENT', 'Email sent', 'text-success-text'],
+  ['PENDING', 'Email queued', 'text-warning-text'],
+  ['FAILED', 'Email failed', 'text-danger-text'],
+  ['SKIPPED', 'Email skipped', 'text-foreground'],
+])(
+  'uses the shared semantic badge for %s email delivery',
+  (state, label, color) => {
+    const html = renderToStaticMarkup(
+      <NotificationItem
+        item={{
+          ...item,
+          emailDelivery: {
+            state,
+            attempts: 1,
+            failureCode: null,
+            sentAt: null,
+            nextAttemptAt: '',
+          },
+        }}
+        busy={false}
+        onRead={() => undefined}
+      />
+    )
+    expect(html).toContain(label)
+    expect(html).toContain('data-slot="badge"')
+    expect(html).toContain(color)
+  }
+)
+it('uses an informational blue indicator for informational updates', () => {
+  const html = renderToStaticMarkup(
+    <NotificationItem
+      item={{ ...item, severity: 'info' }}
+      busy={false}
+      onRead={() => undefined}
+    />
+  )
+  expect(html).toContain('bg-blue-500')
+  expect(html).not.toContain('bg-teal-500')
+})

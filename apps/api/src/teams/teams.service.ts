@@ -297,79 +297,119 @@ export class TeamsService {
       s.organizationId,
       "policy.read",
     );
-    const [members, scopes, assignments, audit] = await Promise.all([
-      this.db.teamMember.findMany({
-        where: {
-          teamId: id,
-          membership: { active: true, organizationId: s.organizationId! },
-        },
-        include: {
-          membership: {
-            include: {
-              identity: { select: { displayName: true, subject: true } },
+    const [members, scopes, assignments, activeAssignments, audit] =
+      await Promise.all([
+        this.db.teamMember.findMany({
+          where: {
+            teamId: id,
+            membership: { active: true, organizationId: s.organizationId! },
+          },
+          include: {
+            membership: {
+              include: {
+                identity: { select: { displayName: true, subject: true } },
+              },
             },
           },
-        },
-      }),
-      this.db.teamRepositoryScope.findMany({
-        where: { teamId: id, repositoryId: { in: repos.map((r) => r.id) } },
-        include: { repository: true },
-        orderBy: { repositoryId: "asc" },
-      }),
-      this.db.teamPolicyAssignment.findMany({
-        where: { teamId: id },
-        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-        take: 100,
-      }),
-      this.db.auditEvent.findMany({
-        where: {
-          event: { startsWith: "team." },
-          metadata: { path: ["teamId"], equals: id },
-        },
-        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-        take: 100,
-      }),
-    ]);
-    const impact = [];
-    for (const scope of scopes.filter((r) => r.policyScopeEnabled)) {
-      const [policy, selection] = await Promise.all([
-        this.db.gatePolicyRevision.findFirst({
+        }),
+        this.db.teamRepositoryScope.findMany({
+          where: { teamId: id, repositoryId: { in: repos.map((r) => r.id) } },
+          include: { repository: true },
+          orderBy: { repositoryId: "asc" },
+        }),
+        this.db.teamPolicyAssignment.findMany({
+          where: { teamId: id },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          take: 100,
+        }),
+        this.db.teamPolicyAssignment.findMany({
+          where: { teamId: id, supersededAt: null },
+          orderBy: [{ branchRef: "asc" }, { id: "asc" }],
+          take: 101,
+        }),
+        this.db.auditEvent.findMany({
           where: {
-            repositoryId: scope.repositoryId,
-            organizationId: s.organizationId!,
-            definition: {
-              path: ["teamContext"],
-              array_contains: [{ teamId: id }],
-            },
+            event: { startsWith: "team." },
+            metadata: { path: ["teamId"], equals: id },
           },
           orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          take: 100,
         }),
+      ]);
+    if (activeAssignments.length > 100)
+      throw new ConflictException("Team assignment limit reached");
+    const branchRefs = [...new Set(activeAssignments.map((a) => a.branchRef))];
+    const impact = [];
+    for (const scope of scopes.filter((r) => r.policyScopeEnabled)) {
+      const [heads, selection] = await Promise.all([
+        branchRefs.length
+          ? this.db.gatePolicyRevision.groupBy({
+              by: ["branchRef"],
+              where: {
+                repositoryId: scope.repositoryId,
+                organizationId: s.organizationId!,
+                branchRef: { in: branchRefs },
+              },
+              _max: { revision: true },
+              orderBy: { branchRef: "asc" },
+              take: branchRefs.length,
+            })
+          : Promise.resolve([]),
         this.db.repositoryStandardsSelection.findFirst({
           where: { repositoryId: scope.repositoryId },
           orderBy: { revision: "desc" },
         }),
       ]);
-      let current = !!policy && policy.selectionId === selection?.id;
-      if (policy)
-        try {
-          await verifyTeamContext(
-            this.db,
-            scope.repositoryId,
-            (policy.definition as { teamContext?: unknown }).teamContext,
+      const policies = heads.length
+        ? await this.db.gatePolicyRevision.findMany({
+            where: {
+              repositoryId: scope.repositoryId,
+              organizationId: s.organizationId!,
+              OR: heads.map((head) => ({
+                branchRef: head.branchRef,
+                revision: head._max.revision!,
+              })),
+            },
+            take: branchRefs.length,
+          })
+        : [];
+      for (const branchRef of branchRefs.length ? branchRefs : [null]) {
+        const policy = policies.find((p) => p.branchRef === branchRef);
+        const context = (
+          policy?.definition as { teamContext?: unknown } | undefined
+        )?.teamContext;
+        const branchAssignments = activeAssignments.filter(
+          (a) => a.branchRef === branchRef,
+        );
+        let current =
+          !!policy &&
+          policy.selectionId === selection?.id &&
+          branchAssignments.every(
+            (assignment) =>
+              Array.isArray(context) &&
+              context.some(
+                (source) =>
+                  source?.teamId === id &&
+                  source.assignmentId === assignment.id,
+              ),
           );
-        } catch (e) {
-          if (e instanceof ConflictException) current = false;
-          else throw e;
-        }
-      impact.push({
-        githubId: scope.repository.githubId.toString(),
-        name: scope.repository.fullName,
-        policyId: policy?.id ?? null,
-        branchRef: policy?.branchRef ?? null,
-        state: policy?.state ?? "NOT_ASSIGNED",
-        revision: policy?.revision ?? null,
-        current,
-      });
+        if (policy)
+          try {
+            await verifyTeamContext(this.db, scope.repositoryId, context);
+          } catch (e) {
+            if (e instanceof ConflictException) current = false;
+            else throw e;
+          }
+        impact.push({
+          githubId: scope.repository.githubId.toString(),
+          name: scope.repository.fullName,
+          policyId: policy?.id ?? null,
+          branchRef,
+          state: policy?.state ?? "NOT_ASSIGNED",
+          revision: policy?.revision ?? null,
+          current,
+        });
+      }
     }
     await this.access.requireOrganization(s, "team.read");
     return {
@@ -501,7 +541,8 @@ export class TeamsService {
           })
         : [];
       const removesAssignedRepository = priorScope.some(
-        (scope) => !b.repositoryIds.includes(scope.repository.githubId.toString()),
+        (scope) =>
+          !b.repositoryIds.includes(scope.repository.githubId.toString()),
       );
       if (
         previous &&

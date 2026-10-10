@@ -7,7 +7,10 @@ import {
 } from "../src/intelligence/ai-configuration.js";
 import { runSkillInference } from "../src/intelligence/skill-inference.js";
 const transport = vi.hoisted(() => vi.fn());
-vi.mock("../src/intelligence/ai-http.js", () => ({ aiHttpRequest: transport }));
+vi.mock("../src/intelligence/ai-http.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/intelligence/ai-http.js")>()),
+  aiHttpRequest: transport,
+}));
 const context = {
   assessmentHash: "a".repeat(64),
   sourceSha: "b".repeat(40),
@@ -184,4 +187,35 @@ it("uses the same /v1 base for keyless Ollama reviews as connection testing", as
   expect(locality).toBe("local");
   expect(options.headers.authorization).toBeUndefined();
   expect(JSON.parse(options.body)).toMatchObject({ model: "llama3.2:3b", max_tokens: 400, stream: false });
+});
+
+
+it('classifies only failed transport and upstream availability as outage signals, with redacted errors', async () => {
+  const { AiTransportError } = await import('../src/intelligence/ai-http.js');
+  const provider = { id: 'provider', organizationId: 'org', modelId: 'model', encryptedCredential: null,
+    endpoint: { id: 'provider', name: 'Local', baseUrl: 'http://localhost:11434/v1', locality: 'local', requiresKey: false, models: ['model'] } } as any;
+  for (const status of [429, 502, 503]) {
+    transport.mockResolvedValueOnce(new Response('private-provider-text', { status }));
+    const error = await runSkillInference(provider, skills, context, 1000, new AbortController().signal).catch(e => e);
+    expect(error).toBeInstanceOf(AiTransportError);
+    expect(error.message).not.toContain('private-provider-text');
+  }
+  for (const response of [new Response('private-key', { status: 401 }), new Response('invalid JSON'), new Response(JSON.stringify({ choices: [{ finish_reason: 'length' }] }))]) {
+    transport.mockResolvedValueOnce(response);
+    const error = await runSkillInference(provider, skills, context, 1000, new AbortController().signal).catch(e => e);
+    expect(error).not.toBeInstanceOf(AiTransportError);
+  }
+  transport.mockRejectedValueOnce(new Error('Model endpoint address is not allowed'));
+  await expect(runSkillInference(provider, skills, context, 1000, new AbortController().signal)).rejects.not.toBeInstanceOf(AiTransportError);
+});
+it('distinguishes an inference timeout from caller cancellation', async () => {
+  const { AiTransportError } = await import('../src/intelligence/ai-http.js');
+  const provider = { id: 'provider', organizationId: 'org', modelId: 'model', encryptedCredential: null,
+    endpoint: { id: 'provider', name: 'Local', baseUrl: 'http://localhost:11434/v1', locality: 'local', requiresKey: false, models: ['model'] } } as any;
+  const controller = new AbortController();
+  transport.mockImplementationOnce(async () => { controller.abort(new DOMException('deadline', 'TimeoutError')); throw new Error('AbortError'); });
+  await expect(runSkillInference(provider, skills, context, 1000, controller.signal)).rejects.toMatchObject({ code: 'TIMEOUT', name: 'AiTransportError' });
+  const cancelled = new AbortController();
+  transport.mockImplementationOnce(async () => { cancelled.abort(); throw new Error('AbortError'); });
+  await expect(runSkillInference(provider, skills, context, 1000, cancelled.signal)).rejects.not.toBeInstanceOf(AiTransportError);
 });

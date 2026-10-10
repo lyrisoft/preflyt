@@ -1,19 +1,30 @@
-import { configurationValue } from '../configuration/runtime-configuration.js'
-import { normalizeReportFindings } from '../findings/normalize-report-findings.js'
+import { configurationValue } from "../configuration/runtime-configuration.js";
+import { normalizeReportFindings } from "../findings/normalize-report-findings.js";
 import { digest } from "../assessments/assessment-digest.js";
-import type { Prisma } from "../generated/prisma/client.js";
+import type {
+  NativeExecutionRequest,
+  Prisma,
+} from "../generated/prisma/client.js";
 
 export const notificationsEnabled = () =>
-  configurationValue('NOTIFICATIONS_ENABLED') === "true";
+  configurationValue("NOTIFICATIONS_ENABLED") === "true";
 export function assessmentNotification(report: unknown) {
   const value = report as {
     coverage?: string;
-    checks?: { providerResult?: string | null }[];
+    checks?: {
+      providerResult?: string | null;
+      evidenceSource?: string;
+      nativeOutcome?: string;
+    }[];
     observations?: { result?: string }[];
   };
-  // These are imported assessment signals, never a claim of merge readiness.
+  // Saved check outcomes describe the assessment, never GitHub merge permission.
   if (
-    value.checks?.some((c) => c.providerResult === "FAILED") ||
+    value.checks?.some(
+      (c) =>
+        c.providerResult === "FAILED" ||
+        (c.evidenceSource === "NATIVE" && c.nativeOutcome === "FAIL"),
+    ) ||
     value.observations?.some((o) => o.result === "FAILED")
   )
     return { type: "ASSESSMENT_FAILED", severity: "error" };
@@ -23,7 +34,13 @@ export function assessmentNotification(report: unknown) {
 }
 export async function recordAssessmentNotification(
   tx: Prisma.TransactionClient,
-  assessment: { id: string; report: unknown; sourceSha: string },
+  assessment: {
+    id: string;
+    report: unknown;
+    sourceSha: string;
+    request?: unknown;
+    requestKey?: string;
+  },
   repo: {
     id: string;
     installationId: bigint;
@@ -36,13 +53,86 @@ export async function recordAssessmentNotification(
   const installation = await tx.gitHubInstallation.findUniqueOrThrow({
     where: { id: repo.installationId },
   });
-  const observations = (assessment.report as { observations?: { deliveryId: string; artifacts?: { id: string; sha256: string }[] }[] }).observations ?? []
-  const references = observations.flatMap(observation => (observation.artifacts ?? []).map(ref => ({ ...ref, deliveryId: observation.deliveryId }))).slice(0, 100)
-  const artifacts = references.length ? await tx.ciArtifactImport.findMany({ where: { id: { in: references.map(ref => ref.id) }, evidence: { repositoryGithubId: repo.githubId, installationId: repo.installationId, sourceSha: assessment.sourceSha } }, take: 100 }) : []
-  const critical = artifacts.some(artifact => {
-    if (!references.some(ref => ref.id === artifact.id && ref.sha256 === artifact.sha256 && ref.deliveryId === artifact.deliveryId)) return false
-    return normalizeReportFindings(artifact.format, artifact.content, artifact.sha256).some(finding => finding.severity === 'critical' && !finding.suppressed)
-  })
+  const observations =
+    (
+      assessment.report as {
+        observations?: {
+          deliveryId: string;
+          artifacts?: { id: string; sha256: string }[];
+        }[];
+      }
+    ).observations ?? [];
+  const references = observations
+    .flatMap((observation) =>
+      (observation.artifacts ?? []).map((ref) => ({
+        ...ref,
+        deliveryId: observation.deliveryId,
+      })),
+    )
+    .slice(0, 100);
+  const artifacts = references.length
+    ? await tx.ciArtifactImport.findMany({
+        where: {
+          id: { in: references.map((ref) => ref.id) },
+          evidence: {
+            repositoryGithubId: repo.githubId,
+            installationId: repo.installationId,
+            sourceSha: assessment.sourceSha,
+          },
+        },
+        take: 100,
+      })
+    : [];
+  const critical = artifacts.some((artifact) => {
+    if (
+      !references.some(
+        (ref) =>
+          ref.id === artifact.id &&
+          ref.sha256 === artifact.sha256 &&
+          ref.deliveryId === artifact.deliveryId,
+      )
+    )
+      return false;
+    return normalizeReportFindings(
+      artifact.format,
+      artifact.content,
+      artifact.sha256,
+    ).some((finding) => finding.severity === "critical" && !finding.suppressed);
+  });
+  // Native completion already records its failure in the state transaction. Reusing
+  // that attempt's event avoids a second generic notice when its assessment is saved.
+  const nativeAttempts =
+    (
+      assessment.report as {
+        nativeExecutions?: { id: string; controllerJobId: string | null }[];
+      }
+    ).nativeExecutions ?? [];
+  const nativeRequestId =
+    (assessment.request as { trigger?: string } | undefined)?.trigger ===
+      "NATIVE" && assessment.requestKey?.startsWith("native:")
+      ? assessment.requestKey.slice("native:".length)
+      : null;
+  const nativeEventIds = nativeAttempts
+    .filter(
+      (attempt) => attempt.controllerJobId && attempt.id === nativeRequestId,
+    )
+    .map((attempt) =>
+      nativeExecutionFailureId(attempt.id, attempt.controllerJobId!),
+    );
+  if (
+    !critical &&
+    nativeEventIds.length &&
+    (await tx.notificationEvent.findFirst({
+      where: {
+        id: { in: nativeEventIds },
+        type: "NATIVE_EXECUTION_FAILED",
+        organizationId: installation.organizationId,
+        repositoryId: repo.id,
+        sourceSha: assessment.sourceSha,
+      },
+    }))
+  )
+    return;
   await tx.notificationEvent.create({
     data: {
       assessmentId: assessment.id,
@@ -52,7 +142,9 @@ export async function recordAssessmentNotification(
       repositoryName: repo.fullName,
       sourceSha: assessment.sourceSha,
       actorId,
-      ...(critical ? { type: 'CRITICAL_FINDINGS_REPORTED', severity: 'error' } : assessmentNotification(assessment.report)),
+      ...(critical
+        ? { type: "CRITICAL_FINDINGS_REPORTED", severity: "error" }
+        : assessmentNotification(assessment.report)),
     },
   });
 }
@@ -88,6 +180,7 @@ export const governanceNotificationTypes = [
   "RULESET_DRIFTED",
 ];
 export const assessmentNotificationTypes = [
+  "NATIVE_EXECUTION_FAILED",
   "CRITICAL_FINDINGS_REPORTED",
   "ASSESSMENT_COMPLETED",
   "ASSESSMENT_FAILED",
@@ -164,6 +257,53 @@ export async function recordRulesetNotification(
         actorId,
         type,
         severity: state === "DRIFTED" ? "warning" : "info",
+      },
+    ],
+    skipDuplicates: true,
+  });
+}
+
+export function nativeExecutionFailureId(requestId: string, attemptId: string) {
+  return digest({ kind: "native-execution-failure", requestId, attemptId });
+}
+
+/** Internal execution services call this only for an admitted failed attempt, never an admission denial or user cancellation. */
+export async function recordNativeExecutionFailure(
+  tx: Prisma.TransactionClient,
+  request: Pick<
+    NativeExecutionRequest,
+    | "id"
+    | "controllerJobId"
+    | "organizationId"
+    | "repositoryId"
+    | "repositoryGithubId"
+    | "sourceSha"
+    | "actorId"
+  >,
+) {
+  if (!notificationsEnabled() || !request.controllerJobId) return;
+  const repo = await tx.gitHubRepository.findFirst({
+    where: {
+      id: request.repositoryId,
+      githubId: BigInt(request.repositoryGithubId),
+      selected: true,
+      available: true,
+      installation: { active: true, organizationId: request.organizationId },
+    },
+  });
+  if (!repo) return;
+  await tx.notificationEvent.createMany({
+    data: [
+      {
+        id: nativeExecutionFailureId(request.id, request.controllerJobId),
+        organizationId: request.organizationId,
+        repositoryId: repo.id,
+        repositoryGithubId: repo.githubId.toString(),
+        repositoryName: repo.fullName,
+        sourceSha: request.sourceSha,
+        actorId: request.actorId,
+        type: "NATIVE_EXECUTION_FAILED",
+        severity: "error",
       },
     ],
     skipDuplicates: true,

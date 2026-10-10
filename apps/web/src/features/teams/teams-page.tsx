@@ -118,7 +118,7 @@ const help = [
   {
     title: 'GitHub import and sync',
     content:
-      'Link your organization in Access Control first. Your GitHub App needs Organization Members: read. Imported identity and members are read-only. Imported repositories start outside policy scope. Sync adds new repositories for review, retains removed associations as warnings, and never expands approved scope. Sync is manual in this release; synchronize before applying policies and at least every 24 hours.',
+      'Link your organization in Access Control first. Your GitHub App needs Organization Members: read. Imported identity and members are read-only. Imported repositories start outside policy scope. Sync adds new repositories for review, retains removed associations as warnings, and never expands approved scope. Manual Sync remains available. The worker checks up to five stale teams per minute, targeting a 15-minute refresh, using the original importer’s current authority. If that authority is lost, an authorized administrator must sync. Failed snapshots or snapshots older than 24 hours block assigning or publishing inherited policies.',
   },
   {
     title: 'Assign standards and review impact',
@@ -996,7 +996,10 @@ function TeamDetail({
             </thead>
             <tbody>
               {team.impact?.slice((page - 1) * 10, page * 10).map((row) => (
-                <tr key={row.githubId} className='border-t'>
+                <tr
+                  key={`${row.githubId}:${row.branchRef ?? 'unassigned'}`}
+                  className='border-t'
+                >
                   <td className='p-3'>{row.name}</td>
                   <td className='p-3'>
                     {row.branchRef?.replace('refs/heads/', '') ?? '—'}

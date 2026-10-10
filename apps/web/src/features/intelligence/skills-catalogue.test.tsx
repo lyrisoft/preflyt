@@ -306,9 +306,18 @@ it('keeps the Markdown editor wide on desktop and prevents mobile overflow', asy
       '# Security evidence review\n\n## Instructions\n\n- Review the supplied evidence.\n- Cite each check behind a finding.\n- Do not treat missing checks as passing.\n\n```text\nEvidence → Finding → Recommended next action\n```'
     )
   await view.getByRole('tab', { name: 'Preview', exact: true }).click()
-  const dialog = document.querySelector('[role="dialog"]') as HTMLElement
-  await expect.poll(() => getComputedStyle(dialog).opacity).toBe('1')
-  expect(dialog.getBoundingClientRect().width).toBeGreaterThan(900)
+  const editor = view.getByRole('dialog', {
+    name: 'Create review skill',
+    exact: true,
+  })
+  await expect.element(editor).toBeVisible()
+  await expect
+    .poll(() => {
+      const dialog = editor.element()
+      return dialog.isConnected && getComputedStyle(dialog).opacity === '1'
+    })
+    .toBe(true)
+  expect(editor.element().getBoundingClientRect().width).toBeGreaterThan(900)
   await expect
     .element(view.getByRole('button', { name: 'Save draft' }))
     .toBeVisible()

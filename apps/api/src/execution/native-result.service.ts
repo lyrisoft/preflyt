@@ -1,3 +1,4 @@
+import { recordNativeExecutionFailure } from '../notifications/notification-event.js'
 import { nativeRequestIntegrity } from './native-request-integrity.js'
 import { ConflictException, NotFoundException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service.js'
@@ -85,24 +86,35 @@ export class NativeResultService {
           )
         const cleanup = receipt.checks.every((c) => c.cleanupConfirmed)
         const cancelled = live.state === 'CANCEL_REQUESTED' || receipt.cancelled
+        const interrupted =
+          !live.cancelledById &&
+          ((receipt.cancelled && live.state === 'RUNNING') ||
+            (live.state === 'CANCEL_REQUESTED' &&
+              live.reason === 'EXECUTION_INTERRUPTED' &&
+              (receipt.cancelled ||
+                receipt.checks.some((check) => check.state === 'FAIL'))))
         const state = !cleanup
           ? 'BLOCKED'
-          : cancelled
-            ? 'CANCELLED'
-            : receipt.checks.some((c) => c.state === 'FAIL')
-              ? 'FAILED'
-              : receipt.checks.every(
-                    (c) => c.state === 'PASS' && c.coverage === 'FULL_RULE',
-                  )
-                ? 'SUCCEEDED'
-                : 'BLOCKED'
+          : interrupted
+            ? 'FAILED'
+            : cancelled
+              ? 'CANCELLED'
+              : receipt.checks.some((c) => c.state === 'FAIL')
+                ? 'FAILED'
+                : receipt.checks.every(
+                      (c) => c.state === 'PASS' && c.coverage === 'FULL_RULE',
+                    )
+                  ? 'SUCCEEDED'
+                  : 'BLOCKED'
         const reason = !cleanup
           ? 'CLEANUP_UNCONFIRMED'
-          : cancelled
-            ? 'EXECUTION_CANCELLED'
-            : state === 'BLOCKED'
-              ? 'EVIDENCE_INCOMPLETE'
-              : null
+          : interrupted
+            ? 'EXECUTION_UNAVAILABLE'
+            : cancelled
+              ? 'EXECUTION_CANCELLED'
+              : state === 'BLOCKED'
+                ? 'EVIDENCE_INCOMPLETE'
+                : null
         const updated = await tx.nativeExecutionRequest.update({
           where: { id: live.id },
           data: {
@@ -130,6 +142,26 @@ export class NativeResultService {
             },
           },
         })
+        const executionFailed =
+          interrupted ||
+          (!cancelled &&
+            (state === 'FAILED' ||
+              receipt.checks.some(
+                (check) =>
+                  check.state === 'INCOMPLETE' &&
+                  // A signed runtime or cleanup failure can precede the tool's exit status.
+                  // It fails the attempt notification without making the check outcome FAIL.
+                  (check.reason === 'EXECUTION_CANCELLED_OR_TIMED_OUT' ||
+                    check.reason === 'EXECUTION_UNAVAILABLE' ||
+                    !check.cleanupConfirmed ||
+                    (check.exitCode !== null &&
+                      [
+                        'TOOL_EXECUTION_FAILED',
+                        'REPORT_INVALID',
+                        'REPORT_UNAVAILABLE',
+                      ].includes(check.reason))),
+              )))
+        if (executionFailed) await recordNativeExecutionFailure(tx, updated)
         return { record: updated, duplicate: false }
       },
       { isolationLevel: 'Serializable' },

@@ -28,6 +28,9 @@ const reasons: Record<string, string> = {
     'Cleanup could not be confirmed. Check the execution service.',
   EXECUTION_UNAVAILABLE:
     'Checks could not run. Check access and the execution service.',
+  EXECUTION_INTERRUPTED:
+    'The checks stopped before finishing. Cleanup is pending.',
+  EXECUTION_TIMED_OUT: 'The checks exceeded their time limit.',
   CURRENT_NATIVE_EXECUTION_NOT_VERIFIED:
     'Results could not be verified. Review the execution environment.',
   TOOL_REVIEW_REQUIRED: 'The selected tools need a security review.',

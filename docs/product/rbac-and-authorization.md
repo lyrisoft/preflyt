@@ -12,11 +12,11 @@ Use GitHub login for GitHub-connected workspaces, with OIDC retained as an expli
 
 **Contributor permissions:** `contributors.read`, `contributors.activity.read`, `contributors.policy_evidence.read` are repository-scoped and require authorization to underlying GitHub evidence. Organization aggregates must exclude unauthorized private repositories. See [Engineering Contributors](engineering-contributors.md).
 
-**Planned team administration permissions (not implemented):** `team.read`, `team.create`, `team.manage`, `team.import`, `team.sync`, `team.repository_scope.manage` and `policy.assignment.manage`. Imported GitHub team membership does not automatically grant Preflyt permissions or private repository access. Team-based policy scope and team-based RBAC grants are separate concerns. See [Teams and Policy Inheritance](teams-and-policy-inheritance.md).
+**Implemented team permissions:** `team.read`, `team.manage`, `team.import` and `team.policy.assign`. Team management covers local team creation and explicit repository policy scope; import covers GitHub discovery, import and synchronization; assignment covers impact preview and applying pinned standards. Imported GitHub team membership does not grant Preflyt permissions or private repository access. Team policy scope remains separate from RBAC grants. See [Teams and Policy Inheritance](teams-and-policy-inheritance.md).
 
 ## Scope and security
 
-- P0 supports organization membership and repository-level assignments, with team membership/inheritance if implemented; otherwise defer team management explicitly and do not pretend it works.
+- P0 supports organization membership and repository-level assignments. Implemented Teams group existing members and compose standards within explicitly approved repository policy scope; they do not grant workspace or repository access.
 - In the GitHub-first target, repository access is the intersection of the user's verified GitHub repository rights, installed/selected scope and Preflyt role/grants. Even a Preflyt Owner/Admin cannot read private repository evidence outside their GitHub rights. Current OIDC deployments need the migration described in ADR-0007 before this additional provider-user bound is enabled.
 - Session subject, active organization, repository ownership and permissions must be verified server-side on every request. Never trust organization IDs or permissions from browser, webhook, queue payload or AI output.
 - Background jobs capture an authorized actor/service identity and resource context; reauthorize sensitive writes when executing. Services receive narrow independent identities.
