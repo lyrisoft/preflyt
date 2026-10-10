@@ -75,6 +75,8 @@ services:
       API_PORT: '3000'
       REDIS_URL: ${REDIS_URL:-redis://cache:6379/0}
       REDIS_CACHE_PREFIX: ${REDIS_CACHE_PREFIX:-preflyt:production:cache}
+      QUEUE_REDIS_URL: ${QUEUE_REDIS_URL:-redis://queue:6379/0}
+      QUEUE_PREFIX: ${QUEUE_PREFIX:-preflyt:production:queue}
       DATABASE_URL: postgresql://preflyt_app:${DATABASE_APP_PASSWORD:?Set DATABASE_APP_PASSWORD}@db:5432/${PREFLYT_DATABASE:-preflyt}
       WEB_ORIGIN: ${WEB_ORIGIN:?Set WEB_ORIGIN}
       COOKIE_SECURE: 'true'

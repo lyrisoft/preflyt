@@ -60,6 +60,21 @@ if (process.env.SUPER_ADMIN_USERNAME && process.env.SUPER_ADMIN_PASSWORD) {
       headers: { Cookie: cookie },
     })
     assert.equal((await response.json()).role, 'SUPER_ADMIN')
+    if (process.env.PREFLYT_SMOKE_CONFIGURATION === 'true') {
+      response = await request('/api/configuration', { headers: { Cookie: cookie } })
+      assert.equal(response.status, 200, 'Deployment configuration must be available')
+      const configuration = await response.json()
+      assert(configuration.fields.every(field => field.kind !== 'secret' || field.value === ''), 'Configuration secrets must remain masked')
+      const previous = configuration.fields.find(field => field.key === 'NOTIFICATIONS_ENABLED').value
+      const change = { expectedRevision: configuration.revision, values: { NOTIFICATIONS_ENABLED: 'true' }, clearSecrets: [] }
+      response = await request('/api/configuration', { method: 'PATCH', headers: { Cookie: cookie, Origin: 'https://invalid.example', 'Content-Type': 'application/json' }, body: JSON.stringify(change) })
+      assert.equal(response.status, 403, 'Wrong-origin configuration changes must be blocked')
+      response = await request('/api/configuration', { method: 'PATCH', headers: { Cookie: cookie, Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify(change) })
+      assert.equal(response.status, 200, 'Bundled queue must permit enabling notifications')
+      const changed = await response.json()
+      response = await request('/api/configuration', { method: 'PATCH', headers: { Cookie: cookie, Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ expectedRevision: changed.revision, values: { NOTIFICATIONS_ENABLED: previous }, clearSecrets: [] }) })
+      assert.equal(response.status, 200, 'Smoke configuration must be restored')
+    }
     response = await request('/api/github/repositories/1/profile', {
       headers: { Cookie: cookie },
     })
