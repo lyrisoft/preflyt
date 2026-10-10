@@ -76,3 +76,16 @@ The optional `kubernetes-controller.execution.yaml` override mounts a protected 
 Source delivery initially uses one immutable ConfigMap limited to 512 KiB of serialized verified source. Larger repositories fail closed; use Docker execution or imported CI evidence until a separately reviewed larger-source delivery adapter exists. The initializer verifies binary bytes, paths, modes and the whole source hash before the check container starts. Job and ConfigMap deletion uses ownership annotations and UID preconditions; passing results require confirmed removal of both the Pod and source object. Cluster scheduling-gate support is required.
 
 A restarted controller cancels and cleans up its known attempts instead of rerunning code. Recovery requires the original valid cluster review; expired/changed reviews leave the controller unavailable and results incomplete until an operator performs scoped cleanup or restores the matching review. The fixture tests do not authorize deployment, certify CNI/runtime isolation, or replace independently reviewed live acceptance.
+
+## Local Kubernetes contract fixtures
+
+Use a fresh, dedicated local kind cluster and a separate kubeconfig. The harness refuses the default context, non-loopback API servers and contexts other than `kind-preflyt-gap-fixture`. It exercises generated Node fixtures through the real Kubernetes API, verifies admitted Pod controls before removing the scheduling gate, checks the exact-source report and confirms UID-owned Job/Pod/ConfigMap deletion. No application database, GitHub connection or runtime approval is used.
+
+```sh
+kind create cluster --name preflyt-gap-fixture --kubeconfig /private/tmp/preflyt-gap-kind.kubeconfig --wait 60s
+kind load docker-image preflyt-native-node:fixture --name preflyt-gap-fixture
+PREFLYT_FIXTURE_KUBECONFIG=/private/tmp/preflyt-gap-kind.kubeconfig pnpm --filter @preflyt/api exec tsx scripts/native-kubernetes-fixtures.mts
+kind delete cluster --name preflyt-gap-fixture --kubeconfig /private/tmp/preflyt-gap-kind.kubeconfig
+```
+
+This is a generated-source lifecycle test using ordinary runc, not independent strong-isolation approval. Connected repositories still require a reviewed gVisor/Kata runtime. Kubernetes omits false host-access booleans in API responses; verification normalizes only those documented false defaults, while enabled flags remain rejected. Cleanup has a separate 30-second deadline and never marks evidence complete if deletion cannot be confirmed.

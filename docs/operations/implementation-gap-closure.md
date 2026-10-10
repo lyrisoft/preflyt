@@ -23,7 +23,7 @@ Status: active, audited against source and executable checks on 2026-10-10. This
 
 1. Finish nested team policy scope, reviewed time-bound exceptions and exception notifications. Preserve explicit scope expansion, strongest inherited requirements and independent authorization.
 2. Finish explicit legacy identity linking/recovery while preserving historical actors and preventing self-approval through alternate identities. Never match by email or username.
-3. Complete the supported native adapter matrix; maintain the implemented fresh offline database image; run isolated live Kubernetes lifecycle checks. Record independent effective-isolation review separately. Keep connected-repository execution disabled without valid review.
+3. Complete the supported native adapter matrix; maintain the implemented fresh offline database image; retain live generated Kubernetes lifecycle acceptance and complete independent effective-isolation review. Keep connected-repository execution disabled without valid review.
 4. Run private-repository governance passing/failing/incomplete, drift and rollback acceptance with the organization-signed report route. Fork PR and merge-queue support remain explicit limitations until implemented and accepted.
 5. Audit the stacked delivery PRs, full regression suites and versioned release/deployment verification. Local builds alone do not prove published image availability or production acceptance.
 
@@ -48,3 +48,6 @@ These are scoped implementation results, not a claim that all phase/release gaps
 - Remote CI at `f14c268` passed API regression but caught an asynchronous browser download assertion. The assertion now waits for the actual request and download; the corrected remote run remains to verify.
 
 - Offline dependency slice: four API files passed all 44 tests; the generated dependency vulnerability fixture produced the expected FAIL with network disabled. Skills catalogue Chromium tests passed all 16 tests after the asynchronous assertion correction. API typecheck passed.
+
+- GitHub CI run `38028028205` at `7708b15` passed both builds and the complete API/browser regression workflow.
+- Live local Kubernetes generated fixtures passed PASS, FAIL and INCOMPLETE, including scheduling-gate admission, exact-source reports and UID-owned cleanup. They exposed and verified fixes for omitted false host flags and asynchronous Kubernetes garbage collection. Focused Kubernetes/controller regression passed all 27 tests; API typecheck passed. Ordinary local runc fixtures do not approve connected-source isolation.
