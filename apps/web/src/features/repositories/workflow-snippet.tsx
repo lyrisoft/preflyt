@@ -55,8 +55,9 @@ export function WorkflowSnippet({
           <DialogHeader className='pr-8'>
             <DialogTitle>{title}</DialogTitle>
             <DialogDescription>
-              Paste this step into your existing GitHub Actions job after
-              checkout and dependency installation.
+              Add these jobs to your PR workflow. Keep dependency installation
+              before the policy step, and make the final gate depend on every
+              check job.
             </DialogDescription>
           </DialogHeader>
           <div className='flex justify-end'>
