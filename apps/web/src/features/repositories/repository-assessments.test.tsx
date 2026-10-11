@@ -184,7 +184,9 @@ it('opens check results, paginates them and reveals optional sections only on re
   await page.getByRole('tab', { name: 'AI reviews', exact: true }).click()
   await expect.element(page.getByText('AI review content')).toBeVisible()
   await page.getByRole('tab', { name: 'Details', exact: true }).click()
-  await page.getByText('Check results', { exact: true }).click()
+  await expect
+    .element(page.getByRole('region', { name: 'Check results', exact: true }))
+    .toBeVisible()
   await page.getByRole('button', { name: 'View not evaluated checks' }).click()
   await expect
     .element(page.getByRole('tab', { name: 'Checks (12)' }))
@@ -280,7 +282,9 @@ it('prioritizes required failures and keeps passing and optional checks availabl
   await chooseChecks('Optional checks')
   await expect.element(page.getByText('Check 2', { exact: true })).toBeVisible()
   await page.getByRole('tab', { name: 'Details', exact: true }).click()
-  await page.getByText('Check results', { exact: true }).click()
+  await expect
+    .element(page.getByRole('region', { name: 'Check results', exact: true }))
+    .toBeVisible()
   await expect
     .element(page.getByRole('group', { name: 'All check results' }))
     .toHaveTextContent('1 passed, 1 failed, 10 not evaluated')
@@ -347,7 +351,9 @@ it('shows an actionable pass state without repeating passing checks', async () =
     )
     .toBeVisible()
   await page.getByRole('tab', { name: 'Details', exact: true }).click()
-  await page.getByText('Check results', { exact: true }).click()
+  await expect
+    .element(page.getByRole('region', { name: 'Check results', exact: true }))
+    .toBeVisible()
   await expect
     .element(page.getByRole('group', { name: 'All check results' }))
     .toHaveTextContent('12 passed, 0 failed, 0 not evaluated')
@@ -379,7 +385,9 @@ it('does not render a cached pass after a merge evaluation failure and offers re
   await page.getByRole('button', { name: 'Retry result' }).click()
   expect(state.preview.refetch).toHaveBeenCalledOnce()
   await page.getByRole('tab', { name: 'Details', exact: true }).click()
-  await page.getByText('Check results', { exact: true }).click()
+  await expect
+    .element(page.getByRole('region', { name: 'Check results', exact: true }))
+    .toBeVisible()
   await expect
     .element(page.getByRole('group', { name: 'All check results' }))
     .toHaveTextContent('0 passed, 0 failed, 12 not evaluated')

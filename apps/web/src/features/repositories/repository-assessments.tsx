@@ -1213,10 +1213,16 @@ export function AssessmentReport({
                       />
                     </TabsContent>
                     <TabsContent value='details' className='space-y-4'>
-                      <details className='rounded-lg border text-sm'>
-                        <summary className='cursor-pointer px-4 py-3 font-medium'>
+                      <section
+                        aria-labelledby='assessment-check-results'
+                        className='rounded-lg border text-sm'
+                      >
+                        <h3
+                          id='assessment-check-results'
+                          className='px-4 py-3 font-medium'
+                        >
                           Check results
-                        </summary>
+                        </h3>
                         <div className='border-t p-4'>
                           <div className='grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]'>
                             <AssessmentResultsChart
@@ -1282,7 +1288,7 @@ export function AssessmentReport({
                             </div>
                           </div>
                         </div>
-                      </details>
+                      </section>
                       <GateEvaluationDetails preview={preview} />
                       <details className='rounded-lg border text-sm'>
                         <summary className='cursor-pointer px-4 py-3 font-medium'>
