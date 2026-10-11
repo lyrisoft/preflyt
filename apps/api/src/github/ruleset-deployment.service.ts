@@ -136,6 +136,7 @@ export class RulesetDeploymentService {
     });
     return {
       enabled: governanceEnabled(),
+      canSelfApprove: await this.isSuperAdmin(session.identityId),
       page,
       hasMore: rows.length > 20,
       deployments: rows
@@ -296,13 +297,15 @@ export class RulesetDeploymentService {
           },
         });
         let conclusion = "action_required";
+        // A cached receipt may be older than a polling cycle. The fresh plan and
+        // GitHub read below verify the current policy, exact PR head and publisher.
         if (
-          task?.state === "PUBLISHED" &&
+          (task?.state === "PUBLISHED" ||
+            (task?.state === "PROCESSING" && task.conclusion === "success")) &&
           task.sourceSha === pr.headSha &&
           task.policyId === policy.id &&
           task.policyHash === policy.definitionHash &&
           task.verifiedAt &&
-          Date.now() - task.verifiedAt.getTime() < 120_000 &&
           task.assessmentId &&
           task.checkRunId
         ) {
@@ -448,6 +451,22 @@ export class RulesetDeploymentService {
       throw new ConflictException("Deployment preview changed");
     return { repo, row };
   }
+  private async isSuperAdmin(identityId: string) {
+    const member = await this.prisma.membership.findUnique({ where: { identityId } });
+    return !!member?.active && member.role === "SUPER_ADMIN";
+  }
+  private async requireApproval(row: { approvedById: string | null; proposedById: string; approvalKind: string; state: string }) {
+    if (
+      !row.approvedById ||
+      !["APPROVED", "UNKNOWN", "DEPLOYING"].includes(row.state) ||
+      (await sameIdentity(this.prisma, row.approvedById, row.proposedById) &&
+        (row.approvalKind !== "SUPER_ADMIN_SELF_APPROVAL" ||
+          !(await this.isSuperAdmin(row.approvedById))))
+    )
+      throw new ConflictException(
+        "An independently approved deployment or active Super Admin approval is required",
+      );
+  }
   async approve(
     session: AuthenticatedSession,
     id: string,
@@ -455,7 +474,8 @@ export class RulesetDeploymentService {
     hash: string,
   ) {
     const { row } = await this.row(session, id, deploymentId, hash);
-    if (await sameIdentity(this.prisma, row.proposedById, session.identityId))
+    const selfApproval = await sameIdentity(this.prisma, row.proposedById, session.identityId);
+    if (selfApproval && !(await this.isSuperAdmin(session.identityId)))
       throw new ForbiddenException(
         "Another authorized administrator must approve ruleset activation",
       );
@@ -471,15 +491,21 @@ export class RulesetDeploymentService {
       );
     const updated = await this.prisma.gitHubRulesetDeployment.updateMany({
       where: { id: row.id, state: "PREVIEW", previewHash: hash },
-      data: { state: "APPROVED", approvedById: session.identityId },
+      data: {
+        state: "APPROVED",
+        approvedById: session.identityId,
+        approvalKind: selfApproval ? "SUPER_ADMIN_SELF_APPROVAL" : "INDEPENDENT",
+      },
     });
     if (!updated.count)
       throw new ConflictException("This deployment cannot be approved");
     await this.prisma.auditEvent.create({
       data: {
-        event: "github.ruleset_deployment_approved",
+        event: selfApproval
+          ? "github.ruleset_super_admin_self_approved"
+          : "github.ruleset_deployment_approved",
         actorId: session.identityId,
-        metadata: { deploymentId, previewHash: hash },
+        metadata: { deploymentId, previewHash: hash, approvalKind: selfApproval ? "SUPER_ADMIN_SELF_APPROVAL" : "INDEPENDENT" },
       },
     });
     return { state: "APPROVED" };
@@ -491,15 +517,8 @@ export class RulesetDeploymentService {
     hash: string,
   ) {
     const { repo, row } = await this.row(session, id, deploymentId, hash);
-    if (
-      !row.approvedById ||
-      await sameIdentity(this.prisma, row.approvedById, row.proposedById) ||
-      !["APPROVED", "UNKNOWN", "DEPLOYING"].includes(row.state)
-    )
-      throw new ConflictException(
-        "An independently approved deployment is required",
-      );
-    await this.authorize({ ...session, identityId: row.approvedById }, id);
+    await this.requireApproval(row);
+    await this.authorize({ ...session, identityId: row.approvedById! }, id);
     await this.authorize({ ...session, identityId: row.proposedById }, id);
     const plan = await this.preflight(
       session,
@@ -552,6 +571,7 @@ export class RulesetDeploymentService {
       );
       if (latest.previewHash !== hash)
         throw new ConflictException("Readiness changed before activation");
+      await this.requireApproval(row);
       const receipt = await plan.connection.create(plan.definition);
       await this.prisma.$transaction(async (tx) => {
         const saved = await tx.gitHubRulesetDeployment.updateMany({

@@ -319,21 +319,6 @@ export class ReadinessAutomationService {
         return;
       }
       const sourceSha = context.head.sha;
-      const pending = await this.invalidate(
-        repo,
-        task.prNumber,
-        sourceSha,
-        "Preflyt is checking the current policy and CI evidence. Missing evidence never counts as passing.",
-      );
-      await this.prisma.readinessTask.updateMany({
-        where: { id, leaseToken },
-        data: {
-          sourceSha,
-          ...pending,
-          conclusion: "action_required",
-          verifiedAt: new Date(),
-        },
-      });
       const session: AuthenticatedSession = {
         authenticated: true,
         identityId: config.actorId,
@@ -354,6 +339,38 @@ export class ReadinessAutomationService {
         throw new ConflictException(
           "Save engineering standards before enabling readiness checks",
         );
+      // Revalidate an unchanged published success without flipping GitHub to
+      // pending or creating another assessment on every background poll.
+      if (task.conclusion === "success" && task.sourceSha === sourceSha &&
+        task.assessmentId && task.checkRunId && task.verifiedAt) {
+        try {
+          const existing = await this.checks.plan(session, repo.githubId.toString(), task.prNumber, task.assessmentId, "policy.publish");
+          const observed = await this.github.readPublishedReadinessCheck(repo.installationId, repo.githubId, task.checkRunId, sourceSha);
+          const current = await this.prisma.readinessAutomation.findUniqueOrThrow({ where: { repositoryId: repo.id } });
+          await this.access.requireRepository(session, repo.githubId.toString(), "policy.publish");
+          if (current.enabled && automationEnabled() && current.revision === config.revision &&
+            existing.policy?.id === task.policyId && existing.policy?.definitionHash === task.policyHash &&
+            existing.policyEvaluation?.evaluationHash === task.evaluationHash &&
+            existing.payload.conclusion === "success" && observed.conclusion === "success" &&
+            observed.externalId === automaticExternalId(repo.id, task.prNumber, sourceSha) &&
+            observed.output?.title === existing.payload.output.title &&
+            digest(observed.output?.summary) === digest(existing.payload.output.summary)) {
+            const saved = await finish({ state: "PUBLISHED", verifiedAt: new Date(), attempts: 0, message: null, nextAttemptAt: new Date(Date.now() + 60_000) });
+            if (saved.count) return;
+          }
+        } catch {
+          // A changed/unavailable result goes through invalidation and full
+          // reassessment below; a cached green result is never accepted alone.
+        }
+      }
+      const pending = await this.invalidate(
+        repo, task.prNumber, sourceSha,
+        "Preflyt is checking the current policy and CI evidence. Missing evidence never counts as passing.",
+      );
+      await this.prisma.readinessTask.updateMany({
+        where: { id, leaseToken },
+        data: { sourceSha, ...pending, conclusion: "action_required", verifiedAt: new Date() },
+      });
       const assessment = await this.assessments.createAutomatic(
         repo.githubId.toString(),
         sourceSha,

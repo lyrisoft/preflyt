@@ -20,7 +20,7 @@ This is the deployment contract for the implemented policy-aware readiness publi
 | No published policy | Historical observe preview; never publishes success. |
 | Check publication | Disabled by default; explicitly enabled automatic PR checks maintain the PR-head result. The UI has no manual Publish check flow. |
 | Automatic publication and invalidation after changes | Implemented with durable jobs, per-repository enablement and bounded invalidation/retry polling. |
-| Organization ruleset deployment, activation, drift recovery and rollback | Single-repository activation, independent approval, current-state verification and managed rollback are implemented behind an explicit flag. Bounded worker drift verification is implemented. Broader targeting and live private-repository enforcement acceptance remain pending. |
+| Organization ruleset deployment, activation, drift recovery and rollback | Single-repository activation, independent or active Super Admin approval, current-state verification and managed rollback are implemented behind an explicit flag. Bounded worker drift verification is implemented. Broader targeting and live private-repository enforcement acceptance remain pending. |
 | Fork PRs and merge queues | Not supported by the current publisher. |
 | Live end-to-end acceptance | Private-repository passing/failing checks, automatic source registration, DeepSeek PR reviews and final publication-gate failure/timeout/recovery verified on 11 October 2026. The test tunnel is stopped. Permanent deployment and Preflyt-managed ruleset activation/drift/rollback remain unverified. |
 
@@ -39,7 +39,7 @@ New installations default to one App. Existing separate credentials are preserve
 
 Sharing one App means its private key can authorize all granted permissions. Purpose-limited tokens reduce the permissions of each operation; they do not isolate a compromised App key. Organizations that require separate credentials can opt into the second App. GitHub installation permissions must be approved in GitHub before ruleset activation; selecting an App in Preflyt does not grant permission or change branch protection.
 
-Organization administration is an organization-level authority; repository selection alone does not make it a repository-only permission. Ruleset writes independently enforce exact single-repository scope and independent approval. The existing `policy.publish` permission authorizes readiness publication; it does not expose ruleset activation. Built-in Owner/Admin roles have `github.ruleset.manage` and `policy.enforcement.manage`; both are required for activation. The policy Super Admin exception does not authorize ruleset self-approval.
+Organization administration is an organization-level authority; repository selection alone does not make it a repository-only permission. Ruleset writes enforce exact single-repository scope and independent approval, with an audited self-approval exception for active local Super Admins. The existing `policy.publish` permission authorizes readiness publication; it does not expose ruleset activation. Built-in Owner/Admin roles have `github.ruleset.manage` and `policy.enforcement.manage`; both are required for activation. An active local Super Admin may approve their own ruleset proposal; role and scoped permissions are rechecked before activation.
 
 Provision App private keys, client secrets, webhook secrets and callbacks in **Settings → Configuration** as Super Admin. Managed credentials are encrypted in PostgreSQL; legacy environment values are imported once and cannot overwrite saved settings. Keep `CONFIGURATION_ENCRYPTION_KEY` and `GITHUB_USER_TOKEN_ENCRYPTION_KEY` in deployment-managed secrets, stable across upgrades and restore. Never put credentials or encryption roots in source control, frontend configuration, Docker build arguments or example files. Losing an encryption root prevents decrypting its stored credentials; changing the environment is not a key-rotation procedure. Use HTTPS callbacks matching the deployed public origin and GitHub App registrations. See [deployment configuration](../operations/deployment-configuration.md).
 
@@ -145,3 +145,9 @@ Normal GitHub workflow verification works without artifact attestations or a rep
 See the [private repository proof alternatives](../operations/github-check-publication.md#private-repositories-on-github-team).
 
 Ruleset Insights additionally needs repository Administration: read on the assessment App. Insights uses a repository-limited read-only token and never uses the governance write connection.
+
+### Super Admin ruleset approval
+
+An active local Super Admin can approve and activate their own proposal. Other administrators require an independent approver. Self-approval is explicitly recorded and audited; the role is rechecked before activation. Repository scope, both enforcement permissions, preview integrity, current passing publication and GitHub permission checks still apply.
+
+Activation revalidates an existing publication receipt against the current policy, exact PR head and a fresh GitHub check read. A cached receipt older than a polling cycle does not by itself require rerunning a successful workflow. Changed, unavailable or mismatching live results still block activation.

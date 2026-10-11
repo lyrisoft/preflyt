@@ -34,6 +34,7 @@ type Deployment = {
   draftId: string
   proposedById: string
   approvedById: string | null
+  approvalKind: string
   previewHash: string
   definition: unknown
   preview: {
@@ -43,7 +44,12 @@ type Deployment = {
   message: string | null
   verifiedAt: string | null
 }
-type Page = { enabled: boolean; hasMore: boolean; deployments: Deployment[] }
+type Page = {
+  enabled: boolean
+  canSelfApprove: boolean
+  hasMore: boolean
+  deployments: Deployment[]
+}
 export function RulesetDeployments({
   repositoryId,
   actorId,
@@ -290,6 +296,11 @@ export function RulesetDeployments({
                 >
                   {selected.state.replace(/_/g, ' ').toLowerCase()}
                 </StatusBadge>
+                {selected.approvalKind === 'SUPER_ADMIN_SELF_APPROVAL' && (
+                  <p className='text-sm text-muted-foreground'>
+                    Approved by the proposing Super Admin.
+                  </p>
+                )}
                 {selected.message && (
                   <p className='text-sm'>{selected.message}</p>
                 )}
@@ -344,7 +355,8 @@ export function RulesetDeployments({
                   </p>
                 )}
                 {selected.state === 'PREVIEW' &&
-                  selected.proposedById === actorId && (
+                  selected.proposedById === actorId &&
+                  !query.data?.canSelfApprove && (
                     <p className='text-sm text-muted-foreground'>
                       Another authorized administrator must approve activation.
                     </p>
@@ -388,7 +400,8 @@ export function RulesetDeployments({
                       </Button>
                     )}
                     {selected.state === 'PREVIEW' &&
-                      selected.proposedById !== actorId && (
+                      (selected.proposedById !== actorId ||
+                        query.data?.canSelfApprove) && (
                         <Button
                           disabled={busy}
                           onClick={() => void action('approve', selected)}
