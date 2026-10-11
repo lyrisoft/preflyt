@@ -35,7 +35,7 @@ import {
   type Profile,
 } from './repository-queries'
 
-export type ControlFilter = 'all' | 'review' | 'found'
+export type ControlFilter = 'all' | 'review' | 'found' | 'ci'
 export type RepositoryTab =
   'overview' | 'standards' | 'assessments' | 'activity'
 const states = [
@@ -47,7 +47,7 @@ const states = [
   },
   {
     key: 'UNKNOWN',
-    label: 'Unknown',
+    label: 'Configuration not determined',
     color: 'var(--neutral-mark)',
     filter: 'review' as const,
   },
@@ -56,6 +56,12 @@ const states = [
     label: 'Not found',
     color: 'var(--warning)',
     filter: 'review' as const,
+  },
+  {
+    key: 'NOT_INSPECTED',
+    label: 'CI evidence required',
+    color: 'var(--muted-foreground)',
+    filter: 'ci' as const,
   },
 ]
 const tooltip = {
@@ -86,6 +92,8 @@ export function PostureSummary({
   const controls = standards.data?.controls ?? []
   const summary = controlSummary(controls)
   const found = summary.distribution[0].value
+  const ciOnly = summary.distribution[3].value
+  const inspectable = controls.length - ciOnly
   const distribution = summary.distribution.map((entry, index) => ({
     ...entry,
     name: states[index].label,
@@ -113,8 +121,12 @@ export function PostureSummary({
       value:
         standards.isPending || standards.isError || !selectionValid
           ? '—'
-          : `${found} / ${controls.length}`,
-      description: 'Files found · checks not run',
+          : inspectable
+            ? `${found} / ${inspectable}`
+            : '—',
+      description: inspectable
+        ? 'Files found · checks not run'
+        : `${ciOnly} checks require CI evidence`,
       icon: FileCode2,
       color: 'text-chart-2 bg-chart-2/10',
       tab: 'overview' as const,
@@ -189,7 +201,7 @@ export function PostureSummary({
         <CardHeader>
           <CardTitle>Check configuration</CardTitle>
           <CardDescription>
-            Configuration found at{' '}
+            Inspected at{' '}
             {(
               standards.data?.profileSnapshot?.sourceSha ?? profile?.sourceSha
             )?.slice(0, 7) ?? 'the current profile'}{' '}
@@ -298,7 +310,7 @@ export function PostureSummary({
                   aria-label={summary.requirements
                     .map(
                       (s) =>
-                        `${s.name}: ${s.found} found, ${s.unknown} unknown, ${s.missing} not found`
+                        `${s.name}: ${s.found} found, ${s.unknown} configuration not determined, ${s.missing} not found, ${s.ci} require CI evidence`
                     )
                     .join('; ')}
                 >
@@ -345,9 +357,16 @@ export function PostureSummary({
                       />
                       <Bar
                         dataKey='unknown'
-                        name='Unknown'
+                        name='Configuration not determined'
                         stackId='config'
                         fill='var(--neutral-mark)'
+                        {...chartAnimation}
+                      />
+                      <Bar
+                        dataKey='ci'
+                        name='CI evidence required'
+                        stackId='config'
+                        fill='var(--muted-foreground)'
                         {...chartAnimation}
                       />
                       <Bar

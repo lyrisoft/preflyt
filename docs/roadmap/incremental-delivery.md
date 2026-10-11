@@ -1,8 +1,10 @@
 # Preflyt incremental delivery plan: usable vertical slices
 
 **Status:** Ordered delivery roadmap with explicit source-implementation notes. Only entries marked implemented describe current code; phase completion still requires its deployment and live acceptance gates.
-**Version:** 0.1 · **Date:** 2026-10-08  
+**Version:** 0.2 · **Date:** 2026-10-11
 **Related:** [SDLC capability model](../product/sdlc-capabilities.md) · [PRD](../PRD.md) · [ADR-0004](../architecture/ADR-0004-shift-left-assessment-governance.md)
+
+**Approved revision (2026-10-11):** Repository Health Assessment is inserted as P5 after P4. Former P5–P11 are now P6–P12; their scope, implementation notes and outstanding acceptance gates are preserved. P5 is planned, not implemented. See [P5 specification](../product/repository-health-assessment.md).
 
 ## 1. Definition of a phase
 
@@ -28,15 +30,16 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 | **P2** | **Policy Quality Gates** | PR/CI + UI | Apply mandatory/advisory policy, publish exact-SHA status and clear PASS/WARN/BLOCK/INCOMPLETE |
 | **P3** | **Native Secure Validation** | PR + approved executor | Execute security/testing/IaC scans safely and enrich findings beyond imported evidence |
 | **P4** | **Advanced AI Engineering Intelligence** | SDLC assessments | Advanced model-routed investigations and recommendations; deterministic gates remain independent |
-| **P5** | **Developer Experience: CLI + IDE** | Laptop / VS Code | Shared local engine, CLI, policy sync, inline diagnostics, AI explanations and optional Git hooks |
-| **P6** | **QA Release Readiness** | QA/CI + UI | Import end-to-end/contract/regression evidence and validate release candidate readiness |
-| **P7** | **k6 Performance Evidence** | Existing k6/CI + UI | Import k6 results and gate comparable performance evidence against budgets |
-| **P8** | **Managed k6 Smoke & Load** | Performance UI + approved runner | Run approved smoke/load tests, view reports and thresholds safely |
-| **P9** | **Advanced Performance Profiles** | Performance UI | Stress/spike/soak/breakpoint/scalability with safety controls and baselines |
-| **P10** | **Production Feedback Loop** | Read-only incident/deploy integration | Link escaped incidents to releases and earlier checks; propose human-approved improvements |
-| **P11** | **Operational Expansion** | GitLab / scheduled profiles | Expand providers, distributed k6, trends, observability correlations and cost/compliance checks |
+| **P5** | **Repository Health Assessment** | Repository selection + Health UI | Automatically assess a selected branch, report actionable findings and freshness without requiring CI |
+| **P6** | **Developer Experience: CLI + IDE** | Laptop / VS Code | Shared local engine, CLI, policy sync, inline diagnostics, AI explanations and optional Git hooks |
+| **P7** | **QA Release Readiness** | QA/CI + UI | Import end-to-end/contract/regression evidence and validate release candidate readiness |
+| **P8** | **k6 Performance Evidence** | Existing k6/CI + UI | Import k6 results and gate comparable performance evidence against budgets |
+| **P9** | **Managed k6 Smoke & Load** | Performance UI + approved runner | Run approved smoke/load tests, view reports and thresholds safely |
+| **P10** | **Advanced Performance Profiles** | Performance UI | Stress/spike/soak/breakpoint/scalability with safety controls and baselines |
+| **P11** | **Production Feedback Loop** | Read-only incident/deploy integration | Link escaped incidents to releases and earlier checks; propose human-approved improvements |
+| **P12** | **Operational Expansion** | GitLab / scheduled profiles | Expand providers, distributed k6, trends, observability correlations and cost/compliance checks |
 
-**P0–P3 form the first commercially meaningful MVP foundation.** P4 expands the core AI intelligence capability; P5–P9 deepen Shift Left through local, QA and performance workflows; P10 moves production learnings earlier; P11 expands scale and integrations. The first deliverable is P0, **not** an empty architecture scaffold.
+**P0–P3 form the first commercially meaningful MVP foundation.** P4 expands the core AI intelligence capability; P5 delivers automatic repository health and first value without CI; P6–P10 deepen Shift Left through local, QA and performance workflows; P11 moves production learnings earlier; P12 expands scale and integrations. The first deliverable is P0, **not** an empty architecture scaffold.
 
 ## 3. Detailed per-phase tasks and completion gates
 
@@ -179,99 +182,114 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 
 - **P4.CQ:** Multi-skill contextual PR review with pinned skill versions, evidence validation, deduplication, cost/egress controls and opt-in GitHub inline feedback. See [Skill-Based Review](../product/skill-based-code-review.md).
 
-### P5 — Developer Experience: CLI and IDE Extension
+### P5 — Repository Health Assessment
 
-**Incremental release contract:** P5.1 shared local engine and installable CLI; P5.2 authenticated repository link and cached policy; P5.3 installable VS Code extension with inline diagnostics; P5.4 AI explanation and revision-bound PR gate visibility; P5.5 opt-in Git hooks and tested compatible editors. Each is independently usable and deployable. See [developer CLI and IDE specification](../product/developer-cli-ide-extension.md).
+**Status:** Planned; implementation and live acceptance pending. [Detailed specification](../product/repository-health-assessment.md).
+
+**User value:** Selecting a repository and branch immediately starts a background health assessment. Users receive actionable findings without configuring CI; optional CI provides continuous PR feedback and enforcement later.
+
+**Entry dependencies:** P0 GitHub access, repository selection and profiles; qualified P3 adapters and independently approved isolation for executed analysis. Reuse existing evidence, finding, worker, notification and RBAC contracts. P4 AI enrichment is optional and never delays deterministic results.
+
+**Independently usable increments:**
+- **P5.1 Automatic first assessment:** persist the selected branch (default repository branch), queue one idempotent job after explicit selection, freeze its SHA at execution start, apply qualified stack-specific analysis defaults, show progress and a basic evidence-linked report, and notify completion/failure/partial results. No workflow, PR or manual first assessment is required. Without an approved runtime, provide a clearly partial inspection report and explain unavailable analysis.
+- **P5.2 Health dashboards and findings:** make Overview summarize organization health, make Repositories a health inventory, and add the default Health view to repository details. Present supported security, reliability and maintainability findings, severity, file/line evidence, coverage and limits; preserve separate CI activity, access controls and existing deep links.
+- **P5.3 Reassessment and history:** authorized rate-limited Reassess, branch-aware freshness and comparable report history. Preserve immutable reports when the branch advances; broad scheduled scans remain P12.
+
+**Completion gates:** Demonstrate fresh repository onboarding without CI, seeded findings and a clean fixture on qualified adapters, correct branch/SHA binding, worker retries without duplicate scans/notifications, unsupported languages and scanner failure reported honestly, cross-repository/organization denial, isolation rejection and cancellation cleanup. Prove no changes to published policy, AI routing or merge protection. Deploy and upgrade through Compose with migration/rollback and runtime qualification evidence; infrastructure qualification cannot be replaced by fixture tests.
+
+### P6 — Developer Experience: CLI and IDE Extension
+
+**Incremental release contract:** P6.1 shared local engine and installable CLI; P6.2 authenticated repository link and cached policy; P6.3 installable VS Code extension with inline diagnostics; P6.4 AI explanation and revision-bound PR gate visibility; P6.5 opt-in Git hooks and tested compatible editors. Each is independently usable and deployable. See [developer CLI and IDE specification](../product/developer-cli-ide-extension.md).
 
 
 **User value:** A developer runs fast local checks and gets actionable feedback before pushing code.
 
 **Tasks:**
-- P5.1 Ship signed/reproducible Node.js/TypeScript CLI package with documented install/update/remove.
-- P5.2 Local fast lint/typecheck/secret/dependency checks on a working tree, per-tool scope and execution consent.
-- P5.3 Cache approved repository policy and show cache freshness; add explicit opt-in pre-commit integration.
-- P5.4 Present local findings with file/line; optionally submit redacted evidence or ask for AI explanation with consent.
-- P5.5 Tests for offline mode, dirty tree, missing tools, revoked identity, policy cache age and safe uninstall.
+- P6.1 Ship signed/reproducible Node.js/TypeScript CLI package with documented install/update/remove.
+- P6.2 Local fast lint/typecheck/secret/dependency checks on a working tree, per-tool scope and execution consent.
+- P6.3 Cache approved repository policy and show cache freshness; add explicit opt-in pre-commit integration.
+- P6.4 Present local findings with file/line; optionally submit redacted evidence or ask for AI explanation with consent.
+- P6.5 Tests for offline mode, dirty tree, missing tools, revoked identity, policy cache age and safe uninstall.
 
 **Done when:** Developers can install and run the CLI locally, discover a seeded issue without pushing to CI, and work without a model key. Local PASS is labeled **advisory**, never a trusted CI green result.
 
-### P6 — QA Release Readiness
+### P7 — QA Release Readiness
 
 **User value:** QA can evaluate a real release candidate using traceable functional test and compatibility evidence.
 
 **Tasks:**
-- P6.1 Release candidate/environment identity, deployment SHA/image, test-suite inventory and QA evidence import.
-- P6.2 Unit/integration/E2E/regression/contract test adapters and correct discovered/executed/skipped counts.
-- P6.3 Database migration/API compatibility check templates using isolated test environments and fixtures.
-- P6.4 QA readiness policy and optional authorized sign-off, report and audit.
-- P6.5 Test missing mandatory suites, zero tests, failed contract, stale candidate and manually approved exception.
+- P7.1 Release candidate/environment identity, deployment SHA/image, test-suite inventory and QA evidence import.
+- P7.2 Unit/integration/E2E/regression/contract test adapters and correct discovered/executed/skipped counts.
+- P7.3 Database migration/API compatibility check templates using isolated test environments and fixtures.
+- P7.4 QA readiness policy and optional authorized sign-off, report and audit.
+- P7.5 Test missing mandatory suites, zero tests, failed contract, stale candidate and manually approved exception.
 
-**Done when:** QA can select a candidate, see required suites and contract findings, and make an evidence-backed pass/block/incomplete decision without depending on AI or P7+ capabilities.
+**Done when:** QA can select a candidate, see required suites and contract findings, and make an evidence-backed pass/block/incomplete decision without depending on AI or P8+ capabilities.
 
-### P7 — k6 Performance Evidence and Budgets
+### P8 — k6 Performance Evidence and Budgets
 
 **User value:** A team already running k6 in CI can import a run and receive a performance assessment/gate, **without** Preflyt running load.
 
 **Tasks:**
-- P7.1 Performance target/profile metadata (approved environment, service/revision, workload identity).
-- P7.2 k6 summary/threshold parser with tool-version, script/config digest and artifact provenance.
-- P7.3 Performance budget policy (latency percentiles, error rate, throughput/iterations, dropped iterations).
-- P7.4 First comparable baseline record and clear INCOMPARABLE/INCOMPLETE cases; performance report in UI.
-- P7.5 Test missing metrics, absent threshold, underachieved load, mismatched revisions and invalid artifact.
+- P8.1 Performance target/profile metadata (approved environment, service/revision, workload identity).
+- P8.2 k6 summary/threshold parser with tool-version, script/config digest and artifact provenance.
+- P8.3 Performance budget policy (latency percentiles, error rate, throughput/iterations, dropped iterations).
+- P8.4 First comparable baseline record and clear INCOMPARABLE/INCOMPLETE cases; performance report in UI.
+- P8.5 Test missing metrics, absent threshold, underachieved load, mismatched revisions and invalid artifact.
 
 **Done when:** One existing k6 report can be imported and compared to a configured budget, producing a defensible quality-gate result. No execution permissions or Operator are needed.
 
-### P8 — Managed k6 Smoke and Load
+### P9 — Managed k6 Smoke and Load
 
 **User value:** An authorized engineer can configure and execute a controlled smoke/load test against a registered non-production target.
 
 **Tasks:**
-- P8.1 Target service/environment registry, ownership verification, scoped test auth and script versioning.
-- P8.2 Performance profiles, VUs/arrival-rate settings, duration/ramp and threshold setup in UI.
-- P8.3 k6 runner adapter on approved isolated runtime with resource quotas, egress restrictions, non-production target allowlist, cost controls and cancellation.
-- P8.4 Test lifecycle and live progress, results, artifacts, operator audit, error/timeout states.
-- P8.5 Verify no arbitrary URLs, SSRF redirects/DNS pivots, credentials in scripts/logs, unbounded request rates or load-generator saturation marked falsely as app regression.
+- P9.1 Target service/environment registry, ownership verification, scoped test auth and script versioning.
+- P9.2 Performance profiles, VUs/arrival-rate settings, duration/ramp and threshold setup in UI.
+- P9.3 k6 runner adapter on approved isolated runtime with resource quotas, egress restrictions, non-production target allowlist, cost controls and cancellation.
+- P9.4 Test lifecycle and live progress, results, artifacts, operator audit, error/timeout states.
+- P9.5 Verify no arbitrary URLs, SSRF redirects/DNS pivots, credentials in scripts/logs, unbounded request rates or load-generator saturation marked falsely as app regression.
 
-**Done when:** A user runs a smoke and a bounded load test on an approved staging service, sees achieved VUs/iterations/RPS/latency/errors and a budget gate, and can cancel safely. P7 imported-run functionality remains available.
+**Done when:** A user runs a smoke and a bounded load test on an approved staging service, sees achieved VUs/iterations/RPS/latency/errors and a budget gate, and can cancel safely. P8 imported-run functionality remains available.
 
-### P9 — Advanced Performance Testing
+### P10 — Advanced Performance Testing
 
 **User value:** Performance engineers can execute and compare stress, spike, soak, breakpoint and scalability workloads with safe automated stop conditions.
 
 **Tasks:**
-- P9.1 Add advanced workload profiles/stage shapes, recovery windows, stop-on-threshold and budget alerts.
-- P9.2 Profile-specific approvals for higher-impact tests and dedicated runner pools/regions where needed.
-- P9.3 Comparable multi-run baselines, runner-vs-target saturation detection, latency drift and test reproducibility.
-- P9.4 Optional SigNoz/OpenTelemetry/Prometheus correlation and AI-assisted explanation with evidence links.
-- P9.5 Safety tests for long soak cancellation, spike rate clamps, runaway breakpoint ramp, target outage and production default-deny.
+- P10.1 Add advanced workload profiles/stage shapes, recovery windows, stop-on-threshold and budget alerts.
+- P10.2 Profile-specific approvals for higher-impact tests and dedicated runner pools/regions where needed.
+- P10.3 Comparable multi-run baselines, runner-vs-target saturation detection, latency drift and test reproducibility.
+- P10.4 Optional SigNoz/OpenTelemetry/Prometheus correlation and AI-assisted explanation with evidence links.
+- P10.5 Safety tests for long soak cancellation, spike rate clamps, runaway breakpoint ramp, target outage and production default-deny.
 
 **Done when:** One stress, spike and soak scenario each produces a safe, interpretable evidence-backed report and is cancelled/stopped under its policy. Production load tests remain prohibited without separate explicit operational approval.
 
-### P10 — Production Evidence Feedback
+### P11 — Production Evidence Feedback
 
 **User value:** An SRE links a production incident to a released version and an earlier missing or failed engineering check, then proposes an improved PR/release policy.
 
 **Tasks:**
-- P10.1 Read-only incident/alert/telemetry or deployment evidence connector (start with one provider and one release mapping).
-- P10.2 Correlate incident, service, deployment SHA/version, prior assessments and missing controls; distinguish hypothesis from proved cause.
-- P10.3 Create a **policy improvement proposal**, separate from active policy enforcement.
-- P10.4 Authorized owner review/approval, audited policy version change and later effectiveness reporting.
-- P10.5 Validate with known incident fixture plus ambiguous and stale/insufficient evidence cases.
+- P11.1 Read-only incident/alert/telemetry or deployment evidence connector (start with one provider and one release mapping).
+- P11.2 Correlate incident, service, deployment SHA/version, prior assessments and missing controls; distinguish hypothesis from proved cause.
+- P11.3 Create a **policy improvement proposal**, separate from active policy enforcement.
+- P11.4 Authorized owner review/approval, audited policy version change and later effectiveness reporting.
+- P11.5 Validate with known incident fixture plus ambiguous and stale/insufficient evidence cases.
 
 **Done when:** A real or fixture incident produces a sourced, reviewable prevention recommendation; an engineering owner can choose to apply it as a new policy, and Preflyt does not directly modify production or auto-remediate.
 
-### P11 — Operational expansion
+### P12 — Operational expansion
 
 **User value:** Teams can onboard more systems and run validated broader engineering assessments without replacing existing installations.
 
 **Tasks:**
-- P11.1 GitLab adapter with repository/CI/check provider parity and scope-tested auth.
-- P11.2 Scheduled baseline/drift assessments, historical quality coverage and trend reporting.
-- P11.3 Distributed k6 Operator support (when justified), workload topology policy and runner health.
-- P11.4 Broader cost/compliance/observability rules with domain-specific evidence and applicability.
-- P11.5 Migration and scaling/reliability tests, concurrent organizations only after explicit tenant-isolation review.
+- P12.1 GitLab adapter with repository/CI/check provider parity and scope-tested auth.
+- P12.2 Scheduled baseline/drift assessments, historical quality coverage and trend reporting.
+- P12.3 Distributed k6 Operator support (when justified), workload topology policy and runner health.
+- P12.4 Broader cost/compliance/observability rules with domain-specific evidence and applicability.
+- P12.5 Migration and scaling/reliability tests, concurrent organizations only after explicit tenant-isolation review.
 
-**Done when:** At least one new provider/domain/scale workflow works end-to-end with documented compatibility and no regressions to already deployed stages. Optional sub-slices can be independently released rather than waiting for all P11 tasks.
+**Done when:** At least one new provider/domain/scale workflow works end-to-end with documented compatibility and no regressions to already deployed stages. Optional sub-slices can be independently released rather than waiting for all P12 tasks.
 
 ## 4. Capability breakdown within each SDLC stage
 
@@ -279,14 +297,14 @@ These subphases map to the global deployment phases above and may be tracked as 
 
 | Stage | Usable first slice | Second slice | Third slice | Advanced slice |
 | --- | --- | --- | --- | --- |
-| Laptop | P5.1 shared engine + CLI | P5.2 organization policy sync | P5.3 VS Code diagnostics; P5.4 AI and PR status | P5.5 Git hooks/editor compatibility |
-| Repository | R1 discovery/profile (P0) | R2 baseline policies/evidence (P1–P3) | R3 scheduled drift (P11) | Cross-repo standards |
+| Laptop | P6.1 shared engine + CLI | P6.2 organization policy sync | P6.3 VS Code diagnostics; P6.4 AI and PR status | P6.5 Git hooks/editor compatibility |
+| Repository | R1 discovery/profile (P0) | Automatic health assessment (P5.1) | Health dashboards and history (P5.2–P5.3) | Scheduled drift / cross-repo standards (P12) |
 | PR/CI | P1 CI evidence viewer | P2 deterministic quality gate | P3 isolated scanner/test jobs | P4 AI explanation |
-| QA | Q1 imported suite/candidate report (P6) | Q2 contract/migration tests (P6) | Q3 QA quality gates/sign-off (P6) | Cross-service matrix later |
-| Performance | F1 import k6 reports (P7) | F2 smoke/load execution (P8) | F3 advanced workload profiles (P9) | F4 distributed/correlation (P11) |
-| Production | O1 incidents/deploy mapping (P10) | O2 correlation to missed checks (P10) | O3 policy proposal and approval (P10) | Outcome trends later |
+| QA | Q1 imported suite/candidate report (P7) | Q2 contract/migration tests (P7) | Q3 QA quality gates/sign-off (P7) | Cross-service matrix later |
+| Performance | F1 import k6 reports (P8) | F2 smoke/load execution (P9) | F3 advanced workload profiles (P10) | F4 distributed/correlation (P12) |
+| Production | O1 incidents/deploy mapping (P11) | O2 correlation to missed checks (P11) | O3 policy proposal and approval (P11) | Outcome trends later |
 
-Built-in pack lifecycle: **P0 catalogue and recommendations → P1 evidence mapping → P2 deterministic enforcement → P3 native checks → P6–P9 specialized QA/performance packs → P10 owner-approved policy improvements**. See [Engineering Standards Library](../product/engineering-standards-library.md).
+Built-in pack lifecycle: **P0 catalogue and recommendations → P1 evidence mapping → P2 deterministic enforcement → P3 native checks → P7–P10 specialized QA/performance packs → P11 owner-approved policy improvements**. See [Engineering Standards Library](../product/engineering-standards-library.md).
 
 ## Kubernetes packaging decision
 
@@ -319,17 +337,19 @@ flowchart TD
     P1 --> P2["P2 Quality Gates"]
     P2 --> P3["P3 Safe Native Scans"]
     P3 --> P4["P4 Optional AI Explanations"]
-    P3 --> P5["P5 CLI + IDE Extension"]
-    P3 --> P6["P6 QA Readiness"]
-    P2 --> P7["P7 Imported k6 Gates"]
-    P7 --> P8["P8 Managed Smoke / Load"]
-    P8 --> P9["P9 Advanced Performance"]
-    P6 --> P10["P10 Production Feedback"]
-    P2 --> P10
-    P9 --> P11["P11 Provider / Scale Expansion"]
+    P0 --> P5["P5 Repository Health"]
+    P3 --> P5
+    P3 --> P6["P6 CLI + IDE Extension"]
+    P3 --> P7["P7 QA Readiness"]
+    P2 --> P8["P8 Imported k6 Gates"]
+    P8 --> P9["P9 Managed Smoke / Load"]
+    P9 --> P10["P10 Advanced Performance"]
+    P7 --> P11["P11 Production Feedback"]
+    P2 --> P11
+    P10 --> P12["P12 Provider / Scale Expansion"]
 ~~~
 
-AI is a core product capability introduced in P0/P1; inference is optional at runtime, and deterministic checks remain functional without model access. P7 (import k6 results) can be prioritized soon after P2 because it needs **no managed load generator**. P8 requires separately verified target/runner safety; P3 real-repository execution approval is not bypassed by test infrastructure.
+AI is a core product capability introduced in P0/P1; inference is optional at runtime, and deterministic checks remain functional without model access. P8 (import k6 results) can be prioritized soon after P2 because it needs **no managed load generator**. P9 requires separately verified target/runner safety; P3 real-repository execution approval is not bypassed by test infrastructure.
 
 P0 deployment is intentionally useful without a scanner, model or extensive policy framework. All subsequent releases **add** capability without requiring a full platform rewrite.
 

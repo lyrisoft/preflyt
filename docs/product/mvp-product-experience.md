@@ -1,7 +1,7 @@
 # Preflyt MVP Product Experience Contract
 
-**Status:** Authoritative **target UX** for P0–P3; not an implementation claim.  
-**Audience:** Product, frontend/backend engineers, Codex, Claude and reviewers.  
+**Status:** Authoritative **target UX** for P0–P3; not an implementation claim.
+**Audience:** Product, frontend/backend engineers, Codex, Claude and reviewers.
 **Sources:** [PRD](../PRD.md), [delivery phases](../roadmap/incremental-delivery.md), [Contributors](engineering-contributors.md), [Standards](engineering-standards-library.md), [RBAC](rbac-and-authorization.md), [UI guidelines](../design/enterprise-ui-guidelines.md), [Agent guardrails](../agents/product-implementation-guardrails.md).
 
 ## Purpose and boundaries
@@ -33,8 +33,8 @@ Compact breadcrumbs/page title, scoped search across authorized repositories/PRs
 
 ### Context navigation
 
-Repository: Overview / Engineering Profile / Pull Requests / Assessments / Findings / Policies.  
-Assessment: Summary / Checks & Evidence / Findings / Policy Decision / AI Explanation (only if available).  
+Repository: Overview / Engineering Profile / Pull Requests / Assessments / Findings / Policies.
+Assessment: Summary / Checks & Evidence / Findings / Policy Decision / AI Explanation (only if available).
 Contributor: Overview / Repositories / Pull Requests / Reviews / Findings & Policy Evidence / Activity.
 
 Tabs must reflect available functionality and preserve deep links.
@@ -130,7 +130,7 @@ Automatic setup on selection, GitHub App Manifest provisioning, connection hot r
 - [ ] Policy changes are versioned and authorized; missing required checks never display as passed.
 - [ ] Contributors list and individual drill-down work when P3 module is released.
 - [ ] Desktop/tablet/mobile navigation, keyboard focus, contrast and reduced-motion behaviour are tested.
-- [ ] Existing P0 features remain functional; no P0–P11 reordering.
+- [ ] Existing P0 features remain functional; no P0–P12 reordering.
 
 Access Control separates **People**, **GitHub members**, **Roles & permissions**, and **Activity**. People manages existing Preflyt access. GitHub members lists active organization users with search, pagination, **Sync members**, and **Assign role**. Role assignment opens a side panel with predefined permissions and repository scope. Sync alone never grants access.
 

@@ -9,7 +9,7 @@
 3. [Enterprise UI Guidelines](../design/enterprise-ui-guidelines.md): visual/interaction design.
 4. [PRD](../PRD.md), [Incremental Delivery Plan](../roadmap/incremental-delivery.md), [RBAC](../product/rbac-and-authorization.md), [Standards](../product/engineering-standards-library.md), [Contributors](../product/engineering-contributors.md), architecture ADRs.
 
-If documents conflict with current code, **report the discrepancy and propose a safe migration**; do not silently overwrite working implementation. Product scope decisions take precedence over speculative visual polish. Keep existing P0–P11 order.
+If documents conflict with current code, **report the discrepancy and propose a safe migration**; do not silently overwrite working implementation. Product scope decisions take precedence over speculative visual polish. Preserve the approved P0–P12 order. The authorized 2026-10-11 roadmap revision inserts Repository Health Assessment as P5; former P5–P11 become P6–P12 with their scope and progress preserved.
 
 ## Mandatory behaviour
 

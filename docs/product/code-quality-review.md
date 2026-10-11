@@ -1,6 +1,6 @@
 # PR Code Quality Review
 
-**Status:** Product specification; implementation must be verified per phase. **Existing P0–P11 order is unchanged.**  
+**Status:** Product specification; implementation must be verified per phase. **Existing P0–P12 order is unchanged.**
 **Related:** [Skill-based review](skill-based-code-review.md), [Engineering Standards Library](engineering-standards-library.md), [PRD](../PRD.md), [roadmap](../roadmap/incremental-delivery.md).
 
 ## Objective
@@ -52,7 +52,7 @@ Assessment detail → **Code Quality** tab: overview of verified/advisory findin
 - **P2:** Add first-party Code Quality policy pack and deterministic gate evaluation, with summary/check feedback.
 - **P3:** Add tested native static analyzers only after independent sandbox approval.
 - **P4:** Advanced context-aware, multi-skill AI review, deduplication and opt-in inline GitHub feedback.
-- **P5:** Surface same findings/skills through CLI and IDE using shared contracts.
+- **P6:** Surface same findings/skills through CLI and IDE using shared contracts.
 
 ## Acceptance
 

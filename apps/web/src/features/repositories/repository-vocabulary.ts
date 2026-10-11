@@ -14,12 +14,16 @@ export function sentence(value: string) {
 
 const configFound: Status = { label: 'Related files found', tone: 'success' }
 const notFound: Status = { label: 'Not found', tone: 'warning' }
-const unknown: Status = { label: 'Not determined', tone: 'neutral' }
+const unknown: Status = {
+  label: 'Configuration not determined',
+  tone: 'neutral',
+}
 
 export const configurationStatus: Record<string, Status> = {
   HINT_DETECTED: configFound,
   MISSING: notFound,
   UNKNOWN: unknown,
+  NOT_INSPECTED: { label: 'CI evidence required', tone: 'neutral' },
 }
 export const signalStatus: Record<string, Status> = {
   detected: configFound,
@@ -31,6 +35,7 @@ export const configurationOrder: Record<string, number> = {
   MISSING: 0,
   UNKNOWN: 1,
   HINT_DETECTED: 2,
+  NOT_INSPECTED: 3,
 }
 
 export function coverageStatus(value: string): Status {

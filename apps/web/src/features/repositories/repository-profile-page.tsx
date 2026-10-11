@@ -44,6 +44,7 @@ import { RepositoryActivityPanel } from './repository-activity-panel'
 import { RepositoryAssessments } from './repository-assessments'
 import { RepositoryBindings } from './repository-bindings'
 import { RepositoryCiEvidence } from './repository-ci-evidence'
+import { repositoryConfigurationHelp } from './repository-configuration-help'
 import { RepositoryControls } from './repository-controls'
 import { RepositoryEvents } from './repository-events'
 import { RepositoryPullRequests } from './repository-pull-requests'
@@ -212,6 +213,7 @@ function RepositoryHelp({ limitations }: { limitations: string[] }) {
     <PageHelpDrawer
       title='Repository'
       sections={[
+        ...repositoryConfigurationHelp,
         {
           title: 'Understanding repository status',
           content: (

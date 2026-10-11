@@ -1,7 +1,7 @@
-# P5 Developer Experience: CLI and IDE Extension
+# P6 Developer Experience: CLI and IDE Extension
 
-**Status:** Design and acceptance specification, not implemented.  
-**Phase:** P5 (existing phase, unchanged order)  
+**Status:** Design and acceptance specification, not implemented.
+**Phase:** P6 (formerly P5; scope unchanged after the approved Repository Health insertion)
 **Related:** [SDLC capabilities](sdlc-capabilities.md), [RBAC](rbac-and-authorization.md), [Roadmap](../roadmap/incremental-delivery.md)
 
 ## Decision
@@ -12,11 +12,11 @@ Build **one shared TypeScript local assessment engine** used by a Preflyt CLI an
 
 | Increment | User-visible deliverable | Completion demonstration |
 | --- | --- | --- |
-| **P5.1 — Local engine + CLI** | Install CLI, detect Git working tree, run approved fast checks, display file/line findings and machine-readable results | Seeded secret or lint violation detected; offline local check works |
-| **P5.2 — Organization integration** | Authenticated browser login (GitHub-first target under ADR-0007; OIDC compatibility during migration), repository linking, authorized policy download/cache and offline freshness display | Authorized repo sync works; revoked membership denies new sync; offline cached policy visibly aged |
-| **P5.3 — VS Code extension** | Install VSIX, run shared checks on demand/save, render Diagnostics/Problems and status bar | Real finding appears at correct file/line; workspace trust blocks unsafe execution |
-| **P5.4 — Intelligent developer feedback** | Extension sidebar, evidence-linked AI explanation using organization SDLC model routing, central PR gate status | Findings and current PR status display with SHA/freshness; no provider key stored in extension |
-| **P5.5 — Developer automation** | Explicit opt-in pre-commit/pre-push hooks, bounded incremental scheduling, compatibility testing for Cursor/Windsurf | Hook detects seeded issue; uninstall restores hooks; supported editors pass compatibility suite |
+| **P6.1 — Local engine + CLI** | Install CLI, detect Git working tree, run approved fast checks, display file/line findings and machine-readable results | Seeded secret or lint violation detected; offline local check works |
+| **P6.2 — Organization integration** | Authenticated browser login (GitHub-first target under ADR-0007; OIDC compatibility during migration), repository linking, authorized policy download/cache and offline freshness display | Authorized repo sync works; revoked membership denies new sync; offline cached policy visibly aged |
+| **P6.3 — VS Code extension** | Install VSIX, run shared checks on demand/save, render Diagnostics/Problems and status bar | Real finding appears at correct file/line; workspace trust blocks unsafe execution |
+| **P6.4 — Intelligent developer feedback** | Extension sidebar, evidence-linked AI explanation using organization SDLC model routing, central PR gate status | Findings and current PR status display with SHA/freshness; no provider key stored in extension |
+| **P6.5 — Developer automation** | Explicit opt-in pre-commit/pre-push hooks, bounded incremental scheduling, compatibility testing for Cursor/Windsurf | Hook detects seeded issue; uninstall restores hooks; supported editors pass compatibility suite |
 
 Each increment must be **packaged, installable, tested and usable without waiting for the next**. Keep prior CLI and extension functionality operational as features are added.
 
@@ -50,13 +50,13 @@ The central PR check remains authoritative: the extension shows the exact PR hea
 
 ### Acceptance and security tests
 
-- [ ] P5.1 CLI detects a seeded issue and reports valid structured findings offline.
-- [ ] P5.2 authorized policy sync, revoked identity, expired cache and denied repository are tested.
-- [ ] P5.3 extension diagnostics update and clear after fix, without editor freezes or leaking stale findings.
+- [ ] P6.1 CLI detects a seeded issue and reports valid structured findings offline.
+- [ ] P6.2 authorized policy sync, revoked identity, expired cache and denied repository are tested.
+- [ ] P6.3 extension diagnostics update and clear after fix, without editor freezes or leaking stale findings.
 - [ ] Workspace Trust disables unapproved code execution and source transmission.
-- [ ] P5.4 AI provider outage leaves local checks functional; model output cannot change local deterministic outcomes.
+- [ ] P6.4 AI provider outage leaves local checks functional; model output cannot change local deterministic outcomes.
 - [ ] Central PR status shown in extension is bound to exact commit and does not inherit stale green.
-- [ ] P5.5 hooks are opt-in, documented and cleanly removable; GitHub server gates remain mandatory.
+- [ ] P6.5 hooks are opt-in, documented and cleanly removable; GitHub server gates remain mandatory.
 - [ ] All artifacts are versioned, signed or integrity-verifiable where feasible, with tested installation/upgrade/uninstall.
 - [ ] Each increment includes release instructions, telemetry with redaction, success/failure tests and rollback.
 

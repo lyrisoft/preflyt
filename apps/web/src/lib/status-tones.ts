@@ -77,6 +77,8 @@ export const statusTones: Readonly<Record<string, StatusTone>> = {
   'related files found': 'success',
   'not found': 'warning',
   'not determined': 'neutral',
+  'configuration not determined': 'neutral',
+  'ci evidence required': 'neutral',
   required: 'neutral',
   optional: 'neutral',
   suggested: 'neutral',

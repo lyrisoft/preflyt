@@ -161,3 +161,19 @@ it('separates setup gaps, file observations and undetermined setup', async () =>
   await expect.element(view.getByText('Required')).toHaveClass('bg-muted')
   await view.unmount()
 })
+
+it('keeps CI-only setup and undetermined configuration neutral', async () => {
+  const view = await render(
+    <>
+      <StatusBadge tone='warning'>CI evidence required</StatusBadge>
+      <StatusBadge tone='warning'>Configuration not determined</StatusBadge>
+    </>
+  )
+  await expect
+    .element(view.getByText('CI evidence required'))
+    .toHaveClass('bg-muted')
+  await expect
+    .element(view.getByText('Configuration not determined'))
+    .toHaveClass('bg-muted')
+  await view.unmount()
+})

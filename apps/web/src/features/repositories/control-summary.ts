@@ -1,6 +1,11 @@
 export type ControlInput = { required: boolean; configuration: string }
 export function controlSummary(controls: ControlInput[]) {
-  const states = ['HINT_DETECTED', 'UNKNOWN', 'MISSING'] as const
+  const states = [
+    'HINT_DETECTED',
+    'UNKNOWN',
+    'MISSING',
+    'NOT_INSPECTED',
+  ] as const
   const state = (control: ControlInput) =>
     states.includes(control.configuration as (typeof states)[number])
       ? control.configuration
@@ -17,6 +22,9 @@ export function controlSummary(controls: ControlInput[]) {
       ).length,
       unknown: controls.filter(
         (c) => c.required === required && state(c) === 'UNKNOWN'
+      ).length,
+      ci: controls.filter(
+        (c) => c.required === required && state(c) === 'NOT_INSPECTED'
       ).length,
       missing: controls.filter(
         (c) => c.required === required && state(c) === 'MISSING'

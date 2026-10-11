@@ -1,9 +1,9 @@
 # ADR-0004: Shift Left assessment and governance architecture
 
 **Status:** Accepted product direction; repository profiling, imported assessments, versioned policies and flag-gated GitHub governance are implemented in source. Native execution, AI intelligence and live enforcement acceptance remain pending.
-**Date:** 2026-10-08  
-**Decision owner:** Preflyt Product / Engineering  
-**Supersedes:** Remediation-first prioritization in the original product definition (not the safety rules in ADR-0002)  
+**Date:** 2026-10-08
+**Decision owner:** Preflyt Product / Engineering
+**Supersedes:** Remediation-first prioritization in the original product definition (not the safety rules in ADR-0002)
 **Related:** [Product requirements](../PRD.md), [TypeScript stack](ADR-0001-typescript-first-stack.md), [Execution safety and optional remediation](ADR-0002-safe-execution-fixtures-remediation-contract.md), [OIDC authentication](ADR-0003-oidc-user-authentication.md)
 
 ## Context
@@ -39,7 +39,7 @@ No single check is universally applicable. Assessment *plans* depend on reposito
 
 The [six-stage SDLC capability model](../product/sdlc-capabilities.md) distinguishes **developer laptop, repository, PR/CI, QA, performance/staging, and production-feedback** use cases, alongside optional requirements/design checks. Production integration is **feedback into earlier assurance**, not a production auto-remediation or APM platform.
 
-**Delivery rule:** each phase must produce a **deployable and usable** product slice, not only an architecture component. The [P0–P11 incremental delivery plan](../roadmap/incremental-delivery.md) is the implementation release contract. Later stages must extend a common Assessment/Policy/Evidence model without blocking earlier useful releases.
+**Delivery rule:** each phase must produce a **deployable and usable** product slice, not only an architecture component. The [P0–P12 incremental delivery plan](../roadmap/incremental-delivery.md) is the implementation release contract. Later stages must extend a common Assessment/Policy/Evidence model without blocking earlier useful releases.
 
 ## Assessment model
 
@@ -132,7 +132,7 @@ flowchart TD
 
 **MVP user-value slices:** P0 connects and profiles selected GitHub repositories; P1 imports CI evidence; P2 publishes an actual deterministic PR quality gate; P3 adds safe native scanners/testing in an independently approved executor. Each can be deployed and used without the later releases. AI explanation is an **optional P4 enhancement**, not a prerequisite.
 
-Subsequent phases use the same planning/reporting contracts: P5 local developer CLI, P6 QA readiness, P7 k6 result ingestion/performance budgets, P8 managed k6 smoke/load, P9 advanced controlled stress/spike/soak/breakpoint/scalability, P10 production-feedback-based policy improvement and P11 optional provider/scaling extensions. Compare test results only where environment and workload are meaningfully comparable; gate impact is determined by recorded evidence and policy, not AI.
+Subsequent phases use the same planning/reporting contracts: P6 local developer CLI, P7 QA readiness, P8 k6 result ingestion/performance budgets, P9 managed k6 smoke/load, P10 advanced controlled stress/spike/soak/breakpoint/scalability, P11 production-feedback-based policy improvement and P12 optional provider/scaling extensions. Compare test results only where environment and workload are meaningfully comparable; gate impact is determined by recorded evidence and policy, not AI.
 
 ## Built-in engineering policy packs
 

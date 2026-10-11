@@ -1,6 +1,6 @@
 # Teams and Policy Inheritance
 
-**Status:** Teams, organization baseline, reviewed version upgrades, scheduled reconciliation and impact preview implemented; explicitly reviewed nested scope is implemented; reviewed time-bound rule exceptions are implemented. **No change to P0–P11 phase order.**
+**Status:** Teams, organization baseline, reviewed version upgrades, scheduled reconciliation and impact preview implemented; explicitly reviewed nested scope is implemented; reviewed time-bound rule exceptions are implemented. **No change to P0–P12 phase order.**
 **Related:** [PRD](../PRD.md), [Engineering Standards](engineering-standards-library.md), [RBAC](rbac-and-authorization.md), [MVP Experience](mvp-product-experience.md), [Roadmap](../roadmap/incremental-delivery.md).
 
 

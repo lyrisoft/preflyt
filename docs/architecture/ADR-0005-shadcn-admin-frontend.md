@@ -1,7 +1,7 @@
 # ADR-0005: Build Preflyt on the Shadcn Admin source codebase
 
 **Status:** Pinned source baseline imported; Preflyt screens, session-aware navigation and API integration are implemented. Remaining product scope and release acceptance are tracked separately.
-**Date:** 2026-10-08  
+**Date:** 2026-10-08
 **Related:** [ADR-0001](ADR-0001-typescript-first-stack.md), [ADR-0003](ADR-0003-oidc-user-authentication.md), [ADR-0004](ADR-0004-shift-left-assessment-governance.md), [Incremental delivery plan](../roadmap/incremental-delivery.md)
 
 ## Context
@@ -39,7 +39,7 @@ Use React + Vite + TypeScript, Tailwind CSS and shadcn/ui while keeping the alre
 - **Backend authority:** NestJS authenticates/authorizes every action. The browser never holds GitHub App credentials, model-provider keys, cluster/sandbox credentials or decisions that should be enforced server-side.
 - **Routing:** standardize on one typed router after evaluating the imported router and dependencies.
 - **Data access:** use a typed API client and TanStack Query where appropriate; TanStack Table for repository/assessment/finding data. Forms may use React Hook Form + Zod; charts may use Recharts. These are implementation choices to validate against the imported versions, not mandatory reasons to rebuild the app.
-- **Product readiness:** a visible module must be backed by a usable end-to-end workflow. Hide unsupported P1–P11 features rather than leaving deceptive clickable placeholders.
+- **Product readiness:** a visible module must be backed by a usable end-to-end workflow. Hide unsupported P1–P12 features rather than leaving deceptive clickable placeholders.
 - **Open-source licensing:** review upstream and all dependencies/assets before distribution; record whether any code modifications require notices or other actions.
 
 ## Architecture
