@@ -3,7 +3,7 @@ import { RelativeTime } from './relative-time'
 import type { ArtifactSummary } from './repository-queries'
 import { sentence } from './repository-vocabulary'
 
-/** Reports an administrator attached to one CI result. */
+/** Reports received for one CI result. */
 export function ReportList({
   artifacts,
   repositoryId,
@@ -16,7 +16,7 @@ export function ReportList({
   canVerify?: boolean
 }) {
   if (artifacts.length === 0)
-    return <p className='text-sm text-muted-foreground'>No reports imported.</p>
+    return <p className='text-sm text-muted-foreground'>No reports received.</p>
   return (
     <ul className='divide-y rounded-md border'>
       {artifacts.map((artifact) => (
@@ -31,8 +31,7 @@ export function ReportList({
             </span>
           </p>
           <p className='text-xs text-muted-foreground'>
-            Uploaded by an administrator. Verify the signed report source
-            separately.
+            Report source and verification details are shown below.
           </p>
           <p className='flex flex-wrap gap-x-3 gap-y-1 text-xs'>
             {Object.entries(artifact.summary).map(([key, value]) => (

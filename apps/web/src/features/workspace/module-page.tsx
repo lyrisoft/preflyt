@@ -13,7 +13,6 @@ import {
 } from 'lucide-react'
 import { IconGithub } from '@/assets/brand-icons'
 import { API_BASE_URL } from '@/lib/api'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -28,7 +27,6 @@ import { SurfaceIcon } from '@/components/surface-icon'
 import { CheckPublications } from '@/features/repositories/check-publications'
 import { RepositoryActivityPanel } from '@/features/repositories/repository-activity-panel'
 import { RepositoryAssessments } from '@/features/repositories/repository-assessments'
-import { RepositoryCiEvidence } from '@/features/repositories/repository-ci-evidence'
 import { RepositoryPullRequests } from '@/features/repositories/repository-pull-requests'
 import {
   RepositoryRulesets,
@@ -78,8 +76,7 @@ const modules = {
     title: 'Integrations',
     section: 'Administration',
     icon: PlugZap,
-    description:
-      'Review GitHub access and the check results and reports available to Preflyt.',
+    description: 'Connect your GitHub App and manage repository access.',
   },
 }
 type Repository = { githubId: string; fullName: string; selected: boolean }
@@ -624,7 +621,7 @@ export function WorkspaceModule({ module }: { module: Module }) {
                 </CardContent>
               </Card>
             )}
-            {(module !== 'integrations' || integration === 'ci') &&
+            {module !== 'integrations' &&
               (repositories.length === 0 ? (
                 <Card>
                   <CardContent className='flex flex-wrap items-center justify-between gap-4 pt-1'>
@@ -678,17 +675,6 @@ export function WorkspaceModule({ module }: { module: Module }) {
                       />
                     </div>
                     <div className='flex flex-wrap items-center gap-2'>
-                      {module === 'integrations' && (
-                        <Badge
-                          variant='outline'
-                          className='text-muted-foreground'
-                        >
-                          {repositories.length} selected{' '}
-                          {repositories.length === 1
-                            ? 'repository'
-                            : 'repositories'}
-                        </Badge>
-                      )}
                       {repository && (
                         <Button variant='ghost' size='sm' asChild>
                           <Link
@@ -815,17 +801,6 @@ export function WorkspaceModule({ module }: { module: Module }) {
                             )}
                           />
                         </TabsContent>
-                      )}
-                      {module === 'integrations' && (
-                        <RepositoryCiEvidence
-                          showIntegrationLink={false}
-                          repositoryId={repository.githubId}
-                          canImport={canPerform(
-                            session.data,
-                            'evidence.manage',
-                            repository.githubId
-                          )}
-                        />
                       )}
                     </div>
                   ) : (

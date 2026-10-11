@@ -118,15 +118,28 @@ export type CiObservation = {
   evidenceHash: string
   observedAt: string
 }
-export type CiEvidence = { enabled: boolean; observations: CiObservation[] }
+export type CiEvidence = {
+  enabled: boolean
+  observations: CiObservation[]
+  pagination?: {
+    page: number
+    pageSize: number
+    total: number
+    hasNext: boolean
+  }
+}
 
 export function useCiEvidence(
   repositoryId: string,
   sha = '',
-  { enabled = true, poll = false }: { enabled?: boolean; poll?: boolean } = {}
+  {
+    enabled = true,
+    poll = false,
+    page,
+  }: { enabled?: boolean; poll?: boolean; page?: number } = {}
 ) {
   return useQuery<CiEvidence>({
-    queryKey: ['ci-evidence', repositoryId, sha],
+    queryKey: ['ci-evidence', repositoryId, sha, page],
     enabled,
     retry: false,
     refetchInterval: (query) =>
@@ -135,7 +148,7 @@ export function useCiEvidence(
       read<CiEvidence>(
         repositoryPath(
           repositoryId,
-          `/ci-evidence${sha ? `?sha=${encodeURIComponent(sha)}` : ''}`
+          `/ci-evidence?${new URLSearchParams({ ...(sha ? { sha } : {}), ...(page ? { page: String(page) } : {}) })}`
         ),
         signal,
         (status) =>

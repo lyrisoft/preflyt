@@ -83,6 +83,8 @@ Acceptance: Branch policies and CI jobs are separate tabs; New policy includes t
 
 Within the existing Integrations, AI Intelligence and Skills pages, prioritize the GitHub connection path and clear connection health/recovery. Keep their direct sidebar links. Present AI as optional reviews with useful default skills. Keep model routing and infrastructure details advanced. Split larger installation improvements from the friction audit into bounded follow-up tasks before implementing them.
 
+Integrations contains GitHub connection and repository access management only. Workflow results and automatically received reports remain in repository CI activity; policy results remain in Assessments. There is no manual report upload flow. CI results and Delivery timeline are separate tabs with server-backed pagination and ten rows per page. CI results retain commit filtering and charts of the latest 50 deliveries.
+
 Acceptance: each connection has a clear status and next action; a review can be configured without learning model-routing internals; secrets and source-sharing controls remain intact; no unsupported feature is presented as available.
 
 ### S5 — Remove residual clutter and validate value (source review complete; usability validation deferred)

@@ -619,16 +619,28 @@ export function RepositoryProfilePage() {
               <TabsContent value='activity' className='space-y-5'>
                 <RepositoryActivityPanel repositoryId={repositoryId} />
                 <RepositoryPullRequests repositoryId={repositoryId} />
-                <RepositoryCiEvidence
-                  canImport={canPerform(
-                    sessionQuery.data,
-                    'evidence.manage',
-                    repositoryId
-                  )}
-                  key={repositoryId}
-                  repositoryId={repositoryId}
-                />
-                <RepositoryEvents repositoryId={repositoryId} />
+                <Tabs defaultValue='results' className='space-y-4'>
+                  <TabsList aria-label='CI activity views'>
+                    <TabsTrigger value='results'>CI results</TabsTrigger>
+                    <TabsTrigger value='deliveries'>
+                      Delivery timeline
+                    </TabsTrigger>
+                  </TabsList>
+                  <TabsContent value='results'>
+                    <RepositoryCiEvidence
+                      canManageEvidence={canPerform(
+                        sessionQuery.data,
+                        'evidence.manage',
+                        repositoryId
+                      )}
+                      key={repositoryId}
+                      repositoryId={repositoryId}
+                    />
+                  </TabsContent>
+                  <TabsContent value='deliveries'>
+                    <RepositoryEvents repositoryId={repositoryId} />
+                  </TabsContent>
+                </Tabs>
               </TabsContent>
             </Tabs>
           )

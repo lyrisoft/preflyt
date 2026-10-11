@@ -272,19 +272,24 @@ export class GitHubWebhookService {
     })
   }
 
-  async evidence(repositoryId: string, sha?: string) {
+  async evidence(repositoryId: string, sha?: string, pageInput?: string) {
+    if (pageInput !== undefined && (typeof pageInput !== 'string' || !/^[1-9][0-9]{0,5}$/.test(pageInput)))
+      throw new BadRequestException('A positive page number is required')
+    const page = pageInput === undefined ? undefined : Number(pageInput)
+    const pageSize = page === undefined ? 50 : 10
     if (
       sha !== undefined &&
       (typeof sha !== 'string' || !/^[a-f0-9]{40}$/i.test(sha))
     )
       throw new BadRequestException('A full commit SHA is required')
     const repository = await this.selectedRepository(repositoryId)
+    const where = {
+      repositoryGithubId: repository.githubId,
+      installationId: repository.installationId,
+      ...(sha === undefined ? {} : { sourceSha: sha.toLowerCase() }),
+    }
     const observations = await this.prisma.importedCiEvidence.findMany({
-      where: {
-        repositoryGithubId: repository.githubId,
-        installationId: repository.installationId,
-        ...(sha === undefined ? {} : { sourceSha: sha.toLowerCase() }),
-      },
+      where,
       include: {
         artifacts: {
           select: artifactSummarySelect,
@@ -292,9 +297,12 @@ export class GitHubWebhookService {
         },
       },
       orderBy: [{ observedAt: 'desc' }, { deliveryId: 'desc' }],
-      take: 50,
+      take: pageSize,
+      ...(page === undefined ? {} : { skip: (page - 1) * pageSize }),
     })
+    const total = page === undefined ? undefined : await this.prisma.importedCiEvidence.count({ where })
     return {
+      ...(page === undefined ? {} : { pagination: { page, pageSize, total: total!, hasNext: page * pageSize < total! } }),
       enabled: this.enabled,
       source: 'github_signed_webhook',
       qualityGate: null,
@@ -328,15 +336,18 @@ export class GitHubWebhookService {
     return repository
   }
 
-  async list(repositoryId: string) {
+  async list(repositoryId: string, pageInput?: string) {
+    if (pageInput !== undefined && (typeof pageInput !== 'string' || !/^[1-9][0-9]{0,5}$/.test(pageInput)))
+      throw new BadRequestException('A positive page number is required')
+    const page = pageInput === undefined ? undefined : Number(pageInput)
+    const pageSize = page === undefined ? 50 : 10
     const repository = await this.selectedRepository(repositoryId)
+    const where = { repositoryGithubId: repository.githubId, installationId: repository.installationId }
     const deliveries = await this.prisma.gitHubWebhookDelivery.findMany({
-      where: {
-        repositoryGithubId: repository.githubId,
-        installationId: repository.installationId,
-      },
+      where,
       orderBy: [{ receivedAt: 'desc' }, { id: 'desc' }],
-      take: 50,
+      take: pageSize,
+      ...(page === undefined ? {} : { skip: (page - 1) * pageSize }),
       select: {
         id: true,
         event: true,
@@ -353,6 +364,7 @@ export class GitHubWebhookService {
         processedAt: true,
       },
     })
-    return { enabled: this.enabled, deliveries }
+    const total = page === undefined ? undefined : await this.prisma.gitHubWebhookDelivery.count({ where })
+    return { enabled: this.enabled, deliveries, ...(page === undefined ? {} : { pagination: { page, pageSize, total: total!, hasNext: page * pageSize < total! } }) }
   }
 }

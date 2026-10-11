@@ -139,7 +139,7 @@ export function CiActivityCharts({
             <strong className='font-semibold text-foreground tabular-nums'>
               {summary.reports}
             </strong>{' '}
-            imported reports
+            reports received
           </span>
         </div>
       </section>
