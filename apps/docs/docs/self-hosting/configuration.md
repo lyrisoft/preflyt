@@ -18,19 +18,19 @@ Open **Settings → Configuration** as Super Admin.
 
 | Section | What you configure |
 | --- | --- |
-| GitHub | App ID, client ID and secret, private key, webhook secret, installation and login callbacks, the sign-in switch and the event-ingestion switch |
-| Governance | A separate governance App and installation ID, check publication, ruleset activation, history import and retention |
+| GitHub | Public Preflyt API URL, App ID, client ID and secret, private key, webhook secret, installation and login callbacks, the sign-in switch and the event-ingestion switch |
+| Governance | A separate governance App and installation ID, publishing PR checks (manual and automatic), ruleset activation, history import and retention |
 | Single sign-on | OIDC issuer, client ID and secret, callback |
 | Notifications | In-app and email switches, SMTP host, port, sender, username and password |
 | Intelligence | Model configuration and advisory review switches |
 | Native execution | Preflight and execution switches |
 
-Organization-level settings (AI models and provider keys, review skills, CI bindings, policies and notification channels) stay on their own organization pages. Organization Owners and Admins cannot change deployment credentials.
+Organization-level settings stay on their own pages: AI models and provider keys, review skills, CI jobs and policies, notification channels, and **Settings → PR feedback** (PR check publication, policy summary comments and optional AI feedback). Organization Owners and Admins cannot change deployment credentials.
 
 ### How saved settings behave
 
 - **Secrets stay hidden.** The browser never receives a saved secret, only whether one is set. Leave a secret field empty to keep the saved value. Use **Clear saved** and then **Save changes** to remove it.
-- **Connection changes need a restart.** After editing GitHub, governance, OIDC, SMTP or GitHub sign-in connections, restart **both** the API and the worker. The page shows a restart notice. Until you restart, the running process keeps its previous connection.
+- **Connection changes need a restart.** After editing GitHub, governance, OIDC, SMTP or GitHub sign-in connections, restart **both** the API and the worker. The page shows a restart notice. Until you restart, the running process keeps its previous connection. The **Public Preflyt API URL** is the exception: it applies without a restart.
 - **Feature switches apply on their own.** Switches and history retention refresh every five seconds, with no restart.
 - **Concurrent edits are detected.** If someone else saved first, refresh and re-apply your change.
 - **Changes are audited.** The audit record stores who changed which fields and the revision, never secret values.

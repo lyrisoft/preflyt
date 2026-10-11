@@ -24,7 +24,7 @@ Follow [GitHub App](../self-hosting/github-app.md) to create the App with the ri
 
 ## 2. Save the App in Preflyt
 
-1. Sign in as Super Admin and open **Settings → Configuration**.
+1. Sign in as Super Admin. On the Overview, choose **Configure GitHub**, or open **Settings → Configuration**.
 2. In the **GitHub** section, fill in **App ID**, **Client ID**, **Client secret**, **Private key** and **Webhook secret**.
 3. Check that **Installation callback URL** and **Login callback URL** match the URLs registered in GitHub.
 4. Turn on **GitHub sign-in**. Turn on **GitHub event ingestion** if you have a public URL for webhooks.
@@ -35,9 +35,9 @@ Follow [GitHub App](../self-hosting/github-app.md) to create the App with the ri
    docker compose --env-file .env -f docker-compose.yaml -f compose.local.yaml restart api worker
    ```
 
-![Settings, Configuration, GitHub section with App credential fields and the two feature switches](/img/screens/settings-configuration.png)
-
 Secret fields never show a saved value. Leaving one empty keeps what you saved.
+
+**Public Preflyt API URL** is optional at this stage. It is the public HTTPS address of your Preflyt API that GitHub Actions runners use when Preflyt gives you a workflow snippet. GitHub runners cannot reach `localhost`, so leave it empty for a local trial. It applies without a restart.
 
 For GitHub sign-in you also need `GITHUB_USER_TOKEN_ENCRYPTION_KEY` in `.env`. See [Authentication](../self-hosting/authentication.md#github-sign-in).
 

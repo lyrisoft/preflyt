@@ -26,16 +26,16 @@ If the list is empty, check that:
 - the Super Admin saved the App credentials and restarted the API and worker,
 - you are signed in with a role that can connect repositories.
 
-Use **Refresh inventory** to re-read the list from GitHub. The page otherwise shows the last successful sync.
+Use **Refresh repositories** to re-read the list from GitHub. The page otherwise shows the last successful sync.
 
 If GitHub reports that the App lost access to repositories, the page tells you to reconnect the App to restore it.
 
 ## What selecting does and does not do
 
-- **Selecting** lets Preflyt read the repository's metadata and file contents to build a [profile](first-assessment.md#1-profile-the-repository), and lets webhook events for it be recorded. Events for repositories that are **not selected** are acknowledged and discarded.
+- **Selecting** lets Preflyt read the repository's metadata and file contents to build a [profile](first-assessment.md#1-inspect-the-repository), and lets webhook events for it be recorded. Events for repositories that are **not selected** are acknowledged and discarded.
 - **Selecting does not** run any repository code, build or test.
 - **Selecting does not** give other people access. Access comes from roles and repository assignment in [Access Control](../self-hosting/authentication.md).
 
 ## Next
 
-[Your first assessment](first-assessment.md).
+[Your first report](first-assessment.md).

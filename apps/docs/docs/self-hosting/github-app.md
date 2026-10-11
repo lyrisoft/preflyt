@@ -79,7 +79,8 @@ Sign in as Super Admin and open **Settings → Configuration → GitHub**:
 2. Enter the webhook secret you chose above.
 3. Confirm the installation and login callbacks match what you registered in GitHub **exactly**.
 4. Turn on **GitHub event ingestion** to start recording webhooks.
-5. Save, then **restart the API and worker**.
+5. Optionally set **Public Preflyt API URL**: the public HTTPS address of your API that GitHub Actions runners use for Preflyt workflow snippets. Localhost is rejected. This field applies without a restart.
+6. Save, then **restart the API and worker**.
 
 Callback defaults are derived from `WEB_ORIGIN` only for the one-time import of legacy values. Saved callbacks must match the deployed origin and the App registration.
 

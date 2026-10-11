@@ -30,7 +30,7 @@ flowchart LR
 | **Discover** | Profiles each selected repository with file evidence. | Available |
 | **Assess** | Freezes your standards and reported CI results at a commit. | Available |
 | **Validate** | Verifies where evidence came from, through approved CI sources and signed reports. | Available, see [Evidence and trust](evidence-and-trust.md) |
-| **Enforce** | Evaluates quality gates. Publishing checks or rulesets needs the optional governance App. | Observe-only preview |
+| **Enforce** | Shows a merge review result for every report. **Merge Protection** can publish PR checks and activate GitHub rulesets through the optional governance App. | Observe by default; enforcement is opt-in |
 | **Improve** | Trends, contributor activity and advisory AI review. | Available |
 
 ## The three engines
@@ -57,7 +57,7 @@ A "configuration found" result means a supported file or workflow reference exis
 | **Workspace** | Your organization's space in Preflyt, linked to a GitHub organization or identity provider. |
 | **Repository** | A GitHub repository you have explicitly selected. |
 | **Profile** | What Preflyt found in a repository at one commit. |
-| **Standards pack** | A versioned set of engineering rules, such as Application Security. |
-| **Assessment** | A frozen snapshot of selected standards and evidence at one commit. |
+| **Standard** | A versioned set of engineering checks, such as Application Security. |
+| **Report** (assessment) | A saved snapshot of selected standards and evidence at one commit, with a merge review result. |
 | **CI result** | A check or workflow outcome GitHub reported for a commit. |
 | **Finding** | An issue surfaced from evidence, with its own lifecycle. |

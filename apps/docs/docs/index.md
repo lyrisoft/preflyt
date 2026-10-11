@@ -36,7 +36,7 @@ By default Preflyt **observes and records**. It reads repository configuration a
 - [Quick Start](getting-started/quick-start.md): run Preflyt locally in a few minutes.
 - [Connect GitHub](getting-started/connect-github.md): register a GitHub App and link it.
 - [Select repositories](getting-started/select-repositories.md): choose what Preflyt may see.
-- [Your first assessment](getting-started/first-assessment.md): profile a repository, adopt standards and record a snapshot.
+- [Your first report](getting-started/first-assessment.md): see which checks pass, fail or still need results.
 
 ### Self-Hosting
 

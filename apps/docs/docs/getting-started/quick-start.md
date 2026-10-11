@@ -58,22 +58,15 @@ node --env-file=.env scripts/deploy/smoke.mjs
 
 ## 4. Sign in
 
-Open [http://localhost:8080](http://localhost:8080). The sign-in page says **Organization sign-in is not configured**. That is expected on a fresh install. Choose **Super Admin access**, or go straight to `http://localhost:8080/super-admin/login`.
+Open [http://localhost:8080](http://localhost:8080). On a fresh install the page says **Set up Preflyt**. Choose **Start setup** and sign in with the Super Admin username and password from `.env`.
 
-![The Preflyt sign-in page on a fresh install, with a Super Admin access link](/img/screens/sign-in.png)
+You land on the **Engineering Overview**, which shows **Connect your organization**. Choose **Configure GitHub** to continue with [Connect GitHub](connect-github.md).
 
-Sign in with the username and password you set. You land on **Engineering Overview**, which asks you to connect your first repository.
+## What the Super Admin account is for
 
-![Engineering Overview on a new install, prompting you to connect a repository](/img/screens/overview-empty.png)
+The Super Admin configures the **deployment**: GitHub App credentials, single sign-on, email and feature switches in **Settings → Configuration**.
 
-## What the Super Admin can and cannot do
-
-The Super Admin account configures the **deployment**:
-
-- Open **Settings → Configuration** to enter GitHub App credentials, single sign-on, SMTP and feature switches.
-- The sidebar shows **Select organization / Organization setup** until a workspace exists.
-
-It does **not** belong to a workspace, so workspace pages such as **Engineering Standards** and workspace **Settings** tabs show "You do not have access to this resource" until you [connect GitHub](connect-github.md) and a workspace is created.
+It is not a member of any workspace. Until a GitHub organization owner creates the workspace, the sidebar shows **Select organization / Organization setup**, and workspace pages such as **Standards** show that you do not have access. That is expected.
 
 ## Stop and start again
 

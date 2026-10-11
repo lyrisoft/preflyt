@@ -35,6 +35,22 @@ Effort: **S** about a week or less, **M** a few weeks, **L** a larger project.
 - Setup steps were taken from the deployment and operations documentation and checked against the code while writing `apps/docs`.
 - The GitHub App, installation and GitHub sign-in steps were **not** run live, because that needs a real GitHub App.
 
+## Status update, 2026-10-11
+
+Checked against the working tree after the S1 to S5 simplification work.
+
+| Item | Status |
+| --- | --- |
+| 3.1 Sign-in on a fresh install | **Resolved.** The page now says **Set up Preflyt** with a **Start setup** button. |
+| 3.3 Landing as Super Admin | **Partly resolved.** The Overview shows **Connect your organization** with **Configure GitHub**. Workspace pages such as Standards still show "no access" until a workspace exists. |
+| 5.1 and 6.1 to 6.3 Manual first steps | **Largely resolved.** **Create first report** inspects the repository, saves recommended standards and creates the report in one action. It is a click, not automatic on selection. |
+| 6.1 "Config found" sounding like success | **Resolved.** Now **Related files found**, shown as informational blue. |
+| 6.3 Report readability | **Resolved.** Reports lead with a merge review result and a next step. |
+| 6.4 Verified results | **In progress.** Workflow snippets, a setup pull request and a local policy Action exist; there is no public Action release yet. |
+| 8.3 and 8.4 Policies and Quality Gates | **Partly resolved.** Policies has Branch policies and CI jobs tabs; Quality Gates is now **Merge Protection**; the stale environment-variable message now points to **Settings → PR feedback**. |
+| 9.1 AI pricing and budgets | **Resolved.** Prices and token budgets are no longer required. |
+| 2.x Installation, 4.1 App Manifest flow, 4.2 restarts, 11.x operations | **Open.** |
+
 ---
 
 ## Stage 1: Before installing

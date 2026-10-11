@@ -1,66 +1,86 @@
 ---
 id: first-assessment
-title: Your first assessment
-sidebar_label: First assessment
-description: Profile a repository, adopt engineering standards and record your first commit assessment.
+title: Your first report
+sidebar_label: First report
+description: Create your first repository report, then review its checks, standards and evidence.
 ---
 
-# Your first assessment
+# Your first report
 
-You will profile a repository, choose the standards that apply to it, and freeze the result at an exact commit. You need to be an **Owner or Admin** and to have [selected a repository](select-repositories.md).
+A **report** (an assessment of one commit) shows which checks your repository meets, which fail and which still lack results. You need to be an **Owner or Admin** and to have [selected a repository](select-repositories.md).
 
-## 1. Profile the repository
+## The quick way: Create first report
 
-1. Open **Repositories** and select a repository card to open it.
+1. Open **Overview**.
+2. Under **Get your first repository report**, choose a repository with **Select a repository**.
+3. Choose **Create first report**.
+
+Preflyt then does three things, showing progress as it goes:
+
+1. **Inspects the repository** if it has not been inspected yet: languages, frameworks and existing CI configuration.
+2. **Saves the recommended standards** for the detected stack, unless you have already chosen your own.
+3. **Creates the report** for the inspected commit.
+
+When it finishes you see "Your first report is ready". Missing check results stay visible as missing. Merge blocking and AI source-sharing settings stay as they were.
+
+## The step-by-step way
+
+Use this when you want to choose the standards yourself first.
+
+### 1. Inspect the repository
+
+1. Open **Repositories** and open a selected repository.
 2. Choose **Discover profile**.
 
-Preflyt reads the repository's default branch through the GitHub App and records what it finds at that exact commit. Nothing in the repository is built or executed.
+Preflyt reads the default branch through the GitHub App and records what it finds at that commit. Nothing is built or run.
 
 The **Overview** tab then shows:
 
-- a summary of **selected checks**, **configuration hints**, **recent CI results** and **recent assessments**,
-- the **Control register**, filtered by **All**, **Needs review** or **Config found**,
-- the detected **Stack**, **Tooling** and the **Snapshot** (branch, commit and capture time).
+- a summary of **Selected checks**, **Configuration hints**, **Recent CI results** and **Recent assessments**,
+- **Repository checks**, filtered by **All**, **Needs review** or **Files found**,
+- the detected **Stack**, **Tooling** and **Snapshot** (branch, commit and capture time).
 
-Open the **evidence** button on any row to see which files support it, each linked to GitHub at that commit.
+**Related files found** means a supported file exists for that check, for example a workflow that mentions a scanner. It is information, not a pass: whether the check actually ran is shown in the report. Open the **evidence** button on a row to see the files, linked to GitHub at that commit.
 
 :::info Partial inspection
-If Preflyt could not read some files within its limits, the header shows **Partial inspection**. Select it to see why. Controls that depend on unread files appear as **Unknown**, not as missing.
+If Preflyt could not read some files, the header shows **Partial inspection**. Select it to see why. Checks that depend on unread files show **Unknown**, not missing.
 :::
 
-Choose **Refresh profile** whenever you want to inspect the latest default-branch commit. Each profile is a separate saved snapshot.
+Choose **Refresh profile** to inspect the latest commit again.
 
-## 2. Adopt engineering standards
+### 2. Choose standards
 
-1. Open the **Standards** tab.
-2. Choose **Choose packs**. A side panel opens.
-3. Pick an **Adoption profile**: **Default** (core requirements), **Recommended** (adds broader evidence) or **Strict** (adds resilience requirements). All of them run in **observe mode**.
-4. Tick the **packs** that apply. Packs matching your detected stack are marked **Recommended**.
-5. Choose **Save selection**.
+1. Open the **Standards** tab and choose **Choose standards**.
+2. Pick a **Requirement level**: **Core** (baseline requirements), **Recommended** (adds broader checks) or **Strict** (also requires resilience checks).
+3. Choose up to five standards. Standards that match the detected stack are marked **Recommended**.
+4. Review the changes Preflyt shows, then choose **Save standards**.
 
-The five built-in packs are Baseline Engineering, Application Security, Backend Services, Frontend Applications and Infrastructure as Code. Each is versioned, and the **Pack catalogue** lets you open any pack's rules.
+Saving standards does not turn on GitHub merge protection, and existing branch policies keep their approved version until you publish a new revision.
 
-Your saved selection becomes the **Control register** on the Overview. Each control is marked **Required** or **Advisory** and shows whether its configuration was found in the profile.
-
-## 3. Create an assessment
-
-An assessment **freezes** your standards and the evidence available for one commit, so you can compare later.
+### 3. Create the report
 
 1. Open the **Assessments** tab and choose **New assessment**.
-2. The **commit SHA** is filled with the profiled commit. Replace it with any full 40-character SHA that Preflyt has a profile or CI result for.
-3. Optionally, for each control, choose a **CI result** from that commit to associate with it. Leave **No association** if none applies.
+2. The commit is filled with the inspected commit. You can enter another full 40-character SHA that Preflyt has a profile or CI result for.
+3. Under **CI result per control**, leave **Use the approved CI source if available** unless you need to link a specific result by hand.
 4. Choose **Create assessment**.
 
-The snapshot appears in the list. Open it to see its coverage, the controls table (requirement, coverage and the associated CI result) and **Source and verification details** with digests of everything it froze.
-
-:::caution Associations are your claim
-A CI result you associate with a control is recorded as **unverified**: Preflyt cannot tell from GitHub alone that the job covered that control. A successful job never turns into a pass by itself. [Evidence and trust](../concepts/evidence-and-trust.md) explains how to get verified coverage.
+:::caution Manual links are your claim
+A CI result you link by hand is recorded as unverified. It never turns into a pass on its own. See [Evidence and trust](../concepts/evidence-and-trust.md).
 :::
 
-If your GitHub App receives pull request events, Preflyt also creates assessments automatically for the head commit of pull requests in selected repositories that have adopted standards. These are historical snapshots of that commit. They do not run code or block the pull request.
+## Reading the report
+
+Open a row in **Saved assessments** to see the report:
+
+- The **Merge review result** at the top: **Required checks passed**, **Required checks failed**, **Required results incomplete** or **Optional checks need attention**.
+- A **Next step** telling you what to do.
+- Failed and incomplete required checks first. Passing and optional checks are available through the filter.
+- **Source and verification details** for the digests of everything the report saved.
+
+Reports are historical: each one describes a single commit. If your GitHub App receives pull request events, Preflyt also creates reports automatically for pull request commits in repositories with saved standards.
 
 ## What next
 
-- Read [How Preflyt works](../concepts/how-preflyt-works.md) and [Status labels](../concepts/status-labels.md) to interpret what you see.
+- Read [How Preflyt works](../concepts/how-preflyt-works.md) and [Status labels](../concepts/status-labels.md).
 - Set up [webhooks](../self-hosting/github-app.md#3-subscribe-to-events) to collect CI results automatically.
 - Invite your team from **Access Control**.

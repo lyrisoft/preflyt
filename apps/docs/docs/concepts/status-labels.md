@@ -21,23 +21,23 @@ Every status in Preflyt has a **text label** as well as a colour, so meaning nev
 
 Green is never used for something that is unknown or unassessed.
 
-## Control configuration
+## Repository checks
 
-Shown on the Overview controls table.
+Shown on the repository **Overview**. Filter the list with **All**, **Needs review** or **Files found**.
 
 | Label | Meaning |
 | --- | --- |
-| Configuration found | A supported file or workflow reference exists at the profiled commit. It does not prove the tool ran. |
+| Related files found | A supported file or workflow reference exists at the inspected commit. Shown in blue, because it is information, not a pass. |
 | Not found | No supported configuration was found. This is not a policy failure. |
 | Unknown | Preflyt could not tell, for example because files were unreadable or the check is not implemented. |
 
-## Assessment coverage
+## Check coverage in a report
 
-Shown per control inside an assessment.
+Shown per check inside a report.
 
 | Label | Meaning |
 | --- | --- |
-| Configuration found | Configuration observed at that exact commit. |
+| Related files found | Supporting files were observed at that exact commit. |
 | Not found | Nothing associated or observed. |
 | Source not verified | A CI result is associated but its source is not verified. |
 | Pending | The associated CI result had not finished. |
@@ -48,7 +48,7 @@ Shown per control inside an assessment.
 | Multiple matching results | Conflicting results with the same or unknown time. |
 | Not available | The check adapter does not exist yet, so an association cannot enable it. |
 
-An assessment's overall coverage is **Incomplete** when mandatory evidence is missing, or **Not evaluated** when no required checks exist.
+Each check in a report also has a result: **Passed**, **Failed**, **Incomplete** or **Not evaluated**.
 
 ## CI results
 
@@ -69,15 +69,15 @@ An assessment's overall coverage is **Incomplete** when mandatory evidence is mi
 | Not processed | Repository access changed before the worker processed it. |
 | Processing failed | The worker gave up after repeated attempts. See [Troubleshooting](../self-hosting/troubleshooting.md). |
 
-## Quality gate preview
+## Merge review result
 
-The Quality Gates page is an **observe-only** preview. Its outcome comes only from a frozen assessment, so it is repeatable.
+Every report leads with one merge review result. It comes only from the saved report, so it is repeatable. It is Preflyt's view; whether GitHub allows a merge is decided by GitHub.
 
-| Outcome | Meaning |
+| Result | Meaning |
 | --- | --- |
-| **PASS** | Every rule is met by observed evidence. For configuration rules this confirms configuration only. |
-| **WARN** | Every required rule passes, but an advisory rule does not. |
-| **BLOCK** | A required rule has a failed result from an approved, verified CI source at that commit. |
-| **INCOMPLETE** | Required evidence is missing, stale or unverified, collection was truncated, or the policy has no required rules. |
+| Required checks passed | Every check is met by observed evidence. For configuration checks this confirms configuration only. |
+| Optional checks need attention | Every required check passes, but an optional check does not. |
+| Required checks failed | A required check has a failed result from an approved, verified CI source at that commit. |
+| Required results incomplete | Required evidence is missing, stale or unverified, collection was truncated, or the policy has no required checks. |
 
-Execution results that Preflyt cannot verify stay **INCOMPLETE**. They never become a pass.
+Results that Preflyt cannot verify stay incomplete. They never become a pass.
