@@ -121,3 +121,12 @@ it('does not present detected configuration files as a passed check', () => {
   expect(statusTones['related files found']).toBe('info')
   expect(statusTones.passed).toBe('success')
 })
+
+it('preserves managed ruleset deployment status colors', () => {
+  expect(statusTones.preview).toBe('warning')
+  expect(statusTones.drifted).toBe('warning')
+  expect(statusTones.unknown).toBe('warning')
+  expect(statusTones.deploying).toBe('info')
+  expect(statusTones['rolling back']).toBe('info')
+  expect(statusTones['rolled back']).toBe('neutral')
+})

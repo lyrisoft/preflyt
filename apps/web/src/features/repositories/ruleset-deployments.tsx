@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react'
+import { toast } from 'sonner'
 import { handleServerError } from '@/lib/handle-server-error'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -45,6 +46,20 @@ type Deployment = {
   message: string | null
   verifiedAt: string | null
 }
+function canonicalJson(value: unknown): string {
+  return JSON.stringify(value, (_, item: unknown) =>
+    item && typeof item === 'object' && !Array.isArray(item)
+      ? Object.fromEntries(
+          Object.entries(item).sort(([a], [b]) => a.localeCompare(b))
+        )
+      : item
+  )
+}
+type Verification = {
+  state: string
+  observed: Record<string, unknown>
+  expected: Record<string, unknown>
+}
 type Page = {
   enabled: boolean
   canSelfApprove: boolean
@@ -64,6 +79,7 @@ export function RulesetDeployments({
     [draftId, setDraftId] = useState(''),
     [selected, setSelected] = useState<Deployment | null>(null),
     [busy, setBusy] = useState(false),
+    [verification, setVerification] = useState<Verification | null>(null),
     [error, setError] = useState(''),
     [confirmation, setConfirmation] = useState<'deploy' | 'rollback' | null>(
       null
@@ -104,10 +120,37 @@ export function RulesetDeployments({
           })
         )
       } else if (row) {
-        await governanceRequest(`${root}/${row.id}/${kind}`, {
-          expectedPreviewHash: row.previewHash,
-        })
-        setSelected(null)
+        if (kind === 'refresh') {
+          const result = await governanceRequest<Verification>(
+            `${root}/${row.id}/${kind}`,
+            { expectedPreviewHash: row.previewHash }
+          )
+          setVerification(result)
+          setSelected({
+            ...row,
+            state: result.state,
+            message:
+              result.state === 'DRIFTED'
+                ? 'GitHub protections changed outside Preflyt. Review the differences below. Preflyt has not overwritten them.'
+                : null,
+          })
+          if (result.state === 'DRIFTED')
+            toast.warning('GitHub ruleset changes detected')
+          else toast.success('GitHub ruleset verified')
+        } else {
+          await governanceRequest(`${root}/${row.id}/${kind}`, {
+            expectedPreviewHash: row.previewHash,
+          })
+          setSelected(null)
+          setVerification(null)
+          toast.success(
+            kind === 'rollback'
+              ? 'Managed ruleset disabled and verified'
+              : kind === 'deploy'
+                ? 'GitHub ruleset activated and verified'
+                : 'Ruleset activation approved'
+          )
+        }
       }
       setConfirmation(null)
       await query.refetch()
@@ -228,6 +271,7 @@ export function RulesetDeployments({
                             size='sm'
                             onClick={() => {
                               setSelected(row)
+                              setVerification(null)
                               setConfirmation(null)
                               setError('')
                             }}
@@ -296,7 +340,13 @@ export function RulesetDeployments({
             <>
               <div className='flex-1 space-y-5 overflow-y-auto p-6'>
                 <StatusBadge
-                  tone={selected.state === 'ACTIVE' ? 'success' : 'info'}
+                  tone={
+                    selected.state === 'DRIFTED'
+                      ? 'warning'
+                      : selected.state === 'ACTIVE'
+                        ? 'success'
+                        : 'neutral'
+                  }
                 >
                   {selected.state.replace(/_/g, ' ').toLowerCase()}
                 </StatusBadge>
@@ -307,6 +357,63 @@ export function RulesetDeployments({
                 )}
                 {selected.message && (
                   <p className='text-sm'>{selected.message}</p>
+                )}
+                {verification?.state === 'DRIFTED' && (
+                  <section
+                    className='space-y-3'
+                    aria-label='GitHub configuration changes'
+                  >
+                    <h3 className='text-sm font-semibold'>
+                      Changes detected on GitHub
+                    </h3>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Setting</TableHead>
+                          <TableHead>Last verified</TableHead>
+                          <TableHead>On GitHub now</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {Array.from(
+                          new Set([
+                            ...Object.keys(verification.expected),
+                            ...Object.keys(verification.observed),
+                          ])
+                        )
+                          .filter(
+                            (key) =>
+                              canonicalJson(verification.expected[key]) !==
+                              canonicalJson(verification.observed[key])
+                          )
+                          .map((key) => (
+                            <TableRow key={key}>
+                              <TableCell className='align-top font-medium'>
+                                {key.replace(/_/g, ' ')}
+                              </TableCell>
+                              <TableCell className='max-w-56 align-top'>
+                                <pre className='text-xs break-all whitespace-pre-wrap'>
+                                  {JSON.stringify(
+                                    verification.expected[key] ?? null,
+                                    null,
+                                    2
+                                  )}
+                                </pre>
+                              </TableCell>
+                              <TableCell className='max-w-56 align-top'>
+                                <pre className='text-xs break-all whitespace-pre-wrap'>
+                                  {JSON.stringify(
+                                    verification.observed[key] ?? null,
+                                    null,
+                                    2
+                                  )}
+                                </pre>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                      </TableBody>
+                    </Table>
+                  </section>
                 )}
                 <section className='space-y-3'>
                   <h3 className='text-sm font-semibold'>
