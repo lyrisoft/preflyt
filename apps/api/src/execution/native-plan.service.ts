@@ -1,3 +1,4 @@
+import { currentStandards } from '../standards/policy-standards.js'
 import { ConflictException, Inject, Injectable } from '@nestjs/common'
 import { AuthorizationService } from '../auth/authorization.service.js'
 import type { AuthenticatedSession } from '../auth/session.guard.js'
@@ -25,16 +26,14 @@ export class NativePlanService {
       repositoryId,
       'assessment.read',
     )
-    const [profile, selection] = await Promise.all([
+    const [profile] = await Promise.all([
       this.prisma.repositoryProfile.findFirst({
         where: { repositoryId: repo.id },
         orderBy: { createdAt: 'desc' },
       }),
-      this.prisma.repositoryStandardsSelection.findFirst({
-        where: { repositoryId: repo.id },
-        orderBy: { revision: 'desc' },
-      }),
+
     ])
+    const selection = await currentStandards(this.prisma, repo.id, { branchRef: profile?.branch ? `refs/heads/${profile.branch}` : undefined });
     if (!profile || !selection)
       throw new ConflictException(
         'Inspect this repository and save its standards before planning checks.',

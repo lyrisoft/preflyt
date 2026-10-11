@@ -1,3 +1,6 @@
+import { pipelineVerifications, githubReportExecutions } from './pipeline-verification.js'
+import { excludePreflytFeedback } from '../github-events/preflyt-feedback.js'
+import { currentStandards, selectionBindingWhere } from '../standards/policy-standards.js'
 import {
   freezeNativeEvidence,
   readLatestNativeEvidence,
@@ -144,21 +147,28 @@ export class AssessmentService {
     pullRequest: NonNullable<Trigger['pullRequest']>,
   ) {
     const repo = await this.repository(id)
-    return this.prisma.$transaction((tx) =>
-      this.persist(
-        tx,
-        repo,
-        id,
-        {
-          sourceSha,
-          expectedSelectionId: selectionId,
-          requestKey,
-          mappings: [],
-        },
-        actorId,
-        { kind: 'AUTOMATIC', deliveryId: null, pullRequest },
-      ),
-    )
+    return this.prisma.$transaction(async (tx) => {
+      // Polling revalidates GitHub, but unchanged evidence should reuse its snapshot.
+      const where = { repositoryGithubId: repo.githubId, installationId: repo.installationId,
+        sourceSha, ...excludePreflytFeedback() }
+      const [observations, profile, binding, native, selection] = await Promise.all([
+        tx.importedCiEvidence.findMany({ where, orderBy: [{ observedAt: 'desc' }, { deliveryId: 'desc' }],
+          take: 101, select: { evidenceHash: true, artifacts: { orderBy: { id: 'asc' },
+            select: { id: true, sha256: true, attestations: { orderBy: { id: 'asc' }, select: { id: true } } } } } }),
+        tx.repositoryProfile.findFirst({ where: { repositoryId: repo.id, sourceSha },
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], select: { id: true } }),
+        tx.repositoryCiBindings.findFirst({ where: selectionBindingWhere(repo.id, selectionId),
+          orderBy: { revision: 'desc' }, select: { id: true, revision: true } }),
+        readLatestNativeEvidence(tx, { repositoryGithubId: id, sourceSha, selectionId }),
+        currentStandards(tx, repo.id, { expectedId: selectionId, branchRef: `refs/heads/${pullRequest.base.ref}` }),
+      ])
+      const githubVerification = await pipelineVerifications(tx, repo.id, sourceSha, selectionId)
+      const key = `auto:${digest({ githubVerification, repositoryId: repo.id, sourceSha, actorId, pullRequest,
+        selection, observations, profile, binding,
+        native: native.map(freezeNativeEvidence), proofPolicy: reportProofPolicy()?.digest ?? null })}`
+      return this.persist(tx, repo, id, { sourceSha, expectedSelectionId: selectionId,
+        requestKey: key, mappings: [] }, actorId, { kind: 'AUTOMATIC', deliveryId: null, pullRequest })
+    })
   }
 
   /** Internal native completion produces a new immutable commit snapshot. */
@@ -225,10 +235,7 @@ export class AssessmentService {
       },
     })
     if (!repo) throw new ForbiddenException('Repository access changed')
-    const selection = await tx.repositoryStandardsSelection.findFirst({
-      where: { repositoryId: repo.id },
-      orderBy: { revision: 'desc' },
-    })
+    const selection = await currentStandards(tx, repo.id, { branchRef: pullRequest ? `refs/heads/${pullRequest.base.ref}` : (repo.defaultBranch ? `refs/heads/${repo.defaultBranch}` : undefined) })
     if (!selection) return { assessment: null, reason: 'standards_not_adopted' }
     const result = await this.persist(
       tx,
@@ -306,10 +313,7 @@ export class AssessmentService {
         )
       return { assessment: existing, duplicate: true }
     }
-    const selection = await tx.repositoryStandardsSelection.findFirst({
-      where: { repositoryId: repo.id },
-      orderBy: { revision: 'desc' },
-    })
+    const selection = await currentStandards(tx, repo.id, { expectedId: input.expectedSelectionId, ...(trigger.pullRequest ? { branchRef: `refs/heads/${trigger.pullRequest.base.ref}` } : {}) })
     if (!selection || selection.id !== input.expectedSelectionId)
       throw new ConflictException(
         'Save or reload the current standards selection first',
@@ -326,6 +330,7 @@ export class AssessmentService {
         repositoryGithubId: repo.githubId,
         installationId: repo.installationId,
         sourceSha: normalized.sourceSha,
+        ...excludePreflytFeedback(),
       },
       orderBy: [{ observedAt: 'desc' }, { deliveryId: 'desc' }],
       take: 101,
@@ -386,7 +391,7 @@ export class AssessmentService {
         'Mappings must reference selected rules and collected evidence from this exact repository commit',
       )
     const binding = await tx.repositoryCiBindings.findFirst({
-      where: { repositoryId: repo.id },
+      where: selectionBindingWhere(repo.id, selection.id),
       orderBy: { revision: 'desc' },
     })
     const bindingActive = binding?.selectionId === selection.id
@@ -433,6 +438,7 @@ export class AssessmentService {
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: MAX_VALIDATION_ARTIFACTS,
     })
+    const githubVerification = await pipelineVerifications(tx, repo.id, normalized.sourceSha, selection.id)
     const validations = new Map<string, ObservationValidation>()
     for (const row of observations.filter((o) =>
       mappedIds.includes(o.deliveryId),
@@ -446,7 +452,7 @@ export class AssessmentService {
           .slice(0, MAX_VALIDATION_ARTIFACTS)
           .filter((a) => a.deliveryId === row.deliveryId)
           .map((a) =>
-            validateReport({
+            ({ ...validateReport({
               ...a,
               provenance: validatedProvenance(
                 receipts.find((r) => r.artifactId === a.id),
@@ -460,7 +466,7 @@ export class AssessmentService {
                   runAttempt: runAttempt(row.sourceIdentity),
                 },
               ),
-            }),
+            }), githubExecutions: githubReportExecutions(githubVerification, row, a.sha256) }),
           ),
       })
     const installation = await tx.gitHubInstallation.findUnique({

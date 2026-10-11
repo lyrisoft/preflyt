@@ -44,6 +44,7 @@ export function ThemeCards() {
       </div>
       <RadioGroup.Root
         aria-labelledby='theme-label'
+        orientation='horizontal'
         value={theme}
         onValueChange={(value) => setTheme(value as typeof theme)}
         className='grid grid-cols-1 gap-4 sm:grid-cols-3'

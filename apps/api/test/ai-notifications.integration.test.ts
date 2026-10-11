@@ -7,7 +7,7 @@ import { AuthorizationService } from '../src/auth/authorization.service.js';
 import { NotificationsService } from '../src/notifications/notifications.service.js';
 import { deliverNotification } from '../src/notifications/notification-delivery.js';
 import { deliverNotificationEmail } from '../src/notifications/notification-email-delivery.js';
-import { recordAiBudgetNotification, recordAiInferenceOutcome } from '../src/notifications/ai-notification.js';
+import { recordAiInferenceOutcome } from '../src/notifications/ai-notification.js';
 import type { AuthenticatedSession } from '../src/auth/session.guard.js';
 let fixture: Awaited<ReturnType<typeof disposableDatabase>>, db: PrismaService;
 const org = 'ai-notification-org';
@@ -37,8 +37,9 @@ async function signal(outcome: 'transport_failed' | 'succeeded' = 'transport_fai
   await recordAiInferenceOutcome(db, input);
   return input;
 }
-async function budget() {
-  await db.$transaction(tx => recordAiBudgetNotification(tx, repo, org, 'owner', { id: 'route', revision: 1, stage: 'repository' }, '2026-10-10'));
+// Old budget notices remain access-controlled history; runtime no longer creates them.
+async function legacyNotice() {
+  await db.notificationEvent.createMany({ data: [{ id: 'historical-ai-notice', organizationId: org, repositoryId: repo.id, repositoryGithubId: repo.githubId.toString(), repositoryName: repo.fullName, actorId: 'owner', type: 'AI_REVIEW_BUDGET_REACHED', severity: 'warning' }], skipDuplicates: true });
   return db.notificationEvent.findFirstOrThrow({ where: { type: 'AI_REVIEW_BUDGET_REACHED' } });
 }
 it('debounces actual failures across three distinct reviews and deduplicates concurrent delivery signals', async () => {
@@ -87,7 +88,7 @@ it('excludes cancelled jobs, changed providers, inactive requesters and unavaila
 });
 it('sends AI configuration alerts only to current Owner/Admin despite assessment opt-out', async () => {
   await db.notificationPreference.create({ data: { identityId: 'owner', organizationId: org, assessments: false } });
-  const event = await budget(); await budget(); await deliverNotification(db, event.id);
+  const event = await legacyNotice(); await legacyNotice(); await deliverNotification(db, event.id);
   expect((await db.inboxNotification.findMany()).map(row => row.identityId).sort()).toEqual(['admin', 'owner']);
   const inbox = new NotificationsService(db, new AuthorizationService(db));
   expect((await inbox.list(session(), { type: 'AI_REVIEW_BUDGET_REACHED', severity: 'warning', repository: '81818' })).total).toBe(1);
@@ -99,7 +100,7 @@ it('sends AI configuration alerts only to current Owner/Admin despite assessment
 it('rechecks current GitHub repository access when reading AI alerts or sending email', async () => {
   vi.stubEnv('NOTIFICATION_EMAIL_ENABLED', 'true');
   await db.notificationPreference.create({ data: { identityId: 'owner', organizationId: org, email: true, assessments: false } });
-  const event = await budget(); await deliverNotification(db, event.id);
+  const event = await legacyNotice(); await deliverNotification(db, event.id);
   const repositoryIds = vi.fn().mockResolvedValue([repo.githubId]);
   const auth = new AuthorizationService(db, { repositoryIds } as any);
   const inbox = new NotificationsService(db, auth);
@@ -114,7 +115,7 @@ it('rechecks current GitHub repository access when reading AI alerts or sending 
 it('skips AI configuration email when an administrator is demoted even if repository access remains', async () => {
   vi.stubEnv('NOTIFICATION_EMAIL_ENABLED', 'true');
   await db.notificationPreference.create({ data: { identityId: 'owner', organizationId: org, email: true, assessments: false } });
-  const event = await budget(); await deliverNotification(db, event.id);
+  const event = await legacyNotice(); await deliverNotification(db, event.id);
   const delivery = await db.notificationEmailDelivery.findFirstOrThrow();
   await db.organizationMembership.update({ where: { id: 'member-owner' }, data: { role: 'DEVELOPER' } });
   const mail = { send: vi.fn() }; await deliverNotificationEmail(db, new AuthorizationService(db), mail, delivery.id);
@@ -131,10 +132,9 @@ it('includes scoped Security Engineers in native execution failure alerts and hi
   await db.repositoryGrant.deleteMany({ where: { membershipId: 'member-security' } });
   expect((await inbox.list(session('security'), {})).items).toEqual([]);
 });
-it('does not write AI alert signals or budget events when notifications are disabled', async () => {
+it('does not write AI alert signals when notifications are disabled', async () => {
   vi.stubEnv('NOTIFICATIONS_ENABLED', 'false');
   await signal();
-  await db.$transaction(tx => recordAiBudgetNotification(tx, repo, org, 'owner', { id: 'route', revision: 1, stage: 'repository' }, '2026-10-10'));
   expect(await db.auditEvent.count()).toBe(0); expect(await db.notificationEvent.count()).toBe(0);
 });
 

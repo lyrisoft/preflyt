@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ArrowUpRight, Workflow } from 'lucide-react'
+import { ArrowUpRight } from 'lucide-react'
 import { IconGithub } from '@/assets/brand-icons'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/select'
 import { StatusBadge } from '@/components/status-badge'
 
-export type IntegrationId = 'github' | 'ci'
+export type IntegrationId = 'github'
 export function IntegrationCatalogue({
   connected,
   selected,
@@ -34,16 +34,6 @@ export function IntegrationCatalogue({
       tone: connected ? ('success' as const) : ('neutral' as const),
       color: 'bg-chart-1/10 text-chart-1',
     },
-    {
-      id: 'ci' as const,
-      name: 'Check results and reports',
-      description:
-        'Import check results and workflow runs for your repositories.',
-      icon: Workflow,
-      status: 'Available',
-      tone: 'info' as const,
-      color: 'bg-chart-2/10 text-chart-2',
-    },
   ]
   const visible = integrations.filter(
     (item) =>
@@ -53,9 +43,7 @@ export function IntegrationCatalogue({
       (filter === 'all' ||
         (filter === 'connected'
           ? item.status === 'Connected'
-          : filter === 'disconnected'
-            ? item.status === 'Not connected'
-            : item.status === 'Available'))
+          : item.status === 'Not connected'))
   )
   return (
     <section aria-label='Integration catalogue' className='space-y-4'>
@@ -78,7 +66,6 @@ export function IntegrationCatalogue({
             <SelectItem value='all'>All integrations</SelectItem>
             <SelectItem value='connected'>Connected</SelectItem>
             <SelectItem value='disconnected'>Not connected</SelectItem>
-            <SelectItem value='available'>Available</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -90,11 +77,11 @@ export function IntegrationCatalogue({
             aria-pressed={selected === item.id}
             onClick={() => onSelect(item.id)}
             className={cn(
-              'group flex min-h-48 flex-col rounded-xl border bg-card p-5 text-left transition-[border-color,box-shadow] duration-150 hover:border-primary/40 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none motion-reduce:transition-none',
+              'group flex min-h-36 flex-col rounded-xl border bg-card p-4 text-left transition-[border-color,box-shadow] duration-150 hover:border-primary/40 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none motion-reduce:transition-none',
               selected === item.id && 'border-primary/50 bg-primary/5'
             )}
           >
-            <span className='mb-7 flex items-center justify-between gap-3'>
+            <span className='mb-3 flex items-center justify-between gap-3'>
               <span
                 className={cn(
                   'flex size-10 shrink-0 items-center justify-center rounded-xl border border-current/10',
@@ -116,11 +103,7 @@ export function IntegrationCatalogue({
               {item.description}
             </span>
             <span className='mt-4 text-xs font-medium text-primary'>
-              {item.id === 'github'
-                ? connected
-                  ? 'Manage connection'
-                  : 'Set up connection'
-                : 'View imports'}
+              {connected ? 'Manage connection' : 'Set up connection'}
             </span>
           </button>
         ))}

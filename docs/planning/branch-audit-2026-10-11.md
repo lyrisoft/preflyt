@@ -1,0 +1,61 @@
+# Current branch audit — 11 October 2026
+
+Branch: `codex/p0-p3-phase-closure`. Reviewed base: `25d12a8`.
+
+Scope: all pending changes in the visible Preflyt checkout, including the previously staged notification, model selection and documentation changes. No isolated worktree, remote push or PR merge was performed for this audit.
+
+## Reviewed changes
+
+- Signed GitHub repository webhook ingestion binds events without installation metadata only to an existing selected repository with an active installation and matching repository identity.
+- Preflyt-generated feedback events are excluded from CI evidence. Unchanged automatic evidence reuses an assessment; changed evidence produces a new snapshot.
+- Repository PR feedback supports one repository or all authorized selected repositories. AI review authorization is recorded with its revision and time, rechecked during dispatch, and excludes verified submissions preceding consent.
+- Automatic PR AI review uses the published policy's standards, bounded changed-code context and constrained evidence references. Summary and inline suggestions go on the PR; AI feedback remains advisory and never approves the PR or overrides a required policy check.
+- Explicit retries of unavailable AI reviews recheck authorization and retain bounded retry accounting. Automatic dispatch remains idempotent.
+- Notification explanations and links use authorized repository context. Email notifications keep repository details behind sign-in. Model routing excludes the primary model from fallback selection.
+- Both Prisma migrations match the repository AI settings in the schema. They were applied locally and the client regenerated during the live integration work.
+
+## Audit corrections
+
+1. Removed instructions to configure token budgets from historical AI notifications, retaining support for already recorded events.
+2. Replaced an incorrect all-repositories “Disabled” status with actual enabled counts. Policy comments and AI review controls also show their enabled counts; bulk check buttons explicitly apply to all selected repositories.
+3. Removed the redundant settings refresh after a successful bulk update.
+4. Changed failed-check guidance to rerun the workflow instead of asking pipeline users to save another assessment manually.
+5. Updated outdated ruleset/editor test fixture types and the fullscreen mock so application compilation and touched-file lint succeed.
+
+No additional commit-blocking issue was found in the reviewed diff. This is a branch audit, not a claim that the three remaining live acceptance cases passed.
+
+## Validation
+
+- API TypeScript compilation passed without emitting build artifacts.
+- Changed frontend files passed ESLint and Prettier checks.
+- Frontend application TypeScript compilation passed without emitting build artifacts.
+- Diff whitespace checks passed. An added-line credential scan found no credential values; no environment or private-key files are included.
+- No unit, integration or live tests were run for this audit. Earlier live verification and focused regression results are recorded in the saved live-test report.
+
+## Live evidence already recorded
+
+[Acceptance PR #5](https://github.com/lyrisoft/preflyt-p2-acceptance/pull/5) remains open and unmerged. Its tested workflow detected intentional test/scanner failures; Preflyt saved the assessment, registered both sources automatically, published a failed readiness check and updated the policy comment. The [automatic OpenAI review](https://github.com/lyrisoft/preflyt-p2-acceptance/pull/5#pullrequestreview-5482150320) posted two inline findings on changed application code.
+
+## Three live tests still pending
+
+1. **Trusted passing path:** run a clean fixture with configured execution proof and verify passing assessment, PR publication and AI feedback. The local test deployment currently lacks the required attestation/verifier and execution-contract setup.
+2. **Publication failure gate:** install reviewed gate integration on the acceptance repository's default branch, then verify publication failure and timeout fail the final gate. The workflow currently exists only on the test branch; the defect fixture must remain unmerged.
+3. **Merge enforcement:** require the Preflyt readiness/publication checks on the test branch target and verify failed results block merging while passing results clear those requirements. Existing review/conversation blocking does not prove Preflyt enforcement. Ruleset activation also needs the appropriate GitHub Administration permission.
+
+The temporary test webhook is inactive and the tunnel is stopped. The next live run needs a reachable API URL and reactivated test event delivery. Those external changes have not been made during this audit.
+
+## Live acceptance follow-up — 11 October 2026
+
+The three acceptance cases above were exercised after this audit. The normal same-repository GitHub path now verifies the configured completed workflow and jobs directly; separate report signatures are optional. Server-only receipts bind report checksums, check IDs, repository, exact SHA, run attempt, workflow and published policy. Uploaded claims alone cannot establish a passing check.
+
+- Clean PR #7, head `bde548696094c5c396b918a92ab954ee5e29aafe`: [pipeline 38122284691](https://github.com/lyrisoft/preflyt-p2-acceptance/actions/runs/38122284691) passed eight application tests and the security scan. Assessment `cmv3ioh01001jzm6nswoeh5rg` completed with 2/2 required checks passed; sources registered and policy feedback published automatically. [Final gate 38122321254](https://github.com/lyrisoft/preflyt-p2-acceptance/actions/runs/38122321254) passed. [Automatic AI PR review](https://github.com/lyrisoft/preflyt-p2-acceptance/pull/7#pullrequestreview-5482415562) succeeded with the configured DeepSeek `deepseek-flash` primary. Existing OpenAI fallback remained configured but was not used for this successful review.
+- Publication confirmation failure: gate 38120884317 attempt 2 failed when the restricted test proxy returned an authenticated 503 confirmation response. Removing the fault and rerunning attempt 3 passed. This exercised confirmation failure, not a forced outage of GitHub's Check creation API.
+- Waiting timeout: gate 38120428288 attempt 2 failed after ten minutes when an authenticated confirmation was deliberately held pending. The proxy fault was removed afterwards.
+- Defect PR #5, head `7292f0567e646baf9f980f769d03e6954f411fd6`: pipeline 38120760814 and final gate 38120796918 failed. Its Preflyt check is required and failed; GitHub disables merging. Clean PR #7's required Preflyt check passed; existing conversation requirements still block overall merging. Both PRs remain open and unmerged.
+- Enforcement was verified with an owner-created main-only repository ruleset 24869943 requiring `Preflyt / Engineering Readiness` from App 4585551. The inherited organization rule was unchanged. Preflyt-managed ruleset activation remains unverified because the configured GitHub App has Administration read rather than write access; its UI draft remains saved.
+
+Additional live-test repairs: exclude Preflyt-generated Action/gate/configuration paths from PR AI source; keep the user's DeepSeek default and existing fallback; request final structured JSON from DeepSeek and give fallback inference a separate deadline. Restore compact built-in OpenAI, Anthropic, Gemini and DeepSeek provider cards above configured models, each opening the model-name/API-key form without endpoint or pricing fields.
+
+Validation: focused receipt, provider, evidence, published-policy, historical gate, PR scope, AI inference/deadline/cancellation and provider UI regressions passed. API and frontend TypeScript compilation passed. The provider UI was verified in Chrome, and its focused automated regression ran in a separate headless Chromium instance. No full suite run.
+
+Cleanup: the temporary acceptance webhook was deactivated, restricted proxy/tunnel stopped, and prior Public API URL restored. Local Preflyt remains running. Future live Actions runs need a reachable deployment or a fresh authorized tunnel; the test workflows still contain the stopped test URL. No defect/application PR was merged and no shared App permission or webhook was broadened.

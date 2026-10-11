@@ -20,6 +20,12 @@ export type PrReviewSource = {
 };
 const credential =
   /Bearer\s+[a-zA-Z0-9._~+\/-]{16,}|-----BEGIN (?:[A-Z ]*PRIVATE KEY)|\b(?:gh[pousr]_[a-zA-Z0-9]{20,}|github_pat_[a-zA-Z0-9_]{20,}|sk-[a-zA-Z0-9_-]{16,}|AKIA[A-Z0-9]{16})|(?:password|api[_-]?key|access[_-]?token|secret)\s*[:=]\s*["']?[^\s"']{8,}/i;
+// These paths are installed by Preflyt's generated integration. User-authored
+// workflows and custom Actions remain reviewable.
+const preflytIntegration = (path: string) =>
+  path.startsWith(".github/actions/preflyt-policy/") ||
+  /^\.github\/workflows\/preflyt-gate\.ya?ml$/.test(path) ||
+  path.startsWith(".preflyt/");
 export function sameReviewPr(a: unknown, b: unknown) {
   const x = readPullRequestContext(a),
     y = readPullRequestContext(b);
@@ -37,21 +43,29 @@ export function prReviewSource(
   number: number,
   expected: PullRequestContext,
   files: unknown,
+  uncollectedFiles = 0,
 ): PrReviewSource {
   if (
     !Number.isSafeInteger(number) ||
     number < 1 ||
     !sameReviewPr(expected, expected) ||
     !Array.isArray(files) ||
-    files.length > 200
+    files.length > 200 ||
+    !Number.isSafeInteger(uncollectedFiles) ||
+    uncollectedFiles < 0
   )
     throw new Error("PR diff exceeds the review limit or is unavailable");
   const lines: DiffLine[] = [];
   let bytes = 0,
-    omittedFiles = 0,
+    omittedFiles = uncollectedFiles,
     omittedLines = 0;
   const seen = new Set<string>();
-  for (const file of files) {
+  // Keep application changes ahead of workflow scaffolding within the same
+  // fixed disclosure bound. GitHub lists .github files first alphabetically.
+  const priority = (file: any) => typeof file?.filename === "string" &&
+    (file.filename.startsWith(".github/") || /(?:^|\/)(?:[^/]+\.lock|package-lock\.json|pnpm-lock\.yaml|yarn\.lock)$/.test(file.filename)) ? 1 : 0;
+  const orderedFiles = [...files].sort((a, b) => priority(a) - priority(b));
+  for (const file of orderedFiles) {
     const path = file?.filename;
     if (
       typeof path !== "string" ||
@@ -73,6 +87,8 @@ export function prReviewSource(
       throw new Error("Invalid previous file identity");
     seen.add(path);
     if (
+      preflytIntegration(path) ||
+      preflytIntegration(oldPath) ||
       /(^|\/)(?:\.env(?:\..*)?|[^/]*\.(?:pem|key|p12|pfx))$/i.test(path) ||
       /(^|\/)(?:\.env(?:\..*)?|[^/]*\.(?:pem|key|p12|pfx))$/i.test(oldPath) ||
       typeof file.patch !== "string"

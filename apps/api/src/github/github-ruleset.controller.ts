@@ -27,11 +27,13 @@ export class GitHubRulesetController {
     @Req() req: Request & { preflytSession?: AuthenticatedSession },
     @Param("repositoryId") repositoryId: string,
     @Query("page") page?: string,
+    @Query("refresh") refresh?: string,
   ) {
     return this.rulesets.list(
       req.preflytSession!,
       repositoryId,
       page === undefined ? 1 : Number(page),
+      refresh === "true",
     );
   }
   @Get(":rulesetId/insights")

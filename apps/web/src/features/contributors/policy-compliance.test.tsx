@@ -35,7 +35,7 @@ it('shows the compliance section and unknown state immediately instead of an inv
       onEvidence={() => {}}
     />
   )
-  expect(html).toContain('Engineering policy compliance')
+  expect(html).toContain('Policy Compliance')
   expect(html).not.toContain('Not enough evidence')
   expect(html).not.toContain('with missing or older evidence')
   expect(html).toContain('Missing evidence')

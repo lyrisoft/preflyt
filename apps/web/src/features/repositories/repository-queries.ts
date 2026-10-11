@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { API_BASE_URL } from '@/lib/api'
 import type { CiResult } from './repository-vocabulary'
+import type { WorkflowSnippetData } from './workflow-snippet'
 
 const repositoryPath = (repositoryId: string, path: string) =>
   `${API_BASE_URL}/github/repositories/${encodeURIComponent(repositoryId)}${path}`
@@ -20,6 +21,9 @@ type Rule = {
   title: string
   capability: string
   guidance: string
+  workflowCommand?: string
+  reportPath?: string
+  workflowSetup?: WorkflowSnippetData
   requiredIn: string[]
 }
 export type AiCheck = {
@@ -33,6 +37,7 @@ export type AiCheck = {
   stages: ('repository' | 'pull_request')[]
 }
 export type Pack = {
+  workflowSetup?: WorkflowSnippetData
   aiChecks?: AiCheck[]
   id: string
   version: string
@@ -69,13 +74,18 @@ export type Standards = {
   controls: StandardsControl[]
 }
 
-export function useStandards(repositoryId: string) {
+export function useStandards(repositoryId: string, policyId?: string) {
   return useQuery<Standards>({
-    queryKey: ['repository-standards', repositoryId],
+    queryKey: policyId
+      ? ['repository-standards', repositoryId, policyId]
+      : ['repository-standards', repositoryId],
     retry: false,
     queryFn: ({ signal }) =>
       read<Standards>(
-        repositoryPath(repositoryId, '/standards'),
+        repositoryPath(
+          repositoryId,
+          `/standards${policyId ? `?policy=${encodeURIComponent(policyId)}` : ''}`
+        ),
         signal,
         () =>
           'Could not load standards. Check repository selection and account access.'
@@ -108,15 +118,28 @@ export type CiObservation = {
   evidenceHash: string
   observedAt: string
 }
-export type CiEvidence = { enabled: boolean; observations: CiObservation[] }
+export type CiEvidence = {
+  enabled: boolean
+  observations: CiObservation[]
+  pagination?: {
+    page: number
+    pageSize: number
+    total: number
+    hasNext: boolean
+  }
+}
 
 export function useCiEvidence(
   repositoryId: string,
   sha = '',
-  { enabled = true, poll = false }: { enabled?: boolean; poll?: boolean } = {}
+  {
+    enabled = true,
+    poll = false,
+    page,
+  }: { enabled?: boolean; poll?: boolean; page?: number } = {}
 ) {
   return useQuery<CiEvidence>({
-    queryKey: ['ci-evidence', repositoryId, sha],
+    queryKey: ['ci-evidence', repositoryId, sha, page],
     enabled,
     retry: false,
     refetchInterval: (query) =>
@@ -125,7 +148,7 @@ export function useCiEvidence(
       read<CiEvidence>(
         repositoryPath(
           repositoryId,
-          `/ci-evidence${sha ? `?sha=${encodeURIComponent(sha)}` : ''}`
+          `/ci-evidence?${new URLSearchParams({ ...(sha ? { sha } : {}), ...(page ? { page: String(page) } : {}) })}`
         ),
         signal,
         (status) =>

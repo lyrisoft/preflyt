@@ -1,3 +1,4 @@
+import { repositoryStandards } from './policy-standards.js'
 import { inheritedTeamStandards } from '../teams/team-context.js'
 import { composeTeamStandards } from '../teams/team-composition.js'
 import { organizationCatalogue } from './organization-standards.service.js'
@@ -42,18 +43,19 @@ export class StandardsService {
     if (!repository) throw new ForbiddenException('Repository is unavailable')
     return repository
   }
-  async get(id: string) {
+  async get(id: string, policyId?: string) {
     const repo = await this.repository(id)
-    const [selection, snapshot] = await Promise.all([
-      this.prisma.repositoryStandardsSelection.findFirst({
-        where: { repositoryId: repo.id },
-        orderBy: { revision: 'desc' },
+    const [resolved, snapshot] = await Promise.all([
+      repositoryStandards(this.prisma, repo.id, policyId).then(selection => ({ selection, selectionError: null as string | null })).catch(error => {
+        if (error instanceof ConflictException) return { selection: null, selectionError: error.message };
+        throw error;
       }),
       this.prisma.repositoryProfile.findFirst({
         where: { repositoryId: repo.id },
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       }),
     ])
+    const { selection, selectionError } = resolved
     const customVersions = repo.installation.organizationId
       ? await organizationCatalogue(
           this.prisma,
@@ -92,18 +94,19 @@ export class StandardsService {
       ? (selection.packs as unknown as PackRef[])
       : recommendations.map(({ id, version }) => ({ id, version }))
     const selectionIntegrity =
-      !selection ||
+      !selectionError && (!selection ||
       (selection.packs as unknown as (PackRef & { digest: string })[]).every(
         (ref) => {
           const pack = resolvePacks([ref])[0]
           return !!pack && pack.digest === ref.digest
         },
-      )
+      ))
     return {
       catalogue: library,
       adoptionProfiles,
       selection,
       selectionIntegrity,
+      selectionError,
       recommendations,
       scope: {
         organization: 'deployment',

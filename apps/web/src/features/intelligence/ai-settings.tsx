@@ -1,21 +1,14 @@
 import { useState, type FormEvent } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link } from '@tanstack/react-router'
 import {
   BrainCircuit,
-  BookOpen,
   Cable,
-  FlaskConical,
-  FolderGit2,
-  Gauge,
-  GitPullRequest,
-  Laptop,
-  ServerCog,
   Loader2,
   Pencil,
   PlugZap,
   Power,
   Save,
-  Settings2,
   Plus,
   RefreshCw,
   Route as RouteIcon,
@@ -24,7 +17,7 @@ import {
 import { siClaude, siGooglegemini, siDeepseek } from 'simple-icons'
 import { surfaceTones } from '@/lib/surface-tones'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import {
   Dialog,
   DialogContent,
@@ -33,6 +26,13 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { AppHeader } from '@/components/layout/app-header'
 import { Main } from '@/components/layout/main'
@@ -46,7 +46,6 @@ import {
   canAdminister,
 } from '../workspace/navigation-session'
 import { isAiSettingsTab, type AiSettingsTab } from './intelligence-search'
-import { SkillsCatalogue } from './skills-catalogue'
 
 type Preset = {
   id: string
@@ -73,8 +72,6 @@ type Provider = {
   revision: number
   testStatus: string
   approved: boolean
-  inputPriceCentsPerMillion?: number | null
-  outputPriceCentsPerMillion?: number | null
   apiKeySet: boolean
 }
 type StageRoute = {
@@ -86,9 +83,6 @@ type StageRoute = {
   automaticReviews?: boolean
   publishSummary?: boolean
   publishInline?: boolean
-  maxInputTokens: number
-  maxOutputTokens: number
-  dailyBudgetCents: number
   revision: number
 }
 type Configuration = {
@@ -141,6 +135,7 @@ function ProviderIcon({
 }
 const stageName = (stage: string) =>
   ({
+    default: 'Default',
     laptop: 'Local development',
     repository: 'Repository',
     pull_request: 'Pull requests',
@@ -148,15 +143,6 @@ const stageName = (stage: string) =>
     performance: 'Performance',
     production: 'Production',
   })[stage] ?? stage
-const stageIcon = (stage: string) =>
-  ({
-    laptop: Laptop,
-    repository: FolderGit2,
-    pull_request: GitPullRequest,
-    qa: FlaskConical,
-    performance: Gauge,
-    production: ServerCog,
-  })[stage] ?? RouteIcon
 const testName = (status: string) =>
   ({
     NOT_TESTED: 'Not tested',
@@ -165,13 +151,11 @@ const testName = (status: string) =>
     MODEL_UNAVAILABLE: 'Model unavailable',
     UNAVAILABLE: 'Connection unavailable',
   })[status] ?? 'Not tested'
-const selectClass =
-  'h-9 w-full min-w-0 rounded-md border bg-background px-3 text-sm focus-visible:outline-2 focus-visible:outline-ring'
 const help = [
   {
-    title: 'Markdown skill files',
+    title: 'Set up AI reviews',
     content:
-      'Write instructions in Markdown and use Preview to review them. Upload SKILL.md to open an editable draft; uploading does not save, approve or enable it. The UTF-8 file must be at most 32 KiB, with name and description in a YAML header and up to 6,000 instruction characters below it. Optional header fields are source, license, stages and repositories. Enter the source and license before saving. Download SKILL.md exports the selected database version. Existing policies keep their approved version and digest; file changes require a new draft and approval. Preview does not run HTML or load linked images.',
+      'Connect a model and test the connection. Choose it as the default in Model Router. Choose a skill in Skills, approve and enable it, then add it as an AI Review in a standard. AI reviews are optional suggestions and do not change check results. Repository code is shared only when you enable it.',
   },
   {
     title: 'Models',
@@ -181,17 +165,12 @@ const help = [
   {
     title: 'Model router',
     content:
-      'Each stage has a primary model and an optional fallback. Source sharing starts off. A connection must be enabled and successfully tested within the last 24 hours before its route is ready. Switching organizations separates connections and routes.',
-  },
-  {
-    title: 'Review skills',
-    content:
-      'Open Built-in skills for ready-to-edit Markdown reviews linked to engineering checks, or create a custom skill. Review its instructions, source and license, then approve and enable it. Changes require a new version. Add an AI Review in Engineering Standards and assign this approved skill version to it. Choose where the review applies; up to three assigned reviews can run in one request. AI output provides suggestions only and never changes check results. Third-party packages and scripts are not automatically imported or executed.',
+      'Choose one default model for AI reviews and workflow rewriting. Stage overrides are optional. Source sharing starts off. Saving a model tests its connection; configuration changes require another test. Connections do not expire after 24 hours. PR feedback is configured in Settings. Switching organizations separates connections and routes.',
   },
   {
     title: 'Current availability',
     content:
-      'AI Reviews use saved assessment results. When source sharing is enabled, PR reviews can also use selected changes from the assessed commit. Published PR policies can run assigned reviews automatically and post summaries or comments to GitHub when those options are enabled. Comments on changed lines also require source sharing. Reviews require an enabled, tested model and configured token prices. Preflyt reserves the estimated cost against your daily budget; this is not the provider’s final bill. AI suggestions never approve policies or count as passed checks.',
+      'AI Reviews use saved assessment results. When source sharing is enabled, PR reviews can also use selected changes from the assessed commit. Published PR policies can run assigned reviews automatically and post summaries or comments to GitHub when those options are enabled. Comments on changed lines also require source sharing. Reviews require an enabled, tested model. AI suggestions never approve policies or count as passed checks.',
   },
 ]
 type AiSettingsNavigation = {
@@ -216,7 +195,7 @@ export function AiSettingsPage({
           <div className='space-y-6'>
             <PageHeader
               title='AI Intelligence'
-              description='Review skills for your engineering standards.'
+              description='Set up optional AI reviews for your development workflow.'
               section='Intelligence'
               icon={BrainCircuit}
               tone='violet'
@@ -224,9 +203,15 @@ export function AiSettingsPage({
                 <PageHelpDrawer title='AI Intelligence' sections={help} />
               }
             />
-            <SkillsCatalogue
-              key={`${session.data?.identityId}:${session.data?.organizationId}`}
-            />
+            <div className='space-y-3 rounded-xl border p-4'>
+              <p role='status' className='text-sm text-muted-foreground'>
+                Only organization administrators can manage models and routing.
+                Review instructions are available on the Skills page.
+              </p>
+              <Button size='sm' variant='outline' asChild>
+                <Link to='/skills'>Open Skills</Link>
+              </Button>
+            </div>
           </div>
         ) : (
           <AiSettings
@@ -281,10 +266,39 @@ function AiSettings({
     setError('')
     setNotice('')
     try {
-      const result = await governanceRequest<{ status?: string }>(
+      const result = await governanceRequest<{ id?: string; status?: string }>(
         '/ai/configuration' + path,
         body
       )
+      if (
+        path.startsWith('/providers') &&
+        !path.endsWith('/test') &&
+        result.id
+      ) {
+        done?.()
+        try {
+          const tested = await governanceRequest<{ status: string }>(
+            `/ai/configuration/providers/${result.id}/test`,
+            {}
+          )
+          if (tested.status !== 'CONNECTED') {
+            setError(
+              `Model saved. ${testName(tested.status)}. Check the connection details.`
+            )
+            await client.invalidateQueries({ queryKey: key })
+            return
+          }
+        } catch {
+          setError(
+            'Model saved. Its connection could not be tested. Use Test to retry.'
+          )
+          await client.invalidateQueries({ queryKey: key })
+          return
+        }
+        await client.invalidateQueries({ queryKey: key })
+        setNotice('Model saved and connection tested.')
+        return
+      }
       done?.()
       await client.invalidateQueries({ queryKey: key })
       if (path.endsWith('/test')) {
@@ -309,7 +323,7 @@ function AiSettings({
     <div className='space-y-6'>
       <PageHeader
         title='AI Intelligence'
-        description='Manage models, skills and model routing across SDLC stages.'
+        description='Set up optional AI reviews for your development workflow.'
         section='Intelligence'
         icon={BrainCircuit}
         tone='violet'
@@ -341,7 +355,7 @@ function AiSettings({
           {query.error.message}
         </p>
       )}
-      {error && (
+      {error && edit === undefined && !routing && (
         <p role='alert' className='text-sm text-destructive'>
           {error}
         </p>
@@ -369,12 +383,14 @@ function AiSettings({
       )}
       {data?.enabled && (
         <>
-          <div className='flex items-center gap-3 rounded-lg border border-info/20 bg-info/5 px-4 py-3 text-sm'>
-            <ShieldCheck className='size-4 shrink-0 text-info' />
-            {data.executionAvailable
-              ? 'Model connections and AI assessment reviews are available.'
-              : 'Model connections are available. AI Reviews are disabled for this deployment.'}
-          </div>
+          {!data.executionAvailable && (
+            <div className='flex items-center gap-3 rounded-lg border border-info/20 bg-info/5 px-4 py-3 text-sm'>
+              <ShieldCheck className='size-4 shrink-0 text-info' />
+              {data.executionAvailable
+                ? 'Model connections and AI assessment reviews are available.'
+                : 'Model connections are available. AI Reviews are disabled for this deployment.'}
+            </div>
+          )}
           <Tabs
             value={onTabChange ? (tab ?? 'connections') : localTab}
             onValueChange={(value) => {
@@ -388,75 +404,91 @@ function AiSettings({
                 <Cable className='mr-2 size-4' />
                 Models
               </TabsTrigger>
-              <TabsTrigger value='skills'>
-                <BookOpen className='mr-2 size-4' />
-                Review skills
-              </TabsTrigger>
               <TabsTrigger value='routing'>
                 <RouteIcon className='mr-2 size-4' />
                 Model router
               </TabsTrigger>
             </TabsList>
             <TabsContent value='connections' className='mt-5 space-y-6'>
-              <div className='space-y-1'>
-                <h2 className='text-base font-semibold'>Built-in providers</h2>
-                <p className='text-sm text-muted-foreground'>
-                  Connect a provider with your model name and API key.
-                </p>
-              </div>
-              <div className='grid gap-4 sm:grid-cols-2 xl:grid-cols-4'>
-                {data.presets?.map((p) => {
-                  const connection = data.providers.find(
-                    (c) => c.endpoint?.preset === p.id
-                  )
-                  return (
-                    <Card key={p.id} className='gap-4'>
-                      <CardHeader>
-                        <div className='flex items-center justify-between gap-3'>
-                          <ProviderIcon provider={p.id} tile />
-                          <StatusBadge
-                            tone={connection?.enabled ? 'success' : 'neutral'}
-                          >
-                            {connection?.enabled ? 'Active' : 'Inactive'}
-                          </StatusBadge>
-                        </div>
-                        <h3 className='mt-3 text-base font-semibold tracking-tight'>
-                          {p.name}
-                        </h3>
-                      </CardHeader>
-                      <CardContent className='min-w-0 flex-1'>
-                        <p className='mb-1 text-xs font-medium text-muted-foreground'>
-                          Model name
-                        </p>
-                        <p className='text-sm font-medium break-words'>
-                          {connection?.modelId ?? 'Not connected'}
-                        </p>
-                      </CardContent>
-                      <CardFooter className='justify-end border-t'>
-                        <Button
-                          size='sm'
-                          variant={connection ? 'outline' : 'default'}
-                          disabled={
-                            busy || (!connection && data.providers.length >= 32)
-                          }
-                          onClick={() => {
-                            setError('')
-                            setPreset(p)
-                            setEdit(connection ?? null)
-                          }}
-                        >
-                          {connection ? (
-                            <Settings2 aria-hidden='true' />
-                          ) : (
-                            <Power aria-hidden='true' />
-                          )}
-                          {connection ? 'Configure' : 'Activate'}
-                        </Button>
-                      </CardFooter>
-                    </Card>
-                  )
-                })}
-              </div>
+              {!!data.presets?.length && (
+                <section
+                  aria-labelledby='built-in-providers'
+                  className='space-y-3'
+                >
+                  <div>
+                    <h2
+                      id='built-in-providers'
+                      className='text-base font-semibold'
+                    >
+                      Built-in providers
+                    </h2>
+                    <p className='text-sm text-muted-foreground'>
+                      Connect with your API key and model name.
+                    </p>
+                  </div>
+                  <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-4'>
+                    {data.presets.map((item) => {
+                      const provider =
+                        data.providers.find(
+                          (p) => p.endpoint?.preset === item.id && p.enabled
+                        ) ??
+                        data.providers.find(
+                          (p) => p.endpoint?.preset === item.id
+                        )
+                      return (
+                        <Card key={item.id}>
+                          <CardContent className='space-y-3'>
+                            <div className='flex items-center gap-3'>
+                              <ProviderIcon provider={item.id} tile />
+                              <div className='min-w-0'>
+                                <h3 className='text-sm font-semibold'>
+                                  {item.name}
+                                </h3>
+                                <p
+                                  className='truncate text-xs text-muted-foreground'
+                                  title={provider?.modelId}
+                                >
+                                  {provider?.modelId ?? 'Not connected'}
+                                </p>
+                              </div>
+                            </div>
+                            <div className='flex items-center justify-between gap-2'>
+                              <StatusBadge tone='neutral'>
+                                {provider
+                                  ? !provider.enabled
+                                    ? 'Disabled'
+                                    : testName(provider.testStatus)
+                                  : 'Inactive'}
+                              </StatusBadge>
+                              <Button
+                                size='sm'
+                                variant={provider ? 'outline' : 'default'}
+                                aria-label={`${provider ? 'Configure' : 'Activate'} ${item.name}`}
+                                disabled={
+                                  busy ||
+                                  (!provider && data.providers.length >= 32)
+                                }
+                                onClick={() => {
+                                  setError('')
+                                  setPreset(item)
+                                  setEdit(provider ?? null)
+                                }}
+                              >
+                                {provider ? (
+                                  <Pencil aria-hidden='true' />
+                                ) : (
+                                  <Power aria-hidden='true' />
+                                )}
+                                {provider ? 'Configure' : 'Activate'}
+                              </Button>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      )
+                    })}
+                  </div>
+                </section>
+              )}
               <div className='flex flex-wrap items-end justify-between gap-4'>
                 <div className='space-y-3'>
                   <h2 className='text-base font-semibold'>Configured models</h2>
@@ -652,83 +684,114 @@ function AiSettings({
                 per organization
               </p>
             </TabsContent>
-            <TabsContent value='skills' className='mt-5'>
-              <SkillsCatalogue />
-            </TabsContent>
-            <TabsContent value='routing' className='mt-5'>
-              <div className='grid gap-4 md:grid-cols-2 xl:grid-cols-3'>
-                {data.stages.map((stage) => {
-                  const r = data.routes.find((r) => r.stage === stage)
-                  return (
-                    <Card key={stage} className='gap-4'>
-                      <CardHeader>
-                        <div className='flex items-center justify-between gap-3'>
-                          <SurfaceIcon icon={stageIcon(stage)} tone='violet' />
-                          <StatusBadge
-                            tone={r?.enabled ? 'success' : 'neutral'}
-                          >
-                            {r?.enabled ? 'Configured' : 'Disabled'}
-                          </StatusBadge>
-                        </div>
-                        <h2 className='mt-3 text-base font-semibold tracking-tight'>
-                          {stageName(stage)}
-                        </h2>
-                      </CardHeader>
-                      <CardContent className='flex-1'>
-                        <dl className='divide-y text-sm [&>div]:py-2.5 [&>div:first-child]:pt-0 [&>div:last-child]:pb-0'>
-                          <div className='flex justify-between gap-3'>
-                            <dt className='text-muted-foreground'>Primary</dt>
-                            <dd className='truncate'>
-                              {data.providers.find((p) => p.id === r?.primaryId)
-                                ?.name ?? 'Not selected'}
-                            </dd>
-                          </div>
-                          <div className='flex justify-between gap-3'>
-                            <dt className='text-muted-foreground'>Fallback</dt>
-                            <dd className='truncate'>
-                              {data.providers.find(
-                                (p) => p.id === r?.fallbackId
-                              )?.name ?? 'None'}
-                            </dd>
-                          </div>
-                          <div className='flex justify-between gap-3'>
-                            <dt className='text-muted-foreground'>
-                              Source sharing
-                            </dt>
-                            <dd>{r?.allowSource ? 'Allowed' : 'Off'}</dd>
-                          </div>
-                        </dl>
-                      </CardContent>
-                      <CardFooter className='justify-end border-t'>
-                        <Button
-                          size='sm'
-                          variant={r?.enabled ? 'outline' : 'default'}
-                          disabled={busy}
-                          onClick={() => {
-                            setError('')
-                            setRouting(
-                              r ?? {
-                                stage,
-                                primaryId: null,
-                                fallbackId: null,
-                                enabled: false,
-                                allowSource: false,
-                                maxInputTokens: 8000,
-                                maxOutputTokens: 1000,
-                                dailyBudgetCents: 1000,
-                                revision: 0,
-                              }
-                            )
-                          }}
-                        >
-                          <Settings2 aria-hidden='true' />
-                          Configure
-                        </Button>
-                      </CardFooter>
-                    </Card>
-                  )
-                })}
+            <TabsContent value='routing' className='mt-5 space-y-4'>
+              <div className='flex flex-wrap items-center justify-between gap-4 rounded-xl border p-4'>
+                <div className='space-y-1'>
+                  <h2 className='text-sm font-semibold'>Default model</h2>
+                  <p className='text-sm text-muted-foreground'>
+                    {data.providers.find(
+                      (p) =>
+                        p.id ===
+                        data.routes.find((r) => r.stage === 'default')
+                          ?.primaryId
+                    )?.name ?? 'Choose a model to use across Preflyt.'}
+                  </p>
+                </div>
+                <Button
+                  disabled={busy}
+                  onClick={() => {
+                    setError('')
+                    setRouting(
+                      data.routes.find((r) => r.stage === 'default') ?? {
+                        stage: 'default',
+                        primaryId: null,
+                        fallbackId: null,
+                        enabled: true,
+                        allowSource: false,
+                        revision: 0,
+                      }
+                    )
+                  }}
+                >
+                  Configure default
+                </Button>
               </div>
+              <details className='rounded-xl border p-4'>
+                <summary className='cursor-pointer text-sm font-medium'>
+                  Stage overrides (optional)
+                </summary>
+                <div className='mt-3 divide-y'>
+                  {data.stages.map((stage) => {
+                    const r = data.routes.find((r) => r.stage === stage)
+                    return (
+                      <div
+                        key={stage}
+                        className='flex flex-wrap items-center justify-between gap-3 py-3'
+                      >
+                        <div>
+                          <p className='text-sm font-medium'>
+                            {stageName(stage)}
+                          </p>
+                          <p className='text-xs text-muted-foreground'>
+                            {r
+                              ? r.enabled
+                                ? (data.providers.find(
+                                    (p) => p.id === r.primaryId
+                                  )?.name ?? 'Model unavailable')
+                                : 'Disabled for this stage'
+                              : 'Uses default model'}
+                          </p>
+                        </div>
+                        <div className='flex gap-2'>
+                          {r && (
+                            <Button
+                              size='sm'
+                              variant='ghost'
+                              disabled={busy}
+                              onClick={() =>
+                                void action(`/routes/${stage}/inherit`, {
+                                  expectedRevision: r.revision,
+                                })
+                              }
+                            >
+                              Use default
+                            </Button>
+                          )}
+                          <Button
+                            size='sm'
+                            variant='outline'
+                            disabled={busy}
+                            onClick={() => {
+                              setError('')
+                              setRouting(
+                                r ?? {
+                                  ...data.routes.find(
+                                    (r) => r.stage === 'default'
+                                  ),
+                                  stage,
+                                  revision: 0,
+                                  primaryId:
+                                    data.routes.find(
+                                      (r) => r.stage === 'default'
+                                    )?.primaryId ?? null,
+                                  fallbackId:
+                                    data.routes.find(
+                                      (r) => r.stage === 'default'
+                                    )?.fallbackId ?? null,
+                                  enabled: false,
+                                  allowSource: false,
+                                }
+                              )
+                            }}
+                          >
+                            Edit
+                          </Button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </details>
             </TabsContent>
           </Tabs>
         </>
@@ -750,14 +813,39 @@ function AiSettings({
                   : 'Add model'}
             </DialogTitle>
             <DialogDescription>
-              Saving approves this model for your organization. Keys stay
-              private.
+              Saving tests and approves this model for your organization. Keys
+              stay private.
             </DialogDescription>
           </DialogHeader>
+          {data && edit === null && (
+            <label className='block space-y-1.5 text-sm'>
+              <span>Provider</span>
+              <Select
+                value={preset?.id ?? 'custom'}
+                onValueChange={(value) =>
+                  setPreset(data.presets?.find((p) => p.id === value))
+                }
+              >
+                <SelectTrigger aria-label='Provider'>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {data.presets?.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value='custom'>
+                    OpenAI-compatible endpoint
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </label>
+          )}
           {data && edit !== undefined && (
             <ProviderForm
               preset={preset}
-              key={edit?.id ?? 'new'}
+              key={`${edit?.id ?? 'new'}:${preset?.id ?? 'custom'}`}
               provider={edit}
               busy={busy}
               error={error}
@@ -785,7 +873,7 @@ function AiSettings({
               {stageName(routing?.stage ?? '')} model routing
             </DialogTitle>
             <DialogDescription>
-              Set the models, review options and limits for this stage.
+              Choose the primary model, optional fallback and source sharing.
             </DialogDescription>
           </DialogHeader>
           {data && routing && (
@@ -848,14 +936,6 @@ function ProviderForm({
       modelId: f.get('modelId'),
       enabled: preset && !provider ? true : f.get('enabled') === 'on',
       expectedRevision: provider?.revision ?? 0,
-      inputPriceCentsPerMillion:
-        f.get('inputRate') === null || f.get('inputRate') === ''
-          ? (provider?.inputPriceCentsPerMillion ?? null)
-          : Number(f.get('inputRate')),
-      outputPriceCentsPerMillion:
-        f.get('outputRate') === null || f.get('outputRate') === ''
-          ? (provider?.outputPriceCentsPerMillion ?? null)
-          : Number(f.get('outputRate')),
       ...(apiKey ? { apiKey } : {}),
     })
   }
@@ -890,17 +970,21 @@ function ProviderForm({
           </label>
           <label className='block space-y-2 text-sm'>
             <span>Hosting</span>
-            <select
-              className={selectClass}
+            <Select
               value={locality}
-              onChange={(e) => {
-                setLocality(e.target.value)
-                setRequiresKey(e.target.value !== 'local')
+              onValueChange={(value) => {
+                setLocality(value)
+                setRequiresKey(value !== 'local')
               }}
             >
-              <option value='hosted'>Hosted provider</option>
-              <option value='local'>Self-hosted model</option>
-            </select>
+              <SelectTrigger aria-label='Hosting'>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value='hosted'>Hosted provider</SelectItem>
+                <SelectItem value='local'>Self-hosted model</SelectItem>
+              </SelectContent>
+            </Select>
           </label>
         </>
       )}
@@ -952,37 +1036,6 @@ function ProviderForm({
           />
           Enable model
         </label>
-      )}
-      {provider && (
-        <fieldset className='space-y-3 rounded-lg border p-3'>
-          <legend className='px-1 text-sm font-medium'>
-            Review budget rates
-          </legend>
-          <div className='grid gap-3 sm:grid-cols-2'>
-            <label className='space-y-2 text-sm'>
-              <span>Input · cents per million tokens</span>
-              <Input
-                type='number'
-                name='inputRate'
-                min={0}
-                max={100000000}
-                placeholder='200'
-                defaultValue={provider.inputPriceCentsPerMillion ?? ''}
-              />
-            </label>
-            <label className='space-y-2 text-sm'>
-              <span>Output · cents per million tokens</span>
-              <Input
-                type='number'
-                name='outputRate'
-                min={0}
-                max={100000000}
-                placeholder='800'
-                defaultValue={provider.outputPriceCentsPerMillion ?? ''}
-              />
-            </label>
-          </div>
-        </fieldset>
       )}
       {error && (
         <p role='alert' className='text-sm text-destructive'>
@@ -1039,20 +1092,21 @@ function RouteForm({
   cancel: () => void
   save: (body: unknown) => void
 }) {
+  const [primaryId, setPrimaryId] = useState(route.primaryId ?? 'none')
+  const [fallbackId, setFallbackId] = useState(route.fallbackId ?? 'none')
   function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const f = new FormData(e.currentTarget)
     save({
-      primaryId: f.get('primaryId') || null,
-      fallbackId: f.get('fallbackId') || null,
+      primaryId:
+        f.get('primaryId') === 'none' ? null : f.get('primaryId') || null,
+      fallbackId:
+        f.get('fallbackId') === 'none' ? null : f.get('fallbackId') || null,
       enabled: f.get('enabled') === 'on',
       allowSource: f.get('allowSource') === 'on',
-      automaticReviews: f.get('automaticReviews') === 'on',
-      publishSummary: f.get('publishSummary') === 'on',
-      publishInline: f.get('publishInline') === 'on',
-      maxInputTokens: Number(f.get('maxInputTokens')),
-      maxOutputTokens: Number(f.get('maxOutputTokens')),
-      dailyBudgetCents: Number(f.get('dailyBudgetCents')),
+      automaticReviews: route.automaticReviews ?? false,
+      publishSummary: route.publishSummary ?? false,
+      publishInline: route.publishInline ?? false,
       expectedRevision: route.revision,
     })
   }
@@ -1065,60 +1119,50 @@ function RouteForm({
               ? 'Primary connection'
               : 'Fallback connection'}
           </span>
-          <select
-            className={selectClass}
+          <Select
             name={name}
-            defaultValue={route[name] ?? ''}
+            value={name === 'primaryId' ? primaryId : fallbackId}
+            onValueChange={(value) => {
+              if (name === 'primaryId') {
+                setPrimaryId(value)
+                if (value === fallbackId) setFallbackId('none')
+              } else {
+                setFallbackId(value)
+              }
+            }}
+            disabled={busy}
           >
-            <option value=''>None</option>
-            {providers.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name} · {testName(p.testStatus)}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger
+              aria-label={
+                name === 'primaryId'
+                  ? 'Primary connection'
+                  : 'Fallback connection'
+              }
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value='none'>
+                {name === 'primaryId' ? 'Choose a model' : 'No fallback'}
+              </SelectItem>
+              {providers.map((p) => (
+                <SelectItem
+                  key={p.id}
+                  value={p.id}
+                  disabled={name === 'fallbackId' && p.id === primaryId}
+                >
+                  {p.name} · {testName(p.testStatus)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </label>
       ))}
-      <div className='grid grid-cols-2 gap-3'>
-        {(
-          [
-            {
-              name: 'maxInputTokens',
-              label: 'Input token limit',
-              min: 100,
-              max: 32000,
-            },
-            {
-              name: 'maxOutputTokens',
-              label: 'Output token limit',
-              min: 128,
-              max: 8192,
-            },
-            {
-              name: 'dailyBudgetCents',
-              label: 'Daily estimated cost limit (US cents)',
-              min: 1,
-              max: 5000,
-            },
-          ] as const
-        ).map((f) => (
-          <label key={f.name} className='block space-y-2 text-sm'>
-            <span>{f.label}</span>
-            <Input
-              type='number'
-              name={f.name}
-              min={f.min}
-              max={f.max}
-              step={1}
-              required
-              defaultValue={route[f.name]}
-            />
-          </label>
-        ))}
-      </div>
       <label className='flex items-center gap-2 text-sm'>
         <input type='checkbox' name='enabled' defaultChecked={route.enabled} />
-        Enable reviews for this stage
+        {route.stage === 'default'
+          ? 'Enable AI reviews'
+          : 'Enable reviews for this stage'}
       </label>
       <label className='flex items-center gap-2 text-sm'>
         <input
@@ -1128,42 +1172,6 @@ function RouteForm({
         />
         Send repository code to the selected AI model
       </label>
-      {route.stage === 'pull_request' && (
-        <fieldset className='space-y-3 rounded-lg border p-4'>
-          <legend className='px-1 text-sm font-medium'>
-            Published PR policies
-          </legend>
-          <label className='flex items-center gap-2 text-sm'>
-            <input
-              type='checkbox'
-              name='automaticReviews'
-              defaultChecked={route.automaticReviews ?? false}
-            />
-            Run assigned AI Reviews automatically
-          </label>
-          <label className='flex items-center gap-2 text-sm'>
-            <input
-              type='checkbox'
-              name='publishSummary'
-              defaultChecked={route.publishSummary ?? false}
-            />
-            Post AI review summary to GitHub
-          </label>
-          <label className='flex items-center gap-2 text-sm'>
-            <input
-              type='checkbox'
-              name='publishInline'
-              defaultChecked={route.publishInline ?? false}
-            />
-            Post AI review comments on changed lines
-          </label>
-          <p className='text-xs text-muted-foreground'>
-            Uses approved skills and your budget. Source sharing adds verified
-            PR changes; otherwise only assessment evidence is sent. AI summaries
-            do not decide merge readiness.
-          </p>
-        </fieldset>
-      )}
       {error && (
         <p role='alert' className='text-sm text-destructive'>
           {error}

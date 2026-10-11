@@ -6,6 +6,7 @@ const route = getRouteApi('/_authenticated/intelligence')
 export function IntelligencePage() {
   const { tab } = route.useSearch()
   const navigate = route.useNavigate()
+  if (tab === 'skills') return null
   return (
     <AiSettingsPage
       tab={tab}

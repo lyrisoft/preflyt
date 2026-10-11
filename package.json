@@ -18,7 +18,9 @@
     "build:api": "pnpm --filter @preflyt/api build",
     "test:api": "pnpm --filter @preflyt/api test",
     "db:generate": "pnpm --filter @preflyt/api prisma:generate",
-    "dev:worker": "pnpm --filter @preflyt/api start:worker:dev"
+    "dev:worker": "pnpm --filter @preflyt/api start:worker:dev",
+    "dev:docs": "pnpm --filter @preflyt/docs dev",
+    "build:docs": "pnpm --filter @preflyt/docs build"
   },
   "devDependencies": {
     "turbo": "2.11.7"

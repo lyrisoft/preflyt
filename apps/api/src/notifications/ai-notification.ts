@@ -9,32 +9,6 @@ export const isAiNotification = (type: string) => aiNotificationTypes.includes(t
 const outageWindowMs = 10 * 60000;
 const outageMinimumSpanMs = 60000;
 const alertCooldownMs = 30 * 60000;
-type Repository = { id: string; githubId: bigint; fullName: string };
-
-/** Called only at an actual admission rejection; a reservation is a limit, not billed spend. */
-export async function recordAiBudgetNotification(
-  tx: Prisma.TransactionClient,
-  repo: Repository,
-  organizationId: string,
-  actorId: string,
-  route: { id: string; revision: number; stage: string },
-  day: string,
-) {
-  if (!notificationsEnabled()) return;
-  await tx.notificationEvent.createMany({
-    data: [{
-      id: digest({ kind: 'ai-review-budget', organizationId, routeId: route.id, revision: route.revision, day }),
-      organizationId,
-      repositoryId: repo.id,
-      repositoryGithubId: repo.githubId.toString(),
-      repositoryName: repo.fullName,
-      actorId,
-      type: 'AI_REVIEW_BUDGET_REACHED',
-      severity: 'warning',
-    }],
-    skipDuplicates: true,
-  });
-}
 
 /** Durable, bounded debounce across workers; no provider text, keys, prompts or source. */
 export type AiInferenceOutcome = {

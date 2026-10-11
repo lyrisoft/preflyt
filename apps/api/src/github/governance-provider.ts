@@ -31,8 +31,8 @@ export function matchesRuleset(expected: unknown, actual: unknown): boolean {
 }
 export class GovernanceProvider {
   private readonly limiter = new GitHubRequestLimiter()
-  async open(fullName: string) {
-    const config = governanceConfiguration(fullName)
+  async open(fullName: string, repositoryInstallationId?: bigint) {
+    const config = governanceConfiguration(repositoryInstallationId)
     const organization = fullName.split('/')[0]
     if (!/^[a-zA-Z0-9-]+$/.test(organization))
       throw new ForbiddenException('Invalid GitHub organization')
@@ -64,7 +64,7 @@ export class GovernanceProvider {
       installation.permissions?.organization_administration !== 'write'
     )
       throw new ForbiddenException(
-        'The governance App needs organization Administration: write on this organization',
+        'The selected GitHub App needs organization Administration: write on this organization. Approve that permission in GitHub before changing organization rulesets',
       )
     const response = await request(
       'POST /app/installations/{installation_id}/access_tokens',

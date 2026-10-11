@@ -1,6 +1,12 @@
-import { recordAiBudgetNotification, recordAiInferenceOutcome, recordAiInferenceOutcomeInTransaction } from '../notifications/ai-notification.js';
-import { AiTransportError } from './ai-http.js';
-import { configurationValue } from '../configuration/runtime-configuration.js'
+import { actionableFindings, conciseReviewSummary } from "./pr-review-feedback.js";
+import { currentStandards } from "../standards/policy-standards.js";
+import { effectiveAiRoute } from "./effective-ai-route.js";
+import {
+  recordAiInferenceOutcome,
+  recordAiInferenceOutcomeInTransaction,
+} from "../notifications/ai-notification.js";
+import { AiTransportError } from "./ai-http.js";
+import { configurationValue } from "../configuration/runtime-configuration.js";
 import { skillApplicability } from "./skill-applicability.js";
 import { GitHubProviderService } from "../github/github-provider.service.js";
 import { readPullRequestContext } from "../github-events/pull-request-context.js";
@@ -29,14 +35,13 @@ import {
 } from "./ai-configuration.js";
 import {
   reviewContext,
-  reviewPrompt,
   skillDigest,
   type ReviewContext,
 } from "./review-skills.js";
-import { reviewReservation, runSkillInference } from "./skill-inference.js";
+import { AiResponseError, aiResponseTokenLimit, runSkillInference } from "./skill-inference.js";
+import { Prisma } from "../generated/prisma/client.js";
 import type {
   AiReviewSkill,
-  AiStageRoute,
   AiProviderConnection,
 } from "../generated/prisma/client.js";
 import { assessmentAiChecks, type AiCheck } from "../standards/catalogue.js";
@@ -57,6 +62,7 @@ type Snapshot = {
     key: string;
     policyId: string;
     policyHash: string;
+    repositoryRevision?: number;
     number: number;
     context: NonNullable<ReturnType<typeof readPullRequestContext>>;
   };
@@ -65,8 +71,6 @@ type Snapshot = {
   checks: AiCheck[];
   route: { id: string; revision: number };
   providers: { id: string; revision: number; endpointDigest: string }[];
-  inputTokens: number;
-  maxOutputTokens: number;
 };
 const publicReview = (r: any, allowUsage = false) => ({
   id: r.id,
@@ -81,8 +85,17 @@ const publicReview = (r: any, allowUsage = false) => ({
   providerId: r.providerId,
   result: r.result,
   latencyMs: r.latencyMs,
-  usage: allowUsage ? r.usage : null,
-  reservedCents: allowUsage ? Number(r.reservedMicroCents) / 1000000 : null,
+  usage:
+    allowUsage && Array.isArray(r.usage)
+      ? r.usage.map(
+          ({ providerId, inputTokens, outputTokens, cachedTokens }: any) => ({
+            providerId,
+            inputTokens,
+            outputTokens,
+            cachedTokens,
+          }),
+        )
+      : null,
   createdAt: r.createdAt,
   finishedAt: r.finishedAt,
   checks: (r.snapshot as Snapshot).checks ?? [],
@@ -111,9 +124,17 @@ export class SkillReviewService {
     this.closing = true;
     this.abort.abort();
   }
-  private async profile(record: { request: unknown; sourceSha: string }, repositoryId: string) {
-    const id = (record.request as { profileSnapshotId?: string })?.profileSnapshotId;
-    return id ? this.db.repositoryProfile.findFirst({ where: { id, repositoryId, sourceSha: record.sourceSha } }) : null;
+  private async profile(
+    record: { request: unknown; sourceSha: string },
+    repositoryId: string,
+  ) {
+    const id = (record.request as { profileSnapshotId?: string })
+      ?.profileSnapshotId;
+    return id
+      ? this.db.repositoryProfile.findFirst({
+          where: { id, repositoryId, sourceSha: record.sourceSha },
+        })
+      : null;
   }
   async list(
     session: AuthenticatedSession,
@@ -148,7 +169,11 @@ export class SkillReviewService {
     });
     const profile = await this.profile(assessment, repo.id);
     const checks = assigned.map((c) => ({
-      selection: skillApplicability(live.find(s=>s.id===c.skillId) ?? {}, profile, assessment.sourceSha),
+      selection: skillApplicability(
+        live.find((s) => s.id === c.skillId) ?? {},
+        profile,
+        assessment.sourceSha,
+      ),
       ...c,
       available: live.some(
         (s) =>
@@ -171,10 +196,13 @@ export class SkillReviewService {
     });
     await this.access.requireRepository(session, repoId, "assessment.read");
     let allowUsage = false;
-    try { await this.access.requireOrganization(session,"ai.usage.read"); allowUsage = true; } catch {}
+    try {
+      await this.access.requireOrganization(session, "ai.usage.read");
+      allowUsage = true;
+    } catch {}
     return {
       enabled: skillReviewsEnabled(),
-      reviews: records.map(r=>publicReview(r,allowUsage)),
+      reviews: records.map((r) => publicReview(r, allowUsage)),
       checks,
     };
   }
@@ -247,21 +275,30 @@ export class SkillReviewService {
         "An assigned skill version is unavailable. Ask an admin to check its approval and enablement",
       );
     const profile = await this.profile(record, repo.id);
-    if (skills.some(s=> !skillApplicability(s, profile, record.sourceSha).eligible))
-      throw new BadRequestException("The skill language/framework scope does not match this commit. Inspect the skipped review or refresh the repository profile.");
+    if (
+      skills.some(
+        (s) => !skillApplicability(s, profile, record.sourceSha).eligible,
+      )
+    )
+      throw new BadRequestException(
+        "The skill language/framework scope does not match this commit. Inspect the skipped review or refresh the repository profile.",
+      );
     skills.sort((a, b) => a.id.localeCompare(b.id));
-    const route = await this.db.aiStageRoute.findUnique({
-      where: {
-        organizationId_stage: {
-          organizationId: session.organizationId!,
-          stage,
-        },
-      },
-    });
+    let route = await effectiveAiRoute(
+      this.db,
+      session.organizationId!,
+      stage,
+    );
     if (!route?.enabled)
       throw new ConflictException(
-        "Configure an enabled model route for this stage",
+        "Choose an enabled default model in Model Router",
       );
+    if (options.automatic?.repositoryRevision !== undefined) {
+      const config = await this.db.readinessAutomation.findUnique({ where: { repositoryId: repo.id } });
+      if (!config?.aiReviews || config.revision !== options.automatic.repositoryRevision || config.actorId !== session.identityId || !route.allowSource)
+        throw new ConflictException("Repository PR reviews are disabled or changed");
+      route = { ...route, automaticReviews: true, publishSummary: false, publishInline: true };
+    }
     if (
       options.automatic &&
       (!route.automaticReviews || stage !== "pull_request")
@@ -295,12 +332,6 @@ export class SkillReviewService {
         expected,
       );
     }
-    const prompt = reviewPrompt(reviewTasks(checks, skills), context),
-      inputTokens = Buffer.byteLength(prompt.system + prompt.user) + 1024;
-    if (inputTokens > route.maxInputTokens)
-      throw new BadRequestException(
-        "Review context exceeds the configured input limit",
-      );
     const providers: AiProviderConnection[] = [];
     for (const id of [route.primaryId, route.fallbackId]) {
       if (!id) continue;
@@ -313,15 +344,6 @@ export class SkillReviewService {
       throw new ConflictException(
         "Test and enable a model connection before running reviews",
       );
-    let reserved = 0n;
-    try {
-      for (const p of providers)
-        reserved += reviewReservation(p, inputTokens, route.maxOutputTokens);
-    } catch {
-      throw new BadRequestException(
-        "Configure model input/output rates before running a review",
-      );
-    }
     const snapshot: Snapshot = {
       ...(options.automatic ? { automatic: options.automatic } : {}),
       context,
@@ -333,11 +355,8 @@ export class SkillReviewService {
         revision: p.revision,
         endpointDigest: endpointDigest(providerEndpoint(p)!),
       })),
-      inputTokens,
-      maxOutputTokens: route.maxOutputTokens,
     };
-    const fingerprint = digest(snapshot),
-      day = new Date().toISOString().slice(0, 10);
+    const fingerprint = digest(snapshot);
     try {
       const review = await this.db.$transaction(
         async (tx) => {
@@ -361,11 +380,12 @@ export class SkillReviewService {
               },
             },
           });
-          if (existing) return existing;
+          if (existing && (existing.state !== "UNAVAILABLE" || options.automatic)) return existing;
           if (
-            (await tx.aiSkillReview.count({
+            (await tx.auditEvent.count({
               where: {
-                organizationId: session.organizationId!,
+                event: "ai.review.requested",
+                metadata: { path: ["organizationId"], equals: session.organizationId! },
                 createdAt: { gt: new Date(Date.now() - 3600000) },
               },
             })) >= 20
@@ -386,7 +406,14 @@ export class SkillReviewService {
               throw new ConflictException(
                 "Skill changed before review admission",
               );
+          const effective = await effectiveAiRoute(
+            tx as PrismaService,
+            session.organizationId!,
+            stage,
+          );
           if (
+            effective?.id !== route.id ||
+            effective.revision !== route.revision ||
             !(await tx.aiStageRoute.findFirst({
               where: {
                 id: route.id,
@@ -399,25 +426,15 @@ export class SkillReviewService {
             throw new ConflictException(
               "Route changed before review admission",
             );
-          // Decide admission before incrementing. A rejected request records its
-          // outbox event in this transaction but reserves nothing and calls no model.
-          const budget = await tx.aiReviewBudget.findUnique({
-            where: { organizationId_stage_day: {
-              organizationId: session.organizationId!, stage, day,
-            } },
-          });
-          if ((budget?.reservedMicroCents ?? 0n) + reserved > BigInt(route.dailyBudgetCents) * 1000000n) {
-            await recordAiBudgetNotification(tx, repo, session.organizationId!, session.identityId, route, day);
-            return { budgetRejected: true as const };
-          }
-          await tx.aiReviewBudget.upsert({
-            where: { organizationId_stage_day: {
-              organizationId: session.organizationId!, stage, day,
-            } },
-            create: { organizationId: session.organizationId!, stage, day, reservedMicroCents: reserved },
-            update: { reservedMicroCents: { increment: reserved } },
-          });
-          const result = await tx.aiSkillReview.create({
+          if (options.automatic) await this.currentPolicy(session, repoId, snapshot, tx as PrismaService);
+          // An explicit manual retry reuses the pinned job after admission checks.
+          // Successful/running reviews and automatic polling remain idempotent.
+          const result = existing ? await tx.aiSkillReview.update({
+            where: { id: existing.id },
+            data: { state: "QUEUED", failure: null, result: Prisma.JsonNull, usage: Prisma.JsonNull,
+              startedAt: null, finishedAt: null, latencyMs: null, providerId: null,
+              createdAt: new Date(), feedbackState: "NOT_REQUESTED" },
+          }) : await tx.aiSkillReview.create({
             data: {
               organizationId: session.organizationId!,
               repositoryId: repo.id,
@@ -427,11 +444,13 @@ export class SkillReviewService {
               fingerprint,
               automaticKey: options.automatic?.key,
               feedbackState:
-                options.automatic && (route.publishSummary || route.publishInline)
+                options.automatic &&
+                (route.publishSummary || route.publishInline)
                   ? "PENDING"
                   : "NOT_REQUESTED",
               snapshot: JSON.parse(JSON.stringify(snapshot)),
-              reservedMicroCents: reserved,
+              // Required legacy column retained for historical records.
+              reservedMicroCents: 0n,
             },
           });
           await tx.auditEvent.create({
@@ -452,7 +471,6 @@ export class SkillReviewService {
         },
         { isolationLevel: "Serializable" },
       );
-      if ('budgetRejected' in review) throw new ConflictException("Daily review budget reached");
       return publicReview(review);
     } catch (e) {
       if (["P2034", "P2002"].includes((e as { code?: string }).code ?? ""))
@@ -527,6 +545,19 @@ export class SkillReviewService {
       .sort((a, b) => a.id.localeCompare(b.id));
     if (digest(assigned) !== digest(snapshot.checks))
       throw new Error("AI review assignment changed");
+    const effective = await effectiveAiRoute(
+      this.db,
+      session.organizationId!,
+      (assessment.request as { subjectKind?: string }).subjectKind ===
+        "PULL_REQUEST"
+        ? "pull_request"
+        : "repository",
+    );
+    if (
+      effective?.id !== snapshot.route.id ||
+      effective.revision !== snapshot.route.revision
+    )
+      throw new Error("Model settings changed");
     const route = await this.db.aiStageRoute.findFirst({
       where: {
         id: snapshot.route.id,
@@ -538,7 +569,7 @@ export class SkillReviewService {
     if (
       !route ||
       (snapshot.context.source && !route.allowSource) ||
-      (snapshot.automatic && !route.automaticReviews)
+      (snapshot.automatic && snapshot.automatic.repositoryRevision === undefined && !route.automaticReviews)
     )
       throw new Error("Route changed");
     if (snapshot.automatic) await this.currentPolicy(session, repoId, snapshot);
@@ -585,7 +616,9 @@ export class SkillReviewService {
       )
         throw new Error("Provider changed");
     }
-    return route;
+    return snapshot.automatic?.repositoryRevision !== undefined
+      ? { ...route, automaticReviews: true, publishSummary: false, publishInline: true }
+      : route;
   }
   private async currentPolicy(
     session: AuthenticatedSession,
@@ -599,6 +632,11 @@ export class SkillReviewService {
       repoId,
       "ai.review.run",
     );
+    if (pin.repositoryRevision !== undefined) {
+      const config = await db.readinessAutomation.findUnique({ where: { repositoryId: repo.id } });
+      if (!config?.aiReviews || config.revision !== pin.repositoryRevision || config.actorId !== session.identityId)
+        throw new Error("Repository PR review settings changed");
+    }
     const policy = await db.gatePolicyRevision.findFirst({
       where: {
         repositoryId: repo.id,
@@ -607,10 +645,7 @@ export class SkillReviewService {
       },
       orderBy: { publishedAt: "desc" },
     });
-    const selection = await db.repositoryStandardsSelection.findFirst({
-      where: { repositoryId: repo.id },
-      orderBy: { revision: "desc" },
-    });
+    const selection = policy ? await currentStandards(db, repo.id, { policyId: policy.id }) : null;
     if (
       !policy ||
       policy.id !== pin.policyId ||
@@ -664,25 +699,20 @@ export class SkillReviewService {
         repository: {
           selected: true,
           available: true,
-          installation: {
-            active: true,
-            organization: {
-              aiRoutes: {
-                some: {
-                  stage: "pull_request",
-                  enabled: true,
-                  automaticReviews: true,
-                },
-              },
-            },
-          },
+          installation: { active: true },
+          OR: [
+            { readinessAutomation: { aiReviews: true } },
+            { installation: { organization: { aiRoutes: { some: {
+              stage: "pull_request", enabled: true, automaticReviews: true,
+            } } } } },
+          ],
         },
       },
       orderBy: [
         { aiReviewAttemptAt: { sort: "asc", nulls: "first" } },
         { id: "asc" },
       ],
-      include: { repository: { include: { installation: true } } },
+      include: { repository: { include: { installation: true, readinessAutomation: true } } },
     });
     if (!pr) return;
     const claimed = await this.db.repositoryPullRequest.updateMany({
@@ -703,11 +733,11 @@ export class SkillReviewService {
       !organizationId
     )
       return;
-    const route = await this.db.aiStageRoute.findUnique({
-      where: {
-        organizationId_stage: { organizationId, stage: "pull_request" },
-      },
-    });
+    const route = await effectiveAiRoute(
+      this.db,
+      organizationId,
+      "pull_request",
+    );
     const policy = await this.db.gatePolicyRevision.findFirst({
       where: {
         repositoryId: pr.repositoryId,
@@ -716,10 +746,30 @@ export class SkillReviewService {
       },
       orderBy: { publishedAt: "desc" },
     });
-    if (!route?.automaticReviews || !route.enabled || !policy) return;
+    const config = pr.repository.readinessAutomation;
+    const scoped = config?.aiReviews === true;
+    if (!route?.enabled || (!scoped && !route.automaticReviews) || !policy || (scoped && !route.allowSource)) return;
+    // The pipeline supplies the exact PR assessment. Enabling reviews never sends
+    // historic PR code: only verified runs submitted after this authorization.
+    // Upgrade an already enabled preference using its original, audited consent.
+    const authorizationAt = scoped ? config!.aiReviewsEnabledAt ?? (await this.db.auditEvent.findFirst({ where: {
+      event: "github.readiness_automation_changed", actorId: config!.actorId,
+      AND: [
+        { metadata: { path: ["repositoryGithubId"], equals: pr.repository.githubId.toString() } },
+        { metadata: { path: ["revision"], equals: config!.revision } },
+        { metadata: { path: ["aiReviews"], equals: true } },
+      ],
+    }, orderBy: { createdAt: "desc" } }))?.createdAt : null;
+    const run = scoped && authorizationAt ? await this.db.pipelineRunSubmission.findFirst({ where: {
+      repositoryId: pr.repositoryId, prNumber: pr.number, sourceSha: context.head.sha,
+      policyId: policy.id, policyHash: policy.definitionHash, state: "COMPLETE",
+      assessmentId: { not: null }, createdAt: { gte: authorizationAt! },
+    }, orderBy: { createdAt: "desc" } }) : null;
+    if (scoped && !run) return;
     let assessment = await this.db.commitAssessment.findFirst({
       where: {
         repositoryId: pr.repositoryId,
+        ...(run?.assessmentId ? { id: run.assessmentId } : {}),
         sourceSha: context.head.sha,
         selectionId: policy.selectionId,
         request: { path: ["subjectKind"], equals: "PULL_REQUEST" },
@@ -728,7 +778,7 @@ export class SkillReviewService {
     });
     const session: AuthenticatedSession = {
       authenticated: true,
-      identityId: route.updatedById,
+      identityId: scoped ? config!.actorId : route.updatedById,
       organizationId,
       subject: "",
       email: null,
@@ -741,6 +791,7 @@ export class SkillReviewService {
         context,
       )
     ) {
+      if (scoped) return;
       try {
         const automatic = {
           policyId: policy.id,
@@ -788,8 +839,14 @@ export class SkillReviewService {
       checks.some((c) => !published.some((p) => digest(p) === digest(c)))
     )
       return;
-    const eligibility = await this.list(session, pr.repository.githubId.toString(), assessment.id);
-    const eligibleChecks = checks.filter(c => eligibility.checks.some(e=>e.id === c.id && e.available));
+    const eligibility = await this.list(
+      session,
+      pr.repository.githubId.toString(),
+      assessment.id,
+    );
+    const eligibleChecks = checks.filter((c) =>
+      eligibility.checks.some((e) => e.id === c.id && e.available),
+    );
     for (let index = 0; index < eligibleChecks.length; index += 3) {
       const selected = eligibleChecks.slice(index, index + 3);
       const automatic = {
@@ -800,8 +857,10 @@ export class SkillReviewService {
           context,
           policyHash: policy.definitionHash,
           routeRevision: route.revision,
+          ...(scoped ? { repositoryRevision: config!.revision } : {}),
           checks: selected,
         }),
+        ...(scoped ? { repositoryRevision: config!.revision } : {}),
         policyId: policy.id,
         policyHash: policy.definitionHash,
         number: pr.number,
@@ -837,7 +896,7 @@ export class SkillReviewService {
         )
           await this.db.auditEvent.create({
             data: {
-              actorId: route.updatedById,
+              actorId: session.identityId,
               event: "ai.review.dispatch_unavailable",
               metadata,
             },
@@ -846,7 +905,10 @@ export class SkillReviewService {
     }
   }
   async publishPendingSummary() {
-    if (!this.github || configurationValue('GITHUB_CHECK_PUBLICATION_ENABLED') !== "true")
+    if (
+      !this.github ||
+      configurationValue("GITHUB_CHECK_PUBLICATION_ENABLED") !== "true"
+    )
       return;
     const job = await this.db.aiSkillReview.findFirst({
       where: {
@@ -890,7 +952,10 @@ export class SkillReviewService {
         job.assessmentId,
         snapshot,
       );
-      if ((!route.publishSummary && !route.publishInline) || !snapshot.automatic)
+      if (
+        (!route.publishSummary && !route.publishInline) ||
+        !snapshot.automatic
+      )
         throw new Error("Summary disabled");
       await this.verifyLivePr(job.repository, snapshot);
       const result = job.result as {
@@ -900,44 +965,40 @@ export class SkillReviewService {
           evidenceRefs: string[];
         }[];
       };
-      const safe = (s: string) => s.replace(/[\`*_<>#@\[\]]/g, "");
-      const summary = [
-        `Advisory review for PR #${snapshot.automatic.number}, commit ${snapshot.context.sourceSha}. AI does not decide readiness.`,
-        ...result.findings.map(
-          (f) =>
-            `- ${safe(f.summary)} ${safe(f.recommendation)} (${f.evidenceRefs
-              .map((ref) => {
-                const line = snapshot.context.source?.lines.find(
-                  (l) => l.ref === ref,
-                );
-                return line
-                  ? `${safe(line.path)}:${line.line} ${line.side}`
-                  : ref;
-              })
-              .join(", ")})`,
-        ),
-        ...(result.findings.length
-          ? []
-          : [
-              "No advisory suggestions returned; this is not a passing engineering check.",
-            ]),
-        ...(snapshot.context.source
-          ? [
-              `Scope: ${snapshot.context.source.lines.length} changed lines; ${snapshot.context.source.omittedFiles} files and ${snapshot.context.source.omittedLines} lines omitted.`,
-            ]
-          : ["Assessment evidence only; repository source was not shared."]),
-      ].join("\n\n");
-      const publication = route.publishSummary ? await this.github.publishAiReviewSummary(
-        job.repository.installationId,
-        job.repository.githubId,
+      const findings = actionableFindings(result.findings);
+      const summary = conciseReviewSummary(
+        snapshot.automatic.number,
         snapshot.context.sourceSha,
-        digest({ kind: "AI_SUMMARY", key: snapshot.automatic.key }),
-        summary,
-      ) : null;
-      const inline = route.publishInline && snapshot.context.source ? await this.github.publishAiInlineReview(job.repository.installationId, job.repository.githubId, snapshot.context.source, digest({kind:"AI_INLINE", key:snapshot.automatic.key}), result.findings) : null;
+        findings.length,
+        snapshot.context.source,
+      );
+      const publication = route.publishSummary
+        ? await this.github.publishAiReviewSummary(
+            job.repository.installationId,
+            job.repository.githubId,
+            snapshot.context.sourceSha,
+            digest({ kind: "AI_SUMMARY", key: snapshot.automatic.key }),
+            summary,
+          )
+        : null;
+      const inline =
+        route.publishInline && snapshot.context.source
+          ? await this.github.publishAiInlineReview(
+              job.repository.installationId,
+              job.repository.githubId,
+              snapshot.context.source,
+              digest({ kind: "AI_INLINE", key: snapshot.automatic.key }),
+              findings,
+              snapshot.automatic.repositoryRevision !== undefined ? summary : undefined,
+            )
+          : null;
       await this.db.aiSkillReview.update({
         where: { id: job.id },
-        data: { feedbackState: "PUBLISHED", feedbackUrl: publication?.htmlUrl ?? null, inlineFeedbackUrl: inline?.htmlUrl ?? null },
+        data: {
+          feedbackState: "PUBLISHED",
+          feedbackUrl: publication?.htmlUrl ?? null,
+          inlineFeedbackUrl: inline?.htmlUrl ?? null,
+        },
       });
       await this.db.auditEvent.create({
         data: {
@@ -999,7 +1060,11 @@ export class SkillReviewService {
       signal = AbortSignal.any([
         controller.signal,
         this.abort.signal,
-        AbortSignal.timeout(60000),
+        // Give each configured provider its own deadline, while bounding the
+        // whole review and preserving cancellation when access or context changes.
+        AbortSignal.timeout(
+          60000 * Math.max(1, Math.min(snapshot.providers.length, 2)),
+        ),
       ]);
     let checking = false;
     const timer = setInterval(() => {
@@ -1034,7 +1099,9 @@ export class SkillReviewService {
       );
       let findings: Awaited<ReturnType<typeof runSkillInference>> | undefined,
         providerId: string | undefined;
-      const usage: import("./skill-inference.js").ProviderUsage[] & { providerId?:string }[] = [];
+      const usage: import("./skill-inference.js").ProviderUsage[] &
+        { providerId?: string }[] = [];
+      let responseFailure: AiResponseError | undefined;
       for (const pin of snapshot.providers) {
         signal.throwIfAborted();
         const provider = await this.db.aiProviderConnection.findFirst({
@@ -1056,29 +1123,45 @@ export class SkillReviewService {
             provider,
             reviewTasks(snapshot.checks, snapshot.skills),
             snapshot.context,
-            snapshot.maxOutputTokens,
-            signal,
-            async reported => {
-              usage.push({...reported, providerId:provider.id});
-              await this.db.aiSkillReview.update({where:{id:job.id},data:{usage}});
+            aiResponseTokenLimit,
+            AbortSignal.any([signal, AbortSignal.timeout(60000)]),
+            async (reported) => {
+              usage.push({ ...reported, providerId: provider.id });
+              await this.db.aiSkillReview.update({
+                where: { id: job.id },
+                data: { usage },
+              });
             },
           );
           providerId = provider.id;
           break;
         } catch (error) {
-          if (error instanceof AiTransportError && (!signal.aborted || signal.reason?.name === 'TimeoutError')) {
+          if (error instanceof AiResponseError) responseFailure = error;
+          if (
+            error instanceof AiTransportError &&
+            (!signal.aborted || signal.reason?.name === "TimeoutError")
+          ) {
             // Recheck access/configuration before retaining a redacted outage signal.
-            await this.current(session, job.repository.githubId.toString(), job.assessmentId, snapshot);
+            await this.current(
+              session,
+              job.repository.githubId.toString(),
+              job.assessmentId,
+              snapshot,
+            );
             await recordAiInferenceOutcome(this.db, {
-              reviewId: job.id, organizationId: job.organizationId, actorId: job.actorId,
-              repositoryId: job.repositoryId, providerId: provider.id, providerRevision: provider.revision,
-              outcome: 'transport_failed',
+              reviewId: job.id,
+              organizationId: job.organizationId,
+              actorId: job.actorId,
+              repositoryId: job.repositoryId,
+              providerId: provider.id,
+              providerRevision: provider.revision,
+              outcome: "transport_failed",
             });
           }
           signal.throwIfAborted();
         }
       }
-      if (!findings) throw new Error("Unavailable");
+      if (!findings) throw responseFailure ?? new Error("Unavailable");
       await this.verifyLivePr(job.repository, snapshot);
       signal.throwIfAborted();
       await this.current(
@@ -1096,7 +1179,14 @@ export class SkillReviewService {
             job.repository.githubId.toString(),
             "ai.review.run",
           );
+          const effective = await effectiveAiRoute(
+            tx as PrismaService,
+            job.organizationId,
+            job.stage,
+          );
           if (
+            effective?.id !== snapshot.route.id ||
+            effective.revision !== snapshot.route.revision ||
             !(await tx.aiStageRoute.findFirst({
               where: {
                 id: snapshot.route.id,
@@ -1158,14 +1248,20 @@ export class SkillReviewService {
             )
               throw new Error("Provider changed");
           }
-          const successfulProvider = snapshot.providers.find(pin => pin.id === providerId);
+          const successfulProvider = snapshot.providers.find(
+            (pin) => pin.id === providerId,
+          );
           if (!successfulProvider) throw new Error("Model unavailable");
           // Persist availability with the verified review result. A notification
           // storage failure never falls through to another inference call.
           await recordAiInferenceOutcomeInTransaction(tx, {
-            reviewId: job.id, organizationId: job.organizationId, actorId: job.actorId,
-            repositoryId: job.repositoryId, providerId: successfulProvider.id, providerRevision: successfulProvider.revision,
-            outcome: 'succeeded',
+            reviewId: job.id,
+            organizationId: job.organizationId,
+            actorId: job.actorId,
+            repositoryId: job.repositoryId,
+            providerId: successfulProvider.id,
+            providerRevision: successfulProvider.revision,
+            outcome: "succeeded",
           });
           await tx.aiSkillReview.updateMany({
             where: { id: job.id, state: "RUNNING" },
@@ -1181,8 +1277,6 @@ export class SkillReviewService {
                     : {}),
                 },
                 classification: "ADVISORY",
-                inputTokenEstimate: snapshot.inputTokens,
-                maxOutputTokens: snapshot.maxOutputTokens,
               },
               latencyMs: Date.now() - start,
               finishedAt: new Date(),
@@ -1191,13 +1285,23 @@ export class SkillReviewService {
         },
         { isolationLevel: "Serializable" },
       );
-    } catch {
+    } catch (error) {
+      const responseMessages: Record<AiResponseError["code"], string> = {
+        MODEL_UNAVAILABLE: "The configured model rejected the request. Check the model connection.",
+        TRUNCATED: "The model response was cut off. Retry the review.",
+        INVALID_RESPONSE: "The model returned an unreadable response. Retry the review.",
+        UNSAFE_RESPONSE: "The model response contained unsafe content and was rejected.",
+        REFUSED: "The model declined this review.",
+        INVALID_REVIEW_SCHEMA: "The model did not return the required review format. Retry the review.",
+        INVALID_EVIDENCE: "The model cited evidence outside this assessment. Retry the review.",
+        UNSUPPORTED_CLAIM: "The model made an unsupported claim. Retry the review.",
+      };
       await this.db.aiSkillReview.updateMany({
         where: { id: job.id, state: "RUNNING" },
         data: {
           state: "UNAVAILABLE",
           feedbackState: "NOT_REQUESTED",
-          failure:
+          failure: error instanceof AiResponseError ? responseMessages[error.code] :
             "Review unavailable: check current access, approved skills, model route and connection",
           latencyMs: Date.now() - start,
           finishedAt: new Date(),

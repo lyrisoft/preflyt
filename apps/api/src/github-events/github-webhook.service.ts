@@ -1,3 +1,4 @@
+import { isPreflytFeedback } from './preflyt-feedback.js'
 import { configurationValue } from '../configuration/runtime-configuration.js'
 import { normalizeContributorEvent } from './contributor-event.js'
 import { captureContributors } from '../contributors/capture.js'
@@ -113,6 +114,30 @@ export class GitHubWebhookService {
         return {accepted: true, duplicate: false, deliveryId: deliveryId.toLowerCase()};
       });
     }
+    // Repository webhooks omit App installation metadata. After verifying the
+    // original signed bytes, bind only supported CI/PR events to an existing,
+    // selected repository connection. Never create or grant access from a hook.
+    if (
+      ['pull_request', 'workflow_run', 'check_run'].includes(event) &&
+      body && typeof body === 'object' && !Array.isArray(body) &&
+      !Object.hasOwn(body, 'installation')
+    ) {
+      const payload = body as { repository?: { id?: unknown; full_name?: unknown; owner?: { login?: unknown } } }
+      const identity = payload.repository
+      if (!Number.isSafeInteger(identity?.id) || Number(identity?.id) < 1 ||
+        typeof identity?.full_name !== 'string' || typeof identity?.owner?.login !== 'string')
+        throw new BadRequestException('Repository webhook identity is invalid')
+      const connection = await this.prisma.gitHubRepository.findFirst({
+        where: { githubId: BigInt(Number(identity.id)), selected: true, available: true,
+          installation: { active: true } },
+        select: { installationId: true, fullName: true, ownerLogin: true },
+      })
+      if (!connection) return { accepted: false, reason: 'repository_not_selected' }
+      if (connection.fullName.toLowerCase() !== identity.full_name.toLowerCase() ||
+        connection.ownerLogin.toLowerCase() !== identity.owner.login.toLowerCase())
+        throw new BadRequestException('Repository webhook does not match its connection')
+      body = { ...body, installation: { id: Number(connection.installationId) } }
+    }
     const access = normalizeAccessEvent(event, body)
     if (access)
       return this.receiveAccess(
@@ -134,6 +159,8 @@ export class GitHubWebhookService {
       if (!normalized || !captured.accepted) return captured
     }
     if (!normalized) return { accepted: false, reason: 'unsupported_event' }
+    if (isPreflytFeedback(normalized.sourceIdentity))
+      return { accepted: false, reason: 'preflyt_feedback_check' }
     const id = deliveryId.toLowerCase()
     const payloadHash = createHash('sha256')
       .update(event)
@@ -245,19 +272,24 @@ export class GitHubWebhookService {
     })
   }
 
-  async evidence(repositoryId: string, sha?: string) {
+  async evidence(repositoryId: string, sha?: string, pageInput?: string) {
+    if (pageInput !== undefined && (typeof pageInput !== 'string' || !/^[1-9][0-9]{0,5}$/.test(pageInput)))
+      throw new BadRequestException('A positive page number is required')
+    const page = pageInput === undefined ? undefined : Number(pageInput)
+    const pageSize = page === undefined ? 50 : 10
     if (
       sha !== undefined &&
       (typeof sha !== 'string' || !/^[a-f0-9]{40}$/i.test(sha))
     )
       throw new BadRequestException('A full commit SHA is required')
     const repository = await this.selectedRepository(repositoryId)
+    const where = {
+      repositoryGithubId: repository.githubId,
+      installationId: repository.installationId,
+      ...(sha === undefined ? {} : { sourceSha: sha.toLowerCase() }),
+    }
     const observations = await this.prisma.importedCiEvidence.findMany({
-      where: {
-        repositoryGithubId: repository.githubId,
-        installationId: repository.installationId,
-        ...(sha === undefined ? {} : { sourceSha: sha.toLowerCase() }),
-      },
+      where,
       include: {
         artifacts: {
           select: artifactSummarySelect,
@@ -265,9 +297,12 @@ export class GitHubWebhookService {
         },
       },
       orderBy: [{ observedAt: 'desc' }, { deliveryId: 'desc' }],
-      take: 50,
+      take: pageSize,
+      ...(page === undefined ? {} : { skip: (page - 1) * pageSize }),
     })
+    const total = page === undefined ? undefined : await this.prisma.importedCiEvidence.count({ where })
     return {
+      ...(page === undefined ? {} : { pagination: { page, pageSize, total: total!, hasNext: page * pageSize < total! } }),
       enabled: this.enabled,
       source: 'github_signed_webhook',
       qualityGate: null,
@@ -301,15 +336,18 @@ export class GitHubWebhookService {
     return repository
   }
 
-  async list(repositoryId: string) {
+  async list(repositoryId: string, pageInput?: string) {
+    if (pageInput !== undefined && (typeof pageInput !== 'string' || !/^[1-9][0-9]{0,5}$/.test(pageInput)))
+      throw new BadRequestException('A positive page number is required')
+    const page = pageInput === undefined ? undefined : Number(pageInput)
+    const pageSize = page === undefined ? 50 : 10
     const repository = await this.selectedRepository(repositoryId)
+    const where = { repositoryGithubId: repository.githubId, installationId: repository.installationId }
     const deliveries = await this.prisma.gitHubWebhookDelivery.findMany({
-      where: {
-        repositoryGithubId: repository.githubId,
-        installationId: repository.installationId,
-      },
+      where,
       orderBy: [{ receivedAt: 'desc' }, { id: 'desc' }],
-      take: 50,
+      take: pageSize,
+      ...(page === undefined ? {} : { skip: (page - 1) * pageSize }),
       select: {
         id: true,
         event: true,
@@ -326,6 +364,7 @@ export class GitHubWebhookService {
         processedAt: true,
       },
     })
-    return { enabled: this.enabled, deliveries }
+    const total = page === undefined ? undefined : await this.prisma.gitHubWebhookDelivery.count({ where })
+    return { enabled: this.enabled, deliveries, ...(page === undefined ? {} : { pagination: { page, pageSize, total: total!, hasNext: page * pageSize < total! } }) }
   }
 }

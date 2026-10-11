@@ -42,7 +42,7 @@ const reasons: Record<string, string> = {
   NO_APPLICABLE_ASSESSMENT:
     'No assessment matches the current revision and policy. A PR or CI event will create another assessment.',
   EXECUTION_NOT_VERIFIED:
-    'Matching assessments are available. Their evidence does not establish verified execution or a quality gate.',
+    'Matching assessments are available. Their evidence does not establish verified execution or a passing merge review result.',
 }
 
 export function RepositoryPullRequests({
@@ -323,7 +323,7 @@ export function RepositoryPullRequests({
                         className='size-3.5 text-muted-foreground'
                         aria-hidden='true'
                       />
-                      Quality gate
+                      Merge review result
                     </p>
                     <p className='mt-3 text-xs text-muted-foreground'>
                       Not evaluated

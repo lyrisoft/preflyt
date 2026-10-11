@@ -27,7 +27,12 @@ vi.mock('@tanstack/react-router', () => ({
 }))
 const render = () =>
   renderToStaticMarkup(
-    <RulesetInsights repositoryId='501' actorId='reader' rulesetId={7} />
+    <RulesetInsights
+      repositoryId='501'
+      actorId='reader'
+      rulesetId={7}
+      configuration={null}
+    />
   )
 beforeEach(() => {
   state.query = {
@@ -53,7 +58,7 @@ beforeEach(() => {
 })
 it('labels current-page counts and empty history without a false pass percentage', () => {
   const html = render()
-  expect(html).toContain('This page')
+  expect(html).toContain('on this page')
   expect(html).toContain('No matching evaluations')
   expect(html).toContain('Previous')
   expect(html).toContain('Next')
@@ -83,11 +88,10 @@ it('shows disabled or failed saved-history collection without claiming complete 
     },
   }
   const html = render()
-  expect(html).toContain('Saved GitHub evaluations')
+  expect(html).toContain('Saved GitHub history')
   expect(html).toContain('History collection is disabled')
   expect(html).toContain('No history collected yet')
-  expect(html).toContain('first collection sweep has not finished')
-  expect(html).toContain('Retention: 90 days')
+  expect(html).not.toContain('100%')
 })
 
 it('shows collected-period comparisons and an honest bounded-history warning', () => {
@@ -180,7 +184,7 @@ it('renders the real saved-history chart within a narrow viewport in both themes
   }
   const view = await renderBrowser(
     <div style={{ width: '100%', padding: 16 }}>
-      <RulesetInsights repositoryId='501' actorId='reader' rulesetId={7} />
+      <RulesetInsights repositoryId='501' actorId='reader' rulesetId={7} configuration={null} />
     </div>
   )
   try {

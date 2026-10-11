@@ -1,7 +1,10 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   AlertTriangle,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   CircleCheck,
   Clock3,
   GitCommitHorizontal,
@@ -44,7 +47,16 @@ type Delivery = {
   reason: string | null
   receivedAt: string
 }
-type Events = { enabled: boolean; deliveries: Delivery[] }
+type Events = {
+  enabled: boolean
+  deliveries: Delivery[]
+  pagination?: {
+    page: number
+    pageSize: number
+    total: number
+    hasNext: boolean
+  }
+}
 const stateOrder: DeliveryState[] = [
   'PROCESSED',
   'RECEIVED',
@@ -151,13 +163,14 @@ function DeliveryTimelineItem({
 }
 
 export function RepositoryEvents({ repositoryId }: { repositoryId: string }) {
+  const [page, setPage] = useState(1)
   const query = useQuery<Events>({
-    queryKey: ['repository-events', repositoryId],
+    queryKey: ['repository-events', repositoryId, page],
     retry: false,
     refetchInterval: (query) => (query.state.data?.enabled ? 10_000 : false),
     queryFn: async ({ signal }): Promise<Events> => {
       const response = await fetch(
-        `${API_BASE_URL}/github/repositories/${encodeURIComponent(repositoryId)}/events`,
+        `${API_BASE_URL}/github/repositories/${encodeURIComponent(repositoryId)}/events?page=${page}`,
         { credentials: 'include', signal }
       )
       if (!response.ok)
@@ -229,6 +242,9 @@ export function RepositoryEvents({ repositoryId }: { repositoryId: string }) {
           </div>
         ) : (
           <>
+            <p className='mx-6 mb-2 text-xs text-muted-foreground'>
+              Events on this page
+            </p>
             <div className='mx-6 mb-2 flex flex-wrap items-center gap-x-5 gap-y-2 rounded-lg border bg-muted/10 px-4 py-3 text-xs'>
               {counts.map(({ state, count }) => (
                 <span key={state} className='inline-flex items-center gap-2'>
@@ -264,6 +280,36 @@ export function RepositoryEvents({ repositoryId }: { repositoryId: string }) {
                 ))}
             </ol>
           </>
+        )}
+        {query.data?.pagination && !query.isError && (
+          <nav
+            aria-label='Delivery timeline pagination'
+            className='mt-4 flex flex-wrap items-center justify-between gap-3 border-t px-6 pt-4'
+          >
+            <p className='text-xs text-muted-foreground'>
+              Page {page} · {query.data.pagination.total} deliveries
+            </p>
+            <div className='flex gap-2'>
+              <Button
+                variant='outline'
+                size='sm'
+                disabled={page === 1 || query.isFetching}
+                onClick={() => setPage(page - 1)}
+              >
+                <ChevronLeft aria-hidden='true' />
+                Previous
+              </Button>
+              <Button
+                variant='outline'
+                size='sm'
+                disabled={!query.data.pagination.hasNext || query.isFetching}
+                onClick={() => setPage(page + 1)}
+              >
+                Next
+                <ChevronRight aria-hidden='true' />
+              </Button>
+            </div>
+          </nav>
         )}
       </CardContent>
     </Card>

@@ -97,14 +97,14 @@ export function ContributorHelp({
       ),
     },
     {
-      title: 'Engineering policy compliance',
+      title: 'Policy Compliance',
       content: (
         <>
           {definitions(complianceDefinitions)}
           <p>
-            Results use saved engineering standards in observe mode. They do not
-            show published-policy enforcement or current merge readiness. Open
-            Policy evidence to review the exact PR commit and assessment.
+            Results use saved standards in observe mode. They do not show
+            published-policy enforcement or current merge readiness. Open Policy
+            evidence to review the exact PR commit and assessment.
           </p>
           <p>
             Different standards versions are compared separately. First recorded

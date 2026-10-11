@@ -12,7 +12,7 @@ export function sentence(value: string) {
   return text.charAt(0).toUpperCase() + text.slice(1)
 }
 
-const configFound: Status = { label: 'Configuration found', tone: 'success' }
+const configFound: Status = { label: 'Related files found', tone: 'info' }
 const notFound: Status = { label: 'Not found', tone: 'warning' }
 const unknown: Status = { label: 'Unknown', tone: 'neutral' }
 

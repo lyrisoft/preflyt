@@ -1,4 +1,7 @@
-import { checkReportAdapters } from "../assessments/check-report-adapters.js";
+import {
+  checkReportAdapters,
+  checkReportFormat,
+} from "../assessments/check-report-adapters.js";
 import { digest as contentDigest } from "../assessments/assessment-digest.js";
 import { createHash } from "node:crypto";
 import type { ProfileSignal } from "../github/repository-profile.js";
@@ -23,6 +26,8 @@ export type Rule = {
   exceptionEligible: boolean;
   defaultEnforcement: "observe";
   guidance: string;
+  workflowCommand?: string;
+  reportPath?: string;
   rationale: string;
 };
 function rule(
@@ -66,6 +71,109 @@ function rule(
       "Configure the named control and collect revision-bound, trusted evidence. Configuration alone does not establish compliance.",
     rationale: "/docs/product/engineering-standards-library.md",
   };
+}
+/** Names and remediation text do not change evaluation requirements. */
+export function ruleRequirementsDigest(value: Rule & { packIds?: string[] }) {
+  const {
+    title: _title,
+    guidance: _guidance,
+    workflowCommand: _command,
+    reportPath: _path,
+    packIds: _packIds,
+    ...requirements
+  } = value;
+  return contentDigest(requirements);
+}
+export type CheckInput = {
+  id: string;
+  title: string;
+  guidance: string;
+  workflowCommand?: string;
+  reportPath?: string;
+};
+export function validCheckWorkflow(
+  input: Pick<CheckInput, "workflowCommand" | "reportPath">,
+) {
+  return (
+    (input.workflowCommand === undefined ||
+      (typeof input.workflowCommand === "string" &&
+        input.workflowCommand.length <= 4000 &&
+        !input.workflowCommand.includes("\0"))) &&
+    (input.reportPath === undefined ||
+      (typeof input.reportPath === "string" &&
+        !!input.reportPath.trim() &&
+        input.reportPath.length <= 512 &&
+        !input.reportPath.startsWith("/") &&
+        !input.reportPath.split("/").includes("..") &&
+        !/[\x00-\x1f\\]/.test(input.reportPath)))
+  );
+}
+export function checkWorkflow(
+  input: Pick<CheckInput, "workflowCommand" | "reportPath">,
+) {
+  return {
+    ...(input.workflowCommand?.trim()
+      ? { workflowCommand: input.workflowCommand.trim() }
+      : {}),
+    ...(input.reportPath?.trim()
+      ? { reportPath: input.reportPath.trim() }
+      : {}),
+  };
+}
+export function customRule(input: CheckInput): Rule | undefined {
+  if (
+    !input ||
+    typeof input.id !== "string" ||
+    !input.id.startsWith("custom-") ||
+    !checkReportFormat(input.id) ||
+    typeof input.title !== "string" ||
+    !input.title.trim() ||
+    input.title.length > 120 ||
+    typeof input.guidance !== "string" ||
+    input.guidance.length > 4000 ||
+    !validCheckWorkflow(input)
+  )
+    return;
+  return {
+    ...rule(input.id, input.title.trim(), null, "import_only"),
+    guidance: input.guidance.trim(),
+    ...checkWorkflow(input),
+    allowedSources: ["verified_imported_ci"],
+    thresholds: {
+      maxFailedChecks: 0,
+      ...(checkReportFormat(input.id) === "junit"
+        ? { minimumExecutedTests: 1 }
+        : {}),
+    },
+  };
+}
+function validOrganizationRule(value: Rule): boolean {
+  if (
+    !value ||
+    typeof value.title !== "string" ||
+    !value.title.trim() ||
+    value.title.length > 120 ||
+    typeof value.guidance !== "string" ||
+    value.guidance.length > 4000 ||
+    !validCheckWorkflow(value)
+  )
+    return false;
+  if (typeof value.id === "string" && value.id.startsWith("custom-")) {
+    const canonical = customRule(value);
+    return !!canonical && contentDigest(canonical) === contentDigest(value);
+  }
+  return catalogueVersions.some((pack) =>
+    pack.rules.some(
+      (known) =>
+        known.id === value.id &&
+        contentDigest({
+          ...known,
+          title: value.title,
+          guidance: value.guidance,
+          ...checkWorkflow(value),
+        }) === contentDigest(value),
+    ),
+  );
 }
 const tests = rule(
   "tests.required",
@@ -338,12 +446,7 @@ export function organizationPack(value: unknown): StandardPack | undefined {
         new Set(pack.aiChecks.map((c) => c.id)).size !== pack.aiChecks.length ||
         pack.aiChecks.some((c) => !validAiCheck(c)))) ||
     digest !== packDigest(definition) ||
-    pack.rules.some(
-      (r) =>
-        !catalogueVersions.some((p) =>
-          p.rules.some((known) => contentDigest(known) === contentDigest(r)),
-        ),
-    )
+    pack.rules.some((r) => !validOrganizationRule(r))
   )
     return;
   return pack;
@@ -419,10 +522,7 @@ export function posture(
     for (const rule of pack.rules) {
       const existing = rules.get(rule.id);
       if (existing) {
-        if (
-          JSON.stringify({ ...existing, packIds: undefined }) !==
-          JSON.stringify(rule)
-        )
+        if (ruleRequirementsDigest(existing) !== ruleRequirementsDigest(rule))
           throw new Error("Conflicting frozen rule definitions");
         existing.packIds.push(pack.id);
         continue;

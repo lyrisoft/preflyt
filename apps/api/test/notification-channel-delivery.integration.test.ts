@@ -61,7 +61,7 @@ it('does not create historical channel deliveries while email is disabled or sou
 it('claims concurrent worker attempts once and records a safe sent audit', async () => {
   const { delivery } = await pending(), send = vi.fn().mockResolvedValue(undefined)
   await Promise.all([deliver(delivery.id, { send }), deliver(delivery.id, { send })])
-  expect(send).toHaveBeenCalledOnce(); expect(send).toHaveBeenCalledWith(delivery.recipient, delivery.id, 'ORGANIZATION')
+  expect(send).toHaveBeenCalledOnce(); expect(send).toHaveBeenCalledWith(delivery.recipient, delivery.id, 'ORGANIZATION', 'ASSESSMENT_FAILED')
   expect((await row(delivery.id)).state).toBe('SENT')
   const audit = await db().auditEvent.findFirstOrThrow({ where: { event: 'notification.channel.email.sent' } })
   expect(JSON.stringify(audit.metadata)).not.toContain(delivery.recipient); expect(JSON.stringify(audit.metadata)).not.toContain('sensitive-repo')

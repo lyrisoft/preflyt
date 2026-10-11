@@ -128,3 +128,31 @@ it("maps renamed deletion lines to the original file and additions to the curren
     ]),
   ).toThrow();
 });
+
+it("excludes generated Preflyt integration files from the AI disclosure and comment scope", () => {
+  const patch = "@@ -0,0 +1,400 @@\n" + Array.from({length: 400}, (_, i) => `+generatedLine${i}`).join("\n");
+  const source = prReviewSource(1, pr, [
+    {filename: ".github/actions/preflyt-policy/run.py", patch},
+    {filename: ".github/workflows/preflyt-gate.yml", patch},
+    {filename: ".preflyt/checks.json", patch},
+    {filename: "catalogue.py", patch: "@@ -0,0 +1 @@\n+price = total + discount"},
+  ]);
+  expect(source.lines).toEqual([{ref: "diff:0", path: "catalogue.py", line: 1, side: "RIGHT", text: "price = total + discount"}]);
+  expect(source.omittedFiles).toBe(3);
+  expect(source.omittedLines).toBe(0);
+  expect(JSON.stringify(source)).not.toContain("generatedLine");
+});
+
+it("keeps user workflows and custom Actions reviewable and excludes renamed Preflyt files", () => {
+  const patch = "@@ -1 +1 @@\n-before\n+after";
+  const source = prReviewSource(1, pr, [
+    {filename: ".github/workflows/ci.yml", patch},
+    {filename: ".github/actions/custom-build/action.yml", patch},
+    {filename: "renamed.py", previous_filename: ".github/actions/preflyt-policy/run.py", patch},
+    {filename: ".github/workflows/preflyt-gate.yaml", previous_filename: "gate.yaml", patch},
+  ]);
+  expect(source.omittedFiles).toBe(2);
+  expect(new Set(source.lines.map(line => line.path))).toEqual(new Set([".github/workflows/ci.yml", ".github/actions/custom-build/action.yml"]));
+  expect(() => prReviewSource(1, pr, [{filename: ".github/actions/preflyt-policy/run.py", previous_filename: "../unsafe", patch}])).toThrow("Invalid previous file identity");
+  expect(() => prReviewSource(1, pr, [{filename: ".github/actions/preflyt-policy/run.py", patch}])).toThrow("No safe changed lines");
+});

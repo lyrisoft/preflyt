@@ -1,8 +1,9 @@
+import { isExecutionVerified } from './assessment-result'
 import { sentence } from './repository-vocabulary'
 
 export type EvidenceValidation = {
   version: number
-  status: 'INVALID' | 'INCOMPLETE'
+  status: 'INVALID' | 'INCOMPLETE' | 'VERIFIED'
   trustedExecuted: boolean
   sourceApproved: boolean
   observationIntegrity: boolean | null
@@ -37,8 +38,10 @@ export function EvidenceValidationPanel({
       </summary>
       <div className='mt-2 space-y-2'>
         <p>
-          The tools and rules that ran have not been verified. CI source:{' '}
-          {validation.sourceApproved ? 'approved' : 'missing'}.
+          {isExecutionVerified(validation)
+            ? 'Check execution verified.'
+            : 'Check execution has not been verified.'}{' '}
+          CI source: {validation.sourceApproved ? 'approved' : 'missing'}.
         </p>
         {validation.reports.map((report) => (
           <p key={report.artifactId}>

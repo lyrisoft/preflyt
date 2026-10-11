@@ -52,8 +52,11 @@ import { StatusBadge } from '@/components/status-badge'
 import { SurfaceIcon } from '@/components/surface-icon'
 import { RelativeTime } from '@/features/repositories/relative-time'
 import { TechIcon } from '@/features/repositories/tech-icon'
+import { useNavigationSession } from '@/features/workspace/navigation-session'
 import { ActivityHeatmap } from './activity-heatmap'
 import type { DashboardData } from './dashboard-types'
+import { FirstReport } from './first-report'
+import { WorkspaceStart } from './workspace-start'
 
 const route = getRouteApi('/_authenticated/')
 const reasons: Record<string, string> = {
@@ -68,8 +71,16 @@ export function Dashboard() {
   const { days = '180', repository, tab = 'overview' } = route.useSearch()
   const [repositoryPage, setRepositoryPage] = useState(1)
   const navigate = useNavigate()
+  const session = useNavigationSession()
   const query = useQuery({
-    queryKey: ['engineering-dashboard', days, repository ?? 'all'],
+    queryKey: [
+      'engineering-dashboard',
+      session.data?.organizationId,
+      session.data?.identityId,
+      days,
+      repository ?? 'all',
+    ],
+    enabled: session.isSuccess && !!session.data.organizationId,
     staleTime: 15_000,
     retry: false,
     queryFn: async ({ signal }): Promise<DashboardData> => {
@@ -204,7 +215,20 @@ export function Dashboard() {
             </>
           }
         />
-        {query.isPending ? (
+        {session.isError ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>Session unavailable</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Button variant='outline' onClick={() => void session.refetch()}>
+                Try again
+              </Button>
+            </CardContent>
+          </Card>
+        ) : session.isSuccess && !session.data.organizationId ? (
+          <WorkspaceStart platformAdmin={!!session.data.platformAdmin} />
+        ) : query.isPending ? (
           <div
             role='status'
             aria-label='Loading engineering overview'
@@ -245,25 +269,16 @@ export function Dashboard() {
           data && (
             <>
               {data.metrics.repositories === 0 ? (
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Connect your first repository</CardTitle>
-                    <CardDescription>
-                      Start with GitHub access, then adopt engineering standards
-                      and collect check results and reports.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <Button asChild>
-                      <Link to='/apps'>
-                        Connect and select repositories
-                        <ArrowUpRight />
-                      </Link>
-                    </Button>
-                  </CardContent>
-                </Card>
+                <FirstReport
+                  repositories={data.repositories}
+                  session={session.data}
+                />
               ) : (
                 <>
+                  <FirstReport
+                    repositories={data.repositories}
+                    session={session.data}
+                  />
                   <div className='grid gap-4 sm:grid-cols-2 xl:grid-cols-4'>
                     {stats.map((stat) => (
                       <Card key={stat.label}>
@@ -372,9 +387,9 @@ export function Dashboard() {
                               </div>
                             </div>
                             <p className='border-t pt-4 text-xs text-muted-foreground'>
-                              Open Quality Gates or Findings for detailed
-                              results. A successful CI result alone does not
-                              mean a change is ready to merge.
+                              Open Assessments or Findings for detailed results.
+                              A successful CI result alone does not mean a
+                              change is ready to merge.
                             </p>
                             <Button variant='outline' size='sm' asChild>
                               <Link to='/policies' search={{ repository }}>

@@ -25,7 +25,6 @@ import {
 import { API_BASE_URL } from '@/lib/api'
 import { chartAnimation, chartTooltipAnimation } from '@/lib/chart-motion'
 import { cn } from '@/lib/utils'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -43,6 +42,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { AppHeader } from '@/components/layout/app-header'
 import { Main } from '@/components/layout/main'
 import { PageHeader } from '@/components/page-header'
@@ -69,124 +76,166 @@ type Repository = {
 
 type Installation = { id: string; accountLogin: string; active: boolean }
 
-function RepositoryCardDetails({
-  repository,
+export function RepositoryInventoryTable({
+  repositories,
   canManage,
-  saving,
+  savingRepository,
+  onSelectionChange,
 }: {
-  repository: Repository
+  repositories: Repository[]
   canManage: boolean
-  saving: boolean
+  savingRepository: string | null
+  onSelectionChange: (repository: Repository, selected: boolean) => void
 }) {
-  const technologies = repository.selected
-    ? [...new Set(repository.technologies ?? [])]
-    : []
   return (
-    <div className='space-y-4'>
-      <div className='flex items-start justify-between gap-3'>
-        <span
-          className={cn(
-            'flex size-10 shrink-0 items-center justify-center rounded-xl border',
-            repository.selected
-              ? 'border-primary/20 bg-primary/10 text-primary'
-              : 'bg-muted/40 text-muted-foreground'
-          )}
-        >
-          <GitBranch aria-hidden='true' className='size-5' />
-        </span>
-        <div className={cn('flex items-center gap-2', canManage && 'pe-8')}>
-          <StatusBadge tone={repository.selected ? 'info' : 'neutral'}>
-            {repository.selected ? 'Selected' : 'Not selected'}
-          </StatusBadge>
-        </div>
-      </div>
-      <div className='min-w-0'>
-        <p className='truncate text-xs text-muted-foreground'>
-          {repository.ownerLogin}
-        </p>
-        <h3
-          className={cn(
-            'mt-1 flex items-center justify-between gap-2 text-base font-semibold',
-            repository.selected && 'text-primary'
-          )}
-        >
-          <span
-            className={cn(
-              'truncate',
-              repository.selected && 'group-hover:underline'
+    <div className='overflow-hidden rounded-xl border'>
+      <Table aria-label='Repository inventory' className='min-w-[1000px]'>
+        <TableHeader>
+          <TableRow className='bg-muted/30'>
+            {canManage && (
+              <TableHead className='w-14'>
+                <span className='sr-only'>Select repository</span>
+              </TableHead>
             )}
-          >
-            {repository.name}
-          </span>
-          {repository.selected && (
-            <ArrowUpRight aria-hidden='true' className='size-4 shrink-0' />
-          )}
-        </h3>
-      </div>
-      <div className='flex flex-wrap gap-2'>
-        <Badge variant='neutral' className='gap-1.5 font-normal'>
-          <GitBranch aria-hidden='true' className='size-3' />
-          {repository.defaultBranch ?? 'No default branch'}
-        </Badge>
-        <Badge variant='neutral' className='gap-1.5 font-normal'>
-          {repository.isPrivate ? (
-            <LockKeyhole aria-hidden='true' className='size-3' />
-          ) : (
-            <Globe2 aria-hidden='true' className='size-3' />
-          )}
-          {repository.isPrivate ? 'Private' : 'Public'}
-        </Badge>
-      </div>
-      <div
-        className='flex min-h-9 flex-wrap items-center gap-1.5'
-        role='group'
-        aria-label={
-          repository.profileSha
-            ? `Last profiled languages and frameworks at commit ${repository.profileSha.slice(0, 7)}`
-            : 'Last profiled languages and frameworks'
-        }
-      >
-        {technologies.length > 0 ? (
-          <>
-            {technologies.map((name) => (
-              <TechIcon key={name} name={name} />
-            ))}
-            <span
-              id={`repository-stack-${repository.githubId}`}
-              className='sr-only group-has-[:focus-visible]:not-sr-only group-has-[:focus-visible]:w-full group-has-[:focus-visible]:text-xs group-has-[:focus-visible]:text-muted-foreground'
-            >
-              Last profiled stack: {technologies.join(', ')}
-            </span>
-          </>
-        ) : (
-          <span
-            id={`repository-stack-${repository.githubId}`}
-            className='text-xs text-muted-foreground'
-          >
-            {!repository.selected
-              ? 'Select to view stack'
-              : repository.profiledAt === undefined
-                ? 'Stack not loaded'
-                : repository.profiledAt
-                  ? 'Stack not detected'
-                  : 'Not profiled'}
-          </span>
-        )}
-      </div>
-      <div className='flex items-center justify-between gap-2 border-t pt-3 text-xs text-muted-foreground'>
-        <span className='flex min-w-0 items-center gap-1.5'>
-          <Plug aria-hidden='true' className='size-3.5 shrink-0' />
-          <span className='truncate'>
-            {repository.installation.accountLogin}
-          </span>
-        </span>
-        {saving && (
-          <span role='status' className='flex items-center gap-1.5'>
-            <LoaderCircle aria-hidden='true' className='size-3 animate-spin' />
-            Saving…
-          </span>
-        )}
-      </div>
+            <TableHead className='px-4'>Repository</TableHead>
+            <TableHead className='px-4'>Owner</TableHead>
+            <TableHead className='px-4'>Default branch</TableHead>
+            <TableHead className='px-4'>Visibility</TableHead>
+            <TableHead className='px-4'>Stack</TableHead>
+            <TableHead className='px-4'>GitHub account</TableHead>
+            <TableHead className='px-4'>Selection</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {repositories.map((repository) => {
+            const technologies = repository.selected
+              ? [...new Set(repository.technologies ?? [])]
+              : []
+            const saving = savingRepository === repository.githubId
+            return (
+              <TableRow key={repository.githubId}>
+                {canManage && (
+                  <TableCell className='px-2'>
+                    <label className='flex size-9 cursor-pointer items-center justify-center rounded-lg has-[:disabled]:cursor-not-allowed'>
+                      <Checkbox
+                        checked={repository.selected}
+                        disabled={savingRepository !== null}
+                        onCheckedChange={(checked) =>
+                          onSelectionChange(repository, checked === true)
+                        }
+                        aria-label={`Select ${repository.fullName}`}
+                      />
+                    </label>
+                  </TableCell>
+                )}
+                <TableCell className='px-4 py-4'>
+                  {repository.selected ? (
+                    <Link
+                      to='/repositories/$repositoryId'
+                      params={{ repositoryId: repository.githubId }}
+                      aria-label={`Open ${repository.fullName}`}
+                      className='inline-flex max-w-80 items-center gap-2 rounded-sm font-medium text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring'
+                    >
+                      <span className='truncate' title={repository.fullName}>
+                        {repository.name}
+                      </span>
+                      <ArrowUpRight
+                        aria-hidden='true'
+                        className='size-3.5 shrink-0'
+                      />
+                    </Link>
+                  ) : (
+                    <span
+                      className='block max-w-80 truncate font-medium'
+                      title={repository.fullName}
+                    >
+                      {repository.name}
+                    </span>
+                  )}
+                </TableCell>
+                <TableCell className='px-4 text-muted-foreground'>
+                  {repository.ownerLogin}
+                </TableCell>
+                <TableCell className='px-4'>
+                  <span className='inline-flex items-center gap-2'>
+                    <GitBranch
+                      aria-hidden='true'
+                      className='size-3.5 text-muted-foreground'
+                    />
+                    {repository.defaultBranch ?? 'No default branch'}
+                  </span>
+                </TableCell>
+                <TableCell className='px-4'>
+                  <span className='inline-flex items-center gap-2'>
+                    {repository.isPrivate ? (
+                      <LockKeyhole
+                        aria-hidden='true'
+                        className='size-3.5 text-muted-foreground'
+                      />
+                    ) : (
+                      <Globe2
+                        aria-hidden='true'
+                        className='size-3.5 text-muted-foreground'
+                      />
+                    )}
+                    {repository.isPrivate ? 'Private' : 'Public'}
+                  </span>
+                </TableCell>
+                <TableCell className='px-4'>
+                  <div
+                    className='flex max-w-64 flex-wrap items-center gap-1.5'
+                    role='group'
+                    aria-label={
+                      repository.profileSha
+                        ? `Last profiled languages and frameworks at commit ${repository.profileSha.slice(0, 7)}`
+                        : 'Last profiled languages and frameworks'
+                    }
+                  >
+                    {technologies.length ? (
+                      technologies.map((name) => (
+                        <TechIcon key={name} name={name} compact />
+                      ))
+                    ) : (
+                      <span className='text-xs text-muted-foreground'>
+                        {!repository.selected
+                          ? 'Select to view stack'
+                          : repository.profiledAt === undefined
+                            ? 'Stack not loaded'
+                            : repository.profiledAt
+                              ? 'Stack not detected'
+                              : 'Not profiled'}
+                      </span>
+                    )}
+                  </div>
+                </TableCell>
+                <TableCell className='px-4 text-muted-foreground'>
+                  {repository.installation.accountLogin}
+                </TableCell>
+                <TableCell className='px-4'>
+                  {saving ? (
+                    <span
+                      role='status'
+                      className='inline-flex items-center gap-2 text-xs text-muted-foreground'
+                    >
+                      <LoaderCircle
+                        aria-hidden='true'
+                        className='size-3.5 animate-spin'
+                      />
+                      Saving…
+                    </span>
+                  ) : (
+                    <StatusBadge
+                      tone={repository.selected ? 'info' : 'neutral'}
+                    >
+                      {repository.selected ? 'Selected' : 'Not selected'}
+                    </StatusBadge>
+                  )}
+                </TableCell>
+              </TableRow>
+            )
+          })}
+        </TableBody>
+      </Table>
     </div>
   )
 }
@@ -497,8 +546,8 @@ export function Apps() {
 
           <div className='grid gap-4 sm:grid-cols-2 xl:grid-cols-4'>
             {metrics.map(({ label, value, icon: Icon, accent, detail }) => (
-              <Card key={label} className='gap-3 py-5'>
-                <CardContent className='flex items-start gap-3 px-5'>
+              <Card key={label} className='gap-3 py-4'>
+                <CardContent className='flex items-start gap-3 px-4'>
                   <span
                     className={cn(
                       'flex size-10 shrink-0 items-center justify-center rounded-lg border',
@@ -762,7 +811,7 @@ export function Apps() {
                 Inventory is unavailable. Refresh to try again.
               </div>
             ) : repositories.length === 0 ? (
-              <div className='flex min-h-48 flex-col items-center justify-center rounded-xl border border-dashed p-6 text-center'>
+              <div className='flex min-h-48 flex-col items-center justify-center rounded-xl border border-dashed p-4 text-center'>
                 <span className='mb-4 flex size-12 items-center justify-center rounded-xl border border-blue-500/20 bg-blue-500/10 text-blue-500'>
                   <GitBranch aria-hidden='true' className='size-6' />
                 </span>
@@ -784,7 +833,7 @@ export function Apps() {
                 </p>
               </div>
             ) : visibleRepositories.length === 0 ? (
-              <div className='flex min-h-40 flex-col items-center justify-center rounded-xl border border-dashed p-6 text-center'>
+              <div className='flex min-h-40 flex-col items-center justify-center rounded-xl border border-dashed p-4 text-center'>
                 <SearchIcon
                   aria-hidden='true'
                   className='mb-3 size-6 text-muted-foreground'
@@ -802,56 +851,14 @@ export function Apps() {
                 </Button>
               </div>
             ) : (
-              <div className='grid gap-4 md:grid-cols-2 2xl:grid-cols-3'>
-                {visibleRepositories.map((repository) => (
-                  <Card
-                    key={repository.githubId}
-                    className={cn(
-                      'group relative gap-0 py-0',
-                      repository.selected &&
-                        'border-primary/30 bg-primary/[0.025] hover:border-primary/70'
-                    )}
-                  >
-                    <CardContent className='flex flex-1 px-0'>
-                      {repository.selected ? (
-                        <Link
-                          to='/repositories/$repositoryId'
-                          params={{ repositoryId: repository.githubId }}
-                          aria-label={`Open ${repository.fullName}`}
-                          aria-describedby={`repository-stack-${repository.githubId}`}
-                          className='block w-full rounded-xl p-5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
-                        >
-                          <RepositoryCardDetails
-                            repository={repository}
-                            canManage={canManage}
-                            saving={savingRepository === repository.githubId}
-                          />
-                        </Link>
-                      ) : (
-                        <div className='w-full p-5'>
-                          <RepositoryCardDetails
-                            repository={repository}
-                            canManage={canManage}
-                            saving={savingRepository === repository.githubId}
-                          />
-                        </div>
-                      )}
-                    </CardContent>
-                    {canManage && (
-                      <label className='absolute end-3.5 top-3.5 z-10 flex size-8 cursor-pointer items-center justify-center rounded-lg has-[:disabled]:cursor-not-allowed'>
-                        <Checkbox
-                          checked={repository.selected}
-                          disabled={savingRepository !== null}
-                          onCheckedChange={(checked) =>
-                            void setSelected(repository, checked === true)
-                          }
-                          aria-label={`Select ${repository.fullName}`}
-                        />
-                      </label>
-                    )}
-                  </Card>
-                ))}
-              </div>
+              <RepositoryInventoryTable
+                repositories={visibleRepositories}
+                canManage={canManage}
+                savingRepository={savingRepository}
+                onSelectionChange={(repository, selected) =>
+                  void setSelected(repository, selected)
+                }
+              />
             )}
           </section>
         </div>

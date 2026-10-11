@@ -49,15 +49,27 @@ export function NotificationItem({
             }}
             className='font-medium hover:underline'
           >
-            {titles[item.type] ?? 'AI configuration needs attention'}
+            {item.title ??
+              titles[item.type] ??
+              'AI configuration needs attention'}
+            {item.actionLabel && (
+              <span className='mt-1 block text-xs font-normal text-primary'>
+                {item.actionLabel} →
+              </span>
+            )}
           </Link>
         ) : item.policyId || item.type.startsWith('POLICY_EXCEPTION_') ? (
           <Link
             to='/policies'
-            search={{ repository: item.repositoryId }}
+            search={{ repository: item.repositoryId, policy: item.policyId ?? undefined }}
             className='font-medium hover:underline'
           >
-            {titles[item.type] ?? 'Policy update'}
+            {item.title ?? titles[item.type] ?? 'Policy update'}
+            {item.actionLabel && (
+              <span className='mt-1 block text-xs font-normal text-primary'>
+                {item.actionLabel} →
+              </span>
+            )}
           </Link>
         ) : item.type.startsWith('READINESS_') ||
           item.type.startsWith('RULESET_') ? (
@@ -69,7 +81,12 @@ export function NotificationItem({
             }}
             className='font-medium hover:underline'
           >
-            {titles[item.type] ?? 'Quality gate update'}
+            {item.title ?? titles[item.type] ?? 'Merge review update'}
+            {item.actionLabel && (
+              <span className='mt-1 block text-xs font-normal text-primary'>
+                {item.actionLabel} →
+              </span>
+            )}
           </Link>
         ) : (
           <Link
@@ -81,7 +98,12 @@ export function NotificationItem({
             }}
             className='font-medium hover:underline'
           >
-            {titles[item.type] ?? 'Engineering update'}
+            {item.title ?? titles[item.type] ?? 'Engineering update'}
+            {item.actionLabel && (
+              <span className='mt-1 block text-xs font-normal text-primary'>
+                {item.actionLabel} →
+              </span>
+            )}
           </Link>
         )}
         <p className='mt-1 text-sm break-words text-muted-foreground'>
@@ -89,19 +111,24 @@ export function NotificationItem({
           {item.sourceSha ? ' · ' : ''}
           <span className='font-mono'>{item.sourceSha?.slice(0, 7)}</span>
         </p>
-        {item.type === 'AI_REVIEW_BUDGET_REACHED' && (
-          <p className='mt-2 text-sm text-muted-foreground'>
-            A review could not start because its reservation would exceed the
-            configured daily limit. Reservations are estimates, not provider
-            invoices.
-          </p>
+        <p className='mt-2 text-sm leading-relaxed text-muted-foreground'>
+          {item.message ??
+            (item.type === 'AI_REVIEW_BUDGET_REACHED'
+              ? 'This review was blocked by previous AI settings. Check the current model configuration in Model Router before retrying.'
+              : item.type === 'AI_MODEL_UNAVAILABLE'
+                ? 'Repeated model request failures were recorded. Test the primary and fallback connections.'
+                : 'Open this event to review its recorded results and next steps.')}
+        </p>
+        {!!item.details?.length && (
+          <ul className='mt-2 space-y-1 text-xs text-muted-foreground'>
+            {item.details.map((detail, index) => (
+              <li key={index} className='break-words'>
+                {detail}
+              </li>
+            ))}
+          </ul>
         )}
-        {item.type === 'AI_MODEL_UNAVAILABLE' && (
-          <p className='mt-2 text-sm text-muted-foreground'>
-            Repeated model request failures were recorded. Test your connections
-            and check the primary and fallback model.
-          </p>
-        )}
+
         {item.emailDelivery && (
           <div
             className='mt-2'

@@ -21,6 +21,10 @@ import {
 } from "../src/assessments/gate-policy.service.js";
 import { GatePolicyController } from "../src/assessments/gate-policy.controller.js";
 import { catalogue } from "../src/standards/catalogue.js";
+import { currentStandards } from '../src/standards/policy-standards.js';
+import { CiBindingService } from '../src/assessments/ci-binding.service.js';
+import { AssessmentService } from '../src/assessments/assessment.service.js';
+import { digest } from '../src/assessments/assessment-digest.js';
 let db: PrismaService, app: INestApplication;
 let organizationId: string,
   repoId: string,
@@ -493,4 +497,63 @@ it("rejects policy approval by a proof-linked sign-in, including links made afte
   await post(author, `${base}/${d.id}/publish`, { expectedHash: d.definitionHash, expectedPublishedId: null }).expect(409);
   const next = (await draft()).body;
   await post(approver, `${base}/${next.id}/approve`, { expectedHash: next.definitionHash }).expect(409);
+});
+
+const directBody = (index = 0, branch = 'development') => ({ branchRef: `refs/heads/${branch}`, requiredRules: [], standards: { profile: 'RECOMMENDED', packs: catalogue.slice(index, index + 1).map(({ id, version, digest }) => ({ id, version, digest })) } });
+async function publishDirect(value = directBody()) {
+  const policy = (await post(author, base, value).expect(201)).body;
+  await approve(policy);
+  return (await post(approver, `${base}/${policy.id}/publish`, { expectedHash: policy.definitionHash, expectedPublishedId: null }).expect(201)).body;
+}
+it('creates a branch policy without repository adoption and freezes standards in the policy', async () => {
+  await db.repositoryStandardsSelection.deleteMany({ where: { repositoryId: repoId } });
+  const policy = await publishDirect();
+  expect(policy.selectionId).toMatch(/^policy-[a-f0-9]{64}$/);
+  expect(policy.definition.standardsSource).toBe('POLICY');
+  expect(policy.definition.packs).toEqual(directBody().standards.packs);
+  expect(await db.repositoryStandardsSelection.count({ where: { repositoryId: repoId } })).toBe(0);
+  const selection = await currentStandards(db, repoId, { branchRef: 'refs/heads/development' });
+  expect(selection.id).toBe(policy.selectionId);
+  expect(selection.packs).toEqual(policy.definition.packs);
+});
+it('keeps branch policies, CI connections and PR assessments independent of repository defaults', async () => {
+  const development = await publishDirect(directBody(0));
+  const release = await publishDirect(directBody(1, 'release'));
+  const ci = new CiBindingService(db);
+  const binding = { ruleId: 'tests.required', kind: 'check_run' as const, appId: '15368', checkName: 'Run tests' };
+  const devBinding = await ci.save('51', { expectedSelectionId: development.selectionId, expectedBindingId: null, bindings: [binding] }, approver);
+  await ci.save('51', { expectedSelectionId: release.selectionId, expectedBindingId: null, bindings: [] }, approver);
+  expect((await ci.get('51', development.id)).binding?.id).toBe(devBinding.id);
+  await db.repositoryStandardsSelection.create({ data: { repositoryId: repoId, revision: 2, profile: 'STRICT', packs: packs(), selectedById: approver } });
+  expect((await currentStandards(db, repoId, { branchRef: 'refs/heads/development' })).id).toBe(development.selectionId);
+  expect((await currentStandards(db, repoId, { branchRef: 'refs/heads/release' })).id).toBe(release.selectionId);
+  const assessments = new AssessmentService(db);
+  const context = { version: 1 as const, state: 'open' as const, draft: false, merged: false, head: { repositoryId: '51', ref: 'feature', sha: 'a'.repeat(40) }, base: { repositoryId: '51', ref: 'development', sha: 'b'.repeat(40) }, number: 7, objectId: '700' };
+  await db.repositoryProfile.create({ data: { repositoryId: repoId, sourceSha: context.head.sha, treeSha: 'c'.repeat(40), branch: 'development', fullName: 'fixture/app', version: 1, complete: true, report: { signals: [] } } });
+  const saved = await assessments.createAutomatic('51', context.head.sha, development.selectionId, 'direct-policy-test', approver, context);
+  expect(saved.assessment.selectionId).toBe(development.selectionId);
+  expect((saved.assessment.request as any).sourceBindings.id).toBe(devBinding.id);
+  await expect(assessments.createAutomatic('51', context.head.sha, release.selectionId, 'wrong-branch-test', approver, context)).rejects.toThrow('Branch policy changed');
+});
+it('rejects unsupported or changed standards and preserves independent approval for direct policies', async () => {
+  const changed = directBody(); changed.standards.packs[0].digest = '0'.repeat(64);
+  await post(author, base, changed).expect(409);
+  await post(author, base, { ...directBody(), standards: { profile: 'RECOMMENDED', packs: [{ id: 'org-standard-foreign', version: '1.0.0', digest: 'a'.repeat(64) }] } }).expect(409);
+  await post(viewer, base, directBody()).expect(403);
+  await post(foreign, base, directBody()).expect(403);
+  const policy = (await post(author, base, directBody()).expect(201)).body;
+  await post(author, `${base}/${policy.id}/approve`, { expectedHash: policy.definitionHash }).expect(409);
+  await post(approver, `${base}/${policy.id}/publish`, { expectedHash: policy.definitionHash, expectedPublishedId: null }).expect(409);
+});
+it('includes inherited organization requirements and rejects a changed approval context', async () => {
+  const team = await db.preflytTeam.create({ data: { name: 'Organization baseline', source: 'ORGANIZATION', organizationId, createdById: approver } });
+  await db.teamRepositoryScope.create({ data: { teamId: team.id, repositoryId: repoId, policyScopeEnabled: true, origin: 'LOCAL' } });
+  const assignment = { branchRef: 'refs/heads/development', profile: 'STRICT', packs: packs() };
+  await db.teamPolicyAssignment.create({ data: { teamId: team.id, ...assignment, digest: digest(assignment), createdById: approver } });
+  const policy = (await post(author, base, directBody(1)).expect(201)).body;
+  expect(policy.definition.packs).toHaveLength(2);
+  expect(policy.definition.adoptionProfile).toBe('STRICT');
+  expect(policy.definition.teamContext[0].teamId).toBe(team.id);
+  await db.preflytTeam.update({ where: { id: team.id }, data: { scopeRevision: { increment: 1 } } });
+  await post(approver, `${base}/${policy.id}/approve`, { expectedHash: policy.definitionHash }).expect(409);
 });

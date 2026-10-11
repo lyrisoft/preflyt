@@ -146,7 +146,7 @@ function PreviewDetails({
         </ul>
       </section>
       <section className='space-y-2'>
-        <h3 className='text-sm font-semibold'>Saved engineering standards</h3>
+        <h3 className='text-sm font-semibold'>Saved standards</h3>
         {selectionId ? (
           <ul className='space-y-1 text-sm'>
             {packs.map((pack) => (

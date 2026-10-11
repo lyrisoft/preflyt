@@ -1,5 +1,11 @@
 import { useState } from 'react'
-import { FileUp, MoreHorizontal, RefreshCw, ScrollText } from 'lucide-react'
+import {
+  ChevronLeft,
+  ChevronRight,
+  MoreHorizontal,
+  RefreshCw,
+  ScrollText,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -20,7 +26,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
@@ -34,11 +39,10 @@ import {
 } from '@/components/ui/table'
 import { StatusBadge } from '@/components/status-badge'
 import { CiActivityCharts, CiActivityEmpty } from './ci-activity-charts'
-import { ReportList } from './ci-artifact-imports'
+import { ReportList } from './ci-reports'
 import { RelativeTime } from './relative-time'
 import { useCiEvidence, type CiObservation } from './repository-queries'
 import { ciResultStatus, sentence, sourceLabel } from './repository-vocabulary'
-import { useReportImport } from './use-report-import'
 
 function providerDetail(item: CiObservation) {
   return [item.sourceStatus, item.sourceConclusion]
@@ -111,22 +115,20 @@ function DeliveryDialog({
 
 export function RepositoryCiEvidence({
   repositoryId,
-  canImport,
+  canManageEvidence,
   showIntegrationLink = true,
 }: {
   repositoryId: string
-  canImport: boolean
+  canManageEvidence: boolean
   showIntegrationLink?: boolean
 }) {
+  const [page, setPage] = useState(1)
   const [draft, setDraft] = useState('')
   const [sha, setSha] = useState('')
   const [details, setDetails] = useState<string | null>(null)
   const valid = draft === '' || /^[a-f0-9]{40}$/i.test(draft)
-  const query = useCiEvidence(repositoryId, sha, { poll: true })
-  const reports = useReportImport({
-    repositoryId,
-    onImported: () => query.refetch(),
-  })
+  const summary = useCiEvidence(repositoryId, sha, { poll: true })
+  const query = useCiEvidence(repositoryId, sha, { poll: true, page })
   const observations = query.data?.observations ?? []
   const detailItem =
     observations.find((item) => item.deliveryId === details) ?? null
@@ -137,7 +139,7 @@ export function RepositoryCiEvidence({
           <h2>CI results</h2>
         </CardTitle>
         <CardDescription>
-          Delivery trends, provider outcomes and imported reports.
+          Workflow runs, check results and reports received from your pipeline.
         </CardDescription>
         <CardAction>
           <Button
@@ -146,21 +148,28 @@ export function RepositoryCiEvidence({
             className='touch-target size-8'
             aria-label='Refresh CI results'
             disabled={query.isFetching}
-            onClick={() => void query.refetch()}
+            onClick={() => {
+              void summary.refetch()
+              void query.refetch()
+            }}
           >
             <RefreshCw className={query.isFetching ? 'animate-spin' : ''} />
           </Button>
         </CardAction>
       </CardHeader>
       <CardContent className='space-y-5 px-0'>
-        {!query.isPending && !query.isError && observations.length > 0 && (
-          <CiActivityCharts observations={observations} />
+        {summary.data && summary.data.observations.length > 0 && (
+          <CiActivityCharts observations={summary.data.observations} />
         )}
         <form
           className='flex max-w-xl flex-wrap items-center gap-2 px-6'
           onSubmit={(event) => {
             event.preventDefault()
-            if (valid) setSha(draft.toLowerCase())
+            if (valid) {
+              setSha(draft.toLowerCase())
+              setPage(1)
+              setDetails(null)
+            }
           }}
         >
           <Input
@@ -184,6 +193,8 @@ export function RepositoryCiEvidence({
               onClick={() => {
                 setDraft('')
                 setSha('')
+                setPage(1)
+                setDetails(null)
               }}
             >
               Clear
@@ -207,7 +218,7 @@ export function RepositoryCiEvidence({
           <CiActivityEmpty
             enabled={query.data.enabled}
             filtered={!!sha}
-            canConfigure={canImport}
+            canConfigure={canManageEvidence}
             showIntegrationLink={showIntegrationLink}
           />
         ) : (
@@ -227,11 +238,6 @@ export function RepositoryCiEvidence({
             <TableBody>
               {observations.map((item) => {
                 const status = ciResultStatus[item.result]
-                const importable =
-                  canImport &&
-                  item.sourceStatus === 'completed' &&
-                  item.sourceAction === 'completed' &&
-                  item.artifacts.length < 10
                 const label = sourceLabel(item.sourceKind, item.sourceObjectId)
                 return (
                   <TableRow key={item.deliveryId}>
@@ -254,11 +260,9 @@ export function RepositoryCiEvidence({
                       </div>
                     </TableCell>
                     <TableCell className='text-xs text-muted-foreground tabular-nums'>
-                      {reports.busy === item.deliveryId
-                        ? 'Importing…'
-                        : item.artifacts.length
-                          ? `${item.artifacts.length} report${item.artifacts.length === 1 ? '' : 's'}`
-                          : 'None'}
+                      {item.artifacts.length
+                        ? `${item.artifacts.length} report${item.artifacts.length === 1 ? '' : 's'}`
+                        : 'None'}
                     </TableCell>
                     <TableCell className='text-xs text-muted-foreground'>
                       <RelativeTime value={item.observedAt} />
@@ -282,29 +286,6 @@ export function RepositoryCiEvidence({
                             <ScrollText aria-hidden='true' />
                             Delivery details
                           </DropdownMenuItem>
-                          {importable && (
-                            <>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                disabled={!!reports.busy}
-                                onSelect={() =>
-                                  reports.choose(item.deliveryId, 'junit')
-                                }
-                              >
-                                <FileUp aria-hidden='true' />
-                                Import JUnit report
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                disabled={!!reports.busy}
-                                onSelect={() =>
-                                  reports.choose(item.deliveryId, 'sarif')
-                                }
-                              >
-                                <FileUp aria-hidden='true' />
-                                Import SARIF report
-                              </DropdownMenuItem>
-                            </>
-                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
@@ -314,10 +295,45 @@ export function RepositoryCiEvidence({
             </TableBody>
           </Table>
         )}
-        <input {...reports.inputProps} />
+        {query.data?.pagination && !query.isError && (
+          <nav
+            aria-label='CI results pagination'
+            className='flex flex-wrap items-center justify-between gap-3 border-t px-6 pt-4'
+          >
+            <p className='text-xs text-muted-foreground'>
+              Page {page} · {query.data.pagination.total} results
+            </p>
+            <div className='flex gap-2'>
+              <Button
+                variant='outline'
+                size='sm'
+                disabled={page === 1 || query.isFetching}
+                onClick={() => {
+                  setPage(page - 1)
+                  setDetails(null)
+                }}
+              >
+                <ChevronLeft aria-hidden='true' />
+                Previous
+              </Button>
+              <Button
+                variant='outline'
+                size='sm'
+                disabled={!query.data.pagination.hasNext || query.isFetching}
+                onClick={() => {
+                  setPage(page + 1)
+                  setDetails(null)
+                }}
+              >
+                Next
+                <ChevronRight aria-hidden='true' />
+              </Button>
+            </div>
+          </nav>
+        )}
         <DeliveryDialog
           repositoryId={repositoryId}
-          canVerify={canImport}
+          canVerify={canManageEvidence}
           item={detailItem}
           onClose={() => setDetails(null)}
         />

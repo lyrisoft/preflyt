@@ -1,3 +1,4 @@
+import { githubActionsWorkflowSkill } from "./github-actions-workflow-skill.js";
 import { readUpstreamSkill } from "./upstream-skill.js";
 import { createHash, randomUUID } from "node:crypto";
 import {
@@ -42,7 +43,7 @@ export class ReviewSkillsService {
     await this.access.requireOrganization(session, "ai.skills.read");
     return {
       skills,
-      templates: skillTemplates,
+      templates: [githubActionsWorkflowSkill, ...skillTemplates],
       executionMode: "instructions_only",
       context: "assessment_evidence",
     };
@@ -75,7 +76,9 @@ export class ReviewSkillsService {
   }
   async builtinMarkdown(session: AuthenticatedSession, id: string) {
     await this.access.requireOrganization(session, "ai.skills.read");
-    const skill = skillTemplates.find((template) => template.id === id);
+    const skill = [githubActionsWorkflowSkill, ...skillTemplates].find(
+      (template) => template.id === id,
+    );
     if (!skill) throw new NotFoundException("Built-in skill unavailable");
     return exportSkillMarkdown(skill);
   }

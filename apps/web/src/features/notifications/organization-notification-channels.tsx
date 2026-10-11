@@ -387,7 +387,7 @@ function ChannelSettings({ organizationId }: { organizationId: string }) {
             </div>
           ) : null}
           {data.items.length === 0 ? (
-            <Card className='gap-3 px-5 py-6 sm:px-6'>
+            <Card className='gap-3 px-4 py-4 sm:px-4'>
               <h3 className='text-sm font-semibold'>
                 Keep your team in the loop
               </h3>
@@ -401,7 +401,7 @@ function ChannelSettings({ organizationId }: { organizationId: string }) {
             <div className='space-y-3'>
               {data.items.map((channel) => (
                 <Card key={channel.id} className='gap-4 overflow-hidden py-0'>
-                  <CardHeader className='flex flex-row items-start justify-between gap-3 px-4 pt-5 sm:px-5'>
+                  <CardHeader className='flex flex-row items-start justify-between gap-3 px-4 pt-4 sm:px-4'>
                     <div className='flex min-w-0 items-start gap-3'>
                       <SurfaceIcon icon={Mail} tone='teal' />
                       <div className='min-w-0'>
@@ -420,7 +420,7 @@ function ChannelSettings({ organizationId }: { organizationId: string }) {
                       {channel.enabled ? 'Active' : 'Disabled'}
                     </StatusBadge>
                   </CardHeader>
-                  <CardContent className='space-y-4 px-4 sm:px-5'>
+                  <CardContent className='space-y-4 px-4 sm:px-4'>
                     <ul
                       aria-label={`${channel.name} recipients`}
                       className='flex flex-wrap gap-x-4 gap-y-1 text-sm'
@@ -440,7 +440,7 @@ function ChannelSettings({ organizationId }: { organizationId: string }) {
                     )}
                     <DeliveryStatus delivery={channel.lastDelivery} />
                   </CardContent>
-                  <CardFooter className='flex flex-wrap justify-end gap-2 border-t bg-muted/20 px-4 py-3 sm:px-5'>
+                  <CardFooter className='flex flex-wrap justify-end gap-2 border-t bg-muted/20 px-4 py-3 sm:px-4'>
                     <Button
                       variant='outline'
                       size='sm'

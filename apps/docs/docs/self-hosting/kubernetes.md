@@ -1,0 +1,84 @@
+---
+id: kubernetes
+title: Kubernetes
+sidebar_label: Kubernetes
+description: Deploy Preflyt to Kubernetes with the single-instance manifest bundle.
+---
+
+# Kubernetes
+
+<span className="badge-status badge-available">Available</span> as a single-instance manifest bundle. It is rendered and fixture-tested, but **not accepted on a live production cluster**. Helm and Operator packaging are planned and **not implemented**.
+
+The bundle in `deploy/kubernetes` uses the **same** web, API, worker and migration images as Docker Compose. It includes PostgreSQL, a disposable cache and a persistent queue, so a managed database is optional.
+
+## What you provide
+
+- A cluster and an explicitly selected `kubectl` context. Never rely on your current context.
+- An Ingress and TLS controller for the `web` Service on port 8080. The API and databases stay internal.
+- Registry access and **immutable image digests** for your reviewed release. The placeholders in `resources.yaml` and `migration.yaml` must be replaced.
+- Storage with backups, and capacity planning. Database and queue storage use retained PVCs on the default storage class.
+
+The namespace enforces restricted Pod Security. No host ports, host paths, cluster roles or application service-account tokens are installed.
+
+## Configure
+
+1. Create the namespace `preflyt`.
+2. Replace the image placeholders with your release digests. The API and worker must use the **same** API image.
+3. Set `WEB_ORIGIN` in the `preflyt-config` ConfigMap to your public HTTPS origin.
+4. Create these Secrets from protected files or your secret manager, not shell arguments:
+
+| Secret | Required values |
+| --- | --- |
+| `preflyt-db-secrets` | `POSTGRES_PASSWORD`, `DATABASE_APP_PASSWORD` |
+| `preflyt-migration-secrets` | `DATABASE_URL` for the `preflyt_owner` role at `db:5432/preflyt` |
+| `preflyt-api-secrets` | `DATABASE_URL` for `preflyt_app`; `CONFIGURATION_ENCRYPTION_KEY`; the identity and provider encryption keys; deployment trust settings |
+| `preflyt-worker-secrets` | `DATABASE_URL` for `preflyt_app`; the **same** `CONFIGURATION_ENCRYPTION_KEY`; provider keys; CI proof and telemetry settings |
+
+Use fresh URL-safe passwords. The URLs and password Secrets must agree. Editing a Secret does not rotate a password in an existing database. Application pods never receive the migration owner credentials, and the web pod receives no application Secrets.
+
+Provision GitHub, sign-in and notification settings in **Settings → Configuration**, as for Compose. See [Configuration](configuration.md).
+
+## Install and roll out
+
+All application Deployments start at **zero replicas** on purpose, so nothing starts before a successful migration. Preview the rendered manifests without cluster access:
+
+```bash
+kubectl kustomize deploy/kubernetes > rendered.yaml
+```
+
+Then, replacing `YOUR_CONTEXT`:
+
+```bash
+kubectl --context YOUR_CONTEXT apply -k deploy/kubernetes
+kubectl --context YOUR_CONTEXT -n preflyt rollout status statefulset/db --timeout=180s
+kubectl --context YOUR_CONTEXT -n preflyt rollout status statefulset/queue --timeout=180s
+kubectl --context YOUR_CONTEXT -n preflyt rollout status deployment/cache --timeout=180s
+
+kubectl --context YOUR_CONTEXT apply -f deploy/kubernetes/migration.yaml
+kubectl --context YOUR_CONTEXT -n preflyt wait --for=condition=complete job/preflyt-migrate --timeout=600s
+
+# Continue only if the migration completed successfully.
+kubectl --context YOUR_CONTEXT -n preflyt scale deployment/api deployment/worker deployment/web --replicas=1
+kubectl --context YOUR_CONTEXT -n preflyt rollout status deployment/api --timeout=180s
+kubectl --context YOUR_CONTEXT -n preflyt rollout status deployment/worker --timeout=180s
+kubectl --context YOUR_CONTEXT -n preflyt rollout status deployment/web --timeout=180s
+```
+
+The migration Job has no retry and a ten-minute deadline. A failed Job does not authorize scaling up. Keep its logs, and never reset the database or mark a migration applied without repair.
+
+## Upgrade and recovery
+
+Use a maintenance rollout:
+
+1. Preserve the old image digests, and take and rehearse a protected database backup.
+2. Review schema compatibility, then scale API, worker and web to zero.
+3. Update images and configuration, apply the bundle, remove only the previous completed migration Job (after saving its diagnostics), and run the new migration Job.
+4. Scale up only after the migration succeeds.
+
+Do not delete PVCs or queue or database data during an upgrade. **Applying the base bundle resets replicas to zero by design**, so follow the sequence above rather than applying it casually to a running installation. Restore into a new database before a recovery cutover.
+
+After connection edits in Settings, restart **all** API and worker replicas. A rolling restart can briefly run different snapshots, so use a maintenance restart for authentication changes.
+
+## Native checks
+
+Native execution stays disabled by default. Scanner jobs belong in a dedicated, reviewed execution environment, not the application namespace. Do not give the API or worker Kubernetes Job or Docker control as a shortcut.

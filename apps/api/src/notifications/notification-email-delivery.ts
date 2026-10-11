@@ -7,7 +7,7 @@ import { validNotificationEmail } from "./notification-mail.js";
 export async function deliverNotificationEmail(
   db: PrismaService,
   authorization: AuthorizationService,
-  mail: { send(to: string, id: string): Promise<void> },
+  mail: { send(to: string, id: string, kind?: 'PERSONAL', eventType?: string): Promise<void> },
   id: string,
 ) {
   const now = new Date();
@@ -78,7 +78,7 @@ export async function deliverNotificationEmail(
       isGovernanceNotification(event.type) ? "policy.read" : "assessment.read",
     );
     // No repository names, SHAs, findings or report contents leave the application.
-    await mail.send(identity.email, delivery.id);
+    await mail.send(identity.email, delivery.id, 'PERSONAL', event.type);
     accepted = true;
     await db.$transaction(async (tx) => {
       await tx.notificationEmailDelivery.update({

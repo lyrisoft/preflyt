@@ -439,6 +439,7 @@ describe('immutable exact-SHA assessment API', () => {
               get(target, key) {
                 return key === 'auditEvent'
                   ? {
+                      findMany: tx.auditEvent.findMany.bind(tx.auditEvent),
                       create: async () => {
                         throw new Error('storage unavailable')
                       },
@@ -466,6 +467,37 @@ describe('immutable exact-SHA assessment API', () => {
 })
 
 describe('atomic automatic CI assessment snapshots', () => {
+  it('reuses unchanged polling snapshots, ignores its own feedback, and records changed CI evidence', async () => {
+    vi.stubEnv('GITHUB_APP_ID', '999')
+    const {selection, delivery} = await ready()
+    const service = new AssessmentService(prisma)
+    const context = {...prContext('a'.repeat(40)), version: 1 as const, state: 'open' as const, number: 5, objectId: '55'}
+    const run = () => service.createAutomatic('501', delivery.sourceSha, selection.id, randomUUID(), actorId, context)
+    const first = await run()
+    expect((first.assessment.report as any).observations).toHaveLength(1)
+    const second = await run()
+    expect(second.duplicate).toBe(true)
+    expect(second.assessment.id).toBe(first.assessment.id)
+    const feedback = await prisma.gitHubWebhookDelivery.create({data: {
+      id: randomUUID(), event: 'check_run', action: 'completed', installationId: 500n,
+      repositoryGithubId: 501n, sourceSha: delivery.sourceSha, sourceObjectId: '999',
+      sourceIdentity: {kind: 'check_run', appId: '999', checkName: 'Preflyt / Engineering Readiness'},
+      sourceStatus: 'completed', sourceConclusion: 'failure', payloadHash: '1'.repeat(64), sourceUpdatedAt: new Date(),
+    }})
+    await prisma.importedCiEvidence.create({data: importCiEvidence(feedback)!})
+    expect((await run()).assessment.id).toBe(first.assessment.id)
+    const changed = await prisma.gitHubWebhookDelivery.create({data: {
+      id: randomUUID(), event: 'check_run', action: 'completed', installationId: 500n,
+      repositoryGithubId: 501n, sourceSha: delivery.sourceSha, sourceObjectId: '88',
+      sourceStatus: 'completed', sourceConclusion: 'failure', payloadHash: '2'.repeat(64), sourceUpdatedAt: new Date(),
+    }})
+    await prisma.importedCiEvidence.create({data: importCiEvidence(changed)!})
+    const next = await run()
+    expect(next.assessment.id).not.toBe(first.assessment.id)
+    expect((next.assessment.report as any).observations).toHaveLength(2)
+    expect(await prisma.commitAssessment.count()).toBe(2)
+  })
+
   it('preserves manual request idempotency hashes used before automatic triggers were added', async () => {
     const { selection, delivery } = await ready()
     const input = assessmentBody(selection.id, delivery.id)
@@ -697,6 +729,7 @@ describe('atomic automatic CI assessment snapshots', () => {
               get(target, key) {
                 return key === 'auditEvent'
                   ? {
+                      findMany: tx.auditEvent.findMany.bind(tx.auditEvent),
                       create: async (args: any) => {
                         if (args.data.event === 'github_event_processed')
                           throw new Error('processor audit unavailable')
@@ -1197,6 +1230,7 @@ describe('PR-triggered exact-head assessments', () => {
               get(target, key) {
                 return key === 'auditEvent'
                   ? {
+                      findMany: tx.auditEvent.findMany.bind(tx.auditEvent),
                       create: async () => {
                         throw new Error('audit unavailable')
                       },

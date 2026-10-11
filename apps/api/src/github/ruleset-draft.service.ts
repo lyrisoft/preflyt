@@ -1,3 +1,4 @@
+import { currentStandards, repositoryStandards } from '../standards/policy-standards.js'
 import {
   BadRequestException,
   ConflictException,
@@ -33,10 +34,7 @@ export class RulesetDraftService {
         skip: (page - 1) * 20,
         take: 21,
       }),
-      this.prisma.repositoryStandardsSelection.findFirst({
-        where: { repositoryId: repo.id },
-        orderBy: { revision: 'desc' },
-      }),
+      repositoryStandards(this.prisma, repo.id),
     ])
     await this.access.requireRepository(session, githubId, 'policy.read')
     return {
@@ -69,10 +67,7 @@ export class RulesetDraftService {
           organizationId: session.organizationId!,
         },
       }),
-      this.prisma.repositoryStandardsSelection.findFirst({
-        where: { repositoryId: repo.id },
-        orderBy: { revision: 'desc' },
-      }),
+      repositoryStandards(this.prisma, repo.id),
     ])
     await this.access.requireRepository(session, githubId, 'policy.read')
     if (!draft) throw new NotFoundException('Draft is unavailable')
@@ -98,10 +93,7 @@ export class RulesetDraftService {
       githubId,
       'policy.draft',
     )
-    const selection = await this.prisma.repositoryStandardsSelection.findFirst({
-      where: { repositoryId: repo.id },
-      orderBy: { revision: 'desc' },
-    })
+    const selection = await currentStandards(this.prisma, repo.id, { expectedId: input.expectedSelectionId ?? undefined, branchRef: input.branches[0]?.startsWith("refs/heads/") ? input.branches[0] : `refs/heads/${input.branches[0]}` })
     this.assertSelection(input, selection?.id ?? null)
     await this.access.requireRepository(session, githubId, 'policy.draft')
     return {
@@ -162,10 +154,7 @@ export class RulesetDraftService {
           const repo = await new AuthorizationService(
             tx as PrismaService,
           ).requireRepository(session, githubId, 'policy.draft')
-          const selection = await tx.repositoryStandardsSelection.findFirst({
-            where: { repositoryId: repo.id },
-            orderBy: { revision: 'desc' },
-          })
+          const selection = await currentStandards(tx, repo.id, { expectedId: input.expectedSelectionId ?? undefined, branchRef: input.branches[0]?.startsWith("refs/heads/") ? input.branches[0] : `refs/heads/${input.branches[0]}` })
           this.assertSelection(input, selection?.id ?? null)
           const hash = draftHash({
             definition,

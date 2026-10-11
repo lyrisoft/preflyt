@@ -18,7 +18,7 @@ vi.mock('./notification-query', () => ({
   useInbox: () => inbox,
   titles: {
     AI_MODEL_UNAVAILABLE: 'Model requests keep failing',
-    AI_REVIEW_BUDGET_REACHED: 'Daily AI review reservation limit reached',
+    AI_REVIEW_BUDGET_REACHED: 'Previous AI review could not start',
     NATIVE_EXECUTION_FAILED: 'Check execution failed',
     POLICY_EXCEPTION_APPROVED: 'Policy exception approved',
   },
@@ -80,11 +80,7 @@ const item = {
 }
 it.each([
   ['AI_MODEL_UNAVAILABLE', 'connections', 'Model requests keep failing'],
-  [
-    'AI_REVIEW_BUDGET_REACHED',
-    'routing',
-    'Daily AI review reservation limit reached',
-  ],
+  ['AI_REVIEW_BUDGET_REACHED', 'routing', 'Previous AI review could not start'],
 ])('links %s to the right AI settings tab', (type, tab, label) => {
   const html = renderToStaticMarkup(
     <NotificationItem
@@ -97,7 +93,7 @@ it.each([
   expect(html).toContain(`&quot;tab&quot;:&quot;${tab}&quot;`)
   expect(html).toContain(label)
   if (type === 'AI_REVIEW_BUDGET_REACHED')
-    expect(html).toContain('estimates, not provider invoices')
+    expect(html).toContain('blocked by previous AI settings')
 })
 it('links native execution failures to saved commit assessments without inventing an assessment result', () => {
   const html = renderToStaticMarkup(
@@ -155,6 +151,32 @@ it('uses an informational blue indicator for informational updates', () => {
   )
   expect(html).toContain('bg-blue-500')
   expect(html).not.toContain('bg-teal-500')
+})
+
+it('shows the event explanation, check details and next action with its assessment link', () => {
+  const html = renderToStaticMarkup(
+    <NotificationItem
+      item={{
+        ...item,
+        type: 'ASSESSMENT_FAILED',
+        assessmentId: 'assessment-1',
+        title: 'Assessment recorded failed checks',
+        message: 'Fix the failing check and rerun the workflow.',
+        details: [
+          '3 checks recorded · 2 required',
+          'Reported failures: Tests <script>',
+        ],
+        actionLabel: 'Review failed checks',
+      }}
+      busy={false}
+      onRead={() => undefined}
+    />
+  )
+  expect(html).toContain('Fix the failing check and rerun the workflow.')
+  expect(html).toContain('3 checks recorded · 2 required')
+  expect(html).toContain('Review failed checks')
+  expect(html).toContain('&quot;assessment&quot;:&quot;assessment-1&quot;')
+  expect(html).toContain('Tests &lt;script&gt;')
 })
 
 it('links an exception notice to repository policies without requiring a publication-only policy event id', () => {

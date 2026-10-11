@@ -12,6 +12,7 @@ import type { PrismaService } from "../prisma/prisma.service.js";
 import {
   configurationFields,
   configurationKeys,
+  governanceAppMode,
 } from "./configuration-catalogue.js";
 import { applyConfiguration } from "./runtime-configuration.js";
 const aad = Buffer.from("preflyt.deployment-configuration.v1:primary");
@@ -125,6 +126,9 @@ export function validateConfiguration(
       try {
         const url = new URL(value);
         if (
+          (name === "PREFLYT_PUBLIC_API_URL" &&
+            (url.protocol !== "https:" ||
+              ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname))) ||
           url.username ||
           url.password ||
           url.hash ||
@@ -139,7 +143,11 @@ export function validateConfiguration(
           throw new Error();
       } catch {
         throw new BadRequestException(
-          "Invalid " + field.label + "; use HTTPS or a local development URL",
+          "Invalid " +
+            field.label +
+            (name === "PREFLYT_PUBLIC_API_URL"
+              ? "; use a public HTTPS API URL"
+              : "; use HTTPS or a local development URL"),
         );
       }
     }
@@ -238,19 +246,23 @@ export function validateConfiguration(
       );
     if (result.AI_CONFIGURATION_ENABLED === "true")
       requireKey("AI_PROVIDER_ENCRYPTION_KEY");
-    if (
-      result.GITHUB_RULESET_ACTIVATION_ENABLED === "true" &&
-      process.env.GITHUB_GOVERNANCE_LOCAL_ACCEPTANCE !== "true"
-    ) {
-      require([
-        "GITHUB_GOVERNANCE_APP_ID",
-        "GITHUB_GOVERNANCE_PRIVATE_KEY",
-        "GITHUB_GOVERNANCE_INSTALLATION_ID",
-      ], "the separate governance connection");
-      if (result.GITHUB_GOVERNANCE_APP_ID === result.GITHUB_APP_ID)
-        throw new BadRequestException(
-          "Governance requires a separate GitHub App",
-        );
+    if (result.GITHUB_RULESET_ACTIVATION_ENABLED === "true") {
+      if (governanceAppMode(result) === "true") {
+        require([
+          "GITHUB_GOVERNANCE_APP_ID",
+          "GITHUB_GOVERNANCE_PRIVATE_KEY",
+          "GITHUB_GOVERNANCE_INSTALLATION_ID",
+        ], "the optional separate governance connection");
+        if (result.GITHUB_GOVERNANCE_APP_ID === result.GITHUB_APP_ID)
+          throw new BadRequestException(
+            "Use a different App ID for the optional separate governance App",
+          );
+      } else {
+        require([
+          "GITHUB_APP_ID",
+          "GITHUB_APP_PRIVATE_KEY",
+        ], "the GitHub connection");
+      }
     }
   }
   return result;
@@ -259,9 +271,13 @@ export function unpackConfiguration(row: {
   values: unknown;
   encryptedSecrets: string | null;
 }) {
-  return validateConfiguration({
+  const values = {
     ...(row.values as Record<string, string>),
     ...decryptConfigurationSecrets(row.encryptedSecrets),
+  };
+  return validateConfiguration({
+    ...values,
+    GITHUB_GOVERNANCE_SEPARATE_APP_ENABLED: governanceAppMode(values),
   });
 }
 export async function initializeConfiguration(db: PrismaService) {
@@ -273,7 +289,10 @@ export async function initializeConfiguration(db: PrismaService) {
       Object.fromEntries(
         configurationFields.map((field) => [
           field.key,
-          process.env[field.key] || field.defaultValue,
+          process.env[field.key] ||
+            (field.key === "GITHUB_GOVERNANCE_SEPARATE_APP_ENABLED"
+              ? governanceAppMode(process.env as Record<string, string>)
+              : field.defaultValue),
         ]),
       ),
     );

@@ -18,14 +18,14 @@ export class GitHubWebhookController {
   @Get('repositories/:repositoryId/ci-evidence')
   @UseGuards(SessionGuard)
   @Header('Cache-Control', 'no-store')
-  evidence(@Param('repositoryId') repositoryId: string, @Query('sha') sha?: string) {
-    return this.webhooks.evidence(repositoryId, sha)
+  evidence(@Param('repositoryId') repositoryId: string, @Query('sha') sha?: string, @Query('page') page?: string) {
+    return this.webhooks.evidence(repositoryId, sha, page)
   }
 
   @Get('repositories/:repositoryId/events')
   @UseGuards(SessionGuard)
   @Header('Cache-Control', 'no-store')
-  list(@Param('repositoryId') repositoryId: string) {
-    return this.webhooks.list(repositoryId)
+  list(@Param('repositoryId') repositoryId: string, @Query('page') page?: string) {
+    return this.webhooks.list(repositoryId, page)
   }
 }

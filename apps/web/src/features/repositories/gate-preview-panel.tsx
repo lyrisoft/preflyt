@@ -1,200 +1,134 @@
-import { useQuery } from '@tanstack/react-query'
-import { ShieldCheck, ExternalLink } from 'lucide-react'
-import { API_BASE_URL } from '@/lib/api'
+import { ShieldCheck } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from '@/components/ui/card'
 import { StatusBadge } from '@/components/status-badge'
 import { SurfaceIcon } from '@/components/surface-icon'
-import { engineeringRead } from './engineering-queries'
+import { reviewReason, reviewStatuses } from './assessment-result'
+import type { useGatePreview } from './engineering-queries'
 
-type GatePreview = {
-  evaluatorVersion: number
-  sourceSha: string
-  status: 'PASS' | 'WARN' | 'BLOCK' | 'INCOMPLETE'
-  evaluationHash: string
-  requiredRules: number
-  requiredRulesSatisfied: number
-  advisoryIncomplete: number
-  advisoryFailed: number
-  requiredRulesBlocked: number
-  requiredRulesIncomplete: number
-  reasons: string[]
-  rules: {
-    ruleId: string
-    title: string
-    required: boolean
-    status: string
-    reasons: string[]
-    deliveryId: string | null
-  }[]
-}
-const reasonLabels: Record<string, string> = {
-  COLLECTION_INCOMPLETE: 'Not all CI results were collected.',
-  CONFIGURATION_NOT_ESTABLISHED:
-    'The required configuration could not be confirmed.',
-  PROFILE_NOT_COMPLETE_AT_REVISION:
-    'Repository inspection was incomplete for this commit.',
-  CONFIGURATION_EVIDENCE_MISSING:
-    'The required configuration evidence is missing.',
-  RULE_ADAPTER_UNSUPPORTED:
-    'Preflyt does not support evaluating this check yet.',
-  TRUSTED_EXECUTION_NOT_ESTABLISHED:
-    'The tools and checks that ran have not been verified.',
-  EVIDENCE_INTEGRITY_INVALID: 'The saved evidence failed verification.',
-  SOURCE_AMBIGUOUS: 'More than one CI result could match this check.',
-  SOURCE_SUPERSEDED: 'A newer CI result has replaced this one.',
-  APPROVED_CI_SOURCE_FAILED: 'The approved CI check or workflow failed.',
-  SNAPSHOT_SCHEMA_UNSUPPORTED:
-    'This saved assessment format cannot be evaluated.',
-  NO_REQUIRED_RULES: 'This assessment has no required checks.',
-}
-const label = (reason: string) =>
-  reasonLabels[reason] ?? reason.toLowerCase().replace(/_/g, ' ')
+type PreviewQuery = ReturnType<typeof useGatePreview>
+
 export function GatePreviewPanel({
-  repositoryId,
-  assessmentId,
+  preview,
+  onReviewChecks,
 }: {
-  repositoryId: string
-  assessmentId: string
+  preview: PreviewQuery
+  onReviewChecks: () => void
 }) {
-  const query = useQuery({
-    queryKey: ['gate-preview', repositoryId, assessmentId],
-    retry: false,
-    queryFn: ({ signal }) =>
-      engineeringRead<GatePreview>(
-        repositoryId,
-        `/assessments/${encodeURIComponent(assessmentId)}/gate-preview`,
-        signal
-      ),
-  })
+  const result = preview.isError ? undefined : preview.data
+  const status = result && reviewStatuses[result.status]
   return (
-    <Card className='border-info/20 bg-info/5'>
-      <CardHeader>
-        <div className='flex min-w-0 items-center gap-3'>
-          <SurfaceIcon icon={ShieldCheck} />
-          <div className='min-w-0 space-y-1'>
-            <CardTitle asChild>
-              <h2>Merge review result</h2>
-            </CardTitle>
-            <CardDescription>
-              Results for this saved assessment. GitHub check publication and
-              merge protection are configured separately in Quality Gates.
-            </CardDescription>
-          </div>
+    <section
+      aria-label='Merge review result'
+      className={cn(
+        'space-y-3 rounded-lg border bg-muted/20 p-4',
+        status?.tone === 'success'
+          ? 'border-success/30'
+          : status?.tone === 'error'
+            ? 'border-destructive/30'
+            : status?.tone === 'warning'
+              ? 'border-warning/30'
+              : 'border-border'
+      )}
+    >
+      <div className='flex flex-wrap items-center justify-between gap-3'>
+        <div className='flex items-center gap-2.5'>
+          <SurfaceIcon icon={ShieldCheck} tone='teal' size='sm' />
+          <h3 className='text-sm font-semibold'>Merge review result</h3>
         </div>
-      </CardHeader>
-      <CardContent className='space-y-4'>
-        {query.isPending ? (
-          <p role='status'>Checking saved requirements…</p>
-        ) : query.isError ? (
-          <div role='alert'>
-            <p>{query.error.message}</p>
-            <Button
-              variant='outline'
-              size='sm'
-              onClick={() => void query.refetch()}
-            >
-              Retry preview
-            </Button>
-          </div>
-        ) : (
-          <>
-            <div className='flex flex-wrap items-center justify-between gap-4'>
-              <div className='flex items-center gap-3'>
-                <StatusBadge
-                  tone={
-                    query.data.status === 'PASS'
-                      ? 'success'
-                      : query.data.status === 'BLOCK'
-                        ? 'error'
-                        : 'warning'
-                  }
-                >
-                  {query.data.status}
-                </StatusBadge>
-                <code className='text-xs'>
-                  {query.data.sourceSha.slice(0, 12)}
-                </code>
-              </div>
-              <p className='text-sm tabular-nums'>
-                {query.data.requiredRulesSatisfied} / {query.data.requiredRules}{' '}
-                required checks passed · {query.data.requiredRulesBlocked}{' '}
-                blocked · {query.data.requiredRulesIncomplete} incomplete
-              </p>
-            </div>
-            <p className='text-xs text-muted-foreground'>
-              PASS for a configuration check means the required files were
-              found. A successful CI result or a verified report signature does
-              not prove which tools and checks ran. BLOCK means an approved CI
-              check or workflow failed; it does not confirm a specific defect.
+        {status && <StatusBadge tone={status.tone}>{status.label}</StatusBadge>}
+      </div>
+      {preview.isError ? (
+        <div role='alert' className='flex flex-wrap items-center gap-3 text-sm'>
+          <p>{preview.error.message}</p>
+          <Button
+            variant='outline'
+            size='sm'
+            disabled={preview.isFetching}
+            onClick={() => void preview.refetch()}
+          >
+            Retry result
+          </Button>
+        </div>
+      ) : !result ? (
+        <p role='status' className='text-sm text-muted-foreground'>
+          Checking saved requirements…
+        </p>
+      ) : status ? (
+        <>
+          <p className='text-sm tabular-nums'>
+            <span className='font-medium'>
+              {result.requiredRulesSatisfied} of {result.requiredRules}
+            </span>{' '}
+            required checks passed
+            <span className='text-muted-foreground'>
+              {' '}
+              · {result.requiredRulesBlocked} failed ·{' '}
+              {result.requiredRulesIncomplete} incomplete
+            </span>
+          </p>
+          <div className='flex flex-wrap items-center gap-x-4 gap-y-2'>
+            <p className='text-sm sm:min-w-0 sm:flex-1'>
+              {result.status === 'BLOCK'
+                ? 'Fix the failed CI results and rerun the workflow.'
+                : result.reasons.includes('NO_REQUIRED_RULES')
+                  ? 'Choose required checks in the repository standards before relying on this result.'
+                  : result.reasons.includes('SNAPSHOT_SCHEMA_UNSUPPORTED')
+                    ? 'Ask your administrator to review this assessment format.'
+                    : result.status === 'INCOMPLETE'
+                      ? 'Open an incomplete check to see what is missing.'
+                      : result.status === 'WARN'
+                        ? 'Required checks passed. Review the optional checks for remaining gaps.'
+                        : 'No required checks need attention in this saved assessment.'}
             </p>
-            {query.data.reasons.map((r) => (
-              <p key={r} role='status' className='text-sm text-warning'>
-                {label(r)}
-              </p>
+            {result.rules.some((rule) => rule.status !== 'PASS') && (
+              <Button size='sm' variant='outline' onClick={onReviewChecks}>
+                {result.status === 'WARN'
+                  ? 'Review optional checks'
+                  : 'Review required checks'}
+              </Button>
+            )}
+          </div>
+        </>
+      ) : null}
+      <p className='text-xs text-muted-foreground'>
+        GitHub decides whether merging is allowed.
+      </p>
+    </section>
+  )
+}
+
+export function GateEvaluationDetails({ preview }: { preview: PreviewQuery }) {
+  const result = preview.isError ? undefined : preview.data
+  if (!result) return null
+  return (
+    <details className='rounded-lg border text-sm'>
+      <summary className='cursor-pointer px-4 py-3 font-medium'>
+        Merge evaluation details
+      </summary>
+      <div className='space-y-3 border-t p-4 text-xs text-muted-foreground'>
+        <p>
+          Result: {result.status} · Evaluator v{result.evaluatorVersion}
+        </p>
+        {!!result.reasons.length && (
+          <ul className='list-disc space-y-1 pl-4'>
+            {result.reasons.map((reason) => (
+              <li key={reason}>{reviewReason(reason)}</li>
             ))}
-            <details className='rounded-lg border bg-background/60 p-3'>
-              <summary className='cursor-pointer text-sm font-medium'>
-                Check results and missing evidence ({query.data.rules.length})
-              </summary>
-              <ul className='mt-3 space-y-3'>
-                {query.data.rules.map((rule) => (
-                  <li key={rule.ruleId} className='rounded-md border p-3'>
-                    <div className='flex flex-wrap items-center justify-between gap-2'>
-                      <span className='text-sm font-medium'>
-                        {rule.title}{' '}
-                        <span className='font-normal text-muted-foreground'>
-                          · {rule.required ? 'Required' : 'Optional'}
-                        </span>
-                      </span>
-                      <StatusBadge
-                        tone={
-                          rule.status === 'PASS'
-                            ? 'success'
-                            : rule.status === 'BLOCK'
-                              ? 'error'
-                              : 'warning'
-                        }
-                      >
-                        {rule.status}
-                      </StatusBadge>
-                    </div>
-                    <p className='mt-2 text-xs text-muted-foreground'>
-                      {rule.reasons.length
-                        ? rule.reasons.map(label).join(' · ')
-                        : 'Required configuration found at this commit.'}
-                    </p>
-                    {rule.deliveryId && (
-                      <a
-                        className='mt-2 inline-flex items-center gap-1 text-xs text-info underline'
-                        href={`${API_BASE_URL}/github/repositories/${encodeURIComponent(repositoryId)}/ci-evidence?sha=${query.data.sourceSha}`}
-                        target='_blank'
-                        rel='noreferrer'
-                      >
-                        Check results and reports for this commit{' '}
-                        <ExternalLink className='size-3' aria-hidden='true' />
-                      </a>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </details>
-            <details className='text-xs text-muted-foreground'>
-              <summary className='cursor-pointer'>Evaluation details</summary>
-              <p className='mt-2'>Evaluator v{query.data.evaluatorVersion}</p>
-              <code className='block break-all'>
-                {query.data.evaluationHash}
-              </code>
-            </details>
-          </>
+          </ul>
         )}
-      </CardContent>
-    </Card>
+        <p>
+          A configuration check passes when its saved configuration requirement
+          is satisfied. Successful CI or a signed report alone does not prove
+          which tools and checks ran. A failed approved CI source does not
+          identify a specific defect.
+        </p>
+        <p>
+          {result.advisoryFailed} optional checks failed ·{' '}
+          {result.advisoryIncomplete} incomplete
+        </p>
+        <code className='block break-all'>{result.evaluationHash}</code>
+      </div>
+    </details>
   )
 }

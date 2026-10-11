@@ -131,7 +131,7 @@ it('creates a new version instead of editing an approved definition', async () =
 it('separates read-only developer access from approval and handles failed loads', () => {
   state.role = 'DEVELOPER'
   const html = renderToStaticMarkup(<SkillsCatalogue />)
-  expect(html).toContain('Review skills')
+  expect(html).toContain('Skills')
   expect(html).not.toContain('Create skill')
   expect(html).not.toContain('Use template')
   state.query = { isError: true, data: { skills: [skill], templates: [] } }
@@ -556,4 +556,44 @@ it('keeps built-in skill cards aligned and readable in both themes and on mobile
   await page.screenshot({ path: '__screenshots__/skill-catalogue-mobile.png' })
   document.documentElement.classList.remove('dark')
   await page.viewport(1280, 900)
+})
+
+it('shows the workflow editing skill as automatically used without assessment adoption actions', async () => {
+  state.query = {
+    data: {
+      skills: [],
+      templates: [
+        {
+          ...template,
+          id: 'github-actions',
+          name: 'GitHub Actions workflow',
+          purpose: 'workflow_edit',
+          version: 1,
+          category: 'GitHub Actions',
+        },
+      ],
+    },
+  }
+  const view = await render(<SkillsCatalogue />)
+  await expect
+    .element(view.getByText('Used automatically', { exact: false }))
+    .toBeVisible()
+  await expect
+    .element(view.getByRole('button', { name: 'Use GitHub Actions workflow' }))
+    .not.toBeInTheDocument()
+  await view
+    .getByRole('button', { name: 'View GitHub Actions workflow' })
+    .click()
+  await expect
+    .element(
+      page.getByRole('dialog').getByText('Used automatically', { exact: false })
+    )
+    .toBeVisible()
+  await expect
+    .element(page.getByRole('button', { name: 'Download SKILL.md' }))
+    .toBeVisible()
+  await expect
+    .element(page.getByRole('button', { name: 'Create separate copy' }))
+    .not.toBeInTheDocument()
+  expect(state.save).not.toHaveBeenCalled()
 })

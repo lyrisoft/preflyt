@@ -38,7 +38,7 @@ if (
   );
   let timedOut = false;
   let unavailable = false;
-  const child = spawn(command, args, { stdio: "ignore", shell: false });
+  const child = spawn(command, args, { stdio: "inherit", shell: false });
   const timer = setTimeout(() => {
     timedOut = true;
     child.kill("SIGKILL");

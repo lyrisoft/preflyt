@@ -311,7 +311,9 @@ export function buildAssessment(input: {
                 ? 'Check adapter is not implemented; an association cannot enable it.'
                 : !mapping && control.operator !== 'configuration_hint_present'
                   ? 'No CI observation associated with this rule.'
-                  : 'Imported result/association does not prove trusted rule coverage.',
+                  : evidenceValidation?.githubExecution
+                    ? 'Check results verified against the configured GitHub workflow run.'
+                    : 'The configured CI run or check results have not been verified.',
     }
   })
   const required = checks.filter((check) => check.required)
@@ -330,7 +332,7 @@ export function buildAssessment(input: {
       requiredConfigurationObserved: required.filter(
         (c) => c.coverage === 'CONFIGURATION_OBSERVED',
       ).length,
-      trustedExecutedChecks: 0,
+      trustedExecutedChecks: checks.filter(c => c.evidenceValidation?.trustedExecuted === true).length,
       collectionTruncated: input.truncated,
       validationCollectionTruncated:
         input.validationCollectionTruncated ?? false,

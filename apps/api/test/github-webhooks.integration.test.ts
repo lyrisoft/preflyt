@@ -211,6 +211,46 @@ describe('signed webhook durable inbox and repository history', () => {
     expect((await query('/github/repositories/501/ci-evidence')).status).toBe(403)
   })
 
+  it('paginates scoped CI history without truncating older results and validates page inputs', async () => {
+    const processor = new GitHubEventProcessor(prisma)
+    for (let index = 0; index < 12; index++) {
+      const id = randomUUID()
+      await send({ action: 'completed', installation: { id: 77 }, repository: { id: 501 },
+        check_run: { id: 3000 + index, head_sha: (index < 10 ? 'c' : 'd').repeat(40), status: 'completed', conclusion: 'success' } }, id, 'check_run')
+      await processor.process(id)
+    }
+    const query = (suffix: string) => request(app.getHttpServer()).get('/github/repositories/501/ci-evidence' + suffix).set('Cookie', 'test.sid=VIEWER')
+    const first = await query('?page=1'), second = await query('?page=2')
+    expect(first.status).toBe(200)
+    expect(first.body.pagination).toEqual({ page: 1, pageSize: 10, total: 12, hasNext: true })
+    expect(first.body.observations).toHaveLength(10)
+    expect(second.body.pagination).toEqual({ page: 2, pageSize: 10, total: 12, hasNext: false })
+    expect(second.body.observations).toHaveLength(2)
+    const ids = [...first.body.observations, ...second.body.observations].map(row => row.deliveryId)
+    expect(new Set(ids).size).toBe(12)
+    expect((await query('?page=1')).body.observations.map(row => row.deliveryId)).toEqual(first.body.observations.map(row => row.deliveryId))
+    const filtered = await query('?page=1&sha=' + 'd'.repeat(40))
+    expect(filtered.body.pagination.total).toBe(2)
+    expect(filtered.body.observations.every(row => row.sourceSha === 'd'.repeat(40))).toBe(true)
+    expect((await query('')).body.observations).toHaveLength(12)
+    for (const invalid of ['0', '-1', '1.5', 'abc', '1000000', '1&page=2'])
+      expect((await query('?page=' + invalid)).status).toBe(400)
+    const events = (suffix: string) => request(app.getHttpServer()).get('/github/repositories/501/events' + suffix).set('Cookie', 'test.sid=VIEWER')
+    const firstEvents = await events('?page=1'), secondEvents = await events('?page=2')
+    expect(firstEvents.body.pagination).toEqual({ page: 1, pageSize: 10, total: 12, hasNext: true })
+    expect(firstEvents.body.deliveries).toHaveLength(10)
+    expect(secondEvents.body.pagination.hasNext).toBe(false)
+    expect(secondEvents.body.deliveries).toHaveLength(2)
+    expect(new Set([...firstEvents.body.deliveries, ...secondEvents.body.deliveries].map(row => row.id)).size).toBe(12)
+    for (const invalid of ['0', '-1', '1.5', 'abc', '1000000', '1&page=2'])
+      expect((await events('?page=' + invalid)).status).toBe(400)
+    expect((await events('')).body.deliveries).toHaveLength(12)
+    expect((await query('?page=3')).body.observations).toEqual([])
+    await prisma.gitHubRepository.update({ where: { githubId: 501n }, data: { selected: false } })
+    expect((await query('?page=2')).status).toBe(403)
+    expect((await events('?page=2')).status).toBe(403)
+  })
+
   it('rolls back the event claim when evidence persistence fails', async () => {
     const id = randomUUID()
     await send({ action: 'completed', installation: { id: 77 }, repository: { id: 501 },

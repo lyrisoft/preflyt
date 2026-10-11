@@ -5,6 +5,7 @@ import {
   Header,
   Inject,
   Param,
+  Query,
   Post,
   Req,
   UseGuards,
@@ -55,9 +56,9 @@ export class CiBindingController {
     @Inject(AuthService) private readonly auth: AuthService,
   ) {}
   @Get() @Header('Cache-Control', 'no-store') get(
-    @Param('repositoryId') id: string,
+    @Param('repositoryId') id: string, @Query('policy') policyId?: string,
   ) {
-    return this.bindings.get(id)
+    return this.bindings.get(id, policyId)
   }
   @Post() @UseGuards(OwnerAdminGuard) @Header('Cache-Control', 'no-store') save(
     @Param('repositoryId') id: string,

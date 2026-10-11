@@ -36,12 +36,12 @@ export function PageHeader({
     <header
       data-slot='page-header'
       className={cn(
-        'flex flex-wrap items-center justify-between gap-5 rounded-xl border p-5 sm:px-6',
+        'flex flex-wrap items-center justify-between gap-4 rounded-xl border p-4',
         headerTones[tone],
         className
       )}
     >
-      <div className='flex w-full min-w-0 flex-none items-center gap-4 sm:w-auto sm:flex-[1_1_20rem]'>
+      <div className='flex w-full min-w-0 flex-none items-center gap-3 sm:w-auto sm:flex-[1_1_20rem]'>
         {leading ?? <SurfaceIcon icon={icon} tone={tone} size='lg' />}
         <div className='min-w-0'>
           {section && (

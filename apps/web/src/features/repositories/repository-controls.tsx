@@ -43,7 +43,7 @@ import {
 const filters: { value: ControlFilter; label: string }[] = [
   { value: 'all', label: 'All' },
   { value: 'review', label: 'Needs review' },
-  { value: 'found', label: 'Config found' },
+  { value: 'found', label: 'Files found' },
 ]
 const pageSize = 8
 const githubPath = (value: string) =>
@@ -91,7 +91,7 @@ function ControlDetails({
               <p className='text-sm text-muted-foreground'>{guidance}</p>
             )}
             <dl className='grid gap-x-4 gap-y-2 rounded-lg border bg-muted/20 p-4 text-xs sm:grid-cols-[max-content_1fr]'>
-              <dt className='text-muted-foreground'>Control ID</dt>
+              <dt className='text-muted-foreground'>Check ID</dt>
               <dd className='font-mono break-all'>{control.id}</dd>
               <dt className='text-muted-foreground'>Configuration note</dt>
               <dd>{control.reason}</dd>
@@ -204,19 +204,23 @@ export function RepositoryControls({
         <CardTitle asChild>
           <h2 className='flex items-center gap-2'>
             <ShieldCheck className='size-4 text-chart-1' />
-            Control register
+            Repository checks
           </h2>
         </CardTitle>
         <CardDescription>
           {data?.selection
-            ? `${sentence(data.selection.profile)} · selection revision ${data.selection.revision}`
+            ? `${sentence(data.selection.profile)} · saved version ${data.selection.revision}`
             : 'Recommended preview · no saved selection'}
         </CardDescription>
+        <p className='text-xs text-muted-foreground'>
+          Related files show setup only. Open Assessments to see whether checks
+          ran and passed.
+        </p>
       </CardHeader>
       <CardContent className='px-0'>
         {query.isPending ? (
           <p role='status' className='px-6 text-sm text-muted-foreground'>
-            Loading controls…
+            Loading checks…
           </p>
         ) : query.isError ? (
           <p role='alert' className='px-6 text-sm text-destructive'>
@@ -228,14 +232,14 @@ export function RepositoryControls({
             className='mx-6 rounded-lg border border-warning/30 bg-warning/5 p-4 text-sm text-warning-text'
           >
             Saved standards do not match the installed catalogue. Review the
-            selection before reading this control register.
+            selection before reading these repository checks.
           </div>
         ) : (
           <>
             <div className='mb-3 flex flex-wrap items-center justify-between gap-2 px-6'>
               <div
                 role='group'
-                aria-label='Filter controls'
+                aria-label='Filter checks'
                 className='inline-flex rounded-md border p-0.5'
               >
                 {filters.map((item) => (
@@ -273,7 +277,7 @@ export function RepositoryControls({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className='ps-6'>Control</TableHead>
+                  <TableHead className='ps-6'>Check</TableHead>
                   <TableHead className='hidden sm:table-cell'>
                     Requirement
                   </TableHead>
@@ -290,7 +294,7 @@ export function RepositoryControls({
                       colSpan={4}
                       className='px-6 py-8 text-center text-sm text-muted-foreground'
                     >
-                      No controls match this filter.
+                      No checks match this filter.
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -365,8 +369,8 @@ export function RepositoryControls({
             <div className='flex flex-wrap items-center justify-between gap-3 border-t px-6 pt-3 text-xs text-muted-foreground'>
               <span>
                 {visible.length
-                  ? `${start + 1}–${Math.min(start + pageSize, visible.length)} of ${visible.length} controls`
-                  : '0 controls'}
+                  ? `${start + 1}–${Math.min(start + pageSize, visible.length)} of ${visible.length} checks`
+                  : '0 checks'}
               </span>
               <div className='flex items-center gap-2'>
                 <span className='me-1 tabular-nums'>
@@ -376,7 +380,7 @@ export function RepositoryControls({
                   size='icon'
                   variant='outline'
                   className='size-7'
-                  aria-label='Previous controls page'
+                  aria-label='Previous checks page'
                   disabled={page === 0}
                   onClick={() => setPagination({ scope, index: page - 1 })}
                 >
@@ -386,7 +390,7 @@ export function RepositoryControls({
                   size='icon'
                   variant='outline'
                   className='size-7'
-                  aria-label='Next controls page'
+                  aria-label='Next checks page'
                   disabled={page + 1 >= pages}
                   onClick={() => setPagination({ scope, index: page + 1 })}
                 >

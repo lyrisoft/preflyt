@@ -11,6 +11,10 @@ import {
 } from "@nestjs/common";
 import {
   ArrayMaxSize,
+  ArrayMinSize,
+  IsOptional,
+  IsIn,
+  ValidateNested,
   ArrayUnique,
   IsArray,
   IsString,
@@ -18,6 +22,8 @@ import {
   MaxLength,
   ValidateIf,
 } from "class-validator";
+import { Type } from 'class-transformer';
+import { adoptionProfiles, type AdoptionProfile } from '../standards/catalogue.js';
 import type { Request } from "express";
 import { AuthService } from "../auth/auth.service.js";
 import {
@@ -25,8 +31,19 @@ import {
   type AuthenticatedSession,
 } from "../auth/session.guard.js";
 import { GatePolicyService } from "./gate-policy.service.js";
+class PolicyPackDto {
+  @IsString() @MaxLength(80) id!: string;
+  @IsString() @MaxLength(40) version!: string;
+  @Matches(/^[a-f0-9]{64}$/) digest!: string;
+}
+class PolicyStandardsDto {
+  @IsIn(adoptionProfiles) profile!: AdoptionProfile;
+  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(5) @ValidateNested({ each: true }) @Type(() => PolicyPackDto)
+  packs!: PolicyPackDto[];
+}
 class DraftDto {
-  @IsString() @MaxLength(80) expectedSelectionId!: string;
+  @IsOptional() @IsString() @MaxLength(80) expectedSelectionId?: string;
+  @IsOptional() @ValidateNested() @Type(() => PolicyStandardsDto) standards?: PolicyStandardsDto;
   @IsString() @MaxLength(255) branchRef!: string;
   @IsArray()
   @ArrayMaxSize(64)

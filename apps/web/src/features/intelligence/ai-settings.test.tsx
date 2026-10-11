@@ -4,7 +4,10 @@ import { beforeEach, expect, it, vi } from 'vitest'
 import { render } from 'vitest-browser-react'
 import { page } from 'vitest/browser'
 import { AiSettingsPage } from './ai-settings'
-import { validateIntelligenceSearch } from './intelligence-search'
+import {
+  isAiSettingsTab,
+  validateIntelligenceSearch,
+} from './intelligence-search'
 
 const state = vi.hoisted(() => ({
   role: 'OWNER',
@@ -25,8 +28,10 @@ vi.mock('../workspace/navigation-session', () => ({
 vi.mock('../repositories/governance-api', () => ({
   governanceRequest: (...args: unknown[]) => state.save(...args),
 }))
-vi.mock('./skills-catalogue', () => ({
-  SkillsCatalogue: () => <section>Review skills</section>,
+vi.mock('@tanstack/react-router', () => ({
+  Link: ({ children, to }: { children: React.ReactNode; to: string }) => (
+    <a href={to}>{children}</a>
+  ),
 }))
 vi.mock('@/components/layout/app-header', () => ({ AppHeader: () => null }))
 vi.mock('@/components/layout/main', () => ({
@@ -67,15 +72,44 @@ it('keeps connections and routing separate without promising inference', () => {
   expect(html).toContain('Model router')
   expect(html).toContain('AI Reviews are disabled for this deployment')
   state.query = { data: { ...configuration(), executionAvailable: true } }
-  expect(renderToStaticMarkup(<AiSettingsPage />)).toContain(
-    'AI assessment reviews are available'
-  )
+  expect(renderToStaticMarkup(<AiSettingsPage />)).toContain('Add model')
   expect(html).not.toContain('Explain findings')
 })
-it('shows read-only skills without model management to developers', () => {
+it('shows built-in providers directly and opens setup with only model and key fields', async () => {
+  const view = await render(<AiSettingsPage />)
+  await expect
+    .element(view.getByRole('tab', { name: 'Review skills' }))
+    .not.toBeInTheDocument()
+  await expect
+    .element(view.getByRole('tab', { name: 'Model router' }))
+    .toBeVisible()
+  await expect
+    .element(view.getByRole('region', { name: 'Built-in providers' }))
+    .toBeVisible()
+  await view
+    .getByRole('button', { name: 'Activate OpenAI (ChatGPT)', exact: true })
+    .click()
+  await expect
+    .element(view.getByRole('textbox', { name: 'Model name' }))
+    .toBeVisible()
+  await expect
+    .element(view.getByLabelText('API key', { exact: true }))
+    .toBeVisible()
+  await expect
+    .element(view.getByRole('textbox', { name: 'Endpoint URL' }))
+    .not.toBeInTheDocument()
+  await expect
+    .element(view.getByRole('textbox', { name: 'Display name' }))
+    .not.toBeInTheDocument()
+  await expect.element(view.getByRole('spinbutton')).not.toBeInTheDocument()
+})
+it('links developers to the dedicated Skills page without model management', () => {
   state.role = 'DEVELOPER'
   const html = renderToStaticMarkup(<AiSettingsPage />)
-  expect(html).toContain('Review skills')
+  expect(html).toContain('Open Skills')
+  expect(html).toContain('href="/skills"')
+  expect(html).not.toContain('Filter skills')
+  expect(html).not.toContain('Create skill')
   expect(html).not.toContain('Add model')
 })
 it('shows deployment-disabled and request-failure states without old settings', () => {
@@ -117,16 +151,60 @@ it('starts new provider connections disabled and keeps errors in the form', asyn
       apiKey: 'fixture-key',
     })
   )
+  const body = state.save.mock.calls[0]![1]
+  expect(body).not.toHaveProperty('inputPriceCentsPerMillion')
+  expect(body).not.toHaveProperty('outputPriceCentsPerMillion')
+  await expect.element(view.getByRole('spinbutton')).not.toBeInTheDocument()
 })
-it('starts routing disabled with source sharing off and bounded defaults', async () => {
+it.each(['Edit'])(
+  'omits token prices when using %s on an existing model',
+  async (action) => {
+    state.query = {
+      data: {
+        ...configuration(),
+        providers: [
+          {
+            id: 'provider',
+            name: 'OpenAI (ChatGPT)',
+            endpointId: 'provider',
+            endpoint: {
+              preset: 'openai',
+              baseUrl: 'https://api.openai.com/v1',
+              locality: 'hosted',
+              requiresKey: true,
+            },
+            modelId: 'model-a',
+            enabled: true,
+            approved: true,
+            revision: 1,
+            testStatus: 'CONNECTED',
+            apiKeySet: true,
+            inputPriceCentsPerMillion: 200,
+            outputPriceCentsPerMillion: 800,
+          },
+        ],
+      },
+    }
+    const view = await render(<AiSettingsPage />)
+    await view.getByRole('button', { name: action, exact: true }).click()
+    await expect.element(view.getByRole('spinbutton')).not.toBeInTheDocument()
+    await view.getByRole('button', { name: 'Save model' }).click()
+    expect(state.save).toHaveBeenCalledWith(
+      '/ai/configuration/providers/provider',
+      expect.objectContaining({ modelId: 'model-a', expectedRevision: 1 })
+    )
+    const body = state.save.mock.calls[0]![1]
+    expect(body).not.toHaveProperty('inputPriceCentsPerMillion')
+    expect(body).not.toHaveProperty('outputPriceCentsPerMillion')
+  }
+)
+it('configures one shared default with source sharing off and no pricing or token budgets', async () => {
   const view = await render(<AiSettingsPage />)
   await view.getByRole('tab', { name: 'Model router' }).click()
-  await view.getByRole('button', { name: 'Configure' }).click()
+  await view.getByRole('button', { name: 'Configure default' }).click()
   await expect
-    .element(
-      view.getByRole('checkbox', { name: 'Enable reviews for this stage' })
-    )
-    .not.toBeChecked()
+    .element(view.getByRole('checkbox', { name: 'Enable AI reviews' }))
+    .toBeChecked()
   await expect
     .element(
       view.getByRole('checkbox', {
@@ -134,18 +212,34 @@ it('starts routing disabled with source sharing off and bounded defaults', async
       })
     )
     .not.toBeChecked()
+  await expect
+    .element(view.getByRole('combobox', { name: 'Primary connection' }))
+    .toBeVisible()
+  await expect
+    .element(
+      view.getByRole('spinbutton', {
+        name: 'Daily estimated cost limit (US cents)',
+      })
+    )
+    .not.toBeInTheDocument()
+  await expect
+    .element(view.getByRole('spinbutton', { name: 'Input token limit' }))
+    .not.toBeInTheDocument()
+  await expect
+    .element(view.getByRole('spinbutton', { name: 'Output token limit' }))
+    .not.toBeInTheDocument()
   await view.getByRole('button', { name: 'Save settings' }).click()
   expect(state.save).toHaveBeenCalledWith(
-    '/ai/configuration/routes/pull_request',
+    '/ai/configuration/routes/default',
     expect.objectContaining({
       allowSource: false,
-      enabled: false,
-      maxInputTokens: 8000,
-      maxOutputTokens: 1000,
-      dailyBudgetCents: 1000,
+      enabled: true,
       expectedRevision: 0,
     })
   )
+  const body = state.save.mock.calls[0]![1]
+  for (const field of ['maxInputTokens', 'maxOutputTokens', 'dailyBudgetCents'])
+    expect(body).not.toHaveProperty(field)
 })
 it('paginates connections and resets pagination when filtering', async () => {
   state.query = {
@@ -195,7 +289,10 @@ it('lets an admin approve a self-hosted model without a deployment allowlist or 
   await view
     .getByRole('textbox', { name: 'Endpoint URL' })
     .fill('http://model-server:4000/v1')
-  await view.getByRole('combobox', { name: 'Hosting' }).selectOptions('local')
+  await view.getByRole('combobox', { name: 'Hosting' }).click()
+  await view
+    .getByRole('option', { name: 'Self-hosted model', exact: true })
+    .click()
   await view.getByRole('textbox', { name: 'Model name' }).fill('internal-model')
   await expect
     .element(
@@ -239,7 +336,12 @@ it('shows organization-admin approval separately from connection testing', () =>
 
 it('activates a built-in provider with only model name and key', async () => {
   const view = await render(<AiSettingsPage />)
-  await view.getByRole('button', { name: 'Activate', exact: true }).click()
+  state.save
+    .mockResolvedValueOnce({ id: 'provider' })
+    .mockResolvedValueOnce({ status: 'CONNECTED' })
+  await view.getByRole('button', { name: 'Add model' }).click()
+  await view.getByRole('combobox', { name: 'Provider' }).click()
+  await page.getByRole('option', { name: 'OpenAI (ChatGPT)' }).click()
   await expect
     .element(view.getByRole('textbox', { name: 'Endpoint URL' }))
     .not.toBeInTheDocument()
@@ -259,6 +361,10 @@ it('activates a built-in provider with only model name and key', async () => {
       baseUrl: 'https://api.openai.com/v1',
       requiresKey: true,
     })
+  )
+  expect(state.save).toHaveBeenCalledWith(
+    '/ai/configuration/providers/provider/test',
+    {}
   )
 })
 
@@ -356,7 +462,9 @@ it('cancels model and routing forms without saving', async () => {
   await view.getByRole('button', { name: 'Cancel', exact: true }).click()
   await expect.element(view.getByRole('dialog')).not.toBeInTheDocument()
   await view.getByRole('tab', { name: 'Model router', exact: true }).click()
-  await view.getByRole('button', { name: 'Configure', exact: true }).click()
+  await view
+    .getByRole('button', { name: 'Configure default', exact: true })
+    .click()
   await view.getByRole('button', { name: 'Cancel', exact: true }).click()
   await expect.element(view.getByRole('dialog')).not.toBeInTheDocument()
   expect(state.save).not.toHaveBeenCalled()
@@ -457,12 +565,12 @@ it('keeps provider actions compact and preserves routing labels across themes an
     .toBeVisible()
   const activationButtons = [
     ...document.querySelectorAll<HTMLButtonElement>(
-      '[data-slot="card-footer"] button'
+      'button[aria-label^="Activate "]'
     ),
   ]
   expect(activationButtons).toHaveLength(4)
   for (const button of activationButtons) {
-    const footer = button.closest('[data-slot="card-footer"]')!
+    const footer = button.parentElement!
     expect(button.getBoundingClientRect().width).toBeLessThan(
       footer.getBoundingClientRect().width * 0.75
     )
@@ -483,9 +591,13 @@ it('keeps provider actions compact and preserves routing labels across themes an
   )
   await page.screenshot({ path: '__screenshots__/ai-providers-dark.png' })
   await view.getByRole('tab', { name: 'Model router' }).click()
+  await view.getByText('Stage overrides (optional)', { exact: true }).click()
   await expect
-    .element(view.getByRole('heading', { name: 'Pull requests', exact: true }))
+    .element(view.getByText('Pull requests', { exact: true }))
     .toBeVisible()
+  await view
+    .getByRole('button', { name: 'Configure default', exact: true })
+    .click()
   expect(document.body.textContent).toContain('Primary')
   expect(document.body.textContent).toContain('Fallback')
   await page.screenshot({ path: '__screenshots__/ai-model-choices-dark.png' })
@@ -494,6 +606,7 @@ it('keeps provider actions compact and preserves routing labels across themes an
     .poll(() => document.documentElement.scrollWidth <= window.innerWidth)
     .toBe(true)
   await page.screenshot({ path: '__screenshots__/ai-model-choices-mobile.png' })
+  await view.getByRole('button', { name: 'Cancel', exact: true }).click()
   document.documentElement.classList.remove('dark')
   await page.viewport(1280, 900)
 })
@@ -531,6 +644,7 @@ it('accepts only known intelligence tabs in notification URLs', () => {
   expect(validateIntelligenceSearch({ tab: 'routing' })).toEqual({
     tab: 'routing',
   })
+  expect(isAiSettingsTab('skills')).toBe(false)
   expect(validateIntelligenceSearch({ tab: 'skills' })).toEqual({
     tab: 'skills',
   })
@@ -543,4 +657,22 @@ it('accepts only known intelligence tabs in notification URLs', () => {
   ]) {
     expect(validateIntelligenceSearch({ tab })).toEqual({ tab: 'connections' })
   }
+})
+
+it('keeps stage overrides optional and moves automatic PR feedback out of model routing', async () => {
+  const view = await render(<AiSettingsPage tab='routing' />)
+  await expect
+    .element(view.getByRole('button', { name: 'Configure default' }))
+    .toBeVisible()
+  await view.getByRole('button', { name: 'Configure default' }).click()
+  await expect
+    .element(
+      view.getByRole('checkbox', {
+        name: 'Run assigned AI reviews automatically',
+      })
+    )
+    .not.toBeInTheDocument()
+  await expect
+    .element(view.getByRole('checkbox', { name: 'Post an AI review summary' }))
+    .not.toBeInTheDocument()
 })

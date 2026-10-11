@@ -182,6 +182,19 @@ describe('ruleset GitHub reader', () => {
       'could not be verified',
     )
   })
+  it('replaces cached rulesets with the authoritative refreshed list after a GitHub deletion', async () => {
+    const { provider, fetchMock } = setupProvider([summary, { ...summary, id: 43, name: 'Production' }])
+    expect((await provider.listRepositoryRulesets(1n, 2n)).rulesets).toHaveLength(2)
+    const initialFetch = fetchMock.getMockImplementation()!
+    fetchMock.mockImplementation(async (url: string) => url.includes('/rulesets?')
+      ? new Response(JSON.stringify([summary]), { status: 200 })
+      : initialFetch(url))
+    // Reads stay cached until expiry or an explicit refresh.
+    expect((await provider.listRepositoryRulesets(1n, 2n)).rulesets).toHaveLength(2)
+    const refreshed = await provider.listRepositoryRulesets(1n, 2n, 1, true)
+    expect(refreshed.rulesets.map(row => row.id)).toEqual([summary.id])
+    expect((await provider.listRepositoryRulesets(1n, 2n)).rulesets.map(row => row.id)).toEqual([summary.id])
+  })
   it('keeps pagination incomplete when a full page is returned', async () => {
     const { provider } = setupProvider(
       Array.from({ length: 20 }, (_, i) => ({ ...summary, id: i + 1 })),

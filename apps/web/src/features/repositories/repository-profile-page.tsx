@@ -6,7 +6,6 @@ import {
   ArrowLeft,
   GitBranch,
   GitCommitHorizontal,
-  Info,
   LoaderCircle,
   RefreshCw,
 } from 'lucide-react'
@@ -30,6 +29,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { AppHeader } from '@/components/layout/app-header'
 import { Main } from '@/components/layout/main'
 import { PageHeader } from '@/components/page-header'
+import { PageHelpDrawer } from '@/components/page-help-drawer'
 import { StatusBadge } from '@/components/status-badge'
 import { canPerform, type ScopedSession } from '../workspace/scoped-access'
 import { BranchPicker } from './branch-picker'
@@ -65,7 +65,7 @@ const stackIds = new Set(['languages', 'frameworks'])
 /** Engineering controls are covered by the standards table, not repeated here. */
 const toolingIds = new Set(['manifests', 'containers', 'iac', 'migrations'])
 const profileNotes = [
-  'Config found means a supported file or workflow reference exists at the inspected commit. Nothing was built, tested or scanned.',
+  'Related files found means a supported file or workflow reference exists at the inspected commit. Nothing was built, tested or scanned.',
   'Not found means no supported hint was found. It is not a policy failure.',
 ]
 const evidenceNotes = [
@@ -207,31 +207,26 @@ function InspectionBadge({ profile }: { profile: Profile }) {
   )
 }
 
-function ReadingGuide({ limitations }: { limitations: string[] }) {
+function RepositoryHelp({ limitations }: { limitations: string[] }) {
   return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button
-          variant='link'
-          size='sm'
-          className='touch-target h-auto min-h-6 p-0 text-xs text-muted-foreground'
-        >
-          <Info aria-hidden='true' className='size-3.5' />
-          How to read this page
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent align='start' className='w-96 text-sm'>
-        <p className='font-medium'>Understanding repository status</p>
-        <ul className='mt-2 list-disc space-y-1.5 ps-5 text-muted-foreground'>
-          {[
-            ...(limitations.length ? limitations : profileNotes),
-            ...evidenceNotes,
-          ].map((note) => (
-            <li key={note}>{note}</li>
-          ))}
-        </ul>
-      </PopoverContent>
-    </Popover>
+    <PageHelpDrawer
+      title='Repository'
+      sections={[
+        {
+          title: 'Understanding repository status',
+          content: (
+            <ul className='list-disc space-y-1.5 ps-5'>
+              {[
+                ...(limitations.length ? limitations : profileNotes),
+                ...evidenceNotes,
+              ].map((note) => (
+                <li key={note}>{note}</li>
+              ))}
+            </ul>
+          ),
+        },
+      ]}
+    />
   )
 }
 
@@ -399,58 +394,65 @@ export function RepositoryProfilePage() {
             icon={GitBranch}
             tone='blue'
             actions={
-              canDiscover && result ? (
-                <div className='flex flex-col gap-2'>
-                  <label
-                    className='text-xs font-medium text-muted-foreground'
-                    htmlFor='profile-branch'
-                  >
-                    Inspect branch
-                  </label>
-                  <div className='flex flex-wrap items-center gap-2'>
-                    <BranchPicker
-                      repositoryId={repositoryId}
-                      actorId={sessionQuery.data?.identityId}
-                      value={inspectionBranch}
-                      disabled={discovering}
-                      onValueChange={(branch) =>
-                        setBranchChoice({ repositoryId, branch })
-                      }
-                    />
-                    <Button
-                      size='sm'
-                      variant='outline'
-                      disabled={
-                        loading || discovering || !inspectionBranch.trim()
-                      }
-                      onClick={() =>
-                        discovery.mutate({
-                          id: repositoryId,
-                          branch: inspectionBranch.trim(),
-                        })
-                      }
+              <>
+                {canDiscover && result && tab !== 'assessments' ? (
+                  <div className='flex flex-col gap-2'>
+                    <label
+                      className='text-xs font-medium text-muted-foreground'
+                      htmlFor='profile-branch'
                     >
-                      {discovering ? (
-                        <LoaderCircle className='animate-spin' />
-                      ) : (
-                        <RefreshCw />
-                      )}
-                      {discovering
-                        ? 'Discovering…'
-                        : profile
-                          ? 'Refresh profile'
-                          : 'Discover profile'}
-                    </Button>
+                      Inspect branch
+                    </label>
+                    <div className='flex flex-wrap items-center gap-2'>
+                      <BranchPicker
+                        repositoryId={repositoryId}
+                        actorId={sessionQuery.data?.identityId}
+                        value={inspectionBranch}
+                        disabled={discovering}
+                        onValueChange={(branch) =>
+                          setBranchChoice({ repositoryId, branch })
+                        }
+                      />
+                      <Button
+                        size='sm'
+                        variant='outline'
+                        disabled={
+                          loading || discovering || !inspectionBranch.trim()
+                        }
+                        onClick={() =>
+                          discovery.mutate({
+                            id: repositoryId,
+                            branch: inspectionBranch.trim(),
+                          })
+                        }
+                      >
+                        {discovering ? (
+                          <LoaderCircle className='animate-spin' />
+                        ) : (
+                          <RefreshCw />
+                        )}
+                        {discovering
+                          ? 'Discovering…'
+                          : profile
+                            ? 'Refresh profile'
+                            : 'Discover profile'}
+                      </Button>
+                    </div>
+                    <p className='text-xs text-muted-foreground'>
+                      Select a branch. Only that branch will be inspected.
+                    </p>
                   </div>
-                  <p className='text-xs text-muted-foreground'>
-                    Select a branch. Only that branch will be inspected.
-                  </p>
-                </div>
-              ) : undefined
+                ) : null}
+                {result && (
+                  <RepositoryHelp
+                    limitations={profile?.report.limitations ?? []}
+                  />
+                )}
+              </>
             }
           >
             <div className='flex flex-wrap items-center gap-x-3 gap-y-2'>
-              {!!technologies.length && (
+              {tab !== 'assessments' && !!technologies.length && (
                 <div
                   className='flex flex-wrap items-center gap-1.5'
                   role='group'
@@ -462,37 +464,40 @@ export function RepositoryProfilePage() {
                 </div>
               )}
             </div>
-            {profile ? (
-              <div className='flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-muted-foreground'>
-                <span className='flex items-center gap-1.5'>
-                  <GitBranch aria-hidden='true' className='size-4' />
-                  Inspected branch: {profile.branch}
-                </span>
-                <span
-                  className='flex items-center gap-1.5'
-                  title={profile.sourceSha}
-                >
-                  <GitCommitHorizontal aria-hidden='true' className='size-4' />
-                  <code className='text-xs'>
-                    {profile.sourceSha.slice(0, 7)}
-                  </code>
-                </span>
-                <span>
-                  Profiled <RelativeTime value={profile.createdAt} />
-                </span>
-                <InspectionBadge profile={profile} />
-              </div>
-            ) : (
-              result && (
-                <p className='text-sm text-muted-foreground'>
-                  No profile discovered yet.
-                </p>
-              )
-            )}
-            {result && (
+            {tab !== 'assessments' &&
+              (profile ? (
+                <div className='flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-muted-foreground'>
+                  <span className='flex items-center gap-1.5'>
+                    <GitBranch aria-hidden='true' className='size-4' />
+                    Inspected branch: {profile.branch}
+                  </span>
+                  <span
+                    className='flex items-center gap-1.5'
+                    title={profile.sourceSha}
+                  >
+                    <GitCommitHorizontal
+                      aria-hidden='true'
+                      className='size-4'
+                    />
+                    <code className='text-xs'>
+                      {profile.sourceSha.slice(0, 7)}
+                    </code>
+                  </span>
+                  <span>
+                    Profiled <RelativeTime value={profile.createdAt} />
+                  </span>
+                  <InspectionBadge profile={profile} />
+                </div>
+              ) : (
+                result && (
+                  <p className='text-sm text-muted-foreground'>
+                    No profile discovered yet.
+                  </p>
+                )
+              ))}
+            {result && tab !== 'assessments' && (
               <p className='flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground'>
                 <StatusBadge tone='info'>No merge blocking</StatusBadge>
-                <ReadingGuide limitations={profile?.report.limitations ?? []} />
               </p>
             )}
           </PageHeader>
@@ -600,8 +605,6 @@ export function RepositoryProfilePage() {
                 />
               </TabsContent>
               <TabsContent value='assessments' className='space-y-5'>
-                <RepositoryActivityPanel repositoryId={repositoryId} />
-                <RepositoryPullRequests repositoryId={repositoryId} />
                 <RepositoryAssessments
                   initialAssessmentId={assessment}
                   key={`${repositoryId}:${assessment ?? ''}`}
@@ -615,16 +618,30 @@ export function RepositoryProfilePage() {
                 />
               </TabsContent>
               <TabsContent value='activity' className='space-y-5'>
-                <RepositoryCiEvidence
-                  canImport={canPerform(
-                    sessionQuery.data,
-                    'evidence.manage',
-                    repositoryId
-                  )}
-                  key={repositoryId}
-                  repositoryId={repositoryId}
-                />
-                <RepositoryEvents repositoryId={repositoryId} />
+                <RepositoryActivityPanel repositoryId={repositoryId} />
+                <RepositoryPullRequests repositoryId={repositoryId} />
+                <Tabs defaultValue='results' className='space-y-4'>
+                  <TabsList aria-label='CI activity views'>
+                    <TabsTrigger value='results'>CI results</TabsTrigger>
+                    <TabsTrigger value='deliveries'>
+                      Delivery timeline
+                    </TabsTrigger>
+                  </TabsList>
+                  <TabsContent value='results'>
+                    <RepositoryCiEvidence
+                      canManageEvidence={canPerform(
+                        sessionQuery.data,
+                        'evidence.manage',
+                        repositoryId
+                      )}
+                      key={repositoryId}
+                      repositoryId={repositoryId}
+                    />
+                  </TabsContent>
+                  <TabsContent value='deliveries'>
+                    <RepositoryEvents repositoryId={repositoryId} />
+                  </TabsContent>
+                </Tabs>
               </TabsContent>
             </Tabs>
           )

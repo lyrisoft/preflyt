@@ -1,3 +1,5 @@
+import { AuditLogController } from '../audit/audit-log.controller.js'
+import { AuditLogService } from '../audit/audit-log.service.js'
 import { GitHubProviderModule } from '../github/github-provider.module.js'
 import { CacheModule } from '../cache/cache.module.js'
 import { GitHubIdentityProvider } from './github-identity-provider.js'
@@ -12,7 +14,7 @@ import { AuthService } from './auth.service.js'
 import { OwnerAdminGuard, SessionGuard } from './session.guard.js'
 @Module({
   imports: [GitHubProviderModule, CacheModule],
-  controllers: [AuthController, OrganizationController, GitHubLoginController],
+  controllers: [AuthController, OrganizationController, GitHubLoginController, AuditLogController],
   providers: [
     GitHubIdentityProvider,
     GitHubUserAccessService,
@@ -21,6 +23,7 @@ import { OwnerAdminGuard, SessionGuard } from './session.guard.js'
     SessionGuard,
     OwnerAdminGuard,
     AuthorizationService,
+    AuditLogService,
   ],
   exports: [AuthService, SessionGuard, OwnerAdminGuard, AuthorizationService],
 })

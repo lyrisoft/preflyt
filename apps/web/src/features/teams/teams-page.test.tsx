@@ -164,7 +164,7 @@ it('requires an impact preview before creating drafts', async () => {
     .not.toBeInTheDocument()
   await userEvent.click(view.getByRole('button', { name: 'Preview impact' }))
   await expect
-    .element(view.getByText('Required test execution · recommended profile'))
+    .element(view.getByText('Required test execution · recommended requirements'))
     .toBeVisible()
   await userEvent.click(
     view.getByRole('button', { name: 'Apply and create drafts' })

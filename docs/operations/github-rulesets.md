@@ -2,11 +2,11 @@
 
 Application connections and feature switches are now provisioned in **Settings → Configuration** by Super Admin. Environment names below describe the legacy import contract; once stored, database values take precedence. See [deployment configuration](deployment-configuration.md). Infrastructure and execution trust controls remain deployment-managed.
 
-See the [production governance deployment guide](../deployment/github-governance-production.md) for separate credentials, permissions and activation release gates. Configuring credentials alone does not enable activation: default-off flags, current passing checks and independent approval are required.
+See the [production governance deployment guide](../deployment/github-governance-production.md) for one-App setup, optional separate credentials, permissions and activation release gates. Configuring credentials alone does not enable activation: default-off flags, current passing checks and independent or active Super Admin approval are required.
 
 Quality Gates → GitHub Rulesets shows rulesets GitHub returns for the selected repository, including applicable parent organization/enterprise rulesets. Choose a repository, open a ruleset, and inspect its branch patterns, rule types, approval count and required status-check names/source App IDs.
 
-This is the first **P2.R1** slice. It uses the existing GitHub App with a repository-limited **Metadata: read** token; no organization administration permission is added. The discovery UI has no GitHub write actions. The P2.R2 wizard previews and saves local drafts for one selected repository. Those discovery and draft endpoints never write GitHub. The separate Readiness check and Deployments tabs now provide automatic publication and independently approved, single-repository activation behind default-off flags; see [publication setup](github-check-publication.md).
+This is the first **P2.R1** slice. It uses the existing GitHub App with a repository-limited **Metadata: read** token; no organization administration permission is added. The discovery UI has no GitHub write actions. The P2.R2 wizard previews and saves local drafts for one selected repository. Those discovery and draft endpoints never write GitHub. The separate Readiness check and Deployments tabs now provide automatic publication and approved, single-repository activation behind default-off flags; see [publication setup](github-check-publication.md).
 
 ## Access and data
 
@@ -71,7 +71,7 @@ editing are audited, concurrent edits conflict, and organization/repository gran
 are checked. Lists expose `activationAvailable: false`; no draft endpoint writes to
 GitHub. The check's source App ID remains unset until verified publisher preflight.
 
-Apply database migrations before using these endpoints. Broader organization and multi-repository targeting, exclusion patterns and resolved effective protection remain pending. Drafts remain local; use Deployments for the independently reviewed activation flow. Live passing/failing/incomplete acceptance remains pending. This selected-repository slice does not close P2.
+Apply database migrations before using these endpoints. Broader organization and multi-repository targeting, exclusion patterns and resolved effective protection remain pending. Drafts remain local; use Deployments for the reviewed activation flow. Live passing/failing/incomplete acceptance remains pending. This selected-repository slice does not close P2.
 
 
 ## Repository Ruleset Insights (P2.R5 first slice)
@@ -128,3 +128,7 @@ With `GITHUB_RULESET_ACTIVATION_ENABLED=true`, the worker reads at most five due
 A matching provider hash updates the verification timestamp. A changed hash marks DRIFTED and records an audit plus a scoped notification once per distinct deployment/hash; the expected managed definition stays intact. Restoring the exact expected provider definition can restore the corresponding ACTIVE/ROLLED_BACK state after verification. Unknown provider reads preserve the old state and verification timestamp, with an explicit outdated-state message. The next attempt waits five minutes. Notifications require the existing default-off notification configuration. An operator must review drift; safe rollback still rejects protections that no longer match the expected managed receipt.
 
 The additive `20261010001000_ruleset_drift_schedule` migration and regenerated client are required. API and worker restart remains an operator deployment action. Local database tests cover successful drift observation, repeated-poll deduplication and provider timeout. No live GitHub deployment acceptance is claimed.
+
+### Super Admin ruleset approval
+
+An active local Super Admin can approve and activate their own proposal. Other administrators require an independent approver. Self-approval is explicitly recorded and audited; the role is rechecked before activation. Repository scope, both enforcement permissions, preview integrity, current passing publication and GitHub permission checks still apply.

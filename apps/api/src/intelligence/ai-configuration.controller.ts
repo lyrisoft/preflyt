@@ -30,9 +30,9 @@ import {
 } from "../auth/session.guard.js";
 import { AiConfigurationService } from "./ai-configuration.service.js";
 class ProviderDto {
-  @IsOptional() @IsInt() @Min(0) @Max(100000000) inputPriceCentsPerMillion?: number | null;
-  @IsOptional() @IsInt() @Min(0) @Max(100000000) outputPriceCentsPerMillion?: number | null;
-  @IsOptional() @IsIn(["openai", "anthropic", "gemini", "deepseek"]) preset?: string;
+  @IsOptional()
+  @IsIn(["openai", "anthropic", "gemini", "deepseek"])
+  preset?: string;
   @IsString() @MinLength(1) @MaxLength(120) name!: string;
   @IsString() @MaxLength(2048) baseUrl!: string;
   @IsIn(["local", "hosted"]) locality!: "local" | "hosted";
@@ -50,15 +50,14 @@ class RouteDto {
   @ValidateIf((_o, v) => v !== null) @IsUUID() fallbackId!: string | null;
   @IsBoolean() enabled!: boolean;
   @IsBoolean() allowSource!: boolean;
-  @IsInt() @Min(100) @Max(32000) maxInputTokens!: number;
-  @IsInt() @Min(128) @Max(8192) maxOutputTokens!: number;
-  @IsInt() @Min(1) @Max(5000) dailyBudgetCents!: number;
   @IsInt() @Min(0) @Max(2147483646) expectedRevision!: number;
+}
+class InheritDto {
+  @IsInt() @Min(1) expectedRevision!: number;
 }
 class PreviewDto {
   @IsString() @MaxLength(32) stage!: string;
   @IsBoolean() containsSource!: boolean;
-  @IsInt() @Min(0) @Max(1000000) inputTokens!: number;
 }
 type R = Request & { preflytSession: AuthenticatedSession };
 @Controller("ai/configuration")
@@ -101,16 +100,23 @@ export class AiConfigurationController {
     this.auth.assertOrigin(req.headers.origin);
     return this.ai.saveRoute(req.preflytSession, stage, body);
   }
+  @Post("routes/:stage/inherit") @Header("Cache-Control", "no-store") inherit(
+    @Param("stage") stage: string,
+    @Body() body: InheritDto,
+    @Req() req: R,
+  ) {
+    this.auth.assertOrigin(req.headers.origin);
+    return this.ai.inheritRoute(
+      req.preflytSession,
+      stage,
+      body.expectedRevision,
+    );
+  }
   @Post("preview") @Header("Cache-Control", "no-store") preview(
     @Body() body: PreviewDto,
     @Req() req: R,
   ) {
     this.auth.assertOrigin(req.headers.origin);
-    return this.ai.preview(
-      req.preflytSession,
-      body.stage,
-      body.containsSource,
-      body.inputTokens,
-    );
+    return this.ai.preview(req.preflytSession, body.stage, body.containsSource);
   }
 }

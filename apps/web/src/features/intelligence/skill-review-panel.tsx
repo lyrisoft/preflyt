@@ -23,10 +23,8 @@ type Review = {
         providerId: string
         inputTokens: number | null
         outputTokens: number | null
-        costMicroCents: string | null
       }[]
     | null
-  reservedCents: number | null
   latencyMs: number | null
   checks?: AiCheck[]
   skills: { id: string; name: string; version: number; digest: string }[]
@@ -182,8 +180,7 @@ export function SkillReviewPanel({
             {!eligible.length && (
               <p className='text-sm text-muted-foreground'>
                 No AI Reviews are assigned in this assessment. Add them to
-                Engineering Standards, adopt the version and create a new
-                assessment.
+                Standards, adopt the version and create a new assessment.
               </p>
             )}
             {stage === 'pull_request' && (
@@ -331,18 +328,12 @@ export function SkillReviewPanel({
               <p key={index} className='text-xs text-muted-foreground'>
                 Provider-reported usage: {u.inputTokens ?? 'unknown'} input /{' '}
                 {u.outputTokens ?? 'unknown'} output tokens
-                {u.costMicroCents !== null
-                  ? ` · Estimated cost from reported usage: $${(Number(u.costMicroCents) / 100000000).toFixed(6)}`
-                  : ' · Cost unavailable'}
               </p>
             ))}
             <div className='flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground'>
               <span>
-                {r.reservedCents === null
-                  ? 'Usage restricted'
-                  : `Reserved estimate: $${(r.reservedCents / 100).toFixed(4)}`}
                 {r.latencyMs !== null
-                  ? ` · ${(r.latencyMs / 1000).toFixed(1)}s`
+                  ? `${(r.latencyMs / 1000).toFixed(1)}s`
                   : ''}
               </span>
               {allowed && ['QUEUED', 'RUNNING'].includes(r.state) && (

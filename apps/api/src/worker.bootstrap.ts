@@ -9,6 +9,7 @@ import { RulesetDeploymentService } from './github/ruleset-deployment.service.js
 import { RulesetHistoryService } from './github/ruleset-history.service.js'
 import { PolicyExceptionService } from './assessments/policy-exception.service.js'
 import { ReadinessAutomationService } from './assessments/readiness-automation.service.js'
+import { PipelineProcessingService } from './assessments/pipeline-processing.service.js'
 import { AssessmentService } from './assessments/assessment.service.js'
 import { CheckPublicationService } from './assessments/check-publication.service.js'
 import { AuthorizationService } from './auth/authorization.service.js'
@@ -141,6 +142,8 @@ async function start() {
   let driftRun: Promise<void> | undefined
   const automation = new ReadinessAutomationService(prisma, emailAuthorization, githubProvider, assessments, checks, exceptions)
   let automationRun: Promise<void> | undefined
+  const pipeline = new PipelineProcessingService(prisma, emailAuthorization, githubProvider, assessments)
+  let pipelineRun: Promise<void> | undefined
   let lastWarning = 0
   const warn = () => {
     if (Date.now() - lastWarning > 5000) {
@@ -212,6 +215,7 @@ async function start() {
       if (!identityRun) identityRun = userAccess.reconcile().catch(warn).finally(() => { identityRun = undefined })
       if (!aiReviewRun) aiReviewRun = aiReviews.reconcile().catch(warn).finally(() => { aiReviewRun = undefined })
       if (!nativeRun) nativeRun = native.reconcile().catch(warn).finally(() => { nativeRun = undefined })
+      if (!pipelineRun) pipelineRun = pipeline.reconcile().catch(warn).finally(() => { pipelineRun = undefined })
       if (!automationRun) automationRun = automation.reconcile().catch(warn).finally(() => { automationRun = undefined })
       if (!historyRun) historyRun = rulesetHistory.reconcile().catch(warn).finally(() => { historyRun = undefined })
       if (!driftRun) driftRun = deployments.reconcile().catch(warn).finally(() => { driftRun = undefined })
@@ -258,6 +262,7 @@ async function start() {
     await aiReviewRun
     await nativeRun
     await syncRun
+    await pipelineRun
     await automationRun
     await historyRun
     await driftRun

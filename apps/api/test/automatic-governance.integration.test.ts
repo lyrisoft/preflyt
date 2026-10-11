@@ -372,6 +372,34 @@ it.each(["failure", "action_required"])(
     expect((await row()).conclusion).toBe(conclusion);
   },
 );
+it("keeps an unchanged verified passing check stable during background rechecks", async () => {
+  await automation.process(task.id);
+  await due();
+  github.publishReadinessCheck.mockClear();
+  assessments.createAutomatic.mockClear();
+  await automation.process(task.id);
+  expect(await row()).toMatchObject({ state: "PUBLISHED", conclusion: "success", attempts: 0 });
+  expect(github.readPublishedReadinessCheck).toHaveBeenCalled();
+  expect(github.publishReadinessCheck).not.toHaveBeenCalled();
+  expect(assessments.createAutomatic).not.toHaveBeenCalled();
+});
+it("invalidates a previously passing result when current evaluation changes", async () => {
+  await automation.process(task.id);
+  await due();
+  const previous = await checks.plan();
+  checks.plan.mockResolvedValue({ ...previous, policyEvaluation: { evaluationHash: "changed" }, payload: { ...previous.payload, conclusion: "failure" } });
+  github.publishReadinessCheck.mockClear();
+  await automation.process(task.id);
+  expect(github.publishReadinessCheck.mock.calls[0][2].conclusion).toBe("action_required");
+  expect(await row()).toMatchObject({ state: "PUBLISHED", conclusion: "failure" });
+});
+it("uses a live verified success while its cached receipt is being rechecked", async () => {
+  await automation.process(task.id);
+  await db.readinessTask.update({ where: { id: task.id }, data: { state: "PROCESSING" } });
+  await expect(deployments.preview(owner, "51", draft.id, draft.definitionHash)).resolves.toBeDefined();
+  github.readPublishedReadinessCheck.mockResolvedValue({ conclusion: "action_required" });
+  await expect(deployments.preview(owner, "51", draft.id, draft.definitionHash)).rejects.toThrow("passing PR check");
+});
 it("revoked publisher access invalidates the check and retries instead of passing", async () => {
   await automation.process(task.id);
   await due();
@@ -504,6 +532,73 @@ it("requires independent approval and binds activation to exact repo, branch and
   await deployments.rollback(owner, "51", proposal.id, proposal.previewHash);
   expect(live.definition.enforcement).toBe("disabled");
   await automation.configure(owner, "51", false, 1);
+});
+it("allows scoped active Super Admin self-approval through the API and verifies activation", async () => {
+  await db.membership.create({ data: { identityId: owner.identityId, role: "SUPER_ADMIN" } });
+  await automation.process(task.id);
+  const proposal = await deployments.preview(owner, "51", draft.id, draft.definitionHash);
+  const listed = await deployments.list(owner, "51");
+  expect(listed.canSelfApprove).toBe(true);
+  await request(app.getHttpServer())
+    .post(`/github/repositories/51/ruleset-deployments/${proposal.id}/approve`)
+    .set("Origin", "http://localhost:5173")
+    .set("Cookie", "test.sid=" + owner.identityId)
+    .send({ expectedPreviewHash: proposal.previewHash })
+    .expect(201);
+  expect(await db.gitHubRulesetDeployment.findUnique({ where: { id: proposal.id } })).toMatchObject({
+    state: "APPROVED", approvedById: owner.identityId, approvalKind: "SUPER_ADMIN_SELF_APPROVAL",
+  });
+  expect(await db.auditEvent.findFirst({ where: { event: "github.ruleset_super_admin_self_approved" } })).toMatchObject({
+    actorId: owner.identityId, metadata: { deploymentId: proposal.id, previewHash: proposal.previewHash, approvalKind: "SUPER_ADMIN_SELF_APPROVAL" },
+  });
+  await deployments.deploy(owner, "51", proposal.id, proposal.previewHash);
+  expect(connection.create).toHaveBeenCalledOnce();
+  expect(live.definition.conditions.repository_id.repository_ids).toEqual([51]);
+  expect(live.definition.bypass_actors).toEqual([]);
+});
+it.each(["missing", "inactive", "demoted"])("rejects %s Super Admin authority at self-approval", async (kind) => {
+  if (kind !== "missing") await db.membership.create({ data: { identityId: owner.identityId, role: kind === "demoted" ? "OWNER" : "SUPER_ADMIN", active: kind !== "inactive" } });
+  await automation.process(task.id);
+  const proposal = await deployments.preview(owner, "51", draft.id, draft.definitionHash);
+  expect((await deployments.list(owner, "51")).canSelfApprove).toBe(false);
+  await expect(deployments.approve({ ...owner, role: "SUPER_ADMIN" }, "51", proposal.id, proposal.previewHash)).rejects.toThrow("Another authorized");
+  expect(connection.create).not.toHaveBeenCalled();
+});
+it.each(["revoked role", "missing approval marker", "revoked repository scope"])("rechecks %s before self-approved activation", async (kind) => {
+  await db.membership.create({ data: { identityId: owner.identityId, role: "SUPER_ADMIN" } });
+  await automation.process(task.id);
+  const proposal = await deployments.preview(owner, "51", draft.id, draft.definitionHash);
+  await deployments.approve(owner, "51", proposal.id, proposal.previewHash);
+  if (kind === "revoked role") await db.membership.update({ where: { identityId: owner.identityId }, data: { active: false } });
+  if (kind === "missing approval marker") await db.gitHubRulesetDeployment.update({ where: { id: proposal.id }, data: { approvalKind: "INDEPENDENT" } });
+  if (kind === "revoked repository scope") await db.organizationMembership.updateMany({ where: { identityId: owner.identityId, organizationId: org }, data: { active: false } });
+  await expect(deployments.deploy(owner, "51", proposal.id, proposal.previewHash)).rejects.toThrow();
+  expect(connection.create).not.toHaveBeenCalled();
+});
+it("still rejects changed readiness after Super Admin self-approval", async () => {
+  await db.membership.create({ data: { identityId: owner.identityId, role: "SUPER_ADMIN" } });
+  await automation.process(task.id);
+  const proposal = await deployments.preview(owner, "51", draft.id, draft.definitionHash);
+  await deployments.approve(owner, "51", proposal.id, proposal.previewHash);
+  github.readOpenReadinessPullRequests.mockResolvedValue([]);
+  await expect(deployments.deploy(owner, "51", proposal.id, proposal.previewHash)).rejects.toThrow("passing PR check");
+  expect(connection.create).not.toHaveBeenCalled();
+});
+it("verifies older publication receipts live rather than expiring an unchanged passing PR", async () => {
+  await automation.process(task.id);
+  await db.readinessTask.update({ where: { id: task.id }, data: { verifiedAt: new Date(Date.now() - 3600000) } });
+  const proposal = await deployments.preview(owner, "51", draft.id, draft.definitionHash);
+  await deployments.approve(reviewer, "51", proposal.id, proposal.previewHash);
+  await deployments.deploy(owner, "51", proposal.id, proposal.previewHash);
+  expect(github.readPublishedReadinessCheck).toHaveBeenCalled();
+  expect(connection.create).toHaveBeenCalledOnce();
+});
+it("rejects older publication receipts when the live GitHub check changed", async () => {
+  await automation.process(task.id);
+  await db.readinessTask.update({ where: { id: task.id }, data: { verifiedAt: new Date(Date.now() - 3600000) } });
+  github.readPublishedReadinessCheck.mockResolvedValue({ ...receipt, conclusion: "failure" });
+  await expect(deployments.preview(owner, "51", draft.id, draft.definitionHash)).rejects.toThrow("passing PR check");
+  expect(connection.create).not.toHaveBeenCalled();
 });
 it("changed PR impact rejects an approved activation", async () => {
   await automation.process(task.id);

@@ -87,8 +87,8 @@ export function FindingsOverview({
     <section aria-label='Findings overview' className='space-y-5'>
       <dl className='grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4'>
         {entries.map(({ name, value, icon, tone, emphasis, iconClassName }) => (
-          <Card key={name} className='gap-0 py-5'>
-            <CardContent className='flex h-full items-start gap-4 px-5'>
+          <Card key={name} className='gap-0 py-4'>
+            <CardContent className='flex h-full items-start gap-4 px-4'>
               <SurfaceIcon icon={icon} tone={tone} className={iconClassName} />
               <div className='flex min-w-0 flex-1 flex-col gap-3'>
                 <dt className='min-h-10 text-sm leading-5 font-medium text-muted-foreground'>
@@ -124,7 +124,7 @@ export function FindingsOverview({
               {summary.chartTotal.toLocaleString()} entries
             </span>
           </CardHeader>
-          <CardContent className='px-5'>
+          <CardContent className='px-4'>
             {summary.chartTotal === 0 ? (
               <ChartEmpty />
             ) : (
@@ -213,7 +213,7 @@ export function FindingsOverview({
               {summary.chartTotal.toLocaleString()} entries
             </span>
           </CardHeader>
-          <CardContent className='px-5'>
+          <CardContent className='px-4'>
             {summary.chartTotal === 0 ? (
               <ChartEmpty />
             ) : (

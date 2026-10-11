@@ -6,7 +6,7 @@
 
 ## Implemented first increment
 
-Intelligence → Skills supports organization-scoped drafts, immutable integer versions and content digests, reviewed approval, enable/disable/retire, repository scope and pagination. Repository assessment details expose explicit AI evidence review using approved model routing, estimated daily budget reservations, cancellation and validated inferred suggestions. The [12 built-in Markdown skills](../skills/README.md) provide concrete review guides linked to every current engineering check; instruction-only SKILL.md uploads open editable drafts and downloads export the selected immutable database version. Candidate third-party packages and scripts are not bundled or executed. PR reviews can include bounded verified changed lines under an enabled source-sharing route. See [setup, permissions and exact limits](../operations/review-skills.md). Language/framework selection and opt-in inline comments are implemented. Administrator-reviewed public GitHub SKILL.md imports pin upstream commits and checksums. Executable-package manifests and script execution remain outside this instruction-only runtime.
+Intelligence → Skills supports organization-scoped drafts, immutable integer versions and content digests, reviewed approval, enable/disable/retire, repository scope and pagination. Repository assessment details expose explicit AI evidence review using approved model routing, cancellation and validated inferred suggestions. The [12 built-in Markdown skills](../skills/README.md) provide concrete review guides linked to every current engineering check; instruction-only SKILL.md uploads open editable drafts and downloads export the selected immutable database version. Candidate third-party packages and scripts are not bundled or executed. PR reviews can include bounded verified changed lines under an enabled source-sharing route. See [setup, permissions and exact limits](../operations/review-skills.md). Language/framework selection and opt-in inline comments are implemented. Administrator-reviewed public GitHub SKILL.md imports pin upstream commits and checksums. Executable-package manifests and script execution remain outside this instruction-only runtime.
 
 ## Markdown file contract
 
@@ -26,11 +26,11 @@ Preflyt owns orchestration, policy scope, model routing, tool permissions, evide
 
 Signed PR webhook → pinned diff/context → deterministic evidence ingestion → organization policy and skill selection → constrained model routing → parallel or sequential read-only skill analysis → structured finding validation → deduplication/correlation → assessment UI → approved GitHub summary/inline feedback → independent deterministic quality gate.
 
-Selection may depend on language, framework, changed paths, risk class, applicable policy and organization-approved skill set. Enforce per-PR time/token/cost caps and bounded context. Prefer deterministic scanner results as evidence; label model-only claims as hypotheses.
+Selection may depend on language, framework, changed paths, risk class, applicable policy and organization-approved skill set. Enforce per-PR time and request limits and bounded context. Prefer deterministic scanner results as evidence; label model-only claims as hypotheses.
 
 ## Skill manifest contract
 
-Each installed skill must have: immutable ID, display name, semantic version, pinned upstream commit/digest, origin and license review, checksum, supported languages/stages, review domains, required context, allowed **read-only** tools, required data classification, model capability requirements, input/output schema version, timeout/token budgets and approval state.
+Each installed skill must have: immutable ID, display name, semantic version, pinned upstream commit/digest, origin and license review, checksum, supported languages/stages, review domains, required context, allowed **read-only** tools, required data classification, model capability requirements, input/output schema version, execution timeouts and approval state.
 
 Example **proposed** metadata (not an imported third-party skill):
 
@@ -64,9 +64,9 @@ A finding includes PR/head SHA, file and changed-line mapping, rule/skill/versio
 
 ## Administration and UI
 
-**Intelligence → Skills** (when usable): list installed/available reviewed skills, provenance, pinned version, license/security status, supported repositories/languages, enablement, assigned stages, selected model route, budgets, last review outcome and audit. Organization admins can propose/import; authorized policy/security approvers activate. Repository-level overrides cannot bypass organization restrictions.
+**Intelligence → Skills** (when usable): list installed/available reviewed skills, provenance, pinned version, license/security status, supported repositories/languages, enablement, assigned stages, selected model route, last review outcome and audit. Organization admins can propose/import; authorized policy/security approvers activate. Repository-level overrides cannot bypass organization restrictions.
 
-Assessment → **Code Quality → AI Review**: show which skills ran/skipped/failed, exact versions, duration, costs, findings and source references. GitHub summary feedback is default; inline comments require separate authorization and deduplication.
+Assessment → **Code Quality → AI Review**: show which skills ran/skipped/failed, exact versions, duration, reported usage, findings and source references. GitHub summary feedback is default; inline comments require separate authorization and deduplication.
 
 ## Phases without renumbering
 

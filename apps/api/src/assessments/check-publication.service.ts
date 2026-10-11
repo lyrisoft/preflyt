@@ -1,3 +1,4 @@
+import { currentStandards, selectionBindingWhere } from '../standards/policy-standards.js'
 import { Optional } from '@nestjs/common'
 import { PolicyExceptionService } from './policy-exception.service.js'
 import { applyApprovedExceptions } from './approved-policy-evaluation.js'
@@ -57,6 +58,39 @@ export class CheckPublicationService {
       publications: rows
         .slice(0, 20)
         .map(({ leaseToken: _lease, ...row }) => row),
+    }
+  }
+  async prChecks(session: AuthenticatedSession, githubId: string, page = 1) {
+    if (!Number.isInteger(page) || page < 1 || page > 1000)
+      throw new BadRequestException('Invalid PR checks page')
+    const repo = await this.access.requireRepository(session, githubId, 'policy.read')
+    const rows = await this.prisma.$queryRaw<{
+      id: string; assessmentId: string | null; prNumber: number;
+      sourceSha: string | null; branchRef: string | null; state: string;
+      conclusion: string | null; htmlUrl: string | null;
+      verifiedAt: Date | null; updatedAt: Date;
+    }[]>`
+      WITH checks AS (
+        SELECT "id", "assessmentId", "prNumber", "sourceSha", NULL::text AS "branchRef",
+          "state", "conclusion", "htmlUrl", "verifiedAt", "updatedAt"
+        FROM "GitHubCheckPublication"
+        WHERE "repositoryId" = ${repo.id} AND "organizationId" = ${session.organizationId!}
+        UNION ALL
+        SELECT "id", "assessmentId", "prNumber", "sourceSha", "branchRef",
+          "state", "conclusion", "htmlUrl", "verifiedAt", "updatedAt"
+        FROM "ReadinessTask" WHERE "repositoryId" = ${repo.id}
+      ), latest AS (
+        SELECT DISTINCT ON ("prNumber") * FROM checks
+        ORDER BY "prNumber", "updatedAt" DESC, "id" DESC
+      )
+      SELECT * FROM latest ORDER BY "updatedAt" DESC, "id" DESC
+      LIMIT 21 OFFSET ${(page - 1) * 20}
+    `
+    await this.access.requireRepository(session, githubId, 'policy.read')
+    return {
+      enabled: configurationValue('GITHUB_CHECK_PUBLICATION_ENABLED') === 'true',
+      hasMore: rows.length > 20,
+      publications: rows.slice(0, 20),
     }
   }
   async preview(
@@ -136,17 +170,14 @@ export class CheckPublicationService {
       throw new ConflictException(
         'Choose the latest assessment for an open, non-draft pull request in this repository. Forks and merge-queue commits are not supported yet.',
       )
-    const [selection, binding, latest] = await Promise.all([
-      this.prisma.repositoryStandardsSelection.findFirst({
-        where: { repositoryId: repo.id },
-        orderBy: { revision: 'desc' },
-      }),
+    const selection = await currentStandards(this.prisma, repo.id, { branchRef: `refs/heads/${context.base.ref}` })
+    const [binding, latest] = await Promise.all([
       this.prisma.repositoryCiBindings.findFirst({
-        where: { repositoryId: repo.id },
+        where: selectionBindingWhere(repo.id, selection?.id),
         orderBy: { revision: 'desc' },
       }),
       this.prisma.commitAssessment.findFirst({
-        where: { repositoryId: repo.id, sourceSha: assessment.sourceSha },
+        where: { repositoryId: repo.id, sourceSha: assessment.sourceSha, ...(selection?.standardsSource === 'POLICY' ? { selectionId: selection.id } : {}) },
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       }),
     ])

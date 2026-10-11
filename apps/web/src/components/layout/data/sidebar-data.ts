@@ -1,4 +1,5 @@
 import {
+  History,
   BookOpen,
   BrainCircuit,
   Sparkles,
@@ -55,12 +56,12 @@ export const sidebarData: SidebarData = {
       title: 'Governance',
       items: [
         {
-          title: 'Quality Gates',
+          title: 'Merge Protection',
           url: '/quality-gates',
           icon: ShieldCheck,
           badge: 'Preview',
         },
-        { title: 'Engineering Standards', url: '/standards', icon: BookOpen },
+        { title: 'Standards', url: '/standards', icon: BookOpen },
         { title: 'Policies', url: '/policies', icon: SlidersHorizontal },
       ],
     },
@@ -88,10 +89,15 @@ export const sidebarData: SidebarData = {
           adminOnly: true,
         },
         {
+          title: 'Audit log',
+          url: '/audit-log',
+          icon: History,
+          roles: ['OWNER', 'ADMIN', 'AUDITOR', 'SUPER_ADMIN'],
+        },
+        {
           title: 'Settings',
           url: '/organization-settings',
           icon: Settings,
-          adminOnly: true,
         },
       ],
     },

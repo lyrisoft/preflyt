@@ -20,7 +20,7 @@ const help = [
   {
     title: 'What skills do',
     content:
-      'Skills are reviewed instructions for advisory AI analysis. They cannot run commands, edit code, approve policies or change check results. The runtime reviews saved evidence and can include bounded verified PR changes when source sharing is enabled.',
+      'Review skills analyze saved evidence and verified PR changes when source sharing is enabled. They cannot run commands, approve policies or change check results. The bundled GitHub Actions workflow skill is used automatically when you select Rewrite workflow in Policies: it drafts YAML for review while preserving existing jobs and deployment steps. It does not execute or publish changes.',
   },
   {
     title: 'Create and approve',
@@ -30,7 +30,7 @@ const help = [
   {
     title: 'Assign and run',
     content:
-      'Assign an approved skill version to an AI Review in Engineering Standards, choose its review stages, then adopt that standard version. Open a new saved assessment, select up to three assigned AI Reviews and run explicitly, or enable automatic reviews on the Pull requests model route for a published branch policy. Skills can restrict repository, language and framework scope. A constrained skill needs the exact-commit profile to match; missing or different-commit detection skips it. A tested model route and configured rates are required. Suggestions stay separate from deterministic gates.',
+      'Assign an approved skill version to an AI Review in Standards, choose its review stages, then select that standard in a branch policy. Open a new saved assessment, select up to three assigned AI Reviews and run explicitly, or enable automatic reviews on the Pull requests model route for a published branch policy. Skills can restrict repository, language and framework scope. A constrained skill needs the exact-commit profile to match; missing or different-commit detection skips it. A tested model route is required. Suggestions stay separate from deterministic gates.',
   },
 ]
 export function SkillsPage() {
@@ -42,11 +42,11 @@ export function SkillsPage() {
         <div className='space-y-6'>
           <PageHeader
             title='Skills'
-            description='Create, review and approve Markdown instructions for AI Reviews.'
+            description='Instructions for AI reviews and workflow editing.'
             section='Intelligence'
             icon={Sparkles}
             tone='violet'
-            actions={<PageHelpDrawer title='Review skills' sections={help} />}
+            actions={<PageHelpDrawer title='Skills' sections={help} />}
           />
           {session.isPending ? (
             <p role='status'>Checking access…</p>

@@ -7,7 +7,6 @@ import {
   validateSkillOutput,
   reviewPrompt,
 } from "../src/intelligence/review-skills.js";
-import { reviewReservation } from "../src/intelligence/skill-inference.js";
 const context = reviewContext({
   assessmentHash: "a".repeat(64),
   sourceSha: "b".repeat(40),
@@ -110,28 +109,8 @@ it.each([
     ),
   ).toThrow();
 });
-it("bounds output and reserves both token rates without floating point", () => {
+it("bounds structured review output", () => {
   expect(() =>
     validateSkillOutput("a".repeat(20001), context, ["skill"]),
-  ).toThrow();
-  expect(
-    reviewReservation(
-      {
-        inputPriceCentsPerMillion: 200,
-        outputPriceCentsPerMillion: 800,
-      } as any,
-      4000,
-      1000,
-    ),
-  ).toBe(1600000n);
-  expect(() =>
-    reviewReservation(
-      {
-        inputPriceCentsPerMillion: null,
-        outputPriceCentsPerMillion: 800,
-      } as any,
-      4000,
-      1000,
-    ),
   ).toThrow();
 });

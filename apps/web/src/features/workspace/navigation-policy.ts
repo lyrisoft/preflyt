@@ -14,10 +14,18 @@ export function authorizedNavigation(
       ...group,
       items: group.items.filter(
         (item) =>
-          canAdminister(role) ||
-          !item.adminOnly ||
-          (platformAdmin && item.url === '/access-control')
+          (!item.roles || item.roles.includes(role ?? '')) &&
+          (canAdminister(role) ||
+            !item.adminOnly ||
+            (platformAdmin && item.url === '/access-control'))
       ),
     }))
     .filter((group) => group.items.length > 0)
+}
+
+/** Highlight the direct sidebar destination of a nested page. */
+export function primaryDestination(href: string) {
+  const path = href.split('?')[0].replace(/\/$/, '') || '/'
+  if (path.startsWith('/repositories/')) return '/apps'
+  return path === '/' ? '/' : `/${path.split('/')[1]}`
 }

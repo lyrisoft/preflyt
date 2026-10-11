@@ -20,7 +20,7 @@ export async function queueOrganizationChannelEmails(tx: Prisma.TransactionClien
 
 /** Durable leases and current channel/scope checks are independent of the Redis queue's lifetime. */
 export async function deliverNotificationChannelEmail(db: PrismaService, authorization: AuthorizationService,
-  mail: { send(to: string, id: string, kind?: NotificationEmailKind): Promise<void> }, id: string) {
+  mail: { send(to: string, id: string, kind?: NotificationEmailKind, eventType?: string): Promise<void> }, id: string) {
   if (!notificationsEnabled() || !emailNotificationsEnabled()) return
   const now = new Date(), leaseUntil = new Date(now.getTime() + 60000)
   const claimed = await db.notificationChannelDelivery.updateMany({
@@ -57,7 +57,7 @@ export async function deliverNotificationChannelEmail(db: PrismaService, authori
       await db.notificationChannelDelivery.updateMany({ where: owned, data: { leaseUntil: null, attempts: { decrement: 1 } } }); return
     }
     // One message per recipient. No repository names, SHAs, findings, source, logs or configuration secrets.
-    await mail.send(delivery.recipient, delivery.id, delivery.kind === 'TEST' ? 'TEST' : 'ORGANIZATION')
+    await mail.send(delivery.recipient, delivery.id, delivery.kind === 'TEST' ? 'TEST' : 'ORGANIZATION', delivery.kind === 'EVENT' ? event?.type : undefined)
     accepted = true
     await db.$transaction(async (tx) => {
       const sentData = { state: 'SENT', sentAt: new Date(), leaseUntil: null, failureCode: null }

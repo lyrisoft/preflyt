@@ -1,26 +1,31 @@
-import { configurationValue } from '../configuration/runtime-configuration.js'
-import { ServiceUnavailableException, ForbiddenException } from '@nestjs/common'
+import { configurationValue } from "../configuration/runtime-configuration.js";
+import {
+  ServiceUnavailableException,
+  ForbiddenException,
+} from "@nestjs/common";
+import { governanceAppMode } from "../configuration/configuration-catalogue.js";
 
-/** Separate credentials by default; the local exception cannot target other repositories. */
-export function governanceConfiguration(repositoryFullName: string) {
-  const local = process.env.GITHUB_GOVERNANCE_LOCAL_ACCEPTANCE === 'true'
-  const production = process.env.NODE_ENV === 'production'
-  if (
-    local &&
-    (production ||
-      process.env.NODE_ENV !== 'development' ||
-      repositoryFullName !== 'lyrisoft/preflyt-p2-acceptance')
-  )
-    throw new ForbiddenException(
-      'The shared App exception is restricted to the local acceptance repository',
-    )
-  const appId = local
-    ? configurationValue('GITHUB_APP_ID')
-    : configurationValue('GITHUB_GOVERNANCE_APP_ID')
-  const privateKey = local
-    ? configurationValue('GITHUB_APP_PRIVATE_KEY')
-    : configurationValue('GITHUB_GOVERNANCE_PRIVATE_KEY')
-  const installationId = configurationValue('GITHUB_GOVERNANCE_INSTALLATION_ID')
+/** Reuse the repository connection unless a separate governance App is selected. */
+export function governanceConfiguration(repositoryInstallationId?: bigint) {
+  const values = Object.fromEntries(
+    [
+      "GITHUB_APP_ID",
+      "GITHUB_APP_PRIVATE_KEY",
+      "GITHUB_GOVERNANCE_SEPARATE_APP_ENABLED",
+      "GITHUB_GOVERNANCE_APP_ID",
+      "GITHUB_GOVERNANCE_PRIVATE_KEY",
+      "GITHUB_GOVERNANCE_INSTALLATION_ID",
+    ].map((key) => [key, configurationValue(key) ?? ""]),
+  );
+  const separate = governanceAppMode(values) === "true";
+  const appId = values[separate ? "GITHUB_GOVERNANCE_APP_ID" : "GITHUB_APP_ID"];
+  const privateKey =
+    values[
+      separate ? "GITHUB_GOVERNANCE_PRIVATE_KEY" : "GITHUB_APP_PRIVATE_KEY"
+    ];
+  const installationId = separate
+    ? values.GITHUB_GOVERNANCE_INSTALLATION_ID
+    : repositoryInstallationId?.toString();
   if (
     !appId ||
     !/^[1-9]\d*$/.test(appId) ||
@@ -29,16 +34,18 @@ export function governanceConfiguration(repositoryFullName: string) {
     !/^[1-9]\d*$/.test(installationId)
   )
     throw new ServiceUnavailableException(
-      'Configure the governance App and its organization installation before changing rulesets',
-    )
-  if (!local && appId === configurationValue('GITHUB_APP_ID'))
+      separate
+        ? "Configure the separate governance App and its organization installation before changing rulesets"
+        : "Connect the GitHub App to this repository before changing rulesets",
+    );
+  if (separate && appId === values.GITHUB_APP_ID)
     throw new ForbiddenException(
-      'Production governance requires a separate GitHub App',
-    )
+      "Use a different App ID for the optional separate governance App",
+    );
   return {
     appId,
-    privateKey: privateKey.replace(/\\n/g, '\n'),
+    privateKey: privateKey.replace(/\\n/g, "\n"),
     installationId: BigInt(installationId),
-    localAcceptance: local,
-  }
+    separateApp: separate,
+  };
 }

@@ -50,6 +50,7 @@ it('uses green for resolved triage and blue for ongoing review', async () => {
 
 it('preserves evidence colors after wording changes', () => {
   expect(statusTones['source not verified']).toBe('warning')
+  expect(statusTones['execution verified']).toBe('success')
   expect(statusTones['newer result available']).toBe('warning')
   expect(statusTones['result expired']).toBe('error')
   expect(statusTones['multiple matching results']).toBe('error')
@@ -62,6 +63,72 @@ it('uses shared delivery colors for email notification states', () => {
   expect(statusTones['email queued']).toBe('warning')
   expect(statusTones['email failed']).toBe('error')
   expect(statusTones['email skipped']).toBe('neutral')
+})
+
+it('preserves merge review result colors', () => {
+  expect(statusTones['required checks passed']).toBe('success')
+  expect(statusTones['required checks failed']).toBe('error')
+  expect(statusTones['required results incomplete']).toBe('warning')
+  expect(statusTones['optional checks need attention']).toBe('warning')
+  expect(statusTones.incomplete).toBe('warning')
+  expect(statusTones['not evaluated']).toBe('warning')
+})
+
+it('keeps changed policy requirements and review-needed scope amber', async () => {
+  expect(statusTones['draft ready']).toBe('warning')
+  expect(statusTones.conflict).toBe('error')
+  const view = await render(
+    <>
+      <StatusBadge tone='success'>Standards changed</StatusBadge>
+      <StatusBadge tone='info'>Needs review</StatusBadge>
+    </>
+  )
+  await expect
+    .element(view.getByText('Standards changed'))
+    .toHaveClass('text-warning-text')
+  await expect
+    .element(view.getByText('Needs review'))
+    .toHaveClass('text-warning-text')
+})
+
+it('keeps an unavailable assessment result amber even when a caller asks for blue', async () => {
+  const view = await render(
+    <StatusBadge tone='info'>Result unavailable</StatusBadge>
+  )
+  await expect
+    .element(view.getByText('Result unavailable'))
+    .toHaveClass('text-warning-text')
+  await view.unmount()
+})
+
+it('keeps connected CI jobs green and missing connections amber', async () => {
+  const view = await render(
+    <>
+      <StatusBadge tone='info'>Connected</StatusBadge>
+      <StatusBadge tone='info'>Not connected</StatusBadge>
+    </>
+  )
+  await expect
+    .element(view.getByText('Connected', { exact: true }))
+    .toHaveClass('text-success-text')
+  await expect
+    .element(view.getByText('Not connected'))
+    .toHaveClass('text-warning-text')
+  await view.unmount()
+})
+
+it('does not present detected configuration files as a passed check', () => {
+  expect(statusTones['related files found']).toBe('info')
+  expect(statusTones.passed).toBe('success')
+})
+
+it('preserves managed ruleset deployment status colors', () => {
+  expect(statusTones.preview).toBe('warning')
+  expect(statusTones.drifted).toBe('warning')
+  expect(statusTones.unknown).toBe('warning')
+  expect(statusTones.deploying).toBe('info')
+  expect(statusTones['rolling back']).toBe('info')
+  expect(statusTones['rolled back']).toBe('neutral')
 })
 
 it('uses semantic colors for the policy exception lifecycle', () => {

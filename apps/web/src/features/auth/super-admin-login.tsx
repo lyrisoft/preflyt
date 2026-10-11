@@ -90,7 +90,7 @@ export function SuperAdminLogin() {
       }
     >
       <Card className='sign-in-card w-full'>
-        <CardHeader className='gap-3 px-6 sm:px-8'>
+        <CardHeader className='gap-3 px-4 sm:px-8'>
           <p className='text-[11px] font-medium tracking-[0.12em] text-muted-foreground uppercase'>
             Deployment administration
           </p>
@@ -102,7 +102,7 @@ export function SuperAdminLogin() {
             deployment.
           </CardDescription>
         </CardHeader>
-        <CardContent className='px-6 sm:px-8'>
+        <CardContent className='px-4 sm:px-8'>
           {methodsError ? (
             <div className='space-y-3'>
               <p role='alert' className='text-sm text-destructive'>

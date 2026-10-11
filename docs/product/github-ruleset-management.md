@@ -1,6 +1,6 @@
 # GitHub Ruleset Management and Preflyt Quality Gate Integration
 
-**Status:** P2 product requirement; first P2.R1 repository-scoped read-only slice and P2.R2 single-repository draft wizard implemented. The P2.R3 manual policy-aware publisher supports passing checks only with pinned execution contracts and verified signed evidence; see [publication limits](../operations/github-check-publication.md). Automatic publication and independently approved single-repository activation with verification/rollback are implemented behind default-off deployment flags. Live acceptance, broader targeting and the remaining R5 Insights scope are pending. Repository-scoped on-demand Insights now attributes detailed matching rules, paginates filtered history and charts current-page failures; retained snapshots and bounded background collection are implemented behind a default-off flag; bounded saved-history daily trends, previous-period comparisons and exact-commit assessment links are implemented; organization-wide comparisons remain pending. **No phase reorder.**
+**Status:** Repository-scoped ruleset discovery, draft review, automatic PR check publication, approved activation, verification, drift detection and rollback are implemented. Completed GitHub workflow runs supply verified policy evidence; report signatures are optional for the normal GitHub path. Super Admin approval is supported with explicit audit records. Saved history includes bounded daily trends and previous-period comparisons, with exact-commit assessment links; organization-wide comparisons remain pending. Deployment flags control enforcement. **No phase reorder.**
 
 See [current ruleset setup and limits](../operations/github-rulesets.md) and the [production deployment contract](../deployment/github-governance-production.md).
 **Related:** [MVP Experience](mvp-product-experience.md), [Engineering Standards](engineering-standards-library.md), [RBAC](rbac-and-authorization.md), [Roadmap](../roadmap/incremental-delivery.md).
@@ -35,7 +35,7 @@ Profiles are recommendations; do not overwrite existing protection or assume eve
 
 Rulesets tab lists name, GitHub org, target repositories/branches, profile, GitHub enforcement state, linked Preflyt policy version, last sync, drift, owner and actions. Detail page includes rule configuration, exact required check name/source, target preview, current GitHub JSON snapshot, Preflyt desired JSON, diff, audit, history, deployment errors and rollback options.
 
-**No one-click blind enforcement.** Approval is separate from preview. Sensitive organization-wide writes require `github.ruleset.manage` and `policy.enforcement.manage`, audited actor identity, and preferably independent approval for Strict/broad changes. Use a separately authorized GitHub governance connection; ordinary repository-read integrations must not inherit org administration privileges.
+**No one-click blind enforcement.** Approval is separate from preview. Sensitive organization-wide writes require `github.ruleset.manage` and `policy.enforcement.manage`, audited actor identity, and preferably independent approval for Strict/broad changes. Use the connected GitHub App with explicitly approved Organization Administration: write for managed organization rulesets, or optionally a separate governance App. Ordinary assessment tokens remain read-only and ruleset tokens are purpose-limited. App separation is optional; authorization and approval checks remain mandatory.
 
 ## Synchronization and failure semantics
 
@@ -95,3 +95,7 @@ Each increment must be deployable and useful independently. R1 works with read a
 - [ ] No application code or ruleset has been deployed by this documentation change.
 
 **GitHub reference:** https://docs.github.com/en/rest/orgs/rules and https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/available-rules-for-rulesets
+
+### Super Admin ruleset approval
+
+An active local Super Admin can approve and activate their own proposal. Other administrators require an independent approver. Self-approval is explicitly recorded and audited; the role is rechecked before activation. Repository scope, both enforcement permissions, preview integrity, current passing publication and GitHub permission checks still apply.

@@ -1,4 +1,5 @@
-import { checkReportAdapters } from './check-report-adapters.js'
+import type { GitHubExecution } from './pipeline-verification.js'
+import { checkReportFormat } from './check-report-adapters.js'
 import { executionContracts } from './execution-contract.js'
 import type { validatedProvenance } from '../github-events/ci-attestation-policy.js'
 import { createHash } from 'node:crypto'
@@ -14,6 +15,7 @@ export const VALIDATOR_VERSION = 2
 export const MAX_VALIDATION_ARTIFACTS = 32
 export type ReportValidation = {
   artifactId: string
+  githubExecutions?: GitHubExecution[]
   format: string
   integrity: 'VALID' | 'INVALID'
   reasons: string[]
@@ -169,9 +171,9 @@ export function validateRuleEvidence(
   if (truncated) reasons.add('VALIDATION_COLLECTION_TRUNCATED')
   const contracts = executionContracts()
   const contract = contracts?.contracts.find((c) => c.ruleId === ruleId)
-  const expectedFormat = contract?.format ?? checkReportAdapters[ruleId] ?? null
-  const reports =
-    observation?.reports.filter((r) => r.format === expectedFormat) ?? []
+  const expectedFormat = contract?.format ?? checkReportFormat(ruleId) ?? null
+  const githubReports = observation?.reports.filter(r => r.githubExecutions?.some(e => e.ruleId === ruleId)) ?? []
+  const reports = (githubReports.length ? githubReports : observation?.reports ?? []).filter(r => r.format === expectedFormat)
   if (!expectedFormat) reasons.add('RULE_ADAPTER_UNSUPPORTED')
   else if (!reports.length) reasons.add('REQUIRED_REPORT_MISSING')
   if (reports.length > 1) reasons.add('REPORT_SELECTION_AMBIGUOUS')
@@ -188,7 +190,7 @@ export function validateRuleEvidence(
     reasons.add('REPORT_PROVENANCE_UNVERIFIED')
   const report = reports.length === 1 ? reports[0] : undefined
   const provenance = report?.provenance
-  const trusted =
+  const signedExecution =
     !!contract &&
     !!contracts &&
     !!provenance &&
@@ -203,6 +205,13 @@ export function validateRuleEvidence(
         report.tools[0].versionHash === digest(contract.toolVersion) &&
         report.findings === 0 &&
         !report.reasons.includes('REPORT_COVERAGE_INCOMPLETE'))
+  const githubExecution = report?.githubExecutions?.find(e => e.ruleId === ruleId)
+  const githubExecuted = !!githubExecution && report?.integrity === 'VALID' &&
+    report.reportedResult === 'REPORTED_SUCCESS' &&
+    (expectedFormat === 'junit' ? (report.executedTests ?? 0) >= 1 : report.findings === 0 &&
+      !!report.tools?.length && !report.reasons.includes('REPORT_COVERAGE_INCOMPLETE'))
+  const trusted = signedExecution || githubExecuted
+  if (githubExecuted) reasons.delete('REPORT_PROVENANCE_UNVERIFIED')
   if (trusted) {
     for (const reason of [
       'TOOL_IDENTITY_UNVERIFIED',
@@ -227,7 +236,8 @@ export function validateRuleEvidence(
         ? 'VERIFIED'
         : 'INCOMPLETE',
     trustedExecuted: trusted && !reasons.size,
-    executionContractDigest: trusted ? contracts!.digest : null,
+    executionContractDigest: signedExecution ? contracts!.digest : null,
+    ...(githubExecuted ? { githubExecution } : {}),
     sourceApproved,
     observationIntegrity: observation?.observationIntegrity ?? null,
     expectedFormat,

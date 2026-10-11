@@ -3,7 +3,7 @@ on:
   workflow_call:
   pull_request:
   push:
-    branches: [development, main]
+    branches: [main]
 permissions:
   contents: read
 concurrency:
@@ -12,7 +12,10 @@ concurrency:
 jobs:
   regression:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      id-token: write
     services:
       postgres:
         image: postgres:16
@@ -35,6 +38,11 @@ jobs:
       NOTIFICATION_TEST_REDIS_URL: redis://127.0.0.1:6379/2
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Prepare CI reports
+        run: mkdir -p .preflyt/results
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24.4.1
@@ -45,17 +53,68 @@ jobs:
       - name: Install Chromium
         run: pnpm --filter @preflyt/web exec playwright install --with-deps chromium
       - name: Generate client and build applications
-        run: |
-          pnpm --filter @preflyt/api build
-          pnpm --filter @preflyt/web build
+        id: build
+        run: node docs/deployment/ci-command-report.mjs build.required .preflyt/results/build.xml -- "$(command -v pnpm)" -r --filter @preflyt/api --filter @preflyt/web build
       - name: Enable offline attestation acceptance
         run: |
           gh_path="$(command -v gh)"
           echo "PREFLYT_TEST_GH_PATH=$gh_path" >> "$GITHUB_ENV"
       - name: API regression
-        run: pnpm --filter @preflyt/api test
+        if: ${{ !cancelled() && steps.build.conclusion == 'success' }}
+        run: pnpm --filter @preflyt/api test --reporter=default --reporter=junit --outputFile.junit=../../.preflyt/results/api-tests.xml
       - name: Browser regression
-        run: pnpm --filter @preflyt/web test
+        if: ${{ !cancelled() && steps.build.conclusion == 'success' }}
+        run: pnpm --filter @preflyt/web test --reporter=default --reporter=junit --outputFile.junit=../../.preflyt/results/web-tests.xml
+      - name: Combine actual API and browser test results
+        if: ${{ !cancelled() }}
+        run: python3 scripts/ci/merge-junit.py .preflyt/results/tests.xml .preflyt/results/api-tests.xml .preflyt/results/web-tests.xml
+      - name: Preflyt development policy
+        if: ${{ !cancelled() && github.event_name == 'pull_request' && github.base_ref == 'development' && github.event.pull_request.head.repo.full_name == github.repository }}
+        uses: lyrisoft/preflyt-action@d80243bae90cc85eaaca08a60e8efd15a413d35a # v1.0.0
+        with:
+          api-url: ${{ vars.PREFLYT_API_URL }}
+          checks: |
+            {
+              "build.required": {"report": ".preflyt/results/build.xml"},
+              "tests.required": {"report": ".preflyt/results/tests.xml"}
+            }
+  images:
+    name: Build ${{ matrix.image }}
+    if: ${{ github.event_name == 'pull_request' }}
+    needs: regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: preflyt-api
+            file: deploy/api.Dockerfile
+            target: runtime
+          - image: preflyt-api-migration
+            file: deploy/api.Dockerfile
+            target: migration
+          - image: preflyt-native-controller
+            file: deploy/api.Dockerfile
+            target: native-docker-controller
+          - image: preflyt-web
+            file: deploy/web.Dockerfile
+            target: runtime
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: ${{ matrix.file }}
+          target: ${{ matrix.target }}
+          platforms: linux/amd64
+          push: false
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
 
   compose-smoke:
     uses: ./.github/workflows/compose-acceptance.yml

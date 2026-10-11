@@ -41,7 +41,7 @@ export type RepositoryTab =
 const states = [
   {
     key: 'HINT_DETECTED',
-    label: 'Config found',
+    label: 'Files found',
     color: 'var(--chart-2)',
     filter: 'found' as const,
   },
@@ -222,8 +222,7 @@ export function PostureSummary({
             </div>
           ) : controls.length === 0 ? (
             <p className='py-10 text-center text-sm text-muted-foreground'>
-              Choose engineering standards to establish this repository's
-              control scope.
+              Choose standards to establish this repository's control scope.
             </p>
           ) : (
             <div className='grid gap-6 md:grid-cols-2'>
@@ -338,7 +337,7 @@ export function PostureSummary({
                       />
                       <Bar
                         dataKey='found'
-                        name='Config found'
+                        name='Files found'
                         stackId='config'
                         fill='var(--chart-2)'
                         barSize={22}

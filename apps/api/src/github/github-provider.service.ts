@@ -1,3 +1,4 @@
+import { inlineIssues, maxInlineIssues, sameInlineIssue, type FeedbackFinding } from '../intelligence/pr-review-feedback.js'
 import { configurationValue } from '../configuration/runtime-configuration.js'
 import { sameReviewPr, prReviewSource } from '../intelligence/pr-review-context.js'
 import type { PullRequestContext } from '../github-events/pull-request-context.js'
@@ -393,6 +394,7 @@ export class GitHubProviderService {
     load: (
       reader: Awaited<ReturnType<GitHubProviderService['openRepository']>>,
     ) => Promise<T>,
+    refresh = false,
   ) {
     // Even cached responses require current installation and repository access.
     const reader = await this.openRepository(
@@ -405,7 +407,7 @@ export class GitHubProviderService {
       select: { accessRevision: true },
     })
     const key = `github-rulesets:v1:${this.requireAppId()}:${installationId}:${repositoryId}:${access?.accessRevision ?? 0}:${suffix}`
-    const cached = await this.cache?.get(key)
+    const cached = refresh ? undefined : await this.cache?.get(key)
     if (cached) {
       try {
         return JSON.parse(cached) as T
@@ -413,9 +415,9 @@ export class GitHubProviderService {
         /* Re-read malformed cache. */
       }
     }
-    return this.limiter.singleFlight(key, async () => {
+    return this.limiter.singleFlight(`${key}:${refresh ? 'refresh' : 'read'}`, async () => {
       const result = await load(reader)
-      await this.cache?.set(key, JSON.stringify(result), 60)
+      await this.cache?.set(key, JSON.stringify(result), 300)
       return result
     })
   }
@@ -423,6 +425,7 @@ export class GitHubProviderService {
     installationId: bigint,
     repositoryId: bigint,
     page = 1,
+    refresh = false,
   ) {
     if (!Number.isInteger(page) || page < 1 || page > 1000)
       throw new BadRequestException('Invalid ruleset page')
@@ -445,6 +448,7 @@ export class GitHubProviderService {
           fetchedAt: new Date().toISOString(),
         }
       },
+      refresh,
     )
   }
   async getRepositoryRuleset(
@@ -694,8 +698,302 @@ export class GitHubProviderService {
     const root=`/repos/${encodeURIComponent(reader.metadata.owner.login)}/${encodeURIComponent(reader.metadata.name)}`
     const run=await reader.request<Record<string,any>>(`${root}/actions/runs/${runId}`)
     if(String(run.id)!==runId || String(run.repository?.id)!==repositoryId.toString() || String(run.head_repository?.id)!==repositoryId.toString() || !Number.isSafeInteger(run.run_attempt) || run.run_attempt<1 || !Number.isSafeInteger(run.workflow_id) || run.workflow_id<1 || !/^[a-f0-9]{40}$/.test(run.head_sha))throw new ServiceUnavailableException('Workflow run identity could not be verified')
-    return {sourceSha:run.head_sha,runAttempt:run.run_attempt,status:run.status,conclusion:run.conclusion,workflowId:String(run.workflow_id)}
+    return {sourceSha:run.head_sha,runAttempt:run.run_attempt,status:run.status,conclusion:run.conclusion,workflowId:String(run.workflow_id),event:String(run.event),workflowPath:typeof run.path === "string" ? run.path.split("@")[0] : ""}
   }
+  /** Read the exact attempt directly from GitHub; display caches cannot establish execution. */
+  async readPipelineJobs(installationId: bigint, repositoryId: bigint, runId: string, attempt: number) {
+    if (!/^[1-9]\d{0,15}$/.test(runId) || !Number.isSafeInteger(attempt) || attempt < 1)
+      throw new BadRequestException('Invalid workflow run attempt')
+    const reader = await this.openRepository(installationId, repositoryId, 'actions')
+    const root = `/repos/${encodeURIComponent(reader.metadata.owner.login)}/${encodeURIComponent(reader.metadata.name)}`
+    const result = await reader.request<{ total_count: number; jobs: Record<string, any>[] }>(
+      `${root}/actions/runs/${runId}/attempts/${attempt}/jobs?per_page=100`)
+    if (!Array.isArray(result.jobs) || result.total_count !== result.jobs.length || !result.jobs.length || result.jobs.length > 100 ||
+      result.jobs.some(job => String(job.run_id) !== runId || !Number.isSafeInteger(job.id) || !Array.isArray(job.steps)))
+      throw new ServiceUnavailableException('Workflow jobs could not be verified')
+    return result.jobs.map(job => ({ id: String(job.id), sourceSha: job.head_sha, status: job.status,
+      conclusion: job.conclusion, steps: job.steps.map((step: any) => ({ status: step.status, conclusion: step.conclusion })) }))
+  }
+
+  /** Cache display/setup sources only. Callers verify current upstream access first. */
+  private async readPipelineCache<T>(
+    installationId: bigint,
+    repositoryId: bigint,
+    suffix: string,
+    refresh: boolean,
+    load: () => Promise<T>,
+    valid: (value: T) => boolean,
+  ): Promise<T> {
+    if (!this.cache) return load()
+    const access = await this.prisma?.gitHubInstallation.findUnique({
+      where: { id: installationId },
+      select: { accessRevision: true },
+    })
+    const key = `github-pipeline:v1:${this.requireAppId()}:${installationId}:${repositoryId}:${access?.accessRevision ?? 0}:${suffix}`
+    const cached = refresh ? null : await this.cache.get(key)
+    if (cached) {
+      try {
+        const value = JSON.parse(cached) as T
+        if (valid(value)) return value
+      } catch {
+        // Invalid cache entries are replaced with verified upstream data.
+      }
+    }
+    return this.limiter.singleFlight(
+      `${key}:${refresh ? 'refresh' : 'read'}`,
+      async () => {
+        const result = await load()
+        await this.cache!.set(key, JSON.stringify(result), 300)
+        return result
+      },
+    )
+  }
+
+  async discoverPipelineWorkflows(
+    installationId: bigint,
+    repositoryId: bigint,
+    refresh = false,
+  ) {
+    const reader = await this.openRepository(
+      installationId,
+      repositoryId,
+      'actions',
+    )
+    return this.readPipelineCache(
+      installationId,
+      repositoryId,
+      'workflows',
+      refresh,
+      async () => {
+        const root = `/repos/${encodeURIComponent(reader.metadata.owner.login)}/${encodeURIComponent(reader.metadata.name)}`
+        const response = await reader.request<{
+          total_count: number
+          workflows: { id: number; name: string; path: string; state: string }[]
+        }>(`${root}/actions/workflows?per_page=100`)
+        if (
+          !Array.isArray(response.workflows) ||
+          response.workflows.length > 100
+        )
+          throw new ServiceUnavailableException(
+            'Workflow discovery is unavailable',
+          )
+        return {
+          workflows: response.workflows
+            .filter(
+              (w) =>
+                Number.isSafeInteger(w.id) &&
+                w.id > 0 &&
+                w.state === 'active' &&
+                /^\.github\/workflows\/[a-zA-Z0-9_-]+\.ya?ml$/.test(w.path),
+            )
+            .map((w) => ({ id: String(w.id), name: w.name, path: w.path })),
+          truncated: response.total_count > 100,
+        }
+      },
+      (value) =>
+        !!value &&
+        typeof value.truncated === 'boolean' &&
+        Array.isArray(value.workflows) &&
+        value.workflows.length <= 100 &&
+        value.workflows.every(
+          (w) =>
+            !!w &&
+            typeof w.id === 'string' &&
+            /^[1-9]\d{0,15}$/.test(w.id) &&
+            typeof w.name === 'string' &&
+            typeof w.path === 'string' &&
+            /^\.github\/workflows\/[a-zA-Z0-9_-]+\.ya?ml$/.test(w.path),
+        ),
+    )
+  }
+
+  async readPipelineWorkflow(
+    installationId: bigint,
+    repositoryId: bigint,
+    workflowId: string,
+    branch: string,
+    refresh = false,
+  ) {
+    branch = branch.replace(/^refs\/heads\//, '')
+    if (!/^[1-9]\d{0,15}$/.test(workflowId) || !validProfileBranch(branch))
+      throw new BadRequestException('Choose a repository workflow and branch')
+    const reader = await this.openRepository(
+      installationId,
+      repositoryId,
+      'contents',
+    )
+    return this.readPipelineCache(
+      installationId,
+      repositoryId,
+      `workflow:${workflowId}:${encodeURIComponent(branch)}`,
+      refresh,
+      async () => {
+        const workflows = await this.discoverPipelineWorkflows(
+          installationId,
+          repositoryId,
+          refresh,
+        )
+        const workflow = workflows.workflows.find((w) => w.id === workflowId)
+        if (!workflow)
+          throw new BadRequestException('Choose a repository workflow')
+        const root = `/repos/${encodeURIComponent(reader.metadata.owner.login)}/${encodeURIComponent(reader.metadata.name)}`
+        const branchState = await reader.request<{ commit: { sha: string } }>(
+          `${root}/branches/${encodeURIComponent(branch)}`,
+        )
+        if (!/^[a-f0-9]{40}$/.test(branchState.commit?.sha))
+          throw new ServiceUnavailableException(
+            'Workflow branch could not be verified',
+          )
+        const file = await reader.request<{
+          type: string
+          encoding: string
+          content: string
+          size: number
+          sha: string
+          path: string
+        }>(
+          `${root}/contents/${workflow.path.split('/').map(encodeURIComponent).join('/')}?ref=${branchState.commit.sha}`,
+        )
+        if (
+          file.type !== 'file' ||
+          file.encoding !== 'base64' ||
+          file.path !== workflow.path ||
+          !Number.isInteger(file.size) ||
+          file.size < 1 ||
+          file.size > 32768 ||
+          !/^[a-f0-9]{40}$/.test(file.sha) ||
+          typeof file.content !== 'string'
+        )
+          throw new BadRequestException(
+            'The workflow must be a YAML file under 32 KB',
+          )
+        const encoded = file.content.replace(/\s/g, ''),
+          bytes = Buffer.from(encoded, 'base64')
+        if (bytes.toString('base64') !== encoded || bytes.length !== file.size)
+          throw new ServiceUnavailableException(
+            'Workflow content could not be verified',
+          )
+        const content = bytes.toString('utf8')
+        if (
+          Buffer.from(content).length !== bytes.length ||
+          content.includes('\0')
+        )
+          throw new BadRequestException('Workflow content must be UTF-8')
+        return {
+          ...workflow,
+          workflow: content,
+          fileSha: file.sha,
+          baseSha: branchState.commit.sha,
+          branch,
+        }
+      },
+      (value) =>
+        !!value &&
+        value.id === workflowId &&
+        value.branch === branch &&
+        typeof value.name === 'string' &&
+        typeof value.path === 'string' &&
+        /^\.github\/workflows\/[a-zA-Z0-9_-]+\.ya?ml$/.test(value.path) &&
+        /^[a-f0-9]{40}$/.test(value.baseSha) &&
+        /^[a-f0-9]{40}$/.test(value.fileSha) &&
+        typeof value.workflow === 'string' &&
+        Buffer.byteLength(value.workflow) > 0 &&
+        Buffer.byteLength(value.workflow) <= 32768 &&
+        !value.workflow.includes('\0'),
+    )
+  }
+
+  async pipelineWriteAvailability(installationId: bigint) {
+    const installation = await this.verifyInstallation(installationId)
+    const available = ['contents', 'workflows', 'pull_requests'].every(key => installation.permissions[key] === 'write')
+    return { available, reason: available ? null : 'Creating a setup PR requires GitHub App Contents, Workflows and Pull requests write permissions.' }
+  }
+
+  /** Called only after the user reviews YAML and explicitly requests a setup PR. Never writes the base branch. */
+  async createPipelineSetupPr(installationId: bigint, repositoryId: bigint, branch: string, baseSha: string, files: Record<string, string>, requestId: string) {
+    branch = branch.replace(/^refs\/heads\//, '')
+    if (!/^[a-f0-9]{40}$/.test(baseSha) || !/^[a-f0-9-]{36}$/.test(requestId) || Object.keys(files).length !== 2 || !Object.hasOwn(files, '.github/workflows/preflyt-gate.yml') ||
+      Object.entries(files).some(([path, content]) => !/^\.github\/workflows\/[a-zA-Z0-9_-]+\.ya?ml$/.test(path) || Buffer.byteLength(content) > 65536))
+      throw new BadRequestException('Invalid reviewed workflow files')
+    const write = await this.pipelineWriteAvailability(installationId)
+    if (!write.available) throw new ForbiddenException(write.reason!)
+    const reader = await this.openRepository(installationId, repositoryId, 'contents')
+    const root = `/repos/${encodeURIComponent(reader.metadata.owner.login)}/${encodeURIComponent(reader.metadata.name)}`
+    const current = await reader.request<{ commit: { sha: string } }>(`${root}/branches/${encodeURIComponent(branch)}`)
+    if (current.commit?.sha !== baseSha) throw new ConflictException('The repository branch changed. Reload the workflow before creating a PR.')
+    const token = (await this.appRequest('POST /app/installations/{installation_id}/access_tokens', { installation_id: Number(installationId), repository_ids: [Number(repositoryId)], permissions: { metadata: 'read', contents: 'write', workflows: 'write', pull_requests: 'write' } })).data.token
+    if (typeof token !== 'string' || !token) throw new ForbiddenException('GitHub workflow write permission is unavailable')
+    const call = async (path: string, method = 'GET', body?: unknown): Promise<any> => {
+      const response = await this.apiFetch(`installation:${installationId}`, `https://api.github.com${root}${path}`, { method, redirect: 'error', signal: AbortSignal.timeout(15000), headers: { ...this.apiHeaders(token), 'Content-Type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) })
+      if (!response.ok) throw new ServiceUnavailableException('GitHub could not complete the setup PR. Retry with the same request or check the repository.')
+      return response.json()
+    }
+    const fingerprint = createHash('sha256').update(JSON.stringify(Object.entries(files).sort())).digest('hex').slice(0, 12)
+    const head = `preflyt/setup-${requestId}-${fingerprint}`
+    const existing = await call(`/pulls?state=open&head=${encodeURIComponent(reader.metadata.owner.login + ':' + head)}&base=${encodeURIComponent(branch)}&per_page=1`)
+    const refs = await call(`/git/matching-refs/heads/${head}`)
+    let commitSha: string
+    if (Array.isArray(refs) && refs.length) {
+      const ref = refs.find((entry: any) => entry.ref === `refs/heads/${head}`)
+      if (!ref || !/^[a-f0-9]{40}$/.test(ref.object?.sha)) throw new ConflictException('Setup branch changed')
+      commitSha = ref.object.sha
+      // Recover a previous uncertain attempt only when every proposed file still matches.
+      for (const [path, content] of Object.entries(files)) {
+        const file = await reader.request<{ sha: string }>(`${root}/contents/${path.split('/').map(encodeURIComponent).join('/')}?ref=${commitSha}`)
+        const blob = createHash('sha1').update(Buffer.concat([Buffer.from(`blob ${Buffer.byteLength(content)}\0`), Buffer.from(content)])).digest('hex')
+        if (file.sha !== blob) throw new ConflictException('The setup branch changed. Start a new review.')
+      }
+    } else {
+      const parent = await call(`/git/commits/${baseSha}`)
+      if (!/^[a-f0-9]{40}$/.test(parent.tree?.sha)) throw new ServiceUnavailableException('Repository tree could not be verified')
+      const tree = await call('/git/trees', 'POST', { base_tree: parent.tree.sha, tree: Object.entries(files).map(([path, content]) => ({ path, mode: '100644', type: 'blob', content })) })
+      if (!/^[a-f0-9]{40}$/.test(tree.sha)) throw new ServiceUnavailableException('Workflow tree could not be created')
+      const commit = await call('/git/commits', 'POST', { message: 'Connect Preflyt policy checks', tree: tree.sha, parents: [baseSha] })
+      if (!/^[a-f0-9]{40}$/.test(commit.sha)) throw new ServiceUnavailableException('Workflow commit could not be created')
+      commitSha = commit.sha
+      // No force push; a duplicate concurrent request stops here and can recover on retry.
+      await call('/git/refs', 'POST', { ref: `refs/heads/${head}`, sha: commitSha })
+    }
+    const pr = existing[0] ?? await call('/pulls', 'POST', { title: 'Connect Preflyt policy checks', head, base: branch, body: 'Adds the reviewed checks workflow and final publication gate using the published Preflyt Action. Review both workflows before merging. Existing tests, scan steps and branch protection are preserved.' })
+    const expected = `https://github.com/${reader.metadata.owner.login}/${reader.metadata.name}/pull/`
+    if (!Number.isSafeInteger(pr.number) || pr.number < 1 || pr.html_url !== expected + pr.number || pr.head?.sha !== commitSha || pr.base?.ref !== branch)
+      throw new ServiceUnavailableException('Setup PR could not be verified; check the repository before retrying')
+    return { number: pr.number as number, url: pr.html_url as string }
+  }
+
+  async publishPipelineComment(installationId: bigint, repositoryId: bigint, number: number, headSha: string, body: string) {
+    if (!Number.isSafeInteger(number) || number < 1 || !/^[a-f0-9]{40}$/.test(headSha) || !body.startsWith('<!-- preflyt-policy-summary -->') || body.length > 30000) throw new BadRequestException('Invalid pipeline summary')
+    const before = await this.readPullRequest(installationId, repositoryId, number)
+    if (before.context.state !== 'open' || before.context.head.sha !== headSha || before.context.head.repositoryId !== repositoryId.toString()) throw new ConflictException('Pull request changed before comment publication')
+    const app = (await this.appRequest('GET /app', {})).data
+    const reader = await this.openRepository(installationId, repositoryId, 'pull_requests')
+    const root = `/repos/${encodeURIComponent(reader.metadata.owner.login)}/${encodeURIComponent(reader.metadata.name)}`
+    const token = (await this.appRequest('POST /app/installations/{installation_id}/access_tokens', { installation_id: Number(installationId), repository_ids: [Number(repositoryId)], permissions: { metadata: 'read', pull_requests: 'write' } })).data.token
+    if (typeof token !== 'string' || !token) throw new ServiceUnavailableException('GitHub PR comment permission is unavailable')
+    const call = async (path: string, method = 'GET', payload?: unknown) => {
+      const response = await this.apiFetch(`installation:${installationId}`, `https://api.github.com${path}`, { method, redirect: 'error', signal: AbortSignal.timeout(10000), headers: { ...this.apiHeaders(token), 'Content-Type': 'application/json' }, ...(payload === undefined ? {} : { body: JSON.stringify(payload) }) })
+      if (!response.ok) throw new ServiceUnavailableException('GitHub PR comment could not be published or verified')
+      return response.json() as Promise<any>
+    }
+    let existing: any
+    for (let page = 1; page <= 5; page++) {
+      const comments = await call(`${root}/issues/${number}/comments?per_page=100&page=${page}`)
+      if (!Array.isArray(comments) || comments.length > 100) throw new ServiceUnavailableException('GitHub comment history is unavailable')
+      existing ??= comments.find(c => c.user?.type === 'Bot' && c.user?.login === `${app.slug}[bot]` && typeof c.body === 'string' && c.body.startsWith('<!-- preflyt-policy-summary -->'))
+      if (existing || comments.length < 100) break
+      if (page === 5) throw new ServiceUnavailableException('Comment discovery limit reached; refusing a duplicate summary')
+    }
+    const current = await this.readPullRequest(installationId, repositoryId, number)
+    if (current.context.head.sha !== headSha || current.context.state !== 'open') throw new ConflictException('Pull request changed')
+    const result = existing ? await call(`${root}/issues/comments/${existing.id}`, 'PATCH', { body }) : await call(`${root}/issues/${number}/comments`, 'POST', { body })
+    if (!Number.isSafeInteger(result.id) || result.id < 1) throw new ServiceUnavailableException('Invalid comment receipt')
+    const observed = await call(`${root}/issues/comments/${result.id}`)
+    const url = new URL(String(observed.html_url))
+    if (observed.body !== body || observed.user?.login !== `${app.slug}[bot]` || observed.user?.type !== 'Bot' || url.protocol !== 'https:' || url.hostname !== 'github.com' || url.username || url.password) throw new ServiceUnavailableException('PR summary read-back failed')
+    if ((await this.readPullRequest(installationId, repositoryId, number)).context.head.sha !== headSha) throw new ConflictException('Pull request changed during summary publication')
+    return { htmlUrl: url.href }
+  }
+
   async checkPublicationAccess(installationId: bigint) {
     const installation = await this.verifyInstallation(installationId)
     if (installation.permissions.checks !== 'write')
@@ -936,14 +1234,10 @@ export class GitHubProviderService {
   }
 
   /** Publish advisory comments only at verified changed lines on the exact PR revision. */
-  async publishAiInlineReview(installationId: bigint, repositoryId: bigint, source: import('../intelligence/pr-review-context.js').PrReviewSource, key: string, findings: {summary:string;recommendation:string;evidenceRefs:string[]}[]) {
-    if (!/^[a-f0-9]{64}$/.test(key) || findings.length > 20) throw new BadRequestException('Invalid AI review');
-    const safe = (s:string) => s.replace(/[\`*_<>#@\[\]]/g,'');
-    const comments = findings.flatMap(f=> {
-      const line = source.lines.find(l=>f.evidenceRefs.includes(l.ref));
-      return line ? [{path:line.path,line:line.line,side:line.side,body:`Advisory AI suggestion\n\n${safe(f.summary)}\n\n${safe(f.recommendation)}`}]:[];
-    });
-    if (!comments.length) return null;
+  async publishAiInlineReview(installationId: bigint, repositoryId: bigint, source: import('../intelligence/pr-review-context.js').PrReviewSource, key: string, findings: FeedbackFinding[], summary?: string) {
+    if (!/^[a-f0-9]{64}$/.test(key) || findings.length > 20 || (summary && summary.length > 1000)) throw new BadRequestException('Invalid AI review');
+    const candidates = inlineIssues(source, findings);
+    if (!candidates.length && !summary) return null;
     const before = await this.readPullRequest(installationId, repositoryId, source.number);
     if (!sameReviewPr(source.context,before.context)) throw new ConflictException('PR changed before inline feedback');
     const reader = await this.openRepository(installationId,repositoryId,'metadata');
@@ -956,27 +1250,50 @@ export class GitHubProviderService {
       if(!response.ok) throw new ServiceUnavailableException('GitHub inline feedback unavailable');
       return response.json() as Promise<any>;
     };
-    const body = `Advisory AI review; does not approve or block merging.\n\n<!-- preflyt-ai:${key} -->`;
-    const matches = (r:any)=>r.body===body && r.commit_id===source.context.head.sha && r.state==='COMMENTED' && r.user?.login===`${app.slug}[bot]` && r.user?.type==='Bot' && typeof r.html_url==='string' && r.html_url.startsWith('https://github.com/');
+    const marker = `<!-- preflyt-ai:${key} -->`;
+    const fromApp = (r:any) => r.user?.login===`${app.slug}[bot]` && r.user?.type==='Bot';
+    const matches = (r:any)=>typeof r.body==='string' && r.body.endsWith(marker) && r.commit_id===source.context.head.sha && r.state==='COMMENTED' && fromApp(r) && typeof r.html_url==='string' && r.html_url.startsWith('https://github.com/');
+    const preflytReviewIds = new Set<number>();
     let existing:any;
     for(let page=1;page<=3;page++) {
       const reviews=await call(`${root}/reviews?per_page=100&page=${page}`);
       if(!Array.isArray(reviews)||reviews.length>100)throw new ServiceUnavailableException('Invalid review history');
+      for (const review of reviews) if (fromApp(review) && /<!-- preflyt-ai:[a-f0-9]{64} -->$/.test(review.body ?? '') && Number.isSafeInteger(review.id)) preflytReviewIds.add(review.id);
       existing=reviews.find(matches);if(existing)break;
       if(reviews.length<100)break;
       if(page===3)throw new ServiceUnavailableException('Review history exceeds publication limit');
     }
+    let selected = candidates;
+    let remaining = maxInlineIssues;
+    // Read actual posted comments, not model history. Never trust another actor's
+    // markers or suppress issues because a previous publication failed.
+    if (!existing && candidates.length && preflytReviewIds.size) {
+      const prior:any[]=[];
+      for (let page=1;page<=3;page++) {
+        const rows=await call(`${root}/comments?per_page=100&page=${page}`);
+        if(!Array.isArray(rows)||rows.length>100)throw new ServiceUnavailableException('Invalid comment history');
+        prior.push(...rows.filter(row=>fromApp(row) && preflytReviewIds.has(row.pull_request_review_id) && typeof row.path==='string' && typeof row.body==='string'));
+        if(rows.length<100)break;
+        if(page===3)throw new ServiceUnavailableException('Comment history exceeds publication limit');
+      }
+      remaining = Math.max(0, maxInlineIssues - prior.filter(comment=>(comment.original_commit_id ?? comment.commit_id)===source.context.head.sha).length);
+      selected = candidates.filter(issue=>!prior.some(comment=>sameInlineIssue(issue,comment)));
+    }
+    selected = selected.slice(0,remaining);
+    if (!existing && !selected.length && !summary) return null;
+    const body = `${summary ?? 'Advisory AI review; does not approve or block merging.'}\n\n<!-- preflyt-inline-v2 -->\n${marker}`;
+    const comments = selected.map(({path,line,side,body})=>({path,line,side,body}));
     const id = existing?.id ?? (await call(`${root}/reviews`,{commit_id:source.context.head.sha,event:'COMMENT',body,comments})).id;
     if(!Number.isSafeInteger(id)||id<1)throw new ServiceUnavailableException('Invalid review receipt');
     const observed=await call(`${root}/reviews/${id}`);
-    if(!matches(observed))throw new ConflictException('GitHub inline review changed');
-    // The review-comments listing exposes legacy diff positions; fetch each bounded
-    // comment receipt for GitHub's authoritative line/side and review identity.
+    if(!matches(observed) || observed.body!==body)throw new ConflictException('GitHub inline review changed');
     const listedComments=await call(`${root}/reviews/${id}/comments?per_page=100`);
-    if(!Array.isArray(listedComments)||listedComments.length!==comments.length||listedComments.some((v:any)=>!Number.isSafeInteger(v.id)||v.id<1)||new Set(listedComments.map((v:any)=>v.id)).size!==listedComments.length)throw new ConflictException('GitHub inline comments changed');
+    if(!Array.isArray(listedComments)||listedComments.length>maxInlineIssues||(!existing && listedComments.length!==comments.length)||listedComments.some((v:any)=>!Number.isSafeInteger(v.id)||v.id<1)||new Set(listedComments.map((v:any)=>v.id)).size!==listedComments.length)throw new ConflictException('GitHub inline comments changed');
     const observedComments: Record<string,any>[]=[];
     for(const listed of listedComments) observedComments.push(await call(`${root.replace(/\/pulls\/\d+$/,'')}/pulls/comments/${listed.id}`));
-    if(!comments.every(c=>observedComments.some((v:any)=>v.pull_request_review_id===id && v.commit_id===source.context.head.sha && v.user?.login===`${app.slug}[bot]` && v.user?.type==='Bot' && v.path===c.path && v.line===c.line && v.side===c.side && v.body===c.body)))throw new ConflictException('GitHub inline comments changed');
+    // Recover a write whose response was lost using its exact persisted subset.
+    // History can change between attempts; never calculate and repost that subset.
+    if(!observedComments.every(v=>v.pull_request_review_id===id && v.commit_id===source.context.head.sha && fromApp(v) && candidates.some(c=>v.path===c.path && v.line===c.line && v.side===c.side && v.body===c.body)))throw new ConflictException('GitHub inline comments changed');
     const after = await this.readPullRequest(installationId,repositoryId,source.number);
     if(!sameReviewPr(source.context,after.context))throw new ConflictException('PR changed during inline feedback');
     return {htmlUrl:observed.html_url as string,reviewId:String(id)};
@@ -993,16 +1310,19 @@ export class GitHubProviderService {
     const reader = await this.openRepository(installationId, repositoryId, 'pull_requests')
     const root = `/repos/${encodeURIComponent(reader.metadata.owner.login)}/${encodeURIComponent(reader.metadata.name)}/pulls/${number}`
     const files: unknown[] = []
-    for (let page = 1; page <= 3; page++) {
+    for (let page = 1; page <= 2; page++) {
       const rows = await reader.request<unknown[]>(`${root}/files?per_page=100&page=${page}`)
       if (!Array.isArray(rows) || rows.length > 100) throw new ServiceUnavailableException('PR files unavailable')
       files.push(...rows)
-      if (files.length > 200) throw new ServiceUnavailableException('PR exceeds 200-file source review limit')
       if (rows.length < 100) break
     }
     const after = await this.readPullRequest(installationId, repositoryId, number)
     if (!sameReviewPr(expected, after.context)) throw new ConflictException('PR changed while reading source')
-    return prReviewSource(number, expected, files)
+    // Keep the source disclosure bounded even for large PRs. The live count
+    // records everything we did not collect; it never implies full coverage.
+    if (files.length === 200 && before.changedFiles === undefined) throw new ServiceUnavailableException('PR file count unavailable for bounded review')
+    if (before.changedFiles !== after.changedFiles) throw new ConflictException('PR file count changed while reading source')
+    return prReviewSource(number, expected, files, Math.max(0, (before.changedFiles ?? files.length) - files.length))
   }
 
   async readPullRequest(
@@ -1038,6 +1358,8 @@ export class GitHubProviderService {
       context: normalized.pullRequestContext,
       sourceUpdatedAt: normalized.sourceUpdatedAt,
       sourceObjectId: normalized.sourceObjectId,
+      changedFiles: Number.isSafeInteger(data.changed_files) && Number(data.changed_files) >= 0
+        ? Number(data.changed_files) : undefined,
     }
   }
 

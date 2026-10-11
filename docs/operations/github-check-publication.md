@@ -2,9 +2,17 @@
 
 Application connections and feature switches are now provisioned in **Settings → Configuration** by Super Admin. Environment names below describe the legacy import contract; once stored, database values take precedence. See [deployment configuration](deployment-configuration.md). Infrastructure and execution trust controls remain deployment-managed.
 
-Status: manual publication evaluates the published branch policy when one exists. Verified execution can produce a passing check only under an approved pinned workflow contract. Durable automatic publication and single-repository ruleset activation are implemented behind explicit deployment flags. Live disposable-repository acceptance, forks and merge queues remain pending.
+Status: automatic PR publication and final publication gates are implemented. Same-repository PR execution can pass after completed workflow/job verification; optional signatures retain their existing stricter verification path.
 
-For production, use the [deployment and release-gate runbook](../deployment/github-governance-production.md). It includes the two-App boundary, private-repository plan requirement, container configuration and recovery.
+For production, use the [deployment and release-gate runbook](../deployment/github-governance-production.md). It includes one-App setup and optional credential separation, stable endpoint configuration, optional signed-report requirements and recovery.
+
+## GitHub workflow verification — 11 October 2026
+
+The normal GitHub Actions integration verifies execution directly against GitHub. Separate report signatures and deployment execution contracts are optional; they are not a setup prerequisite for this path. This supersedes earlier mandatory-signer instructions below.
+
+The Action authenticates with GitHub OIDC and submits the exact report bytes and policy check IDs. After the run completes, Preflyt matches the signed GitHub event with a fresh GitHub API read of the repository, PR head, workflow path/ID, run attempt, successful job and completed steps. A server-only audit receipt binds each report checksum and check ID to that run and published policy. Existing source approval, report parsing/integrity, freshness, coverage, rerun and policy checks still apply. The publisher verifies the current GitHub run again. OIDC alone, uploaded reports and caller-supplied success labels cannot create a passing result.
+
+This trusts the configured repository workflow to run its intended commands. It does not independently certify the tool installation or execution environment. Optional signed-report contracts remain available for deployments requiring that stronger boundary. Tests need executed cases with no failures; security reports need a named tool, no findings and no incomplete coverage. Missing, failed, stale, ambiguous or superseded required evidence cannot pass.
 
 ## Setup
 
@@ -15,13 +23,13 @@ For production, use the [deployment and release-gate runbook](../deployment/gith
 
 See [GitHub Checks API](https://docs.github.com/en/rest/checks/runs) for the App permission and check-run contract.
 
-## Review and publish
+## Automatic PR feedback
 
-Open **Quality Gates → Readiness check**, select a repository, enter an open PR number and choose its latest saved assessment. Review the exact commit, GitHub App ID and proposed output, then publish. History is paginated and links to the GitHub check.
+Enable PR checks for the repository, publish its target-branch policy and commit the generated Action/snippet and default-branch final gate. Preflyt verifies completed runs, registers check sources, saves assessments and maintains the stable `Preflyt / Engineering Readiness` check and optional policy summary on the PR. There is no manual Publish check flow in the UI.
 
-The stable check name is `Preflyt / Engineering Readiness`. A required control with approved negative CI evidence produces `failure`. Every other historical preview, including configuration-only PASS and WARN, produces `action_required`. Historical observe assessments cannot establish verified merge readiness. With a published policy, every required rule must be satisfied and at least one required execution rule must have verified evidence before `success` is allowed. Optional incomplete rules also prevent success. It never emits `neutral` or `skipped`, and does not activate a ruleset.
+Require that PR-head check in GitHub branch rules. The separate `workflow_run` gate uses trusted default-branch code and waits up to ten minutes for verified publication; incomplete/failed publication, errors, stale runs and timeout fail its job. Its Actions job belongs to the default-branch commit and is not a substitute for the PR-head required check.
 
-Publication requires an open, non-draft, same-repository PR at the assessment SHA, current saved standards and CI source bindings, and the latest assessment for that commit. Changed previews are rejected. Fork PRs and merge-queue commits are not supported in this slice.
+Optional PR AI reviews run from the verified workflow assessment and post advisory feedback on the PR. They exclude Preflyt's bundled Action, generated gate workflow and `.preflyt` files. User-authored workflows/custom Actions remain reviewable. AI cannot override policy or branch rules. The configured default model and fallback are preserved. Each has a separate bounded request deadline, so a slow primary cannot consume the fallback's entire allowance. DeepSeek structured reviews request final JSON with thinking disabled to avoid exhausting the response before returning findings.
 
 ## Verification and recovery
 
@@ -31,7 +39,7 @@ A timeout or unverified response is marked `UNKNOWN`. Refresh history, review th
 
 Production enforcement still requires the live acceptance release gate. The managed activation endpoint refuses to require this check without a current automatically published passing PR check for every target branch.
 
-## Reviewed execution contracts
+## Optional signed-report execution contracts
 
 `CI_EXECUTION_CONTRACTS` is a deployment-controlled JSON array, not a user-entered claim. Each entry pins `ruleId`, `signerWorkflow` (owner/repo/.github/workflows/file.yml), `signerDigest` (reviewed 40-character commit SHA), `format` (`junit` or `sarif`), `tool` and `toolVersion`. Review the workflow commands and report generation at that exact commit before configuring it. The workflow must actually execute that rule and produce its report; an empty report is insufficient. Current built-in v1.1.0 packs support the pipeline report contracts listed in [Engineering check report adapters](engineering-check-adapters.md), including type/build command outcomes and component/resilience test execution. Earlier saved pack versions retain their original capabilities. Every required rule still needs its own approved execution contract and adequate report coverage. Native scanner support is a separate, narrower matrix in the [native execution guide](native-execution.md); report import support does not provide a native adapter.
 
@@ -39,29 +47,23 @@ Configure the existing offline attestation verifier and allowlist the signer wor
 
 ## Local governance acceptance exception
 
-Production requires a distinct governance App ID/private key and its installation ID, provisioned in **Settings → Configuration → Governance**. API and worker share the configuration encryption root and can decrypt all managed credentials, including governance credentials; both are trusted application processes. Keep that root and managed credentials out of web, migration, execution-controller and scanner services. The explicit `GITHUB_GOVERNANCE_LOCAL_ACCEPTANCE=true` exception permits the assessment App only with `NODE_ENV=development`, exclusively for `lyrisoft/preflyt-p2-acceptance`. It is rejected for all other repositories and for production. This configuration does not itself activate a ruleset. The authorised local App is 4585551 and its lyrisoft installation is 153542598.
+Preflyt uses the connected GitHub App and the selected repository's installation by default, including in production. That installation needs Organization Administration: write for the current organization-ruleset activation path. A separate governance App is optional in **Settings → Configuration → Governance**: enable **Use a separate governance App** and supply its credentials. Existing separate connections are preserved on upgrade; switch the option off to use the connected App. API and worker share the configuration encryption root and can decrypt managed credentials; keep these out of web, migration, execution-controller and scanner services. This configuration alone never activates a ruleset.
 
-GitHub Team supports native artifact attestations only for public repositories. The currently private acceptance repository cannot complete the signed-report test on that plan; it will remain private. Existing production repositories remain private and untouched. See [GitHub artifact attestation availability](https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations/use-artifact-attestations).
+For the optional GitHub-native signed-report path, private artifact attestations require Enterprise Cloud. The normal completed-workflow path was verified on the private GitHub Team acceptance repository without a signer. Neither path requires making the repository public. See [GitHub artifact attestation availability](https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations/use-artifact-attestations).
 
 ## Automatic checks and managed activation
 
-In **Quality Gates → Readiness check**, enable automatic PR checks for the selected repository. The worker discovers up to 99 open PRs per inventory, creates durable per-PR jobs, and schedules each completed task for reevaluation after sixty seconds. Actual delay depends on batch capacity and GitHub availability. Inventory batches cover ten repositories; processing batches cover twenty due tasks. Large inventories fail explicitly rather than silently skipping targets. Settings are bound to the enabling publisher's current repository permissions; revoked access cannot publish success.
+In **Policies**, enable PR checks for the selected repository’s workflow connection. The worker discovers up to 99 open PRs per inventory, creates durable per-PR jobs, and schedules each completed task for reevaluation after sixty seconds. Actual delay depends on batch capacity and GitHub availability. Inventory batches cover ten repositories; processing batches cover twenty due tasks. Large inventories fail explicitly rather than silently skipping targets. Settings are bound to the enabling publisher's current repository permissions; revoked access cannot publish success.
 
 One automatic check is maintained for each PR head SHA. Before reevaluation the worker marks it `action_required`; it then verifies current PR context, saved standards, CI bindings, published policy, trusted execution and live workflow attempts before updating it. Changed heads, closed/draft PRs, disabled settings and failed verification invalidate previously managed results. Database leases, generation checks, exponential backoff and bounded check search recover restarts/timeouts. Provider outages can delay invalidation: GitHub and the Preflyt database are separate systems, and polling is not instantaneous enforcement.
 
-In **Quality Gates → GitHub Rulesets → Deployments**, choose a saved draft, review the exact desired configuration and affected PRs, obtain approval from another authorized administrator, then confirm activation. Both `github.ruleset.manage` and `policy.enforcement.manage` are required; built-in Owner/Admin roles have them. Policy publishers cannot activate protections. The policy Super Admin self-approval exception does not apply to ruleset deployment.
+In **Merge Protection → Branch rules → Deployments**, choose a saved draft, review the exact desired configuration and affected PRs, obtain approval from another authorized administrator, then confirm activation. Both `github.ruleset.manage` and `policy.enforcement.manage` are required; built-in Owner/Admin roles have them. Policy publishers cannot activate protections. The policy Super Admin self-approval exception does not apply to ruleset deployment.
 
-Enable Ruleset activation (`GITHUB_RULESET_ACTIVATION_ENABLED`) in Settings → Configuration and provision the separate governance App there. Restart API and worker after connection edits; the activation switch refreshes live. Preflight requires current published policies for every target branch, fresh automatically verified passing checks bound to the assessment App, current PR impact, and no merge queue. Fork PRs are rejected. Activation creates a uniquely named organization ruleset targeted only at this repository; existing unmanaged protections are preserved. Legacy drafts need one explicit save to refresh canonical hashes.
+Enable Ruleset activation (`GITHUB_RULESET_ACTIVATION_ENABLED`) in Settings → Configuration and ensure the selected GitHub App has the required organization permission. A separate governance App is optional. Restart API and worker after connection edits; the activation switch refreshes live. Preflight requires current published policies for every target branch, fresh automatically verified passing checks bound to the assessment App, current PR impact, and no merge queue. Fork PRs are rejected. Activation creates a uniquely named organization ruleset targeted only at this repository; existing unmanaged protections are preserved. Legacy drafts need one explicit save to refresh canonical hashes.
 
 The deployment records desired JSON, preview/hash, proposer, approver, source App IDs, GitHub ruleset ID and read-back hash. Unknown creation outcomes recover by the same unique name before another POST. **Verify GitHub** compares the recorded definition with current GitHub state and reports drift. **Roll back** disables only this managed ruleset after checking its recorded observed hash. External changes are never blindly overwritten. Disabling automatic checks is rejected while managed enforcement remains active, unknown or drifted. Resolve or roll back protection first.
 
 
 ### Private repositories on GitHub Team
 
-The positive-execution verifier supports GitHub-native attestations or explicitly configured organization-key proofs.
-Private/internal repositories need GitHub Enterprise Cloud for that native feature.
-This is a GitHub plan boundary, not an additional App permission. Ordinary Actions
-runs and artifact uploads do not replace cryptographically verified provenance.
-
-The implemented alternative is the organization-key/KMS-compatible report adapter; see [private report setup](organization-signed-ci-reports.md). It verifies the original report digest, repository ID, exact commit, workflow identity, run ID/attempt and reviewed signer key. Deploy and independently validate a protected signer isolated from untrusted PR code, with reviewed key rotation/revocation and replay rejection. The signing service and live enforcement acceptance remain deployment work. Do not disable report source verification or treat ordinary artifact uploads as passing evidence to work around the plan.
-The local acceptance repository remains private; live positive acceptance is pending until its trusted signer and CI workflow are configured.
+The normal OIDC, signed-webhook and GitHub workflow/job verification path works without artifact attestations or an external signer. Optional GitHub-native artifact attestations for private/internal repositories require Enterprise Cloud. The organization-key adapter remains available when stronger signed-report evidence is explicitly required; see [private report setup](organization-signed-ci-reports.md). No signer is installed by the normal snippet flow.

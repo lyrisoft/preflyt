@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link } from '@tanstack/react-router'
 import {
   ArrowUpRight,
   ChevronLeft,
@@ -10,13 +11,6 @@ import {
 import { API_BASE_URL } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   Table,
@@ -28,6 +22,7 @@ import {
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { StatusBadge } from '@/components/status-badge'
+import { SurfaceIcon } from '@/components/surface-icon'
 import { RulesetDeployments } from './ruleset-deployments'
 import { RulesetDrafts } from './ruleset-drafts'
 import { RulesetInsights } from './ruleset-insights'
@@ -40,6 +35,12 @@ type Summary = {
   source: string
   enforcement: 'active' | 'disabled' | 'evaluate'
   htmlUrl: string
+}
+type RulesetList = {
+  rulesets: Summary[]
+  hasMore: boolean
+  page: number
+  fetchedAt: string
 }
 type Detail = Summary & {
   branches: { include: string[]; exclude: string[] }
@@ -82,18 +83,17 @@ const stateLabel = {
 }
 const ruleLabel = (value: string) =>
   value.replace(/_/g, ' ').replace(/^./, (letter) => letter.toUpperCase())
-function RulesetDrawer({
+export function RulesetDetail({
   repositoryId,
   actorId,
   id,
-  onClose,
+  canRead,
 }: {
   repositoryId: string
   actorId?: string
-  id: number | null
-  onClose: () => void
+  id: number
+  canRead: boolean
 }) {
-  const [view, setView] = useState('configuration')
   const detail = useQuery({
     queryKey: ['github-ruleset', actorId, repositoryId, id],
     queryFn: ({ signal }) =>
@@ -101,157 +101,167 @@ function RulesetDrawer({
         `/github/repositories/${repositoryId}/rulesets/${id}`,
         signal
       ),
-    enabled: id !== null,
+    enabled: canRead,
     staleTime: 60_000,
+    gcTime: 30 * 60_000,
+    refetchOnWindowFocus: true,
+    refetchInterval: (query) => {
+      if (query.state.status === 'error') return 60_000
+      const fetchedAt = Date.parse(query.state.data?.fetchedAt ?? '')
+      // Schedule from GitHub fetch time, not the time this tab read the cache.
+      return Number.isFinite(fetchedAt)
+        ? Math.max(1_000, 5 * 60_000 - (Date.now() - fetchedAt))
+        : 5 * 60_000
+    },
     retry: false,
   })
   const ruleset = detail.isError ? undefined : detail.data?.ruleset
+  if (!canRead)
+    return (
+      <p role='alert' className='rounded-xl border p-4 text-sm'>
+        You need permission to view policies for this repository.
+      </p>
+    )
   return (
-    <Sheet open={id !== null} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent className='w-full gap-0 sm:max-w-3xl'>
-        <SheetHeader className='border-b p-6'>
-          <SheetTitle>{ruleset?.name ?? 'GitHub ruleset'}</SheetTitle>
-          <SheetDescription>
-            Rules reported by GitHub for this repository.
-          </SheetDescription>
-        </SheetHeader>
-        <div className='flex-1 space-y-6 overflow-y-auto p-6'>
-          <Tabs value={view} onValueChange={setView}>
-            <TabsList>
-              <TabsTrigger value='configuration'>Configuration</TabsTrigger>
-              <TabsTrigger value='insights'>Insights</TabsTrigger>
-            </TabsList>
-          </Tabs>
-          {view === 'insights' && id !== null && (
-            <RulesetInsights
-              repositoryId={repositoryId}
-              actorId={actorId}
-              rulesetId={id}
-            />
-          )}
-          {view === 'configuration' && detail.isPending && (
-            <Skeleton className='h-48' />
-          )}
-          {view === 'configuration' && detail.isError && (
-            <div role='alert' className='space-y-3'>
-              <p className='text-sm'>{detail.error.message}</p>
-              <Button
-                variant='outline'
-                size='sm'
-                onClick={() => void detail.refetch()}
-              >
-                Try again
-              </Button>
+    <RulesetInsights
+      repositoryId={repositoryId}
+      actorId={actorId}
+      rulesetId={id}
+      configuration={
+        <Card className='min-w-0 gap-3'>
+          <CardHeader className='flex items-center gap-3'>
+            <SurfaceIcon icon={ShieldCheck} tone='blue' />
+            <div className='min-w-0'>
+              <CardTitle>Configuration</CardTitle>
+              <p className='mt-1 text-xs font-medium break-words text-muted-foreground'>
+                {ruleset?.name ?? 'GitHub ruleset'}
+              </p>
             </div>
-          )}
-          {view === 'configuration' && !detail.isError && ruleset && (
-            <>
-              <div className='flex flex-wrap items-center justify-between gap-3'>
-                <StatusBadge tone={tone[ruleset.enforcement]}>
-                  {stateLabel[ruleset.enforcement]}
-                </StatusBadge>
-                <Button asChild variant='outline' size='sm'>
-                  <a href={ruleset.htmlUrl} target='_blank' rel='noreferrer'>
-                    View on GitHub
-                    <ArrowUpRight className='size-4' />
-                  </a>
+          </CardHeader>
+          <CardContent className='space-y-4'>
+            {detail.isPending && <Skeleton className='h-48' />}
+            {detail.isError && (
+              <div role='alert' className='space-y-3'>
+                <p className='text-sm'>{detail.error.message}</p>
+                <Button
+                  variant='outline'
+                  size='sm'
+                  onClick={() => void detail.refetch()}
+                >
+                  Try again
                 </Button>
               </div>
-              <dl className='grid grid-cols-2 gap-4 text-sm'>
-                <div>
-                  <dt className='text-muted-foreground'>Source</dt>
-                  <dd className='mt-1 font-medium break-all'>
-                    {ruleset.source}
-                  </dd>
+            )}
+            {ruleset && (
+              <>
+                <div className='flex flex-wrap items-center justify-between gap-2'>
+                  <StatusBadge tone={tone[ruleset.enforcement]}>
+                    {stateLabel[ruleset.enforcement]}
+                  </StatusBadge>
+                  <Button asChild variant='outline' size='sm'>
+                    <a href={ruleset.htmlUrl} target='_blank' rel='noreferrer'>
+                      View on GitHub
+                      <ArrowUpRight className='size-3.5' />
+                    </a>
+                  </Button>
                 </div>
-                <div>
-                  <dt className='text-muted-foreground'>Level</dt>
-                  <dd className='mt-1 font-medium'>{ruleset.sourceType}</dd>
-                </div>
-                <div>
-                  <dt className='text-muted-foreground'>Target</dt>
-                  <dd className='mt-1 font-medium'>
-                    {ruleLabel(ruleset.target)}
-                  </dd>
-                </div>
-                <div>
-                  <dt className='text-muted-foreground'>Fetched from GitHub</dt>
-                  <dd className='mt-1'>
-                    {new Date(detail.data!.fetchedAt).toLocaleString()}
-                  </dd>
-                </div>
-              </dl>
-              <section className='space-y-3'>
-                <h3 className='text-sm font-semibold'>Branch patterns</h3>
-                {(['include', 'exclude'] as const).map((kind) => (
-                  <div key={kind}>
-                    <p className='mb-1 text-xs text-muted-foreground'>
-                      {kind === 'include' ? 'Included' : 'Excluded'}
-                    </p>
-                    {ruleset.branches[kind].length ? (
-                      <div className='flex flex-wrap gap-2'>
-                        {ruleset.branches[kind].map((ref, index) => (
-                          <code
-                            key={`${ref}-${index}`}
-                            className='rounded-md border bg-muted/30 px-2 py-1 text-xs break-all'
-                          >
-                            {ref}
-                          </code>
-                        ))}
+                <dl className='space-y-2 text-xs'>
+                  {[
+                    ['Source', ruleset.source],
+                    ['Level', ruleset.sourceType],
+                    ['Target', ruleLabel(ruleset.target)],
+                    [
+                      'Fetched',
+                      new Date(detail.data!.fetchedAt).toLocaleString(),
+                    ],
+                  ].map(([name, value]) => (
+                    <div
+                      key={name}
+                      className='grid grid-cols-[5rem_minmax(0,1fr)] gap-3'
+                    >
+                      <dt className='text-muted-foreground'>{name}</dt>
+                      <dd className='text-right font-medium break-words'>
+                        {value}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+                <section className='space-y-2 border-t pt-3'>
+                  <h3 className='text-sm font-semibold'>Branches</h3>
+                  {(['include', 'exclude'] as const).map((kind) => (
+                    <div
+                      key={kind}
+                      className='grid grid-cols-[5rem_minmax(0,1fr)] gap-3 text-xs'
+                    >
+                      <p className='text-muted-foreground'>
+                        {kind === 'include' ? 'Included' : 'Excluded'}
+                      </p>
+                      <div className='flex flex-wrap justify-end gap-1'>
+                        {ruleset.branches[kind].length ? (
+                          ruleset.branches[kind].map((ref, index) => (
+                            <code
+                              key={`${ref}-${index}`}
+                              className='rounded-md bg-muted/30 px-1.5 py-0.5 break-all'
+                            >
+                              {ref}
+                            </code>
+                          ))
+                        ) : (
+                          <span className='text-muted-foreground'>None</span>
+                        )}
                       </div>
-                    ) : (
-                      <p className='text-sm text-muted-foreground'>
-                        None reported
-                      </p>
-                    )}
-                  </div>
-                ))}
-              </section>
-              <section className='space-y-3'>
-                <h3 className='text-sm font-semibold'>
-                  Rules · {ruleset.rules.length}
-                </h3>
-                {ruleset.rules.map((rule, index) => (
-                  <div
-                    key={`${rule.type}-${index}`}
-                    className='space-y-2 rounded-lg border p-3'
-                  >
-                    <p className='text-sm font-medium'>
-                      {ruleLabel(rule.type)}
-                    </p>
-                    {rule.requiredApprovals !== null && (
-                      <p className='text-sm text-muted-foreground'>
-                        Required approvals: {rule.requiredApprovals}
-                      </p>
-                    )}
-                    {rule.checks.map((check, index) => (
+                    </div>
+                  ))}
+                </section>
+                <section className='space-y-2 border-t pt-3'>
+                  <h3 className='text-sm font-semibold'>
+                    Rules · {ruleset.rules.length}
+                  </h3>
+                  <div className='divide-y'>
+                    {ruleset.rules.map((rule, index) => (
                       <div
-                        key={`${check.context}-${index}`}
-                        className='rounded-md bg-muted/30 p-2 text-xs'
+                        key={`${rule.type}-${index}`}
+                        className='space-y-1.5 py-2 first:pt-0 last:pb-0'
                       >
-                        <p className='font-medium break-all'>{check.context}</p>
-                        <p className='mt-1 text-muted-foreground'>
-                          {check.integrationId === null
-                            ? 'Any source App'
-                            : `GitHub App ID: ${check.integrationId}`}
+                        <p className='text-sm font-medium'>
+                          {ruleLabel(rule.type)}
                         </p>
+                        {rule.requiredApprovals !== null && (
+                          <p className='text-xs text-muted-foreground'>
+                            Required approvals: {rule.requiredApprovals}
+                          </p>
+                        )}
+                        {rule.checks.map((check, index) => (
+                          <div
+                            key={`${check.context}-${index}`}
+                            className='text-xs'
+                          >
+                            <p className='break-all'>{check.context}</p>
+                            <p className='text-muted-foreground'>
+                              {check.integrationId === null
+                                ? 'Any source App'
+                                : `GitHub App ID: ${check.integrationId}`}
+                            </p>
+                          </div>
+                        ))}
                       </div>
                     ))}
                   </div>
-                ))}
-                {!ruleset.rules.length && (
-                  <p className='text-sm text-muted-foreground'>
-                    No rules reported.
-                  </p>
-                )}
-              </section>
-            </>
-          )}
-        </div>
-      </SheetContent>
-    </Sheet>
+                  {!ruleset.rules.length && (
+                    <p className='text-xs text-muted-foreground'>
+                      No rules reported.
+                    </p>
+                  )}
+                </section>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      }
+    />
   )
 }
+
 export function RepositoryRulesets({
   repositoryId,
   actorId,
@@ -259,6 +269,7 @@ export function RepositoryRulesets({
   canDraft,
   canManage,
   repositoryName,
+  initialView = 'github',
 }: {
   repositoryId: string
   actorId?: string
@@ -266,26 +277,53 @@ export function RepositoryRulesets({
   canDraft: boolean
   canManage: boolean
   repositoryName: string
+  initialView?: 'github' | 'drafts' | 'deployments'
 }) {
-  const [view, setView] = useState('github')
+  const [view, setView] = useState<string>(initialView)
   const [page, setPage] = useState(1)
-  const [selected, setSelected] = useState<number | null>(null)
+  const queryClient = useQueryClient()
   const query = useQuery({
     queryKey: ['github-rulesets', actorId, repositoryId, page],
     queryFn: ({ signal }) =>
-      read<{
-        rulesets: Summary[]
-        hasMore: boolean
-        page: number
-        fetchedAt: string
-      }>(`/github/repositories/${repositoryId}/rulesets?page=${page}`, signal),
+      read<RulesetList>(
+        `/github/repositories/${repositoryId}/rulesets?page=${page}`,
+        signal
+      ),
     enabled: canRead && view === 'github',
     staleTime: 60_000,
+    gcTime: 30 * 60_000,
+    refetchOnWindowFocus: true,
+    refetchInterval: (query) => {
+      if (query.state.status === 'error') return 60_000
+      const fetchedAt = Date.parse(query.state.data?.fetchedAt ?? '')
+      // Schedule from GitHub fetch time, not the time this tab read the cache.
+      return Number.isFinite(fetchedAt)
+        ? Math.max(1_000, 5 * 60_000 - (Date.now() - fetchedAt))
+        : 5 * 60_000
+    },
     retry: false,
+  })
+  const refresh = useMutation({
+    mutationFn: async () => {
+      await queryClient.cancelQueries({
+        queryKey: ['github-rulesets', actorId, repositoryId, page],
+        exact: true,
+      })
+      return read<RulesetList>(
+        `/github/repositories/${repositoryId}/rulesets?page=${page}&refresh=true`,
+        new AbortController().signal
+      )
+    },
+    onSuccess: (data) =>
+      queryClient.setQueryData(
+        ['github-rulesets', actorId, repositoryId, data.page],
+        data
+      ),
+    meta: { successMessage: 'GitHub rulesets refreshed.' },
   })
   if (!canRead)
     return (
-      <p role='alert' className='rounded-xl border p-5 text-sm'>
+      <p role='alert' className='rounded-xl border p-4 text-sm'>
         You need permission to view policies for this repository.
       </p>
     )
@@ -315,8 +353,8 @@ export function RepositoryRulesets({
             <Button
               variant='outline'
               size='sm'
-              disabled={query.isFetching}
-              onClick={() => void query.refetch()}
+              disabled={query.isFetching || refresh.isPending}
+              onClick={() => refresh.mutate()}
             >
               <RefreshCw className='size-4' />
               Refresh
@@ -348,13 +386,16 @@ export function RepositoryRulesets({
                     {query.data.rulesets.map((item) => (
                       <TableRow key={item.id}>
                         <TableCell>
-                          <button
-                            type='button'
+                          <Link
+                            to='/quality-gates'
+                            search={{
+                              repository: repositoryId,
+                              ruleset: item.id,
+                            }}
                             className='max-w-80 text-left font-medium break-words text-primary hover:underline focus-visible:rounded focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'
-                            onClick={() => setSelected(item.id)}
                           >
                             {item.name}
-                          </button>
+                          </Link>
                         </TableCell>
                         <TableCell>
                           <p className='text-sm'>{item.source}</p>
@@ -372,11 +413,18 @@ export function RepositoryRulesets({
                           <Button
                             variant='ghost'
                             size='sm'
-                            onClick={() => setSelected(item.id)}
                             aria-label={`View ${item.name}`}
+                            asChild
                           >
-                            View
-                            <ArrowUpRight className='size-3.5' />
+                            <Link
+                              to='/quality-gates'
+                              search={{
+                                repository: repositoryId,
+                                ruleset: item.id,
+                              }}
+                            >
+                              View <ArrowUpRight className='size-3.5' />
+                            </Link>
                           </Button>
                         </TableCell>
                       </TableRow>
@@ -438,13 +486,6 @@ export function RepositoryRulesets({
           />
         )}
       </TabsContent>
-      <RulesetDrawer
-        key={selected ?? 'none'}
-        repositoryId={repositoryId}
-        actorId={actorId}
-        id={selected}
-        onClose={() => setSelected(null)}
-      />
     </Tabs>
   )
 }

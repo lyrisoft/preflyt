@@ -23,6 +23,44 @@ export async function engineeringRead<T>(
     )
   return response.json() as Promise<T>
 }
+export type GatePreview = {
+  evaluatorVersion: number
+  sourceSha: string
+  status: 'PASS' | 'WARN' | 'BLOCK' | 'INCOMPLETE'
+  evaluationHash: string
+  requiredRules: number
+  requiredRulesSatisfied: number
+  advisoryIncomplete: number
+  advisoryFailed: number
+  requiredRulesBlocked: number
+  requiredRulesIncomplete: number
+  reasons: string[]
+  rules: {
+    ruleId: string
+    title: string
+    required: boolean
+    status: string
+    reasons: string[]
+    deliveryId: string | null
+  }[]
+}
+export function useGatePreview(
+  repo: string,
+  assessmentId?: string,
+  enabled = true
+) {
+  return useQuery({
+    queryKey: ['gate-preview', repo, assessmentId],
+    enabled: enabled && !!assessmentId,
+    retry: false,
+    queryFn: ({ signal }) =>
+      engineeringRead<GatePreview>(
+        repo,
+        `/assessments/${encodeURIComponent(assessmentId!)}/gate-preview`,
+        signal
+      ),
+  })
+}
 export type SourceIdentity = {
   kind: 'check_run' | 'workflow_run'
   appId?: string
@@ -42,12 +80,12 @@ export type BindingResult = {
     createdAt: string
   }
 }
-export function useBindings(repo: string) {
+export function useBindings(repo: string, policyId?: string) {
   return useQuery({
-    queryKey: ['ci-bindings', repo],
+    queryKey: policyId ? ['ci-bindings', repo, policyId] : ['ci-bindings', repo],
     retry: false,
     queryFn: ({ signal }) =>
-      engineeringRead<BindingResult>(repo, '/ci-bindings', signal),
+      engineeringRead<BindingResult>(repo, `/ci-bindings${policyId ? `?policy=${encodeURIComponent(policyId)}` : ''}`, signal),
   })
 }
 export type PrContext = {

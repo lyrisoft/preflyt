@@ -2,7 +2,7 @@
 
 **Status:** Authoritative **target UX** for P0–P3; not an implementation claim.  
 **Audience:** Product, frontend/backend engineers, Codex, Claude and reviewers.  
-**Sources:** [PRD](../PRD.md), [delivery phases](../roadmap/incremental-delivery.md), [Contributors](engineering-contributors.md), [Engineering Standards](engineering-standards-library.md), [RBAC](rbac-and-authorization.md), [UI guidelines](../design/enterprise-ui-guidelines.md), [Agent guardrails](../agents/product-implementation-guardrails.md).
+**Sources:** [PRD](../PRD.md), [delivery phases](../roadmap/incremental-delivery.md), [Contributors](engineering-contributors.md), [Standards](engineering-standards-library.md), [RBAC](rbac-and-authorization.md), [UI guidelines](../design/enterprise-ui-guidelines.md), [Agent guardrails](../agents/product-implementation-guardrails.md).
 
 ## Purpose and boundaries
 
@@ -16,11 +16,13 @@ The **MVP** is P0–P3. Contributor analytics is specified as a P3 additive capa
 
 ### Left sidebar
 
+Preserve this familiar grouped navigation and its direct links. The [Product simplification plan](../planning/product-simplification.md) simplifies content and workflows inside these pages; it does not consolidate or relocate sidebar destinations.
+
 - Brand header: Preflyt icon/name and short `Engineering Assurance` descriptor; organization switcher only where organization membership supports it.
 - **Workspace:** Overview, Repositories, Assessments, Findings, **Contributors** (only once P3 functional).
-- **Governance:** Quality Gates, Engineering Standards, Policies.
+- **Governance:** Merge Protection, Standards, Policies.
 - **Intelligence:** AI Intelligence (when a usable evidence-linked AI experience ships) and **Skills** (when the approved review-skill catalogue and management experience is functional). Skills is a sibling navigation item under Intelligence, **not** under Settings or Governance. The Intelligence group may be shown with only functional items; never render a dead-end route.
-- **Administration:** Teams (once functional), Integrations, Access Control, Settings; visibility depends on RBAC.
+- **Administration:** Integrations, Teams (once functional), Access Control, Settings; visibility depends on RBAC.
 - Footer: current identity/role, profile, sign out; preserve separate Super Admin recovery identity handling.
 - Desktop sidebar persists and collapses to icons; mobile uses a keyboard-accessible drawer. Active route is visibly highlighted; navigation order stable.
 - Do not show nonfunctional future pages. Hide unshipped routes or mark clearly unavailable without dead-end navigation.
@@ -57,7 +59,7 @@ Tabs must reflect available functionality and preserve deep links.
 | `/teams/:id` | Team detail | GitHub access versus approved policy scope, assignments, impact preview and audit | Authorized scope; stale sync visible |
 | `/access-control` | Member access management | Searchable connected-GitHub member directory, username selection, Preflyt roles, repo grants, audit and revocation | Implemented behind GitHub login flag; existing workspaces use explicit Owner-verified organization linking; backend enforces |
 | `/settings` | Workspace settings | Organization details, identity/session settings, supported AI provider/model routing controls when shipped, operational preferences | Do not show secrets; unavailable features hidden |
-| `/intelligence/skills` | Review skill catalogue and management | Approved and pinned skills, provenance, enablement, stage/model routing, budgets, security review and audit | Only when functional; organization permissions required |
+| `/intelligence/skills` | Review skill catalogue and management | Approved and pinned skills, provenance, enablement, stage/model routing, security review and audit | Only when functional; organization permissions required |
 | `/intelligence` | Evidence-linked AI findings analysis | Supported explanation and cited evidence, selected permitted model/route, usage and availability | Only if implemented; advisory, never gate authority |
 
 Routes are a design contract; existing implemented paths may differ. Prefer backwards-compatible routing/redirects and review actual router before changes.
@@ -85,7 +87,7 @@ No large marketing hero, decorative globe or fake percentage. Charts should have
 - **Readiness:** counts of latest assessment decisions by PR/repository context; avoid combining incomparable objects in one percentage.
 - **Contributor adherence:** first-pass and final adherence only over fully assessed eligible PRs, always shown beside assessment coverage and policy version.
 
-**Quality Gates → GitHub Rulesets tab:** show existing organization rulesets, enforcement state, targeted branches/repos, linked Preflyt check/policy, sync/drift and a guided Standard/Strict/Custom setup. The wizard must preflight a real PR check, preview GitHub changes and require authorized deployment approval. Do not expose activation if the check publisher is not ready. See [GitHub Ruleset Management](github-ruleset-management.md).
+**Merge Protection → Branch rules:** show existing organization rulesets, enforcement state, targeted branches/repos, linked Preflyt check/policy, sync/drift and a guided Standard/Strict/Custom setup. The wizard must preflight a real PR check, preview GitHub changes and require authorized deployment approval. Do not expose activation if the check publisher is not ready. See [GitHub Ruleset Management](github-ruleset-management.md).
 
 **GitHub Ruleset Details → Insights (P2.R5):** display GitHub rule-suite evaluation metrics and charts for the selected ruleset, most frequently failing rules, affected repositories, filtered evaluation history, and drill-down. Keep Preflyt quality-gate analytics in a separately labeled panel. Show source, time window, attribution completeness, permission and sync status. See [Ruleset Insights](github-ruleset-management.md#ruleset-detail-insights-tab-p2r5).
 
@@ -107,9 +109,14 @@ Show sync time, partial directory results, verification errors and retry actions
 
 **New organization (GitHub-first target):** Continue with GitHub → connect/verify the organization App installation → verify GitHub organization ownership and create the matching workspace automatically → select repository → discover profile → recommend and select policy packs → show missing controls and next steps. The Overview should be an onboarding state until real assessments exist.
 
+**Implemented first-report path:** When organization sign-in is unconfigured, the sign-in page exposes setup through the configured Super Admin account. Overview directs users without an organization to GitHub sign-in or deployment configuration, according to permission and configured providers. Once a repository is explicitly selected, Overview offers **Create first report**: reuse the saved inspection or inspect configuration, preserve existing standards or save recommended observe-mode standards, then save a commit-bound assessment and open its results. Custom setup remains available. Each existing API enforces authorization; concurrent standards changes stop the flow. Failed steps retain saved progress, and retries in the current view reuse the assessment request key for identical inputs. Setup does not publish policies, activate rulesets, execute repository code or change AI source-sharing permissions. Missing evidence remains incomplete. The setup card uses all-time saved report state, so date filters do not restart onboarding. Configuration tabs support direct links.
+
+Automatic setup on selection, GitHub App Manifest provisioning, connection hot reload, and an installation CLI are separate friction-audit proposals; this first-report flow does not implement them.
+
+
 **Developer PR:** signed webhook → pin SHA → import trusted CI evidence or approved isolated scan → normalize checks/findings → deterministic policy decision → publish exact-SHA GitHub check → show readiness and required corrective action. A missing required check is INCOMPLETE, not PASS.
 
-**Policy Manager:** inspect built-in pack → assign version/profile → preview effective policy → authorize advisory/enforced mode → audit change. AI cannot enable enforcement.
+**Policy Manager:** Policies → choose repository, team or organization scope → choose saved standard versions → review changes → save requirements and branch-policy drafts. Team and organization assignment uses the existing server impact preview and requires the unchanged preview hash. A repository selection preview describes requirements; it does not run checks, and the server validates current selection and inherited requirements on save. Reviewers approve and publish branch policies separately. After reliable required checks are available, use **Review merge protection** to enter the existing GitHub ruleset review and activation flow. Preparing organization scope includes only currently selected authorized repositories; future repositories require another scope review. AI cannot enable enforcement.
 
 **Contributor investigation:** Contributors list → filter repo/time → open contributor → inspect PR/review activity and exact policy evidence; distinguish external users and bots.
 
