@@ -11,6 +11,7 @@ import type { AuthenticatedSession } from './session.guard.js'
 
 export const rolePermissions: Record<string, string[]> = {
   OWNER: [
+    'audit.read',
     'ai.provider.manage', 'ai.routing.manage', 'ai.usage.read',
     'ai.skills.read', 'ai.skills.manage', 'ai.skills.approve', 'ai.review.run',
     'team.manage', 'team.import', 'team.policy.assign',
@@ -36,6 +37,7 @@ export const rolePermissions: Record<string, string[]> = {
     'contributors.policy_evidence.read',
   ],
   ADMIN: [
+    'audit.read',
     'ai.provider.manage', 'ai.routing.manage', 'ai.usage.read',
     'ai.skills.read', 'ai.skills.manage', 'ai.skills.approve', 'ai.review.run',
     'team.manage', 'team.import', 'team.policy.assign',
@@ -107,6 +109,7 @@ export const rolePermissions: Record<string, string[]> = {
     'contributors.policy_evidence.read',
   ],
   AUDITOR: [
+    'audit.read',
     'ai.skills.read',
     'ai.usage.read',
     'repository.read',
@@ -245,6 +248,8 @@ export class AuthorizationService {
   // SessionGuard calls this after live session validation, before any controller or cache lookup.
   async authorizeRequest(request: Request, session: AuthenticatedSession) {
     const path = request.path.replace(/\/$/, '')
+    // The audit reader performs fresh organization and repository authorization.
+    if (path === '/audit-log' && request.method === 'GET') return false
     if (path === '/configuration') {
       if (session.platformAdmin !== true) await this.deny(session, 'deployment.configuration.manage')
       return true

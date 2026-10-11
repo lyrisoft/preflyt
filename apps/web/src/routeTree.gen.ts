@@ -21,6 +21,7 @@ import { Route as errors503RouteImport } from './routes/(errors)/503'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
 import { Route as AuthenticatedAccessControlRouteImport } from './routes/_authenticated/access-control'
 import { Route as AuthenticatedAssessmentsRouteImport } from './routes/_authenticated/assessments'
+import { Route as AuthenticatedAuditLogRouteImport } from './routes/_authenticated/audit-log'
 import { Route as AuthenticatedFindingsRouteImport } from './routes/_authenticated/findings'
 import { Route as AuthenticatedIntegrationsRouteImport } from './routes/_authenticated/integrations'
 import { Route as AuthenticatedIntelligenceRouteImport } from './routes/_authenticated/intelligence'
@@ -104,6 +105,11 @@ const AuthenticatedAssessmentsRoute =
     path: '/assessments',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedAuditLogRoute = AuthenticatedAuditLogRouteImport.update({
+  id: '/audit-log',
+  path: '/audit-log',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedFindingsRoute = AuthenticatedFindingsRouteImport.update({
   id: '/findings',
   path: '/findings',
@@ -237,6 +243,7 @@ export interface FileRoutesByFullPath {
   '/503': typeof errors503Route
   '/access-control': typeof AuthenticatedAccessControlRoute
   '/assessments': typeof AuthenticatedAssessmentsRoute
+  '/audit-log': typeof AuthenticatedAuditLogRoute
   '/findings': typeof AuthenticatedFindingsRoute
   '/integrations': typeof AuthenticatedIntegrationsRoute
   '/intelligence': typeof AuthenticatedIntelligenceRoute
@@ -269,6 +276,7 @@ export interface FileRoutesByTo {
   '/503': typeof errors503Route
   '/access-control': typeof AuthenticatedAccessControlRoute
   '/assessments': typeof AuthenticatedAssessmentsRoute
+  '/audit-log': typeof AuthenticatedAuditLogRoute
   '/findings': typeof AuthenticatedFindingsRoute
   '/integrations': typeof AuthenticatedIntegrationsRoute
   '/intelligence': typeof AuthenticatedIntelligenceRoute
@@ -305,6 +313,7 @@ export interface FileRoutesById {
   '/(errors)/503': typeof errors503Route
   '/_authenticated/access-control': typeof AuthenticatedAccessControlRoute
   '/_authenticated/assessments': typeof AuthenticatedAssessmentsRoute
+  '/_authenticated/audit-log': typeof AuthenticatedAuditLogRoute
   '/_authenticated/findings': typeof AuthenticatedFindingsRoute
   '/_authenticated/integrations': typeof AuthenticatedIntegrationsRoute
   '/_authenticated/intelligence': typeof AuthenticatedIntelligenceRoute
@@ -342,6 +351,7 @@ export interface FileRouteTypes {
     | '/503'
     | '/access-control'
     | '/assessments'
+    | '/audit-log'
     | '/findings'
     | '/integrations'
     | '/intelligence'
@@ -374,6 +384,7 @@ export interface FileRouteTypes {
     | '/503'
     | '/access-control'
     | '/assessments'
+    | '/audit-log'
     | '/findings'
     | '/integrations'
     | '/intelligence'
@@ -409,6 +420,7 @@ export interface FileRouteTypes {
     | '/(errors)/503'
     | '/_authenticated/access-control'
     | '/_authenticated/assessments'
+    | '/_authenticated/audit-log'
     | '/_authenticated/findings'
     | '/_authenticated/integrations'
     | '/_authenticated/intelligence'
@@ -529,6 +541,13 @@ declare module '@tanstack/react-router' {
       path: '/assessments'
       fullPath: '/assessments'
       preLoaderRoute: typeof AuthenticatedAssessmentsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/audit-log': {
+      id: '/_authenticated/audit-log'
+      path: '/audit-log'
+      fullPath: '/audit-log'
+      preLoaderRoute: typeof AuthenticatedAuditLogRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/findings': {
@@ -708,6 +727,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedSettingsRouteRoute: typeof AuthenticatedSettingsRouteRouteWithChildren
   AuthenticatedAccessControlRoute: typeof AuthenticatedAccessControlRoute
   AuthenticatedAssessmentsRoute: typeof AuthenticatedAssessmentsRoute
+  AuthenticatedAuditLogRoute: typeof AuthenticatedAuditLogRoute
   AuthenticatedFindingsRoute: typeof AuthenticatedFindingsRoute
   AuthenticatedIntegrationsRoute: typeof AuthenticatedIntegrationsRoute
   AuthenticatedIntelligenceRoute: typeof AuthenticatedIntelligenceRoute
@@ -729,6 +749,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedSettingsRouteRoute: AuthenticatedSettingsRouteRouteWithChildren,
   AuthenticatedAccessControlRoute: AuthenticatedAccessControlRoute,
   AuthenticatedAssessmentsRoute: AuthenticatedAssessmentsRoute,
+  AuthenticatedAuditLogRoute: AuthenticatedAuditLogRoute,
   AuthenticatedFindingsRoute: AuthenticatedFindingsRoute,
   AuthenticatedIntegrationsRoute: AuthenticatedIntegrationsRoute,
   AuthenticatedIntelligenceRoute: AuthenticatedIntelligenceRoute,

@@ -14,9 +14,10 @@ export function authorizedNavigation(
       ...group,
       items: group.items.filter(
         (item) =>
-          canAdminister(role) ||
-          !item.adminOnly ||
-          (platformAdmin && item.url === '/access-control')
+          (!item.roles || item.roles.includes(role ?? '')) &&
+          (canAdminister(role) ||
+            !item.adminOnly ||
+            (platformAdmin && item.url === '/access-control'))
       ),
     }))
     .filter((group) => group.items.length > 0)

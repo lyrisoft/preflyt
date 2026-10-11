@@ -30,6 +30,7 @@ describe('enterprise navigation permissions and scope', () => {
         'Integrations',
         'Teams',
         'Access Control',
+        'Audit log',
         'Settings',
       ])
     }
@@ -41,6 +42,7 @@ describe('enterprise navigation permissions and scope', () => {
   it('keeps personal settings available without granting administrative access', () => {
     for (const role of [undefined, 'VIEWER', 'DEVELOPER', 'UNKNOWN']) {
       expect(titles(role)).not.toContain('Access Control')
+      expect(titles(role)).not.toContain('Audit log')
       expect(titles(role)).toContain('Settings')
       expect(titles(role)).toContain('Integrations')
       expect(titles(role)).toContain('Skills')
@@ -97,4 +99,14 @@ describe('enterprise navigation permissions and scope', () => {
       workspaceSearchSchema.parse({ repository: ['invalid'] }).repository
     ).toBeUndefined()
   })
+})
+
+it('includes the Audit log for Auditors without granting Access Control', () => {
+  expect(titles('AUDITOR')).toContain('Audit log')
+  expect(titles('AUDITOR')).not.toContain('Access Control')
+  expect(
+    authorizedNavigation(sidebarData.navGroups, undefined, true).flatMap((g) =>
+      g.items.map((i) => i.title)
+    )
+  ).not.toContain('Audit log')
 })

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react'
+import { handleServerError } from '@/lib/handle-server-error'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -111,11 +112,14 @@ export function RulesetDeployments({
       setConfirmation(null)
       await query.refetch()
     } catch (e) {
-      setError(
+      const message =
         e instanceof Error
           ? e.message
           : 'The ruleset operation could not be verified'
-      )
+      setError(message)
+      handleServerError(new Error(message), {
+        id: `ruleset-operation:${repositoryId}:${kind}`,
+      })
     } finally {
       setBusy(false)
     }

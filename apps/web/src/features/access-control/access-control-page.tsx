@@ -134,11 +134,13 @@ const roleDescription: Record<string, string> = {
   ENGINEERING_LEAD:
     'Run and review assessments, read policies and contributor evidence.',
   DEVELOPER: 'Run assessments and review results for assigned repositories.',
-  AUDITOR: 'Read assessments, policies and contributor evidence. No changes.',
+  AUDITOR:
+    'Read audit history, assessments, policies and contributor evidence. No changes.',
   VIEWER:
     'Read repositories, assessments, policies and contributor lists. No changes.',
 }
 const permissionName: Record<string, string> = {
+  'audit.read': 'View workspace and authorized repository audit history',
   'organization.members.manage': 'Manage members and roles',
   'organization.settings.update': 'Update organization settings',
   'repository.connect': 'Connect GitHub repositories',
@@ -946,7 +948,7 @@ export function AccessControlPage() {
                       <Button
                         size='sm'
                         variant='outline'
-                        className='mt-4 w-full'
+                        className='mt-4 ml-auto flex w-fit'
                         disabled={!access.data?.githubLinked}
                         onClick={() => start(undefined, r.id)}
                       >
