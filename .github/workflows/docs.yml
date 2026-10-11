@@ -1,7 +1,5 @@
 name: Documentation
 on:
-  pull_request:
-    paths: ['apps/docs/**', '.env.example', '.github/workflows/docs.yml']
   push:
     branches: [main]
     paths: ['apps/docs/**', '.env.example', '.github/workflows/docs.yml']
