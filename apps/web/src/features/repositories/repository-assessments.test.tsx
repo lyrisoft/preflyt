@@ -4,6 +4,10 @@ import { render } from 'vitest-browser-react'
 import { page, userEvent } from 'vitest/browser'
 import type { GatePreview } from './engineering-queries'
 import {
+  EvidenceValidationPanel,
+  type EvidenceValidation,
+} from './evidence-validation-panel'
+import {
   AssessmentReport as RepositoryAssessments,
   AssessmentList,
 } from './repository-assessments'
@@ -52,13 +56,27 @@ vi.mock('./assessment-context', () => ({
 vi.mock('./native-execution-status', () => ({
   NativeExecutionStatus: () => <div>Execution details</div>,
 }))
-vi.mock('./assessment-coverage-chart', () => ({
-  AssessmentCoverageChart: ({
+vi.mock('./assessment-results-chart', () => ({
+  AssessmentResultsChart: ({
+    passed,
+    failed,
+    incomplete,
     onSelect,
   }: {
+    passed: number
+    failed: number
+    incomplete: number
     onSelect: (value: string) => void
   }) => (
-    <button onClick={() => onSelect('missing')}>View missing inputs</button>
+    <div role='group' aria-label='All check results'>
+      <p>
+        {passed} passed, {failed} failed, {incomplete} not evaluated
+      </p>
+      <button onClick={() => onSelect('incomplete')}>
+        View not evaluated checks
+      </button>
+      <button onClick={() => onSelect('failed')}>View failed checks</button>
+    </div>
   ),
 }))
 beforeEach(() => {
@@ -166,8 +184,8 @@ it('opens check results, paginates them and reveals optional sections only on re
   await page.getByRole('tab', { name: 'AI reviews', exact: true }).click()
   await expect.element(page.getByText('AI review content')).toBeVisible()
   await page.getByRole('tab', { name: 'Details', exact: true }).click()
-  await page.getByText('Evidence coverage', { exact: true }).click()
-  await page.getByRole('button', { name: 'View missing inputs' }).click()
+  await page.getByText('Check results', { exact: true }).click()
+  await page.getByRole('button', { name: 'View not evaluated checks' }).click()
   await expect
     .element(page.getByRole('tab', { name: 'Checks (12)' }))
     .toHaveAttribute('aria-selected', 'true')
@@ -261,6 +279,21 @@ it('prioritizes required failures and keeps passing and optional checks availabl
     .toHaveClass('text-success-text')
   await chooseChecks('Optional checks')
   await expect.element(page.getByText('Check 2', { exact: true })).toBeVisible()
+  await page.getByRole('tab', { name: 'Details', exact: true }).click()
+  await page.getByText('Check results', { exact: true }).click()
+  await expect
+    .element(page.getByRole('group', { name: 'All check results' }))
+    .toHaveTextContent('1 passed, 1 failed, 10 not evaluated')
+  await page.getByRole('button', { name: 'View failed checks' }).click()
+  await expect
+    .element(page.getByText('Check 12', { exact: true }))
+    .toBeVisible()
+  await expect
+    .element(page.getByText('Check 1', { exact: true }))
+    .not.toBeInTheDocument()
+  await expect
+    .element(page.getByText('Result filter: Failed', { exact: true }))
+    .toBeVisible()
   await view.unmount()
 })
 
@@ -313,11 +346,22 @@ it('shows an actionable pass state without repeating passing checks', async () =
       })
     )
     .toBeVisible()
+  await page.getByRole('tab', { name: 'Details', exact: true }).click()
+  await page.getByText('Check results', { exact: true }).click()
+  await expect
+    .element(page.getByRole('group', { name: 'All check results' }))
+    .toHaveTextContent('12 passed, 0 failed, 0 not evaluated')
+  await expect
+    .element(page.getByText('Coverage status', { exact: true }))
+    .not.toBeInTheDocument()
   await view.unmount()
 })
 
 it('does not render a cached pass after a merge evaluation failure and offers retry', async () => {
   state.preview.data.status = 'PASS'
+  state.preview.data.rules.forEach((rule) => {
+    rule.status = 'PASS'
+  })
   state.preview.isError = true
   state.preview.error = new Error('Repository access changed')
   const view = await render(
@@ -334,6 +378,11 @@ it('does not render a cached pass after a merge evaluation failure and offers re
     .toHaveClass('text-warning-text')
   await page.getByRole('button', { name: 'Retry result' }).click()
   expect(state.preview.refetch).toHaveBeenCalledOnce()
+  await page.getByRole('tab', { name: 'Details', exact: true }).click()
+  await page.getByText('Check results', { exact: true }).click()
+  await expect
+    .element(page.getByRole('group', { name: 'All check results' }))
+    .toHaveTextContent('0 passed, 0 failed, 12 not evaluated')
   await view.unmount()
 })
 
@@ -778,4 +827,48 @@ it('keeps the outcome columns aligned on desktop and readable in a narrow conten
     await view.unmount()
   }
   await page.viewport(1280, 720)
+})
+
+it('describes verified execution accurately and retains the warning for unverified evidence', async () => {
+  const validation: EvidenceValidation = {
+    version: 1,
+    status: 'VERIFIED',
+    trustedExecuted: true,
+    sourceApproved: true,
+    observationIntegrity: true,
+    expectedFormat: 'sarif',
+    reports: [],
+    reasons: [],
+  }
+  const verified = await render(
+    <EvidenceValidationPanel validation={validation} />
+  )
+  await page.getByText('Evidence validation: Verified', { exact: true }).click()
+  await expect
+    .element(page.getByText('Check execution verified.', { exact: false }))
+    .toBeVisible()
+  await expect
+    .element(
+      page.getByText('Check execution has not been verified.', { exact: false })
+    )
+    .not.toBeInTheDocument()
+  await verified.unmount()
+  const unverified = await render(
+    <EvidenceValidationPanel
+      validation={{
+        ...validation,
+        status: 'INCOMPLETE',
+        trustedExecuted: false,
+      }}
+    />
+  )
+  await page
+    .getByText('Evidence validation: Incomplete', { exact: true })
+    .click()
+  await expect
+    .element(
+      page.getByText('Check execution has not been verified.', { exact: false })
+    )
+    .toBeVisible()
+  await unverified.unmount()
 })

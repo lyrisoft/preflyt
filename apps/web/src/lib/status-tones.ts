@@ -53,6 +53,7 @@ export const statusTones: Readonly<Record<string, StatusTone>> = {
   'organization-wide requirements': 'neutral',
   'suggestions only': 'info',
   'source not verified': 'warning',
+  'execution verified': 'success',
   'newer result available': 'warning',
   'result expired': 'error',
   'multiple matching results': 'error',

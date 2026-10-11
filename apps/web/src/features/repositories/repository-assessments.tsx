@@ -41,13 +41,14 @@ import { StatusBadge } from '@/components/status-badge'
 import { SurfaceIcon } from '@/components/surface-icon'
 import { SkillReviewPanel } from '../intelligence/skill-review-panel'
 import { AssessmentContext } from './assessment-context'
-import { AssessmentCoverageChart } from './assessment-coverage-chart'
 import {
   checkNextStep,
   checkReview,
+  isExecutionVerified,
   reviewReason,
   reviewStatuses,
 } from './assessment-result'
+import { AssessmentResultsChart } from './assessment-results-chart'
 import { useGatePreview, type ContextRequest } from './engineering-queries'
 import {
   EvidenceValidationPanel,
@@ -622,7 +623,7 @@ export function AssessmentReport({
   const client = useQueryClient()
   const [selected, setSelected] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
-  const [inputFilter, setInputFilter] = useState('all')
+  const [resultFilter, setResultFilter] = useState('all')
   const [checkView, setCheckView] = useState('attention')
   const checksRef = useRef<HTMLDivElement>(null)
   const [assessmentTab, setAssessmentTab] = useState('checks')
@@ -670,18 +671,14 @@ export function AssessmentReport({
       sourceLabel(item.sourceKind, item.sourceObjectId),
     ])
   )
-  const configFound =
-    data?.report.checks.filter((c) => c.coverage === 'CONFIGURATION_OBSERVED')
+  const totalChecks = data?.report.checks.length ?? 0
+  const passedChecks =
+    data?.report.checks.filter((check) => ruleFor(check)?.status === 'PASS')
       .length ?? 0
-  const withCi = data?.report.checks.filter((c) => c.deliveryId).length ?? 0
-  const coverage = data ? coverageStatus(data.report.coverage) : null
-  const configurationOnly =
-    data?.report.checks.filter(
-      (check) =>
-        !check.deliveryId && check.coverage === 'CONFIGURATION_OBSERVED'
-    ).length ?? 0
-  const noInputs =
-    (data?.report.checks.length ?? 0) - withCi - configurationOnly
+  const failedChecks =
+    data?.report.checks.filter((check) => ruleFor(check)?.status === 'BLOCK')
+      .length ?? 0
+  const notEvaluatedChecks = totalChecks - passedChecks - failedChecks
   const checks = (data?.report.checks ?? [])
     .filter((check) =>
       checkView === 'attention'
@@ -693,12 +690,12 @@ export function AssessmentReport({
             : true
     )
     .filter((check) =>
-      inputFilter === 'linked'
-        ? !!check.deliveryId
-        : inputFilter === 'configuration'
-          ? !check.deliveryId && check.coverage === 'CONFIGURATION_OBSERVED'
-          : inputFilter === 'missing'
-            ? !check.deliveryId && check.coverage !== 'CONFIGURATION_OBSERVED'
+      resultFilter === 'passed'
+        ? ruleFor(check)?.status === 'PASS'
+        : resultFilter === 'failed'
+          ? ruleFor(check)?.status === 'BLOCK'
+          : resultFilter === 'incomplete'
+            ? !['PASS', 'BLOCK'].includes(ruleFor(check)?.status ?? '')
             : true
     )
     .sort((a, b) => {
@@ -763,7 +760,7 @@ export function AssessmentReport({
                   initialSha={initialSha}
                   onCreated={(id) => {
                     setSelected(id)
-                    setInputFilter('all')
+                    setResultFilter('all')
                     setCheckView('attention')
                     setCheckPage(1)
                     setExpandedCheck(null)
@@ -787,7 +784,9 @@ export function AssessmentReport({
                     A saved assessment evaluates the standards and evidence for
                     one commit. Required failures and missing results appear
                     first. Passing configuration checks confirm configuration,
-                    not successful test or scan execution.
+                    not successful test or scan execution. The Check results
+                    chart uses the same evaluation as this summary and includes
+                    both required and optional checks.
                   </p>
                 ),
               },
@@ -854,8 +853,7 @@ export function AssessmentReport({
                 Loading assessment…
               </p>
             ) : (
-              data &&
-              coverage && (
+              data && (
                 <>
                   <GatePreviewPanel
                     preview={preview}
@@ -863,7 +861,7 @@ export function AssessmentReport({
                       setCheckView(
                         evaluated?.status === 'WARN' ? 'optional' : 'attention'
                       )
-                      setInputFilter('all')
+                      setResultFilter('all')
                       setCheckPage(1)
                       setExpandedCheck(null)
                       setAssessmentTab('checks')
@@ -957,7 +955,7 @@ export function AssessmentReport({
                               setCheckView(value)
                               setCheckPage(1)
                               setExpandedCheck(null)
-                              setInputFilter('all')
+                              setResultFilter('all')
                             }}
                           >
                             <SelectTrigger
@@ -982,21 +980,21 @@ export function AssessmentReport({
                             </SelectContent>
                           </Select>
                         </div>
-                        {inputFilter !== 'all' && (
+                        {resultFilter !== 'all' && (
                           <div className='flex flex-wrap items-center gap-3 text-xs text-muted-foreground'>
                             <span>
-                              Evidence filter:{' '}
-                              {inputFilter === 'linked'
-                                ? 'CI results'
-                                : inputFilter === 'configuration'
-                                  ? 'Configuration'
-                                  : 'Missing inputs'}
+                              Result filter:{' '}
+                              {resultFilter === 'passed'
+                                ? 'Passed'
+                                : resultFilter === 'failed'
+                                  ? 'Failed'
+                                  : 'Not evaluated'}
                             </span>
                             <Button
                               size='sm'
                               variant='ghost'
                               onClick={() => {
-                                setInputFilter('all')
+                                setResultFilter('all')
                                 setCheckPage(1)
                                 setExpandedCheck(null)
                               }}
@@ -1016,7 +1014,12 @@ export function AssessmentReport({
                                     tone: 'error' as const,
                                     label: 'Invalid evidence',
                                   }
-                                : coverageStatus(check.coverage)
+                                : isExecutionVerified(check.evidenceValidation)
+                                  ? {
+                                      tone: 'success' as const,
+                                      label: 'Execution verified',
+                                    }
+                                  : coverageStatus(check.coverage)
                             return (
                               <li key={check.ruleId} className='text-sm'>
                                 <button
@@ -1152,7 +1155,7 @@ export function AssessmentReport({
                               variant='outline'
                               onClick={() => {
                                 setCheckView('all')
-                                setInputFilter('all')
+                                setResultFilter('all')
                                 setCheckPage(1)
                                 setExpandedCheck(null)
                               }}
@@ -1212,18 +1215,18 @@ export function AssessmentReport({
                     <TabsContent value='details' className='space-y-4'>
                       <details className='rounded-lg border text-sm'>
                         <summary className='cursor-pointer px-4 py-3 font-medium'>
-                          Evidence coverage
+                          Check results
                         </summary>
                         <div className='border-t p-4'>
                           <div className='grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]'>
-                            <AssessmentCoverageChart
+                            <AssessmentResultsChart
                               total={data.report.checks.length}
-                              linked={withCi}
-                              configuration={configurationOnly}
-                              missing={noInputs}
-                              selected={inputFilter}
+                              passed={passedChecks}
+                              failed={failedChecks}
+                              incomplete={notEvaluatedChecks}
+                              selected={resultFilter}
                               onSelect={(value) => {
-                                setInputFilter(value)
+                                setResultFilter(value)
                                 setCheckView('all')
                                 setCheckPage(1)
                                 setExpandedCheck(null)
@@ -1243,36 +1246,37 @@ export function AssessmentReport({
                                   assessment
                                 </p>
                               </div>
-                              <div className='rounded-lg border border-chart-2/20 bg-chart-2/5 p-4'>
+                              <div className='rounded-lg border border-success/20 bg-success/5 p-4'>
                                 <p className='text-xs text-muted-foreground'>
-                                  Configuration found
+                                  Passed
                                 </p>
                                 <p className='mt-2 text-2xl font-semibold tabular-nums'>
-                                  {configFound}
+                                  {passedChecks}
                                 </p>
                                 <p className='mt-1 text-xs text-muted-foreground'>
-                                  Observed repository configuration
+                                  Requirements satisfied
                                 </p>
                               </div>
-                              <div className='rounded-lg border p-4'>
+                              <div className='rounded-lg border border-danger/20 bg-danger/5 p-4'>
                                 <p className='text-xs text-muted-foreground'>
-                                  Coverage status
-                                </p>
-                                <div className='mt-3'>
-                                  <StatusBadge tone={coverage.tone}>
-                                    {coverage.label}
-                                  </StatusBadge>
-                                </div>
-                              </div>
-                              <div className='rounded-lg border p-4'>
-                                <p className='text-xs text-muted-foreground'>
-                                  Verified execution
+                                  Failed
                                 </p>
                                 <p className='mt-2 text-2xl font-semibold tabular-nums'>
-                                  {data.report.trustedExecutedChecks}
+                                  {failedChecks}
                                 </p>
                                 <p className='mt-1 text-xs text-muted-foreground'>
-                                  Checks with verified execution
+                                  Checks that need fixing
+                                </p>
+                              </div>
+                              <div className='rounded-lg border border-warning/20 bg-warning/5 p-4'>
+                                <p className='text-xs text-muted-foreground'>
+                                  Not evaluated
+                                </p>
+                                <p className='mt-2 text-2xl font-semibold tabular-nums'>
+                                  {notEvaluatedChecks}
+                                </p>
+                                <p className='mt-1 text-xs text-muted-foreground'>
+                                  Missing or unverified results
                                 </p>
                               </div>
                             </div>

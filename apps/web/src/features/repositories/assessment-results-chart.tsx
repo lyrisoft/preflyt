@@ -2,54 +2,54 @@ import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts'
 import { chartAnimation, chartTooltipAnimation } from '@/lib/chart-motion'
 import { cn } from '@/lib/utils'
 
-/** These categories describe available inputs; they never imply passed checks. */
-export function AssessmentCoverageChart({
+/** Outcomes come from the same verified evaluation as the assessment summary. */
+export function AssessmentResultsChart({
   total,
-  linked,
-  configuration,
-  missing,
+  passed,
+  failed,
+  incomplete,
   selected,
   onSelect,
 }: {
   total: number
-  linked: number
-  configuration: number
-  missing: number
+  passed: number
+  failed: number
+  incomplete: number
   selected: string
   onSelect: (key: string) => void
 }) {
   const segments = [
     {
-      key: 'linked',
-      label: 'CI result linked',
-      value: linked,
-      color: 'var(--chart-1)',
-      fill: 'bg-chart-1',
+      key: 'passed',
+      label: 'Passed',
+      value: passed,
+      color: 'var(--success)',
+      fill: 'bg-success',
     },
     {
-      key: 'configuration',
-      label: 'Configuration only',
-      value: configuration,
-      color: 'var(--chart-2)',
-      fill: 'bg-chart-2',
+      key: 'failed',
+      label: 'Failed',
+      value: failed,
+      color: 'var(--danger)',
+      fill: 'bg-danger',
     },
     {
-      key: 'missing',
-      label: 'No linked inputs',
-      value: missing,
-      color: 'var(--neutral-mark)',
-      fill: 'bg-neutral-mark',
+      key: 'incomplete',
+      label: 'Not evaluated',
+      value: incomplete,
+      color: 'var(--warning)',
+      fill: 'bg-warning',
     },
   ]
   const chartData = segments.filter((segment) => segment.value > 0)
   return (
     <div className='rounded-lg border bg-muted/10 p-4'>
-      <p className='text-sm font-semibold'>Assessment inputs</p>
+      <p className='text-sm font-semibold'>All check results</p>
       <div className='mt-4 flex flex-wrap items-center gap-5'>
         <div
           className='relative h-44 w-full max-w-44 shrink-0'
           role='img'
-          aria-label={`Inputs for ${total} controls: ${linked} with CI results, ${configuration} configuration only, ${missing} without linked inputs`}
+          aria-label={`Results for ${total} checks: ${passed} passed, ${failed} failed, ${incomplete} not evaluated`}
         >
           <ResponsiveContainer width='100%' height='100%'>
             <PieChart className='chart-motion' accessibilityLayer>
@@ -86,7 +86,7 @@ export function AssessmentCoverageChart({
               <Tooltip
                 {...chartTooltipAnimation}
                 formatter={(value, name) => [
-                  `${value} controls · ${total ? Math.round((Number(value) / total) * 100) : 0}%`,
+                  `${value} checks · ${total ? Math.round((Number(value) / total) * 100) : 0}%`,
                   name,
                 ]}
                 contentStyle={{
@@ -102,9 +102,7 @@ export function AssessmentCoverageChart({
           </ResponsiveContainer>
           <div className='pointer-events-none absolute inset-0 flex flex-col items-center justify-center'>
             <span className='text-3xl font-semibold tabular-nums'>{total}</span>
-            <span className='mt-0.5 text-xs text-muted-foreground'>
-              controls
-            </span>
+            <span className='mt-0.5 text-xs text-muted-foreground'>checks</span>
           </div>
         </div>
         <div className='min-w-40 flex-1 space-y-1'>
@@ -133,7 +131,8 @@ export function AssessmentCoverageChart({
         </div>
       </div>
       <p className='mt-3 text-xs text-muted-foreground'>
-        Input availability does not establish verified execution.
+        Includes required and optional checks. Select a result to view its
+        checks.
       </p>
     </div>
   )

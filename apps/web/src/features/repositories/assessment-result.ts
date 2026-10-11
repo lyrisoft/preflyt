@@ -1,4 +1,5 @@
 import type { GatePreview } from './engineering-queries'
+import type { EvidenceValidation } from './evidence-validation-panel'
 import type { Status } from './repository-vocabulary'
 
 export const reviewStatuses: Record<GatePreview['status'], Status> = {
@@ -97,4 +98,14 @@ export function checkNextStep(rule?: GatePreview['rules'][number]): {
       destination: 'standards',
     }
   return { text: 'Load the merge review result before relying on this check.' }
+}
+
+export function isExecutionVerified(validation?: EvidenceValidation | null) {
+  return !!(
+    validation?.status === 'VERIFIED' &&
+    validation.trustedExecuted &&
+    validation.sourceApproved &&
+    validation.observationIntegrity === true &&
+    validation.reasons.length === 0
+  )
 }

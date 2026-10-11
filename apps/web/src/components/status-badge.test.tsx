@@ -50,6 +50,7 @@ it('uses green for resolved triage and blue for ongoing review', async () => {
 
 it('preserves evidence colors after wording changes', () => {
   expect(statusTones['source not verified']).toBe('warning')
+  expect(statusTones['execution verified']).toBe('success')
   expect(statusTones['newer result available']).toBe('warning')
   expect(statusTones['result expired']).toBe('error')
   expect(statusTones['multiple matching results']).toBe('error')
