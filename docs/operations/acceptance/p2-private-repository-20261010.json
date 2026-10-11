@@ -1,0 +1,43 @@
+{
+  "scope": "Real private GitHub workflow/check/merge/ruleset; isolated service harness with disposable signer; not production KMS or live webhook qualification",
+  "rulesetId": "24837900",
+  "activation": "ACTIVE before cases",
+  "rollback": "ROLLED_BACK after cases",
+  "drift": "DETECTED on owned disabled ruleset after rollback",
+  "driftRollback": "REFUSED",
+  "restoration": "ROLLED_BACK",
+  "prNumber": 4,
+  "cases": [
+    {
+      "mode": "fail",
+      "runId": 38047372170,
+      "sourceSha": "3233a986159ad88ff63ded9be7cf143ff8242394",
+      "checkRunId": "114199534415",
+      "merge": "BLOCKED",
+      "reportSha256": "258bdd567839d82f7caa9cf5cfa9a82750fda75d625ffc5a7f082e27b16ed82d",
+      "conclusionAtReadback": "action_required",
+      "conclusionAtMerge": "failure"
+    },
+    {
+      "mode": "incomplete",
+      "runId": 38047428581,
+      "sourceSha": "617bae020726c0a48808c9586425e7b2d8f36156",
+      "checkRunId": "114199699938",
+      "merge": "BLOCKED",
+      "reportSha256": "3dc69a1d9742a645ea6c2356fd19e621cf3e958cb83f6592832b2cccc09ff086",
+      "conclusionAtReadback": "action_required",
+      "conclusionAtMerge": "action_required"
+    },
+    {
+      "mode": "pass",
+      "runId": 38047487320,
+      "sourceSha": "e1f1e3f6db4270583b0ea249c62373fc3c56bcf9",
+      "checkRunId": "114199867066",
+      "merge": "ALLOWED",
+      "reportSha256": "69d12eb3a171b14202b406f4792cb156b43b24159b91699b04b8f074414edf48",
+      "conclusionAtReadback": "success",
+      "conclusionAtMerge": "success"
+    }
+  ],
+  "readbackNote": "Earlier-head checks may be marked action_required after a newer head; conclusions at merge were captured during each actual merge attempt."
+}

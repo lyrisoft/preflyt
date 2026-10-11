@@ -870,3 +870,13 @@ it("rejects ruleset approval and deployment through proof-linked sign-ins", asyn
   await expect(deployments.approve(reviewer, "51", next.id, next.previewHash)).rejects.toThrow("Another authorized");
   expect(connection.create).not.toHaveBeenCalled();
 });
+
+it("refreshes an allowed exception before its expiration cutoff", async () => {
+  const plan = await checks.plan();
+  const expiry = Date.now() + 90_000;
+  checks.plan.mockResolvedValue({ ...plan, exceptionExpiry: [new Date(expiry).toISOString()] });
+  await automation.process(task.id);
+  const published = await row();
+  expect(published.state).toBe("PUBLISHED");
+  expect(published.nextAttemptAt.getTime()).toBe(expiry - 60_000);
+});

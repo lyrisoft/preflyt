@@ -1,6 +1,8 @@
 import { effectiveAiRoute } from "../intelligence/effective-ai-route.js";
 import { currentStandards } from "../standards/policy-standards.js";
 import { configurationValue } from "../configuration/runtime-configuration.js";
+import { Optional } from '@nestjs/common'
+import { PolicyExceptionService } from './policy-exception.service.js'
 import { recordReadinessNotification } from "../notifications/notification-event.js";
 import { randomUUID } from "node:crypto";
 import {
@@ -44,6 +46,7 @@ export class ReadinessAutomationService {
     @Inject(AssessmentService) private readonly assessments: AssessmentService,
     @Inject(CheckPublicationService)
     private readonly checks: CheckPublicationService,
+    @Optional() @Inject(PolicyExceptionService) private readonly exceptions?: PolicyExceptionService,
   ) {}
   async list(session: AuthenticatedSession, githubId: string, page = 1) {
     if (!Number.isInteger(page) || page < 1 || page > 1000)
@@ -197,6 +200,7 @@ export class ReadinessAutomationService {
   }
   /** Database jobs survive restarts. Discovery and processing are bounded and independently retryable. */
   async reconcile() {
+    await this.exceptions?.expire();
     const configs = await this.prisma.readinessAutomation.findMany({
       where: {
         enabled: true,
@@ -460,7 +464,7 @@ export class ReadinessAutomationService {
             verifiedAt: new Date(),
             attempts: 0,
             message: null,
-            nextAttemptAt: new Date(Date.now() + 60_000),
+            nextAttemptAt: new Date(Math.min(Date.now() + 60_000, ...(plan.exceptionExpiry ?? []).map(value => Date.parse(value) - 60_000))),
           },
           tx,
         );

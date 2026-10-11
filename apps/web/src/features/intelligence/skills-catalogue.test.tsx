@@ -111,7 +111,10 @@ it('requires explicit review before approving the pinned version', async () => {
 it('creates a new version instead of editing an approved definition', async () => {
   const view = await render(<SkillsCatalogue />)
   await view.getByRole('button', { name: 'Review', exact: true }).click()
-  await view.getByRole('button', { name: 'Create new version' }).click()
+  // Activate by keyboard while the drawer finishes opening; its moving position
+  // must not determine whether this editor handoff is exercised.
+  view.getByRole('button', { name: 'Create new version' }).element().focus()
+  await userEvent.keyboard('{Enter}')
   await view
     .getByRole('textbox', { name: 'Instructions', exact: true })
     .fill('Changed instructions')

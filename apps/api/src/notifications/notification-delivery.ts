@@ -69,7 +69,7 @@ export async function deliverNotification(db: PrismaService, eventId: string) {
           (ai
             ? ["OWNER", "ADMIN"].includes(m.role)
             : policy
-            ? ["OWNER", "ADMIN", "POLICY_MANAGER"].includes(m.role)
+            ? ["OWNER", "ADMIN", "POLICY_MANAGER"].includes(m.role) || (event.type.startsWith("POLICY_EXCEPTION_") && m.identityId === event.actorId)
             : ["OWNER", "ADMIN", "ENGINEERING_LEAD"].includes(m.role) ||
               (['CRITICAL_FINDINGS_REPORTED', 'NATIVE_EXECUTION_FAILED'].includes(event.type) && m.role === 'SECURITY_ENGINEER') ||
               authors.has(m.identityId)),

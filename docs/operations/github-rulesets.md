@@ -114,7 +114,11 @@ Enabled reconciliation deletes evaluations whose provider timestamp is older tha
 
 **Coverage is collected evaluations only.** Each sweep queries GitHub's month window; it cannot recover older history that was never collected. Provider pagination is a changing list, not an atomic historical snapshot. Sweeps overlap and deduplicate, but a completed sweep is not proof of complete period coverage. A full 1,000th page stops the sweep with a collection error instead of claiming a completed sweep. The page limit, access failures, missed runs and upstream availability can leave gaps. The UI shows these observations without claiming all PRs or all period totals.
 
-Organization-wide comparisons, longer trend charts and exact links to Preflyt assessments remain pending. No browser or live GitHub acceptance is claimed by the local regression tests. See [GitHub Rule Suites API](https://docs.github.com/en/rest/repos/rule-suites).
+Saved-history Insights now charts daily matched rule occurrences across the selected period and compares them with the preceding equal-duration period. Active pass/fail, evaluation-mode failures and attributable bypasses remain separate. Both periods use the same branch, actor and result filters; suite-wide outcomes never become ruleset outcomes. Reads verify at most the newest 1,000 matching saved suites across both periods. The view explicitly reports truncation and when retention covers only part of the previous period. Missing days and empty history are unknown collected coverage, never a 100% pass rate. These trends cover collected history for this repository, not every GitHub evaluation.
+
+Evaluation rows link up to five latest verified saved assessments only for the exact repository and full commit SHA. These are commit associations, not proof that the assessment produced the GitHub rule outcome. Assessment permission is checked before and after fetching links; tampered assessment contents fail closed. The UI keeps missing assessments explicit.
+
+Organization-wide comparisons remain pending. No browser or live GitHub acceptance is claimed by the local regression tests. See [GitHub Rule Suites API](https://docs.github.com/en/rest/repos/rule-suites).
 
 
 ## Scheduled managed-ruleset drift checks

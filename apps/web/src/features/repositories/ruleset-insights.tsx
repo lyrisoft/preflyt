@@ -1,5 +1,6 @@
 import { useId, useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { Link } from '@tanstack/react-router'
 import { ListFilter, ChartNoAxesCombined } from 'lucide-react'
 import {
   Area,
@@ -50,6 +51,8 @@ type Suite = {
   sourceSha: string
   pushedAt: string
   suiteResult: string
+  assessments?: { id: string; createdAt: string }[]
+  moreAssessments?: boolean
   rules: {
     type: string
     result: string
@@ -69,6 +72,31 @@ type Insights = {
   }
   scannedSuites: number
   repositoryName: string
+  trend?: {
+    truncated: boolean
+    previousWindowLimitedByRetention: boolean
+    scannedSuites: number
+    limit: number
+    current: {
+      activePass: number
+      activeFail: number
+      evaluateFail: number
+      attributedBypass: number
+    }
+    previous: {
+      activePass: number
+      activeFail: number
+      evaluateFail: number
+      attributedBypass: number
+    }
+    days: {
+      day: string
+      activePass: number
+      activeFail: number
+      evaluateFail: number
+      attributedBypass: number
+    }[]
+  }
   summary: {
     ruleEvaluations: number
     activePass: number
@@ -172,7 +200,15 @@ export function RulesetInsights({
   })
   const data = query.isError ? undefined : query.data
   const hourly = period === 'hour' || period === 'day'
-  const trend = evaluationTrend(data?.suites ?? [], hourly)
+  const trend = data?.trend
+    ? data.trend.days.map((day) => ({
+        time: day.day,
+        passed: day.activePass,
+        failed: day.activeFail,
+        evaluateFailed: day.evaluateFail,
+        bypassed: day.attributedBypass,
+      }))
+    : evaluationTrend(data?.suites ?? [], hourly)
   return (
     <div className='space-y-5'>
       <Dialog open={filterOpen} onOpenChange={setFilterOpen}>
@@ -307,9 +343,12 @@ export function RulesetInsights({
             <div className='flex min-w-0 items-center gap-3'>
               <SurfaceIcon icon={ChartNoAxesCombined} tone='blue' />
               <div>
-                <CardTitle>Ruleset insights</CardTitle>
+                <CardTitle>
+                  {data?.trend ? 'Saved rule history' : 'Ruleset insights'}
+                </CardTitle>
                 <p className='mt-1 text-xs text-muted-foreground'>
-                  {periodLabels[period]} · UTC · Page {page}
+                  {periodLabels[period]} · UTC ·{' '}
+                  {data?.trend ? 'Selected period' : `Page ${page}`}
                 </p>
               </div>
             </div>
@@ -345,11 +384,40 @@ export function RulesetInsights({
             )}
             {data && (
               <>
+                {data.trend && (
+                  <div className='space-y-2 text-xs text-muted-foreground'>
+                    <p>Selected period compared with the previous period.</p>
+                    {(data.trend.truncated ||
+                      data.trend.previousWindowLimitedByRetention) && (
+                      <p role='status'>
+                        {data.trend.truncated &&
+                          `Showing the newest ${data.trend.limit} saved suites. `}
+                        {data.trend.previousWindowLimitedByRetention &&
+                          'Retention covers only part of the previous period.'}
+                      </p>
+                    )}
+                    <div className='grid grid-cols-2 gap-2 sm:grid-cols-4'>
+                      {(
+                        [
+                          ['activePass', 'Active passed'],
+                          ['activeFail', 'Active failed'],
+                          ['evaluateFail', 'Evaluate failures'],
+                          ['attributedBypass', 'Rule bypasses'],
+                        ] as const
+                      ).map(([key, title]) => (
+                        <p key={key}>
+                          {title}: {data.trend!.current[key]} · Previous period{' '}
+                          {data.trend!.previous[key]}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 {trend.length ? (
                   <div
                     className='h-64 sm:h-72'
                     role='img'
-                    aria-label={`GitHub rule evaluations on page ${page}: ${data.summary.activePass} active passed, ${data.summary.activeFail} active failed, ${data.summary.evaluateFail} evaluate failures, ${data.summary.attributedBypass} rule bypasses.`}
+                    aria-label={`GitHub rule evaluations ${data.trend ? 'in selected period' : `on page ${page}`}: ${data.trend?.current.activePass ?? data.summary.activePass} active passed, ${data.trend?.current.activeFail ?? data.summary.activeFail} active failed, ${data.trend?.current.evaluateFail ?? data.summary.evaluateFail} evaluate failures, ${data.trend?.current.attributedBypass ?? data.summary.attributedBypass} rule bypasses.`}
                   >
                     <ResponsiveContainer width='100%' height='100%'>
                       <AreaChart
@@ -483,7 +551,9 @@ export function RulesetInsights({
                   </div>
                 ) : (
                   <p className='flex h-48 items-center justify-center rounded-lg border border-dashed px-4 text-center text-sm text-muted-foreground'>
-                    No evaluations match these filters.
+                    {data.trend
+                      ? 'No saved evaluations match this period.'
+                      : 'No evaluations match these filters.'}
                   </p>
                 )}
                 <div className='flex flex-wrap justify-center gap-x-5 gap-y-2 text-xs text-muted-foreground'>
@@ -504,22 +574,30 @@ export function RulesetInsights({
                   {[
                     {
                       name: 'Active passed',
-                      count: data.summary.activePass,
+                      count:
+                        data.trend?.current.activePass ??
+                        data.summary.activePass,
                       tone: 'success' as const,
                     },
                     {
                       name: 'Active failed',
-                      count: data.summary.activeFail,
+                      count:
+                        data.trend?.current.activeFail ??
+                        data.summary.activeFail,
                       tone: 'error' as const,
                     },
                     {
                       name: 'Evaluate failures',
-                      count: data.summary.evaluateFail,
+                      count:
+                        data.trend?.current.evaluateFail ??
+                        data.summary.evaluateFail,
                       tone: 'warning' as const,
                     },
                     {
                       name: 'Rule bypasses',
-                      count: data.summary.attributedBypass,
+                      count:
+                        data.trend?.current.attributedBypass ??
+                        data.summary.attributedBypass,
                       tone: 'info' as const,
                     },
                   ].map((metric) => (
@@ -648,6 +726,39 @@ export function RulesetInsights({
                       <code className='block text-xs text-muted-foreground'>
                         Suite {suite.id}
                       </code>
+                      {suite.assessments?.map((assessment) => (
+                        <Button
+                          key={assessment.id}
+                          variant='outline'
+                          size='sm'
+                          className='mt-2'
+                          asChild
+                        >
+                          <Link
+                            to='/repositories/$repositoryId'
+                            params={{ repositoryId }}
+                            search={{
+                              tab: 'assessments',
+                              assessment: assessment.id,
+                            }}
+                          >
+                            Assessment ·{' '}
+                            {new Date(
+                              assessment.createdAt
+                            ).toLocaleDateString()}
+                          </Link>
+                        </Button>
+                      ))}
+                      {suite.assessments && !suite.assessments.length && (
+                        <p className='mt-2 text-xs text-muted-foreground'>
+                          No saved assessment for this commit.
+                        </p>
+                      )}
+                      {suite.moreAssessments && (
+                        <p className='mt-2 text-xs text-muted-foreground'>
+                          Showing the five latest assessments for this commit.
+                        </p>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}

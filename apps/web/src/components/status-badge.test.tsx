@@ -130,3 +130,12 @@ it('preserves managed ruleset deployment status colors', () => {
   expect(statusTones['rolling back']).toBe('info')
   expect(statusTones['rolled back']).toBe('neutral')
 })
+
+it('uses semantic colors for the policy exception lifecycle', () => {
+  expect(statusTones['pending review']).toBe('warning')
+  expect(statusTones.approved).toBe('success')
+  expect(statusTones.rejected).toBe('error')
+  expect(statusTones.revoked).toBe('neutral')
+  expect(statusTones.expired).toBe('warning')
+  expect(statusTones['allowed with exception']).toBe('warning')
+})

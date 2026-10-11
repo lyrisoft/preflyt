@@ -8,6 +8,7 @@ import {
   RulesetHistoryService,
   snapshotDetail,
 } from "../src/github/ruleset-history.service.js";
+import { digest } from "../src/assessments/assessment-digest.js";
 import { GitHubRulesetService } from "../src/github/github-ruleset.service.js";
 const name = "preflyt_history_test_" + randomUUID().replaceAll("-", "");
 let admin: Client,
@@ -299,4 +300,45 @@ it("resolves the public GitHub repository ID to its internal snapshot scope", as
     source: "retained",
   });
   expect(response.summary.activeFail).toBe(1);
+});
+
+it('compares retained periods without mixing rulesets or suite-wide outcomes', async () => {
+  const now = Date.now();
+  const values = [
+    { ...suite(101), pushed_at: new Date(now - 86400000).toISOString() },
+    { ...suite(102), pushed_at: new Date(now - 8 * 86400000).toISOString(), rule_evaluations: [{ ...suite().rule_evaluations[0], result: 'pass' }] },
+    { ...suite(103), pushed_at: new Date(now - 86400000).toISOString(), rule_evaluations: [{ ...suite().rule_evaluations[0], rule_source: { type: 'ruleset', id: 8 } }] },
+    { ...suite(104), pushed_at: new Date(now - 86400000).toISOString(), rule_evaluations: [{ ...suite().rule_evaluations[0], enforcement: 'evaluate' }] },
+  ];
+  await db.gitHubRuleSuiteSnapshot.createMany({ data: values.map(value => ({ ...snapshotDetail(value, '51'), repositoryId: repo.id, fetchedAt: new Date() })) });
+  const result = await read();
+  expect(result.trend).toMatchObject({ truncated: false, previousWindowLimitedByRetention: false, current: { activeFail: 1, evaluateFail: 1, activePass: 0 }, previous: { activePass: 1, activeFail: 0 } });
+  expect(result.trend.days).toHaveLength(1);
+  expect(result.trend.days[0]).toMatchObject({ activeFail: 1, evaluateFail: 1 });
+  expect((await history.read(repo.id, 51n, 7, 'fixture/repo', { page: 1, period: 'quarter' })).trend.previousWindowLimitedByRetention).toBe(true);
+});
+it('labels capped trends and includes more than the visible page', async () => {
+  const values = Array.from({ length: 1001 }, (_, index) => suite(index + 1));
+  await db.gitHubRuleSuiteSnapshot.createMany({ data: values.map(value => ({ ...snapshotDetail(value, '51'), repositoryId: repo.id, fetchedAt: new Date() })) });
+  const result = await read();
+  expect(result.summary.activeFail).toBe(20);
+  expect(result.trend).toMatchObject({ truncated: true, scannedSuites: 1000, current: { activeFail: 1000 } });
+});
+it('verifies trend evidence beyond the current page', async () => {
+  const values = Array.from({ length: 21 }, (_, index) => ({ ...suite(index + 1), pushed_at: new Date(Date.now() - index * 1000).toISOString() }));
+  await db.gitHubRuleSuiteSnapshot.createMany({ data: values.map(value => ({ ...snapshotDetail(value, '51'), repositoryId: repo.id, fetchedAt: new Date() })) });
+  await db.gitHubRuleSuiteSnapshot.update({ where: { repositoryId_suiteId: { repositoryId: repo.id, suiteId: 21n } }, data: { actor: 'tampered' } });
+  await expect(read()).rejects.toThrow('identity changed');
+});
+it('links only verified assessments for the exact repository and commit', async () => {
+  const value = { request: {}, plan: {}, report: {} };
+  for (let i = 0; i < 6; i++) await db.commitAssessment.create({ data: { ...value, repositoryId: repo.id, sourceSha: 'a'.repeat(40), selectionId: 'fixture', requestKey: randomUUID(), inputHash: 'fixture', assessmentHash: digest(value) } });
+  await db.commitAssessment.create({ data: { ...value, repositoryId: repo.id, sourceSha: 'b'.repeat(40), selectionId: 'fixture', requestKey: randomUUID(), inputHash: 'fixture', assessmentHash: digest(value) } });
+  await history.sync(repo.id);
+  const linked = await history.linkAssessments(repo.id, (await read()).suites);
+  expect(linked[0].assessments).toHaveLength(5);
+  expect(linked[0].moreAssessments).toBe(true);
+  expect(await history.linkAssessments('another-repository', (await read()).suites)).toMatchObject([{ assessments: [] }]);
+  await db.commitAssessment.updateMany({ data: { assessmentHash: 'tampered' } });
+  await expect(history.linkAssessments(repo.id, (await read()).suites)).rejects.toThrow('assessment could not be verified');
 });

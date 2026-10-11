@@ -1,3 +1,5 @@
+import { PolicyExceptionController } from './policy-exception.controller.js';
+import { PolicyExceptionService } from './policy-exception.service.js';
 import { PipelineGateController } from "./pipeline-gate.controller.js";
 import { PipelineWorkflowAiService } from "./pipeline-workflow-ai.service.js";
 import { AiConfigurationService } from "../intelligence/ai-configuration.service.js";
@@ -34,6 +36,7 @@ import { AssessmentService } from "./assessment.service.js";
     PipelinePolicyController,
     PipelineGateController,
     PipelineSetupController,
+    PolicyExceptionController,
     FindingsController,
     NativeRequestController,
     NativeStatusController,
@@ -48,6 +51,7 @@ import { AssessmentService } from "./assessment.service.js";
   providers: [
     PipelineWorkflowAiService,
     AiConfigurationService,
+    PolicyExceptionService,
     FindingsService,
     NativeRequestService,
     NativePlanService,

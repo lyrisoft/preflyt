@@ -58,13 +58,13 @@ export function NotificationItem({
               </span>
             )}
           </Link>
-        ) : item.policyId ? (
+        ) : item.policyId || item.type.startsWith('POLICY_EXCEPTION_') ? (
           <Link
             to='/policies'
-            search={{ repository: item.repositoryId, policy: item.policyId }}
+            search={{ repository: item.repositoryId, policy: item.policyId ?? undefined }}
             className='font-medium hover:underline'
           >
-            {item.title ?? 'Policy published'}
+            {item.title ?? titles[item.type] ?? 'Policy update'}
             {item.actionLabel && (
               <span className='mt-1 block text-xs font-normal text-primary'>
                 {item.actionLabel} →
