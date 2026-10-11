@@ -1,0 +1,29 @@
+# Preflyt
+
+> Engineering confidence before production. Preflyt is a self-hosted Shift Left engineering platform by Lyrisoft Technologies that helps teams find security, quality, reliability and infrastructure risks earlier, using explicit engineering standards and traceable evidence at exact commits.
+
+Preflyt coordinates existing scanners and CI rather than replacing them. It is not a coding agent, an IDE or a CI platform. Its main output is an evidence-backed account of which required engineering checks passed, failed, were not applicable or lacked evidence at a specific repository revision. AI may explain findings but never decides a gate result.
+
+## Available today
+
+- GitHub App installation with explicit repository selection
+- Commit-pinned repository profiles: languages, frameworks, CI, tests, lockfiles, containers, infrastructure as code and scanner configuration, each with file evidence
+- Engineering Standards Library: five versioned packs (Baseline Engineering, Application Security, Backend Services, Frontend Applications, Infrastructure as Code) with profile-based recommendations, adopted in observe mode
+- Exact-commit assessment snapshots, created manually or automatically for pull request head commits
+- Signed GitHub pull request and CI webhook ingestion with revision-bound check and workflow results
+- Automatic bounded JUnit and SARIF submissions authenticated with GitHub OIDC and verified against the actual workflow, run attempt, commit and completed jobs; optional additional report signatures
+- Observe by default; optional readiness check publication and ruleset activation using the primary GitHub App with organization administration permission; a separate governance App is optional
+- GitHub or OIDC sign-in, organizations, teams and role-based access control
+- Self-hosted deployment with Docker Compose or a single-instance Kubernetes bundle
+
+- Public Preflyt Action v1.1.0: github.com/marketplace/actions/preflyt-policy-check; source github.com/lyrisoft/preflyt-action. Check submission and the terminal final gate share one PR workflow.
+- Paginated scoped Audit log and advisory PR AI reviews with explicit code-sharing consent
+
+## Onboarding
+
+Deploy with private GHCR package access, configure one GitHub App as Super Admin, sign in as a verified GitHub organization owner, select repositories, create standards and publish a target-branch policy, add the generated workflow, and verify a same-repository non-draft PR. Optional AI and merge protection follow. Native execution and external report signers are not prerequisites. See /preflyt/getting-started/ and /preflyt/user-guide/native-execution.
+
+## Not yet available
+
+- Native execution production acceptance: fixed adapters are implemented and fixture-tested; complete analyzer coverage, independent effective isolation review and production runtime acceptance remain outstanding
+- Helm and Operator packaging for Kubernetes
