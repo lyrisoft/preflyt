@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { parse } from "yaml";
+import { policyAction } from "../src/assessments/pipeline-action.js";
 import { publicationGateWorkflow } from "../src/assessments/pipeline-gate-workflow.js";
 import {
   PipelineGateController,
@@ -55,11 +56,17 @@ describe("final publication gate", () => {
       types: ["completed"],
     });
     expect(yaml.jobs.publication["timeout-minutes"]).toBe(12);
-    expect(yaml.jobs.publication.steps[0].with).toEqual({
-      ref: "${{ github.sha }}",
-      "persist-credentials": false,
+    expect(yaml.jobs.publication.steps).toHaveLength(1);
+    expect(yaml.jobs.publication.steps[0]).toMatchObject({
+      uses: policyAction,
+      with: {
+        mode: "gate",
+        "api-url": "https://preflyt.example/api",
+        "source-run": "${{ github.event.workflow_run.id }}",
+        "source-attempt": "${{ github.event.workflow_run.run_attempt }}",
+      },
     });
-    expect(yaml.jobs.publication.steps[1].run).toContain("transport.py gate");
+    expect(yaml.jobs.publication.steps[0]).not.toHaveProperty("run");
     expect(yaml.permissions).toEqual({ contents: "read", "id-token": "write" });
     expect(yaml.jobs.publication.if).toContain(
       "head_repository.full_name == github.repository",

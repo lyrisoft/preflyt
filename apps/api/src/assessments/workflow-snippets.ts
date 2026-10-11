@@ -1,4 +1,5 @@
 import { stringify } from "yaml";
+import { policyAction } from "./pipeline-action.js";
 import { checkReportFormat } from "./check-report-adapters.js";
 import { configurationValue } from "../configuration/runtime-configuration.js";
 
@@ -49,8 +50,7 @@ export function checkExecution(rule: SnippetRule) {
       : recipes.has(rule.id)
         ? {
             argv: [
-              "python3",
-              ".github/actions/preflyt-policy/recipes.py",
+              "preflyt-recipe",
               rule.id,
               report,
             ],
@@ -101,7 +101,7 @@ export function workflowSnippet(
   const step = {
     name: "Preflyt policy",
     if: "${{ always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}",
-    uses: "./.github/actions/preflyt-policy",
+    uses: policyAction,
     with: {
       "api-url": apiUrl ?? "<PUBLIC_PREFLYT_API_URL>",
       checks: JSON.stringify(checks, null, 2),
@@ -111,7 +111,7 @@ export function workflowSnippet(
     "# Paste into your existing job after checkout and dependency installation.\n" +
     "# Job permissions: contents: read and id-token: write.\n" +
     "# Checkout ref: ${{ github.event.pull_request.head.sha || github.sha }}\n" +
-    "# Checkout persist-credentials: false. Install the Preflyt Action files once.\n" +
+    "# Checkout persist-credentials: false. Uses the published Preflyt Action.\n" +
     stringify([step], { lineWidth: 0 });
   return {
     snippet,

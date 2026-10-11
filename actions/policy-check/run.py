@@ -4,6 +4,7 @@ import json
 import os
 import signal
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 import xml.etree.ElementTree as ET
@@ -65,11 +66,26 @@ def report_result(fmt, content):
     return 'passed'
 
 
+def recipe_command(argv):
+    if isinstance(argv, list) and argv and argv[0] == 'preflyt-recipe':
+        if len(argv) != 3 or argv[1] not in FORMATS:
+            raise ValueError('Invalid Preflyt recipe')
+        return [sys.executable, str(Path(__file__).resolve().with_name('recipes.py')), *argv[1:]]
+    return argv
+
+
+def is_recipe(argv):
+    return isinstance(argv, list) and (
+        argv[:1] == ['preflyt-recipe'] or
+        argv[:2] == ['python3', '.github/actions/preflyt-policy/recipes.py']
+    )
+
+
 def command_run(argv):
     if not isinstance(argv, list) or not argv or len(argv) > 65 or any(not isinstance(a, str) or '\0' in a or len(a) > 4096 for a in argv):
         raise ValueError('Use an executable and arguments array, not a shell string')
     env = {k: v for k, v in os.environ.items() if not k.startswith(('ACTIONS_ID_TOKEN_', 'PREFLYT_')) and k not in ('GITHUB_TOKEN', 'GH_TOKEN')}
-    process = subprocess.Popen(argv, cwd=os.environ['GITHUB_WORKSPACE'], env=env, start_new_session=True)
+    process = subprocess.Popen(recipe_command(argv), cwd=os.environ['GITHUB_WORKSPACE'], env=env, start_new_session=True)
     try:
         return process.wait(timeout=285)
     except subprocess.TimeoutExpired:
@@ -130,7 +146,7 @@ def main():
                 if 'argv' in check:
                     path.unlink(missing_ok=True)
                     code = command_run(check['argv'])
-                    if code == 78 and check['argv'][:2] == ['python3', '.github/actions/preflyt-policy/recipes.py']:
+                    if code == 78 and is_recipe(check['argv']):
                         code = None  # Unsupported recipe is not evaluated, never a fabricated pass.
                     if rule['id'] in COMMAND_CONTROLS:
                         path.parent.mkdir(parents=True, exist_ok=True)

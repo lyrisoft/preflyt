@@ -276,7 +276,7 @@ describe("GitHub Actions workflow editing skill", () => {
       ...route,
       allowSource: false,
     });
-    await expect(rewrite()).rejects.toThrow("Enable source sharing");
+    await expect(rewrite()).rejects.toThrow("Allow source sharing");
     expect(runPromptInference).not.toHaveBeenCalled();
     expect(db.$transaction).not.toHaveBeenCalled();
     expect((await service.availability(session, "123")).skill).toEqual(

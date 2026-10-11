@@ -20,4 +20,4 @@ Preflyt coordinates existing scanners and CI rather than replacing them. It is n
 
 - Native scanner execution in production: implemented but disabled by default until an independent runtime isolation review
 - Helm and Operator packaging for Kubernetes
-- A published Preflyt policy GitHub Action: a local Action and workflow snippets exist, but no public release yet
+- Preflyt GitHub Action v1.0.0 is released at github.com/lyrisoft/preflyt-action; Marketplace listing requires GitHub organization agreement acceptance

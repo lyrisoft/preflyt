@@ -1,5 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { parse } from "yaml";
+import { policyAction } from "../src/assessments/pipeline-action.js";
 import {
   checkExecution,
   publicPipelineUrl,
@@ -27,10 +28,9 @@ it("combines a standard into one copyable step and deduplicates its checks", () 
   expect(steps).toHaveLength(1);
   expect(result.checkIds).toEqual(["tests.required", "security.sast"]);
   expect(result.ready).toBe(true);
-  expect(steps[0].uses).toBe("./.github/actions/preflyt-policy");
+  expect(steps[0].uses).toBe(policyAction);
   expect(JSON.parse(steps[0].with.checks)["tests.required"].argv).toEqual([
-    "python3",
-    ".github/actions/preflyt-policy/recipes.py",
+    "preflyt-recipe",
     "tests.required",
     ".preflyt/results/tests.required.xml",
   ]);
@@ -91,8 +91,14 @@ it("keeps workflow metadata out of gate requirements and validates saved standar
     reportPath: "reports/tests.xml",
   };
   expect(ruleRequirementsDigest(custom)).toBe(ruleRequirementsDigest(base));
+  const { digest: _digest, ...template } = catalogue[0]!;
   const pack = {
-    ...catalogue[0]!,
+    ...template,
+    version: "1.0.1",
+    stages: ["repository", "pull_request", "ci"],
+    languages: ["*"],
+    repositoryTypes: ["all"],
+    changelog: ["Organization-managed version."],
     id: "org-standard-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     owner: "Organization",
     rules: [custom],

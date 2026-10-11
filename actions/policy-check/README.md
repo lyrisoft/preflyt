@@ -1,99 +1,147 @@
-# Preflyt PR policy Action
+# Preflyt policy check
 
+Connect your existing GitHub Actions workflow to a published Preflyt PR policy.
+GitHub runs your tests and scanners; Preflyt verifies the completed run, evaluates
+the policy and publishes its result on the PR. Optional AI reviews use the model
+and skills configured in Preflyt and post advisory feedback on the PR.
 
-## GitHub workflow verification — 11 October 2026
+No Preflyt API key, manual report upload or copied Action files are needed.
+Authentication uses GitHub's short-lived OIDC identity.
 
-The normal GitHub Actions integration verifies execution directly against GitHub. Separate report signatures and deployment execution contracts are optional; they are not a setup prerequisite for this path. This supersedes earlier mandatory-signer instructions below.
+## Add to an existing workflow
 
-The Action authenticates with GitHub OIDC and submits the exact report bytes and policy check IDs. After the run completes, Preflyt matches the signed GitHub event with a fresh GitHub API read of the repository, PR head, workflow path/ID, run attempt, successful job and completed steps. A server-only audit receipt binds each report checksum and check ID to that run and published policy. Existing source approval, report parsing/integrity, freshness, coverage, rerun and policy checks still apply. The publisher verifies the current GitHub run again. OIDC alone, uploaded reports and caller-supplied success labels cannot create a passing result.
-
-This trusts the configured repository workflow to run its intended commands. It does not independently certify the tool installation or execution environment. Optional signed-report contracts remain available for deployments requiring that stronger boundary. Tests need executed cases with no failures; security reports need a named tool, no findings and no incomplete coverage. Missing, failed, stale, ambiguous or superseded required evidence cannot pass.
-
-This local increment fetches the current published PR policy using a short-lived GitHub Actions identity token, runs reviewed repository commands, writes a job summary and submits results to Preflyt automatically. No Preflyt login cookie, administrator API key or manual report upload is used.
-
-## Current setup
-
-Set **Settings → Configuration → Public Preflyt API URL** once as a deployment administrator. It must be a public HTTPS API address reachable from GitHub's runner. Connect the repository and publish a policy for the PR target branch.
-
-Open **Standards → View YAML** on a standard card (or an individual check's details) to copy a highlighted workflow snippet. **Policies → CI jobs** also provides one combined snippet for the selected published policy. Download the four Action files once, extract them into the repository, paste the snippet into the existing job after checkout and dependency installation, add the stated permissions and commit. Select the workflow and click Connect workflow; Preflyt validates the committed YAML and creates its check-source connections automatically. Per-check source dropdowns are recovery controls.
-
-The YAML editor and AI rewrite are optional. Create setup PR bundles the reviewed YAML and the Action files and saves the connection together; there is no separate save step. Review and merge the PR in GitHub. PR publication and summary comments are configured in **Settings → PR feedback**, rather than repeated in workflow setup.
-
-Use the Action from a reviewed commit of the Preflyt repository, or copy this directory into `.github/actions/preflyt-policy` in the consuming repository. A private remote Action requires GitHub access; Preflyt has not published a public Action release.
-
-Add the step to the existing CI job after dependencies are installed. Check out the exact PR head rather than GitHub's synthetic merge commit. Use a GitHub-hosted Linux runner with Python 3 and Git. Provide job-level `contents: read` and `id-token: write` permissions. No write permissions are required by the Action.
+Connect the repository in Preflyt, publish a policy for the target branch and copy
+the policy or standard's generated YAML. It includes the appropriate check IDs.
+Keep your existing jobs and dependency/tool installation steps. This Action
+requires a Linux runner with Python 3 and Git; GitHub-hosted Ubuntu provides both.
+The first release supports same-repository, non-draft pull requests.
 
 ```yaml
-# Within an existing job with an exact PR-head checkout and installed dependencies:
+name: CI
+on:
+  pull_request:
+    branches: [main]
 permissions:
   contents: read
-  id-token: write
-steps:
-  # Preserve your existing checkout and dependency installation steps here.
-  - name: Preflyt policy
-    uses: ./.github/actions/preflyt-policy
-    with:
-      api-url: https://YOUR_PREFLYT_API
-      checks: |
-        {"build.required":{"argv":["pnpm","build"],"report":".preflyt/results/build.xml"}}
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      # Keep your existing dependency and tool installation steps here.
+      # Example: an earlier step runs pytest --junitxml=reports/tests.xml
+      - name: Preflyt policy
+        if: ${{ always() && github.event.pull_request.head.repo.full_name == github.repository }}
+        uses: lyrisoft/preflyt-action@v1.0.0
+        with:
+          api-url: ${{ vars.PREFLYT_API_URL }}
+          checks: |
+            {"tests.required":{"report":"reports/tests.xml"}}
 ```
 
-The inline `checks` input maps approved policy check IDs to executable argument arrays and report paths. For build/type checks the Action produces the command result automatically; test and scanner adapters read the tool's normal JUnit/SARIF output. `report` is an internal file produced by the pipeline, not a user upload. `argv` is optional for existing reports produced earlier in the same job. Commands stay in the repository workflow. Optional AI proposals are reviewed before use and cannot remove existing triggers, jobs or steps. The Action also accepts an existing repository JSON file path for backward compatibility.
+Set the repository variable PREFLYT_API_URL to your public HTTPS Preflyt API base
+(including /api when using Preflyt's bundled web proxy). Published policy checks
+and repository PR feedback must be enabled in Preflyt.
+
+Use the exact release commit SHA for immutable version pinning. Preflyt-generated
+snippets pin that commit. The v1.0.0 tag identifies the first release.
+
+## Check configuration
+
+The checks input accepts inline JSON or a repository JSON filename. Each key is
+the exact check ID from the published policy, with a report path relative to the
+workspace. A report from an earlier step must exist in the same job. To run a
+command, add argv as an executable/arguments array:
 
 ```json
 {
-  "build.required": {
-    "argv": ["pnpm", "build"],
-    "report": ".preflyt/results/build.xml"
-  },
   "tests.required": {
-    "argv": ["pnpm", "test:ci"],
-    "report": ".preflyt/results/tests.xml"
+    "argv": ["python3", "-m", "pytest", "--junitxml=reports/tests.xml"],
+    "report": "reports/tests.xml"
   }
 }
 ```
 
-The Action files are `action.yml`, `transport.py`, `run.py` and `recipes.py`. Built-in snippets use small recipes for tools and package scripts already installed/configured by the repository's job. They do not install package managers, test reporters or scanners. Tests support existing Vitest, Jest with jest-junit, Node test runner and pytest; scanners reuse existing Semgrep configuration, Gitleaks, Trivy or ESLint SARIF tooling. Container scans need the job's `CONTAINER_IMAGE`. An unavailable tool or unsupported runner stays incomplete. Use a repository-specific command and result file in the check's standard for other tooling. Execution recipes do not establish trusted verification by themselves.
+Built-in snippets use ["preflyt-recipe", "tests.required", "reports/tests.xml"]
+to resolve a recipe bundled with this Action. Recipes reuse installed test tools,
+scanners and package scripts; they do not install tools or invent passing results.
+Custom commands and report paths can be configured in Preflyt standards.
+Tests use JUnit; supported security checks use SARIF. Build and type-check commands
+produce a command-result JUnit report. Missing/unsupported tools or reports stay
+not evaluated. Required failures and missing results fail the job. Up to 10
+reports are supported per source run.
 
-Adapt commands and reporter settings to the repository. Unknown adapters, absent output, timeouts and missing required checks cannot pass. Custom checks use the existing supported JUnit/SARIF adapters. API errors also fail the Action. Result submission retries bounded transient failures with a fresh identity token and an idempotent server receipt.
+## Final publication gate
 
-## Receipt and trust boundary
+Commit this separate workflow to the repository's default branch. It waits for
+the exact source run's verified assessment and successful GitHub publication.
+It fails on policy failure, incomplete results, publication errors or timeout.
+Change CI to the exact name of your checks workflow.
 
-`POST /pipeline/results` revalidates current repository access, workflow/run attempt, PR head and published policy. It stores a bounded, immutable submission in `PipelineRunSubmission` and returns a pending-verification receipt. Required checks and titles come from the server policy, not the submitted body. A stale commit/policy or changed result for the same run is rejected.
+```yaml
+name: Preflyt publication gate
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  publication:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    if: ${{ github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.head_repository.full_name == github.repository }}
+    steps:
+      - name: Wait for verified Preflyt publication
+        uses: lyrisoft/preflyt-action@v1.0.0
+        with:
+          mode: gate
+          api-url: ${{ vars.PREFLYT_API_URL }}
+          source-run: ${{ github.event.workflow_run.id }}
+          source-attempt: ${{ github.event.workflow_run.run_attempt }}
+```
 
-OIDC proves the workflow identity; it does not prove the checks ran correctly. Submissions do not mark existing assessments or merge review results as passed. The worker waits for the live run to complete and its matching signed GitHub event, imports reports, verifies supplied execution proofs, and records an assessment against the published policy. It retries transient failures and marks superseded PRs/policies stale. If enabled, it creates or updates the App’s one PR summary using verified policy evaluation. Processing receipts link to the assessment and comment. At most 10 reports can be submitted per run, matching the existing artifact quota. Execution checks can pass after completed GitHub workflow/job verification and rule-specific report validation; signatures are optional. Do not replace the existing verified Preflyt gate with this runner job as an authoritative protection until live acceptance is complete. Downstream jobs can depend on this job's execution outcome; no branch rules are modified automatically.
+The gate never checks out or executes PR code. Require the PR-head check
+**Preflyt / Engineering Readiness** in your GitHub ruleset. The gate's own status
+runs at the default-branch commit and does not replace that required PR check.
+Comments and AI suggestions are feedback; GitHub enforces merge permissions.
 
-## Validation status
+## Inputs and output
 
-Regression tests are written but not run at the user's request. No GitHub workflow was triggered. Local additive database migration and Prisma client generation were performed; these are setup operations, not test acceptance.
+| Input | Purpose |
+| --- | --- |
+| api-url | Required public HTTPS Preflyt API base. |
+| mode | check (default) or gate. |
+| checks | Check commands/report paths; defaults to {}. Required policy checks must be supplied in check mode. |
+| source-run | Source workflow run ID in gate mode. |
+| source-attempt | Source workflow attempt in gate mode. |
+| proofs | Optional signed-report bundle map. Separate signatures are not required for normal GitHub verification. |
 
+The result output in check mode is passed, failed or incomplete. It is the runner's
+local outcome; Preflyt's later verified assessment is authoritative for its policy.
+API errors fail the Action. Submission retries are bounded and idempotent.
 
-### Automatic snippet connection (11 October 2026)
-Copy the snippet, commit it and run the workflow. With repository PR checks enabled,
-the Action can fetch its published target-branch policy without preconfigured CI
-sources. Preflyt registers report check IDs against the actual workflow ID only
-after the live completed run, attempt, commit, signed GitHub event, policy and
-current publisher access agree. Registration is idempotent and audited; it is
-source identity, not proof that a check passed. Existing unrelated sources are retained.
-Manual publishing and the copy-flow Connect workflow button were removed from the UI.
-Submission errors fail the Action. Completed-run assessment/publication happens after
-the workflow finishes, so a later publication error cannot retroactively fail that
-finished job; required GitHub check enforcement remains necessary. A synchronous
-publication acknowledgement path is still pending. Tests were added, not run.
+## Verification and security
 
+Preflyt binds results to repository, exact PR commit, workflow, run attempt,
+policy revision and report checksums, with completed-run GitHub verification.
+OIDC proves workflow identity; uploaded success claims alone cannot pass a policy.
+Your configured workflow remains responsible for running the intended tools.
+Commands receive neither the Action's OIDC credentials nor platform API settings.
+Never run untrusted PR code under pull_request_target or in the publication gate.
 
-### Final publication gate (11 October 2026)
-Setup downloads and setup PRs include `.github/workflows/preflyt-gate.yml`, watching
-the selected checks workflow by name. Commit the gate and Action transport files
-to the repository default branch: GitHub runs workflow_run gates only from that branch.
-The gate starts after a same-repository PR workflow completes, checks out only
-trusted default-branch code, and waits up to ten minutes for the exact submitted
-assessment's verified GitHub publication. Failed/incomplete results, stale runs,
-disabled access/configuration, API errors and timeouts fail the gate job.
-Require the PR-attached `Preflyt / Engineering Readiness` check in GitHub branch
-rules along with your existing CI checks. The follow-up workflow job runs at the
-default-branch commit, so its own job name is not a PR-head required check. The original completed run stays unchanged; the final gate
-is a separate failing workflow/check. PR comments are informational and do not
-determine the gate result. No report download or execution of PR code occurs in it.
-The processor now publishes the exact verified assessment before optional comments.
-Tests are written but were not run. The preceding pending-gate note is superseded.
+This repository contains only the integration Action. Its MIT license does not
+license the Preflyt application or backend.
+
+## Development
+
+```sh
+python3 -m unittest discover -p 'test_*.py' -v
+```

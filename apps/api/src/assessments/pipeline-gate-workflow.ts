@@ -1,4 +1,5 @@
 import { stringify } from "yaml";
+import { policyAction } from "./pipeline-action.js";
 import { BadRequestException } from "@nestjs/common";
 export function publicationGateWorkflow(
   workflowName: string,
@@ -21,20 +22,14 @@ export function publicationGateWorkflow(
           if: "${{ github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.head_repository.full_name == github.repository }}",
           steps: [
             {
-              name: "Checkout trusted gate code",
-              uses: "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
-              with: { ref: "${{ github.sha }}", "persist-credentials": false },
-            },
-            {
               name: "Wait for verified Preflyt publication",
-              shell: "bash",
-              env: {
-                PREFLYT_API_URL: apiUrl,
-                PREFLYT_SOURCE_RUN_ID: "${{ github.event.workflow_run.id }}",
-                PREFLYT_SOURCE_RUN_ATTEMPT:
-                  "${{ github.event.workflow_run.run_attempt }}",
+              uses: policyAction,
+              with: {
+                mode: "gate",
+                "api-url": apiUrl,
+                "source-run": "${{ github.event.workflow_run.id }}",
+                "source-attempt": "${{ github.event.workflow_run.run_attempt }}",
               },
-              run: "python3 .github/actions/preflyt-policy/transport.py gate",
             },
           ],
         },

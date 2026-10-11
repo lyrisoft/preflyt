@@ -29,8 +29,6 @@ import {
   IsUUID,
 } from "class-validator";
 import type { Request } from "express";
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
 import { gzipSync } from "node:zlib";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { AuthService } from "../auth/auth.service.js";
@@ -551,7 +549,7 @@ export class PipelineSetupController {
         "The repository branch changed. Reload the workflow before creating a PR.",
       );
     const files = {
-      ...(await this.actionFiles(
+      ...(await this.gateFiles(
         String(readWorkflow(body.workflow).value.name ?? source.name),
       )),
       [source.path]: body.workflow,
@@ -620,7 +618,7 @@ export class PipelineSetupController {
     if (!workflow)
       throw new BadRequestException("Choose a repository workflow");
     const files = {
-      ...(await this.actionFiles(
+      ...(await this.gateFiles(
         String(readWorkflow(body.workflow).value.name ?? workflow.name),
       )),
       [workflow.path]: body.workflow,
@@ -647,38 +645,16 @@ export class PipelineSetupController {
     if (!workflow)
       throw new BadRequestException("Choose the checks workflow first");
     return {
-      archive: setupArchive(await this.actionFiles(workflow.name)),
-      filename: "preflyt-action.tar.gz",
+      archive: setupArchive(await this.gateFiles(workflow.name)),
+      filename: "preflyt-publication-gate.tar.gz",
     };
   }
-  private async actionFiles(workflowName: string) {
-    const files: Record<string, string> = {};
-    for (const name of ["action.yml", "run.py", "transport.py", "recipes.py"]) {
-      let content: string | undefined;
-      for (const root of [
-        new URL("../../../../actions/policy-check/", import.meta.url),
-        resolve(process.cwd(), "actions/policy-check"),
-      ]) {
-        try {
-          content = await readFile(
-            root instanceof URL ? new URL(name, root) : resolve(root, name),
-            "utf8",
-          );
-          break;
-        } catch {
-          /* Try the packaged runtime location. */
-        }
-      }
-      if (!content)
-        throw new NotFoundException(
-          "Action files are unavailable in this deployment",
-        );
-      files[`.github/actions/preflyt-policy/${name}`] = content;
-    }
-    files[".github/workflows/preflyt-gate.yml"] = publicationGateWorkflow(
-      workflowName,
-      publicPipelineUrl(),
-    );
-    return files;
+  private async gateFiles(workflowName: string) {
+    return {
+      ".github/workflows/preflyt-gate.yml": publicationGateWorkflow(
+        workflowName,
+        publicPipelineUrl(),
+      ),
+    };
   }
 }

@@ -5,8 +5,10 @@ import { digest } from "./assessment-digest.js";
 import { checkReportFormat } from "./check-report-adapters.js";
 import { setupConfiguration } from "./pipeline-setup-package.js";
 
+import { policyAction, isPolicyAction } from "./pipeline-action.js";
+
 export type WorkflowRule = SnippetRule & { required: boolean };
-export const policyAction = "./.github/actions/preflyt-policy";
+export { policyAction } from "./pipeline-action.js";
 const object = (value: unknown): value is Record<string, any> =>
   !!value && typeof value === "object" && !Array.isArray(value);
 export function readWorkflow(yaml: string) {
@@ -58,7 +60,7 @@ export function workflowChecks(yaml: string) {
   const { value } = readWorkflow(yaml);
   const steps = Object.values(value.jobs)
     .flatMap((job: any) => job.steps ?? [])
-    .filter((step: any) => step.uses === policyAction);
+    .filter((step: any) => isPolicyAction(step.uses));
   return steps;
 }
 export function inspectWorkflow(
@@ -161,7 +163,7 @@ export function addPolicyChecks(
     throw new BadRequestException("Choose pipeline checks from this policy");
   if (workflowChecks(yaml).length > 1)
     throw new BadRequestException("Keep one Preflyt policy step per workflow");
-  const index = job.steps.findIndex((step: any) => step.uses === policyAction);
+  const index = job.steps.findIndex((step: any) => isPolicyAction(step.uses));
   if (index < 0 && workflowChecks(yaml).length)
     throw new BadRequestException(
       "Add checks to the job that already contains the Preflyt step",
@@ -179,6 +181,14 @@ export function addPolicyChecks(
       throw new BadRequestException(
         "The existing check configuration is invalid",
       );
+  }
+  // Resolve built-in recipes from the installed Action, not repository-local files.
+  for (const execution of Object.values(checks)) {
+    if (object(execution) && Array.isArray(execution.argv) &&
+      execution.argv[0] === "python3" &&
+      execution.argv[1] === ".github/actions/preflyt-policy/recipes.py") {
+      execution.argv = ["preflyt-recipe", ...execution.argv.slice(2)];
+    }
   }
   for (const id of ids)
     if (!(id in checks))
@@ -269,7 +279,7 @@ export function validateSetupWorkflow(yaml: string, rules: WorkflowRule[]) {
   const { value } = readWorkflow(yaml);
   const jobs = Object.values(value.jobs);
   const job = jobs.find((job) =>
-    job.steps?.some((s: any) => s.uses === policyAction),
+    job.steps?.some((s: any) => isPolicyAction(s.uses)),
   )!;
   if (
     !job.steps.some(
@@ -278,7 +288,7 @@ export function validateSetupWorkflow(yaml: string, rules: WorkflowRule[]) {
     )
   )
     throw new BadRequestException(
-      "Add actions/checkout before the local Preflyt Action",
+      "Add actions/checkout before the Preflyt Action",
     );
   const permissions = job.permissions ?? value.permissions;
   if (
@@ -387,7 +397,7 @@ export function validateRewrite(
     };
     let position = 0;
     for (const [index, step] of (job.steps ?? []).entries()) {
-      if (step.uses === policyAction) continue;
+      if (isPolicyAction(step.uses)) continue;
       const found = (changed.steps ?? []).findIndex(
         (s: any, i: number) =>
           i >= position && digest(normalize(step)) === digest(normalize(s)),

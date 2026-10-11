@@ -35,7 +35,7 @@ Use this skill when drafting or modifying a repository workflow for a Preflyt po
 - When tool configuration, commands or report details are missing, retain the original flow and explain the specific unresolved check in the summary. Do not add a command with invented flags, fake success or a placeholder that pretends to work.
 
 ## Add the Preflyt Action
-- Add or update exactly one uses: ./.github/actions/preflyt-policy step after the report-producing steps in the compatible job. Preserve any existing proofs input.
+- Add or update exactly one uses: lyrisoft/preflyt-action@d80243bae90cc85eaaca08a60e8efd15a413d35a step after the report-producing steps in the compatible job. Preserve any existing proofs input.
 - Restrict its condition to always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository. Do not execute untrusted PR code under pull_request_target or a privileged workflow_run context.
 - Set with.api-url to the supplied apiUrl or the existing Preflyt step's value. Never invent an endpoint or credentials. Explain a missing or unreachable public HTTPS endpoint in the summary.
 - Set with.checks to an inline JSON string keyed by policy check ID. Each entry has report: a relative report path and optionally argv: [executable, arguments]. Use a YAML block scalar when useful to preserve JSON and GitHub expressions.

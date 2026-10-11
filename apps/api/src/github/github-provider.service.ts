@@ -911,8 +911,8 @@ export class GitHubProviderService {
   /** Called only after the user reviews YAML and explicitly requests a setup PR. Never writes the base branch. */
   async createPipelineSetupPr(installationId: bigint, repositoryId: bigint, branch: string, baseSha: string, files: Record<string, string>, requestId: string) {
     branch = branch.replace(/^refs\/heads\//, '')
-    if (!/^[a-f0-9]{40}$/.test(baseSha) || !/^[a-f0-9-]{36}$/.test(requestId) || Object.keys(files).length !== 4 ||
-      Object.entries(files).some(([path, content]) => (!/^\.github\/workflows\/[a-zA-Z0-9_-]+\.ya?ml$/.test(path) && !/^\.github\/actions\/preflyt-policy\/(action.yml|run.py|transport.py)$/.test(path)) || Buffer.byteLength(content) > 65536))
+    if (!/^[a-f0-9]{40}$/.test(baseSha) || !/^[a-f0-9-]{36}$/.test(requestId) || Object.keys(files).length !== 2 || !Object.hasOwn(files, '.github/workflows/preflyt-gate.yml') ||
+      Object.entries(files).some(([path, content]) => !/^\.github\/workflows\/[a-zA-Z0-9_-]+\.ya?ml$/.test(path) || Buffer.byteLength(content) > 65536))
       throw new BadRequestException('Invalid reviewed workflow files')
     const write = await this.pipelineWriteAvailability(installationId)
     if (!write.available) throw new ForbiddenException(write.reason!)
@@ -953,7 +953,7 @@ export class GitHubProviderService {
       // No force push; a duplicate concurrent request stops here and can recover on retry.
       await call('/git/refs', 'POST', { ref: `refs/heads/${head}`, sha: commitSha })
     }
-    const pr = existing[0] ?? await call('/pulls', 'POST', { title: 'Connect Preflyt policy checks', head, base: branch, body: 'Adds the reviewed Preflyt workflow changes and local Action files. Review the YAML, tool reports and existing execution-proof configuration before merging. Existing branch protection remains unchanged.' })
+    const pr = existing[0] ?? await call('/pulls', 'POST', { title: 'Connect Preflyt policy checks', head, base: branch, body: 'Adds the reviewed checks workflow and final publication gate using the published Preflyt Action. Review both workflows before merging. Existing tests, scan steps and branch protection are preserved.' })
     const expected = `https://github.com/${reader.metadata.owner.login}/${reader.metadata.name}/pull/`
     if (!Number.isSafeInteger(pr.number) || pr.number < 1 || pr.html_url !== expected + pr.number || pr.head?.sha !== commitSha || pr.base?.ref !== branch)
       throw new ServiceUnavailableException('Setup PR could not be verified; check the repository before retrying')

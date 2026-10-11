@@ -145,6 +145,8 @@ export function PipelineWorkflowSetup({
     connectionSaved: boolean
     connectionError: string | null
   } | null>(null)
+  // Forced-refresh refs do not identify data; the key already scopes repository and policy.
+  // eslint-disable-next-line @tanstack/query/exhaustive-deps
   const query = useQuery({
     queryKey: key,
     retry: false,
@@ -162,6 +164,8 @@ export function PipelineWorkflowSetup({
   const apiUrl = data?.apiUrl ?? ''
   const selected =
     workflowId ?? data?.connectedWorkflowIds[0] ?? data?.workflows[0]?.id ?? ''
+  // Keep forced-refresh state out of the repository/workflow cache key.
+  // eslint-disable-next-line @tanstack/query/exhaustive-deps
   const source = useQuery({
     queryKey: [...key, 'workflow', selected],
     enabled: !!selected && editorOpen,
@@ -283,7 +287,7 @@ export function PipelineWorkflowSetup({
           `${base}/files?policy=${encodeURIComponent(policyId)}&workflow=${encodeURIComponent(selected)}`
         )
       ),
-    meta: { successMessage: 'Preflyt Action and publication gate downloaded' },
+    meta: { successMessage: 'Publication gate downloaded' },
   })
   const busy =
     installFiles.isPending ||
@@ -386,11 +390,11 @@ export function PipelineWorkflowSetup({
         {data.workflowSetup.checkIds.length > 0 && (
           <>
             <p className='max-w-2xl text-xs text-muted-foreground'>
-              Install the Action files in the repository once. Paste the snippet
-              after checkout and dependency installation, add the listed job
-              permissions, then commit it. Install the downloaded publication
-              gate on your repository’s default branch too. It uses your
-              workflow's installed test and scan tools.
+              Paste the snippet after checkout and dependency installation, add
+              the listed job permissions, then commit it. It uses the published
+              Preflyt Action and your installed test and scan tools. Add the
+              publication gate to your repository’s default branch, or include
+              both workflows with Create setup PR.
             </p>
             <div className='flex flex-wrap items-center gap-2'>
               <Button
@@ -400,7 +404,7 @@ export function PipelineWorkflowSetup({
                 onClick={() => installFiles.mutate()}
               >
                 <Download />
-                Download setup files
+                Download publication gate
               </Button>
               <Link
                 to='/organization-settings'
@@ -807,8 +811,9 @@ export function PipelineWorkflowSetup({
                   )}
                   <div className='flex flex-wrap items-center justify-between gap-3 border-t pt-3'>
                     <p className='max-w-lg text-xs text-muted-foreground'>
-                      The setup PR includes this YAML and the Preflyt Action
-                      files. Review and merge it in GitHub.
+                      The setup PR includes this workflow and the publication
+                      gate using the published Action. Review and merge it in
+                      GitHub.
                     </p>
                     {canManage && (
                       <div className='flex flex-wrap gap-2'>
@@ -902,7 +907,7 @@ export function PipelineWorkflowSetup({
                 </span>
                 <div className='flex items-center gap-3'>
                   <StatusBadge tone='neutral'>
-                    {run.state === 'PROCESSED'
+                    {['COMPLETE', 'PROCESSED'].includes(run.state)
                       ? 'Completed'
                       : run.state === 'FAILED'
                         ? 'Failed'

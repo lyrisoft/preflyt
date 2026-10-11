@@ -1,3 +1,4 @@
+import { policyAction, isPolicyAction } from "../src/assessments/pipeline-action.js";
 import { describe, expect, it } from "vitest";
 import {
   addPolicyChecks,
@@ -71,7 +72,7 @@ describe("workflow YAML editor", () => {
     result = add(doc.toString(), ["security.sast"]);
     const steps = readWorkflow(result).value.jobs.test.steps;
     expect(
-      steps.filter((s: any) => s.uses === "./.github/actions/preflyt-policy"),
+      steps.filter((s: any) => s.uses === policyAction),
     ).toHaveLength(1);
     expect(steps[2].with.proofs).toContain("proof.json");
   });
@@ -132,7 +133,7 @@ describe("workflow YAML editor", () => {
     ).toThrow("job behavior");
     expect(() =>
       validateRewrite(
-        response(result.replace("branches: [main]", "branches: [other]")),
+        response((() => { const doc = readWorkflow(result).document; doc.setIn(["on", "pull_request", "branches"], ["other"]); return doc.toString(); })()),
         workflow,
       ),
     ).toThrow("triggers");
@@ -176,4 +177,23 @@ describe("workflow YAML editor", () => {
       );
     }
   });
+});
+
+it("upgrades a local Action and its built-in recipe while preserving custom inputs", () => {
+  const generated = add(workflow, ["tests.required"]);
+  const doc = readWorkflow(generated).document;
+  doc.setIn(["jobs", "test", "steps", 2, "uses"], "./.github/actions/preflyt-policy");
+  doc.setIn(["jobs", "test", "steps", 2, "with", "checks"], JSON.stringify({
+    "tests.required": { report: "reports/tests.xml", argv: ["python3", ".github/actions/preflyt-policy/recipes.py", "tests.required", "reports/tests.xml"] },
+  }));
+  doc.setIn(["jobs", "test", "steps", 2, "with", "proofs"], "{}");
+  const upgraded = readWorkflow(add(doc.toString(), ["security.sast"])).value.jobs.test.steps;
+  expect(upgraded.filter((step: any) => isPolicyAction(step.uses))).toHaveLength(1);
+  expect(upgraded[2].uses).toBe(policyAction);
+  expect(upgraded[2].with.proofs).toBe("{}");
+  expect(JSON.parse(upgraded[2].with.checks)["tests.required"]).toEqual({
+    report: "reports/tests.xml", argv: ["preflyt-recipe", "tests.required", "reports/tests.xml"],
+  });
+  expect(isPolicyAction("other/preflyt-action@v1.0.0")).toBe(false);
+  expect(isPolicyAction("lyrisoft/preflyt-action@main")).toBe(false);
 });
