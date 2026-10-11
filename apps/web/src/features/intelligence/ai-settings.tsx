@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link } from '@tanstack/react-router'
 import {
   BrainCircuit,
-  BookOpen,
   Cable,
   Loader2,
   Pencil,
@@ -46,7 +46,6 @@ import {
   canAdminister,
 } from '../workspace/navigation-session'
 import { isAiSettingsTab, type AiSettingsTab } from './intelligence-search'
-import { SkillsCatalogue } from './skills-catalogue'
 
 type Preset = {
   id: string
@@ -159,11 +158,6 @@ const help = [
       'Connect a model and test the connection. Choose it as the default in Model Router. Choose a skill in Skills, approve and enable it, then add it as an AI Review in a standard. AI reviews are optional suggestions and do not change check results. Repository code is shared only when you enable it.',
   },
   {
-    title: 'Markdown skill files',
-    content:
-      'Write instructions in Markdown and use Preview to review them. Upload SKILL.md to open an editable draft; uploading does not save, approve or enable it. The UTF-8 file must be at most 32 KiB, with name and description in a YAML header and up to 6,000 instruction characters below it. Optional header fields are source, license, stages and repositories. Enter the source and license before saving. Download SKILL.md exports the selected database version. Existing policies keep their approved version and digest; file changes require a new draft and approval. Preview does not run HTML or load linked images.',
-  },
-  {
     title: 'Models',
     content:
       'Organization admins add and approve models directly in Preflyt. Choose a built-in provider or add an OpenAI-compatible endpoint. Model name means the exact API identifier your provider accepts. Hosted providers require HTTPS; select Self-hosted for a local model server. Keys are encrypted and write-only. Testing reads model metadata; it does not send repository code or generate an explanation. Editing a connection requires another test.',
@@ -172,11 +166,6 @@ const help = [
     title: 'Model router',
     content:
       'Choose one default model for AI reviews and workflow rewriting. Stage overrides are optional. Source sharing starts off. Saving a model tests its connection; configuration changes require another test. Connections do not expire after 24 hours. PR feedback is configured in Settings. Switching organizations separates connections and routes.',
-  },
-  {
-    title: 'Review skills',
-    content:
-      'Open Built-in skills for ready-to-edit Markdown reviews linked to engineering checks, or create a custom skill. Review its instructions, source and license, then approve and enable it. Changes require a new version. Add an AI Review in Standards and assign this approved skill version to it. Choose where the review applies; up to three assigned reviews can run in one request. AI output provides suggestions only and never changes check results. Third-party packages and scripts are not automatically imported or executed.',
   },
   {
     title: 'Current availability',
@@ -206,7 +195,7 @@ export function AiSettingsPage({
           <div className='space-y-6'>
             <PageHeader
               title='AI Intelligence'
-              description='Review skills for your standards.'
+              description='Set up optional AI reviews for your development workflow.'
               section='Intelligence'
               icon={BrainCircuit}
               tone='violet'
@@ -214,9 +203,15 @@ export function AiSettingsPage({
                 <PageHelpDrawer title='AI Intelligence' sections={help} />
               }
             />
-            <SkillsCatalogue
-              key={`${session.data?.identityId}:${session.data?.organizationId}`}
-            />
+            <div className='space-y-3 rounded-xl border p-4'>
+              <p role='status' className='text-sm text-muted-foreground'>
+                Only organization administrators can manage models and routing.
+                Review instructions are available on the Skills page.
+              </p>
+              <Button size='sm' variant='outline' asChild>
+                <Link to='/skills'>Open Skills</Link>
+              </Button>
+            </div>
           </div>
         ) : (
           <AiSettings
@@ -408,10 +403,6 @@ function AiSettings({
               <TabsTrigger value='connections'>
                 <Cable className='mr-2 size-4' />
                 Models
-              </TabsTrigger>
-              <TabsTrigger value='skills'>
-                <BookOpen className='mr-2 size-4' />
-                Review skills
               </TabsTrigger>
               <TabsTrigger value='routing'>
                 <RouteIcon className='mr-2 size-4' />
@@ -692,9 +683,6 @@ function AiSettings({
                 {filtered.length} of {data.providers.length} models · Maximum 32
                 per organization
               </p>
-            </TabsContent>
-            <TabsContent value='skills' className='mt-5'>
-              <SkillsCatalogue />
             </TabsContent>
             <TabsContent value='routing' className='mt-5 space-y-4'>
               <div className='flex flex-wrap items-center justify-between gap-4 rounded-xl border p-4'>
