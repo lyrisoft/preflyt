@@ -1,3 +1,4 @@
+import { inlineIssues, maxInlineIssues, sameInlineIssue, type FeedbackFinding } from '../intelligence/pr-review-feedback.js'
 import { configurationValue } from '../configuration/runtime-configuration.js'
 import { sameReviewPr, prReviewSource } from '../intelligence/pr-review-context.js'
 import type { PullRequestContext } from '../github-events/pull-request-context.js'
@@ -1233,14 +1234,10 @@ export class GitHubProviderService {
   }
 
   /** Publish advisory comments only at verified changed lines on the exact PR revision. */
-  async publishAiInlineReview(installationId: bigint, repositoryId: bigint, source: import('../intelligence/pr-review-context.js').PrReviewSource, key: string, findings: {summary:string;recommendation:string;evidenceRefs:string[]}[], summary?: string) {
-    if (!/^[a-f0-9]{64}$/.test(key) || findings.length > 20) throw new BadRequestException('Invalid AI review');
-    const safe = (s:string) => s.replace(/[\`*_<>#@\[\]]/g,'');
-    const comments = findings.flatMap(f=> {
-      const line = source.lines.find(l=>f.evidenceRefs.includes(l.ref));
-      return line ? [{path:line.path,line:line.line,side:line.side,body:`Advisory AI suggestion\n\n${safe(f.summary)}\n\n${safe(f.recommendation)}`}]:[];
-    });
-    if (!comments.length && !summary) return null;
+  async publishAiInlineReview(installationId: bigint, repositoryId: bigint, source: import('../intelligence/pr-review-context.js').PrReviewSource, key: string, findings: FeedbackFinding[], summary?: string) {
+    if (!/^[a-f0-9]{64}$/.test(key) || findings.length > 20 || (summary && summary.length > 1000)) throw new BadRequestException('Invalid AI review');
+    const candidates = inlineIssues(source, findings);
+    if (!candidates.length && !summary) return null;
     const before = await this.readPullRequest(installationId, repositoryId, source.number);
     if (!sameReviewPr(source.context,before.context)) throw new ConflictException('PR changed before inline feedback');
     const reader = await this.openRepository(installationId,repositoryId,'metadata');
@@ -1253,28 +1250,50 @@ export class GitHubProviderService {
       if(!response.ok) throw new ServiceUnavailableException('GitHub inline feedback unavailable');
       return response.json() as Promise<any>;
     };
-    if (summary && summary.length > 30000) throw new BadRequestException('AI review summary exceeds limit');
-    const body = `${summary ?? 'Advisory AI review; does not approve or block merging.'}\n\n<!-- preflyt-ai:${key} -->`;
-    const matches = (r:any)=>r.body===body && r.commit_id===source.context.head.sha && r.state==='COMMENTED' && r.user?.login===`${app.slug}[bot]` && r.user?.type==='Bot' && typeof r.html_url==='string' && r.html_url.startsWith('https://github.com/');
+    const marker = `<!-- preflyt-ai:${key} -->`;
+    const fromApp = (r:any) => r.user?.login===`${app.slug}[bot]` && r.user?.type==='Bot';
+    const matches = (r:any)=>typeof r.body==='string' && r.body.endsWith(marker) && r.commit_id===source.context.head.sha && r.state==='COMMENTED' && fromApp(r) && typeof r.html_url==='string' && r.html_url.startsWith('https://github.com/');
+    const preflytReviewIds = new Set<number>();
     let existing:any;
     for(let page=1;page<=3;page++) {
       const reviews=await call(`${root}/reviews?per_page=100&page=${page}`);
       if(!Array.isArray(reviews)||reviews.length>100)throw new ServiceUnavailableException('Invalid review history');
+      for (const review of reviews) if (fromApp(review) && /<!-- preflyt-ai:[a-f0-9]{64} -->$/.test(review.body ?? '') && Number.isSafeInteger(review.id)) preflytReviewIds.add(review.id);
       existing=reviews.find(matches);if(existing)break;
       if(reviews.length<100)break;
       if(page===3)throw new ServiceUnavailableException('Review history exceeds publication limit');
     }
+    let selected = candidates;
+    let remaining = maxInlineIssues;
+    // Read actual posted comments, not model history. Never trust another actor's
+    // markers or suppress issues because a previous publication failed.
+    if (!existing && candidates.length && preflytReviewIds.size) {
+      const prior:any[]=[];
+      for (let page=1;page<=3;page++) {
+        const rows=await call(`${root}/comments?per_page=100&page=${page}`);
+        if(!Array.isArray(rows)||rows.length>100)throw new ServiceUnavailableException('Invalid comment history');
+        prior.push(...rows.filter(row=>fromApp(row) && preflytReviewIds.has(row.pull_request_review_id) && typeof row.path==='string' && typeof row.body==='string'));
+        if(rows.length<100)break;
+        if(page===3)throw new ServiceUnavailableException('Comment history exceeds publication limit');
+      }
+      remaining = Math.max(0, maxInlineIssues - prior.filter(comment=>(comment.original_commit_id ?? comment.commit_id)===source.context.head.sha).length);
+      selected = candidates.filter(issue=>!prior.some(comment=>sameInlineIssue(issue,comment)));
+    }
+    selected = selected.slice(0,remaining);
+    if (!existing && !selected.length && !summary) return null;
+    const body = `${summary ?? 'Advisory AI review; does not approve or block merging.'}\n\n<!-- preflyt-inline-v2 -->\n${marker}`;
+    const comments = selected.map(({path,line,side,body})=>({path,line,side,body}));
     const id = existing?.id ?? (await call(`${root}/reviews`,{commit_id:source.context.head.sha,event:'COMMENT',body,comments})).id;
     if(!Number.isSafeInteger(id)||id<1)throw new ServiceUnavailableException('Invalid review receipt');
     const observed=await call(`${root}/reviews/${id}`);
-    if(!matches(observed))throw new ConflictException('GitHub inline review changed');
-    // The review-comments listing exposes legacy diff positions; fetch each bounded
-    // comment receipt for GitHub's authoritative line/side and review identity.
+    if(!matches(observed) || observed.body!==body)throw new ConflictException('GitHub inline review changed');
     const listedComments=await call(`${root}/reviews/${id}/comments?per_page=100`);
-    if(!Array.isArray(listedComments)||listedComments.length!==comments.length||listedComments.some((v:any)=>!Number.isSafeInteger(v.id)||v.id<1)||new Set(listedComments.map((v:any)=>v.id)).size!==listedComments.length)throw new ConflictException('GitHub inline comments changed');
+    if(!Array.isArray(listedComments)||listedComments.length>maxInlineIssues||(!existing && listedComments.length!==comments.length)||listedComments.some((v:any)=>!Number.isSafeInteger(v.id)||v.id<1)||new Set(listedComments.map((v:any)=>v.id)).size!==listedComments.length)throw new ConflictException('GitHub inline comments changed');
     const observedComments: Record<string,any>[]=[];
     for(const listed of listedComments) observedComments.push(await call(`${root.replace(/\/pulls\/\d+$/,'')}/pulls/comments/${listed.id}`));
-    if(!comments.every(c=>observedComments.some((v:any)=>v.pull_request_review_id===id && v.commit_id===source.context.head.sha && v.user?.login===`${app.slug}[bot]` && v.user?.type==='Bot' && v.path===c.path && v.line===c.line && v.side===c.side && v.body===c.body)))throw new ConflictException('GitHub inline comments changed');
+    // Recover a write whose response was lost using its exact persisted subset.
+    // History can change between attempts; never calculate and repost that subset.
+    if(!observedComments.every(v=>v.pull_request_review_id===id && v.commit_id===source.context.head.sha && fromApp(v) && candidates.some(c=>v.path===c.path && v.line===c.line && v.side===c.side && v.body===c.body)))throw new ConflictException('GitHub inline comments changed');
     const after = await this.readPullRequest(installationId,repositoryId,source.number);
     if(!sameReviewPr(source.context,after.context))throw new ConflictException('PR changed during inline feedback');
     return {htmlUrl:observed.html_url as string,reviewId:String(id)};

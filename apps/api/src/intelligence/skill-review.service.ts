@@ -1,3 +1,4 @@
+import { actionableFindings, conciseReviewSummary } from "./pr-review-feedback.js";
 import { currentStandards } from "../standards/policy-standards.js";
 import { effectiveAiRoute } from "./effective-ai-route.js";
 import {
@@ -964,33 +965,12 @@ export class SkillReviewService {
           evidenceRefs: string[];
         }[];
       };
-      const safe = (s: string) => s.replace(/[\`*_<>#@\[\]]/g, "");
-      const summary = [
-        `Advisory review for PR #${snapshot.automatic.number}, commit ${snapshot.context.sourceSha}. AI does not decide readiness.`,
-        ...result.findings.map(
-          (f) =>
-            `- ${safe(f.summary)} ${safe(f.recommendation)} (${f.evidenceRefs
-              .map((ref) => {
-                const line = snapshot.context.source?.lines.find(
-                  (l) => l.ref === ref,
-                );
-                return line
-                  ? `${safe(line.path)}:${line.line} ${line.side}`
-                  : ref;
-              })
-              .join(", ")})`,
-        ),
-        ...(result.findings.length
-          ? []
-          : [
-              "No advisory suggestions returned; this is not a passing engineering check.",
-            ]),
-        ...(snapshot.context.source
-          ? [
-              `Scope: ${snapshot.context.source.lines.length} changed lines; ${snapshot.context.source.omittedFiles} files and ${snapshot.context.source.omittedLines} lines omitted.`,
-            ]
-          : ["Assessment evidence only; repository source was not shared."]),
-      ].join("\n\n");
+      const findings = actionableFindings(result.findings);
+      const summary = conciseReviewSummary(
+        snapshot.automatic.number,
+        snapshot.context.sourceSha,
+        findings.length,
+      );
       const publication = route.publishSummary
         ? await this.github.publishAiReviewSummary(
             job.repository.installationId,
@@ -1007,7 +987,7 @@ export class SkillReviewService {
               job.repository.githubId,
               snapshot.context.source,
               digest({ kind: "AI_INLINE", key: snapshot.automatic.key }),
-              result.findings,
+              findings,
               snapshot.automatic.repositoryRevision !== undefined ? summary : undefined,
             )
           : null;

@@ -168,6 +168,10 @@ afterAll(async () => {
   vi.unstubAllGlobals();
 });
 beforeEach(async () => {
+  // Each worker selects globally; isolate inference and publication mocks
+  // from earlier fixtures. This database is disposable.
+  await db.aiSkillReview.deleteMany();
+  await db.repositoryPullRequest.deleteMany();
   vi.stubEnv("AI_CONFIGURATION_ENABLED", "true");
   vi.stubEnv("AI_PROVIDER_ENCRYPTION_KEY", randomBytes(32).toString("base64"));
   fetchMock.mockReset();
@@ -1321,7 +1325,7 @@ async function prFixture(
                       {
                         checkId: data.SKILLS[0].id,
                         evidenceRefs: [data.DATA.source ? "diff:0" : "check:0"],
-                        summary: "Input validation may be missing.",
+                        summary: "Unvalidated input reaches the database query.",
                         recommendation: "Validate inputs before use.",
                       },
                     ],
@@ -1521,7 +1525,9 @@ it("exposes built-in defaults and downloads Markdown without creating or approvi
     .get("/ai/skills")
     .set("Cookie", `ai.sid=${owner.identityId}`)
     .expect(200);
-  expect(list.body.templates).toHaveLength(12);
+  expect(list.body.templates.map((template: any) => template.id).sort()).toEqual(
+    ["github-actions", ...skillTemplates.map((template) => template.id)].sort(),
+  );
   const template = list.body.templates.find(
     (s: any) => s.id === "migration-safety",
   );
@@ -2060,4 +2066,54 @@ it('does not review historic PR runs or continue after repository AI authorizati
   fetchMock.mockClear(); f.infer(); await f.reviews.reconcile();
   const job = await db.aiSkillReview.findFirstOrThrow({where:{assessmentId:f.assessment.id}});
   expect(job.state).toBe('UNAVAILABLE'); expect(fetchMock).not.toHaveBeenCalled();
+});
+
+it("publishes only actionable findings and a short summary while retaining full assessment analysis", async () => {
+  vi.stubEnv("GITHUB_CHECK_PUBLICATION_ENABLED", "true");
+  const f = await scopedPrReviewFixture();
+  const gate = previewGate(f.assessment);
+  await db.pipelineRunSubmission.update({
+    where: { id: f.run.id },
+    data: { state: "COMPLETE" },
+  });
+  await f.reviews.dispatchAutomatic();
+  f.infer();
+  await f.reviews.reconcile();
+  const job = await db.aiSkillReview.findFirstOrThrow({
+    where: { assessmentId: f.assessment.id },
+  });
+  const result = job.result as any;
+  const finding = result.findings[0];
+  const findings = [
+    finding,
+    {
+      ...finding,
+      summary: "The parameter binding is correct.",
+      recommendation: "No change required.",
+    },
+    { ...finding, recommendation: "Optionally add another rounding test." },
+  ];
+  await db.aiSkillReview.update({
+    where: { id: job.id },
+    data: { result: { ...result, findings } },
+  });
+  await f.reviews.publishPendingSummary();
+  expect(f.inline).toHaveBeenCalledOnce();
+  const args = f.inline.mock.lastCall! as any[];
+  expect(args[4]).toHaveLength(1);
+  expect(args[5]).toContain("1 actionable issue");
+  expect(args[5].length).toBeLessThan(250);
+  expect(args[5]).not.toContain(finding.summary);
+  const stored = await db.aiSkillReview.findUniqueOrThrow({
+    where: { id: job.id },
+  });
+  expect((stored.result as any).findings).toHaveLength(3);
+  expect(stored.feedbackState).toBe("PUBLISHED");
+  expect(
+    previewGate(
+      await db.commitAssessment.findUniqueOrThrow({
+        where: { id: f.assessment.id },
+      }),
+    ),
+  ).toEqual(gate);
 });

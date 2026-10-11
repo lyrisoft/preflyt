@@ -2,7 +2,7 @@
 
 ## Current delivery
 
-Open **Intelligence → Skills** (also available as **AI Intelligence → Review skills**). Owner/Admin users create drafts from the built-in Markdown skill library, or enter reviewed instructions. Skills supply review instructions; optionally restrict their repository scope. Review stages are assigned on AI reviews in Engineering Standards. An empty repository selection means all authorized repositories in the organization. Drafts start disabled. Review the instructions, source and license, approve the exact content digest, then enable that version. Editing creates a new draft version; earlier versions remain unchanged. Policy Managers and Security Engineers can approve versions; only Owner/Admin can manage or enable them. Readers see only their organization’s catalogue.
+Open **Intelligence → Skills**. Owner/Admin users create drafts from the built-in Markdown skill library, or enter reviewed instructions. Skills supply review instructions; optionally restrict their repository scope. Review stages are assigned on AI reviews in Engineering Standards. An empty repository selection means all authorized repositories in the organization. Drafts start disabled. Review the instructions, source and license, approve the exact content digest, then enable that version. Editing creates a new draft version; earlier versions remain unchanged. Policy Managers and Security Engineers can approve versions; only Owner/Admin can manage or enable them. Readers see only their organization’s catalogue.
 
 ## Markdown editor and SKILL.md
 
@@ -103,6 +103,10 @@ Skill versions may include optional `languages` and `frameworks` arrays in the e
 ## Opt-in inline GitHub feedback
 
 The Pull requests model route has a separate Publish advisory comments on changed lines option. It requires automatic reviews and source sharing; all defaults remain off. The App needs repository Pull requests: write. Only validated findings with a supplied diff reference become line comments; evidence-only findings stay in the assessment or optional summary. Comments are submitted as a COMMENT review, never APPROVE or REQUEST_CHANGES. Exact head/base commits, live authorization, route revision and policy pins are rechecked. A stable marker, App bot identity, bounded history and comment read-back recover ambiguous writes without duplicate reviews. Publication shares the existing bounded worker lease/retry workflow. Changed PRs or revoked configuration prevent further publication. Existing comments remain historical; Preflyt never dismisses other reviews.
+
+PR feedback includes only actionable findings supported by supplied evidence. Praise, “no change required”, optional improvements and speculative verification requests are excluded. Each review publishes at most five concise inline issues, with previous Preflyt comments on the same head counting toward that limit. The summary gives the issue count and reviewed commit without repeating the findings; full analysis remains in Preflyt. Publication matches previously posted issues by file, code anchor and normalized wording across commits, including legacy bot comments, so unchanged findings do not create new threads when line numbers shift. Only this App's verified comments count as history. Historical comments remain in place; the filter does not delete them. No model, route, assessment result or deterministic gate changes are required.
+
+Verification for the concise-feedback change: 99 focused API/provider and disposable-database integration tests passed, plus the API type check. Coverage includes no-change and speculative feedback filtering, five-comment limits, shifted-line and legacy-comment deduplication, foreign-actor rejection, unreadable-history rejection, publication recovery and preservation of assessment results and deterministic gates. These tests use GitHub/model fixtures; historical live PR comments were not modified.
 
 ## Pinned third-party Markdown imports
 
