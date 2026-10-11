@@ -18,7 +18,7 @@ jobs:
         run: |
           case "$TARGET_BRANCH" in
             development|main) ;;
-            *) echo 'Image verification supports only development and main.' >&2; exit 1 ;;
+            *) echo 'PR verification supports only development and main.' >&2; exit 1 ;;
           esac
   development:
     needs: scope
@@ -31,46 +31,9 @@ jobs:
     needs: scope
     if: ${{ (github.base_ref || github.ref_name) == 'main' }}
     uses: ./.github/workflows/main-regression.yml
-  images:
-    name: Build ${{ matrix.image }}
-    if: ${{ always() && github.event_name == 'pull_request' && (needs.development.result == 'success' || needs.main.result == 'success') && needs.development.result != 'failure' && needs.main.result != 'failure' }}
-    needs: [development, main]
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - image: preflyt-api
-            file: deploy/api.Dockerfile
-            target: runtime
-          - image: preflyt-api-migration
-            file: deploy/api.Dockerfile
-            target: migration
-          - image: preflyt-native-controller
-            file: deploy/api.Dockerfile
-            target: native-docker-controller
-          - image: preflyt-web
-            file: deploy/web.Dockerfile
-            target: runtime
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          persist-credentials: false
-      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          file: ${{ matrix.file }}
-          target: ${{ matrix.target }}
-          platforms: linux/amd64
-          push: false
-          cache-from: type=gha,scope=${{ matrix.image }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
   preflyt_gate:
     name: Preflyt final gate
-    needs: [scope, development, main, images]
+    needs: [scope, development, main]
     if: ${{ always() && !cancelled() && github.event_name == 'pull_request' && github.base_ref == 'development' && github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-latest
     timeout-minutes: 20

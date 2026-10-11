@@ -1,0 +1,107 @@
+name: Publish native tools
+on:
+  push:
+    branches: [development, main]
+    paths:
+      - 'docs/deployment/native-runner/**'
+      - 'apps/api/scripts/native-check-fixtures.mts'
+      - 'apps/api/src/execution/**'
+      - 'apps/api/src/assessments/assessment-digest.ts'
+      - 'apps/api/package.json'
+      - 'apps/api/prisma/**'
+      - 'apps/api/prisma.config.ts'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - '.github/workflows/publish-native.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: preflyt-native-images-${{ github.sha }}
+  cancel-in-progress: false
+jobs:
+  publish-native:
+    if: ${{ github.ref == 'refs/heads/development' || github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - tool: node
+            dockerfile: Dockerfile.node
+            target: ''
+          - tool: gitleaks
+            dockerfile: Dockerfile.gitleaks
+            target: ''
+          - tool: semgrep
+            dockerfile: Dockerfile.semgrep
+            target: ''
+          - tool: trivy
+            dockerfile: Dockerfile.trivy
+            target: runtime
+          - tool: trivy-offline
+            dockerfile: Dockerfile.trivy
+            target: dependencies
+    env:
+      # Vendor database builds are distinct artifacts, even at the same source revision.
+      IMAGE: ghcr.io/${{ github.repository_owner }}/preflyt-native-${{ matrix.tool }}:sha-${{ github.sha }}${{ matrix.tool == 'trivy-offline' && format('-db-{0}', github.run_id) || '' }}
+      FIXTURE_IMAGE: preflyt-native-${{ matrix.tool }}:fixture
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24.4.1
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Preserve existing native image
+        id: existing
+        run: |
+          if docker buildx imagetools inspect "$IMAGE" >/dev/null 2>/tmp/manifest-error; then
+            echo 'exists=true' >> "$GITHUB_OUTPUT"
+            docker pull "$IMAGE"
+            docker tag "$IMAGE" "$FIXTURE_IMAGE"
+          elif grep -Eqi '(manifest unknown|not found)' /tmp/manifest-error; then
+            echo 'exists=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'Unable to verify native image availability; refusing to overwrite.' >&2
+            exit 1
+          fi
+      - if: steps.existing.outputs.exists != 'true'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: docs/deployment/native-runner
+          file: docs/deployment/native-runner/${{ matrix.dockerfile }}
+          target: ${{ matrix.target }}
+          no-cache-filters: ${{ matrix.tool == 'trivy-offline' && 'database' || '' }}
+          cache-from: type=gha,scope=native-${{ matrix.tool }}
+          cache-to: type=gha,mode=max,scope=native-${{ matrix.tool }}
+          platforms: linux/amd64
+          load: true
+          tags: |
+            ${{ env.IMAGE }}
+            ${{ env.FIXTURE_IMAGE }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+      - name: Install locked fixture dependencies
+        run: |
+          npm install --global pnpm@10.15.1
+          pnpm install --filter @preflyt/api... --frozen-lockfile --ignore-scripts
+          DATABASE_URL=postgresql://fixture:fixture@127.0.0.1:1/unused pnpm --filter @preflyt/api prisma:generate
+      - name: Verify the exact image with generated source
+        env:
+          NATIVE_FIXTURE_TOOL: ${{ matrix.tool }}
+        run: pnpm --filter @preflyt/api exec tsx scripts/native-check-fixtures.mts
+      - name: Publish only the verified image
+        if: steps.existing.outputs.exists != 'true'
+        run: docker push "$IMAGE"
+

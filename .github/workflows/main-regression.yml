@@ -1,4 +1,4 @@
-name: Main regression and Compose
+name: Main regression
 on:
   workflow_call:
 permissions:
@@ -61,5 +61,3 @@ jobs:
       - name: Combine actual API and browser test results
         if: ${{ !cancelled() }}
         run: python3 scripts/ci/merge-junit.py .preflyt/results/tests.xml .preflyt/results/api-tests.xml .preflyt/results/web-tests.xml
-  compose-smoke:
-    uses: ./.github/workflows/compose-acceptance.yml

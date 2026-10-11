@@ -24,18 +24,49 @@ it('checks the PR head and submits existing reports only for same-repository dev
   expect(steps.some((step: any) => /regression|compose|Install Chromium/i.test(step.name ?? ''))).toBe(false)
   expect(verify.jobs.development.uses).toBe('./.github/workflows/development-checks.yml')
 })
-it('builds all image targets on PRs without registry write permissions, and publishes only after CI', () => {
+it('builds release images only after a push, without repeating PR checks', () => {
   const verify = workflow('verify.yml'), publish = workflow('publish-images.yml')
-  expect(verify.jobs.images.strategy.matrix.include).toEqual(publish.jobs.publish.strategy.matrix.include)
-  expect(verify.jobs.images.steps.at(-1).with.push).toBe(false)
+  expect(verify.jobs.images).toBeUndefined()
   expect(verify.permissions.packages).toBeUndefined()
-  expect(verify.jobs.images.permissions?.packages).toBeUndefined()
   expect(publish.on.push.branches).toEqual(['development', 'main'])
-  expect(publish.on.push.tags).toBeUndefined()
-  expect(publish.jobs['accept-published'].if).toBe("${{ github.ref == 'refs/heads/main' }}")
-  expect(publish.jobs.publish.needs).toBe('verify')
-  expect(publish.jobs.publish.steps.at(-1).with.platforms).toBe('linux/amd64,linux/arm64')
-  expect(publish.jobs.publish.steps.at(-1).with.tags).toContain('sha-${{ github.sha }}')
+  expect(publish.on.pull_request).toBeUndefined()
+  expect(publish.on.workflow_dispatch).toBeUndefined()
+  expect(publish.jobs.verify).toBeUndefined()
+  expect(publish.jobs.build.needs).toBeUndefined()
+  expect(publish.jobs.publish.needs).toBe('build')
+  expect(publish.jobs.build.strategy.matrix.group).toEqual(['api', 'web'])
+  expect(publish.jobs.build.strategy.matrix.platform).toEqual([{ arch: 'amd64', runner: 'ubuntu-24.04' }, { arch: 'arm64', runner: 'ubuntu-24.04-arm' }])
+  expect(publish.jobs.build.steps.some((step: any) => step.uses?.startsWith('docker/setup-qemu'))).toBe(false)
+  expect(publish.jobs['accept-published'].needs).toBe('publish')
+  expect(publish.jobs['accept-published'].if).toBeUndefined()
+  expect(publish.jobs['accept-published'].with.published_images).toBe(true)
+})
+it('builds and fixture-verifies native tools only when their inputs change', () => {
+  const native = workflow('publish-native.yml')
+  expect(native.on.pull_request).toBeUndefined()
+  expect(native.on.push.branches).toEqual(['development', 'main'])
+  for (const path of ['docs/deployment/native-runner/**', 'apps/api/scripts/native-check-fixtures.mts', 'pnpm-lock.yaml']) expect(native.on.push.paths).toContain(path)
+  expect(native.on.push.paths).not.toContain('apps/web/**')
+  const steps = native.jobs['publish-native'].steps
+  const test = steps.findIndex((step: any) => step.name === 'Verify the exact image with generated source')
+  const push = steps.findIndex((step: any) => step.name === 'Publish only the verified image')
+  expect(test).toBeGreaterThan(0)
+  expect(push).toBeGreaterThan(test)
+  expect(steps[push].if).not.toContain('always()')
+  expect(workflow('publish-images.yml').jobs['publish-native']).toBeUndefined()
+})
+it('tests the published commit images without rebuilding and keeps docs off PRs', () => {
+  const compose = workflow('compose-acceptance.yml')
+  const steps = compose.jobs.compose.steps
+  const start = steps.find((step: any) => step.name === 'Build or pull and start all required services').run
+  const published = start.split('else')[0]
+  expect(published).toContain('pull')
+  expect(published).toContain('org.opencontainers.image.revision')
+  expect(published).toContain('test "$revision" = "$GITHUB_SHA"')
+  expect(published).not.toContain('compose.local.yaml build')
+  expect(start).toContain('up -d --no-build --wait')
+  expect(workflow('docs.yml').on.pull_request).toBeUndefined()
+  expect(workflow('docs.yml').on.push.branches).toEqual(['main'])
 })
 it('routes each branch to its own verification and blocks image builds when that verification fails', () => {
   const verify = workflow('verify.yml'), main = workflow('main-regression.yml')
@@ -46,16 +77,14 @@ it('routes each branch to its own verification and blocks image builds when that
   expect(verify.jobs.main.if).toBe("${{ (github.base_ref || github.ref_name) == 'main' }}")
   expect(verify.jobs.development.if).toBe("${{ (github.base_ref || github.ref_name) == 'development' }}")
   for (const branch of ['development', 'main']) expect(verify.jobs[branch].needs).toBe('scope')
-  expect(main.jobs['compose-smoke'].uses).toBe('./.github/workflows/compose-acceptance.yml')
+  expect(main.jobs['compose-smoke']).toBeUndefined()
   for (const name of ['API regression', 'Browser regression']) expect(main.jobs.regression.steps.find((step: any) => step.name === name).if).toContain('!cancelled()')
   expect(main.jobs.regression.steps.some((step: any) => step.name === 'Preflyt development policy')).toBe(false)
-  expect(verify.jobs.images.needs).toEqual(['development', 'main'])
-  expect(verify.jobs.images.if).toContain("needs.development.result == 'success' || needs.main.result == 'success'")
-  expect(verify.jobs.images.if).toContain("needs.development.result != 'failure' && needs.main.result != 'failure'")
+
 })
-it('chains the final gate to check and image jobs in the PR workflow, leaving docs separate', () => {
+it('chains the final gate to check jobs in the PR workflow, leaving docs separate', () => {
   const verify = workflow('verify.yml'), gate = verify.jobs.preflyt_gate;
-  expect(gate.needs).toEqual(['scope', 'development', 'main', 'images']);
+  expect(gate.needs).toEqual(['scope', 'development', 'main']);
   expect(gate.if).toContain('always()');
   expect(gate.name).toBe('Preflyt final gate');
   expect(gate.steps[0].with.mode).toBe('gate');
