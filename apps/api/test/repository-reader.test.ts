@@ -41,6 +41,7 @@ const setup = (
     },
   }))
   Object.assign(provider, { app: { octokit: { request: tokenRequest } } })
+  ;(provider as any).appFingerprint = (provider as any).connectionFingerprint()
   const fetchMock = vi.fn(async (url: string) => {
     if (
       options.denied ||

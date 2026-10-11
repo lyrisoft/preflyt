@@ -2,7 +2,7 @@ name: Documentation
 on:
   push:
     branches: [main]
-    paths: ['apps/docs/**', '.env.example', '.github/workflows/docs.yml']
+    paths: ['apps/docs/**', '.env.example', 'docker-compose.yaml', 'deploy/postgres/**', 'deploy/otel-collector.yaml', 'deploy/kubernetes/**', '.github/workflows/docs.yml']
   workflow_dispatch:
 permissions:
   contents: read

@@ -14,7 +14,7 @@ import {
   configurationKeys,
   governanceAppMode,
 } from "./configuration-catalogue.js";
-import { applyConfiguration } from "./runtime-configuration.js";
+import { applyConfiguration, suspendConfigurationCapabilities } from "./runtime-configuration.js";
 const aad = Buffer.from("preflyt.deployment-configuration.v1:primary");
 function key() {
   const text = process.env.CONFIGURATION_ENCRYPTION_KEY ?? "";
@@ -332,15 +332,7 @@ export function watchConfiguration(db: PrismaService) {
       .catch(() => {
         // Existing snapshot is never replaced with environment values on a database/key failure.
         // Fail closed for live capability switches until a successful database read.
-        const disabled = Object.fromEntries(
-          configurationFields
-            .filter((field) => !field.restart)
-            .map((field) => [
-              field.key,
-              field.kind === "boolean" ? "false" : field.defaultValue,
-            ]),
-        );
-        applyConfiguration(disabled);
+        suspendConfigurationCapabilities();
       })
       .finally(() => {
         running = false;

@@ -336,6 +336,13 @@ button[class*='collapseSidebarButton']:hover {
   box-shadow: none;
 }
 
+/* Long files (the compose file is ~350 lines) scroll inside the block so the
+   steps after it stay in reach. The copy button still copies the whole file. */
+.long-code pre {
+  max-height: 24rem;
+  overflow: auto;
+}
+
 /* ===== Admonitions: tinted cards, full border, no side stripe ===== */
 
 .theme-admonition.alert {

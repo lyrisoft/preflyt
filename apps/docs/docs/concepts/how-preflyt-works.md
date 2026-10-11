@@ -29,8 +29,8 @@ flowchart LR
 | --- | --- | --- |
 | **Discover** | Profiles each selected repository with file evidence. | Available |
 | **Assess** | Freezes your standards and reported CI results at a commit. | Available |
-| **Validate** | Verifies where evidence came from, through approved CI sources and signed reports. | Available, see [Evidence and trust](evidence-and-trust.md) |
-| **Enforce** | Shows a merge review result for every report. **Merge Protection** can publish PR checks and activate GitHub rulesets through the optional governance App. | Observe by default; enforcement is opt-in |
+| **Validate** | Verifies where evidence came from, through authenticated submissions and verified GitHub execution, or reviewed native execution receipts. | Available, see [Evidence and trust](evidence-and-trust.md) |
+| **Enforce** | Shows a merge review result for every report. A published policy publishes a **Preflyt / Engineering Readiness** check on each pull request. **Merge Protection** can require it through GitHub rulesets. | Observe by default; enforcement is opt-in |
 | **Improve** | Trends, contributor activity and advisory AI review. | Available |
 
 ## The three engines
@@ -45,10 +45,10 @@ In the default install, Preflyt **reads** and **records**:
 
 - It reads repository files and metadata through a read-only GitHub App.
 - It records CI results GitHub reports for exact commits.
-- It does **not** run your tests or scanners. Native execution is off until you deploy its separate, reviewed controller.
-- It does **not** block merges. Publishing a readiness check or activating a ruleset requires the optional governance App and explicit approval.
+- It does **not** run your tests or scanners itself. **Your own GitHub Actions workflow** runs them, and Preflyt verifies the completed run. Native execution inside Preflyt is off until you deploy its separate, reviewed controller.
+- It does **not** block merges by default. Blocking needs three explicit steps: publish a policy, turn on PR checks, and require the **Preflyt / Engineering Readiness** check in GitHub. See [Pull request checks](../user-guide/pull-request-checks.md) and [Merge Protection](../user-guide/merge-protection.md).
 
-A "configuration found" result means a supported file or workflow reference exists at that commit. It does **not** prove the tool ran or passed.
+A **Related files found** result means a supported file or workflow reference exists at that commit. It does **not** prove the tool ran or passed.
 
 ## Core objects
 

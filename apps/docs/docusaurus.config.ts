@@ -78,6 +78,12 @@ const config: Config = {
         },
         {
           type: 'docSidebar',
+          sidebarId: 'userGuide',
+          position: 'left',
+          label: 'User Guide',
+        },
+        {
+          type: 'docSidebar',
           sidebarId: 'selfHosting',
           position: 'left',
           label: 'Self-Hosting',

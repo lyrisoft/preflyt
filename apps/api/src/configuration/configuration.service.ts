@@ -6,6 +6,7 @@ import {
   OnModuleDestroy,
   OnModuleInit,
 } from "@nestjs/common";
+import type { Prisma } from "../generated/prisma/client.js";
 import type { AuthenticatedSession } from "../auth/session.guard.js";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { configurationFields } from "./configuration-catalogue.js";
@@ -78,6 +79,7 @@ export class ConfigurationService implements OnModuleInit, OnModuleDestroy {
     revision: number,
     patch: Record<string, unknown>,
     clearSecrets: string[],
+    afterSave?: (tx: Prisma.TransactionClient) => Promise<void>,
   ) {
     this.authorize(session);
     const updates = validateConfiguration(patch);
@@ -98,6 +100,9 @@ export class ConfigurationService implements OnModuleInit, OnModuleDestroy {
         "Configuration changed. Refresh before saving.",
       );
     const previous = unpackConfiguration(row);
+    if (previous.GITHUB_APP_ID && updates.GITHUB_APP_ID !== undefined && updates.GITHUB_APP_ID !== previous.GITHUB_APP_ID &&
+        await this.db.gitHubInstallation.count({ where: { active: true } }))
+      throw new ConflictException('Disconnect existing GitHub installations before replacing the App. Permission upgrades and key rotation use the same App.');
     const next = {
       ...previous,
       ...Object.fromEntries(
@@ -147,6 +152,7 @@ export class ConfigurationService implements OnModuleInit, OnModuleDestroy {
         throw new ConflictException(
           "Configuration changed. Refresh before saving.",
         );
+      if (afterSave) await afterSave(tx);
       await tx.auditEvent.create({
         data: {
           event: "deployment.configuration.updated",

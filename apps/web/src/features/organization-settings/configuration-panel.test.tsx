@@ -78,6 +78,11 @@ it('keeps credentials masked and sends only changed fields with the fetched revi
   )
   vi.stubGlobal('fetch', fetcher)
   const view = await mount()
+  const advanced = view.getByText(
+    'Connect an existing App or edit advanced settings',
+    { exact: true }
+  )
+  if (advanced) await advanced.click()
   await expect.element(view.getByLabelText('SMTP password')).toHaveValue('')
   await expect
     .element(view.getByRole('button', { name: 'Save changes' }))
@@ -105,15 +110,24 @@ it('clears a credential only after an explicit action and save', async () => {
   const fetcher = vi.fn(async () => new Response(JSON.stringify(data)))
   vi.stubGlobal('fetch', fetcher)
   const view = await mount()
+  const advanced = view.getByText(
+    'Connect an existing App or edit advanced settings',
+    { exact: true }
+  )
+  if (advanced) await advanced.click()
   await expect.element(view.getByLabelText('SMTP password')).toBeVisible()
   await view.getByRole('button', { name: 'Clear saved' }).click()
   await expect.element(view.getByLabelText('SMTP password')).toBeDisabled()
-  expect(fetcher).toHaveBeenCalledTimes(1)
+  expect(
+    (fetcher.mock.calls as unknown as [string, RequestInit][]).filter(
+      ([, options]) => (options as RequestInit | undefined)?.method === 'PATCH'
+    )
+  ).toHaveLength(0)
   await view.getByRole('button', { name: 'Save changes' }).click()
   await expect.poll(() => fetcher.mock.calls.length).toBeGreaterThan(1)
   const options = (
     fetcher.mock.calls as unknown as [string, RequestInit][]
-  )[1]![1]
+  ).find(([, options]) => options?.method === 'PATCH')![1]
   expect(JSON.parse(options.body as string).clearSecrets).toEqual([
     'SMTP_PASSWORD',
   ])
@@ -224,6 +238,11 @@ it('keeps configuration fields and secret controls within the mobile layout', as
   )
   await page.viewport(1440, 1000)
   const view = await mount()
+  const advanced = view.getByText(
+    'Connect an existing App or edit advanced settings',
+    { exact: true }
+  )
+  if (advanced) await advanced.click()
   await expect.element(view.getByLabelText('App ID')).toBeVisible()
   try {
     for (const mobile of [false, true]) {
@@ -277,6 +296,11 @@ it('reports failed saves once through the global toast and preserves unsaved cha
     )
   )
   const view = await mount()
+  const advanced = view.getByText(
+    'Connect an existing App or edit advanced settings',
+    { exact: true }
+  )
+  if (advanced) await advanced.click()
   await view.getByRole('switch', { name: 'GitHub event ingestion' }).click()
   await view.getByRole('button', { name: 'Save changes' }).click()
   await expect.poll(() => toastError.mock.calls.length).toBe(1)

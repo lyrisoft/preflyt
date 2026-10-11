@@ -42,7 +42,7 @@ Use this skill when drafting or modifying a repository workflow for a Preflyt po
 - Do not add continue-on-error to the policy step, swallow failures with || true, waive required checks, change branch rules or assert that proof verification is configured. A YAML draft does not prove execution, passing checks, publication or merge protection.
 
 ## Chain the final gate
-- Add a terminal job named Preflyt final gate to this same PR workflow. Use needs for every other job, always() and !cancelled(), same-repository PR scope, contents: read and id-token: write, and the same pinned Action with mode: gate and api-url. Do not add workflow_run or a separate gate workflow. Keep documentation workflows separate.
+- Add one terminal job named Preflyt final gate in this same PR workflow, with needs covering every other job, if: always() && !cancelled() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository, contents: read and id-token: write. Its only Action step uses the same pinned Preflyt release with mode: gate and the same api-url. Do not add workflow_run or a separate publication workflow. Keep documentation workflows separate.
 
 ## Review and return
 - Check YAML indentation, expression syntax, report paths, permissions and step placement. Keep secrets as GitHub secret references; never return literal tokens, private keys or provider credentials. Do not interpolate untrusted PR titles or comments into shell commands.

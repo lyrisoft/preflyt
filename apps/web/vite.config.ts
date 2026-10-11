@@ -21,10 +21,21 @@ export default defineConfig({
       '@': path.resolve(import.meta.dirname, './src'),
     },
   },
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3000',
+        changeOrigin: false,
+        rewrite: (path) => path.replace(/^\/api/, ''),
+      },
+    },
+  },
   optimizeDeps: {
     include: ['@radix-ui/react-switch', '@tanstack/react-query'],
   },
   test: {
+    // Keep focus, viewport and animated overlay interactions deterministic under CI load.
+    fileParallelism: false,
     silent: 'passed-only',
     unstubEnvs: true,
     browser: {

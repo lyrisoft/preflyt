@@ -11,13 +11,19 @@ Preflyt coordinates existing scanners and CI rather than replacing them. It is n
 - Engineering Standards Library: five versioned packs (Baseline Engineering, Application Security, Backend Services, Frontend Applications, Infrastructure as Code) with profile-based recommendations, adopted in observe mode
 - Exact-commit assessment snapshots, created manually or automatically for pull request head commits
 - Signed GitHub pull request and CI webhook ingestion with revision-bound check and workflow results
-- Bounded JUnit and SARIF report imports, approved CI source bindings and signed report provenance
-- Observe-only quality gate preview; optional readiness check publication and ruleset activation through a separate governance GitHub App
+- Automatic bounded JUnit and SARIF submissions authenticated with GitHub OIDC and verified against the actual workflow, run attempt, commit and completed jobs; optional additional report signatures
+- Observe by default; optional readiness check publication and ruleset activation using the primary GitHub App with organization administration permission; a separate governance App is optional
 - GitHub or OIDC sign-in, organizations, teams and role-based access control
 - Self-hosted deployment with Docker Compose or a single-instance Kubernetes bundle
 
+- Public Preflyt Action v1.1.0: github.com/marketplace/actions/preflyt-policy-check; source github.com/lyrisoft/preflyt-action. Check submission and the terminal final gate share one PR workflow.
+- Paginated scoped Audit log and advisory PR AI reviews with explicit code-sharing consent
+
+## Onboarding
+
+Deploy with private GHCR package access, configure one GitHub App as Super Admin, sign in as a verified GitHub organization owner, select repositories, create standards and publish a target-branch policy, add the generated workflow, and verify a same-repository non-draft PR. Optional AI and merge protection follow. Native execution and external report signers are not prerequisites. See /preflyt/getting-started/ and /preflyt/user-guide/native-execution.
+
 ## Not yet available
 
-- Native scanner execution in production: implemented but disabled by default until an independent runtime isolation review
+- Native execution production acceptance: fixed adapters are implemented and fixture-tested; complete analyzer coverage, independent effective isolation review and production runtime acceptance remain outstanding
 - Helm and Operator packaging for Kubernetes
-- Preflyt GitHub Action v1.0.0 is published at github.com/marketplace/actions/preflyt-policy-check; source repository github.com/lyrisoft/preflyt-action

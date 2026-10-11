@@ -1190,3 +1190,23 @@ model PolicyException {
   @@index([repositoryId, policyId, sourceSha, state])
   @@index([state, expiresAt])
 }
+
+// One-use, browser/session-bound GitHub registration. Contains no generated credentials.
+model GitHubAppManifestTransaction {
+  id String @id @default(cuid())
+  stateHash String @unique
+  bindingHash String
+  sessionHash String
+  actorId String
+  configurationRevision Int
+  apiUrl String
+  organization String
+  manifest Json
+  status String @default("PENDING")
+  appSlug String?
+  expiresAt DateTime
+  consumedAt DateTime?
+  createdAt DateTime @default(now())
+  @@index([actorId, sessionHash, createdAt])
+  @@index([expiresAt])
+}

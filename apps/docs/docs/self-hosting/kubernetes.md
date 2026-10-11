@@ -5,27 +5,58 @@ sidebar_label: Kubernetes
 description: Deploy Preflyt to Kubernetes with the single-instance manifest bundle.
 ---
 
+import { CurlDownload } from '@site/src/components/Download'
+
 # Kubernetes
 
 <span className="badge-status badge-available">Available</span> as a single-instance manifest bundle. It is rendered and fixture-tested, but **not accepted on a live production cluster**. Helm and Operator packaging are planned and **not implemented**.
 
-The bundle in `deploy/kubernetes` uses the **same** web, API, worker and migration images as Docker Compose. It includes PostgreSQL, a disposable cache and a persistent queue, so a managed database is optional.
+The bundle (the `kubernetes` folder) uses the **same** web, API, worker and migration images as Docker Compose. It includes PostgreSQL, a disposable cache and a persistent queue, so a managed database is optional.
 
 ## What you provide
 
 - A cluster and an explicitly selected `kubectl` context. Never rely on your current context.
 - An Ingress and TLS controller for the `web` Service on port 8080. The API and databases stay internal.
-- Registry access and **immutable image digests** for your reviewed release. The placeholders in `resources.yaml` and `migration.yaml` must be replaced.
+- Registry access to the private images, and a release to run.
 - Storage with backups, and capacity planning. Database and queue storage use retained PVCs on the default storage class.
 
 The namespace enforces restricted Pod Security. No host ports, host paths, cluster roles or application service-account tokens are installed.
 
+## Get the bundle
+
+```bash
+mkdir preflyt-k8s && cd preflyt-k8s
+```
+
+<CurlDownload file="kubernetes.tgz" />
+
+```bash
+tar -xzf kubernetes.tgz && cd kubernetes
+```
+
+The folder contains `kustomization.yaml`, `resources.yaml` and `migration.yaml`.
+
 ## Configure
 
-1. Create the namespace `preflyt`.
-2. Replace the image placeholders with your release digests. The API and worker must use the **same** API image.
+1. **Create the namespace** `preflyt`, and a pull secret so the cluster can read the private images. Use a token with `read:packages` from an account that can read the Preflyt packages:
+
+   ```bash
+   kubectl --context YOUR_CONTEXT create namespace preflyt
+   kubectl --context YOUR_CONTEXT -n preflyt create secret docker-registry ghcr-pull \
+     --docker-server=ghcr.io --docker-username=YOUR_GITHUB_USERNAME --docker-password=YOUR_TOKEN
+   kubectl --context YOUR_CONTEXT -n preflyt patch serviceaccount default \
+     -p '{"imagePullSecrets":[{"name":"ghcr-pull"}]}'
+   ```
+
+2. **Set the release.** The images are tagged `:development` as a placeholder. Replace the tag with an existing stable version (`vX.Y.Z`) or development SHA tag:
+
+   ```bash
+   sed -i.bak -E 's#(ghcr\.io/lyrisoft/preflyt-[a-z-]+):development#\1:YOUR_PUBLISHED_VERSION#' resources.yaml migration.yaml
+   ```
+
+   For stronger guarantees, use the image digest instead of the tag. The API and worker must use the **same** API image.
 3. Set `WEB_ORIGIN` in the `preflyt-config` ConfigMap to your public HTTPS origin.
-4. Create these Secrets from protected files or your secret manager, not shell arguments:
+4. Create the Secrets in the next table from protected files or your secret manager, not shell arguments.
 
 | Secret | Required values |
 | --- | --- |
@@ -43,18 +74,18 @@ Provision GitHub, sign-in and notification settings in **Settings → Configurat
 All application Deployments start at **zero replicas** on purpose, so nothing starts before a successful migration. Preview the rendered manifests without cluster access:
 
 ```bash
-kubectl kustomize deploy/kubernetes > rendered.yaml
+kubectl kustomize . > rendered.yaml
 ```
 
 Then, replacing `YOUR_CONTEXT`:
 
 ```bash
-kubectl --context YOUR_CONTEXT apply -k deploy/kubernetes
+kubectl --context YOUR_CONTEXT apply -k .
 kubectl --context YOUR_CONTEXT -n preflyt rollout status statefulset/db --timeout=180s
 kubectl --context YOUR_CONTEXT -n preflyt rollout status statefulset/queue --timeout=180s
 kubectl --context YOUR_CONTEXT -n preflyt rollout status deployment/cache --timeout=180s
 
-kubectl --context YOUR_CONTEXT apply -f deploy/kubernetes/migration.yaml
+kubectl --context YOUR_CONTEXT apply -f migration.yaml
 kubectl --context YOUR_CONTEXT -n preflyt wait --for=condition=complete job/preflyt-migrate --timeout=600s
 
 # Continue only if the migration completed successfully.
@@ -77,7 +108,7 @@ Use a maintenance rollout:
 
 Do not delete PVCs or queue or database data during an upgrade. **Applying the base bundle resets replicas to zero by design**, so follow the sequence above rather than applying it casually to a running installation. Restore into a new database before a recovery cutover.
 
-After connection edits in Settings, restart **all** API and worker replicas. A rolling restart can briefly run different snapshots, so use a maintenance restart for authentication changes.
+Saved GitHub and governance connections refresh immediately in the API and within five seconds in workers. OIDC and SMTP edits still require restarting all API and worker replicas. Coordinate authentication restarts to avoid mixed snapshots. For environment changes, update the deployment configuration and roll out new pods; restarting a pod alone does not change its configuration.
 
 ## Native checks
 

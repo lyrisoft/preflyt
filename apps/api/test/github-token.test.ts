@@ -19,6 +19,7 @@ it('reuses least-privilege tokens by exact repository scope, expires early and i
     headers: {},
   }))
   ;(provider as any).app = { octokit: { request: issue } }
+  ;(provider as any).appFingerprint = (provider as any).connectionFingerprint()
   await Promise.all([
     (provider as any).installationToken(1n, 2n),
     (provider as any).installationToken(1n, 2n),

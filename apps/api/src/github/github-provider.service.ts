@@ -58,6 +58,7 @@ export class GitHubInstallationRevokedError extends Error {
 @Injectable()
 export class GitHubProviderService {
   private app?: App
+  private appFingerprint?: string
   private readonly cancellation = new AbortController()
   close() {
     this.cancellation.abort()
@@ -84,7 +85,8 @@ export class GitHubProviderService {
       where: { id: installationId },
       select: { accessRevision: true },
     })
-    const key = `${installationId}:${repositoryId ?? 'inventory'}:${installation?.accessRevision ?? 0}${permission !== 'contents' ? ':' + permission : ''}`
+    const fingerprint = this.connectionFingerprint()
+    const key = `${fingerprint}:${installationId}:${repositoryId ?? 'inventory'}:${installation?.accessRevision ?? 0}${permission !== 'contents' ? ':' + permission : ''}`
     for (const [entry, value] of this.tokens)
       if (value.expiresAt <= Date.now() + 60000) this.tokens.delete(entry)
     const cached = this.tokens.get(key)
@@ -106,16 +108,18 @@ export class GitHubProviderService {
         throw new ServiceUnavailableException(
           'GitHub issued an invalid installation token',
         )
+      if (fingerprint !== this.connectionFingerprint()) throw new ConflictException('GitHub connection changed. Retry the request.')
       this.tokens.set(key, { token: response.data.token, expiresAt })
       return response.data.token as string
     })
   }
 
   private appRequest(route: string, options: Record<string, unknown>) {
+    const app = this.requireApp()
     return this.limiter.run(
       `app:${this.requireAppId()}`,
       () =>
-        this.requireApp().octokit.request(route, {
+        app.octokit.request(route, {
           ...options,
           request: {
             timeout: 10_000,
@@ -1567,8 +1571,14 @@ export class GitHubProviderService {
     )
   }
 
+  private connectionFingerprint() {
+    return createHash('sha256').update(`${configurationValue('GITHUB_APP_ID') ?? ''}:${configurationValue('GITHUB_APP_PRIVATE_KEY') ?? ''}`).digest('hex')
+  }
+
   private requireApp() {
-    if (this.app) return this.app
+    const fingerprint = this.connectionFingerprint()
+    if (this.app && this.appFingerprint === fingerprint) return this.app
+    this.tokens.clear()
     const appId = this.requireAppId()
     const privateKey = configurationValue('GITHUB_APP_PRIVATE_KEY')?.replace(/\\n/g, '\n')
     if (!privateKey)
@@ -1583,6 +1593,7 @@ export class GitHubProviderService {
         error: () => undefined,
       },
     })
+    this.appFingerprint = fingerprint
     return this.app
   }
 

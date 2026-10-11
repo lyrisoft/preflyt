@@ -41,7 +41,7 @@ Only `web` is reachable from the host, and only on loopback (`127.0.0.1:8080` by
 
 ## Requirements
 
-- Docker Engine or Docker Desktop with **Compose v2 or later**.
+- Docker Engine or Docker Desktop with **Compose 2.23.1 or later**.
 - A GitHub organization where you can create a [GitHub App](github-app.md). Preflyt connects to GitHub only through this App.
 - For production: a host **HTTPS reverse proxy** and a public origin such as `https://preflyt.example.com`. See [Reverse proxy and TLS](reverse-proxy.md). Preflyt does not install certificates for you.
 - Optionally, an OpenID Connect provider if you want [single sign-on](authentication.md).
@@ -55,8 +55,8 @@ Node.js, pnpm, PostgreSQL and Redis do **not** need to be installed on the host.
 | [Docker Compose](docker-compose.md) | A single host. The recommended starting point for evaluation and small teams. |
 | [Kubernetes](kubernetes.md) | A single-instance bundle for clusters. Ingress, TLS, storage backups and capacity are your responsibility. |
 
-:::note Published images
-Source builds work today. Published images are produced under `ghcr.io/lyrisoft` by the release workflow. Until a release has been published and package access is configured, build from source as shown in [Docker Compose](docker-compose.md).
+:::note Images
+Preflyt runs from container images stored privately at `ghcr.io/lyrisoft`. You need an account with read access to those packages, and you sign in with `docker login ghcr.io`. You do not need the source code. Stable releases use `vX.Y.Z` image tags; development builds use `sha-` plus the 40-character commit ID. Choose an existing published tag.
 :::
 
 ## What stays outside the containers

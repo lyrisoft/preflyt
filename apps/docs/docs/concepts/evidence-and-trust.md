@@ -15,7 +15,7 @@ Preflyt is careful about what a piece of evidence **actually proves**. This page
 | --- | --- | --- |
 | **Configuration** | Files in the repository at an exact commit | That a supported setup exists, for example a workflow that mentions a scanner. **Not** that it ran. |
 | **Reported CI result** | A signed GitHub webhook for a check or workflow run | That GitHub reported this outcome for this commit. **Not** which rule it covered or which tool ran. |
-| **Verified evidence** | A report tied to an approved CI source and a signed, attested workflow | That a reviewed workflow produced this exact report at this commit. |
+| **Verified evidence** | An Action submission authenticated by GitHub OIDC, bound to report digests and verified GitHub workflow/job execution, or a verified native execution receipt | That the configured checks produced usable evidence for the exact commit and policy. Report coverage and freshness still matter. |
 
 ## Why a green job is not a pass
 
@@ -26,7 +26,7 @@ A job named "test" that succeeded does not tell Preflyt that your required tests
 - A policy with **no required checks** is **not evaluated**, never an empty pass.
 - Missing mandatory evidence is **incomplete**.
 
-Verified coverage needs an **approved CI source binding**, which maps an exact signed GitHub identity to a rule, plus signed report provenance. See the operations documentation in the repository for setup details.
+For the normal Action flow, Preflyt verifies the repository, workflow, run attempt, PR head commit and completed jobs through GitHub, and binds the submitted report digests to that execution. The first verified run registers the workflow connection. Additional report signatures are optional; private repositories do not need a separate signer. Follow [Pull request checks](../user-guide/pull-request-checks.md).
 
 ## Freshness and conflicts
 
@@ -38,9 +38,9 @@ Preflyt keeps results honest over time:
 - Two conflicting results with the same or unknown time are **ambiguous** (**Multiple matching results**).
 - A snapshot is **historical**. It says nothing about the current state of a branch.
 
-## Imports and reports
+## Pipeline reports
 
-You can attach JUnit and SARIF reports to a CI result. Imports are bounded in size and count, and Preflyt stores summaries and checksums, not the uploaded bytes, logs or credentials. An administrator upload is treated as unverified unless its source is separately verified.
+The Action submits bounded JUnit and SARIF reports from your workflow automatically. Preflyt stores summaries and checksums, not uploaded report bytes, CI logs or credentials. There is no manual report-import workflow in the UI. Older unverified records can remain in history; they do not become verified by being displayed in an assessment.
 
 ## AI and advisory reviews
 
@@ -48,4 +48,4 @@ AI review is optional, per organization and **advisory**. It can explain or flag
 
 ## Native execution
 
-Running scanners inside Preflyt is a separate, **disabled-by-default** capability. It needs its own controller, a signed independent isolation review, and reviewed tool images. Generated test fixtures do not establish production acceptance. Treat native execution as not yet available for production use.
+Running scanners inside Preflyt is a separate, **disabled-by-default** capability. It needs its own controller, a signed independent isolation review, and reviewed tool images. Generated test fixtures do not establish production acceptance. Production acceptance is incomplete. Use GitHub Actions for normal onboarding; see [Native execution](../user-guide/native-execution.md) for the implemented controls, current coverage and operator prerequisites.

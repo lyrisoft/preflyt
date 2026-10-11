@@ -39,3 +39,5 @@ If GitHub reports that the App lost access to repositories, the page tells you t
 ## Next
 
 [Your first report](first-assessment.md).
+
+Selecting a repository automatically inspects its files to detect the stack. It does not execute code. Recommended checks are preselected when you open **Choose standards** for a repository without a saved selection; existing standards, published policies and model routing are preserved. If inspection fails, the repository stays selected and **Refresh profile** lets you retry.

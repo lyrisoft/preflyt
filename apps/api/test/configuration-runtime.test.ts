@@ -106,3 +106,14 @@ it("accepts one-App activation and validates the optional separate connection", 
       .GITHUB_GOVERNANCE_SEPARATE_APP_ENABLED,
   ).toBe("false");
 });
+
+it('refreshes GitHub connection settings live while retaining startup-only SMTP settings', async () => {
+  const runtime = await import('../src/configuration/runtime-configuration.js');
+  runtime.applyConfiguration({ GITHUB_APP_ID: '100', GITHUB_APP_PRIVATE_KEY: 'old', SMTP_HOST: 'old' }, true);
+  runtime.applyConfiguration({ GITHUB_APP_ID: '100', GITHUB_APP_PRIVATE_KEY: 'new', SMTP_HOST: 'new' });
+  expect(runtime.configurationValue('GITHUB_APP_PRIVATE_KEY')).toBe('new');
+  expect(runtime.configurationValue('SMTP_HOST')).toBe('old');
+  runtime.suspendConfigurationCapabilities();
+  expect(runtime.configurationValue('GITHUB_APP_PRIVATE_KEY')).toBe('new');
+  expect(runtime.configurationValue('GITHUB_LOGIN_ENABLED')).toBe('false');
+});

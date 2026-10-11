@@ -63,6 +63,8 @@ Before enabling it:
    openssl rand -base64 32   # set as GITHUB_USER_TOKEN_ENCRYPTION_KEY
    ```
 
+Recreate the API and worker after adding the environment key: `docker compose up -d api worker`. A plain restart does not load changed `.env` values.
+
 4. In **Settings → Configuration → GitHub**, save the App ID, client ID and secret, private key and the exact login callback. Turn on **GitHub sign-in**.
 5. Restart the API and the worker.
 
