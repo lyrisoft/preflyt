@@ -82,3 +82,9 @@ it("does not create inline comments for evidence-only findings", () => {
     inlineIssues(source, [{ ...issue, evidenceRefs: ["check:0"] }]),
   ).toEqual([]);
 });
+
+it("discloses bounded review coverage in the concise PR summary", () => {
+  const summary = conciseReviewSummary(7, context.head.sha, 0, {omittedFiles:254,omittedLines:1200});
+  expect(summary).toContain('Partial review: 254 files and 1200 lines omitted.');
+  expect(summary.length).toBeLessThan(280);
+});

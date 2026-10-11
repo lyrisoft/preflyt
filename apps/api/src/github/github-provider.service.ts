@@ -1310,16 +1310,19 @@ export class GitHubProviderService {
     const reader = await this.openRepository(installationId, repositoryId, 'pull_requests')
     const root = `/repos/${encodeURIComponent(reader.metadata.owner.login)}/${encodeURIComponent(reader.metadata.name)}/pulls/${number}`
     const files: unknown[] = []
-    for (let page = 1; page <= 3; page++) {
+    for (let page = 1; page <= 2; page++) {
       const rows = await reader.request<unknown[]>(`${root}/files?per_page=100&page=${page}`)
       if (!Array.isArray(rows) || rows.length > 100) throw new ServiceUnavailableException('PR files unavailable')
       files.push(...rows)
-      if (files.length > 200) throw new ServiceUnavailableException('PR exceeds 200-file source review limit')
       if (rows.length < 100) break
     }
     const after = await this.readPullRequest(installationId, repositoryId, number)
     if (!sameReviewPr(expected, after.context)) throw new ConflictException('PR changed while reading source')
-    return prReviewSource(number, expected, files)
+    // Keep the source disclosure bounded even for large PRs. The live count
+    // records everything we did not collect; it never implies full coverage.
+    if (files.length === 200 && before.changedFiles === undefined) throw new ServiceUnavailableException('PR file count unavailable for bounded review')
+    if (before.changedFiles !== after.changedFiles) throw new ConflictException('PR file count changed while reading source')
+    return prReviewSource(number, expected, files, Math.max(0, (before.changedFiles ?? files.length) - files.length))
   }
 
   async readPullRequest(
@@ -1355,6 +1358,8 @@ export class GitHubProviderService {
       context: normalized.pullRequestContext,
       sourceUpdatedAt: normalized.sourceUpdatedAt,
       sourceObjectId: normalized.sourceObjectId,
+      changedFiles: Number.isSafeInteger(data.changed_files) && Number(data.changed_files) >= 0
+        ? Number(data.changed_files) : undefined,
     }
   }
 

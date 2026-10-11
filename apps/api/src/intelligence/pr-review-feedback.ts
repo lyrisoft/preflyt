@@ -62,8 +62,9 @@ export function conciseReviewSummary(
   number: number,
   sha: string,
   issues: number,
+  source?: Pick<PrReviewSource, "omittedFiles" | "omittedLines">,
 ) {
-  return `Advisory review for PR #${number}, commit ${sha.slice(0, 12)}. ${issues ? `${issues} actionable issue${issues === 1 ? "" : "s"}.` : "No actionable issues found."} Full review in Preflyt. AI does not decide readiness.`;
+  return `Advisory review for PR #${number}, commit ${sha.slice(0, 12)}. ${issues ? `${issues} actionable issue${issues === 1 ? "" : "s"}.` : "No actionable issues found."} ${source && (source.omittedFiles || source.omittedLines) ? `Partial review: ${source.omittedFiles} files and ${source.omittedLines} lines omitted. ` : ""}Full review in Preflyt. AI does not decide readiness.`;
 }
 
 export type InlineIssue = {

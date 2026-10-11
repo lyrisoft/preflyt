@@ -74,3 +74,30 @@ it('verifies published checks with a repository-scoped Checks read token', async
   expect((mint.mock.calls[0][1] as any).permissions).not.toHaveProperty('administration')
   provider.close()
 })
+
+it('reviews a bounded sample of a large PR and records files outside the sample', async () => {
+  const provider = new GitHubProviderService() as any
+  const context = {version:1,head:{repositoryId:'501',ref:'feature',sha:'a'.repeat(40)},base:{repositoryId:'501',ref:'development',sha:'b'.repeat(40)},state:'open',draft:false,merged:false}
+  vi.spyOn(provider, 'readPullRequest').mockResolvedValue({context, changedFiles:454})
+  const request = vi.fn(async (path:string) => {
+    const page = Number(new URL('https://api.github.com' + path).searchParams.get('page'))
+    return Array.from({length:100}, (_, i) => ({filename:`src/file-${(page-1)*100+i}.ts`,patch:'@@ -0,0 +1 @@\n+changed'}))
+  })
+  vi.spyOn(provider,'openRepository').mockResolvedValue({metadata:{owner:{login:'fixture'},name:'app'},request})
+  const source = await provider.readPrReviewSource(500n,501n,7,context)
+  expect(request).toHaveBeenCalledTimes(2)
+  expect(source.omittedFiles).toBe(254)
+  expect(source.lines.length).toBeLessThanOrEqual(300)
+  expect(source.lines.some((line:any) => line.path === 'src/file-199.ts')).toBe(true)
+  provider.close()
+})
+it('rejects a large bounded review if GitHub cannot supply a stable file count', async () => {
+  const provider = new GitHubProviderService() as any
+  const context = {version:1,head:{repositoryId:'501',ref:'feature',sha:'a'.repeat(40)},base:{repositoryId:'501',ref:'development',sha:'b'.repeat(40)},state:'open',draft:false,merged:false}
+  const read = vi.spyOn(provider,'readPullRequest').mockResolvedValue({context})
+  vi.spyOn(provider,'openRepository').mockResolvedValue({metadata:{owner:{login:'fixture'},name:'app'},request:vi.fn(async()=>Array.from({length:100},()=>({filename:'x.ts'})))})
+  await expect(provider.readPrReviewSource(500n,501n,7,context)).rejects.toThrow('file count unavailable')
+  read.mockResolvedValueOnce({context, changedFiles:454}).mockResolvedValueOnce({context,changedFiles:455})
+  await expect(provider.readPrReviewSource(500n,501n,7,context)).rejects.toThrow('file count changed')
+  provider.close()
+})

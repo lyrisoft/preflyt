@@ -970,6 +970,7 @@ export class SkillReviewService {
         snapshot.automatic.number,
         snapshot.context.sourceSha,
         findings.length,
+        snapshot.context.source,
       );
       const publication = route.publishSummary
         ? await this.github.publishAiReviewSummary(

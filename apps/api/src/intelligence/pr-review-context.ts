@@ -43,18 +43,21 @@ export function prReviewSource(
   number: number,
   expected: PullRequestContext,
   files: unknown,
+  uncollectedFiles = 0,
 ): PrReviewSource {
   if (
     !Number.isSafeInteger(number) ||
     number < 1 ||
     !sameReviewPr(expected, expected) ||
     !Array.isArray(files) ||
-    files.length > 200
+    files.length > 200 ||
+    !Number.isSafeInteger(uncollectedFiles) ||
+    uncollectedFiles < 0
   )
     throw new Error("PR diff exceeds the review limit or is unavailable");
   const lines: DiffLine[] = [];
   let bytes = 0,
-    omittedFiles = 0,
+    omittedFiles = uncollectedFiles,
     omittedLines = 0;
   const seen = new Set<string>();
   // Keep application changes ahead of workflow scaffolding within the same
