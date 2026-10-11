@@ -39,7 +39,9 @@ it('opens highlighted, read-only YAML from a standard card and copies the exact 
   const field = view
     .getByRole('textbox', { name: /Application Security.*Workflow YAML/ })
     .element()
-  expect(EditorView.findFromDOM(field)?.state.doc.toString()).toBe(snippet)
+  expect(
+    EditorView.findFromDOM(field as HTMLElement)?.state.doc.toString()
+  ).toBe(snippet)
   expect(field.getAttribute('contenteditable')).toBe('false')
   expect(field.querySelector('.yaml-key')).not.toBeNull()
   await view.getByRole('button', { name: 'Copy snippet' }).click()

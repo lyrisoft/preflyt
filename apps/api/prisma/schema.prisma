@@ -727,6 +727,8 @@ model ReadinessAutomation {
  actorId String
  enabled Boolean @default(false)
  pipelineComments Boolean @default(false)
+ aiReviews Boolean @default(false)
+ aiReviewsEnabledAt DateTime?
  revision Int @default(1)
  createdAt DateTime @default(now())
  updatedAt DateTime @updatedAt

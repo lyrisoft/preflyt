@@ -1,3 +1,4 @@
+import { excludePreflytFeedback } from '../github-events/preflyt-feedback.js'
 import { currentStandards, selectionBindingWhere } from '../standards/policy-standards.js'
 import {
   freezeNativeEvidence,
@@ -145,21 +146,27 @@ export class AssessmentService {
     pullRequest: NonNullable<Trigger['pullRequest']>,
   ) {
     const repo = await this.repository(id)
-    return this.prisma.$transaction((tx) =>
-      this.persist(
-        tx,
-        repo,
-        id,
-        {
-          sourceSha,
-          expectedSelectionId: selectionId,
-          requestKey,
-          mappings: [],
-        },
-        actorId,
-        { kind: 'AUTOMATIC', deliveryId: null, pullRequest },
-      ),
-    )
+    return this.prisma.$transaction(async (tx) => {
+      // Polling revalidates GitHub, but unchanged evidence should reuse its snapshot.
+      const where = { repositoryGithubId: repo.githubId, installationId: repo.installationId,
+        sourceSha, ...excludePreflytFeedback() }
+      const [observations, profile, binding, native, selection] = await Promise.all([
+        tx.importedCiEvidence.findMany({ where, orderBy: [{ observedAt: 'desc' }, { deliveryId: 'desc' }],
+          take: 101, select: { evidenceHash: true, artifacts: { orderBy: { id: 'asc' },
+            select: { id: true, sha256: true, attestations: { orderBy: { id: 'asc' }, select: { id: true } } } } } }),
+        tx.repositoryProfile.findFirst({ where: { repositoryId: repo.id, sourceSha },
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], select: { id: true } }),
+        tx.repositoryCiBindings.findFirst({ where: selectionBindingWhere(repo.id, selectionId),
+          orderBy: { revision: 'desc' }, select: { id: true, revision: true } }),
+        readLatestNativeEvidence(tx, { repositoryGithubId: id, sourceSha, selectionId }),
+        currentStandards(tx, repo.id, { expectedId: selectionId, branchRef: `refs/heads/${pullRequest.base.ref}` }),
+      ])
+      const key = `auto:${digest({ repositoryId: repo.id, sourceSha, actorId, pullRequest,
+        selection, observations, profile, binding,
+        native: native.map(freezeNativeEvidence), proofPolicy: reportProofPolicy()?.digest ?? null })}`
+      return this.persist(tx, repo, id, { sourceSha, expectedSelectionId: selectionId,
+        requestKey: key, mappings: [] }, actorId, { kind: 'AUTOMATIC', deliveryId: null, pullRequest })
+    })
   }
 
   /** Internal native completion produces a new immutable commit snapshot. */
@@ -321,6 +328,7 @@ export class AssessmentService {
         repositoryGithubId: repo.githubId,
         installationId: repo.installationId,
         sourceSha: normalized.sourceSha,
+        ...excludePreflytFeedback(),
       },
       orderBy: [{ observedAt: 'desc' }, { deliveryId: 'desc' }],
       take: 101,

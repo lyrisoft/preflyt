@@ -50,7 +50,7 @@ export function checkNextStep(rule?: GatePreview['rules'][number]): {
     return { text: 'The saved requirement is satisfied at this commit.' }
   if (rule?.status === 'BLOCK')
     return {
-      text: 'Review the failed CI result, fix the failure and rerun the workflow. Then save a new assessment.',
+      text: 'Review the failed CI result, fix the failure and rerun the workflow.',
       destination: 'activity',
     }
   if (reasons.includes('RULE_ADAPTER_UNSUPPORTED'))

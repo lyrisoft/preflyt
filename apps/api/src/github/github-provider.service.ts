@@ -1218,14 +1218,14 @@ export class GitHubProviderService {
   }
 
   /** Publish advisory comments only at verified changed lines on the exact PR revision. */
-  async publishAiInlineReview(installationId: bigint, repositoryId: bigint, source: import('../intelligence/pr-review-context.js').PrReviewSource, key: string, findings: {summary:string;recommendation:string;evidenceRefs:string[]}[]) {
+  async publishAiInlineReview(installationId: bigint, repositoryId: bigint, source: import('../intelligence/pr-review-context.js').PrReviewSource, key: string, findings: {summary:string;recommendation:string;evidenceRefs:string[]}[], summary?: string) {
     if (!/^[a-f0-9]{64}$/.test(key) || findings.length > 20) throw new BadRequestException('Invalid AI review');
     const safe = (s:string) => s.replace(/[\`*_<>#@\[\]]/g,'');
     const comments = findings.flatMap(f=> {
       const line = source.lines.find(l=>f.evidenceRefs.includes(l.ref));
       return line ? [{path:line.path,line:line.line,side:line.side,body:`Advisory AI suggestion\n\n${safe(f.summary)}\n\n${safe(f.recommendation)}`}]:[];
     });
-    if (!comments.length) return null;
+    if (!comments.length && !summary) return null;
     const before = await this.readPullRequest(installationId, repositoryId, source.number);
     if (!sameReviewPr(source.context,before.context)) throw new ConflictException('PR changed before inline feedback');
     const reader = await this.openRepository(installationId,repositoryId,'metadata');
@@ -1238,7 +1238,8 @@ export class GitHubProviderService {
       if(!response.ok) throw new ServiceUnavailableException('GitHub inline feedback unavailable');
       return response.json() as Promise<any>;
     };
-    const body = `Advisory AI review; does not approve or block merging.\n\n<!-- preflyt-ai:${key} -->`;
+    if (summary && summary.length > 30000) throw new BadRequestException('AI review summary exceeds limit');
+    const body = `${summary ?? 'Advisory AI review; does not approve or block merging.'}\n\n<!-- preflyt-ai:${key} -->`;
     const matches = (r:any)=>r.body===body && r.commit_id===source.context.head.sha && r.state==='COMMENTED' && r.user?.login===`${app.slug}[bot]` && r.user?.type==='Bot' && typeof r.html_url==='string' && r.html_url.startsWith('https://github.com/');
     let existing:any;
     for(let page=1;page<=3;page++) {

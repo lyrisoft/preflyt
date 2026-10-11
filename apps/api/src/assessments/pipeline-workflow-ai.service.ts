@@ -64,6 +64,9 @@ function rewriteFailure(error: unknown) {
         "AI returned credentials in its draft. The draft was rejected; use GitHub secret references.",
       REFUSED:
         "The model declined to rewrite this workflow. Try a different request or model.",
+      INVALID_REVIEW_SCHEMA: "AI returned an invalid structured response.",
+      INVALID_EVIDENCE: "AI cited unavailable evidence.",
+      UNSUPPORTED_CLAIM: "AI returned an unsupported claim.",
     };
     return {
       code: error.code,

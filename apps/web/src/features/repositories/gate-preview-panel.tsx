@@ -70,7 +70,7 @@ export function GatePreviewPanel({
           <div className='flex flex-wrap items-center gap-x-4 gap-y-2'>
             <p className='text-sm sm:min-w-0 sm:flex-1'>
               {result.status === 'BLOCK'
-                ? 'Fix the failed CI results, then save a new assessment.'
+                ? 'Fix the failed CI results and rerun the workflow.'
                 : result.reasons.includes('NO_REQUIRED_RULES')
                   ? 'Choose required checks in the repository standards before relying on this result.'
                   : result.reasons.includes('SNAPSHOT_SCHEMA_UNSUPPORTED')

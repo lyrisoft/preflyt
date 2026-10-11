@@ -52,7 +52,9 @@ it('colors YAML tokens and GitHub expressions in both themes without changing th
   expect(light).not.toBe(getComputedStyle(comment).color)
   document.documentElement.classList.add('dark')
   await expect.poll(() => getComputedStyle(key).color !== light).toBe(true)
-  expect(EditorView.findFromDOM(field)?.state.doc.toString()).toBe(workflow)
+  expect(
+    EditorView.findFromDOM(field as HTMLElement)?.state.doc.toString()
+  ).toBe(workflow)
   expect(changed).not.toHaveBeenCalled()
 })
 
@@ -74,7 +76,7 @@ it('supports indentation and preserves a replacement draft as read-only without 
   const view = await render(<Editable />)
   const field = view.getByRole('textbox', { name: 'Workflow YAML' })
   await field.click()
-  const editor = EditorView.findFromDOM(field.element())!
+  const editor = EditorView.findFromDOM(field.element() as HTMLElement)!
   editor.dispatch({ selection: { anchor: editor.state.doc.length } })
   await userEvent.keyboard('{Tab}build:')
   await expect.poll(() => editor.state.doc.toString()).toBe('jobs:\n  build:')
@@ -91,26 +93,26 @@ it('supports indentation and preserves a replacement draft as read-only without 
   await expect.element(field).toHaveAttribute('aria-readonly', 'true')
   await field.click()
   await userEvent.keyboard('overwrite')
-  expect(EditorView.findFromDOM(field.element())?.state.doc.toString()).toBe(
-    workflow
-  )
+  expect(
+    EditorView.findFromDOM(field.element() as HTMLElement)?.state.doc.toString()
+  ).toBe(workflow)
   expect(changed).not.toHaveBeenCalled()
 })
 
 it('expands the whole workflow section without recreating the editor or losing its selection', async () => {
-  let fullscreen: Element | null = null
+  const fullscreen = { element: null as Element | null }
   vi.spyOn(document, 'fullscreenElement', 'get').mockImplementation(
-    () => fullscreen
+    () => fullscreen.element
   )
   vi.spyOn(Element.prototype, 'requestFullscreen').mockImplementation(function (
     this: Element
   ) {
-    fullscreen = this
+    fullscreen.element = this
     document.dispatchEvent(new Event('fullscreenchange'))
     return Promise.resolve()
   })
   vi.spyOn(document, 'exitFullscreen').mockImplementation(() => {
-    fullscreen = null
+    fullscreen.element = null
     document.dispatchEvent(new Event('fullscreenchange'))
     return Promise.resolve()
   })
@@ -133,27 +135,27 @@ it('expands the whole workflow section without recreating the editor or losing i
   }
   const view = await render(<WorkflowSection />)
   const field = view.getByRole('textbox', { name: 'Workflow YAML' })
-  const editor = EditorView.findFromDOM(field.element())!
+  const editor = EditorView.findFromDOM(field.element() as HTMLElement)!
   const section = field.element().closest('.pipeline-workflow-editor')!
   editor.dispatch({ selection: { anchor: 14 } })
   await view.getByRole('button', { name: 'Open workflow fullscreen' }).click()
   await expect
     .element(view.getByRole('button', { name: 'Exit workflow fullscreen' }))
     .toHaveAttribute('aria-pressed', 'true')
-  expect(fullscreen).toBe(section)
+  expect(fullscreen.element).toBe(section)
   expect(
     section.contains(
       view.getByRole('button', { name: 'Rewrite workflow' }).element()
     )
   ).toBe(true)
   expect(section.querySelector('header')?.textContent).toBe('Review changes')
-  expect(EditorView.findFromDOM(field.element())).toBe(editor)
+  expect(EditorView.findFromDOM(field.element() as HTMLElement)).toBe(editor)
   expect(editor.state.selection.main.head).toBe(14)
   await view.getByRole('button', { name: 'Exit workflow fullscreen' }).click()
   await expect
     .element(view.getByRole('button', { name: 'Open workflow fullscreen' }))
     .toHaveAttribute('aria-pressed', 'false')
-  expect(EditorView.findFromDOM(field.element())).toBe(editor)
+  expect(EditorView.findFromDOM(field.element() as HTMLElement)).toBe(editor)
   expect(editor.state.doc.toString()).toBe(workflow)
-  expect(fullscreen).toBeNull()
+  expect(fullscreen.element).toBeNull()
 })

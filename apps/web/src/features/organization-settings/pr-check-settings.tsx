@@ -5,7 +5,6 @@ import { RepositoryPicker } from '@/components/repository-picker'
 import { ReadinessAutomation } from '@/features/repositories/readiness-automation'
 import { useNavigationSession } from '@/features/workspace/navigation-session'
 import { canPerform } from '@/features/workspace/scoped-access'
-import { AiPrFeedback } from './ai-pr-feedback'
 
 export function PrCheckSettings() {
   const session = useNavigationSession()
@@ -35,7 +34,7 @@ export function PrCheckSettings() {
       return response.json()
     },
   })
-  if (!canPerform(session.data, 'policy.publish')) return <AiPrFeedback />
+  if (!canPerform(session.data, 'policy.publish')) return null
   if (inventory.isPending) return <p role='status'>Loading repositories…</p>
   if (inventory.isError)
     return (
@@ -49,23 +48,34 @@ export function PrCheckSettings() {
   )
   const repository =
     repositories.find((repo) => repo.githubId === selected) ?? repositories[0]
+  const all = selected === 'all'
   return (
     <section className='space-y-4'>
-      <AiPrFeedback />
       {repository ? (
         <>
           <RepositoryPicker
             repositories={repositories}
-            value={repository.githubId}
+            allowAll
+            value={all ? 'all' : repository.githubId}
             aria-label='Repository for PR check settings'
             onValueChange={setSelected}
             className='w-full sm:w-96'
           />
           <ReadinessAutomation
-            key={repository.githubId}
-            repositoryId={repository.githubId}
+            key={all ? 'all' : repository.githubId}
+            repositoryId={all ? 'all' : repository.githubId}
+            repositoryIds={
+              all ? repositories.map((repo) => repo.githubId) : undefined
+            }
             actorId={session.data?.identityId}
             canPublish
+            canReview={
+              all
+                ? repositories.every((repo) =>
+                    canPerform(session.data, 'ai.review.run', repo.githubId)
+                  )
+                : canPerform(session.data, 'ai.review.run', repository.githubId)
+            }
             settingsOnly
           />
         </>

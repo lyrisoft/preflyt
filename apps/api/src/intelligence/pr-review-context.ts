@@ -51,7 +51,12 @@ export function prReviewSource(
     omittedFiles = 0,
     omittedLines = 0;
   const seen = new Set<string>();
-  for (const file of files) {
+  // Keep application changes ahead of workflow scaffolding within the same
+  // fixed disclosure bound. GitHub lists .github files first alphabetically.
+  const priority = (file: any) => typeof file?.filename === "string" &&
+    (file.filename.startsWith(".github/") || /(?:^|\/)(?:[^/]+\.lock|package-lock\.json|pnpm-lock\.yaml|yarn\.lock)$/.test(file.filename)) ? 1 : 0;
+  const orderedFiles = [...files].sort((a, b) => priority(a) - priority(b));
+  for (const file of orderedFiles) {
     const path = file?.filename;
     if (
       typeof path !== "string" ||

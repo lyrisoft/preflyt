@@ -135,3 +135,14 @@ it("rejects an inline receipt from a different review without publishing another
   expect(fetch.mock.calls.every((c) => c[1].method === "GET")).toBe(true);
   p.close();
 });
+
+it("posts a PR review summary even when no line suggestions were returned", async () => {
+  const {p, fetch} = fixture();
+  const summary = "No advisory suggestions returned; this is not a passing engineering check.";
+  const observed = {...review, body: `${summary}\n\n<!-- preflyt-ai:${key} -->`};
+  fetch.mockResolvedValueOnce(response([])).mockResolvedValueOnce(response({id:12}))
+    .mockResolvedValueOnce(response(observed)).mockResolvedValueOnce(response([]));
+  expect(await p.publishAiInlineReview(10n,101n,source,key,[],summary)).toMatchObject({reviewId:'12'});
+  expect(JSON.parse(fetch.mock.calls[1][1].body)).toMatchObject({event:'COMMENT', body:observed.body, comments:[]});
+  p.close();
+});

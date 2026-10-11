@@ -19,7 +19,10 @@ export class AiResponseError extends Error {
       | "TRUNCATED"
       | "INVALID_RESPONSE"
       | "UNSAFE_RESPONSE"
-      | "REFUSED",
+      | "REFUSED"
+      | "INVALID_REVIEW_SCHEMA"
+      | "INVALID_EVIDENCE"
+      | "UNSUPPORTED_CLAIM",
     readonly status?: number,
   ) {
     super(
@@ -44,14 +47,40 @@ export async function runSkillInference(
     reviewPrompt(skills, context),
     maxOutputTokens,
     signal,
-    (raw, key) =>
-      validateSkillOutput(
-        raw,
-        context,
-        skills.map((s) => s.id),
-        key,
-      ),
+    (raw, key) => {
+      try {
+        return validateSkillOutput(raw, context, skills.map((s) => s.id), key);
+      } catch (error) {
+        // Retain only a fixed diagnostic code, never model content or credentials.
+        const message = error instanceof Error ? error.message : "";
+        throw new AiResponseError(
+          message === "Unsafe model output" ? "UNSAFE_RESPONSE" :
+          message === "Invalid evidence reference" ? "INVALID_EVIDENCE" :
+          message === "Unsupported model claim" ? "UNSUPPORTED_CLAIM" : "INVALID_REVIEW_SCHEMA",
+        );
+      }
+    },
     onUsage,
+    { jsonOutput: true, jsonSchema: {
+      type: "object", additionalProperties: false,
+      required: ["assessmentHash", "sourceSha", "findings"],
+      properties: {
+        assessmentHash: { type: "string", enum: [context.assessmentHash] },
+        sourceSha: { type: "string", enum: [context.sourceSha] },
+        findings: { type: "array", maxItems: 20, items: {
+          type: "object", additionalProperties: false,
+          required: ["checkId", "evidenceRefs", "summary", "recommendation"],
+          properties: {
+            checkId: { type: "string", enum: skills.map((s) => s.id) },
+            evidenceRefs: { type: "array", minItems: 1, maxItems: 10, items: {
+              type: "string", enum: [...context.evidence.map((e) => e.ref), ...(context.source?.lines.map((l) => l.ref) ?? [])],
+            } },
+            summary: { type: "string", maxLength: 600 },
+            recommendation: { type: "string", maxLength: 600 },
+          },
+        } },
+      },
+    } },
   );
 }
 export async function runPromptInference<T>(
@@ -61,7 +90,7 @@ export async function runPromptInference<T>(
   signal: AbortSignal,
   validate: (raw: string, credential?: string) => T,
   onUsage?: (usage: ProviderUsage) => Promise<void>,
-  options?: { jsonOutput?: boolean },
+  options?: { jsonOutput?: boolean; jsonSchema?: Record<string, unknown> },
 ): Promise<T> {
   const endpoint = providerEndpoint(provider);
   if (!endpoint) throw new Error("Connection unavailable");
@@ -89,7 +118,9 @@ export async function runPromptInference<T>(
       : { max_tokens: maxOutputTokens }),
     ...(options?.jsonOutput &&
     ["openai", "deepseek"].includes(endpoint.preset ?? "")
-      ? { response_format: { type: "json_object" } }
+      ? { response_format: endpoint.preset === "openai" && options.jsonSchema
+        ? { type: "json_schema", json_schema: { name: "preflyt_pr_review", strict: true, schema: options.jsonSchema } }
+        : { type: "json_object" } }
       : {}),
     stream: false,
   };

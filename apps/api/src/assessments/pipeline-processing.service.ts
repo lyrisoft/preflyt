@@ -32,7 +32,7 @@ export function pipelineComment(
   return `<!-- preflyt-policy-summary -->\n## Preflyt policy: ${label}\n\nCommit \`${sha.slice(0, 12)}\` · workflow run \`${runId}\`\n\n${preview.requiredRulesSatisfied}/${preview.requiredRules} required checks passed · ${preview.requiredRulesBlocked} failed · ${preview.requiredRulesIncomplete} incomplete\n\n| Check | Result |\n|---|---|\n${preview.rules
     .slice(0, 64)
     .map(
-      (rule) =>
+      (rule: { title?: string; ruleId: string; status: string }) =>
         `| ${escape(String(rule.title ?? rule.ruleId))} | ${rule.status === "PASS" ? "Passed" : rule.status === "BLOCK" ? "Failed" : "Incomplete"} |`,
     )
     .join(

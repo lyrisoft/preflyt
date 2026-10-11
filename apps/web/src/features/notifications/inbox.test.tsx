@@ -151,3 +151,29 @@ it('uses an informational blue indicator for informational updates', () => {
   expect(html).toContain('bg-blue-500')
   expect(html).not.toContain('bg-teal-500')
 })
+
+it('shows the event explanation, check details and next action with its assessment link', () => {
+  const html = renderToStaticMarkup(
+    <NotificationItem
+      item={{
+        ...item,
+        type: 'ASSESSMENT_FAILED',
+        assessmentId: 'assessment-1',
+        title: 'Assessment recorded failed checks',
+        message: 'Fix the failing check and rerun the workflow.',
+        details: [
+          '3 checks recorded · 2 required',
+          'Reported failures: Tests <script>',
+        ],
+        actionLabel: 'Review failed checks',
+      }}
+      busy={false}
+      onRead={() => undefined}
+    />
+  )
+  expect(html).toContain('Fix the failing check and rerun the workflow.')
+  expect(html).toContain('3 checks recorded · 2 required')
+  expect(html).toContain('Review failed checks')
+  expect(html).toContain('&quot;assessment&quot;:&quot;assessment-1&quot;')
+  expect(html).toContain('Tests &lt;script&gt;')
+})

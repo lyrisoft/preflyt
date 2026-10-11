@@ -22,7 +22,7 @@ export function emailNotificationsConfigured() {
 }
 export class NotificationMailer {
   private transport?: Transporter
-  async send(to: string, deliveryId: string, kind: NotificationEmailKind = 'PERSONAL') {
+  async send(to: string, deliveryId: string, kind: NotificationEmailKind = 'PERSONAL', eventType?: string) {
     const from = configurationValue('SMTP_FROM')
     const host = configurationValue('SMTP_HOST')
     const port = Number(configurationValue('SMTP_PORT') ?? 587)
@@ -38,7 +38,7 @@ export class NotificationMailer {
       logger: false, debug: false, disableFileAccess: true, disableUrlAccess: true,
     })
     const result = await this.transport.sendMail({ from, to,
-      ...notificationEmailTemplate(origin, kind),
+      ...notificationEmailTemplate(origin, kind, eventType),
       messageId: `<${createHash('sha256').update(deliveryId).digest('hex')}@preflyt.local>`,
     })
     if (!result.accepted?.length || result.rejected?.length) throw new Error('SMTP_RECIPIENT_REJECTED')

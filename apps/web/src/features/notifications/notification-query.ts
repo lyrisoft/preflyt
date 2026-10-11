@@ -8,6 +8,10 @@ export type Item = {
   createdAt: string
   type: string
   severity: string
+  title?: string
+  message?: string
+  details?: string[]
+  actionLabel?: string
   repository: string
   repositoryId: string
   assessmentId: string | null

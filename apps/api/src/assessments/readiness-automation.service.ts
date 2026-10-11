@@ -1,3 +1,4 @@
+import { effectiveAiRoute } from "../intelligence/effective-ai-route.js";
 import { currentStandards } from "../standards/policy-standards.js";
 import { configurationValue } from "../configuration/runtime-configuration.js";
 import { recordReadinessNotification } from "../notifications/notification-event.js";
@@ -79,11 +80,13 @@ export class ReadinessAutomationService {
     enabled: boolean,
     expectedRevision: number,
     pipelineComments?: boolean,
+    aiReviews?: boolean,
   ) {
     if (
       typeof enabled !== "boolean" ||
       (pipelineComments !== undefined &&
         typeof pipelineComments !== "boolean") ||
+      (aiReviews !== undefined && typeof aiReviews !== "boolean") ||
       !Number.isInteger(expectedRevision) ||
       expectedRevision < 0
     )
@@ -93,6 +96,12 @@ export class ReadinessAutomationService {
       githubId,
       "policy.publish",
     );
+    if (aiReviews) {
+      await this.access.requireRepository(session, githubId, "ai.review.run");
+      const route = await effectiveAiRoute(this.prisma, session.organizationId!, "pull_request");
+      if (!route?.enabled || !route.primaryId || !route.allowSource)
+        throw new ConflictException("Enable a PR model with source sharing in Model Router before enabling PR reviews");
+    }
     if (enabled && !automationEnabled())
       throw new ServiceUnavailableException(
         "Enable automatic publication on the API and worker before enabling this repository",
@@ -125,7 +134,9 @@ export class ReadinessAutomationService {
       });
       if ((previous?.revision ?? 0) !== expectedRevision)
         throw new ConflictException("Settings changed. Refresh and try again");
+      if (aiReviews) await new AuthorizationService(tx as PrismaService).requireRepository(session, githubId, "ai.review.run");
       const data = {
+        ...(aiReviews !== undefined ? { aiReviews, aiReviewsEnabledAt: aiReviews ? new Date() : null } : {}),
         ...(pipelineComments !== undefined ? { pipelineComments } : {}),
         enabled,
         actorId: session.identityId,
@@ -136,6 +147,9 @@ export class ReadinessAutomationService {
         where: { repositoryId: repo.id },
         create: { repositoryId: repo.id, ...data },
         update: data,
+      });
+      if (aiReviews !== undefined) await tx.repositoryPullRequest.updateMany({
+        where: { repositoryId: repo.id }, data: { aiReviewAttemptAt: null },
       });
       await tx.readinessTask.updateMany({
         where: { repositoryId: repo.id },
@@ -149,6 +163,7 @@ export class ReadinessAutomationService {
             repositoryGithubId: githubId,
             enabled,
             pipelineComments: row.pipelineComments,
+            aiReviews: row.aiReviews,
             revision: row.revision,
           },
         },

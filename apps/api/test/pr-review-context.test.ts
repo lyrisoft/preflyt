@@ -128,3 +128,15 @@ it("maps renamed deletion lines to the original file and additions to the curren
     ]),
   ).toThrow();
 });
+
+it("includes application changes before a large generated Action consumes the diff bound", () => {
+  const patch = "@@ -0,0 +1,400 @@\n" + Array.from({length: 400}, (_, i) => `+generatedLine${i}`).join("\n");
+  const source = prReviewSource(1, pr, [
+    {filename: ".github/actions/preflyt-policy/run.py", patch},
+    {filename: "catalogue.py", patch: "@@ -0,0 +1 @@\n+price = total + discount"},
+  ]);
+  expect(source.lines[0]).toMatchObject({path: "catalogue.py", line: 1, text: "price = total + discount"});
+  expect(source.omittedLines).toBeGreaterThan(0);
+  expect(source.lines.length).toBeLessThanOrEqual(300);
+  expect(source.lines.some(line => line.path.startsWith(".github/"))).toBe(true);
+});

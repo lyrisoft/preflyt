@@ -17,7 +17,7 @@ import {
 import { siClaude, siGooglegemini, siDeepseek } from 'simple-icons'
 import { surfaceTones } from '@/lib/surface-tones'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import {
   Dialog,
   DialogContent,
@@ -1025,6 +1025,8 @@ function RouteForm({
   cancel: () => void
   save: (body: unknown) => void
 }) {
+  const [primaryId, setPrimaryId] = useState(route.primaryId ?? 'none')
+  const [fallbackId, setFallbackId] = useState(route.fallbackId ?? 'none')
   function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const f = new FormData(e.currentTarget)
@@ -1052,7 +1054,15 @@ function RouteForm({
           </span>
           <Select
             name={name}
-            defaultValue={route[name] ?? 'none'}
+            value={name === 'primaryId' ? primaryId : fallbackId}
+            onValueChange={(value) => {
+              if (name === 'primaryId') {
+                setPrimaryId(value)
+                if (value === fallbackId) setFallbackId('none')
+              } else {
+                setFallbackId(value)
+              }
+            }}
             disabled={busy}
           >
             <SelectTrigger
@@ -1069,7 +1079,11 @@ function RouteForm({
                 {name === 'primaryId' ? 'Choose a model' : 'No fallback'}
               </SelectItem>
               {providers.map((p) => (
-                <SelectItem key={p.id} value={p.id}>
+                <SelectItem
+                  key={p.id}
+                  value={p.id}
+                  disabled={name === 'fallbackId' && p.id === primaryId}
+                >
                   {p.name} · {testName(p.testStatus)}
                 </SelectItem>
               ))}

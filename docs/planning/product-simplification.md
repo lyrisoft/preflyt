@@ -134,3 +134,10 @@ Supersedes the editor-first setup and repeated model/publishing configuration ab
 - PR feedback settings centralize policy check publication, policy summary comments and optional AI feedback. No token prices or budgets are required.
 
 Tests were written/updated and left unrun. No tests, builds, lint, typechecks, hosted Actions, external PRs or repository workflow changes were performed for this increment. Public Action release and real-PR acceptance are still pending. Current-run identity, signed evidence, approval and authorization requirements remain in force; missing evidence cannot pass.
+
+## Template route cleanup
+
+- Removed the demo Tasks, Chats, Users, Help Center and error preview routes, their fixture data and template-only components.
+- Removed the template Settings forms. Existing `/settings` bookmarks redirect to the real Preflyt Settings page; notification and appearance links select their matching tabs. Active PR feedback links now use `/organization-settings?tab=pr-checks`.
+- Retained the API-backed repository inventory at `/apps`, the dashboard, real error pages, authentication routes and original sidebar groups.
+- Removed unused charts, table helpers, icons, form widgets and their obsolete tests. Test execution remains deferred to the user's requested full run.

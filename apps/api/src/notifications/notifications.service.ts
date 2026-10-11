@@ -1,5 +1,6 @@
+import { notificationContent } from "./notification-content.js";
 import { aiNotificationTypes } from "./ai-notification.js";
-import { configurationValue } from '../configuration/runtime-configuration.js'
+import { configurationValue } from "../configuration/runtime-configuration.js";
 import { validNotificationEmail } from "./notification-mail.js";
 import {
   BadRequestException,
@@ -54,10 +55,14 @@ export class NotificationsService {
       event: {
         organizationId: session.organizationId ?? "",
         OR: [
-          ...(['OWNER', 'ADMIN'].includes(member?.role ?? '') ? [{
-            type: { in: aiNotificationTypes },
-            repositoryId: { in: assessments.map((r) => r.id) },
-          }] : []),
+          ...(["OWNER", "ADMIN"].includes(member?.role ?? "")
+            ? [
+                {
+                  type: { in: aiNotificationTypes },
+                  repositoryId: { in: assessments.map((r) => r.id) },
+                },
+              ]
+            : []),
           {
             type: { in: assessmentNotificationTypes },
             repositoryId: { in: assessments.map((r) => r.id) },
@@ -164,25 +169,86 @@ export class NotificationsService {
         select: { repositoryGithubId: true, repositoryName: true },
       }),
     ]);
+    // Fetch context only for events already admitted by the current inbox scope.
+    const assessmentIds = items.flatMap((row) =>
+      row.event.assessmentId ? [row.event.assessmentId] : [],
+    );
+    const policyIds = items.flatMap((row) =>
+      row.event.policyId ? [row.event.policyId] : [],
+    );
+    const [assessments, policies] = await Promise.all([
+      assessmentIds.length
+        ? this.db.commitAssessment.findMany({
+            where: {
+              id: { in: assessmentIds },
+              repositoryId: { in: items.map((row) => row.event.repositoryId) },
+              repository: {
+                installation: { organizationId: session.organizationId ?? "" },
+              },
+            },
+            select: {
+              id: true,
+              repositoryId: true,
+              sourceSha: true,
+              report: true,
+            },
+          })
+        : [],
+      policyIds.length
+        ? this.db.gatePolicyRevision.findMany({
+            where: {
+              id: { in: policyIds },
+              organizationId: session.organizationId ?? "",
+              repositoryId: { in: items.map((row) => row.event.repositoryId) },
+            },
+            select: {
+              id: true,
+              repositoryId: true,
+              branchRef: true,
+              revision: true,
+            },
+          })
+        : [],
+    ]);
+    const reports = new Map(assessments.map((row) => [row.id, row]));
+    const revisions = new Map(policies.map((row) => [row.id, row]));
     return {
       enabled: true,
       total,
       unreadCount,
       page,
       repositories,
-      items: items.map((row) => ({
-        id: row.id,
-        readAt: row.readAt,
-        createdAt: row.event.createdAt,
-        type: row.event.type,
-        severity: row.event.severity,
-        repository: row.event.repositoryName,
-        repositoryId: row.event.repositoryGithubId,
-        sourceSha: row.event.sourceSha,
-        assessmentId: row.event.assessmentId,
-        policyId: row.event.policyId,
-        emailDelivery: row.emailDelivery,
-      })),
+      items: items.map((row) => {
+        const assessment = row.event.assessmentId
+          ? reports.get(row.event.assessmentId)
+          : undefined;
+        const policy = row.event.policyId
+          ? revisions.get(row.event.policyId)
+          : undefined;
+        return {
+          ...notificationContent(
+            row.event.type,
+            assessment?.repositoryId === row.event.repositoryId &&
+              assessment.sourceSha === row.event.sourceSha
+              ? assessment.report
+              : undefined,
+            policy?.repositoryId === row.event.repositoryId
+              ? policy
+              : undefined,
+          ),
+          id: row.id,
+          readAt: row.readAt,
+          createdAt: row.event.createdAt,
+          type: row.event.type,
+          severity: row.event.severity,
+          repository: row.event.repositoryName,
+          repositoryId: row.event.repositoryGithubId,
+          sourceSha: row.event.sourceSha,
+          assessmentId: row.event.assessmentId,
+          policyId: row.event.policyId,
+          emailDelivery: row.emailDelivery,
+        };
+      }),
     };
   }
   async preferences(session: AuthenticatedSession) {
@@ -198,7 +264,7 @@ export class NotificationsService {
     return {
       assessments: preference?.assessments ?? true,
       email: preference?.email ?? false,
-      emailEnabled: configurationValue('NOTIFICATION_EMAIL_ENABLED') === "true",
+      emailEnabled: configurationValue("NOTIFICATION_EMAIL_ENABLED") === "true",
       emailAddressAvailable: validNotificationEmail(
         (
           await this.db.identity.findUnique({

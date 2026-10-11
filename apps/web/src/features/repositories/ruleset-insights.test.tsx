@@ -6,7 +6,12 @@ const state = vi.hoisted(() => ({ query: {} as Record<string, unknown> }))
 vi.mock('@tanstack/react-query', () => ({ useQuery: () => state.query }))
 const render = () =>
   renderToStaticMarkup(
-    <RulesetInsights repositoryId='501' actorId='reader' rulesetId={7} />
+    <RulesetInsights
+      repositoryId='501'
+      actorId='reader'
+      rulesetId={7}
+      configuration={null}
+    />
   )
 beforeEach(() => {
   state.query = {

@@ -105,6 +105,14 @@ it.each(aiProviderPresets)(
     expect(options.body).not.toContain("fixture-key");
     expect(JSON.parse(options.body)).not.toHaveProperty("tools");
     const body = JSON.parse(options.body);
+    if (preset.id === "openai") {
+      expect(body.response_format.type).toBe("json_schema");
+      expect(body.response_format.json_schema).toMatchObject({ strict: true, schema: {
+        properties: { findings: { items: { properties: {
+          checkId: { enum: ["skill"] }, evidenceRefs: { items: { enum: ["check:0"] } },
+        } } } },
+      } });
+    } else if (preset.id === "deepseek") expect(body.response_format).toEqual({ type: "json_object" });
     expect(
       preset.id === "gemini"
         ? body.generationConfig.maxOutputTokens

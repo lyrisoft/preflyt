@@ -21,6 +21,7 @@ import { AuthService } from "../auth/auth.service.js";
 import { ReadinessAutomationService } from "./readiness-automation.service.js";
 class SettingsDto {
   @IsOptional() @IsBoolean() pipelineComments?: boolean;
+  @IsOptional() @IsBoolean() aiReviews?: boolean;
   @IsBoolean() enabled!: boolean;
   @IsInt() @Min(0) expectedRevision!: number;
 }
@@ -63,6 +64,7 @@ export class ReadinessAutomationController {
       body.enabled,
       body.expectedRevision,
       body.pipelineComments,
+      body.aiReviews,
     );
   }
 }

@@ -1945,3 +1945,66 @@ it("inherits a shared model, respects disabled stage overrides and guards return
     ).body.reason,
   ).toBe("CONFIGURATION_READY");
 });
+
+it("retries a failed manual review without repeating a running or successful review", async () => {
+  const f = await reviewFixture();
+  const input = {assessmentId: f.assessment.id, checkIds: [f.check.id]};
+  const first = (await f.call("", input).expect(201)).body;
+  await db.aiSkillReview.update({where: {id: first.id}, data: {state: "UNAVAILABLE", failure: "Invalid response", finishedAt: new Date()}});
+  const retry = (await f.call("", input).expect(201)).body;
+  expect(retry.id).toBe(first.id);
+  expect(retry.state).toBe("QUEUED");
+  f.infer();
+  await f.reviews.reconcile();
+  expect((await db.aiSkillReview.findUniqueOrThrow({where: {id: first.id}})).state).toBe("SUCCEEDED");
+  const duplicate = (await f.call("", input).expect(201)).body;
+  expect(duplicate.id).toBe(first.id);
+  expect(duplicate.state).toBe("SUCCEEDED");
+});
+
+async function scopedPrReviewFixture() {
+  const f = await prFixture({automatic: false});
+  const enabledAt = new Date();
+  await db.readinessAutomation.create({data: {repositoryId: f.repo.id, organizationId: owner.organizationId!, actorId: owner.identityId, enabled: true, aiReviews: true, aiReviewsEnabledAt: enabledAt}});
+  const run = await db.pipelineRunSubmission.create({data: {
+    id: randomUUID(), repositoryId: f.repo.id, organizationId: owner.organizationId!,
+    policyId: f.policy.id, policyHash: f.policy.definitionHash, sourceSha: f.context.head.sha,
+    workflowSha: f.context.head.sha, runId: '100', runAttempt: 1, prNumber: f.pr.number,
+    inputHash: digest({test:'scoped-pr'}), payload: {}, submittedById: owner.identityId,
+    state: 'PENDING', assessmentId: f.assessment.id, createdAt: new Date(enabledAt.getTime() + 1),
+  }});
+  const inline = vi.fn(async () => ({htmlUrl:'https://github.com/fixture/review/pull/1#pullrequestreview-1', reviewId:'1'}));
+  (f.github as any).publishAiInlineReview = inline;
+  return {...f, run, inline};
+}
+it('reviews only an authorized repository after its verified PR run, then comments on the PR once', async () => {
+  vi.stubEnv('GITHUB_CHECK_PUBLICATION_ENABLED','true');
+  const f = await scopedPrReviewFixture();
+  await f.reviews.dispatchAutomatic();
+  expect(await db.aiSkillReview.count({where:{assessmentId:f.assessment.id}})).toBe(0);
+  await db.pipelineRunSubmission.update({where:{id:f.run.id},data:{state:'COMPLETE'}});
+  await db.repositoryPullRequest.update({where:{id:f.pr.id},data:{aiReviewAttemptAt:null}});
+  await f.reviews.dispatchAutomatic();
+  f.infer(); await f.reviews.reconcile(); await f.reviews.publishPendingSummary();
+  expect(f.inline).toHaveBeenCalledOnce();
+  expect(f.inline.mock.lastCall).toEqual(expect.arrayContaining([expect.stringContaining('Advisory review for PR #1')]));
+  expect(f.github.publishAiReviewSummary).not.toHaveBeenCalled();
+  const job = await db.aiSkillReview.findFirstOrThrow({where:{assessmentId:f.assessment.id}});
+  expect(job).toMatchObject({state:'SUCCEEDED',feedbackState:'PUBLISHED'});
+  await db.repositoryPullRequest.update({where:{id:f.pr.id},data:{aiReviewAttemptAt:null}});
+  await f.reviews.dispatchAutomatic();
+  expect(await db.aiSkillReview.count({where:{assessmentId:f.assessment.id}})).toBe(1);
+});
+it('does not review historic PR runs or continue after repository AI authorization is revoked', async () => {
+  const f = await scopedPrReviewFixture();
+  await db.pipelineRunSubmission.update({where:{id:f.run.id},data:{state:'COMPLETE',createdAt:new Date(0)}});
+  await f.reviews.dispatchAutomatic();
+  expect(await db.aiSkillReview.count({where:{assessmentId:f.assessment.id}})).toBe(0);
+  await db.pipelineRunSubmission.update({where:{id:f.run.id},data:{createdAt:new Date()}});
+  await db.repositoryPullRequest.update({where:{id:f.pr.id},data:{aiReviewAttemptAt:null}});
+  await f.reviews.dispatchAutomatic();
+  await db.readinessAutomation.update({where:{repositoryId:f.repo.id},data:{aiReviews:false,revision:{increment:1}}});
+  fetchMock.mockClear(); f.infer(); await f.reviews.reconcile();
+  const job = await db.aiSkillReview.findFirstOrThrow({where:{assessmentId:f.assessment.id}});
+  expect(job.state).toBe('UNAVAILABLE'); expect(fetchMock).not.toHaveBeenCalled();
+});
