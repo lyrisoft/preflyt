@@ -34,6 +34,8 @@ export default defineConfig({
     include: ['@radix-ui/react-switch', '@tanstack/react-query'],
   },
   test: {
+    // Keep focus, viewport and animated overlay interactions deterministic under CI load.
+    fileParallelism: false,
     silent: 'passed-only',
     unstubEnvs: true,
     browser: {

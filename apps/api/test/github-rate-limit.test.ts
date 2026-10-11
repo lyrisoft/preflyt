@@ -28,6 +28,7 @@ describe('GitHub rate limit handling', () => {
     })
     const provider = new GitHubProviderService()
     ;(provider as any).app = { octokit: { request: action } }
+  ;(provider as any).appFingerprint = (provider as any).connectionFingerprint()
     await expect(provider.verifyInstallation(1n)).rejects.toBeInstanceOf(
       GitHubRateLimitError,
     )
