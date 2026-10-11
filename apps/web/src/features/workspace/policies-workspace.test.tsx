@@ -298,7 +298,7 @@ it('keeps Branch policies and CI jobs in separate tabs without repository standa
   await expect.element(page.getByRole('tab', { name: 'Branch policies' })).toHaveAttribute('data-state', 'active')
   await expect.element(page.getByRole('button', { name: 'Choose standards' })).not.toBeInTheDocument()
   await page.getByRole('tab', { name: 'CI jobs' }).click()
-  await expect.element(page.getByText('These connections do not create or run jobs.', { exact: false })).toBeVisible()
+  await expect.element(page.getByRole('button', { name: 'Choose branch policy', exact: true })).toBeVisible()
   await expect.element(page.getByRole('heading', { name: 'Branch policies' })).not.toBeInTheDocument()
   await view.unmount()
 })

@@ -26,7 +26,7 @@ it('switches themes from cards, supports arrow keys and persists the selection',
   await expect
     .poll(() => document.documentElement.classList.contains('light'))
     .toBe(true)
-  await userEvent.keyboard('{ArrowRight}')
+  await userEvent.type(view.getByRole('radio', { name: 'Light', exact: true }), '{ArrowRight}')
   await expect
     .element(view.getByRole('radio', { name: 'Dark', exact: true }))
     .toHaveAttribute('aria-checked', 'true')

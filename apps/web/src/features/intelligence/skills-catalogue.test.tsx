@@ -217,6 +217,9 @@ it('replaces new-version draft text while retaining its family and expected vers
   const view = await render(<SkillsCatalogue />)
   await view.getByRole('button', { name: 'Review', exact: true }).click()
   await view.getByRole('button', { name: 'Create new version' }).click()
+  await expect
+    .element(view.getByRole('heading', { name: 'Create new skill version' }))
+    .toBeVisible()
   await userEvent.upload(
     view.getByLabelText('Replace from SKILL.md file'),
     new File(['fixture'], 'SKILL.md')

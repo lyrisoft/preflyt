@@ -439,6 +439,7 @@ describe('immutable exact-SHA assessment API', () => {
               get(target, key) {
                 return key === 'auditEvent'
                   ? {
+                      findMany: tx.auditEvent.findMany.bind(tx.auditEvent),
                       create: async () => {
                         throw new Error('storage unavailable')
                       },
@@ -728,6 +729,7 @@ describe('atomic automatic CI assessment snapshots', () => {
               get(target, key) {
                 return key === 'auditEvent'
                   ? {
+                      findMany: tx.auditEvent.findMany.bind(tx.auditEvent),
                       create: async (args: any) => {
                         if (args.data.event === 'github_event_processed')
                           throw new Error('processor audit unavailable')
@@ -1228,6 +1230,7 @@ describe('PR-triggered exact-head assessments', () => {
               get(target, key) {
                 return key === 'auditEvent'
                   ? {
+                      findMany: tx.auditEvent.findMany.bind(tx.auditEvent),
                       create: async () => {
                         throw new Error('audit unavailable')
                       },

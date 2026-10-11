@@ -200,6 +200,7 @@ describe('plan access', () => {
           createdAt: new Date(now),
         }),
       },
+      gatePolicyRevision: { findFirst: vi.fn().mockResolvedValue(null) },
       repositoryStandardsSelection: {
         findFirst: vi.fn().mockResolvedValue({
           id: 'selection-a',

@@ -61,6 +61,7 @@ vi.mock('@/features/repositories/repository-pull-requests', () => ({
 }))
 vi.mock('@/features/repositories/repository-rulesets', () => ({
   RepositoryRulesets: () => <h2>Merge protection controls</h2>,
+  RulesetDetail: () => <h2>Ruleset details</h2>,
 }))
 vi.mock('@/features/repositories/check-publications', () => ({
   CheckPublications: () => <h2>GitHub result publications</h2>,

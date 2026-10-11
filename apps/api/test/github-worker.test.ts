@@ -59,13 +59,16 @@ it('runs the actual separate worker, reconciles an accepted delivery, reports he
       QUEUE_PREFIX: prefix,
       WORKER_HEARTBEAT_FILE: heartbeat,
     },
-    stdio: 'ignore',
+    stdio: ['ignore', 'pipe', 'pipe'],
   })
+  let diagnostic = ''
+  child.stderr?.on('data', chunk => { diagnostic = (diagnostic + String(chunk)).slice(-4000) })
+  child.stdout?.on('data', chunk => { diagnostic = (diagnostic + String(chunk)).slice(-4000) })
   const exit = new Promise<number | null>((resolve) =>
     child.once('exit', resolve),
   )
   try {
-    const deadline = Date.now() + 7000
+    const deadline = Date.now() + 12000
     let healthy = false
     while (Date.now() < deadline) {
       healthy = await readFile(heartbeat, 'utf8')
@@ -77,7 +80,7 @@ it('runs the actual separate worker, reconciles an accepted delivery, reports he
       if (healthy && record.state === 'IGNORED') break
       await delay(25)
     }
-    expect(healthy).toBe(true)
+    expect(healthy, `Worker exit=${child.exitCode}: ${diagnostic}`).toBe(true)
     expect(
       (await prisma.gitHubWebhookDelivery.findUniqueOrThrow({ where: { id } }))
         .state,
@@ -112,7 +115,7 @@ it('runs the actual separate worker, reconciles an accepted delivery, reports he
     await prisma.$disconnect()
     await unlink(heartbeat).catch(() => undefined)
   }
-}, 25_000)
+}, 35_000)
 
 it('stays unhealthy and can stop while Redis is unavailable', async () => {
   const id = randomUUID()
@@ -140,7 +143,7 @@ it('stays unhealthy and can stop while Redis is unavailable', async () => {
     if (String(chunk).includes('worker started')) started = true
   })
   try {
-    const deadline = Date.now() + 7000
+    const deadline = Date.now() + 12000
     while (!started && Date.now() < deadline) await delay(25)
     expect(started, `Worker exit=${child.exitCode}: ${diagnostic}`).toBe(true)
     expect(

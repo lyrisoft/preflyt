@@ -1,0 +1,61 @@
+import { mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { resolve } from 'node:path'
+import { spawnSync } from 'node:child_process'
+import { parse } from 'yaml'
+import { expect, it } from 'vitest'
+const root = resolve(process.cwd(), '../..')
+const workflow = (name: string) => parse(readFileSync(resolve(root, '.github/workflows', name), 'utf8'))
+it('checks the PR head and submits existing reports only for same-repository development PRs', () => {
+  const verify = workflow('verify.yml')
+  const steps = verify.jobs.regression.steps
+  expect(steps[0].with.ref).toContain('github.event.pull_request.head.sha')
+  expect(steps[0].with['persist-credentials']).toBe(false)
+  const action = steps.find((step: any) => step.name === 'Preflyt development policy')
+  expect(action.if).toContain("github.base_ref == 'development'")
+  expect(action.if).toContain('github.event.pull_request.head.repo.full_name == github.repository')
+  expect(action.if).toContain('!cancelled()')
+  expect(action.uses).toMatch(/^lyrisoft\/preflyt-action@[a-f0-9]{40}$/)
+  expect(JSON.parse(action.with.checks)).toEqual({ 'build.required': { report: '.preflyt/results/build.xml' }, 'tests.required': { report: '.preflyt/results/tests.xml' } })
+  expect(verify.jobs.regression.permissions).toEqual({ contents: 'read', 'id-token': 'write' })
+  for (const name of ['API regression', 'Browser regression']) expect(steps.find((step: any) => step.name === name).if).toContain('!cancelled()')
+})
+it('builds all image targets on PRs without registry write permissions, and publishes only after CI', () => {
+  const verify = workflow('verify.yml'), publish = workflow('publish-images.yml')
+  expect(verify.jobs.images.strategy.matrix.include).toEqual(publish.jobs.publish.strategy.matrix.include)
+  expect(verify.jobs.images.steps.at(-1).with.push).toBe(false)
+  expect(verify.permissions.packages).toBeUndefined()
+  expect(verify.jobs.images.permissions?.packages).toBeUndefined()
+  expect(publish.on.push.branches).toEqual(['development'])
+  expect(publish.jobs.publish.needs).toBe('verify')
+  expect(publish.jobs.publish.steps.at(-1).with.platforms).toBe('linux/amd64,linux/arm64')
+  expect(publish.jobs.publish.steps.at(-1).with.tags).toContain('sha-${{ github.sha }}')
+})
+it('waits for publication from a completed development PR run without checking out PR code', () => {
+  const gate = workflow('preflyt-gate.yml')
+  expect(gate.on.workflow_run).toEqual({ workflows: ['Verify implementation'], types: ['completed'] })
+  expect(gate.jobs.publication.steps.some((step: any) => step.uses?.startsWith('actions/checkout'))).toBe(false)
+  expect(gate.jobs.publication.steps[0].run).toContain("pr['base']['ref'] == 'development'")
+  expect(gate.jobs.publication.steps[0].run).toContain('refusing to skip')
+  expect(gate.jobs.publication.steps[1].if).toBe("steps.scope.outputs.applicable == 'true'")
+  expect(gate.jobs.publication.steps[1].with.mode).toBe('gate')
+})
+it('combines actual test outcomes and rejects missing or malformed current reports without reusing stale evidence', () => {
+  const dir = mkdtempSync(resolve(tmpdir(), 'preflyt-ci-junit-'))
+  const out = resolve(dir, 'tests.xml'), api = resolve(dir, 'api.xml'), web = resolve(dir, 'web.xml')
+  const merge = () => spawnSync('python3', [resolve(root, 'scripts/ci/merge-junit.py'), out, api, web], { encoding: 'utf8' })
+  try {
+    writeFileSync(api, '<testsuites><testsuite><testcase name="pass"/><testcase name="failure"><failure message="failed"/></testcase><system-out>PRIVATE OUTPUT</system-out></testsuite></testsuites>')
+    writeFileSync(web, '<testsuite><testcase name="skipped"><skipped/></testcase><testcase name="error"><error/></testcase></testsuite>')
+    expect(merge().status).toBe(0)
+    const report = readFileSync(out, 'utf8')
+    expect(report.match(/<testcase/g)).toHaveLength(4)
+    expect(report).toContain('failures="1"'); expect(report).toContain('errors="1"'); expect(report).toContain('skipped="1"')
+    expect(report).not.toContain('PRIVATE OUTPUT')
+    rmSync(web); expect(merge().status).toBe(1); expect(existsSync(out)).toBe(false)
+    writeFileSync(out, 'stale'); writeFileSync(web, '<testsuite tests="1"/>')
+    expect(merge().status).toBe(1); expect(existsSync(out)).toBe(false)
+    writeFileSync(web, '<!DOCTYPE x><testsuite><testcase name="x"/></testsuite>')
+    expect(merge().status).toBe(1); expect(existsSync(out)).toBe(false)
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+})

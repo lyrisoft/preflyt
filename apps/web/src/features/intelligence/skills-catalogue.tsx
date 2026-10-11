@@ -560,182 +560,189 @@ export function SkillsCatalogue() {
           if (!open && !busy) setSelected(undefined)
         }}
       >
-        <SheetContent className='flex w-full flex-col sm:max-w-xl'>
-          <SheetHeader>
-            <SheetTitle>
-              {selected?.name} · v{selected?.version}
-            </SheetTitle>
-            <SheetDescription>Read-only review instructions</SheetDescription>
-          </SheetHeader>
-          {selected && (
-            <div className='flex-1 space-y-5 overflow-y-auto px-6 pb-6'>
-              <p className='text-sm'>{selected.description}</p>
-              <dl className='space-y-2 text-sm'>
+        {selected && (
+          <SheetContent
+            className='flex w-full flex-col sm:max-w-xl'
+            onCloseAutoFocus={(event) => {
+              if (editing !== undefined) event.preventDefault()
+            }}
+          >
+            <SheetHeader>
+              <SheetTitle>
+                {selected?.name} · v{selected?.version}
+              </SheetTitle>
+              <SheetDescription>Read-only review instructions</SheetDescription>
+            </SheetHeader>
+            {selected && (
+              <div className='flex-1 space-y-5 overflow-y-auto px-6 pb-6'>
+                <p className='text-sm'>{selected.description}</p>
+                <dl className='space-y-2 text-sm'>
+                  <div>
+                    <dt className='text-muted-foreground'>Source</dt>
+                    <dd>{selected.source}</dd>
+                  </div>
+                  <div>
+                    <dt className='text-muted-foreground'>License</dt>
+                    <dd>{selected.license}</dd>
+                  </div>
+                  <div>
+                    <dt className='text-muted-foreground'>Repositories</dt>
+                    <dd>
+                      {selected.repositories.length
+                        ? selected.repositories
+                            .map(
+                              (id) =>
+                                repositories.data?.repositories.find(
+                                  (r) => r.githubId === id
+                                )?.fullName ?? id
+                            )
+                            .join(', ')
+                        : 'All authorized repositories'}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className='text-muted-foreground'>File fingerprint</dt>
+                    <dd className='font-mono text-xs break-all'>
+                      {selected.contentDigest}
+                    </dd>
+                  </div>
+                </dl>
                 <div>
-                  <dt className='text-muted-foreground'>Source</dt>
-                  <dd>{selected.source}</dd>
+                  <h3 className='mb-2 text-sm font-semibold'>Instructions</h3>
+                  <Tabs defaultValue='preview'>
+                    <TabsList>
+                      <TabsTrigger value='preview'>Preview</TabsTrigger>
+                      <TabsTrigger value='markdown'>Markdown</TabsTrigger>
+                    </TabsList>
+                    <TabsContent
+                      value='preview'
+                      className='rounded-lg border p-4'
+                    >
+                      <MarkdownInstructions>
+                        {selected.instructions}
+                      </MarkdownInstructions>
+                    </TabsContent>
+                    <TabsContent value='markdown'>
+                      <pre className='rounded-lg border p-4 font-mono text-xs break-words whitespace-pre-wrap'>
+                        {selected.instructions}
+                      </pre>
+                    </TabsContent>
+                  </Tabs>
                 </div>
-                <div>
-                  <dt className='text-muted-foreground'>License</dt>
-                  <dd>{selected.license}</dd>
-                </div>
-                <div>
-                  <dt className='text-muted-foreground'>Repositories</dt>
-                  <dd>
-                    {selected.repositories.length
-                      ? selected.repositories
-                          .map(
-                            (id) =>
-                              repositories.data?.repositories.find(
-                                (r) => r.githubId === id
-                              )?.fullName ?? id
-                          )
-                          .join(', ')
-                      : 'All authorized repositories'}
-                  </dd>
-                </div>
-                <div>
-                  <dt className='text-muted-foreground'>File fingerprint</dt>
-                  <dd className='font-mono text-xs break-all'>
-                    {selected.contentDigest}
-                  </dd>
-                </div>
-              </dl>
-              <div>
-                <h3 className='mb-2 text-sm font-semibold'>Instructions</h3>
-                <Tabs defaultValue='preview'>
-                  <TabsList>
-                    <TabsTrigger value='preview'>Preview</TabsTrigger>
-                    <TabsTrigger value='markdown'>Markdown</TabsTrigger>
-                  </TabsList>
-                  <TabsContent
-                    value='preview'
-                    className='rounded-lg border p-4'
-                  >
-                    <MarkdownInstructions>
-                      {selected.instructions}
-                    </MarkdownInstructions>
-                  </TabsContent>
-                  <TabsContent value='markdown'>
-                    <pre className='rounded-lg border p-4 font-mono text-xs break-words whitespace-pre-wrap'>
-                      {selected.instructions}
-                    </pre>
-                  </TabsContent>
-                </Tabs>
-              </div>
-              {approve && selected.status === 'DRAFT' && (
-                <label className='flex items-start gap-2 text-sm'>
-                  <input
-                    type='checkbox'
-                    className='mt-1'
-                    checked={reviewed}
-                    onChange={(e) => setReviewed(e.target.checked)}
-                  />
-                  I reviewed the instructions, source and license for this
-                  version.
-                </label>
-              )}
-              {error && (
-                <p role='alert' className='text-sm text-destructive'>
-                  {error}
-                </p>
-              )}
-              <div className='flex flex-wrap justify-end gap-2'>
-                <Button
-                  size='sm'
-                  variant='outline'
-                  disabled={busy || downloading}
-                  aria-busy={downloading}
-                  onClick={async () => {
-                    setDownloading(true)
-                    setError('')
-                    try {
-                      await downloadSkillMarkdown(selected.id)
-                    } catch (e) {
-                      setError(
-                        e instanceof Error
-                          ? e.message
-                          : 'Could not download SKILL.md'
-                      )
-                    } finally {
-                      setDownloading(false)
-                    }
-                  }}
-                >
-                  {downloading ? (
-                    <Loader2
-                      aria-hidden='true'
-                      className='size-4 animate-spin motion-reduce:animate-none'
+                {approve && selected.status === 'DRAFT' && (
+                  <label className='flex items-start gap-2 text-sm'>
+                    <input
+                      type='checkbox'
+                      className='mt-1'
+                      checked={reviewed}
+                      onChange={(e) => setReviewed(e.target.checked)}
                     />
-                  ) : (
-                    <Download aria-hidden='true' className='size-4' />
-                  )}
-                  Download SKILL.md
-                </Button>
-                {manage && (
+                    I reviewed the instructions, source and license for this
+                    version.
+                  </label>
+                )}
+                {error && (
+                  <p role='alert' className='text-sm text-destructive'>
+                    {error}
+                  </p>
+                )}
+                <div className='flex flex-wrap justify-end gap-2'>
                   <Button
                     size='sm'
                     variant='outline'
-                    disabled={busy}
-                    onClick={() => {
-                      setSelected(undefined)
-                      setEditing(selected)
+                    disabled={busy || downloading}
+                    aria-busy={downloading}
+                    onClick={async () => {
+                      setDownloading(true)
+                      setError('')
+                      try {
+                        await downloadSkillMarkdown(selected.id)
+                      } catch (e) {
+                        setError(
+                          e instanceof Error
+                            ? e.message
+                            : 'Could not download SKILL.md'
+                        )
+                      } finally {
+                        setDownloading(false)
+                      }
                     }}
                   >
-                    Create new version
+                    {downloading ? (
+                      <Loader2
+                        aria-hidden='true'
+                        className='size-4 animate-spin motion-reduce:animate-none'
+                      />
+                    ) : (
+                      <Download aria-hidden='true' className='size-4' />
+                    )}
+                    Download SKILL.md
                   </Button>
-                )}
-                {approve && selected.status === 'DRAFT' && (
-                  <Button
-                    size='sm'
-                    disabled={busy || !reviewed}
-                    onClick={() =>
-                      void action(`/${selected.id}/approve`, {
-                        expectedDigest: selected.contentDigest,
-                        reviewed,
-                      })
-                    }
-                  >
-                    Approve version
-                  </Button>
-                )}
-                {manage && selected.status === 'APPROVED' && (
-                  <>
+                  {manage && (
                     <Button
                       size='sm'
-                      variant='destructive'
+                      variant='outline'
                       disabled={busy}
+                      onClick={() => {
+                        setSelected(undefined)
+                        setEditing(selected)
+                      }}
+                    >
+                      Create new version
+                    </Button>
+                  )}
+                  {approve && selected.status === 'DRAFT' && (
+                    <Button
+                      size='sm'
+                      disabled={busy || !reviewed}
                       onClick={() =>
-                        void action(`/${selected.id}/retire`, {
+                        void action(`/${selected.id}/approve`, {
                           expectedDigest: selected.contentDigest,
-                          reviewed: false,
+                          reviewed,
                         })
                       }
                     >
-                      Retire
+                      Approve version
                     </Button>
-                    <Button
-                      size='sm'
-                      variant={selected.enabled ? 'outline' : 'default'}
-                      disabled={busy}
-                      onClick={() =>
-                        void action(
-                          `/${selected.id}/${selected.enabled ? 'disable' : 'enable'}`,
-                          {
+                  )}
+                  {manage && selected.status === 'APPROVED' && (
+                    <>
+                      <Button
+                        size='sm'
+                        variant='destructive'
+                        disabled={busy}
+                        onClick={() =>
+                          void action(`/${selected.id}/retire`, {
                             expectedDigest: selected.contentDigest,
                             reviewed: false,
-                          }
-                        )
-                      }
-                    >
-                      {selected.enabled ? 'Disable' : 'Enable'}
-                    </Button>
-                  </>
-                )}
+                          })
+                        }
+                      >
+                        Retire
+                      </Button>
+                      <Button
+                        size='sm'
+                        variant={selected.enabled ? 'outline' : 'default'}
+                        disabled={busy}
+                        onClick={() =>
+                          void action(
+                            `/${selected.id}/${selected.enabled ? 'disable' : 'enable'}`,
+                            {
+                              expectedDigest: selected.contentDigest,
+                              reviewed: false,
+                            }
+                          )
+                        }
+                      >
+                        {selected.enabled ? 'Disable' : 'Enable'}
+                      </Button>
+                    </>
+                  )}
+                </div>
               </div>
-            </div>
-          )}
-        </SheetContent>
+            )}
+          </SheetContent>
+        )}
       </Sheet>
       <Dialog
         open={editing !== undefined}

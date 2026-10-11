@@ -29,5 +29,5 @@ it('provides root deployment configuration and a scoped versioned publishing wor
   const workflow = parse(readFileSync(resolve(root, '.github/workflows/publish-images.yml'), 'utf8'))
   expect(workflow.jobs.publish.strategy.matrix.include.map((item: { image: string }) => item.image).sort()).toEqual(['preflyt-api', 'preflyt-api-migration', 'preflyt-native-controller', 'preflyt-web'])
   expect(workflow.jobs.publish.permissions.packages).toBe('write')
-  expect(workflow.on.push.branches).toBeUndefined()
+  expect(workflow.on.push.branches).toEqual(['development'])
 })

@@ -17,3 +17,6 @@ apps/api/src/generated/
 # Documentation site build output
 apps/docs/build/
 apps/docs/.docusaurus/
+
+# Transient CI evidence
+.preflyt/results/
