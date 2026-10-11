@@ -2,86 +2,39 @@ name: Verify implementation
 on:
   workflow_call:
   pull_request:
-  push:
-    branches: [main]
+    branches: [development, main]
 permissions:
   contents: read
 concurrency:
   group: preflyt-verify-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 jobs:
-  regression:
+  scope:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    steps:
+      - name: Verify branch target
+        env:
+          TARGET_BRANCH: ${{ github.base_ref || github.ref_name }}
+        run: |
+          case "$TARGET_BRANCH" in
+            development|main) ;;
+            *) echo 'Image verification supports only development and main.' >&2; exit 1 ;;
+          esac
+  development:
+    needs: scope
+    if: ${{ (github.base_ref || github.ref_name) == 'development' }}
     permissions:
       contents: read
       id-token: write
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: preflyt
-          POSTGRES_PASSWORD: fixture-only
-          POSTGRES_DB: preflyt_ci_test
-        ports: ['5432:5432']
-        options: --health-cmd "pg_isready -U preflyt -d preflyt_ci_test" --health-interval 5s --health-timeout 5s --health-retries 12
-      redis:
-        image: redis:7-alpine
-        ports: ['6379:6379']
-        options: --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 12
-    env:
-      DATABASE_URL: postgresql://preflyt:fixture-only@127.0.0.1:5432/preflyt_ci_test
-      REDIS_URL: redis://127.0.0.1:6379/3
-      REDIS_CACHE_PREFIX: preflyt-ci-${{ github.run_id }}-${{ github.run_attempt }}
-      PREFLYT_DASHBOARD_REDIS_TEST: 'true'
-      TEST_QUEUE_REDIS_URL: redis://127.0.0.1:6379/1
-      NOTIFICATION_TEST_REDIS_URL: redis://127.0.0.1:6379/2
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          persist-credentials: false
-      - name: Prepare CI reports
-        run: mkdir -p .preflyt/results
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 24.4.1
-      - name: Install locked dependencies
-        run: |
-          npm install --global pnpm@10.15.1
-          pnpm install --frozen-lockfile --ignore-scripts
-      - name: Install Chromium
-        run: pnpm --filter @preflyt/web exec playwright install --with-deps chromium
-      - name: Generate client and build applications
-        id: build
-        run: node docs/deployment/ci-command-report.mjs build.required .preflyt/results/build.xml -- "$(command -v pnpm)" -r --filter @preflyt/api --filter @preflyt/web build
-      - name: Enable offline attestation acceptance
-        run: |
-          gh_path="$(command -v gh)"
-          echo "PREFLYT_TEST_GH_PATH=$gh_path" >> "$GITHUB_ENV"
-      - name: API regression
-        if: ${{ !cancelled() && steps.build.conclusion == 'success' }}
-        run: pnpm --filter @preflyt/api test --reporter=default --reporter=junit --outputFile.junit=../../.preflyt/results/api-tests.xml
-      - name: Browser regression
-        if: ${{ !cancelled() && steps.build.conclusion == 'success' }}
-        run: pnpm --filter @preflyt/web test --reporter=default --reporter=junit --outputFile.junit=../../.preflyt/results/web-tests.xml
-      - name: Combine actual API and browser test results
-        if: ${{ !cancelled() }}
-        run: python3 scripts/ci/merge-junit.py .preflyt/results/tests.xml .preflyt/results/api-tests.xml .preflyt/results/web-tests.xml
-      - name: Preflyt development policy
-        if: ${{ !cancelled() && github.event_name == 'pull_request' && github.base_ref == 'development' && github.event.pull_request.head.repo.full_name == github.repository }}
-        uses: lyrisoft/preflyt-action@d80243bae90cc85eaaca08a60e8efd15a413d35a # v1.0.0
-        with:
-          api-url: ${{ vars.PREFLYT_API_URL }}
-          checks: |
-            {
-              "build.required": {"report": ".preflyt/results/build.xml"},
-              "tests.required": {"report": ".preflyt/results/tests.xml"}
-            }
+    uses: ./.github/workflows/development-checks.yml
+  main:
+    needs: scope
+    if: ${{ (github.base_ref || github.ref_name) == 'main' }}
+    uses: ./.github/workflows/main-regression.yml
   images:
     name: Build ${{ matrix.image }}
-    if: ${{ github.event_name == 'pull_request' }}
-    needs: regression
+    if: ${{ always() && github.event_name == 'pull_request' && (needs.development.result == 'success' || needs.main.result == 'success') && needs.development.result != 'failure' && needs.main.result != 'failure' }}
+    needs: [development, main]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
@@ -115,6 +68,3 @@ jobs:
           push: false
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}
-
-  compose-smoke:
-    uses: ./.github/workflows/compose-acceptance.yml

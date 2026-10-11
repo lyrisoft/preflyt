@@ -2,8 +2,7 @@ name: Verify and publish images
 on:
   workflow_dispatch:
   push:
-    branches: [development]
-    tags: ['v*']
+    branches: [development, main]
 permissions:
   contents: read
 concurrency:
@@ -157,6 +156,7 @@ jobs:
         run: docker push "$IMAGE"
 
   accept-published:
+    if: ${{ github.ref == 'refs/heads/main' }}
     needs: [publish, publish-native]
     permissions:
       contents: read

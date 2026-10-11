@@ -7,8 +7,7 @@ import {
   syntaxHighlighting,
   syntaxTree,
 } from '@codemirror/language'
-import { Compartment, EditorState } from '@codemirror/state'
-import type { Range } from '@codemirror/state'
+import { Compartment, EditorState, type Range } from '@codemirror/state'
 import {
   Decoration,
   EditorView,
