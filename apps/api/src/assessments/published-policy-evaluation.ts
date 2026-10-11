@@ -182,7 +182,7 @@ export function evaluatePublishedPolicy(
       githubExecution.runId === observation?.sourceObjectId && githubExecution.runAttempt === run?.runAttempt &&
       githubExecution.workflowId === run?.workflowId && githubExecution.policyId === policy.id &&
       githubExecution.policyHash === policy.definitionHash &&
-      (observation.sourceKind !== 'workflow_jobs' || (githubExecution.verificationScope === 'jobs' &&
+      (observation.sourceKind !== 'workflow_jobs' || (githubExecution.verificationScope === 'jobs' && Array.isArray(githubExecution.jobIds) && !!run?.verifiedJobs &&
         digest(githubExecution.jobIds) === digest(run?.verifiedJobs?.jobIds)))
     const signedExecution = !!contracts && definition.executionContractDigest === contracts.digest &&
       validation?.executionContractDigest === contracts.digest && !!currentAttestationPolicy &&

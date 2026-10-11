@@ -242,3 +242,24 @@ it.each(['run', 'attempt', 'workflow', 'sha', 'policy', 'hash', 'failed', 'missi
     if (kind === 'truncated') v.snapshot.report.validationCollectionTruncated = true
     expect(evaluate(v).status).toBe('INCOMPLETE')
   })
+
+function jobsFixture() {
+  const v = githubFixture()
+  const observation = v.snapshot.report.observations[0]
+  observation.sourceKind = 'workflow_jobs'
+  observation.sourceIdentity = { ...observation.sourceIdentity, verificationScope: 'jobs', jobIds: ['11', '12'] }
+  Object.assign(v.snapshot.report.checks[0].evidenceValidation.githubExecution, { verificationScope: 'jobs', jobIds: ['11', '12'] })
+  Object.assign(v.runs['1'], { status: 'in_progress', conclusion: null, verifiedJobs: { jobIds: ['11', '12'], conclusion: 'success' } })
+  return v
+}
+it('publishes completed predecessor job evidence while the final gate is running', () => {
+  expect(evaluate(jobsFixture()).status).toBe('PASS')
+})
+it.each(['changed-jobs', 'missing-proof', 'failed-jobs', 'changed-receipt'])('rejects incomplete job-scoped proof: %s', kind => {
+  const v = jobsFixture()
+  if (kind === 'changed-jobs') v.runs['1'].verifiedJobs.jobIds = ['11', '13']
+  if (kind === 'missing-proof') delete v.runs['1'].verifiedJobs
+  if (kind === 'failed-jobs') v.runs['1'].verifiedJobs.conclusion = 'failure'
+  if (kind === 'changed-receipt') v.snapshot.report.checks[0].evidenceValidation.githubExecution.jobIds = ['11']
+  expect(evaluate(v).status).toBe('INCOMPLETE')
+})
