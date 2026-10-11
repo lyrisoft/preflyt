@@ -219,7 +219,7 @@ export class RulesetDeploymentService {
       repo.installationId,
       repo.githubId,
     );
-    const connection = await this.governance.open(repo.fullName);
+    const connection = await this.governance.open(repo.fullName, repo.installationId);
     const definition = {
       ...raw,
       name,
@@ -618,7 +618,7 @@ export class RulesetDeploymentService {
       throw new ConflictException(
         "Retry activation to recover an unknown creation",
       );
-    const connection = await this.governance.open(repo.fullName);
+    const connection = await this.governance.open(repo.fullName, repo.installationId);
     const live = await connection.read(row.githubRulesetId);
     const drifted = live.hash !== row.observedHash;
     await this.authorize(session, id);
@@ -707,7 +707,7 @@ export class RulesetDeploymentService {
       throw new ConflictException(
         "Only a verified managed ruleset can be rolled back",
       );
-    const connection = await this.governance.open(repo.fullName);
+    const connection = await this.governance.open(repo.fullName, repo.installationId);
     const leaseToken = randomUUID();
     const claim = await this.prisma.gitHubRulesetDeployment.updateMany({
       where: {

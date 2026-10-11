@@ -44,7 +44,7 @@ Secret fields remain empty in the browser. An empty replacement keeps the saved 
 
 Supply the same configuration encryption root in Compose API/worker environments or Kubernetes `preflyt-api-secrets` and `preflyt-worker-secrets`. Never give it to scan containers or the execution controller. Apply migrations before starting application processes. For API/worker replicas, restart all replicas after connection edits; a rolling deployment can temporarily have different startup snapshots. Use a maintenance restart for authentication changes. Feature toggles do not need a deployment.
 
-Production governance still requires a separate privileged GitHub App. Configure its credentials in this tab; keep the development-only shared-App override out of production. Existing checks for permissions, installation scope, approvals and exact-commit evidence remain in force.
+Preflyt uses the connected GitHub App by default in every environment. Enable **Use a separate governance App** only when separate credentials are wanted; its fields appear when selected. Existing separate connections are preserved on upgrade. Organization-ruleset activation still needs Organization Administration: write on the selected App. Existing checks for permissions, installation scope, approvals and exact-commit evidence remain in force.
 
 
 ### Public API address for GitHub Actions

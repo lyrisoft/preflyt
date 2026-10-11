@@ -2,7 +2,7 @@
 
 Application connections and feature switches are now provisioned in **Settings → Configuration** by Super Admin. Environment names below describe the legacy import contract; once stored, database values take precedence. See [deployment configuration](deployment-configuration.md). Infrastructure and execution trust controls remain deployment-managed.
 
-See the [production governance deployment guide](../deployment/github-governance-production.md) for separate credentials, permissions and activation release gates. Configuring credentials alone does not enable activation: default-off flags, current passing checks and independent approval are required.
+See the [production governance deployment guide](../deployment/github-governance-production.md) for one-App setup, optional separate credentials, permissions and activation release gates. Configuring credentials alone does not enable activation: default-off flags, current passing checks and independent approval are required.
 
 Quality Gates → GitHub Rulesets shows rulesets GitHub returns for the selected repository, including applicable parent organization/enterprise rulesets. Choose a repository, open a ruleset, and inspect its branch patterns, rule types, approval count and required status-check names/source App IDs.
 

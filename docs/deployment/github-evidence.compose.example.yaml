@@ -26,7 +26,6 @@ services:
     environment:
       <<: *evidence-environment
       NODE_ENV: production
-      GITHUB_GOVERNANCE_LOCAL_ACCEPTANCE: 'false'
       GITHUB_RULESET_ACTIVATION_ENABLED: ${GITHUB_RULESET_ACTIVATION_ENABLED:-false}
       GITHUB_GOVERNANCE_APP_ID: ${GITHUB_GOVERNANCE_APP_ID:-}
       GITHUB_GOVERNANCE_PRIVATE_KEY: ${GITHUB_GOVERNANCE_PRIVATE_KEY:-}
@@ -37,6 +36,5 @@ services:
     environment:
       <<: *evidence-environment
       NODE_ENV: production
-      GITHUB_GOVERNANCE_LOCAL_ACCEPTANCE: 'false'
     volumes:
       - *evidence-mount

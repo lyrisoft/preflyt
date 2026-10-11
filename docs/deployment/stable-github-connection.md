@@ -51,7 +51,7 @@ This proves routing and authentication guards, not a completed workflow. Then us
 
 ## Merge protection
 
-Use the separate governance GitHub App for Preflyt-managed organization rulesets. The provider requires **Organization Administration: write** on that App's installation; repository Administration: read on the assessment App is insufficient. Prepare its credentials in Settings → Configuration → Governance, restart API and worker, then review and approve activation in Merge Protection. Approve the governance App permission change separately from enabling repository PR checks.
+Use the connected GitHub App for Preflyt-managed organization rulesets, or optionally select a separate governance App in Settings → Configuration → Governance. The provider requires **Organization Administration: write** on the selected App's installation; repository Administration: read on the assessment App is insufficient. The connected repository supplies its installation automatically; separate credentials are needed only when the optional setting is selected. Restart API and worker after connection edits, then review and approve activation in Merge Protection. Approve GitHub permission changes separately from enabling repository PR checks.
 
 The prior acceptance test demonstrated GitHub blocking a failed required Preflyt check using an owner-created, repository-scoped rule. It did not verify activation through Preflyt's governance App, drift recovery or rollback. Complete those acceptance steps with the correctly configured governance App. Preserve all unrelated GitHub branch protections.
 

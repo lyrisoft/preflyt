@@ -35,7 +35,7 @@ Profiles are recommendations; do not overwrite existing protection or assume eve
 
 Rulesets tab lists name, GitHub org, target repositories/branches, profile, GitHub enforcement state, linked Preflyt policy version, last sync, drift, owner and actions. Detail page includes rule configuration, exact required check name/source, target preview, current GitHub JSON snapshot, Preflyt desired JSON, diff, audit, history, deployment errors and rollback options.
 
-**No one-click blind enforcement.** Approval is separate from preview. Sensitive organization-wide writes require `github.ruleset.manage` and `policy.enforcement.manage`, audited actor identity, and preferably independent approval for Strict/broad changes. Use a separately authorized GitHub governance connection; ordinary repository-read integrations must not inherit org administration privileges.
+**No one-click blind enforcement.** Approval is separate from preview. Sensitive organization-wide writes require `github.ruleset.manage` and `policy.enforcement.manage`, audited actor identity, and preferably independent approval for Strict/broad changes. Use the connected GitHub App with explicitly approved Organization Administration: write for managed organization rulesets, or optionally a separate governance App. Ordinary assessment tokens remain read-only and ruleset tokens are purpose-limited. App separation is optional; authorization and approval checks remain mandatory.
 
 ## Synchronization and failure semantics
 

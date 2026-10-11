@@ -121,7 +121,23 @@ export function ConfigurationPanel() {
   const data = query.data
   const groups = [...new Set(data.fields.map((field) => field.group))]
   const stale = draft !== null && draft.revision !== data.revision
-  const fields = data.fields.filter((field) => field.group === group)
+  const separateAppField = data.fields.find(
+    (field) => field.key === 'GITHUB_GOVERNANCE_SEPARATE_APP_ENABLED'
+  )
+  const separateApp =
+    (draft?.values.GITHUB_GOVERNANCE_SEPARATE_APP_ENABLED ??
+      separateAppField?.value) === 'true'
+  const fields = data.fields.filter(
+    (field) =>
+      field.group === group &&
+      field.key !== 'GITHUB_GOVERNANCE_SEPARATE_APP_ENABLED' &&
+      (separateApp ||
+        ![
+          'GITHUB_GOVERNANCE_APP_ID',
+          'GITHUB_GOVERNANCE_PRIVATE_KEY',
+          'GITHUB_GOVERNANCE_INSTALLATION_ID',
+        ].includes(field.key))
+  )
   const groupIcons: Record<string, LucideIcon> = {
     GitHub: GitBranch,
     Governance: ShieldCheck,
@@ -180,6 +196,30 @@ export function ConfigurationPanel() {
             <SurfaceIcon icon={groupIcon} tone='teal' />
             <h3 className='text-base font-semibold'>{group}</h3>
           </div>
+          {group === 'Governance' && separateAppField && (
+            <div className='flex items-center justify-between gap-4 border-b px-4 py-3'>
+              <div className='space-y-1'>
+                <Label htmlFor='configuration-GITHUB_GOVERNANCE_SEPARATE_APP_ENABLED'>
+                  Use a separate governance App
+                </Label>
+                <p className='text-xs text-muted-foreground'>
+                  Optional. By default, Preflyt uses the GitHub App already
+                  connected to each repository.
+                </p>
+              </div>
+              <Switch
+                id='configuration-GITHUB_GOVERNANCE_SEPARATE_APP_ENABLED'
+                checked={separateApp}
+                disabled={save.isPending}
+                onCheckedChange={(checked) =>
+                  change(
+                    'GITHUB_GOVERNANCE_SEPARATE_APP_ENABLED',
+                    String(checked)
+                  )
+                }
+              />
+            </div>
+          )}
           <div className='grid gap-x-6 gap-y-4 p-4 md:grid-cols-2'>
             {fields
               .filter((field) => field.kind !== 'boolean')

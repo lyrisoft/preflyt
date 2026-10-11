@@ -26,16 +26,18 @@ This is the deployment contract for the implemented policy-aware readiness publi
 
 Production enforcement still requires the live acceptance tests below. Code and mocked-provider integration tests do not demonstrate GitHub merge enforcement. Publishing a policy does not modify a GitHub Actions workflow. Automatic checks must be explicitly enabled for the repository, and ruleset activation requires separate review and approval.
 
-## Separate GitHub Apps
+## One GitHub App by default
 
-Use two distinct App IDs and private keys in production. An installation ID identifies an App installation in an organization; it is not an App ID. GitHub required-check `integration_id` must identify the assessment App that publishes the check.
+Preflyt reuses the GitHub App and installation already connected to the selected repository. A second App is optional, including in production. Assessment, PR feedback and ruleset operations still use separate purpose-limited installation tokens.
 
 | Connection | Permissions and purpose | Configuration |
 | --- | --- | --- |
-| Assessment App | Repository Metadata: read, Contents: read and Pull requests: read for profiling/PR context (Pull requests: write when posting policy summaries or AI reviews); Actions: read for live workflow-run identity; Checks: write for readiness publication. Organization Members: read is used by the separate member access flow. | Settings → Configuration → GitHub: `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, client ID/secret and callback settings. |
-| Governance App | Organization Administration: write for approved organization ruleset management. Install in the intended GitHub organization; restrict its operational use to approved targets. | Settings → Configuration → Governance: `GITHUB_GOVERNANCE_APP_ID`, `GITHUB_GOVERNANCE_PRIVATE_KEY`, `GITHUB_GOVERNANCE_INSTALLATION_ID`. |
+| Connected Preflyt App | Repository Metadata: read, Contents: read, Pull requests: read (write for PR summaries and AI reviews), Actions: read and Checks: write. Organization Members: read supports member access. Organization Administration: write is required only for Preflyt-managed organization rulesets. | Settings → Configuration → GitHub: existing App credentials. The selected repository supplies its installation ID automatically. |
+| Optional separate governance App | Organization Administration: write for approved organization ruleset management. Its verified installation must belong to the target organization. | Settings → Configuration → Governance: enable **Use a separate governance App** (`GITHUB_GOVERNANCE_SEPARATE_APP_ENABLED`), then enter its App ID, private key and installation ID. |
 
-The ordinary assessment App must not retain Organization Administration: write in production. After the local shared-App test, remove that privileged permission from the assessment App before using its connection in production. Accept updated installation permissions and verify the resulting installation metadata. Do not reuse a PAT, governance key or governance token as the assessment connection.
+New installations default to one App. Existing separate credentials are preserved on upgrade; turn the optional setting off to reuse the connected App. Switching connections requires an API and worker restart. Saved separate credentials are retained while disabled; incomplete selected separate connections fail without falling back to the primary App. GitHub required-check `integration_id` continues to identify the App that publishes the readiness check.
+
+Sharing one App means its private key can authorize all granted permissions. Purpose-limited tokens reduce the permissions of each operation; they do not isolate a compromised App key. Organizations that require separate credentials can opt into the second App. GitHub installation permissions must be approved in GitHub before ruleset activation; selecting an App in Preflyt does not grant permission or change branch protection.
 
 Organization administration is an organization-level authority; repository selection alone does not make it a repository-only permission. Ruleset writes independently enforce exact single-repository scope and independent approval. The existing `policy.publish` permission authorizes readiness publication; it does not expose ruleset activation. Built-in Owner/Admin roles have `github.ruleset.manage` and `policy.enforcement.manage`; both are required for activation. The policy Super Admin exception does not authorize ruleset self-approval.
 
@@ -51,7 +53,7 @@ For the optional signed-report path, GitHub-native attestations on private/inter
 
 ## Runtime configuration
 
-Keep deployment controls `NODE_ENV=production` and `GITHUB_GOVERNANCE_LOCAL_ACCEPTANCE=false`. In **Settings → Configuration → Governance**, enable Publish PR checks (`GITHUB_CHECK_PUBLICATION_ENABLED`) only for the configured and reviewed GitHub integration. Enable Automatic PR checks (`AUTOMATIC_CHECK_PUBLICATION_ENABLED`) only after staging checks pass, and Ruleset activation (`GITHUB_RULESET_ACTIVATION_ENABLED`) only after the production release gate passes. All three default false and refresh from the shared database every five seconds; worker consumers apply switches on their next reconciliation tick. GitHub, governance and sign-in connection edits require restarting both API and worker. Infrastructure, encryption roots and the evidence trust settings below remain deployment-managed.
+Keep `NODE_ENV=production` for production deployments. In **Settings → Configuration → Governance**, enable Publish PR checks (`GITHUB_CHECK_PUBLICATION_ENABLED`) only for the configured and reviewed GitHub integration. Enable Automatic PR checks (`AUTOMATIC_CHECK_PUBLICATION_ENABLED`) only after staging checks pass, and Ruleset activation (`GITHUB_RULESET_ACTIVATION_ENABLED`) only after the production release gate passes. All three default false and refresh from the shared database every five seconds; worker consumers apply switches on their next reconciliation tick. GitHub, governance and sign-in connection edits require restarting both API and worker. Infrastructure, encryption roots and the evidence trust settings below remain deployment-managed.
 
 ### Optional signed-report verifier
 
@@ -72,7 +74,7 @@ API and worker must use the same workflow allowlist, trust-root/binary hashes an
 
 The root `.env` file is used for Compose interpolation; arbitrary new keys are **not automatically passed into containers**. The current `docker-compose.yaml` forwards legacy managed settings for the API’s one-time import, plus deployment-managed proof mode, organization public keys and execution contracts. Provision governance credentials through Settings rather than adding runtime environment overrides after import. Verifier paths and trust material still require an explicit reviewed API/worker override with read-only file mounts. Validate the combined Compose configuration without printing resolved secrets. An environment template is not proof that the deployed runtime received the variables.
 
-**Trusted application boundary:** API and worker both receive the same `CONFIGURATION_ENCRYPTION_KEY` and unpack the complete managed configuration, including governance credentials. Environment forwarding only to the API is a bootstrap convention, not credential isolation from the worker. Treat both application processes, their database access and encryption root as privileged. Production still requires a separate governance App, fresh purpose-limited installation tokens and server-side target/approval checks. Web, migration, execution-controller and scanner services must not receive managed App credentials or the configuration encryption root. Controllers use dedicated runtime/signing credentials; scan containers receive none of these credentials.
+**Trusted application boundary:** API and worker both receive the same `CONFIGURATION_ENCRYPTION_KEY` and unpack the complete managed configuration, including governance credentials. Environment forwarding only to the API is a bootstrap convention, not credential isolation from the worker. Treat both application processes, their database access and encryption root as privileged. Production requires fresh purpose-limited installation tokens and server-side target/approval checks; a separate governance App is optional. Web, migration, execution-controller and scanner services must not receive managed App credentials or the configuration encryption root. Controllers use dedicated runtime/signing credentials; scan containers receive none of these credentials.
 
 A [reviewable Compose override example](github-evidence.compose.example.yaml) forwards deployment-managed evidence configuration to both API and worker, mounts a reviewed host directory read-only at `/opt/preflyt-attestation`, and forces production mode with the local exception off. Its governance environment fields remain for backwards-compatible first import; saved Settings values take precedence. The worker subsequently reads those credentials from the same encrypted database configuration. Set `PREFLYT_ATTESTATION_DIR` to the protected absolute host directory containing `gh` and `trusted-root.json`, with permissions allowing the non-root runtime to read/execute them. This example fixes the container paths shown in the table; for a derived image, adjust paths and mounts together.
 
@@ -133,12 +135,9 @@ Do not disable credentials/worker or flip publication flags as a substitute for 
 
 Retain audit/publication/attestation records and the additive database schema during application rollback. Restore an earlier immutable application image only after reviewing schema compatibility. Disabling or rotating governance credentials is separate from removing GitHub protections. Retain evidence and configuration history for incident review.
 
-## Local exception is not a production deployment pattern
+## Local and production connections
 
-The authorized local test may share assessment App `4585551`, installed in lyrisoft as `153542598`, only for `lyrisoft/preflyt-p2-acceptance`, with explicit `NODE_ENV=development` and `GITHUB_GOVERNANCE_LOCAL_ACCEPTANCE=true`. The governance configuration helper rejects this exception in production and for other repositories. The deployment endpoint checks this restriction before opening governance credentials.
-
-Do not copy these test identifiers, keys or the exception flag into production. Do not change a production deployment to development mode to bypass separation. A later production governance App must have a distinct App ID, key and verified organization installation.
-
+One-App mode is supported in local and production deployments. The former `GITHUB_GOVERNANCE_LOCAL_ACCEPTANCE` exception is no longer needed and is ignored. Never copy test keys or installation IDs into production. A connected installation is selected from the authorized repository, and the provider verifies App ownership, organization, suspension state and organization Administration: write before issuing a ruleset token.
 
 ## GitHub Team private repositories
 

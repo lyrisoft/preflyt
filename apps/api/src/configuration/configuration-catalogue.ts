@@ -24,6 +24,18 @@ const field = (
   restart,
   example,
 });
+/** Preserve existing separate connections when upgrading; new installations default to one App. */
+export function governanceAppMode(values: Record<string, string>): string {
+  if (values.GITHUB_GOVERNANCE_SEPARATE_APP_ENABLED)
+    return values.GITHUB_GOVERNANCE_SEPARATE_APP_ENABLED;
+  return values.GITHUB_GOVERNANCE_APP_ID === values.GITHUB_APP_ID
+    ? "false"
+    : ["GITHUB_GOVERNANCE_APP_ID", "GITHUB_GOVERNANCE_PRIVATE_KEY"].some(
+          (key) => Boolean(values[key]),
+        )
+      ? "true"
+      : "false";
+}
 export const configurationFields: ConfigurationField[] = [
   field(
     "PREFLYT_PUBLIC_API_URL",
@@ -81,6 +93,12 @@ export const configurationFields: ConfigurationField[] = [
     "boolean",
     "false",
     false,
+  ),
+  field(
+    "GITHUB_GOVERNANCE_SEPARATE_APP_ENABLED",
+    "Use a separate governance App",
+    "Governance",
+    "boolean",
   ),
   field(
     "GITHUB_GOVERNANCE_APP_ID",
