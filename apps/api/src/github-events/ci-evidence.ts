@@ -24,7 +24,7 @@ export function ciResult(
 }
 
 export function importCiEvidence(delivery: GitHubWebhookDelivery) {
-  if (!['check_run', 'workflow_run'].includes(delivery.event)) return null
+  if (!['check_run', 'workflow_run', 'workflow_jobs'].includes(delivery.event)) return null
   const evidence = {
     version: delivery.sourceIdentity ? 2 : 1,
     ...(delivery.sourceIdentity

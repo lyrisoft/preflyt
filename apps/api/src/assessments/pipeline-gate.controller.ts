@@ -68,10 +68,11 @@ export class PipelineGateController {
       !numeric(claims.run_attempt) ||
       !numeric(runId) ||
       !numeric(attempt) ||
-      claims.event_name !== "workflow_run" ||
-      runId === claims.run_id
+      claims.event_name !== "pull_request" ||
+      runId !== claims.run_id || attempt !== claims.run_attempt ||
+      !/^refs\/pull\/[1-9]\d*\/merge$/.test(String(claims.ref))
     )
-      throw new ForbiddenException("Use the Preflyt publication gate workflow");
+      throw new ForbiddenException("Run the final gate in the same PR workflow and attempt");
     const repo = await this.prisma.gitHubRepository.findFirst({
       where: {
         githubId: BigInt(claims.repository_id),
@@ -85,13 +86,10 @@ export class PipelineGateController {
     if (
       !repo ||
       !config?.enabled ||
-      claims.repository !== repo.fullName ||
-      claims.ref !== `refs/heads/${repo.defaultBranch}` ||
-      claims.workflow_ref !==
-        `${repo.fullName}/.github/workflows/preflyt-gate.yml@refs/heads/${repo.defaultBranch}`
+      claims.repository !== repo.fullName
     )
       throw new ForbiddenException(
-        "Install the Preflyt gate on the connected repository default branch and enable PR checks",
+        "Enable PR checks for this connected repository",
       );
     const session = {
       authenticated: true as const,
@@ -106,35 +104,15 @@ export class PipelineGateController {
       claims.repository_id,
       "policy.publish",
     );
-    const caller = await this.github.readReadinessWorkflowRun(
-      repo.installationId,
-      repo.githubId,
-      claims.run_id,
+    const source = await this.github.readPipelineVerificationRun(
+      repo.installationId, repo.githubId, runId,
     );
-    if (
-      caller.runAttempt !== Number(claims.run_attempt) ||
-      caller.sourceSha !== claims.sha ||
-      caller.event !== "workflow_run" ||
-      caller.workflowPath !== ".github/workflows/preflyt-gate.yml" ||
-      !["queued", "in_progress", "waiting"].includes(caller.status)
-    )
-      throw new ForbiddenException("Gate run identity changed");
-    const source = await this.github.readReadinessWorkflowRun(
-      repo.installationId,
-      repo.githubId,
-      runId,
-    );
-    if (
-      source.runAttempt !== Number(attempt) ||
-      source.status !== "completed" ||
-      source.conclusion !== "success" ||
-      source.event !== "pull_request"
-    )
-      return {
-        state: "FAILED",
-        message:
-          "The source workflow must be a completed PR run at this attempt.",
-      };
+    if (source.runAttempt !== Number(attempt) || source.event !== 'pull_request' ||
+      String(claims.workflow_ref).split('@')[0] !== `${repo.fullName}/${source.workflowPath}`)
+      throw new ForbiddenException('Gate run identity changed');
+    if (!source.verifiedJobs) return {
+      state: 'PENDING', message: 'Waiting for the completed check jobs in this workflow.',
+    };
     const row = await this.prisma.pipelineRunSubmission.findFirst({
       where: {
         repositoryId: repo.id,
@@ -164,6 +142,7 @@ export class PipelineGateController {
       orderBy: [{ publishedAt: "desc" }, { id: "desc" }],
     });
     if (
+      String(row.prNumber) !== /^refs\/pull\/([1-9]\d*)\/merge$/.exec(String(claims.ref))?.[1] ||
       context.state !== "open" ||
       context.draft ||
       context.head.repositoryId !== claims.repository_id ||
@@ -218,9 +197,41 @@ export class PipelineGateController {
             "The published GitHub check changed or could not be verified.",
         };
     }
-    return publicationGateResult(
-      row,
-      publication?.checkRunId ? publication : null,
-    );
+    const result = publicationGateResult(row, publication?.checkRunId ? publication : null);
+    if (result.state !== 'PASSED') return result;
+    if (source.verifiedJobs.conclusion !== 'success') return {
+      state: 'FAILED', message: 'One or more check jobs failed.',
+    };
+    if (config.aiReviews) {
+      const checks = ((policy.definition as any).aiChecks ?? []).filter((c: any) => c.stages?.includes('pull_request'));
+      if (checks.length) {
+        const reviews = await this.prisma.aiSkillReview.findMany({ where: {
+          repositoryId: repo.id, organizationId: config.organizationId, stage: 'pull_request',
+          AND: [
+            { snapshot: { path: ['automatic', 'policyId'], equals: policy.id } },
+            { snapshot: { path: ['automatic', 'policyHash'], equals: policy.definitionHash } },
+            { snapshot: { path: ['automatic', 'number'], equals: row.prNumber } },
+            { snapshot: { path: ['automatic', 'context', 'head', 'sha'], equals: row.sourceSha } },
+          ],
+        }, orderBy: { createdAt: 'desc' }, take: 101 });
+        const ai = pipelineAiResult(checks, reviews);
+        if (ai.state !== 'PASSED') return ai;
+      }
+    }
+    return result;
   }
+}
+
+/** Advisory findings do not block. Missing execution or failed PR publication does. */
+export function pipelineAiResult(checks: { id: string }[], reviews: { state: string; feedbackState: string; snapshot: unknown }[]) {
+  if (reviews.length > 100) return { state: 'FAILED', message: 'AI review collection exceeds the verification limit.' };
+  for (const check of checks) {
+    const review = reviews.find(r => (r.snapshot as any)?.checks?.some((c: any) => c.id === check.id));
+    if (!review) return { state: 'PENDING', message: 'Waiting for the configured PR AI review.' };
+    if (['UNAVAILABLE', 'FAILED', 'CANCELLED'].includes(review.state) || review.feedbackState === 'FAILED')
+      return { state: 'FAILED', message: 'AI review or PR feedback publishing failed.' };
+    if (review.state !== 'SUCCEEDED' || review.feedbackState !== 'PUBLISHED')
+      return { state: 'PENDING', message: 'Waiting for AI review and verified PR feedback publication.' };
+  }
+  return { state: 'PASSED', message: 'Configured AI reviews completed and published.' };
 }

@@ -24,7 +24,9 @@ it("combines a standard into one copyable step and deduplicates its checks", () 
     [...rules, rules[0]!],
     "https://preflyt.example/api",
   );
-  const steps = parse(result.snippet);
+  const workflow = parse(result.snippet);
+  const steps = workflow.jobs.preflyt_checks.steps.filter((s: any) => s.uses === policyAction);
+  expect(workflow.jobs.preflyt_gate.needs).toEqual(["preflyt_checks"]);
   expect(steps).toHaveLength(1);
   expect(result.checkIds).toEqual(["tests.required", "security.sast"]);
   expect(result.ready).toBe(true);

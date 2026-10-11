@@ -86,7 +86,9 @@ export function normalizePipelineSubmission(body: unknown, policy: Policy) {
     : !required.length || required.some((rule) => rule.status !== "passed")
       ? "incomplete"
       : "passed";
+  if (input.verificationScope !== undefined && input.verificationScope !== 'jobs') throw invalid();
   return {
+    ...(input.verificationScope === 'jobs' ? { verificationScope: 'jobs' as const } : {}),
     signerWorkflow: policy.signerWorkflow ?? "",
     schemaVersion: 1,
     policyId: policy.id,

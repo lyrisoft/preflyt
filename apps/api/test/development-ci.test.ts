@@ -53,15 +53,15 @@ it('routes each branch to its own verification and blocks image builds when that
   expect(verify.jobs.images.if).toContain("needs.development.result == 'success' || needs.main.result == 'success'")
   expect(verify.jobs.images.if).toContain("needs.development.result != 'failure' && needs.main.result != 'failure'")
 })
-it('waits for publication from a completed development PR run without checking out PR code', () => {
-  const gate = workflow('preflyt-gate.yml')
-  expect(gate.on.workflow_run).toEqual({ workflows: ['Verify implementation'], types: ['completed'] })
-  expect(gate.jobs.publication.steps.some((step: any) => step.uses?.startsWith('actions/checkout'))).toBe(false)
-  expect(gate.jobs.publication.steps[0].run).toContain("pr['base']['ref'] == 'development'")
-  expect(gate.jobs.publication.steps[0].run).toContain('refusing to skip')
-  expect(gate.jobs.publication.steps[1].if).toBe("steps.scope.outputs.applicable == 'true'")
-  expect(gate.jobs.publication.steps[1].with.mode).toBe('gate')
-})
+it('chains the final gate to check and image jobs in the PR workflow, leaving docs separate', () => {
+  const verify = workflow('verify.yml'), gate = verify.jobs.preflyt_gate;
+  expect(gate.needs).toEqual(['scope', 'development', 'main', 'images']);
+  expect(gate.if).toContain('always()');
+  expect(gate.name).toBe('Preflyt final gate');
+  expect(gate.steps[0].with.mode).toBe('gate');
+  expect(existsSync(resolve(root, '.github/workflows/preflyt-gate.yml'))).toBe(false);
+  expect(existsSync(resolve(root, '.github/workflows/docs.yml'))).toBe(true);
+});
 it('combines actual test outcomes and rejects missing or malformed current reports without reusing stale evidence', () => {
   const dir = mkdtempSync(resolve(tmpdir(), 'preflyt-ci-junit-'))
   const out = resolve(dir, 'tests.xml'), api = resolve(dir, 'api.xml'), web = resolve(dir, 'web.xml')

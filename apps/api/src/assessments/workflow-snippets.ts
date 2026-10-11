@@ -1,3 +1,4 @@
+import { publicationGateJob } from "./pipeline-gate-workflow.js";
 import { stringify } from "yaml";
 import { policyAction } from "./pipeline-action.js";
 import { checkReportFormat } from "./check-report-adapters.js";
@@ -108,11 +109,13 @@ export function workflowSnippet(
     },
   };
   const snippet =
-    "# Paste into your existing job after checkout and dependency installation.\n" +
-    "# Job permissions: contents: read and id-token: write.\n" +
-    "# Checkout ref: ${{ github.event.pull_request.head.sha || github.sha }}\n" +
-    "# Checkout persist-credentials: false. Uses the published Preflyt Action.\n" +
-    stringify([step], { lineWidth: 0 });
+    '# Add these jobs to your PR workflow. Install project dependencies before the Preflyt step.\n' +
+    '# If reusing existing jobs, keep their steps and make preflyt_gate depend on every check job.\n' +
+    stringify({ jobs: { preflyt_checks: { 'runs-on': 'ubuntu-latest',
+      permissions: { contents: 'read', 'id-token': 'write' }, steps: [
+        { uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1',
+          with: { ref: '${{ github.event.pull_request.head.sha }}', 'persist-credentials': false } }, step,
+      ] }, preflyt_gate: publicationGateJob(['preflyt_checks'], apiUrl ?? '<PUBLIC_PREFLYT_API_URL>') } }, { lineWidth: 0 });
   return {
     snippet,
     notes,

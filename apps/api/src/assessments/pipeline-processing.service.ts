@@ -11,6 +11,7 @@ import { currentStandards } from "../standards/policy-standards.js";
 import { identityMatches, runAttempt } from "./ci-binding.js";
 import { AssessmentService } from "./assessment.service.js";
 import { evaluatePublishedPolicy } from "./published-policy-evaluation.js";
+import { recordJobEvidence } from "./pipeline-job-evidence.js";
 import { digest } from "./assessment-digest.js";
 
 export function pipelineComment(
@@ -123,7 +124,8 @@ export class PipelineProcessingService {
           repo.githubId.toString(),
           "policy.publish",
         );
-        const run = await this.github.readReadinessWorkflowRun(
+        const jobScope = (row.payload as any).verificationScope === "jobs";
+        const run = await this.github.readPipelineVerificationRun(
           repo.installationId,
           repo.githubId,
           row.runId,
@@ -145,7 +147,7 @@ export class PipelineProcessingService {
           });
           continue;
         }
-        if (run.status !== "completed") {
+        if (jobScope ? !run.verifiedJobs : run.status !== "completed") {
           await finish({
             state: "PENDING",
             nextAttemptAt: new Date(Date.now() + 30000),
@@ -178,7 +180,13 @@ export class PipelineProcessingService {
           await finish({ state: "STALE", failureCode: "PR_OR_POLICY_CHANGED" });
           continue;
         }
-        const evidence = (
+        if (jobScope && !run.verifiedJobs!.jobIds.includes((row.payload as any).submissionJobId))
+          throw new Error('REPORT_JOB_NOT_VERIFIED');
+        const evidence = jobScope ? await recordJobEvidence(this.prisma, {
+          submissionId: row.id, repositoryId: repo.githubId, installationId: repo.installationId,
+          sourceSha: row.sourceSha, runId: row.runId, runAttempt: row.runAttempt, workflowId: run.workflowId,
+          jobIds: run.verifiedJobs!.jobIds, conclusion: run.verifiedJobs!.conclusion,
+        }) : (
           await this.prisma.importedCiEvidence.findMany({
             where: {
               repositoryGithubId: repo.githubId,
@@ -275,7 +283,7 @@ export class PipelineProcessingService {
           });
         });
         let proofIncomplete = false;
-        if (run.conclusion === "success") {
+        if ((jobScope ? run.verifiedJobs!.conclusion : run.conclusion) === "success") {
           if (run.event !== "pull_request" || payload.signerWorkflow !== `${repo.fullName}/${run.workflowPath}`)
             throw new Error("WORKFLOW_IDENTITY_CHANGED");
           const jobs = await this.github.readPipelineJobs(repo.installationId, repo.githubId, row.runId, row.runAttempt);
@@ -288,7 +296,9 @@ export class PipelineProcessingService {
             metadata: { schemaVersion: 1, submissionId: row.id, repositoryId: repo.id, sourceSha: row.sourceSha,
               selectionId: selection.id, policyId: policy.id, policyHash: policy.definitionHash,
               runId: row.runId, runAttempt: row.runAttempt, workflowId: run.workflowId,
-              verifiedAt: new Date().toISOString(), jobIds: successful.map(job => job.id),
+              verifiedAt: new Date().toISOString(),
+              jobIds: jobScope ? run.verifiedJobs!.jobIds : successful.map(job => job.id),
+              ...(jobScope ? { verificationScope: 'jobs' } : {}),
               reports: payload.reports.map(report => ({ ruleId: report.ruleId, sha256: report.sha256, format: report.format })) },
           }], skipDuplicates: true });
         }
@@ -339,8 +349,9 @@ export class PipelineProcessingService {
           `pipeline:${row.id}`,
           row.submittedById,
           { ...context, number: row.prNumber, objectId: remote.sourceObjectId },
+          { runId: row.runId, runAttempt: row.runAttempt },
         );
-        const freshRun = await this.github.readReadinessWorkflowRun(
+        const freshRun = await this.github.readPipelineVerificationRun(
           repo.installationId,
           repo.githubId,
           row.runId,
@@ -348,7 +359,7 @@ export class PipelineProcessingService {
         if (
           freshRun.runAttempt !== row.runAttempt ||
           freshRun.sourceSha !== row.sourceSha ||
-          freshRun.status !== "completed"
+          (jobScope ? !freshRun.verifiedJobs || digest(freshRun.verifiedJobs) !== digest(run.verifiedJobs) : freshRun.status !== "completed")
         ) {
           await finish({ state: "STALE", failureCode: "RUN_CHANGED" });
           continue;

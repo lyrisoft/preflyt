@@ -145,6 +145,7 @@ export class AssessmentService {
     requestKey: string,
     actorId: string,
     pullRequest: NonNullable<Trigger['pullRequest']>,
+    pipelineRun?: { runId: string; runAttempt: number },
   ) {
     const repo = await this.repository(id)
     return this.prisma.$transaction(async (tx) => {
@@ -163,11 +164,14 @@ export class AssessmentService {
         currentStandards(tx, repo.id, { expectedId: selectionId, branchRef: `refs/heads/${pullRequest.base.ref}` }),
       ])
       const githubVerification = await pipelineVerifications(tx, repo.id, sourceSha, selectionId)
-      const key = `auto:${digest({ githubVerification, repositoryId: repo.id, sourceSha, actorId, pullRequest,
+      const selectedPipeline = pipelineRun ?? (githubVerification[0] ? {
+        runId: githubVerification[0].runId, runAttempt: githubVerification[0].runAttempt,
+      } : undefined)
+      const key = `auto:${digest({ pipelineRun: selectedPipeline, githubVerification, repositoryId: repo.id, sourceSha, actorId, pullRequest,
         selection, observations, profile, binding,
         native: native.map(freezeNativeEvidence), proofPolicy: reportProofPolicy()?.digest ?? null })}`
       return this.persist(tx, repo, id, { sourceSha, expectedSelectionId: selectionId,
-        requestKey: key, mappings: [] }, actorId, { kind: 'AUTOMATIC', deliveryId: null, pullRequest })
+        requestKey: key, mappings: [] }, actorId, { kind: 'AUTOMATIC', deliveryId: null, pullRequest, pipelineRun: selectedPipeline } as Trigger)
     })
   }
 
@@ -405,7 +409,11 @@ export class AssessmentService {
           }
         : resolveBindings(
             binding!.bindings as unknown as Binding[],
-            observations,
+            (trigger as Trigger & { pipelineRun?: { runId: string; runAttempt: number } }).pipelineRun
+              ? observations.filter(o => o.sourceObjectId === (trigger as any).pipelineRun.runId &&
+                  runAttempt(o.sourceIdentity) === (trigger as any).pipelineRun.runAttempt &&
+                  (o.sourceKind === 'workflow_jobs' || o.sourceKind === 'workflow_run'))
+              : observations,
           )
       : { mappings: [], ambiguousRules: [] }
     const manualRules = new Set(input.mappings.map((m) => m.ruleId))

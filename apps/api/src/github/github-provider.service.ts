@@ -709,10 +709,17 @@ export class GitHubProviderService {
     const result = await reader.request<{ total_count: number; jobs: Record<string, any>[] }>(
       `${root}/actions/runs/${runId}/attempts/${attempt}/jobs?per_page=100`)
     if (!Array.isArray(result.jobs) || result.total_count !== result.jobs.length || !result.jobs.length || result.jobs.length > 100 ||
-      result.jobs.some(job => String(job.run_id) !== runId || !Number.isSafeInteger(job.id) || !Array.isArray(job.steps)))
+      result.jobs.some(job => String(job.run_id) !== runId || !Number.isSafeInteger(job.id) || typeof job.name !== 'string' || !Array.isArray(job.steps)))
       throw new ServiceUnavailableException('Workflow jobs could not be verified')
-    return result.jobs.map(job => ({ id: String(job.id), sourceSha: job.head_sha, status: job.status,
+    return result.jobs.map(job => ({ id: String(job.id), name: String(job.name), sourceSha: job.head_sha, status: job.status,
       conclusion: job.conclusion, steps: job.steps.map((step: any) => ({ status: step.status, conclusion: step.conclusion })) }))
+  }
+
+  async readPipelineVerificationRun(installationId: bigint, repositoryId: bigint, runId: string) {
+    const run = await this.readReadinessWorkflowRun(installationId, repositoryId, runId)
+    const { completedPipelineJobs } = await import('../assessments/pipeline-jobs.js')
+    const proof = await completedPipelineJobs(await this.readPipelineJobs(installationId, repositoryId, runId, run.runAttempt), run.sourceSha)
+    return { ...run, ...(proof ? { verifiedJobs: proof } : {}) }
   }
 
   /** Cache display/setup sources only. Callers verify current upstream access first. */
@@ -912,7 +919,7 @@ export class GitHubProviderService {
   /** Called only after the user reviews YAML and explicitly requests a setup PR. Never writes the base branch. */
   async createPipelineSetupPr(installationId: bigint, repositoryId: bigint, branch: string, baseSha: string, files: Record<string, string>, requestId: string) {
     branch = branch.replace(/^refs\/heads\//, '')
-    if (!/^[a-f0-9]{40}$/.test(baseSha) || !/^[a-f0-9-]{36}$/.test(requestId) || Object.keys(files).length !== 2 || !Object.hasOwn(files, '.github/workflows/preflyt-gate.yml') ||
+    if (!/^[a-f0-9]{40}$/.test(baseSha) || !/^[a-f0-9-]{36}$/.test(requestId) || Object.keys(files).length !== 1 ||
       Object.entries(files).some(([path, content]) => !/^\.github\/workflows\/[a-zA-Z0-9_-]+\.ya?ml$/.test(path) || Buffer.byteLength(content) > 65536))
       throw new BadRequestException('Invalid reviewed workflow files')
     const write = await this.pipelineWriteAvailability(installationId)
@@ -946,7 +953,12 @@ export class GitHubProviderService {
     } else {
       const parent = await call(`/git/commits/${baseSha}`)
       if (!/^[a-f0-9]{40}$/.test(parent.tree?.sha)) throw new ServiceUnavailableException('Repository tree could not be verified')
-      const tree = await call('/git/trees', 'POST', { base_tree: parent.tree.sha, tree: Object.entries(files).map(([path, content]) => ({ path, mode: '100644', type: 'blob', content })) })
+      const entries: Record<string, unknown>[] = Object.entries(files).map(([path, content]) => ({ path, mode: '100644', type: 'blob', content }))
+      const oldTree = await call(`/git/trees/${parent.tree.sha}?recursive=1`)
+      if (oldTree.truncated) throw new ServiceUnavailableException('Repository tree could not be fully checked')
+      if (oldTree.tree?.some((entry: any) => entry.path === '.github/workflows/preflyt-gate.yml'))
+        entries.push({ path: '.github/workflows/preflyt-gate.yml', mode: '100644', type: 'blob', sha: null })
+      const tree = await call('/git/trees', 'POST', { base_tree: parent.tree.sha, tree: entries })
       if (!/^[a-f0-9]{40}$/.test(tree.sha)) throw new ServiceUnavailableException('Workflow tree could not be created')
       const commit = await call('/git/commits', 'POST', { message: 'Connect Preflyt policy checks', tree: tree.sha, parents: [baseSha] })
       if (!/^[a-f0-9]{40}$/.test(commit.sha)) throw new ServiceUnavailableException('Workflow commit could not be created')
@@ -954,7 +966,7 @@ export class GitHubProviderService {
       // No force push; a duplicate concurrent request stops here and can recover on retry.
       await call('/git/refs', 'POST', { ref: `refs/heads/${head}`, sha: commitSha })
     }
-    const pr = existing[0] ?? await call('/pulls', 'POST', { title: 'Connect Preflyt policy checks', head, base: branch, body: 'Adds the reviewed checks workflow and final publication gate using the published Preflyt Action. Review both workflows before merging. Existing tests, scan steps and branch protection are preserved.' })
+    const pr = existing[0] ?? await call('/pulls', 'POST', { title: 'Connect Preflyt policy checks', head, base: branch, body: 'Adds the reviewed checks and final Preflyt gate in one workflow using the published Action. Review the workflow before merging. Existing tests, scan steps and branch protection are preserved.' })
     const expected = `https://github.com/${reader.metadata.owner.login}/${reader.metadata.name}/pull/`
     if (!Number.isSafeInteger(pr.number) || pr.number < 1 || pr.html_url !== expected + pr.number || pr.head?.sha !== commitSha || pr.base?.ref !== branch)
       throw new ServiceUnavailableException('Setup PR could not be verified; check the repository before retrying')

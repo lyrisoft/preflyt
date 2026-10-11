@@ -1,4 +1,4 @@
-import { publicationGateWorkflow } from "./pipeline-gate-workflow.js";
+import { chainPublicationGate } from "./pipeline-gate-workflow.js";
 import { readWorkflow } from "./pipeline-workflow.js";
 import { workflowSnippet, publicPipelineUrl } from "./workflow-snippets.js";
 import {
@@ -549,10 +549,7 @@ export class PipelineSetupController {
         "The repository branch changed. Reload the workflow before creating a PR.",
       );
     const files = {
-      ...(await this.gateFiles(
-        String(readWorkflow(body.workflow).value.name ?? source.name),
-      )),
-      [source.path]: body.workflow,
+      [source.path]: chainPublicationGate(body.workflow, publicPipelineUrl()!),
     };
     const result = await this.github.createPipelineSetupPr(
       repo.installationId,
@@ -618,10 +615,7 @@ export class PipelineSetupController {
     if (!workflow)
       throw new BadRequestException("Choose a repository workflow");
     const files = {
-      ...(await this.gateFiles(
-        String(readWorkflow(body.workflow).value.name ?? workflow.name),
-      )),
-      [workflow.path]: body.workflow,
+      [workflow.path]: chainPublicationGate(body.workflow, publicPipelineUrl()!),
     };
     return {
       archive: setupArchive(files),
@@ -644,17 +638,9 @@ export class PipelineSetupController {
     const workflow = workflows.workflows.find((item) => item.id === workflowId);
     if (!workflow)
       throw new BadRequestException("Choose the checks workflow first");
-    return {
-      archive: setupArchive(await this.gateFiles(workflow.name)),
-      filename: "preflyt-publication-gate.tar.gz",
-    };
-  }
-  private async gateFiles(workflowName: string) {
-    return {
-      ".github/workflows/preflyt-gate.yml": publicationGateWorkflow(
-        workflowName,
-        publicPipelineUrl(),
-      ),
-    };
+    const source = await this.github.readPipelineWorkflow(repo.installationId, repo.githubId, workflowId,
+      (await this.context(req.preflytSession, id, policyId)).policy.branchRef, true);
+    return { archive: setupArchive({ [source.path]: chainPublicationGate(source.workflow, publicPipelineUrl()!) }),
+      filename: 'preflyt-workflow-setup.tar.gz' };
   }
 }

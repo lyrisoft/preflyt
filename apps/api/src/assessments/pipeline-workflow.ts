@@ -5,6 +5,7 @@ import { digest } from "./assessment-digest.js";
 import { checkReportFormat } from "./check-report-adapters.js";
 import { setupConfiguration } from "./pipeline-setup-package.js";
 
+import { chainPublicationGate } from "./pipeline-gate-workflow.js";
 import { policyAction, isPolicyAction } from "./pipeline-action.js";
 
 export type WorkflowRule = SnippetRule & { required: boolean };
@@ -60,7 +61,7 @@ export function workflowChecks(yaml: string) {
   const { value } = readWorkflow(yaml);
   const steps = Object.values(value.jobs)
     .flatMap((job: any) => job.steps ?? [])
-    .filter((step: any) => isPolicyAction(step.uses));
+    .filter((step: any) => isPolicyAction(step.uses) && step.with?.mode !== "gate");
   return steps;
 }
 export function inspectWorkflow(
@@ -203,6 +204,7 @@ export function addPolicyChecks(
     with: {
       ...(index >= 0 ? job.steps[index].with : {}),
       "api-url": apiUrl,
+      "job-name": typeof job.name === "string" ? job.name : jobId,
       checks: JSON.stringify(checks, null, 2),
     },
   };
@@ -253,7 +255,7 @@ export function addPolicyChecks(
       false,
     );
   }
-  const workflow = document.toString({ lineWidth: 0 });
+  const workflow = chainPublicationGate(document.toString({ lineWidth: 0 }), apiUrl);
   readWorkflow(workflow);
   return { workflow };
 }

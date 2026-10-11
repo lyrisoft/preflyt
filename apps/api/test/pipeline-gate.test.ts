@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { parse } from "yaml";
 import { policyAction } from "../src/assessments/pipeline-action.js";
-import { publicationGateWorkflow } from "../src/assessments/pipeline-gate-workflow.js";
+import { publicationGateJob } from "../src/assessments/pipeline-gate-workflow.js";
 import {
   PipelineGateController,
+  pipelineAiResult,
   publicationGateResult,
 } from "../src/assessments/pipeline-gate.controller.js";
 const mocks = vi.hoisted(() => ({
@@ -47,36 +47,15 @@ describe("final publication gate", () => {
       ).state,
     ).toBe("FAILED");
   });
-  it("watches only the selected workflow and never checks out or runs the PR head", () => {
-    const yaml = parse(
-      publicationGateWorkflow("CI: build", "https://preflyt.example/api"),
-    );
-    expect(yaml.on.workflow_run).toEqual({
-      workflows: ["CI: build"],
-      types: ["completed"],
-    });
-    expect(yaml.jobs.publication["timeout-minutes"]).toBe(12);
-    expect(yaml.jobs.publication.steps).toHaveLength(1);
-    expect(yaml.jobs.publication.steps[0]).toMatchObject({
-      uses: policyAction,
-      with: {
-        mode: "gate",
-        "api-url": "https://preflyt.example/api",
-        "source-run": "${{ github.event.workflow_run.id }}",
-        "source-attempt": "${{ github.event.workflow_run.run_attempt }}",
-      },
-    });
-    expect(yaml.jobs.publication.steps[0]).not.toHaveProperty("run");
-    expect(yaml.permissions).toEqual({ contents: "read", "id-token": "write" });
-    expect(yaml.jobs.publication.if).toContain(
-      "head_repository.full_name == github.repository",
-    );
-    expect(() =>
-      publicationGateWorkflow(
-        "Preflyt publication gate",
-        "https://preflyt.example",
-      ),
-    ).toThrow();
+  it('chains all prerequisite jobs and never checks out PR code in the gate', () => {
+    const job = publicationGateJob(['tests', 'scan'], 'https://preflyt.example/api');
+    expect(job.needs).toEqual(['tests', 'scan']);
+    expect(job.if).toContain('always()');
+    expect(job.name).toBe('Preflyt final gate');
+    expect(job.steps).toHaveLength(1);
+    expect(job.steps[0]).toMatchObject({ uses: policyAction, with: { mode: 'gate' } });
+    expect(job.steps[0]).not.toHaveProperty('run');
+    expect(job.steps[0].with).not.toHaveProperty('source-run');
   });
   it("denies a gate from another branch or workflow before reading a submission", async () => {
     mocks.identity.mockResolvedValue({
@@ -116,12 +95,8 @@ it("verifies the PR-head GitHub receipt and queries only the submitted assessmen
   mocks.identity.mockResolvedValue({
     repository_id: "51",
     repository: "org/repo",
-    run_id: "200",
-    run_attempt: "1",
-    sha: "gate-sha",
-    event_name: "workflow_run",
-    ref: "refs/heads/main",
-    workflow_ref: "org/repo/.github/workflows/preflyt-gate.yml@refs/heads/main",
+    run_id: "123", run_attempt: "1", sha: "merge-sha", event_name: "pull_request",
+    ref: "refs/pull/7/merge", workflow_ref: "org/repo/.github/workflows/ci.yml@refs/pull/7/merge",
   });
   const prisma = {
     gitHubRepository: {
@@ -155,7 +130,7 @@ it("verifies the PR-head GitHub receipt and queries only the submitted assessmen
     gatePolicyRevision: {
       findFirst: vi
         .fn()
-        .mockResolvedValue({ id: "policy", definitionHash: "hash" }),
+        .mockResolvedValue({ id: "policy", definitionHash: "hash", definition: {} }),
     },
     gitHubCheckPublication: {
       findFirst: vi
@@ -170,25 +145,9 @@ it("verifies the PR-head GitHub receipt and queries only the submitted assessmen
     },
   };
   const github = {
-    readReadinessWorkflowRun: vi
-      .fn()
-      .mockImplementation(async (_installation, _repository, run) =>
-        run === "200"
-          ? {
-              runAttempt: 1,
-              sourceSha: "gate-sha",
-              event: "workflow_run",
-              workflowPath: ".github/workflows/preflyt-gate.yml",
-              status: "in_progress",
-            }
-          : {
-              runAttempt: 1,
-              sourceSha: "head",
-              event: "pull_request",
-              status: "completed",
-              conclusion: "success",
-            },
-      ),
+    readPipelineVerificationRun: vi.fn().mockResolvedValue({ runAttempt: 1, sourceSha: 'head',
+      event: 'pull_request', workflowPath: '.github/workflows/ci.yml', status: 'in_progress',
+      verifiedJobs: { jobIds: ['check'], conclusion: 'success' } }),
     readPullRequest: vi
       .fn()
       .mockResolvedValue({
@@ -242,4 +201,14 @@ it("verifies the PR-head GitHub receipt and queries only the submitted assessmen
   await expect(controller.status("Bearer token", "123", "1")).rejects.toThrow(
     "GitHub unavailable",
   );
+});
+
+it('waits for every configured AI review and PR publication, while advisory findings do not block', () => {
+  const checks = [{ id: 'review' }];
+  const snapshot = { checks };
+  expect(pipelineAiResult(checks, []).state).toBe('PENDING');
+  expect(pipelineAiResult(checks, [{ snapshot, state: 'SUCCEEDED', feedbackState: 'RETRY' }]).state).toBe('PENDING');
+  expect(pipelineAiResult(checks, [{ snapshot, state: 'UNAVAILABLE', feedbackState: 'NOT_REQUESTED' }]).state).toBe('FAILED');
+  expect(pipelineAiResult(checks, [{ snapshot, state: 'SUCCEEDED', feedbackState: 'PUBLISHED' }]).state).toBe('PASSED');
+  expect(pipelineAiResult([{ id: 'other' }], [{ snapshot, state: 'SUCCEEDED', feedbackState: 'PUBLISHED' }]).state).toBe('PENDING');
 });

@@ -1,22 +1,27 @@
 # Public Preflyt Action
 
-The public integration is hosted at https://github.com/lyrisoft/preflyt-action and published on [GitHub Marketplace](https://github.com/marketplace/actions/preflyt-policy-check). Version v1.0.0 pins commit d80243bae90cc85eaaca08a60e8efd15a413d35a. The Action is MIT licensed; that grant covers only `actions/policy-check` and the exported public Action repository, not the Preflyt application.
+The Action source is maintained only in [lyrisoft/preflyt-action](https://github.com/lyrisoft/preflyt-action)
+and distributed through [GitHub Marketplace](https://github.com/marketplace/actions/preflyt-policy-check).
+Version v1.1.0 pins commit 49019a3e7febf942b937628bc831818e4a1b295f. MIT applies to the public Action only;
+the Preflyt application remains separately licensed. No runtime copy is bundled
+with the application or API Docker image.
 
-Generated policy/standard snippets use the immutable release SHA. Built-in recipes resolve from the installed Action using `preflyt-recipe`, so repositories do not need runtime files. Custom commands and existing reports stay supported. Existing local Action steps remain readable; adding checks upgrades their Action reference and built-in recipe paths.
-
-A setup PR contains exactly two workflow files: the reviewed checks workflow and `.github/workflows/preflyt-gate.yml`. It preserves the base tree and validates the reviewed branch SHA before writing a separate branch. The publication gate uses the same Action with `mode: gate`; it requires no checkout and never runs PR code. Workflow downloads include only these workflows. Copy-and-paste setup needs the separate publication gate committed to the default branch.
+Generated snippets contain check and terminal gate jobs in one PR workflow.
+The gate depends on all check jobs, waits for GitHub job verification, configured
+AI review and PR publication, and fails for missing/failed execution or publication.
+No workflow_run workflow or default-branch setup is needed. Documentation stays
+separate. A setup PR changes the reviewed workflow on the selected branch and
+removes that branch's old preflyt-gate.yml if present. Custom commands, genuine
+reports and optional signatures remain supported; AI findings remain advisory.
 
 ## Release procedure
 
-1. Run the Python unit tests and compile checks in `actions/policy-check`.
-2. Export the fixed allowlist with `node scripts/actions/package.mjs <empty-directory>`. Never copy application files, credentials or private Git history.
-3. Copy the standalone Action CI workflow from the public repository and run it on GitHub before tagging a new release. Keep public and application Action sources identical.
-4. Publish a new versioned release in the public repository. Never move a published version tag. Generated snippets pin the resulting commit in `pipeline-action.ts`.
-5. Update the workflow-editing skill and increment its version when its instructions change.
-6. Publish the GitHub Marketplace release from GitHub's release editor. Organization agreement acceptance is required by GitHub.
-7. Test the published check and gate modes against an acceptance PR, automatic verification, PR feedback, configured AI review and existing merge protection.
-
-Normal GitHub verification does not require report signatures. Stronger signed report proofs remain optional. AI feedback remains advisory and uses the user's configured model routes.
+1. Develop and test only in the public Action repository; do not copy private app source or history.
+2. Run Python tests and the public repository CI before publishing an immutable version tag.
+3. Update pipeline-action.ts and product workflow pins to that commit. Update the bundled
+   workflow editing skill and increment its version when instructions change.
+4. Test check/gate modes in one PR workflow with automatic results and the configured AI model.
+5. Publish the version through the GitHub Marketplace release editor. Never move a released tag.
 
 ## v1.0.0 live verification
 

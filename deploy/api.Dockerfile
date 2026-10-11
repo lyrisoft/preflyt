@@ -25,7 +25,6 @@ CMD ["pnpm", "--filter", "@preflyt/api", "prisma:migrate"]
 
 FROM base AS runtime
 WORKDIR /app
-COPY --chown=node:node actions/policy-check /app/actions/policy-check
 COPY --from=build --chown=node:node /opt/api/node_modules ./node_modules
 COPY --from=build --chown=node:node /opt/api/dist ./dist
 COPY --from=build --chown=node:node /opt/api/package.json ./package.json

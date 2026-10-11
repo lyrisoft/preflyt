@@ -26,7 +26,7 @@ First scope: current same-repository, non-draft PRs and their published target-b
 
 A pending submission is a runner assertion, not a verified passing assessment. Existing deterministic evidence, authorization, published-policy pins and merge protection remain authoritative. Neither a stage label nor an uploaded success assertion establishes execution. No public Action release, repository workflow change or branch-rule change has been made.
 
-Next authorized verification: run the written regression tests, then accept one configured PR workflow end to end. Execution PASS requires completed GitHub run/job verification plus valid rule-specific reports; OIDC or an unsigned upload alone stays incomplete. Separate signer contracts are optional. See `actions/policy-check/README.md` for the current integration contract and limits.
+Next authorized verification: run the written regression tests, then accept one configured PR workflow end to end. Execution PASS requires completed GitHub run/job verification plus valid rule-specific reports; OIDC or an unsigned upload alone stays incomplete. Separate signer contracts are optional. See [the public Action README](https://github.com/lyrisoft/preflyt-action/blob/development/README.md) for the current integration contract and limits.
 
 
 ### Workflow editor usability

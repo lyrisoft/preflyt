@@ -222,7 +222,7 @@ export class CheckPublicationService {
     const report = assessment.report as Record<string, any>
     const liveRuns: Record<
       string,
-      Awaited<ReturnType<GitHubProviderService['readReadinessWorkflowRun']>>
+      Awaited<ReturnType<GitHubProviderService['readPipelineVerificationRun']>>
     > = {}
     if (policy) {
       const runIds = [
@@ -230,7 +230,7 @@ export class CheckPublicationService {
           (report.observations ?? [])
             .filter(
               (o: any) =>
-                o.sourceKind === 'workflow_run' &&
+                ['workflow_run', 'workflow_jobs'].includes(o.sourceKind) &&
                 report.checks?.some((c: any) => c.deliveryId === o.deliveryId),
             )
             .map((o: any) => o.sourceObjectId),
@@ -241,7 +241,7 @@ export class CheckPublicationService {
           'Too many CI sources. Review the source mappings before publication.',
         )
       for (const runId of runIds)
-        liveRuns[runId] = await this.github.readReadinessWorkflowRun(
+        liveRuns[runId] = await this.github.readPipelineVerificationRun(
           repo.installationId,
           repo.githubId,
           runId,

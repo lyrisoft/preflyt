@@ -39,7 +39,7 @@ jobs:
         run: node docs/deployment/ci-command-report.mjs build.required .preflyt/results/build.xml -- "$(command -v pnpm)" -r --filter @preflyt/api --filter @preflyt/web build
       - name: Preflyt development policy
         if: ${{ !cancelled() && github.event_name == 'pull_request' && github.base_ref == 'development' && github.event.pull_request.head.repo.full_name == github.repository }}
-        uses: lyrisoft/preflyt-action@d80243bae90cc85eaaca08a60e8efd15a413d35a # v1.0.0
+        uses: lyrisoft/preflyt-action@49019a3e7febf942b937628bc831818e4a1b295f # v1.1.0
         with:
           api-url: ${{ vars.PREFLYT_API_URL }}
           checks: |

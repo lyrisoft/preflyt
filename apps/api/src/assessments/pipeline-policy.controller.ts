@@ -224,12 +224,24 @@ export class PipelinePolicyController {
     @Query("pr") pr: string | undefined,
     @Body() body: unknown,
   ) {
-    const { repo, config, session, claims, exported } = await this.context(
+    const { repo, config, session, claims, exported, run } = await this.context(
       authorization,
       pr,
     );
     const normalized = normalizePipelineSubmission(body, exported);
-    const inputHash = digest(normalized);
+    let submissionJobId: string | undefined;
+    if (normalized.verificationScope === 'jobs') {
+      const jobName = (body as Record<string, unknown>).jobName;
+      if (typeof jobName !== 'string' || !jobName || jobName.length > 200 || jobName === 'Preflyt final gate')
+        throw new ForbiddenException('Identify the check job that submits these reports');
+      const jobs = await this.github.readPipelineJobs(repo.installationId, repo.githubId, String(claims.run_id), Number(claims.run_attempt));
+      const matches = jobs.filter(job => (job.name === jobName || job.name.endsWith(' / ' + jobName)) &&
+        job.sourceSha === run.sourceSha && job.status === 'in_progress');
+      if (matches.length !== 1) throw new ConflictException('The report-producing job could not be identified; set the Action job-name input to its display name');
+      submissionJobId = matches[0].id;
+    }
+    const payload = { ...normalized, ...(submissionJobId ? { submissionJobId } : {}) };
+    const inputHash = digest(payload);
     const id = digest({
       repository: repo.id,
       runId: claims.run_id,
@@ -272,7 +284,7 @@ export class PipelinePolicyController {
             runAttempt: Number(claims.run_attempt),
             prNumber: exported.pullRequest,
             inputHash,
-            payload: normalized,
+            payload,
             submittedById: config.actorId,
           },
         ],

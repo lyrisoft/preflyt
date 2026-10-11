@@ -80,7 +80,7 @@ export function previewGate(snapshot: {
           failedObservations[0].sourceSha === snapshot.sourceSha &&
           failedObservations[0].result === 'FAILED' &&
           failedObservations[0].sourceStatus === 'completed' &&
-          ['check_run', 'workflow_run'].includes(
+          ['check_run', 'workflow_run', 'workflow_jobs'].includes(
             failedObservations[0].sourceKind,
           )
 
@@ -152,7 +152,7 @@ export function previewGate(snapshot: {
           failedObservations.length === 1 &&
           failedObservations[0].sourceSha === snapshot.sourceSha &&
           failedObservations[0].result === 'SUCCEEDED' &&
-          failedObservations[0].sourceKind === 'workflow_run' &&
+          ['workflow_run', 'workflow_jobs'].includes(failedObservations[0].sourceKind) &&
           failedObservations[0].sourceStatus === 'completed' &&
           failedObservations[0].sourceConclusion === 'success' &&
           execution.runId === failedObservations[0].sourceObjectId &&

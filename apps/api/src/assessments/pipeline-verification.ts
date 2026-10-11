@@ -10,6 +10,8 @@ export type GitHubExecution = {
   workflowId: string
   policyId: string
   policyHash: string
+  verificationScope?: string
+  jobIds?: string[]
   verifiedAt: string
 }
 export async function pipelineVerifications(
@@ -52,7 +54,7 @@ export function githubReportExecutions(
   sha256: string,
 ): GitHubExecution[] {
   if (
-    observation.sourceKind !== 'workflow_run' ||
+    !['workflow_run', 'workflow_jobs'].includes(observation.sourceKind) ||
     observation.sourceConclusion !== 'success' ||
     observation.sourceStatus !== 'completed'
   )
@@ -63,7 +65,9 @@ export function githubReportExecutions(
         m.sourceSha === observation.sourceSha &&
         m.runId === observation.sourceObjectId &&
         m.runAttempt === runAttempt(observation.sourceIdentity) &&
-        m.workflowId === observation.sourceIdentity?.workflowId,
+        m.workflowId === observation.sourceIdentity?.workflowId &&
+        (observation.sourceKind !== 'workflow_jobs' || (m.verificationScope === 'jobs' &&
+          JSON.stringify(m.jobIds) === JSON.stringify(observation.sourceIdentity?.jobIds))),
     )
     .flatMap((m) =>
       m.reports
@@ -77,6 +81,8 @@ export function githubReportExecutions(
           workflowId: m.workflowId,
           policyId: m.policyId,
           policyHash: m.policyHash,
+          verificationScope: m.verificationScope,
+          jobIds: m.jobIds,
           verifiedAt: m.verifiedAt,
         })),
     )

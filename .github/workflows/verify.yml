@@ -68,3 +68,18 @@ jobs:
           push: false
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+  preflyt_gate:
+    name: Preflyt final gate
+    needs: [scope, development, main, images]
+    if: ${{ always() && !cancelled() && github.event_name == 'pull_request' && github.base_ref == 'development' && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Verify results, AI review and PR publication
+        uses: lyrisoft/preflyt-action@49019a3e7febf942b937628bc831818e4a1b295f
+        with:
+          mode: gate
+          api-url: ${{ vars.PREFLYT_API_URL }}

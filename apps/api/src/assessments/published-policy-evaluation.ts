@@ -26,6 +26,7 @@ export function evaluatePublishedPolicy(
       status: string
       conclusion: string
       workflowId: string
+      verifiedJobs?: { jobIds: string[]; conclusion: string }
     }
   >,
   now = new Date(),
@@ -154,8 +155,10 @@ export function evaluatePublishedPolicy(
       run.sourceSha === snapshot.sourceSha &&
       run.runAttempt === observation?.sourceIdentity?.runAttempt &&
       run.workflowId === observation?.sourceIdentity?.workflowId &&
-      run.status === 'completed' &&
-      run.conclusion === observation.sourceConclusion &&
+      (observation.sourceKind === 'workflow_jobs'
+        ? !!run.verifiedJobs && run.verifiedJobs.conclusion === observation.sourceConclusion &&
+          digest(run.verifiedJobs.jobIds) === digest(observation.sourceIdentity?.jobIds)
+        : run.status === 'completed' && run.conclusion === observation.sourceConclusion) &&
       Number.isFinite(age) &&
       age >= 0 &&
       age <= requirement.maxAgeHours
@@ -178,7 +181,9 @@ export function evaluatePublishedPolicy(
       githubExecution.ruleId === rule.ruleId && githubExecution.sourceSha === snapshot.sourceSha &&
       githubExecution.runId === observation?.sourceObjectId && githubExecution.runAttempt === run?.runAttempt &&
       githubExecution.workflowId === run?.workflowId && githubExecution.policyId === policy.id &&
-      githubExecution.policyHash === policy.definitionHash
+      githubExecution.policyHash === policy.definitionHash &&
+      (observation.sourceKind !== 'workflow_jobs' || (githubExecution.verificationScope === 'jobs' &&
+        digest(githubExecution.jobIds) === digest(run?.verifiedJobs?.jobIds)))
     const signedExecution = !!contracts && definition.executionContractDigest === contracts.digest &&
       validation?.executionContractDigest === contracts.digest && !!currentAttestationPolicy &&
       validation.reports?.length === 1 && validation.reports[0].provenance?.policyDigest === currentAttestationPolicy.digest &&
@@ -201,8 +206,8 @@ export function evaluatePublishedPolicy(
       !check.ambiguous &&
       !check.superseded &&
       check.providerResult === 'SUCCEEDED' &&
-      observation.sourceKind === 'workflow_run' &&
-      run.conclusion === 'success' &&
+      ['workflow_run', 'workflow_jobs'].includes(observation.sourceKind) &&
+      (observation.sourceKind === 'workflow_jobs' ? run.verifiedJobs?.conclusion : run.conclusion) === 'success' &&
       report.collectionTruncated === false &&
       report.validationCollectionTruncated === false
     if (trusted) return { ...rule, status: 'PASS', reasons: [] }

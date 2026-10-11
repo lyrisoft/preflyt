@@ -287,7 +287,7 @@ export function PipelineWorkflowSetup({
           `${base}/files?policy=${encodeURIComponent(policyId)}&workflow=${encodeURIComponent(selected)}`
         )
       ),
-    meta: { successMessage: 'Publication gate downloaded' },
+    meta: { successMessage: 'Chained workflow downloaded' },
   })
   const busy =
     installFiles.isPending ||
@@ -390,11 +390,10 @@ export function PipelineWorkflowSetup({
         {data.workflowSetup.checkIds.length > 0 && (
           <>
             <p className='max-w-2xl text-xs text-muted-foreground'>
-              Paste the snippet after checkout and dependency installation, add
-              the listed job permissions, then commit it. It uses the published
-              Preflyt Action and your installed test and scan tools. Add the
-              publication gate to your repository’s default branch, or include
-              both workflows with Create setup PR.
+              Add the checks and final gate to the same PR workflow. Install
+              dependencies before the policy step. The gate waits for completed
+              checks, configured AI reviews and PR publication. Create setup PR
+              keeps your existing jobs and adds the final dependency chain.
             </p>
             <div className='flex flex-wrap items-center gap-2'>
               <Button
@@ -404,7 +403,7 @@ export function PipelineWorkflowSetup({
                 onClick={() => installFiles.mutate()}
               >
                 <Download />
-                Download publication gate
+                Download chained workflow
               </Button>
               <Link
                 to='/organization-settings'
@@ -811,9 +810,9 @@ export function PipelineWorkflowSetup({
                   )}
                   <div className='flex flex-wrap items-center justify-between gap-3 border-t pt-3'>
                     <p className='max-w-lg text-xs text-muted-foreground'>
-                      The setup PR includes this workflow and the publication
-                      gate using the published Action. Review and merge it in
-                      GitHub.
+                      The setup PR includes one workflow with checks and the
+                      final gate using the published Action. Review and merge it
+                      in GitHub.
                     </p>
                     {canManage && (
                       <div className='flex flex-wrap gap-2'>
