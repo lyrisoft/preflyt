@@ -247,3 +247,49 @@ it('shows CI jobs directly after saved standards and before branch policies', as
     .not.toBeInTheDocument()
   await view.unmount()
 })
+
+it('shows published branch standards and sends their exact policy to CI connections', async () => {
+  state.data.selection = {
+    id: 'policy-selection',
+    policyId: 'development-v2',
+    branchRef: 'refs/heads/development',
+    standardsSource: 'POLICY',
+    revision: 2,
+    profile: 'RECOMMENDED',
+    packs: [{ id: 'baseline', version: '1.0.0' }],
+    sourceSha: null,
+    createdAt: '2026-10-11T00:00:00Z',
+  }
+  const bindings = vi.fn(() => <h2>Development CI jobs</h2>)
+  const view = await render(
+    <RepositoryStandards
+      repositoryId='101'
+      canManage
+      sourceBindings={bindings}
+    />
+  )
+  await expect
+    .element(page.getByRole('heading', { name: 'development standards' }))
+    .toBeVisible()
+  await expect
+    .element(page.getByText('From the published development branch policy.'))
+    .toBeVisible()
+  await expect
+    .element(page.getByText('Standard baseline', { exact: true }))
+    .toBeVisible()
+  await expect
+    .element(page.getByText('No standards selected'))
+    .not.toBeInTheDocument()
+  await expect
+    .element(page.getByRole('button', { name: 'Edit standards', exact: true }))
+    .not.toBeInTheDocument()
+  const review = page.getByRole('link', { name: 'Review branch policy' })
+  await expect
+    .element(review)
+    .toHaveAttribute(
+      'href',
+      '/policies?repository=%22101%22&policy=%22development-v2%22'
+    )
+  expect(bindings).toHaveBeenCalledWith('development-v2')
+  await view.unmount()
+})

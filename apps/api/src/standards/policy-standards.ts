@@ -32,7 +32,7 @@ export async function currentStandards(db: any, repositoryId: string, options: {
     const selection = { id: policy.selectionId, profile: definition.adoptionProfile,
       packs: definition.packs, teamContext: definition.teamContext ?? [],
       revision: policy.revision, createdAt: policy.createdAt, sourceSha: null,
-      profileSnapshotId: null, policyId: policy.id, standardsSource: 'POLICY' }
+      profileSnapshotId: null, policyId: policy.id, branchRef: policy.branchRef, standardsSource: 'POLICY' }
     if (digest(definition) !== policy.definitionHash ||
       definition.selectionId !== selection.id || definition.branchRef !== policy.branchRef ||
       policySelectionId(repositoryId, policy.branchRef, selection) !== selection.id ||
@@ -58,8 +58,9 @@ export async function currentStandards(db: any, repositoryId: string, options: {
   return db.repositoryStandardsSelection.findFirst({ where: { repositoryId }, orderBy: { revision: 'desc' } })
 }
 
-export async function repositoryStandards(db: any, repositoryId: string, policyId?: string) {
+export async function repositoryStandards(db: any, repositoryId: string, policyId?: string, inspectedBranch?: string) {
   if (policyId) return currentStandards(db, repositoryId, { policyId, allowDraft: true, verifyContext: false })
+  if (inspectedBranch) return currentStandards(db, repositoryId, { branchRef: `refs/heads/${inspectedBranch}`, verifyContext: false })
   const repo = await db.gitHubRepository.findUnique({ where: { id: repositoryId }, select: { defaultBranch: true } })
   return currentStandards(db, repositoryId, repo?.defaultBranch ? { branchRef: `refs/heads/${repo.defaultBranch}`, verifyContext: false } : {})
 }

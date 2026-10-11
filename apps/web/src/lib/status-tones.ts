@@ -74,5 +74,10 @@ export const statusTones: Readonly<Record<string, StatusTone>> = {
   'not processed': 'warning',
   'execution setup verified': 'info',
   'configuration found': 'success',
-  'related files found': 'info',
+  'related files found': 'success',
+  'not found': 'warning',
+  'not determined': 'neutral',
+  required: 'neutral',
+  optional: 'neutral',
+  suggested: 'neutral',
 }

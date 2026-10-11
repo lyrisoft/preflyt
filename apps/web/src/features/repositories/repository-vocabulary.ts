@@ -12,9 +12,9 @@ export function sentence(value: string) {
   return text.charAt(0).toUpperCase() + text.slice(1)
 }
 
-const configFound: Status = { label: 'Related files found', tone: 'info' }
+const configFound: Status = { label: 'Related files found', tone: 'success' }
 const notFound: Status = { label: 'Not found', tone: 'warning' }
-const unknown: Status = { label: 'Unknown', tone: 'neutral' }
+const unknown: Status = { label: 'Not determined', tone: 'neutral' }
 
 export const configurationStatus: Record<string, Status> = {
   HINT_DETECTED: configFound,

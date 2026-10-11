@@ -7,6 +7,7 @@ import {
   FileText,
   ShieldCheck,
 } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -32,6 +33,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { StatusBadge } from '@/components/status-badge'
+import { SurfaceIcon } from '@/components/surface-icon'
 import type { ControlFilter, RepositoryTab } from './posture-summary'
 import { useStandards, type Standards } from './repository-queries'
 import {
@@ -42,7 +44,7 @@ import {
 
 const filters: { value: ControlFilter; label: string }[] = [
   { value: 'all', label: 'All' },
-  { value: 'review', label: 'Needs review' },
+  { value: 'review', label: 'Setup gaps' },
   { value: 'found', label: 'Files found' },
 ]
 const pageSize = 8
@@ -61,7 +63,7 @@ function ControlDetails({
   onClose: () => void
 }) {
   const status = configurationStatus[control?.configuration ?? ''] ?? {
-    label: 'Unknown',
+    label: 'Not determined',
     tone: 'neutral' as const,
   }
   const sourceSha = standards?.profileSnapshot?.sourceSha
@@ -76,13 +78,17 @@ function ControlDetails({
             <DialogHeader>
               <DialogTitle>{control.title}</DialogTitle>
               <DialogDescription>
-                Configuration evidence from the repository profile. File hints
-                do not prove that this control executed.
+                Files found at the inspected commit. Open Assessments for test
+                and scan results.
               </DialogDescription>
             </DialogHeader>
             <div className='flex flex-wrap items-center gap-2'>
-              <Badge variant={control.required ? 'info' : 'neutral'}>
-                {control.required ? 'Required' : 'Optional'}
+              <Badge variant='neutral'>
+                {!standards?.selection
+                  ? 'Suggested'
+                  : control.required
+                    ? 'Required'
+                    : 'Optional'}
               </Badge>
               <StatusBadge tone={status.tone}>{status.label}</StatusBadge>
               <Badge variant='neutral'>{sentence(control.capability)}</Badge>
@@ -99,7 +105,7 @@ function ControlDetails({
               <dd>
                 {standards?.selection
                   ? `${sentence(standards.selection.profile)} · revision ${standards.selection.revision}`
-                  : 'Recommended preview · no saved selection'}
+                  : 'Suggested checks · choose standards to apply them'}
               </dd>
               <dt className='text-muted-foreground'>Inspected commit</dt>
               <dd className='font-mono break-all'>
@@ -202,19 +208,21 @@ export function RepositoryControls({
     <Card className='gap-4'>
       <CardHeader>
         <CardTitle asChild>
-          <h2 className='flex items-center gap-2'>
-            <ShieldCheck className='size-4 text-chart-1' />
-            Repository checks
+          <h2 className='flex items-center gap-3'>
+            <SurfaceIcon icon={ShieldCheck} tone='blue' />
+            Repository check setup
           </h2>
         </CardTitle>
         <CardDescription>
           {data?.selection
-            ? `${sentence(data.selection.profile)} · saved version ${data.selection.revision}`
-            : 'Recommended preview · no saved selection'}
+            ? data.selection.policyId
+              ? `${data.selection.branchRef?.replace(/^refs\/heads\//, '')} · published policy v${data.selection.revision}`
+              : `${sentence(data.selection.profile)} · saved version ${data.selection.revision}`
+            : 'Suggested checks · choose standards to apply them'}
         </CardDescription>
         <p className='text-xs text-muted-foreground'>
-          Related files show setup only. Open Assessments to see whether checks
-          ran and passed.
+          Files found at the inspected commit. Test and scan results are in
+          Assessments.
         </p>
       </CardHeader>
       <CardContent className='px-0'>
@@ -254,7 +262,14 @@ export function RepositoryControls({
                       })
                       onFilter(item.value)
                     }}
-                    className='touch-target inline-flex h-7 items-center gap-1.5 rounded-sm px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring aria-pressed:bg-primary/10 aria-pressed:text-primary'
+                    className={cn(
+                      'touch-target inline-flex h-7 items-center gap-1.5 rounded-sm px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring',
+                      item.value === 'review'
+                        ? 'aria-pressed:bg-warning/10 aria-pressed:text-warning-text'
+                        : item.value === 'found'
+                          ? 'aria-pressed:bg-success/10 aria-pressed:text-success-text'
+                          : 'aria-pressed:bg-muted aria-pressed:text-foreground'
+                    )}
                   >
                     {item.label}
                     <span className='tabular-nums opacity-70'>
@@ -284,7 +299,7 @@ export function RepositoryControls({
                   <TableHead className='hidden sm:table-cell'>
                     Configuration
                   </TableHead>
-                  <TableHead className='pe-6 text-end'>Evidence</TableHead>
+                  <TableHead className='pe-6 text-end'>Related files</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -301,7 +316,7 @@ export function RepositoryControls({
                   pageControls.map((control) => {
                     const status = configurationStatus[
                       control.configuration
-                    ] ?? { label: 'Unknown', tone: 'neutral' as const }
+                    ] ?? { label: 'Not determined', tone: 'neutral' as const }
                     return (
                       <TableRow key={control.id}>
                         <TableCell className='max-w-[24rem] min-w-48 ps-6 whitespace-normal sm:min-w-56'>
@@ -318,18 +333,22 @@ export function RepositoryControls({
                             <StatusBadge tone={status.tone}>
                               {status.label}
                             </StatusBadge>
-                            <Badge
-                              variant={control.required ? 'info' : 'neutral'}
-                            >
-                              {control.required ? 'Required' : 'Optional'}
+                            <Badge variant='neutral'>
+                              {!data?.selection
+                                ? 'Suggested'
+                                : control.required
+                                  ? 'Required'
+                                  : 'Optional'}
                             </Badge>
                           </div>
                         </TableCell>
                         <TableCell className='hidden sm:table-cell'>
-                          <Badge
-                            variant={control.required ? 'info' : 'neutral'}
-                          >
-                            {control.required ? 'Required' : 'Optional'}
+                          <Badge variant='neutral'>
+                            {!data?.selection
+                              ? 'Suggested'
+                              : control.required
+                                ? 'Required'
+                                : 'Optional'}
                           </Badge>
                         </TableCell>
                         <TableCell className='hidden sm:table-cell'>

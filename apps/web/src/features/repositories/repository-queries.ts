@@ -48,6 +48,9 @@ export type Pack = {
   rules: Rule[]
 }
 export type Selection = {
+  policyId?: string
+  branchRef?: string
+  standardsSource?: string
   id: string
   revision: number
   profile: string

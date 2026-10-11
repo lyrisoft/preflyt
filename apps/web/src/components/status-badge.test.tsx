@@ -117,8 +117,8 @@ it('keeps connected CI jobs green and missing connections amber', async () => {
   await view.unmount()
 })
 
-it('does not present detected configuration files as a passed check', () => {
-  expect(statusTones['related files found']).toBe('info')
+it('uses green for found files while keeping their label distinct from a passed check', () => {
+  expect(statusTones['related files found']).toBe('success')
   expect(statusTones.passed).toBe('success')
 })
 
@@ -138,4 +138,26 @@ it('uses semantic colors for the policy exception lifecycle', () => {
   expect(statusTones.revoked).toBe('neutral')
   expect(statusTones.expired).toBe('warning')
   expect(statusTones['allowed with exception']).toBe('warning')
+})
+
+it('separates setup gaps, file observations and undetermined setup', async () => {
+  const view = await render(
+    <>
+      <StatusBadge tone='success'>Not found</StatusBadge>
+      <StatusBadge tone='warning'>Not determined</StatusBadge>
+      <StatusBadge tone='info'>Related files found</StatusBadge>
+      <StatusBadge tone='info'>Suggested</StatusBadge>
+      <StatusBadge tone='info'>Required</StatusBadge>
+    </>
+  )
+  await expect
+    .element(view.getByText('Not found', { exact: true }))
+    .toHaveClass('text-warning-text')
+  await expect.element(view.getByText('Not determined')).toHaveClass('bg-muted')
+  await expect
+    .element(view.getByText('Related files found'))
+    .toHaveClass('text-success-text')
+  await expect.element(view.getByText('Suggested')).toHaveClass('bg-muted')
+  await expect.element(view.getByText('Required')).toHaveClass('bg-muted')
+  await view.unmount()
 })

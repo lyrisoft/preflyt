@@ -98,12 +98,14 @@ export function RepositoryStandards({
   repositoryId: string
   repositoryName?: string
   canManage: boolean
-  sourceBindings?: ReactNode
+  sourceBindings?: ReactNode | ((policyId?: string) => ReactNode)
   policyRevisions?: ReactNode
 }) {
   const query = useStandards(repositoryId)
   const [editing, setEditing] = useState(false)
   const data = query.isError ? undefined : query.data
+  const policyId = data?.selection?.policyId
+  const policyBranch = data?.selection?.branchRef?.replace(/^refs\/heads\//, '')
   const saved =
     data?.selection?.packs
       .map((ref) =>
@@ -128,11 +130,17 @@ export function RepositoryStandards({
             <SurfaceIcon icon={Layers} tone='teal' />
             <div className='min-w-0 space-y-1'>
               <CardTitle asChild>
-                <h2>Repository standards</h2>
+                <h2>
+                  {policyId
+                    ? `${policyBranch} standards`
+                    : 'Repository standards'}
+                </h2>
               </CardTitle>
               <p className='text-xs text-muted-foreground'>
                 {data?.selection
-                  ? 'Saved requirements for this repository.'
+                  ? policyId
+                    ? `From the published ${policyBranch} branch policy.`
+                    : 'Saved requirements for this repository.'
                   : 'Choose the checks that matter for this repository.'}
               </p>
             </div>
@@ -147,7 +155,16 @@ export function RepositoryStandards({
             >
               <RefreshCw className='size-4' />
             </Button>
-            {canManage && data && (
+            {policyId && (
+              <Button variant='outline' size='sm' asChild>
+                <a
+                  href={`/policies?repository=${encodeURIComponent(JSON.stringify(repositoryId))}&policy=${encodeURIComponent(JSON.stringify(policyId))}`}
+                >
+                  Review branch policy
+                </a>
+              </Button>
+            )}
+            {canManage && data && !policyId && (
               <Button size='sm' onClick={() => setEditing(true)}>
                 <SlidersHorizontal className='size-4' />
                 {data.selection ? 'Edit standards' : 'Choose standards'}
@@ -238,7 +255,10 @@ export function RepositoryStandards({
           )}
         </CardContent>
       </Card>
-      {data?.selection && sourceBindings}
+      {data?.selection &&
+        (typeof sourceBindings === 'function'
+          ? sourceBindings(policyId)
+          : sourceBindings)}
       {data?.selection && policyRevisions}
       <Sheet open={editing} onOpenChange={setEditing}>
         <SheetContent className='w-full gap-0 sm:max-w-xl'>
@@ -253,7 +273,7 @@ export function RepositoryStandards({
               keep their approved version.
             </SheetDescription>
           </SheetHeader>
-          {data && canManage && (
+          {data && canManage && !policyId && (
             <StandardsSelectionEditor
               key={data.selection?.id ?? 'new'}
               data={data}

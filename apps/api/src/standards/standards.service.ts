@@ -45,16 +45,16 @@ export class StandardsService {
   }
   async get(id: string, policyId?: string) {
     const repo = await this.repository(id)
-    const [resolved, snapshot] = await Promise.all([
-      repositoryStandards(this.prisma, repo.id, policyId).then(selection => ({ selection, selectionError: null as string | null })).catch(error => {
+    const snapshot = await this.prisma.repositoryProfile.findFirst({
+      where: { repositoryId: repo.id },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    })
+    const resolved = await repositoryStandards(this.prisma, repo.id, policyId, snapshot?.branch)
+      .then(selection => ({ selection, selectionError: null as string | null }))
+      .catch(error => {
         if (error instanceof ConflictException) return { selection: null, selectionError: error.message };
         throw error;
-      }),
-      this.prisma.repositoryProfile.findFirst({
-        where: { repositoryId: repo.id },
-        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      }),
-    ])
+      })
     const { selection, selectionError } = resolved
     const customVersions = repo.installation.organizationId
       ? await organizationCatalogue(

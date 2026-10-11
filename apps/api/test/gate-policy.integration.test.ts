@@ -21,6 +21,7 @@ import {
 } from "../src/assessments/gate-policy.service.js";
 import { GatePolicyController } from "../src/assessments/gate-policy.controller.js";
 import { catalogue } from "../src/standards/catalogue.js";
+import { StandardsService } from '../src/standards/standards.service.js';
 import { currentStandards } from '../src/standards/policy-standards.js';
 import { CiBindingService } from '../src/assessments/ci-binding.service.js';
 import { AssessmentService } from '../src/assessments/assessment.service.js';
@@ -556,4 +557,20 @@ it('includes inherited organization requirements and rejects a changed approval 
   expect(policy.definition.teamContext[0].teamId).toBe(team.id);
   await db.preflytTeam.update({ where: { id: team.id }, data: { scopeRevision: { increment: 1 } } });
   await post(approver, `${base}/${policy.id}/approve`, { expectedHash: policy.definitionHash }).expect(409);
+});
+
+it('shows the inspected branch policy standards without borrowing another branch policy', async () => {
+  await db.gitHubRepository.update({ where: { id: repoId }, data: { defaultBranch: 'main' } });
+  const development = await publishDirect();
+  const profile = await db.repositoryProfile.create({ data: { repositoryId: repoId,
+    sourceSha: 'a'.repeat(40), treeSha: 'b'.repeat(40), branch: 'development',
+    fullName: 'fixture/app', version: 1, complete: true, report: { signals: [] } } });
+  const standards = new StandardsService(db);
+  const observed = await standards.get('51');
+  expect(observed.selection).toMatchObject({ id: development.selectionId,
+    policyId: development.id, branchRef: 'refs/heads/development', standardsSource: 'POLICY' });
+  expect(observed.controls.map((rule: any) => rule.id).sort()).toEqual(development.definition.rules.map((rule: any) => rule.id).sort());
+  await db.repositoryProfile.update({ where: { id: profile.id }, data: { branch: 'main' } });
+  expect((await standards.get('51')).selection?.id).toBe(selectionId);
+  expect((await standards.get('51', development.id)).selection?.id).toBe(development.selectionId);
 });

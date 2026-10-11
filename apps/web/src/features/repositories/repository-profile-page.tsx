@@ -592,16 +592,17 @@ export function RepositoryProfilePage() {
                     'policy.draft',
                     repositoryId
                   )}
-                  sourceBindings={
+                  sourceBindings={(policyId) => (
                     <RepositoryBindings
                       repositoryId={repositoryId}
+                      policyId={policyId}
                       canManage={canPerform(
                         sessionQuery.data,
                         'policy.draft',
                         repositoryId
                       )}
                     />
-                  }
+                  )}
                 />
               </TabsContent>
               <TabsContent value='assessments' className='space-y-5'>
