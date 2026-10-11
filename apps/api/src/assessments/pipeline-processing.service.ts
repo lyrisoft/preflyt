@@ -445,7 +445,7 @@ export class PipelineProcessingService {
           state: "COMPLETE",
           assessmentId: saved.assessment.id,
           commentUrl,
-          failureCode: proofIncomplete && run.conclusion !== "success" ? "EXECUTION_PROOF_INCOMPLETE" : null,
+          failureCode: proofIncomplete && preview.status !== "PASS" ? "EXECUTION_PROOF_INCOMPLETE" : null,
         });
         await this.prisma.auditEvent.createMany({
           data: [
