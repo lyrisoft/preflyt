@@ -101,3 +101,21 @@ it('rejects a large bounded review if GitHub cannot supply a stable file count',
   await expect(provider.readPrReviewSource(500n,501n,7,context)).rejects.toThrow('file count changed')
   provider.close()
 })
+
+it('rotates the App client and token cache when the private key changes', async () => {
+  const provider = new GitHubProviderService() as any;
+  vi.stubEnv('GITHUB_APP_ID', '100'); vi.stubEnv('GITHUB_APP_PRIVATE_KEY', 'old-key');
+  const original = provider.requireApp();
+  provider.tokens.set('old', { token: 'old-token', expiresAt: Date.now() + 3600000 });
+  vi.stubEnv('GITHUB_APP_PRIVATE_KEY', 'new-key');
+  expect(provider.requireApp() === original).toBe(false); expect(provider.tokens.size).toBe(0); provider.close();
+});
+it('rejects an in-flight token minted across a connection change', async () => {
+  const provider = new GitHubProviderService() as any;
+  vi.stubEnv('GITHUB_APP_ID', '100'); vi.stubEnv('GITHUB_APP_PRIVATE_KEY', 'old-key');
+  vi.spyOn(provider, 'appRequest').mockImplementation(async () => {
+    vi.stubEnv('GITHUB_APP_PRIVATE_KEY', 'new-key');
+    return { data: { token: 'old-token', expires_at: new Date(Date.now() + 3600000).toISOString() } };
+  });
+  await expect(provider.installationToken(100n)).rejects.toThrow('connection changed'); expect(provider.tokens.size).toBe(0); provider.close();
+});

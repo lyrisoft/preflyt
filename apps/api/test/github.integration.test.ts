@@ -652,3 +652,25 @@ describe('dashboard reads last synced local state without upstream latency', () 
     expect((await service.repositoryOverview()).repositories).toEqual([])
   })
 })
+
+it('inspects newly selected repositories without overwriting an existing profile', async () => {
+  await prisma.gitHubInstallation.create({ data: { id: 8800n, organizationId: 'preflyt-default', accountLogin: 'lyrisoft-fixtures', accountType: 'Organization', repositorySelection: 'selected', permissions: {}, connectedById: identityId, active: true } });
+  const repository = await prisma.gitHubRepository.create({ data: { githubId: 88001n, installationId: 8800n, name: 'fixture-service', fullName: 'lyrisoft-fixtures/fixture-service', ownerLogin: 'lyrisoft-fixtures', isPrivate: true, defaultBranch: 'main', selected: false } });
+  const discover = vi.fn(async () => {});
+  const service = new GitHubService(prisma, provider as unknown as GitHubProviderService, undefined, { discover } as never);
+  expect(await service.setRepositorySelected(identityId, '88001', true, 'http://localhost:5173')).toEqual({ inspection: 'READY' });
+  expect(discover).toHaveBeenCalledWith('88001', identityId, 'http://localhost:5173');
+  await prisma.repositoryProfile.create({ data: { repositoryId: repository.id, sourceSha: 'a'.repeat(40), treeSha: 'b'.repeat(40), fullName: repository.fullName, version: 1, complete: true, branch: 'development', report: {} } });
+  discover.mockClear();
+  await service.setRepositorySelected(identityId, '88001', false, 'http://localhost:5173');
+  await service.setRepositorySelected(identityId, '88001', true, 'http://localhost:5173');
+  expect(discover).not.toHaveBeenCalled();
+  expect(await prisma.repositoryProfile.count()).toBe(1);
+});
+it('keeps selection saved when first inspection fails and offers retry', async () => {
+  await prisma.gitHubInstallation.create({ data: { id: 8800n, organizationId: 'preflyt-default', accountLogin: 'lyrisoft-fixtures', accountType: 'Organization', repositorySelection: 'selected', permissions: {}, connectedById: identityId, active: true } });
+  await prisma.gitHubRepository.create({ data: { githubId: 88001n, installationId: 8800n, name: 'fixture-service', fullName: 'lyrisoft-fixtures/fixture-service', ownerLogin: 'lyrisoft-fixtures', isPrivate: true, defaultBranch: 'main', selected: false } });
+  const service = new GitHubService(prisma, provider as unknown as GitHubProviderService, undefined, { discover: vi.fn(async () => { throw new Error('network unavailable') }) } as never);
+  expect(await service.setRepositorySelected(identityId, '88001', true, 'http://localhost:5173')).toMatchObject({ inspection: 'RETRY' });
+  expect((await prisma.gitHubRepository.findUnique({ where: { githubId: 88001n } }))?.selected).toBe(true);
+});

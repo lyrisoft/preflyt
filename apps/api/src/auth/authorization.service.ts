@@ -258,7 +258,7 @@ export class AuthorizationService {
     const path = request.path.replace(/\/$/, '')
     // The audit reader performs fresh organization and repository authorization.
     if (path === '/audit-log' && request.method === 'GET') return false
-    if (path === '/configuration') {
+    if (path === '/configuration' || path.startsWith('/configuration/')) {
       if (session.platformAdmin !== true) await this.deny(session, 'deployment.configuration.manage')
       return true
     }

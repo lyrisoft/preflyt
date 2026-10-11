@@ -36,7 +36,7 @@ docker compose --env-file .env logs --tail=100 migrate api worker cache queue we
 | "Sign-in failed" | Wrong username or password. The login is rate-limited, so wait before retrying. |
 | "Sign-in expired. Start again." | The sign-in attempt timed out. Start from the sign-in page again. |
 | You're signed out unexpectedly | Super Admin sessions last 24 hours and other sessions eight. Activity does not extend them. |
-| Login loops locally | Use the same hostname throughout. `localhost` and `127.0.0.1` have separate cookies. For a local trial use the `compose.local.yaml` override so cookies are not marked secure. |
+| Login loops locally | Use the same hostname throughout. `localhost` and `127.0.0.1` have separate cookies. For a local trial on plain `http://localhost`, set `PREFLYT_NODE_ENV=development` and `PREFLYT_COOKIE_SECURE=false` in `.env`, as in the [Quick Start](../getting-started/quick-start.md), then run `docker compose up -d`. |
 | **Reconnect to Preflyt** appears | The browser can't confirm your session, usually during an API outage. Use **Retry connection**. Preflyt does not log you out for transient errors. |
 
 ## GitHub
@@ -44,7 +44,7 @@ docker compose --env-file .env logs --tail=100 migrate api worker cache queue we
 | Symptom | What to check |
 | --- | --- |
 | The install redirect fails | The App's **Setup URL** and callback URLs match `WEB_ORIGIN` exactly, and "Request user authorization during installation" is **off**. |
-| GitHub sign-in is not offered | The sign-in switch is on in Settings, `GITHUB_USER_TOKEN_ENCRYPTION_KEY` is set, the login callback is registered, and the API and worker were restarted. |
+| GitHub sign-in is not offered | The sign-in switch is on in Settings, `GITHUB_USER_TOKEN_ENCRYPTION_KEY` is set, the login callback is registered, and the saved GitHub connection has refreshed. Deployment encryption-key changes require recreating the affected services. |
 | Repositories are missing | The App is installed on that organization and has access to the repository. |
 | No events appear | Event ingestion is on in Settings, the webhook URL is `<WEB_ORIGIN>/api/github/webhooks`, and the App is subscribed to **Pull request**, **Check run** and **Workflow run**. GitHub can't reach `localhost`. |
 | A delivery returns `401` | The webhook secret differs between GitHub and Preflyt. |
@@ -54,7 +54,7 @@ docker compose --env-file .env logs --tail=100 migrate api worker cache queue we
 
 ## Settings changes do not take effect
 
-Connection settings (GitHub, governance, OIDC, SMTP, GitHub sign-in) apply only after you restart **both** the API and the worker. Feature switches apply within about five seconds.
+Saved GitHub and governance connections refresh without a restart, as do feature switches. OIDC and SMTP connection changes still require restarting both the API and worker.
 
 If a switch suddenly turns off by itself, check the API logs for a configuration read or decryption error. When that happens Preflyt disables live switches rather than falling back to old values.
 

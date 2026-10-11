@@ -17,9 +17,9 @@ Every status in Preflyt has a **text label** as well as a colour, so meaning nev
 | Red | Failure or error |
 | Amber | Needs attention, pending or stale |
 | Blue | Information or in progress |
-| Grey | Unknown, not run, inactive or not available |
+| Grey | Not run, inactive or not available |
 
-Green is never used for something that is unknown or unassessed.
+Green marks a confirmed positive state. **Related files found** is green because configuration was found; it does not mean a check executed or passed. **Unknown** is amber and still needs attention.
 
 ## Repository checks
 
@@ -27,7 +27,7 @@ Shown on the repository **Overview**. Filter the list with **All**, **Needs revi
 
 | Label | Meaning |
 | --- | --- |
-| Related files found | A supported file or workflow reference exists at the inspected commit. Shown in blue, because it is information, not a pass. |
+| Related files found | A supported file or workflow reference exists at the inspected commit. Shown in green for configuration found; it is not an execution pass. |
 | Not found | No supported configuration was found. This is not a policy failure. |
 | Unknown | Preflyt could not tell, for example because files were unreadable or the check is not implemented. |
 

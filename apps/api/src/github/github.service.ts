@@ -1,3 +1,4 @@
+import { RepositoryProfileService } from './repository-profile.service.js'
 import { configurationValue } from '../configuration/runtime-configuration.js'
 import { createHash, randomBytes } from 'node:crypto'
 import {
@@ -36,6 +37,7 @@ export class GitHubService {
     @Optional()
     @Inject(RedisCacheService)
     private readonly cache?: RedisCacheService,
+    @Optional() @Inject(RepositoryProfileService) private readonly profiles?: RepositoryProfileService,
   ) {}
 
   async beginInstallation(identityId: string,
@@ -464,6 +466,13 @@ export class GitHubService {
       repositoryId: repositoryId.toString(),
       selected: String(selected),
     })
+    if (selected && this.profiles) {
+      try {
+        const existing = await this.prisma.repositoryProfile.findFirst({ where: { repositoryId: repository.id }, select: { id: true } })
+        if (!existing) await this.profiles.discover(rawRepositoryId, identityId, origin)
+      } catch { return { inspection: 'RETRY', message: 'Repository selected. Inspection could not finish; open the repository and retry Refresh profile.' } }
+    }
+    return { inspection: selected ? 'READY' : null }
   }
 
   private inventoryKey(installationId: bigint) {

@@ -81,6 +81,7 @@ Reports are historical: each one describes a single commit. If your GitHub App r
 
 ## What next
 
+- Make this run on every pull request: [Pull request checks](../user-guide/pull-request-checks.md).
 - Read [How Preflyt works](../concepts/how-preflyt-works.md) and [Status labels](../concepts/status-labels.md).
 - Set up [webhooks](../self-hosting/github-app.md#3-subscribe-to-events) to collect CI results automatically.
 - Invite your team from **Access Control**.

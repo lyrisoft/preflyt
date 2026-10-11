@@ -2,101 +2,167 @@
 id: docker-compose
 title: Docker Compose
 sidebar_label: Docker Compose
-description: Install, start and verify Preflyt with Docker Compose.
+description: Install Preflyt on a server with Docker Compose, with no source code needed.
 ---
+
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
+import { CurlDownload } from '@site/src/components/Download'
+import ComposeYaml from '../_generated/compose-yaml.md'
+import EnvSnippet from '../_generated/env-production.md'
 
 # Docker Compose
 
-This page installs Preflyt on one host. For a throwaway local trial, use the shorter [Quick Start](../getting-started/quick-start.md).
+This page installs Preflyt on one server for a team to use. You download one compose file, create one settings file and start it. You do **not** need the Preflyt source code.
 
-## 1. Get the source
+For a quick look on your own machine first, use the [Quick Start](../getting-started/quick-start.md).
 
-Use a dedicated checkout and keep the same Compose project name (`preflyt` by default) on every upgrade.
+## What you need
+
+- A Linux server (or any host) with **Docker and Compose 2.23.1 or later**. Check with `docker compose version`.
+- **Access to the Preflyt images** at `ghcr.io/lyrisoft`. They are private. You need a GitHub account that has been given read access to those packages and a personal access token (classic) with `read:packages`. Ask Lyrisoft if you do not have access.
+- **A release to run.** Use a published stable version (`vX.Y.Z`) or a development build (`sha-` plus the 40-character commit ID).
+- **A public HTTPS address** for Preflyt, such as `https://preflyt.example.com`, and a reverse proxy that serves it. See [Reverse proxy and TLS](reverse-proxy.md).
+
+## 1. Sign in to the registry
 
 ```bash
-git clone https://github.com/lyrisoft/preflyt.git
-cd preflyt
+docker login ghcr.io -u YOUR_GITHUB_USERNAME
+# Paste your read:packages token at the Password prompt.
 ```
 
-## 2. Create the environment file
+## 2. Add the compose file
+
+Choose a permanent folder and run every `docker compose` command from it. The compose file names the installation `preflyt`, so its volumes are called `preflyt_postgres_data` and `preflyt_queue_data` wherever the folder is.
 
 ```bash
-cp .env.example .env
+mkdir -p /opt/preflyt && cd /opt/preflyt
+```
+
+<Tabs groupId="compose-source">
+<TabItem value="copy" label="Copy and paste" default>
+
+Create a file named `compose.yaml` in that folder and paste the whole block below into it. Use the copy button at the top right of the block: it copies the entire file, not only the part you can see.
+
+<div className="long-code">
+<ComposeYaml />
+</div>
+
+</TabItem>
+<TabItem value="curl" label="Download with curl">
+
+<CurlDownload file="compose.yaml" />
+
+</TabItem>
+</Tabs>
+
+This is the only file Preflyt needs besides your settings. Do not edit it: put your changes in `.env`.
+
+## 3. Create your settings
+
+<Tabs groupId="env-source">
+<TabItem value="copy" label="Copy and paste" default>
+
+Create a file named `.env` next to `compose.yaml`, paste the block below into it, then replace every value that starts with `REPLACE_`.
+
+<EnvSnippet />
+
+Create the random values with these commands and paste each result in:
+
+```bash
+openssl rand -hex 24      # POSTGRES_PASSWORD, then again for DATABASE_APP_PASSWORD
+openssl rand -hex 20      # a strong SUPER_ADMIN_PASSWORD
+openssl rand -base64 32   # CONFIGURATION_ENCRYPTION_KEY, then again for GITHUB_USER_TOKEN_ENCRYPTION_KEY
+```
+
+Finally make the file private:
+
+```bash
 chmod 600 .env
 ```
 
-Set these values in `.env`. Keep the file out of version control.
+</TabItem>
+<TabItem value="generate" label="Generate automatically">
 
-| Variable | Value |
-| --- | --- |
-| `POSTGRES_PASSWORD` | A random hexadecimal string: `openssl rand -hex 24` |
-| `DATABASE_APP_PASSWORD` | A **different** random hexadecimal string. Hexadecimal avoids URL-encoding problems in database URLs. |
-| `CONFIGURATION_ENCRYPTION_KEY` | 32 random bytes, base64: `openssl rand -base64 32`. Back it up separately from the database. |
-| `WEB_ORIGIN` | The public origin, with no trailing slash or path, for example `https://preflyt.example.com`. |
-| `PREFLYT_IMAGE_REGISTRY` | `preflyt-local` when building from source. |
-| `PREFLYT_VERSION` | The exact commit or release you are building. |
-| `SUPER_ADMIN_USERNAME`, `SUPER_ADMIN_PASSWORD` | Recovery credentials. The password must be 24 to 128 characters. See [Authentication](authentication.md). |
+This command writes `.env` for you with freshly generated passwords and keys. Replace `REPLACE_WITH_PUBLISHED_VERSION` with your release first.
 
-:::warning Keep the encryption key safe
-`CONFIGURATION_ENCRYPTION_KEY` decrypts the credentials you save in **Settings → Configuration**. If you lose or replace it, those credentials cannot be decrypted. Preflyt has no key rotation. Restore the original key and restart.
+```bash
+cat > .env <<EOF
+PREFLYT_VERSION=REPLACE_WITH_PUBLISHED_VERSION
+WEB_ORIGIN=https://preflyt.example.com
+SUPER_ADMIN_USERNAME=admin
+SUPER_ADMIN_PASSWORD=$(openssl rand -hex 20)
+POSTGRES_PASSWORD=$(openssl rand -hex 24)
+DATABASE_APP_PASSWORD=$(openssl rand -hex 24)
+CONFIGURATION_ENCRYPTION_KEY=$(openssl rand -base64 32)
+GITHUB_USER_TOKEN_ENCRYPTION_KEY=$(openssl rand -base64 32)
+EOF
+chmod 600 .env
+```
+
+Read your sign-in password with `grep SUPER_ADMIN_PASSWORD .env`.
+
+</TabItem>
+</Tabs>
+
+Set `PREFLYT_VERSION` to the release you were given, and `WEB_ORIGIN` to your public HTTPS address with no trailing slash and no path.
+
+:::warning Back up your keys now
+`CONFIGURATION_ENCRYPTION_KEY` decrypts the credentials you save in **Settings → Configuration**. If you lose or replace it, those credentials cannot be recovered. Preflyt has no key rotation. Copy `.env` to your secret manager before you continue.
 :::
 
-The full variable list is in [Configuration](configuration.md).
+:::note Passwords are set once
+`POSTGRES_PASSWORD` and `DATABASE_APP_PASSWORD` only take effect when the database is first created. Changing them later does not change the existing database's passwords.
+:::
 
-## 3. Build and start
-
-```bash
-docker compose --env-file .env build
-docker compose --env-file .env up -d --wait --wait-timeout 180
-docker compose --env-file .env ps
-```
-
-Startup is ordered by health checks: PostgreSQL becomes healthy, the `migrate` job completes, the API becomes ready, then the web service starts. The worker starts after migration and waits for the API's configuration initialization. A migration failure prevents the API and web from starting.
-
-## 4. Verify
+## 4. Start Preflyt
 
 ```bash
-node --env-file=.env scripts/deploy/smoke.mjs
+docker compose up -d --wait
+docker compose ps
 ```
 
-The smoke utility needs Node 24. It checks:
+Startup follows health checks:
 
-- direct navigation to application routes,
-- web and API health,
-- anonymous and unselected-repository access,
-- origin rejection,
-- Super Admin login, session and logout,
-- protection of dotfiles.
+1. PostgreSQL becomes healthy.
+2. The `migrate` job applies the database migrations and exits.
+3. The API starts and becomes ready.
+4. The worker starts and waits for the API's configuration.
+5. The web service starts.
 
-It does **not** test a browser, live GitHub discovery or your external TLS, OIDC and GitHub callbacks. Verify those yourself after [connecting GitHub](../getting-started/connect-github.md).
+A migration failure stops the API and web from starting. Read `docker compose logs migrate`.
 
-## Local trial override
+## 5. Put HTTPS in front of it
 
-For a local demonstration only, set `WEB_ORIGIN=http://localhost:8080`, leave the OIDC fields empty, configure the Super Admin credentials, and add the loopback override:
+Preflyt listens only on `127.0.0.1:8080` of the server. Set up your reverse proxy so your public address forwards to it. See [Reverse proxy and TLS](reverse-proxy.md).
 
-```bash
-docker compose --env-file .env -f docker-compose.yaml -f compose.local.yaml up -d --build --wait --wait-timeout 180
-```
+## 6. Check it works
 
-Then open `http://localhost:8080/super-admin/login`. The override turns off secure cookies. Never use it for a deployment others can reach.
+1. Open your `WEB_ORIGIN` in a browser. You should see **Set up Preflyt**.
+2. Choose **Start setup** and sign in with `admin` and your `SUPER_ADMIN_PASSWORD`.
+3. Check the health endpoint: `curl -fsS https://preflyt.example.com/healthz` should print `ok`.
 
-## Persistence
+This does not test your GitHub setup. Continue with [Connect GitHub](../getting-started/connect-github.md).
 
-| Data | Where it lives |
+## Where your data lives
+
+| Data | Where |
 | --- | --- |
-| Database | The `postgres_data` named volume. `docker compose stop` and `down` keep it. |
-| Job queue | The `queue_data` volume (AOF every second). |
+| Database | The `postgres_data` volume |
+| Job queue | The `queue_data` volume |
 | Cache | Memory only. Safe to lose. |
 
-:::danger Do not delete the volume
-Do not run `docker compose down --volumes` on an installation whose data you need. Environment passwords only initialize database roles on a **fresh** volume; changing them later does not rotate existing PostgreSQL passwords.
+`docker compose stop` and `docker compose down` keep your data.
+
+:::danger Do not delete the volumes
+Never run `docker compose down --volumes` on an installation whose data you need.
 :::
 
-The containers run as non-root with read-only filesystems, dropped capabilities and `no-new-privileges`. The runtime database role has data access only, with no superuser, role-creation or database-creation privileges.
+Containers run as non-root with read-only filesystems, dropped capabilities and `no-new-privileges`. The runtime database role can read and write data only: it has no superuser, role-creation or database-creation rights.
 
 ## Next steps
 
+- [Connect GitHub](../getting-started/connect-github.md)
 - [Authentication](authentication.md)
-- [GitHub App](github-app.md)
-- [Reverse proxy and TLS](reverse-proxy.md)
 - [Upgrades and backups](upgrades-and-backups.md)
+- [Observability](observability.md)

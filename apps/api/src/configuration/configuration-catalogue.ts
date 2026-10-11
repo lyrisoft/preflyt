@@ -21,7 +21,7 @@ const field = (
   group,
   kind,
   defaultValue: kind === "boolean" ? defaultValue || "false" : defaultValue,
-  restart,
+  restart: key.startsWith("GITHUB_") ? false : restart,
   example,
 });
 /** Preserve existing separate connections when upgrading; new installations default to one App. */

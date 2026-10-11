@@ -21,6 +21,15 @@ export default defineConfig({
       '@': path.resolve(import.meta.dirname, './src'),
     },
   },
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3000',
+        changeOrigin: false,
+        rewrite: (path) => path.replace(/^\/api/, ''),
+      },
+    },
+  },
   optimizeDeps: {
     include: ['@radix-ui/react-switch', '@tanstack/react-query'],
   },

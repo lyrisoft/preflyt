@@ -54,6 +54,9 @@ export class GitHubController {
 
   @Get('setup/callback')
   async setupCallback(@Req() req: Request, @Res() res: Response) {
+    // A fresh manifest installation has no workspace transaction. Installation alone
+    // never grants access: connect it through the normal owner-verified flow.
+    if (req.query.state === undefined) return res.redirect(this.github.frontendOrigin + '/apps')
     const binding = req.cookies?.[this.github.setupCookieName] as
       string
       | undefined
@@ -139,13 +142,13 @@ export class GitHubController {
     @Body() body: RepositorySelectionDto,
     @Req() req: AuthenticatedRequest,
   ) {
-    await this.github.setRepositorySelected(
+    const inspection = await this.github.setRepositorySelected(
       req.preflytSession!.identityId,
       repositoryId,
       body.selected,
       req.headers.origin,
     )
-    return { repositoryId, selected: body.selected }
+    return { repositoryId, selected: body.selected, ...inspection }
   }
 
   private clearSetupCookie(response: Response) {

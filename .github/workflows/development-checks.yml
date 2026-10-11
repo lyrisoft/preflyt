@@ -24,6 +24,8 @@ jobs:
         run: |
           npm install --global pnpm@10.15.1
           pnpm install --frozen-lockfile --ignore-scripts
+      - name: Release automation tests
+        run: node --test scripts/ci/create-release.test.mjs scripts/ci/publish-release.test.mjs
       - name: Type checks
         if: ${{ !cancelled() }}
         env:

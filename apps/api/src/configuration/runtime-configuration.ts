@@ -31,3 +31,10 @@ export function configurationNeedsRestart(values: Record<string, string>) {
       )
     : false;
 }
+
+/** Keep the encrypted connection snapshot, but suspend live capabilities until storage recovers. */
+export function suspendConfigurationCapabilities() {
+  const values = { ...active };
+  for (const field of configurationFields) if (!field.restart && field.kind === 'boolean') values[field.key] = 'false';
+  applyConfiguration(values);
+}

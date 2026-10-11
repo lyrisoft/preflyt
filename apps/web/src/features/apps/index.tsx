@@ -1,3 +1,4 @@
+import { toast } from 'sonner'
 import { useEffect, useState } from 'react'
 import { Link, getRouteApi } from '@tanstack/react-router'
 import {
@@ -337,6 +338,8 @@ export function Apps() {
             : 'Could not update repository selection.'
         )
       }
+      const result = await response.json() as { inspection?: string; message?: string }
+      if (result.inspection === 'RETRY') toast.warning(result.message ?? 'Repository selected. Retry inspection from the repository page.')
       setRepositories((current) =>
         current.map((item) =>
           item.githubId === repository.githubId

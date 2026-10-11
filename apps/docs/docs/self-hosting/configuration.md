@@ -19,7 +19,7 @@ Open **Settings → Configuration** as Super Admin.
 | Section | What you configure |
 | --- | --- |
 | GitHub | Public Preflyt API URL, App ID, client ID and secret, private key, webhook secret, installation and login callbacks, the sign-in switch and the event-ingestion switch |
-| Governance | A separate governance App and installation ID, publishing PR checks (manual and automatic), ruleset activation, history import and retention |
+| Governance | An optional separate governance App and installation ID, automatic PR check publication, ruleset activation, history import and retention |
 | Single sign-on | OIDC issuer, client ID and secret, callback |
 | Notifications | In-app and email switches, SMTP host, port, sender, username and password |
 | Intelligence | Model configuration and advisory review switches |
@@ -30,11 +30,13 @@ Organization-level settings stay on their own pages: AI models and provider keys
 ### How saved settings behave
 
 - **Secrets stay hidden.** The browser never receives a saved secret, only whether one is set. Leave a secret field empty to keep the saved value. Use **Clear saved** and then **Save changes** to remove it.
-- **Connection changes need a restart.** After editing GitHub, governance, OIDC, SMTP or GitHub sign-in connections, restart **both** the API and the worker. The page shows a restart notice. Until you restart, the running process keeps its previous connection. The **Public Preflyt API URL** is the exception: it applies without a restart.
+- **GitHub connections refresh safely.** GitHub and optional governance credentials apply immediately in the API and within five seconds in the worker. Cached App clients and installation tokens refresh when the App key changes. OIDC and SMTP connections still require an API and worker restart; the page shows a restart notice for those changes.
 - **Feature switches apply on their own.** Switches and history retention refresh every five seconds, with no restart.
 - **Concurrent edits are detected.** If someone else saved first, refresh and re-apply your change.
 - **Changes are audited.** The audit record stores who changed which fields and the revision, never secret values.
 - **Failures fail closed.** If a read or decryption fails, live switches turn off until a read succeeds. Preflyt does not fall back to old environment values.
+
+Environment-file edits are different: use `docker compose up -d` to recreate affected services. `docker compose restart` does not reload `.env`.
 
 ### First start and legacy values
 
@@ -66,7 +68,7 @@ Never reuse one key for another purpose, commit a value, or paste a key into Set
 
 ## Variable reference
 
-Defaults are the values in `.env.example`. A blank default means the value is unset.
+Defaults are what Preflyt uses when you do not set a value. A blank default means the value is unset. You only need to set the variables in the [Docker Compose](docker-compose.md) guide to get started.
 
 ### Core
 
@@ -74,8 +76,8 @@ Defaults are the values in `.env.example`. A blank default means the value is un
 | --- | --- | --- |
 | `WEB_ORIGIN` | `https://preflyt.example.com` | Public origin, no trailing slash or path. Production requires HTTPS. |
 | `PREFLYT_HTTP_PORT` | `8080` | Loopback port the web service publishes. |
-| `PREFLYT_IMAGE_REGISTRY` | `preflyt-local` | `preflyt-local` for source builds, `ghcr.io/lyrisoft` for published releases. |
-| `PREFLYT_VERSION` | `development` | The source revision or release you are running. Never reuse a tag for a different build. |
+| `PREFLYT_IMAGE_REGISTRY` | `ghcr.io/lyrisoft` | Where the images are pulled from. |
+| `PREFLYT_VERSION` | | **Required.** An existing stable version (`vX.Y.Z`) or development tag (`sha-` plus the 40-character commit ID). |
 | `POSTGRES_PASSWORD` | | Database owner password, used by migrations. Hexadecimal. |
 | `DATABASE_APP_PASSWORD` | | Runtime database role password. Hexadecimal and different from the owner password. |
 | `CONFIGURATION_ENCRYPTION_KEY` | | Encrypts credentials saved in Settings. Required. |
@@ -135,11 +137,11 @@ Telemetry is off until you provide an endpoint. See [Observability](observabilit
 
 ### CI evidence and governance trust
 
-These controls decide which CI reports Preflyt will treat as signed. Leave them unset unless you run [signed CI reports](https://github.com/lyrisoft/preflyt/blob/development/docs/deployment/github-governance-production.md).
+Normal Action onboarding verifies the GitHub run, attempt, commit and completed jobs directly through the GitHub App. Report signatures are optional, including for private repositories; no GPG key or external signer is required. The variables below configure additional signed-report verification for deployments that explicitly use it. See the [advanced trust runbook](https://github.com/lyrisoft/preflyt/blob/development/docs/deployment/github-governance-production.md); it is not the basic onboarding path.
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `CI_REPORT_PROOF_MODE` | `github-native` | `github-native`, or `organization-key` for private repositories. |
+| `CI_REPORT_PROOF_MODE` | `github-native` | Verification of optional report signatures: GitHub attestations (`github-native`) or a configured organization signer (`organization-key`). Neither is required for the normal GitHub job-verification path. |
 | `CI_ORGANIZATION_SIGNER_KEYS` | | Public-key allowlist JSON. Never include private keys. |
 | `CI_ATTESTATION_GH_PATH` | | Absolute container path of the reviewed GitHub CLI executable used to verify attestations. |
 | `CI_ATTESTATION_GH_SHA256` | | SHA-256 of that exact binary, lowercase hexadecimal. |
@@ -152,10 +154,12 @@ These controls decide which CI reports Preflyt will treat as signed. Leave them 
 
 ### Native execution
 
-Native execution is disabled by default and needs its own reviewed controller. See [Evidence and trust](../concepts/evidence-and-trust.md).
+Native execution is disabled by default and needs its own reviewed controller. See [Native execution](../user-guide/native-execution.md) for prerequisites, supported adapters and remaining acceptance limits.
 
 | Variable | Default | Description |
 | --- | --- | --- |
+| `NATIVE_RUNTIME_BACKEND` | `kubernetes` | Explicit runtime backend: `kubernetes` or `docker`. No fallback after failed review. |
+| `NATIVE_DOCKER_APPROVAL` | | Signed independent approval for the Docker backend; use instead of a Kubernetes runtime approval. |
 | `NATIVE_RUNTIME_APPROVAL` | | A signed independent review of the execution runtime (an Ed25519 signed token). It expires within 30 days. |
 | `NATIVE_RUNTIME_REVIEW_KEYS` | `[]` | JSON array of trusted Ed25519 public keys (`kid` and PEM) that verify that review. |
 | `NATIVE_CONTROLLER_API_KEY` | | Random key of 32 to 256 characters shared by the API, worker and execution controller. |

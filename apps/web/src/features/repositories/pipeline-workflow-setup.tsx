@@ -808,6 +808,29 @@ export function PipelineWorkflowSetup({
                       access is unavailable.
                     </p>
                   )}
+                  {view === 'review' && (
+                    <section className='rounded-lg border bg-muted/20 p-4'>
+                      <h4 className='text-sm font-semibold'>
+                        Review repository setup
+                      </h4>
+                      <p className='mt-1 text-sm'>
+                        Target branch: <code>{data.branch}</code>
+                      </p>
+                      <ul className='mt-3 space-y-1 text-sm'>
+                        {data.checks.map((check) => (
+                          <li key={check.id}>
+                            {check.title} ·{' '}
+                            {check.required ? 'Required' : 'Optional'}
+                          </li>
+                        ))}
+                      </ul>
+                      <p className='mt-3 text-xs text-muted-foreground'>
+                        Review the workflow changes above before creating the
+                        PR. Existing policies and model routing are preserved.
+                        Merge protection requires separate activation.
+                      </p>
+                    </section>
+                  )}
                   <div className='flex flex-wrap items-center justify-between gap-3 border-t pt-3'>
                     <p className='max-w-lg text-xs text-muted-foreground'>
                       The setup PR includes one workflow with checks and the
@@ -844,14 +867,20 @@ export function PipelineWorkflowSetup({
                             !!proposal ||
                             !!pr
                           }
-                          onClick={() => createPr.mutate()}
+                          onClick={() =>
+                            view === 'review'
+                              ? createPr.mutate()
+                              : setView('review')
+                          }
                         >
                           {createPr.isPending ? (
                             <Loader2 className='animate-spin' />
                           ) : (
                             <GitPullRequest />
                           )}
-                          Create setup PR
+                          {view === 'review'
+                            ? 'Create setup PR'
+                            : 'Review setup'}
                         </Button>
                       </div>
                     )}

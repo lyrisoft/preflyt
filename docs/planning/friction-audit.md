@@ -1,3 +1,5 @@
+> Implementation update — 11 October 2026: guided GitHub App manifest registration, encrypted credential capture, GitHub connection hot reload, automatic inspection after explicit repository selection, and a combined workflow setup review are implemented. Optional write permissions stay on the same App. Existing standards, published policies and model routing are preserved; protection remains opt-in. Public Action publication and optional signatures were completed earlier. Findings below describe the original audit baseline, not necessarily current behavior.
+
 # Preflyt friction audit: setup to daily use
 
 **Status:** Proposal for review. Not an implementation commitment.
