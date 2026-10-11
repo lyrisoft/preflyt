@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import {
   ArrowUpRight,
@@ -35,6 +35,12 @@ type Summary = {
   source: string
   enforcement: 'active' | 'disabled' | 'evaluate'
   htmlUrl: string
+}
+type RulesetList = {
+  rulesets: Summary[]
+  hasMore: boolean
+  page: number
+  fetchedAt: string
 }
 type Detail = Summary & {
   branches: { include: string[]; exclude: string[] }
@@ -96,9 +102,17 @@ export function RulesetDetail({
         signal
       ),
     enabled: canRead,
-    staleTime: 5 * 60_000,
+    staleTime: 60_000,
     gcTime: 30 * 60_000,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
+    refetchInterval: (query) => {
+      if (query.state.status === 'error') return 60_000
+      const fetchedAt = Date.parse(query.state.data?.fetchedAt ?? '')
+      // Schedule from GitHub fetch time, not the time this tab read the cache.
+      return Number.isFinite(fetchedAt)
+        ? Math.max(1_000, 5 * 60_000 - (Date.now() - fetchedAt))
+        : 5 * 60_000
+    },
     retry: false,
   })
   const ruleset = detail.isError ? undefined : detail.data?.ruleset
@@ -267,27 +281,45 @@ export function RepositoryRulesets({
 }) {
   const [view, setView] = useState<string>(initialView)
   const [page, setPage] = useState(1)
-  const refreshRequested = useRef(false)
+  const queryClient = useQueryClient()
   const query = useQuery({
     queryKey: ['github-rulesets', actorId, repositoryId, page],
-    queryFn: async ({ signal }) => {
-      const refresh = refreshRequested.current
-      refreshRequested.current = false
-      return read<{
-        rulesets: Summary[]
-        hasMore: boolean
-        page: number
-        fetchedAt: string
-      }>(
-        `/github/repositories/${repositoryId}/rulesets?page=${page}${refresh ? '&refresh=true' : ''}`,
+    queryFn: ({ signal }) =>
+      read<RulesetList>(
+        `/github/repositories/${repositoryId}/rulesets?page=${page}`,
         signal
+      ),
+    enabled: canRead && view === 'github',
+    staleTime: 60_000,
+    gcTime: 30 * 60_000,
+    refetchOnWindowFocus: true,
+    refetchInterval: (query) => {
+      if (query.state.status === 'error') return 60_000
+      const fetchedAt = Date.parse(query.state.data?.fetchedAt ?? '')
+      // Schedule from GitHub fetch time, not the time this tab read the cache.
+      return Number.isFinite(fetchedAt)
+        ? Math.max(1_000, 5 * 60_000 - (Date.now() - fetchedAt))
+        : 5 * 60_000
+    },
+    retry: false,
+  })
+  const refresh = useMutation({
+    mutationFn: async () => {
+      await queryClient.cancelQueries({
+        queryKey: ['github-rulesets', actorId, repositoryId, page],
+        exact: true,
+      })
+      return read<RulesetList>(
+        `/github/repositories/${repositoryId}/rulesets?page=${page}&refresh=true`,
+        new AbortController().signal
       )
     },
-    enabled: canRead && view === 'github',
-    staleTime: 5 * 60_000,
-    gcTime: 30 * 60_000,
-    refetchOnWindowFocus: false,
-    retry: false,
+    onSuccess: (data) =>
+      queryClient.setQueryData(
+        ['github-rulesets', actorId, repositoryId, data.page],
+        data
+      ),
+    meta: { successMessage: 'GitHub rulesets refreshed.' },
   })
   if (!canRead)
     return (
@@ -321,11 +353,8 @@ export function RepositoryRulesets({
             <Button
               variant='outline'
               size='sm'
-              disabled={query.isFetching}
-              onClick={() => {
-                refreshRequested.current = true
-                void query.refetch()
-              }}
+              disabled={query.isFetching || refresh.isPending}
+              onClick={() => refresh.mutate()}
             >
               <RefreshCw className='size-4' />
               Refresh
