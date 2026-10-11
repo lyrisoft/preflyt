@@ -19,4 +19,6 @@ Restart all API and worker processes after managed connection edits. Feature swi
 
 The Compose stack, application Dockerfiles and [Kubernetes bundle](../../deploy/kubernetes/README.md) exist. Native Docker/Kubernetes dispatch, source verification, signed result ingestion and policy-gate integration are implemented and fixture-tested. Generated local Kubernetes fixtures have exercised PASS, FAIL and INCOMPLETE lifecycle outcomes, scheduling-gate admission and UID-owned cleanup. The bundle’s rendering/static checks and generated-source fixtures do not establish a production deployment or effective isolation. Complete supported native coverage, independent gVisor/Kata isolation review, production cluster acceptance and live release/governance verification remain outstanding. Execution stays disabled without current review.
 
+For GitHub Actions policies, use the [stable GitHub connection guide](stable-github-connection.md); the normal workflow path does not require a signer or native execution controller.
+
 See [Compose operations](../operations/docker-compose.md) for existing application deployment and [native runner](native-runner/README.md) for scanner execution defaults and current verification limits.

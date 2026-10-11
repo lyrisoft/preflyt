@@ -22,6 +22,35 @@ assert.equal((await response.json()).authenticated, false)
 response = await request('/.env')
 assert.equal(response.status, 404, 'Dotfiles must not be served')
 
+// Optional after GitHub ingestion is configured. No credentials or signed events
+// are submitted: verify the public proxy reaches Preflyt's authentication guards.
+if (process.env.PREFLYT_SMOKE_GITHUB === 'true') {
+  for (const [path, options] of [
+    ['/api/pipeline/policy', {}],
+    ['/api/pipeline/results', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    }],
+    ['/api/pipeline/publication?run=1&attempt=1', {}],
+    ['/api/github/webhooks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    }],
+  ]) {
+    response = await request(path, options)
+    assert.equal(response.status, 401, `${path} must reject unsigned/anonymous requests`)
+    assert.match(response.headers.get('content-type') ?? '', /application\/json/,
+      `${path} must reach the API rather than the SPA`)
+    const error = await response.json()
+    assert.equal(error.statusCode, 401, `${path} must return the API authentication error`)
+    assert.match(error.message ?? '', /GitHub (Actions identity token|webhook signature)/,
+      `${path} must reach Preflyt's GitHub authentication guard`)
+  }
+  console.log('GitHub endpoint smoke passed: pipeline OIDC and webhook signature guards are reachable.')
+}
+
 if (process.env.SUPER_ADMIN_USERNAME && process.env.SUPER_ADMIN_PASSWORD) {
   const credentials = JSON.stringify({
     username: process.env.SUPER_ADMIN_USERNAME,

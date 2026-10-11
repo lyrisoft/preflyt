@@ -4,7 +4,7 @@ Application connections and feature switches are now provisioned in **Settings â
 
 This packages the current Preflyt UI, authentication, GitHub onboarding and repository profiles, webhook ingestion, a queue worker, separate cache/queue services, and vendor-neutral OpenTelemetry. Reviewed native dispatch, signed result ingestion and gate integration are implemented, but the base application stack does not start a scanner or dedicated execution controller. Native execution remains disabled until its separate Docker or Kubernetes controller, tool inventory and independent isolation review are configured. See [native execution](native-execution.md). Generated fixtures do not establish connected-repository coverage or production acceptance.
 
-For production policy-aware checks, also follow the [GitHub governance runbook](../deployment/github-governance-production.md). Configure managed App credentials and capabilities in Settings. Deployment-managed attestation binaries, trust roots and execution contracts require an explicit reviewed container override; root dotenv values alone do not provision those mounts or enable passing evidence.
+For the normal GitHub Actions policy path, follow the [stable GitHub connection guide](../deployment/stable-github-connection.md) and configure managed App credentials and capabilities in Settings. The workflow uses GitHub OIDC and completed-run verification; no separate report signer is required. Optional signed-report deployments use the [GitHub governance runbook](../deployment/github-governance-production.md) and its reviewed evidence override.
 
 ## Configuration and first start
 
