@@ -20,6 +20,12 @@ export type PrReviewSource = {
 };
 const credential =
   /Bearer\s+[a-zA-Z0-9._~+\/-]{16,}|-----BEGIN (?:[A-Z ]*PRIVATE KEY)|\b(?:gh[pousr]_[a-zA-Z0-9]{20,}|github_pat_[a-zA-Z0-9_]{20,}|sk-[a-zA-Z0-9_-]{16,}|AKIA[A-Z0-9]{16})|(?:password|api[_-]?key|access[_-]?token|secret)\s*[:=]\s*["']?[^\s"']{8,}/i;
+// These paths are installed by Preflyt's generated integration. User-authored
+// workflows and custom Actions remain reviewable.
+const preflytIntegration = (path: string) =>
+  path.startsWith(".github/actions/preflyt-policy/") ||
+  /^\.github\/workflows\/preflyt-gate\.ya?ml$/.test(path) ||
+  path.startsWith(".preflyt/");
 export function sameReviewPr(a: unknown, b: unknown) {
   const x = readPullRequestContext(a),
     y = readPullRequestContext(b);
@@ -78,6 +84,8 @@ export function prReviewSource(
       throw new Error("Invalid previous file identity");
     seen.add(path);
     if (
+      preflytIntegration(path) ||
+      preflytIntegration(oldPath) ||
       /(^|\/)(?:\.env(?:\..*)?|[^/]*\.(?:pem|key|p12|pfx))$/i.test(path) ||
       /(^|\/)(?:\.env(?:\..*)?|[^/]*\.(?:pem|key|p12|pfx))$/i.test(oldPath) ||
       typeof file.patch !== "string"

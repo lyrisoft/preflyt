@@ -183,3 +183,17 @@ it('validates SARIF execution separately from finding count without exposing too
   })
   expect(JSON.stringify(result)).not.toContain('private-tool')
 })
+
+it('accepts complete report results only with a server-verified GitHub execution and an approved current source', () => {
+  const report = { ...validateReport(artifact()), githubExecutions: [{ submissionId: 'submission', ruleId: 'tests.required',
+    sourceSha: 'a'.repeat(40), runId: '1', runAttempt: 1, workflowId: '2', policyId: 'policy', policyHash: 'hash', verifiedAt: new Date().toISOString() }] }
+  const check = (r: any, approved = true, integrity = true, fresh = 'FRESH_AT_COLLECTION') => validateRuleEvidence(
+    'tests.required', approved, { observationIntegrity: integrity, reports: [r] }, fresh, 'SUCCEEDED', false, false, false)
+  expect(check(report)).toMatchObject({ status: 'VERIFIED', trustedExecuted: true, githubExecution: { ruleId: 'tests.required' } })
+  expect(check(report, false).trustedExecuted).toBe(false)
+  expect(check(report, true, false).status).toBe('INVALID')
+  expect(check(report, true, true, 'EXPIRED').trustedExecuted).toBe(false)
+  expect(check({ ...report, executedTests: 0 }).trustedExecuted).toBe(false)
+  expect(check({ ...report, reportedResult: 'REPORTED_FAILURE' }).trustedExecuted).toBe(false)
+  expect(check({ ...report, githubExecutions: undefined }).trustedExecuted).toBe(false)
+})

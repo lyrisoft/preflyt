@@ -92,3 +92,19 @@ it("refuses to create a setup branch after the reviewed base changes", async () 
   expect(mint).not.toHaveBeenCalled();
   provider.close();
 });
+
+it("reads the exact workflow attempt directly and requires a complete job collection", async () => {
+  const provider = new GitHubProviderService() as any;
+  const job = {id: 9, run_id: 7, head_sha: "a".repeat(40), status: "completed", conclusion: "success", steps: [{status: "completed", conclusion: "success"}]};
+  const request = vi.fn().mockResolvedValue({total_count: 1, jobs: [job]});
+  const reader = vi.spyOn(provider, "openRepository").mockResolvedValue({metadata: {owner: {login: "fixture"}, name: "app"}, request});
+  await expect(provider.readPipelineJobs(5n, 6n, "7", 2)).resolves.toEqual([{id: "9", sourceSha: "a".repeat(40), status: "completed", conclusion: "success", steps: job.steps}]);
+  expect(reader).toHaveBeenCalledWith(5n, 6n, "actions");
+  expect(request).toHaveBeenCalledWith("/repos/fixture/app/actions/runs/7/attempts/2/jobs?per_page=100");
+  for (const response of [{total_count: 2, jobs: [job]}, {total_count: 0, jobs: []}, {total_count: 1, jobs: [{...job,run_id: 8}]}, {total_count: 1, jobs: [{...job,steps: undefined}]}]) {
+    request.mockResolvedValue(response);
+    await expect(provider.readPipelineJobs(5n, 6n, "7", 2)).rejects.toThrow("Workflow jobs could not be verified");
+  }
+  await expect(provider.readPipelineJobs(5n, 6n, "7", 0)).rejects.toThrow("Invalid workflow run attempt");
+  provider.close();
+});

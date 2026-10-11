@@ -1,5 +1,14 @@
 # Production deployment: GitHub checks and governance
 
+
+## GitHub workflow verification — 11 October 2026
+
+The normal GitHub Actions integration verifies execution directly against GitHub. Separate report signatures and deployment execution contracts are optional; they are not a setup prerequisite for this path. This supersedes earlier mandatory-signer instructions below.
+
+The Action authenticates with GitHub OIDC and submits the exact report bytes and policy check IDs. After the run completes, Preflyt matches the signed GitHub event with a fresh GitHub API read of the repository, PR head, workflow path/ID, run attempt, successful job and completed steps. A server-only audit receipt binds each report checksum and check ID to that run and published policy. Existing source approval, report parsing/integrity, freshness, coverage, rerun and policy checks still apply. The publisher verifies the current GitHub run again. OIDC alone, uploaded reports and caller-supplied success labels cannot create a passing result.
+
+This trusts the configured repository workflow to run its intended commands. It does not independently certify the tool installation or execution environment. Optional signed-report contracts remain available for deployments requiring that stronger boundary. Tests need executed cases with no failures; security reports need a named tool, no findings and no incomplete coverage. Missing, failed, stale, ambiguous or superseded required evidence cannot pass.
+
 This is the deployment contract for the implemented policy-aware readiness publisher. Use it with the [Docker Compose runbook](../operations/docker-compose.md), [check publication guide](../operations/github-check-publication.md) and [signed-report setup](../operations/ci-provenance.md). Deploy an immutable reviewed release, not an unpinned branch checkout.
 
 ## Current release boundary

@@ -2,6 +2,10 @@
 
 Status: Accepted for the opt-in P1 provenance slice.
 
+## Default pipeline path — 11 October 2026
+
+The user-approved normal GitHub integration now verifies completed configured workflow/jobs through GitHub APIs and signed webhook/OIDC identity, binding report checksums to a server-created run receipt and published policy. Report signatures remain optional and this ADR continues to govern their stricter verification path. Manual uploads and OIDC assertions alone remain insufficient. See [workflow verification](../operations/github-check-publication.md#github-workflow-verification--11-october-2026).
+
 ## Decision
 
 Use GitHub Actions Sigstore/SLSA artifact bundles to verify the origin of already-imported reports. Use the reviewed GitHub CLI verifier with an explicitly pinned binary, frozen trusted-root JSONL file and deployment workflow allowlist. Verify offline; do not fetch bundles, execute repository code or pass platform credentials to the verifier.

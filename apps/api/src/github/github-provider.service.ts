@@ -699,6 +699,21 @@ export class GitHubProviderService {
     if(String(run.id)!==runId || String(run.repository?.id)!==repositoryId.toString() || String(run.head_repository?.id)!==repositoryId.toString() || !Number.isSafeInteger(run.run_attempt) || run.run_attempt<1 || !Number.isSafeInteger(run.workflow_id) || run.workflow_id<1 || !/^[a-f0-9]{40}$/.test(run.head_sha))throw new ServiceUnavailableException('Workflow run identity could not be verified')
     return {sourceSha:run.head_sha,runAttempt:run.run_attempt,status:run.status,conclusion:run.conclusion,workflowId:String(run.workflow_id),event:String(run.event),workflowPath:typeof run.path === "string" ? run.path.split("@")[0] : ""}
   }
+  /** Read the exact attempt directly from GitHub; display caches cannot establish execution. */
+  async readPipelineJobs(installationId: bigint, repositoryId: bigint, runId: string, attempt: number) {
+    if (!/^[1-9]\d{0,15}$/.test(runId) || !Number.isSafeInteger(attempt) || attempt < 1)
+      throw new BadRequestException('Invalid workflow run attempt')
+    const reader = await this.openRepository(installationId, repositoryId, 'actions')
+    const root = `/repos/${encodeURIComponent(reader.metadata.owner.login)}/${encodeURIComponent(reader.metadata.name)}`
+    const result = await reader.request<{ total_count: number; jobs: Record<string, any>[] }>(
+      `${root}/actions/runs/${runId}/attempts/${attempt}/jobs?per_page=100`)
+    if (!Array.isArray(result.jobs) || result.total_count !== result.jobs.length || !result.jobs.length || result.jobs.length > 100 ||
+      result.jobs.some(job => String(job.run_id) !== runId || !Number.isSafeInteger(job.id) || !Array.isArray(job.steps)))
+      throw new ServiceUnavailableException('Workflow jobs could not be verified')
+    return result.jobs.map(job => ({ id: String(job.id), sourceSha: job.head_sha, status: job.status,
+      conclusion: job.conclusion, steps: job.steps.map((step: any) => ({ status: step.status, conclusion: step.conclusion })) }))
+  }
+
   /** Cache display/setup sources only. Callers verify current upstream access first. */
   private async readPipelineCache<T>(
     installationId: bigint,

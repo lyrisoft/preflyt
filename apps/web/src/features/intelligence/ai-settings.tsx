@@ -419,9 +419,88 @@ function AiSettings({
               </TabsTrigger>
             </TabsList>
             <TabsContent value='connections' className='mt-5 space-y-6'>
+              {!!data.presets?.length && (
+                <section
+                  aria-labelledby='built-in-providers'
+                  className='space-y-3'
+                >
+                  <div>
+                    <h2
+                      id='built-in-providers'
+                      className='text-base font-semibold'
+                    >
+                      Built-in providers
+                    </h2>
+                    <p className='text-sm text-muted-foreground'>
+                      Connect with your API key and model name.
+                    </p>
+                  </div>
+                  <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-4'>
+                    {data.presets.map((item) => {
+                      const provider =
+                        data.providers.find(
+                          (p) => p.endpoint?.preset === item.id && p.enabled
+                        ) ??
+                        data.providers.find(
+                          (p) => p.endpoint?.preset === item.id
+                        )
+                      return (
+                        <Card key={item.id}>
+                          <CardContent className='space-y-3'>
+                            <div className='flex items-center gap-3'>
+                              <ProviderIcon provider={item.id} tile />
+                              <div className='min-w-0'>
+                                <h3 className='text-sm font-semibold'>
+                                  {item.name}
+                                </h3>
+                                <p
+                                  className='truncate text-xs text-muted-foreground'
+                                  title={provider?.modelId}
+                                >
+                                  {provider?.modelId ?? 'Not connected'}
+                                </p>
+                              </div>
+                            </div>
+                            <div className='flex items-center justify-between gap-2'>
+                              <StatusBadge tone='neutral'>
+                                {provider
+                                  ? !provider.enabled
+                                    ? 'Disabled'
+                                    : testName(provider.testStatus)
+                                  : 'Inactive'}
+                              </StatusBadge>
+                              <Button
+                                size='sm'
+                                variant={provider ? 'outline' : 'default'}
+                                aria-label={`${provider ? 'Configure' : 'Activate'} ${item.name}`}
+                                disabled={
+                                  busy ||
+                                  (!provider && data.providers.length >= 32)
+                                }
+                                onClick={() => {
+                                  setError('')
+                                  setPreset(item)
+                                  setEdit(provider ?? null)
+                                }}
+                              >
+                                {provider ? (
+                                  <Pencil aria-hidden='true' />
+                                ) : (
+                                  <Power aria-hidden='true' />
+                                )}
+                                {provider ? 'Configure' : 'Activate'}
+                              </Button>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      )
+                    })}
+                  </div>
+                </section>
+              )}
               <div className='flex flex-wrap items-end justify-between gap-4'>
                 <div className='space-y-3'>
-                  <h2 className='text-base font-semibold'>Models</h2>
+                  <h2 className='text-base font-semibold'>Configured models</h2>
                   <Input
                     aria-label='Filter models'
                     placeholder='Filter models…'

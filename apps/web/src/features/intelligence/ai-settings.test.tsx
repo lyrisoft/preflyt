@@ -70,6 +70,28 @@ it('keeps connections and routing separate without promising inference', () => {
   expect(renderToStaticMarkup(<AiSettingsPage />)).toContain('Add model')
   expect(html).not.toContain('Explain findings')
 })
+it('shows built-in providers directly and opens setup with only model and key fields', async () => {
+  const view = await render(<AiSettingsPage />)
+  await expect
+    .element(view.getByRole('region', { name: 'Built-in providers' }))
+    .toBeVisible()
+  await view
+    .getByRole('button', { name: 'Activate OpenAI (ChatGPT)', exact: true })
+    .click()
+  await expect
+    .element(view.getByRole('textbox', { name: 'Model name' }))
+    .toBeVisible()
+  await expect
+    .element(view.getByLabelText('API key', { exact: true }))
+    .toBeVisible()
+  await expect
+    .element(view.getByRole('textbox', { name: 'Endpoint URL' }))
+    .not.toBeInTheDocument()
+  await expect
+    .element(view.getByRole('textbox', { name: 'Display name' }))
+    .not.toBeInTheDocument()
+  await expect.element(view.getByRole('spinbutton')).not.toBeInTheDocument()
+})
 it('shows read-only skills without model management to developers', () => {
   state.role = 'DEVELOPER'
   const html = renderToStaticMarkup(<AiSettingsPage />)

@@ -973,6 +973,59 @@ it("uses a tested fallback without prices or reservations for either attempt", a
     }),
   ).toBe(0);
 });
+it("gives the configured fallback a fresh deadline after a slow primary", async () => {
+  const f = await reviewFixture();
+  const fallback = (
+    await post(owner, "/providers", { ...input, name: "Fallback" }).expect(201)
+  ).body;
+  await post(owner, `/providers/${fallback.id}/test`, {}).expect(201);
+  await post(
+    owner,
+    "/routes/repository",
+    route(f.provider.id, { fallbackId: fallback.id, expectedRevision: 1 }),
+  ).expect(201);
+  const job = (
+    await f.call("", { assessmentId: f.assessment.id, checkIds: [f.check.id] }).expect(201)
+  ).body;
+  f.infer();
+  const succeed = fetchMock.getMockImplementation()!;
+  const originalTimeout = AbortSignal.timeout.bind(AbortSignal);
+  const deadline = vi.spyOn(AbortSignal, "timeout").mockImplementation((ms) =>
+    originalTimeout(ms === 60000 ? 500 : ms === 120000 ? 1000 : ms),
+  );
+  const delayed = (
+    ms: number,
+    signal: AbortSignal,
+    response: () => Promise<Response>,
+  ) => new Promise<Response>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", abort);
+      void response().then(resolve, reject);
+    }, ms);
+    const abort = () => {
+      clearTimeout(timer);
+      reject(signal.reason);
+    };
+    signal.addEventListener("abort", abort, { once: true });
+  });
+  fetchMock
+    .mockImplementationOnce(async (_url, _locality, options) =>
+      delayed(350, options.signal, async () => new Response("", { status: 503 })),
+    )
+    .mockImplementation(async (...args) =>
+      delayed(250, args[2].signal, async () => succeed(...args)),
+    );
+  try {
+    await f.reviews.reconcile();
+    const stored = await db.aiSkillReview.findUniqueOrThrow({ where: { id: job.id } });
+    expect(stored.state).toBe("SUCCEEDED");
+    expect(stored.providerId).toBe(fallback.id);
+    expect(deadline).toHaveBeenCalledWith(120000);
+    expect(deadline.mock.calls.filter(([ms]) => ms === 60000)).toHaveLength(2);
+  } finally {
+    deadline.mockRestore();
+  }
+});
 it("preserves cancellation during an active inference call", async () => {
   const f = await reviewFixture(),
     job = (

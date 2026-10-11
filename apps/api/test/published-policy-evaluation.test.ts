@@ -209,3 +209,36 @@ it('supports organization-key evidence without relaxing frozen policy, workflow 
  vi.stubEnv('CI_ORGANIZATION_SIGNER_KEYS','[]')
  expect(evaluate(f).status).toBe('INCOMPLETE')
 })
+
+function githubFixture() {
+  const v = fixture()
+  vi.unstubAllEnvs()
+  v.snapshot.report.checks[0].evidenceValidation = {
+    version: 2, status: 'VERIFIED', trustedExecuted: true, sourceApproved: true, observationIntegrity: true, reports: [],
+    executionContractDigest: null, githubExecution: { submissionId: 'submission', ruleId: 'tests.required', sourceSha: sha,
+      runId: '1', runAttempt: 1, workflowId: '2', policyId: v.policy.id, policyHash: v.policy.definitionHash },
+  }
+  return v
+}
+it('uses directly verified GitHub execution without deployment report signatures or execution contracts', () => {
+  expect(evaluate(githubFixture()).status).toBe('PASS')
+})
+it.each(['run', 'attempt', 'workflow', 'sha', 'policy', 'hash', 'failed', 'missing', 'stale', 'ambiguous', 'unapproved', 'truncated'])(
+  'rejects mismatched or incomplete verified GitHub %s', kind => {
+    const v = githubFixture()
+    const check = v.snapshot.report.checks[0]
+    const receipt = check.evidenceValidation.githubExecution
+    if (kind === 'run') receipt.runId = '9'
+    if (kind === 'attempt') receipt.runAttempt = 2
+    if (kind === 'workflow') receipt.workflowId = '3'
+    if (kind === 'sha') receipt.sourceSha = 'b'.repeat(40)
+    if (kind === 'policy') receipt.policyId = 'other'
+    if (kind === 'hash') receipt.policyHash = 'other'
+    if (kind === 'failed') v.runs['1'].conclusion = 'failure'
+    if (kind === 'missing') delete check.evidenceValidation.githubExecution
+    if (kind === 'stale') v.snapshot.report.observations[0].sourceUpdatedAt = '2026-10-01T12:00:00Z'
+    if (kind === 'ambiguous') check.ambiguous = true
+    if (kind === 'unapproved') check.evidenceValidation.sourceApproved = false
+    if (kind === 'truncated') v.snapshot.report.validationCollectionTruncated = true
+    expect(evaluate(v).status).toBe('INCOMPLETE')
+  })

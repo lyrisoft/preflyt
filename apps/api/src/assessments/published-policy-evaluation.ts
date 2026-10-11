@@ -173,6 +173,17 @@ export function evaluatePublishedPolicy(
           }
     }
     const validation = check?.evidenceValidation
+    const githubExecution = validation?.githubExecution
+    const verifiedGithubExecution = !!githubExecution &&
+      githubExecution.ruleId === rule.ruleId && githubExecution.sourceSha === snapshot.sourceSha &&
+      githubExecution.runId === observation?.sourceObjectId && githubExecution.runAttempt === run?.runAttempt &&
+      githubExecution.workflowId === run?.workflowId && githubExecution.policyId === policy.id &&
+      githubExecution.policyHash === policy.definitionHash
+    const signedExecution = !!contracts && definition.executionContractDigest === contracts.digest &&
+      validation?.executionContractDigest === contracts.digest && !!currentAttestationPolicy &&
+      validation.reports?.length === 1 && validation.reports[0].provenance?.policyDigest === currentAttestationPolicy.digest &&
+      validation.reports[0].provenance?.runId === observation?.sourceObjectId &&
+      validation.reports[0].provenance?.runAttempt === run?.runAttempt
     const trusted =
       base.reasons.length === 0 &&
       report.version === 1 &&
@@ -181,15 +192,7 @@ export function evaluatePublishedPolicy(
       plan.sourceSha === snapshot.sourceSha &&
       report.sourceSha === snapshot.sourceSha &&
       live &&
-      !!contracts &&
-      definition.executionContractDigest === contracts.digest &&
-      validation?.executionContractDigest === contracts.digest &&
-      !!currentAttestationPolicy &&
-      validation.reports?.length === 1 &&
-      validation.reports[0].provenance?.policyDigest ===
-        currentAttestationPolicy.digest &&
-      validation.reports[0].provenance?.runId === observation.sourceObjectId &&
-      validation.reports[0].provenance?.runAttempt === run.runAttempt &&
+      (verifiedGithubExecution || signedExecution) &&
       validation.trustedExecuted === true &&
       validation.status === 'VERIFIED' &&
       validation.observationIntegrity === true &&
@@ -210,8 +213,8 @@ export function evaluatePublishedPolicy(
         ...new Set([
           ...rule.reasons,
           ...(!live ? ['CURRENT_CI_RUN_NOT_VERIFIED'] : []),
-          ...(!contracts ||
-          definition.executionContractDigest !== contracts.digest
+          ...(!verifiedGithubExecution && (!contracts ||
+          definition.executionContractDigest !== contracts.digest)
             ? ['APPROVED_EXECUTION_CONTRACT_REQUIRED']
             : []),
         ]),

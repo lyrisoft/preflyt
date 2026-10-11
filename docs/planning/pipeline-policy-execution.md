@@ -1,5 +1,14 @@
 # Pipeline policy execution
 
+
+## GitHub workflow verification — 11 October 2026
+
+The normal GitHub Actions integration verifies execution directly against GitHub. Separate report signatures and deployment execution contracts are optional; they are not a setup prerequisite for this path. This supersedes earlier mandatory-signer instructions below.
+
+The Action authenticates with GitHub OIDC and submits the exact report bytes and policy check IDs. After the run completes, Preflyt matches the signed GitHub event with a fresh GitHub API read of the repository, PR head, workflow path/ID, run attempt, successful job and completed steps. A server-only audit receipt binds each report checksum and check ID to that run and published policy. Existing source approval, report parsing/integrity, freshness, coverage, rerun and policy checks still apply. The publisher verifies the current GitHub run again. OIDC alone, uploaded reports and caller-supplied success labels cannot create a passing result.
+
+This trusts the configured repository workflow to run its intended commands. It does not independently certify the tool installation or execution environment. Optional signed-report contracts remain available for deployments requiring that stronger boundary. Tests need executed cases with no failures; security reports need a named tool, no findings and no incomplete coverage. Missing, failed, stale, ambiguous or superseded required evidence cannot pass.
+
 Goal: connect repositories → define checks/standards → create a policy → run it at configured SDLC stages → see outcomes and insights. GitHub Actions is the first execution path. Users do not manually upload reports.
 
 First scope: current same-repository, non-draft PRs and their published target-branch policy. Build/QA/deployment stages follow after this path is accepted. Preserve the familiar sidebar. Work directly on the running branch. No tests, builds or GitHub Actions until requested.
@@ -17,7 +26,7 @@ First scope: current same-repository, non-draft PRs and their published target-b
 
 A pending submission is a runner assertion, not a verified passing assessment. Existing deterministic evidence, authorization, published-policy pins and merge protection remain authoritative. Neither a stage label nor an uploaded success assertion establishes execution. No public Action release, repository workflow change or branch-rule change has been made.
 
-Next authorized verification: run the written regression tests, then accept one configured PR workflow end to end. Execution PASS requires the existing approved execution contracts and trusted report proofs; OIDC or an unsigned success report alone stays incomplete. See `actions/policy-check/README.md` for the current integration contract and limits.
+Next authorized verification: run the written regression tests, then accept one configured PR workflow end to end. Execution PASS requires completed GitHub run/job verification plus valid rule-specific reports; OIDC or an unsigned upload alone stays incomplete. Separate signer contracts are optional. See `actions/policy-check/README.md` for the current integration contract and limits.
 
 
 ### Workflow editor usability

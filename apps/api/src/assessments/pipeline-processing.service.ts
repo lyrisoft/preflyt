@@ -275,6 +275,23 @@ export class PipelineProcessingService {
           });
         });
         let proofIncomplete = false;
+        if (run.conclusion === "success") {
+          if (run.event !== "pull_request" || payload.signerWorkflow !== `${repo.fullName}/${run.workflowPath}`)
+            throw new Error("WORKFLOW_IDENTITY_CHANGED");
+          const jobs = await this.github.readPipelineJobs(repo.installationId, repo.githubId, row.runId, row.runAttempt);
+          const successful = jobs.filter(job => job.sourceSha === row.sourceSha && job.status === "completed" &&
+            job.conclusion === "success" && job.steps.length > 0 &&
+            job.steps.every((step: { status: string; conclusion: string }) => step.status === "completed" && ["success", "skipped"].includes(step.conclusion)));
+          if (!successful.length) throw new Error("WORKFLOW_JOBS_NOT_VERIFIED");
+          await this.prisma.auditEvent.createMany({ data: [{
+            id: `pipeline-verified:${row.id}`, event: "pipeline.run.verified", actorId: row.submittedById,
+            metadata: { schemaVersion: 1, submissionId: row.id, repositoryId: repo.id, sourceSha: row.sourceSha,
+              selectionId: selection.id, policyId: policy.id, policyHash: policy.definitionHash,
+              runId: row.runId, runAttempt: row.runAttempt, workflowId: run.workflowId,
+              verifiedAt: new Date().toISOString(), jobIds: successful.map(job => job.id),
+              reports: payload.reports.map(report => ({ ruleId: report.ruleId, sha256: report.sha256, format: report.format })) },
+          }], skipDuplicates: true });
+        }
         for (const report of payload.reports) {
           const held = await this.prisma.pipelineRunSubmission.updateMany({
             where: { id: row.id, leaseToken: lease },
@@ -417,7 +434,7 @@ export class PipelineProcessingService {
           state: "COMPLETE",
           assessmentId: saved.assessment.id,
           commentUrl,
-          failureCode: proofIncomplete ? "EXECUTION_PROOF_INCOMPLETE" : null,
+          failureCode: proofIncomplete && run.conclusion !== "success" ? "EXECUTION_PROOF_INCOMPLETE" : null,
         });
         await this.prisma.auditEvent.createMany({
           data: [

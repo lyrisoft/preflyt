@@ -1079,7 +1079,11 @@ export class SkillReviewService {
       signal = AbortSignal.any([
         controller.signal,
         this.abort.signal,
-        AbortSignal.timeout(60000),
+        // Give each configured provider its own deadline, while bounding the
+        // whole review and preserving cancellation when access or context changes.
+        AbortSignal.timeout(
+          60000 * Math.max(1, Math.min(snapshot.providers.length, 2)),
+        ),
       ]);
     let checking = false;
     const timer = setInterval(() => {
@@ -1139,7 +1143,7 @@ export class SkillReviewService {
             reviewTasks(snapshot.checks, snapshot.skills),
             snapshot.context,
             aiResponseTokenLimit,
-            signal,
+            AbortSignal.any([signal, AbortSignal.timeout(60000)]),
             async (reported) => {
               usage.push({ ...reported, providerId: provider.id });
               await this.db.aiSkillReview.update({

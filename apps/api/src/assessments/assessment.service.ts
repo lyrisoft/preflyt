@@ -1,3 +1,4 @@
+import { pipelineVerifications, githubReportExecutions } from './pipeline-verification.js'
 import { excludePreflytFeedback } from '../github-events/preflyt-feedback.js'
 import { currentStandards, selectionBindingWhere } from '../standards/policy-standards.js'
 import {
@@ -161,7 +162,8 @@ export class AssessmentService {
         readLatestNativeEvidence(tx, { repositoryGithubId: id, sourceSha, selectionId }),
         currentStandards(tx, repo.id, { expectedId: selectionId, branchRef: `refs/heads/${pullRequest.base.ref}` }),
       ])
-      const key = `auto:${digest({ repositoryId: repo.id, sourceSha, actorId, pullRequest,
+      const githubVerification = await pipelineVerifications(tx, repo.id, sourceSha, selectionId)
+      const key = `auto:${digest({ githubVerification, repositoryId: repo.id, sourceSha, actorId, pullRequest,
         selection, observations, profile, binding,
         native: native.map(freezeNativeEvidence), proofPolicy: reportProofPolicy()?.digest ?? null })}`
       return this.persist(tx, repo, id, { sourceSha, expectedSelectionId: selectionId,
@@ -436,6 +438,7 @@ export class AssessmentService {
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: MAX_VALIDATION_ARTIFACTS,
     })
+    const githubVerification = await pipelineVerifications(tx, repo.id, normalized.sourceSha, selection.id)
     const validations = new Map<string, ObservationValidation>()
     for (const row of observations.filter((o) =>
       mappedIds.includes(o.deliveryId),
@@ -449,7 +452,7 @@ export class AssessmentService {
           .slice(0, MAX_VALIDATION_ARTIFACTS)
           .filter((a) => a.deliveryId === row.deliveryId)
           .map((a) =>
-            validateReport({
+            ({ ...validateReport({
               ...a,
               provenance: validatedProvenance(
                 receipts.find((r) => r.artifactId === a.id),
@@ -463,7 +466,7 @@ export class AssessmentService {
                   runAttempt: runAttempt(row.sourceIdentity),
                 },
               ),
-            }),
+            }), githubExecutions: githubReportExecutions(githubVerification, row, a.sha256) }),
           ),
       })
     const installation = await tx.gitHubInstallation.findUnique({

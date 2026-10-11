@@ -1,5 +1,14 @@
 # Preflyt PR policy Action
 
+
+## GitHub workflow verification — 11 October 2026
+
+The normal GitHub Actions integration verifies execution directly against GitHub. Separate report signatures and deployment execution contracts are optional; they are not a setup prerequisite for this path. This supersedes earlier mandatory-signer instructions below.
+
+The Action authenticates with GitHub OIDC and submits the exact report bytes and policy check IDs. After the run completes, Preflyt matches the signed GitHub event with a fresh GitHub API read of the repository, PR head, workflow path/ID, run attempt, successful job and completed steps. A server-only audit receipt binds each report checksum and check ID to that run and published policy. Existing source approval, report parsing/integrity, freshness, coverage, rerun and policy checks still apply. The publisher verifies the current GitHub run again. OIDC alone, uploaded reports and caller-supplied success labels cannot create a passing result.
+
+This trusts the configured repository workflow to run its intended commands. It does not independently certify the tool installation or execution environment. Optional signed-report contracts remain available for deployments requiring that stronger boundary. Tests need executed cases with no failures; security reports need a named tool, no findings and no incomplete coverage. Missing, failed, stale, ambiguous or superseded required evidence cannot pass.
+
 This local increment fetches the current published PR policy using a short-lived GitHub Actions identity token, runs reviewed repository commands, writes a job summary and submits results to Preflyt automatically. No Preflyt login cookie, administrator API key or manual report upload is used.
 
 ## Current setup
@@ -52,7 +61,7 @@ Adapt commands and reporter settings to the repository. Unknown adapters, absent
 
 `POST /pipeline/results` revalidates current repository access, workflow/run attempt, PR head and published policy. It stores a bounded, immutable submission in `PipelineRunSubmission` and returns a pending-verification receipt. Required checks and titles come from the server policy, not the submitted body. A stale commit/policy or changed result for the same run is rejected.
 
-OIDC proves the workflow identity; it does not prove the checks ran correctly. Submissions do not mark existing assessments or merge review results as passed. The worker waits for the live run to complete and its matching signed GitHub event, imports reports, verifies supplied execution proofs, and records an assessment against the published policy. It retries transient failures and marks superseded PRs/policies stale. If enabled, it creates or updates the App’s one PR summary using verified policy evaluation. Processing receipts link to the assessment and comment. At most 10 reports can be submitted per run, matching the existing artifact quota. Trusted execution contracts and report-proof configuration remain required for execution checks to pass. Do not replace the existing verified Preflyt gate with this runner job as an authoritative protection until live acceptance is complete. Downstream jobs can depend on this job's execution outcome; no branch rules are modified automatically.
+OIDC proves the workflow identity; it does not prove the checks ran correctly. Submissions do not mark existing assessments or merge review results as passed. The worker waits for the live run to complete and its matching signed GitHub event, imports reports, verifies supplied execution proofs, and records an assessment against the published policy. It retries transient failures and marks superseded PRs/policies stale. If enabled, it creates or updates the App’s one PR summary using verified policy evaluation. Processing receipts link to the assessment and comment. At most 10 reports can be submitted per run, matching the existing artifact quota. Execution checks can pass after completed GitHub workflow/job verification and rule-specific report validation; signatures are optional. Do not replace the existing verified Preflyt gate with this runner job as an authoritative protection until live acceptance is complete. Downstream jobs can depend on this job's execution outcome; no branch rules are modified automatically.
 
 ## Validation status
 

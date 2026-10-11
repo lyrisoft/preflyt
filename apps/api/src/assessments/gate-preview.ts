@@ -80,7 +80,9 @@ export function previewGate(snapshot: {
           failedObservations[0].sourceSha === snapshot.sourceSha &&
           failedObservations[0].result === 'FAILED' &&
           failedObservations[0].sourceStatus === 'completed' &&
-          ['check_run', 'workflow_run'].includes(failedObservations[0].sourceKind)
+          ['check_run', 'workflow_run'].includes(
+            failedObservations[0].sourceKind,
+          )
 
         if (!collectionComplete) reasons.push('COLLECTION_INCOMPLETE')
         if (
@@ -108,8 +110,7 @@ export function previewGate(snapshot: {
           )
             reasons.push('CONFIGURATION_EVIDENCE_MISSING')
         } else {
-          // Current imported reports do not establish tool/environment/rule coverage.
-          // Even successful providers or signed report provenance cannot enable PASS.
+          // A success needs a server-verified execution receipt; provider status alone is insufficient.
           reasons.push(
             definition.capability === 'planned'
               ? 'RULE_ADAPTER_UNSUPPORTED'
@@ -126,6 +127,40 @@ export function previewGate(snapshot: {
           if (check.ambiguous) reasons.push('SOURCE_AMBIGUOUS')
           if (check.superseded) reasons.push('SOURCE_SUPERSEDED')
         }
+        const execution = check.evidenceValidation?.githubExecution
+        const verifiedGitHub =
+          collectionComplete &&
+          definition.operator === 'verified_check_succeeded' &&
+          definition.capability === 'import_only' &&
+          Array.isArray(definition.allowedSources) &&
+          definition.allowedSources.includes('verified_imported_ci') &&
+          check.mappingTrust === 'APPROVED_SOURCE_BINDING' &&
+          check.freshness === 'FRESH_AT_COLLECTION' &&
+          check.ambiguous === false &&
+          check.superseded === false &&
+          check.providerResult === 'SUCCEEDED' &&
+          check.coverage !== 'INVALID' &&
+          check.evidenceValidation?.version === 2 &&
+          check.evidenceValidation?.status === 'VERIFIED' &&
+          Array.isArray(check.evidenceValidation.reasons) &&
+          check.evidenceValidation.reasons.length === 0 &&
+          check.evidenceValidation?.trustedExecuted === true &&
+          check.evidenceValidation?.observationIntegrity === true &&
+          check.evidenceValidation?.sourceApproved === true &&
+          execution?.ruleId === definition.id &&
+          execution.sourceSha === snapshot.sourceSha &&
+          failedObservations.length === 1 &&
+          failedObservations[0].sourceSha === snapshot.sourceSha &&
+          failedObservations[0].result === 'SUCCEEDED' &&
+          failedObservations[0].sourceKind === 'workflow_run' &&
+          failedObservations[0].sourceStatus === 'completed' &&
+          failedObservations[0].sourceConclusion === 'success' &&
+          execution.runId === failedObservations[0].sourceObjectId &&
+          execution.runAttempt ===
+            failedObservations[0].sourceIdentity?.runAttempt &&
+          execution.workflowId ===
+            failedObservations[0].sourceIdentity?.workflowId
+        if (verifiedGitHub) reasons.length = 0
         if (failedCi) reasons.push('APPROVED_CI_SOURCE_FAILED')
         return {
           ruleId: definition.id,
@@ -139,17 +174,18 @@ export function previewGate(snapshot: {
       })
     : []
   const required = rules.filter((r: any) => r.required)
-  const incomplete = required.filter((r: any) => r.status === 'INCOMPLETE').length
+  const incomplete = required.filter(
+    (r: any) => r.status === 'INCOMPLETE',
+  ).length
   const blocked = required.filter((r: any) => r.status === 'BLOCK').length
   const reasons = !valid
     ? ['SNAPSHOT_SCHEMA_UNSUPPORTED']
     : !required.length
       ? ['NO_REQUIRED_RULES']
       : []
-  const status =
-    blocked
-      ? 'BLOCK'
-      : reasons.length || incomplete
+  const status = blocked
+    ? 'BLOCK'
+    : reasons.length || incomplete
       ? 'INCOMPLETE'
       : rules.some((r: any) => r.status !== 'PASS')
         ? 'WARN'
@@ -177,7 +213,7 @@ export function previewGate(snapshot: {
     limitations: [
       'Historical policy preview at collection; not current merge readiness.',
       'Configuration PASS means only the frozen configuration requirement is satisfied.',
-      'Imported execution remains INCOMPLETE until tool, environment and rule coverage are verified.',
+      'GitHub execution PASS requires the configured source, verified run receipt and complete check report.',
       'BLOCK identifies a failed approved CI source; it does not prove which tool or test failed.',
       'No GitHub check publication, merge blocking, exceptions or execution admission.',
     ],

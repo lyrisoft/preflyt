@@ -105,6 +105,10 @@ it.each(aiProviderPresets)(
     expect(options.body).not.toContain("fixture-key");
     expect(JSON.parse(options.body)).not.toHaveProperty("tools");
     const body = JSON.parse(options.body);
+    if (preset.id === "deepseek") {
+      expect(body.thinking).toEqual({ type: "disabled" });
+      expect(body.response_format).toEqual({ type: "json_object" });
+    } else expect(body).not.toHaveProperty("thinking");
     if (preset.id === "openai") {
       expect(body.response_format.type).toBe("json_schema");
       expect(body.response_format.json_schema).toMatchObject({ strict: true, schema: {

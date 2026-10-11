@@ -122,6 +122,11 @@ export async function runPromptInference<T>(
         ? { type: "json_schema", json_schema: { name: "preflyt_pr_review", strict: true, schema: options.jsonSchema } }
         : { type: "json_object" } }
       : {}),
+    // Structured reviews need the final JSON rather than an unbounded reasoning
+    // trace. DeepSeek supports this switch: https://api-docs.deepseek.com/api/create-chat-completion/
+    ...(options?.jsonOutput && endpoint.preset === "deepseek"
+      ? { thinking: { type: "disabled" } }
+      : {}),
     stream: false,
   };
   if (endpoint.preset === "anthropic") {

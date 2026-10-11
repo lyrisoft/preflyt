@@ -417,12 +417,6 @@ export function PipelineWorkflowSetup({
             {installFiles.error?.message}
           </p>
         )}
-        {!data.proofConfigured && (
-          <p className='text-xs text-muted-foreground'>
-            Report verification needs administrator setup before execution
-            results can pass.
-          </p>
-        )}
         {!data.workflows.length ? (
           <p className='text-sm text-muted-foreground'>
             No workflows found. Add the snippet to a GitHub Actions workflow in
