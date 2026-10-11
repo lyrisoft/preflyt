@@ -35,6 +35,7 @@ import { PageHeader } from '@/components/page-header'
 import { PageHelpDrawer } from '@/components/page-help-drawer'
 import { StatusBadge, type StatusTone } from '@/components/status-badge'
 import { SurfaceIcon } from '@/components/surface-icon'
+import { reviewReason } from '@/features/repositories/assessment-result'
 import { useNavigationSession } from '@/features/workspace/navigation-session'
 import { FindingsOverview, type FindingsSummary } from './findings-summary'
 
@@ -474,73 +475,182 @@ function FindingsWorkspace() {
           if (!open) setDetail(null)
         }}
       >
-        <SheetContent className='overflow-y-auto sm:max-w-xl'>
-          <SheetHeader>
-            <SheetTitle>{detail?.title ?? 'Finding details'}</SheetTitle>
+        <SheetContent className='w-full gap-0 overflow-clip sm:max-w-2xl'>
+          <SheetHeader className='shrink-0 border-b px-4 py-5 pe-12 sm:px-6 sm:pe-12'>
+            {detail && (
+              <div className='mb-2 flex flex-wrap items-center gap-2'>
+                <StatusBadge
+                  tone={severityTone[detail.severity] ?? 'neutral'}
+                  className='capitalize'
+                >
+                  {detail.severity}
+                </StatusBadge>
+                <StatusBadge tone='neutral'>{detail.status}</StatusBadge>
+              </div>
+            )}
+            <SheetTitle className='text-lg leading-6 break-words'>
+              {detail?.title ?? 'Finding details'}
+            </SheetTitle>
             <SheetDescription>
               Evidence for this saved assessment and commit.
             </SheetDescription>
           </SheetHeader>
           {detail && (
-            <div className='space-y-6 px-4 pb-6'>
-              <dl className='space-y-4 text-sm'>
-                {[
-                  ['Repository', detail.repository],
-                  ['Commit', detail.sourceSha],
-                  ['Rule', detail.ruleId ?? 'Not supplied'],
-                  [
-                    'File',
-                    detail.path
-                      ? `${detail.path}${detail.line ? `:${detail.line}` : ''}`
-                      : 'Not supplied',
-                  ],
-                  [
-                    'Report source verification',
-                    detail.verification === 'ADMIN_ASSOCIATED_UNVERIFIED'
-                      ? 'Admin-associated report; source not independently verified'
-                      : detail.verification,
-                  ],
-                  ['Recorded', new Date(detail.observedAt).toLocaleString()],
-                ].map(([label, value]) => (
-                  <div key={label}>
-                    <dt className='text-muted-foreground'>{label}</dt>
-                    <dd className='mt-1 break-all'>{value}</dd>
-                  </div>
-                ))}
-              </dl>
-              <div>
-                <h3 className='text-sm font-semibold'>Evidence</h3>
-                <ul className='mt-2 space-y-2 text-sm'>
-                  {detail.evidence.map((value, index) => (
-                    <li key={index} className='break-all'>
-                      {value}
-                    </li>
-                  ))}
-                </ul>
+            <>
+              <div className='min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain px-4 py-6 sm:px-6'>
+                <FindingContext finding={detail} />
+                <FindingEvidence evidence={detail.evidence} />
+                <FindingTriage
+                  key={detail.id}
+                  finding={detail}
+                  canManage={!!result.data?.canManage}
+                  onSaved={(triage) => setDetail({ ...detail, triage })}
+                />
               </div>
-              <FindingTriage
-                key={detail.id}
-                finding={detail}
-                canManage={!!result.data?.canManage}
-                onSaved={(triage) => setDetail({ ...detail, triage })}
-              />
-              <Button size='sm' asChild>
-                <Link
-                  to='/repositories/$repositoryId'
-                  params={{ repositoryId: detail.repositoryId }}
-                  search={{
-                    tab: 'assessments',
-                    assessment: detail.assessmentId,
-                  }}
-                >
-                  View assessment
-                </Link>
-              </Button>
-            </div>
+              <div className='flex shrink-0 justify-end border-t bg-background px-4 py-4 sm:px-6'>
+                <Button size='sm' variant='outline' asChild>
+                  <Link
+                    to='/repositories/$repositoryId'
+                    params={{ repositoryId: detail.repositoryId }}
+                    search={{
+                      tab: 'assessments',
+                      assessment: detail.assessmentId,
+                    }}
+                  >
+                    View assessment
+                    <ArrowUpRight className='size-4' aria-hidden='true' />
+                  </Link>
+                </Button>
+              </div>
+            </>
           )}
         </SheetContent>
       </Sheet>
     </Main>
+  )
+}
+
+function FindingContext({ finding }: { finding: Finding }) {
+  return (
+    <section aria-labelledby='finding-context-title' className='space-y-4'>
+      <h3 id='finding-context-title' className='text-sm font-semibold'>
+        Repository context
+      </h3>
+      <dl className='grid grid-cols-1 gap-x-6 gap-y-4 text-sm sm:grid-cols-2'>
+        <div className='min-w-0'>
+          <dt className='text-xs text-muted-foreground'>Repository</dt>
+          <dd className='mt-1 font-medium break-words'>{finding.repository}</dd>
+        </div>
+        <div>
+          <dt className='text-xs text-muted-foreground'>Recorded</dt>
+          <dd className='mt-1'>
+            <time dateTime={finding.observedAt}>
+              {new Date(finding.observedAt).toLocaleString()}
+            </time>
+          </dd>
+        </div>
+        <div className='min-w-0 sm:col-span-2'>
+          <dt className='text-xs text-muted-foreground'>Commit</dt>
+          <dd className='mt-1 rounded-md border bg-muted/30 px-3 py-2 font-mono text-xs break-all'>
+            {finding.sourceSha}
+          </dd>
+        </div>
+        <div className='min-w-0'>
+          <dt className='text-xs text-muted-foreground'>Rule</dt>
+          <dd className='mt-1 font-mono text-xs break-all'>
+            {finding.ruleId ?? 'Not supplied'}
+          </dd>
+        </div>
+        <div className='min-w-0'>
+          <dt className='text-xs text-muted-foreground'>File</dt>
+          <dd className='mt-1 break-all'>
+            {finding.path ? (
+              <code className='text-xs'>
+                {finding.path}
+                {finding.line ? `:${finding.line}` : ''}
+              </code>
+            ) : (
+              <span className='text-muted-foreground'>Not supplied</span>
+            )}
+          </dd>
+        </div>
+      </dl>
+      <div className='rounded-lg border bg-muted/20 px-4 py-3'>
+        <p className='text-xs text-muted-foreground'>
+          Report source verification
+        </p>
+        <p className='mt-1 text-sm break-words'>
+          {finding.verification === 'ADMIN_ASSOCIATED_UNVERIFIED'
+            ? 'Admin-associated report; source not independently verified'
+            : finding.verification}
+        </p>
+      </div>
+    </section>
+  )
+}
+
+const findingEvidenceLabels: Record<string, string> = {
+  CI_SUCCESS_NOT_ESTABLISHED: 'A successful CI result has not been confirmed.',
+  EXECUTION_ENVIRONMENT_UNVERIFIED:
+    'The execution environment has not been verified.',
+  REPORT_PROVENANCE_UNVERIFIED:
+    'The report source has not been independently verified.',
+  RULE_COVERAGE_UNVERIFIED:
+    'The report has not been verified to cover this check.',
+  TOOL_IDENTITY_UNVERIFIED:
+    'The tool that produced the result has not been verified.',
+}
+const isEvidenceCode = (value: string) =>
+  /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$/.test(value)
+
+function FindingEvidence({ evidence }: { evidence: string[] }) {
+  const codes = evidence.filter(isEvidenceCode)
+  return (
+    <section aria-labelledby='finding-evidence-title' className='space-y-3'>
+      <h3 id='finding-evidence-title' className='text-sm font-semibold'>
+        Evidence
+      </h3>
+      {evidence.length ? (
+        <ul className='divide-y rounded-xl border bg-muted/10 px-4'>
+          {evidence.map((value, index) => (
+            <li key={index} className='py-3 text-sm leading-5 break-words'>
+              {/^[a-f0-9]{64}$/i.test(value) ? (
+                <>
+                  <p className='mb-1 text-xs text-muted-foreground'>
+                    Report digest (SHA-256)
+                  </p>
+                  <code className='block font-mono text-xs break-all'>
+                    {value}
+                  </code>
+                </>
+              ) : isEvidenceCode(value) ? (
+                (findingEvidenceLabels[value] ?? reviewReason(value))
+              ) : (
+                value
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className='text-sm text-muted-foreground'>
+          No additional evidence was supplied.
+        </p>
+      )}
+      {codes.length > 0 && (
+        <details className='group text-xs'>
+          <summary className='w-fit cursor-pointer rounded-sm py-1 text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'>
+            Technical evidence
+          </summary>
+          <ul className='mt-2 space-y-2 rounded-lg border bg-muted/20 p-3 font-mono'>
+            {codes.map((code, index) => (
+              <li key={index} className='break-all'>
+                {code}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </section>
   )
 }
 
@@ -612,7 +722,7 @@ function FindingTriage({
   })
   if (!canManage)
     return (
-      <div className='space-y-2'>
+      <div className='space-y-3 rounded-xl border bg-muted/10 p-4'>
         <h3 className='text-sm font-semibold'>Manage issue</h3>
         <StatusBadge
           tone={finding.triage?.state === 'RESOLVED' ? 'success' : 'info'}
@@ -620,13 +730,15 @@ function FindingTriage({
           {triageLabels[finding.triage?.state ?? 'REPORTED']}
         </StatusBadge>
         {finding.triage?.note && (
-          <p className='text-sm whitespace-pre-wrap'>{finding.triage.note}</p>
+          <p className='text-sm break-words whitespace-pre-wrap'>
+            {finding.triage.note}
+          </p>
         )}
       </div>
     )
   return (
     <form
-      className='space-y-4 rounded-lg border p-4'
+      className='space-y-4 rounded-xl border bg-muted/10 p-4'
       onSubmit={(event) => {
         event.preventDefault()
         save.mutate()
@@ -639,7 +751,7 @@ function FindingTriage({
             Status
           </label>
           <Select value={state} onValueChange={setState}>
-            <SelectTrigger id='finding-state'>
+            <SelectTrigger id='finding-state' className='w-full'>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -656,7 +768,7 @@ function FindingTriage({
             Assignee
           </label>
           <Select value={assignee} onValueChange={setAssignee}>
-            <SelectTrigger id='finding-assignee'>
+            <SelectTrigger id='finding-assignee' className='w-full'>
               <SelectValue placeholder='Unassigned' />
             </SelectTrigger>
             <SelectContent>
@@ -680,6 +792,7 @@ function FindingTriage({
           onChange={(event) => setNote(event.target.value)}
           maxLength={1000}
           required={state === 'RESOLVED'}
+          className='min-h-24 resize-y bg-background'
           placeholder='Explain the review or how the issue was resolved.'
         />
       </div>

@@ -93,7 +93,7 @@ it('opens exact commit evidence and preserves unverified report status', async (
           path: 'src/db.ts',
           line: 3,
           ruleId: 'query',
-          evidence: ['digest'],
+          evidence: ['d'.repeat(64), 'APPROVED_CI_SOURCE_FAILED'],
           verification: 'ADMIN_ASSOCIATED_UNVERIFIED',
           occurrences: 1,
         },
@@ -120,6 +120,25 @@ it('opens exact commit evidence and preserves unverified report status', async (
   await expect
     .element(view.getByText('a'.repeat(40), { exact: true }))
     .toBeVisible()
+  await expect
+    .element(view.getByText('The approved CI check or workflow failed.'))
+    .toBeVisible()
+  await expect
+    .element(view.getByText('d'.repeat(64), { exact: true }))
+    .toBeVisible()
+  await expect
+    .element(view.getByText('APPROVED_CI_SOURCE_FAILED', { exact: true }))
+    .not.toBeVisible()
+  await view.getByText('Technical evidence', { exact: true }).click()
+  await expect
+    .element(view.getByText('APPROVED_CI_SOURCE_FAILED', { exact: true }))
+    .toBeVisible()
+  await expect
+    .element(view.getByRole('link', { name: 'View assessment' }))
+    .toBeVisible()
+  await expect
+    .element(view.getByRole('button', { name: 'Save changes' }))
+    .not.toBeInTheDocument()
 })
 it('shows API failures without a misleading empty success state', async () => {
   state.query = {
@@ -274,6 +293,12 @@ it('provides compact custom triage controls with required resolution notes on mo
   await view.getByRole('button', { name: 'Save changes' }).click()
   expect(state.save).toHaveBeenCalledOnce()
   expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390)
+  const drawer = document.querySelector('[data-slot="sheet-content"]')!
+  expect(drawer.scrollTop).toBe(0)
+  expect(
+    drawer.querySelector('[data-slot="sheet-header"]')!.getBoundingClientRect()
+      .top
+  ).toBeGreaterThanOrEqual(0)
 })
 
 it('applies search and tab changes without changing findings query scope', async () => {
