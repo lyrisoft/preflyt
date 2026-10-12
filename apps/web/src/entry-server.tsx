@@ -5,9 +5,11 @@ import {
 } from '@tanstack/react-router/ssr/server'
 import { createAppRouter } from './app'
 
-export async function renderHomepage() {
+export { publicPages } from './features/marketing/public-pages'
+
+export async function renderPublicPage(path = '/') {
   const handler = createRequestHandler({
-    request: new Request('http://prerender.preflyt.invalid/'),
+    request: new Request(new URL(path, 'http://prerender.preflyt.invalid')),
     createRouter: createAppRouter,
   })
   const response = await handler(({ router, responseHeaders }) =>
@@ -22,6 +24,6 @@ export async function renderHomepage() {
     })
   )
   if (!response.ok)
-    throw new Error(`Homepage rendering failed: ${response.status}`)
+    throw new Error(`Public page rendering failed: ${response.status}`)
   return (await response.text()).replace(/^<!DOCTYPE html>/i, '')
 }

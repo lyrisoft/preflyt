@@ -1,7 +1,7 @@
 # Preflyt website analysis and phased implementation plan
 
 **Date:** 12 October 2026  
-**Status:** W0 approved; W1 implemented in the current app
+**Status:** W0 approved; W1 and W2 implemented in the current app
 
 **Scope:** Public website within the existing `apps/web` application
 
@@ -215,6 +215,8 @@ W0–W4 represent approximately 13–21 engineering/design working days with one
 **Release shape:** A complete reviewable homepage on the existing preview environment. W2 pages are absent from navigation until delivered.
 
 ### W2 Product explanation and self hosting
+
+**Implemented, 12 October 2026:** `/product`, `/product/repository-health`, `/product/standards-and-evidence`, `/product/merge-protection` and `/self-hosting`. Shared public header/footer, Geist typography, theme tokens and homepage motion are reused. Pages include workflow, prerequisites, operating limits and documentation handoffs. All six public routes have generated HTML and route-specific metadata. See [deployment and verification](../deployment/public-homepage.md).
 
 **Work:** Deliver `/product`, the three capability pages and `/self-hosting` using a shared page composition. Explain prerequisites, supported inputs and limits alongside each capability. Use the homepage's visual grammar with enough detail for evaluation. Link to authoritative documentation for setup commands and technical contracts.
 

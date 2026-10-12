@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as GithubOnboardingRouteImport } from './routes/github-onboarding'
+import { Route as SelfHostingRouteImport } from './routes/self-hosting'
 import { Route as SetupRouteImport } from './routes/setup'
 import { Route as authSignInRouteImport } from './routes/(auth)/sign-in'
 import { Route as errors401RouteImport } from './routes/(errors)/401'
@@ -34,6 +35,10 @@ import { Route as AuthenticatedSettingsRouteRouteImport } from './routes/_authen
 import { Route as AuthenticatedSkillsRouteImport } from './routes/_authenticated/skills'
 import { Route as AuthenticatedStandardsRouteImport } from './routes/_authenticated/standards'
 import { Route as AuthenticatedTeamsRouteImport } from './routes/_authenticated/teams'
+import { Route as ProductIndexRouteImport } from './routes/product.index'
+import { Route as ProductMergeProtectionRouteImport } from './routes/product.merge-protection'
+import { Route as ProductRepositoryHealthRouteImport } from './routes/product.repository-health'
+import { Route as ProductStandardsAndEvidenceRouteImport } from './routes/product.standards-and-evidence'
 import { Route as authSuperAdminLoginRouteImport } from './routes/(auth)/super-admin/login'
 import { Route as AuthenticatedAppsIndexRouteImport } from './routes/_authenticated/apps/index'
 import { Route as AuthenticatedContributorsIndexRouteImport } from './routes/_authenticated/contributors/index'
@@ -59,6 +64,11 @@ const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
 const GithubOnboardingRoute = GithubOnboardingRouteImport.update({
   id: '/github-onboarding',
   path: '/github-onboarding',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SelfHostingRoute = SelfHostingRouteImport.update({
+  id: '/self-hosting',
+  path: '/self-hosting',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SetupRoute = SetupRouteImport.update({
@@ -179,6 +189,27 @@ const AuthenticatedTeamsRoute = AuthenticatedTeamsRouteImport.update({
   path: '/teams',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const ProductIndexRoute = ProductIndexRouteImport.update({
+  id: '/product/',
+  path: '/product/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProductMergeProtectionRoute = ProductMergeProtectionRouteImport.update({
+  id: '/product/merge-protection',
+  path: '/product/merge-protection',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProductRepositoryHealthRoute = ProductRepositoryHealthRouteImport.update({
+  id: '/product/repository-health',
+  path: '/product/repository-health',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProductStandardsAndEvidenceRoute =
+  ProductStandardsAndEvidenceRouteImport.update({
+    id: '/product/standards-and-evidence',
+    path: '/product/standards-and-evidence',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const authSuperAdminLoginRoute = authSuperAdminLoginRouteImport.update({
   id: '/(auth)/super-admin/login',
   path: '/super-admin/login',
@@ -253,6 +284,7 @@ const AuthenticatedSettingsNotificationsRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/github-onboarding': typeof GithubOnboardingRoute
+  '/self-hosting': typeof SelfHostingRoute
   '/setup': typeof SetupRoute
   '/settings': typeof AuthenticatedSettingsRouteRouteWithChildren
   '/sign-in': typeof authSignInRoute
@@ -275,6 +307,10 @@ export interface FileRoutesByFullPath {
   '/skills': typeof AuthenticatedSkillsRoute
   '/standards': typeof AuthenticatedStandardsRoute
   '/teams': typeof AuthenticatedTeamsRoute
+  '/product/merge-protection': typeof ProductMergeProtectionRoute
+  '/product/repository-health': typeof ProductRepositoryHealthRoute
+  '/product/standards-and-evidence': typeof ProductStandardsAndEvidenceRoute
+  '/product/': typeof ProductIndexRoute
   '/super-admin/login': typeof authSuperAdminLoginRoute
   '/contributors/$contributorId': typeof AuthenticatedContributorsContributorIdRoute
   '/findings/$findingId': typeof AuthenticatedFindingsFindingIdRoute
@@ -291,6 +327,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/github-onboarding': typeof GithubOnboardingRoute
+  '/self-hosting': typeof SelfHostingRoute
   '/setup': typeof SetupRoute
   '/sign-in': typeof authSignInRoute
   '/401': typeof errors401Route
@@ -311,6 +348,10 @@ export interface FileRoutesByTo {
   '/skills': typeof AuthenticatedSkillsRoute
   '/standards': typeof AuthenticatedStandardsRoute
   '/teams': typeof AuthenticatedTeamsRoute
+  '/product/merge-protection': typeof ProductMergeProtectionRoute
+  '/product/repository-health': typeof ProductRepositoryHealthRoute
+  '/product/standards-and-evidence': typeof ProductStandardsAndEvidenceRoute
+  '/product': typeof ProductIndexRoute
   '/super-admin/login': typeof authSuperAdminLoginRoute
   '/contributors/$contributorId': typeof AuthenticatedContributorsContributorIdRoute
   '/findings/$findingId': typeof AuthenticatedFindingsFindingIdRoute
@@ -329,6 +370,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/github-onboarding': typeof GithubOnboardingRoute
+  '/self-hosting': typeof SelfHostingRoute
   '/setup': typeof SetupRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRouteRouteWithChildren
   '/(auth)/sign-in': typeof authSignInRoute
@@ -351,6 +393,10 @@ export interface FileRoutesById {
   '/_authenticated/skills': typeof AuthenticatedSkillsRoute
   '/_authenticated/standards': typeof AuthenticatedStandardsRoute
   '/_authenticated/teams': typeof AuthenticatedTeamsRoute
+  '/product/merge-protection': typeof ProductMergeProtectionRoute
+  '/product/repository-health': typeof ProductRepositoryHealthRoute
+  '/product/standards-and-evidence': typeof ProductStandardsAndEvidenceRoute
+  '/product/': typeof ProductIndexRoute
   '/(auth)/super-admin/login': typeof authSuperAdminLoginRoute
   '/_authenticated/contributors/$contributorId': typeof AuthenticatedContributorsContributorIdRoute
   '/_authenticated/findings/$findingId': typeof AuthenticatedFindingsFindingIdRoute
@@ -369,6 +415,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/github-onboarding'
+    | '/self-hosting'
     | '/setup'
     | '/settings'
     | '/sign-in'
@@ -391,6 +438,10 @@ export interface FileRouteTypes {
     | '/skills'
     | '/standards'
     | '/teams'
+    | '/product/merge-protection'
+    | '/product/repository-health'
+    | '/product/standards-and-evidence'
+    | '/product/'
     | '/super-admin/login'
     | '/contributors/$contributorId'
     | '/findings/$findingId'
@@ -407,6 +458,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/github-onboarding'
+    | '/self-hosting'
     | '/setup'
     | '/sign-in'
     | '/401'
@@ -427,6 +479,10 @@ export interface FileRouteTypes {
     | '/skills'
     | '/standards'
     | '/teams'
+    | '/product/merge-protection'
+    | '/product/repository-health'
+    | '/product/standards-and-evidence'
+    | '/product'
     | '/super-admin/login'
     | '/contributors/$contributorId'
     | '/findings/$findingId'
@@ -444,6 +500,7 @@ export interface FileRouteTypes {
     | '/'
     | '/_authenticated'
     | '/github-onboarding'
+    | '/self-hosting'
     | '/setup'
     | '/_authenticated/settings'
     | '/(auth)/sign-in'
@@ -466,6 +523,10 @@ export interface FileRouteTypes {
     | '/_authenticated/skills'
     | '/_authenticated/standards'
     | '/_authenticated/teams'
+    | '/product/merge-protection'
+    | '/product/repository-health'
+    | '/product/standards-and-evidence'
+    | '/product/'
     | '/(auth)/super-admin/login'
     | '/_authenticated/contributors/$contributorId'
     | '/_authenticated/findings/$findingId'
@@ -484,6 +545,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   GithubOnboardingRoute: typeof GithubOnboardingRoute
+  SelfHostingRoute: typeof SelfHostingRoute
   SetupRoute: typeof SetupRoute
   authSignInRoute: typeof authSignInRoute
   errors401Route: typeof errors401Route
@@ -491,6 +553,10 @@ export interface RootRouteChildren {
   errors404Route: typeof errors404Route
   errors500Route: typeof errors500Route
   errors503Route: typeof errors503Route
+  ProductMergeProtectionRoute: typeof ProductMergeProtectionRoute
+  ProductRepositoryHealthRoute: typeof ProductRepositoryHealthRoute
+  ProductStandardsAndEvidenceRoute: typeof ProductStandardsAndEvidenceRoute
+  ProductIndexRoute: typeof ProductIndexRoute
   authSuperAdminLoginRoute: typeof authSuperAdminLoginRoute
 }
 
@@ -515,6 +581,13 @@ declare module '@tanstack/react-router' {
       path: '/github-onboarding'
       fullPath: '/github-onboarding'
       preLoaderRoute: typeof GithubOnboardingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/self-hosting': {
+      id: '/self-hosting'
+      path: '/self-hosting'
+      fullPath: '/self-hosting'
+      preLoaderRoute: typeof SelfHostingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/setup': {
@@ -670,6 +743,34 @@ declare module '@tanstack/react-router' {
       fullPath: '/teams'
       preLoaderRoute: typeof AuthenticatedTeamsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/product/': {
+      id: '/product/'
+      path: '/product'
+      fullPath: '/product/'
+      preLoaderRoute: typeof ProductIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/product/merge-protection': {
+      id: '/product/merge-protection'
+      path: '/product/merge-protection'
+      fullPath: '/product/merge-protection'
+      preLoaderRoute: typeof ProductMergeProtectionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/product/repository-health': {
+      id: '/product/repository-health'
+      path: '/product/repository-health'
+      fullPath: '/product/repository-health'
+      preLoaderRoute: typeof ProductRepositoryHealthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/product/standards-and-evidence': {
+      id: '/product/standards-and-evidence'
+      path: '/product/standards-and-evidence'
+      fullPath: '/product/standards-and-evidence'
+      preLoaderRoute: typeof ProductStandardsAndEvidenceRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/(auth)/super-admin/login': {
       id: '/(auth)/super-admin/login'
@@ -850,6 +951,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   GithubOnboardingRoute: GithubOnboardingRoute,
+  SelfHostingRoute: SelfHostingRoute,
   SetupRoute: SetupRoute,
   authSignInRoute: authSignInRoute,
   errors401Route: errors401Route,
@@ -857,6 +959,10 @@ const rootRouteChildren: RootRouteChildren = {
   errors404Route: errors404Route,
   errors500Route: errors500Route,
   errors503Route: errors503Route,
+  ProductMergeProtectionRoute: ProductMergeProtectionRoute,
+  ProductRepositoryHealthRoute: ProductRepositoryHealthRoute,
+  ProductStandardsAndEvidenceRoute: ProductStandardsAndEvidenceRoute,
+  ProductIndexRoute: ProductIndexRoute,
   authSuperAdminLoginRoute: authSuperAdminLoginRoute,
 }
 export const routeTree = rootRouteImport
