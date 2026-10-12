@@ -34,6 +34,9 @@ if (process.env.NATIVE_FIXTURE_IMAGE) {
  assert.ok(process.env.NATIVE_FIXTURE_TOOL, 'An exact candidate image requires one fixture tool')
  assert.match(process.env.NATIVE_FIXTURE_IMAGE, /^sha256:[a-f0-9]{64}$/)
 }
+const fixtureRuntime = process.env.NATIVE_FIXTURE_RUNTIME ?? 'runc'
+if (fixtureRuntime !== 'runc' && fixtureRuntime !== 'runsc' && fixtureRuntime !== 'kata')
+  throw new Error('Choose runc, runsc or kata for generated fixtures')
 const root = await mkdtemp(join(tmpdir(), 'preflyt-p3-fixtures-'))
 const git = (args: string[], input?: Buffer | string) =>
   execFileSync('git', args, {
@@ -100,6 +103,22 @@ const fixtures: Array<{
         dependencies: { lodash: { version: '4.17.19' } } }),
     },
     expected: 'FAIL',
+  },
+  {
+    id: 'dependency-clean',
+    ruleId: 'security.dependencies',
+    tool: 'trivy-offline',
+    files: {
+      'package-lock.json': JSON.stringify({ name: 'fixture', version: '1.0.0', lockfileVersion: 2, requires: true, packages: { '': { name: 'fixture', version: '1.0.0' } }, dependencies: {} }),
+    },
+    expected: 'PASS',
+  },
+  {
+    id: 'iac-clean',
+    ruleId: 'iac.policy',
+    tool: 'trivy',
+    files: { 'main.tf': 'terraform {\n  required_version = ">= 1.0.0"\n}\n' },
+    expected: 'PASS',
   },
   {
     id: 'secret-failure',
@@ -300,7 +319,7 @@ try {
           await dockerCommand([
             'create',
             '--runtime',
-            'runc',
+            fixtureRuntime,
             '--network',
             'none',
             '--user',
@@ -377,7 +396,7 @@ try {
       fixture.ruleId,
       review,
       workspace.workspace,
-      'runc',
+      fixtureRuntime,
     )
     // Local content-addressed images are test artifacts, not approved production registry images.
     const effectiveReview = { ...review, image }
@@ -407,7 +426,7 @@ try {
         fixture.ruleId,
         effectiveReview,
         workspace.workspace,
-        'runc',
+        fixtureRuntime,
       )
       const output = await dockerCommand(
         ['start', '--attach', invocation.jobId],
@@ -467,7 +486,7 @@ try {
         fixture.ruleId,
         { ...review, image },
         workspace.workspace,
-        'runc',
+        fixtureRuntime,
       )
       assert.equal(inspection.HostConfig.NetworkMode, 'none')
       assert.equal(inspection.HostConfig.ReadonlyRootfs, true)

@@ -39,7 +39,7 @@ export class NativeStatusService {
         ...base,
         reason: 'REVIEW_REQUIRED',
         message:
-          'An independent sandbox review is required before Preflyt can run checks.',
+          'A signed sandbox approval is required before Preflyt can run checks.',
       }
     const input = {
       nonce: randomUUID(),
@@ -51,9 +51,9 @@ export class NativeStatusService {
       const key = process.env.NATIVE_CONTROLLER_API_KEY ?? ''
       if (key.length < 32 || key.length > 256)
         throw new Error('Controller connection not configured')
-      const response = await fetch(
-        reviewed.approval.controllerOrigin + '/preflight',
-        {
+      let response: Response | null = null
+      for (let attempt = 0; attempt < 5; attempt++) {
+        response = await fetch(reviewed.approval.controllerOrigin + '/preflight', {
           method: 'POST',
           headers: {
             Authorization: 'Bearer ' + key,
@@ -62,9 +62,12 @@ export class NativeStatusService {
           body: JSON.stringify(input),
           redirect: 'error',
           signal: AbortSignal.timeout(15000),
-        },
-      )
-      if (!response.ok) throw new Error('Controller unavailable')
+        })
+        if (response.status !== 429 || attempt === 4) break
+        await response.body?.cancel()
+        await new Promise((resolve) => setTimeout(resolve, 150 * (attempt + 1)))
+      }
+      if (!response?.ok) throw new Error('Controller unavailable')
       if (Number(response.headers.get('content-length') ?? 0) > 20000)
         throw new Error('Response too large')
       let bytes = 0,
@@ -81,7 +84,7 @@ export class NativeStatusService {
             ? verifyNativeProbe(data.signature, input, reviewed.approval)
             : null
       if (!proof) throw new Error('Unverified controller response')
-      // Recheck current scoped access and independent approval after the network operation.
+      // Recheck current scoped access and signed approval after the network operation.
       await this.access.requireRepository(
         session,
         repositoryId,

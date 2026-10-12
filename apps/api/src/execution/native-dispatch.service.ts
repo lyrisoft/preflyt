@@ -43,7 +43,7 @@ export class NativeDispatchService {
     for (const row of rows) {
       if (this.shutdown.signal.aborted) return
       if (!enabled && row.state === 'QUEUED') continue
-      const lease = new Date(Date.now() + 120000)
+      const lease = new Date(Date.now() + (row.state === 'QUEUED' ? 12 * 60_000 : 120000))
       const claimed = await this.prisma.nativeExecutionRequest.updateMany({
         where: { id: row.id, state: row.state, leaseUntil: row.leaseUntil },
         data: {

@@ -46,7 +46,7 @@ const token = (value: unknown) => {
     sign(null, Buffer.from(encoded), signer.privateKey).toString('base64url')
   )
 }
-describe('independent Docker approval', () => {
+describe('signed Docker runtime approval', () => {
   it('accepts a scoped signed unexpired review', () =>
     expect(
       nativeDockerApproval(token(approval()), keys, now)?.approval

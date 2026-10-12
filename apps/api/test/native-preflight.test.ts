@@ -428,7 +428,7 @@ describe('API fail-closed boundaries', () => {
     ).rejects.toThrow('Denied')
     expect(fetchSpy).not.toHaveBeenCalled()
   })
-  it('retains imported-only mode without an independent review', async () => {
+  it('retains imported-only mode without a signed review', async () => {
     vi.stubEnv('NATIVE_RUNTIME_APPROVAL', '')
     const access = { requireRepository: vi.fn().mockResolvedValue({}) },
       fetchSpy = vi.spyOn(globalThis, 'fetch')
@@ -443,6 +443,41 @@ describe('API fail-closed boundaries', () => {
       reason: 'REVIEW_REQUIRED',
     })
     expect(fetchSpy).not.toHaveBeenCalled()
+  })
+  it('retries a temporarily busy controller and verifies the signed response', async () => {
+    const access = { requireRepository: vi.fn().mockResolvedValue({}) }
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (_url, options) => {
+      if (fetchSpy.mock.calls.length === 1)
+        return new Response(null, { status: 429 })
+      const review = parseNativeApproval()!,
+        input = JSON.parse(options!.body as string)
+      return new Response(
+        JSON.stringify({
+          signature: signNativeProbe(
+            {
+              ...input,
+              version: 1,
+              environmentId: review.approval.environmentId,
+              checkedAt: new Date().toISOString(),
+              verified: true,
+              failed: [],
+              controlsHash: review.approval.controlsHash,
+            },
+            process.env.NATIVE_CONTROLLER_SIGNING_KEY!,
+            review.approval,
+          ),
+        }),
+        { status: 200 },
+      )
+    })
+    expect(
+      await new NativeStatusService(access as any).status(
+        { organizationId: 'org' } as any,
+        '51',
+      ),
+    ).toMatchObject({ preflightVerified: true, reason: 'DISPATCHER_REQUIRED' })
+    expect(fetchSpy).toHaveBeenCalledTimes(2)
+    expect(access.requireRepository).toHaveBeenCalledTimes(2)
   })
   it('keeps native execution blocked even after a verified preflight', async () => {
     const access = { requireRepository: vi.fn().mockResolvedValue({}) }

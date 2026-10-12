@@ -378,7 +378,7 @@ export class GitHubProviderService {
   async readNativeSource(installationId: bigint, repositoryId: bigint, sourceSha: string, signal?: AbortSignal) {
     if (!/^[a-f0-9]{40}$/.test(sourceSha)) throw new BadRequestException('Use an exact source commit for native checks')
     signal?.throwIfAborted()
-    const reader = await this.openRepository(installationId, repositoryId, 'contents', signal)
+    const reader = await this.openRepository(installationId, repositoryId, 'contents', signal, 10 * 60_000)
     const base = `/repos/${encodeURIComponent(reader.metadata.owner.login)}/${encodeURIComponent(reader.metadata.name)}`
     return readPinnedNativeSource(reader.request, base, repositoryId.toString(), sourceSha, signal)
   }
@@ -1480,6 +1480,7 @@ export class GitHubProviderService {
     repositoryId: bigint,
     permission: 'contents' | 'pull_requests' | 'metadata' | 'actions' | 'checks' | 'administration' = 'contents',
     externalSignal?: AbortSignal,
+    timeoutMs = 60_000,
   ) {
     try {
       await this.verifyInstallation(installationId)
@@ -1508,7 +1509,7 @@ export class GitHubProviderService {
         'Unable to authorize repository inspection',
       )
     }
-    const timeout = AbortSignal.timeout(60_000)
+    const timeout = AbortSignal.timeout(timeoutMs)
     const signal = externalSignal ? AbortSignal.any([externalSignal, timeout]) : timeout
     signal.throwIfAborted()
     const request = async <T>(path: string): Promise<T> => {

@@ -18,7 +18,7 @@ export type DockerApproval = {
 }
 const hex = (value: unknown) =>
   typeof value === 'string' && /^[a-f0-9]{64}$/.test(value)
-/** Independent approval is required for real repositories; local Docker availability is not approval. */
+/** Signed operator approval is required for real repositories; local Docker availability is not approval. */
 export function nativeDockerApproval(
   token = process.env.NATIVE_DOCKER_APPROVAL ?? '',
   keys = process.env.NATIVE_RUNTIME_REVIEW_KEYS ?? '[]',
