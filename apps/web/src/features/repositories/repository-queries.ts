@@ -168,13 +168,34 @@ export type AssessmentListItem = {
   createdAt: string
 }
 
-export function useAssessmentList(repositoryId: string) {
+export function useAssessmentList(
+  repositoryId: string,
+  {
+    selectionId,
+    selectionRevision,
+    enabled = true,
+  }: {
+    selectionId?: string
+    selectionRevision?: number
+    enabled?: boolean
+  } = {}
+) {
   return useQuery({
-    queryKey: ['assessments', repositoryId],
+    queryKey: selectionId
+      ? ['assessments', repositoryId, selectionId, selectionRevision]
+      : ['assessments', repositoryId],
+    enabled,
     retry: false,
     queryFn: ({ signal }) =>
       read<{ assessments: AssessmentListItem[] }>(
-        repositoryPath(repositoryId, '/assessments'),
+        repositoryPath(
+          repositoryId,
+          `/assessments${
+            selectionId
+              ? `?${new URLSearchParams({ selection: selectionId, revision: String(selectionRevision) })}`
+              : ''
+          }`
+        ),
         signal,
         () =>
           'Could not load assessments. Check your session and repository access.'

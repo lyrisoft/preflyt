@@ -37,7 +37,7 @@ Saved versions stay unchanged. Editing a standard creates a **new version**, and
 
 ## Use a standard in a workflow
 
-Every standard card has **View YAML**. It shows the GitHub Actions snippet that runs that standard's checks. Use **Copy snippet** to copy it. Individual checks have snippets too. See [Pull request checks](pull-request-checks.md) for where it goes.
+Every standard card has **View YAML**. Install this policy runner once in each repository. It fetches the published branch policy on every run, so changing the checks does not require another workflow edit. Configure project commands and genuine result paths in Standards, then approve and publish a new policy revision. Built-in security recipes install their pinned scanner images automatically. See [Pull request checks](pull-request-checks.md).
 
 ## Choose standards for a repository
 

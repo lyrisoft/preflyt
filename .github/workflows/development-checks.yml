@@ -15,8 +15,6 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
-      - name: Prepare CI reports
-        run: mkdir -p .preflyt/results
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24.4.1
@@ -27,25 +25,22 @@ jobs:
       - name: Release automation tests
         run: node --test scripts/ci/create-release.test.mjs scripts/ci/publish-release.test.mjs
       - name: Type checks
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && (github.event_name != 'pull_request' || github.base_ref != 'development' || github.event.pull_request.head.repo.full_name != github.repository) }}
         env:
           DATABASE_URL: postgresql://fixture:fixture@127.0.0.1:1/unused
-        run: node docs/deployment/ci-command-report.mjs types.required .preflyt/results/types.xml -- "$(command -v pnpm)" -r --filter @preflyt/api --filter @preflyt/web typecheck
+        run: pnpm -r --filter @preflyt/api --filter @preflyt/web typecheck
       - name: Lint
         if: ${{ !cancelled() }}
         run: pnpm --filter @preflyt/web lint
       - name: Build validation
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && (github.event_name != 'pull_request' || github.base_ref != 'development' || github.event.pull_request.head.repo.full_name != github.repository) }}
         env:
           DATABASE_URL: postgresql://fixture:fixture@127.0.0.1:1/unused
-        run: node docs/deployment/ci-command-report.mjs build.required .preflyt/results/build.xml -- "$(command -v pnpm)" -r --filter @preflyt/api --filter @preflyt/web build
+        run: pnpm -r --filter @preflyt/api --filter @preflyt/web build
       - name: Preflyt development policy
         if: ${{ !cancelled() && github.event_name == 'pull_request' && github.base_ref == 'development' && github.event.pull_request.head.repo.full_name == github.repository }}
-        uses: lyrisoft/preflyt-action@49019a3e7febf942b937628bc831818e4a1b295f # v1.1.0
+        uses: lyrisoft/preflyt-action@ccc826017dd0a02c5f5e6dfb0052ef2f8e482dfe # v2.0.0
+        env:
+          DATABASE_URL: postgresql://fixture:fixture@127.0.0.1:1/unused
         with:
           api-url: ${{ vars.PREFLYT_API_URL }}
-          checks: |
-            {
-              "build.required": {"report": ".preflyt/results/build.xml"},
-              "types.required": {"report": ".preflyt/results/types.xml"}
-            }

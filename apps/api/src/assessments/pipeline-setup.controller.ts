@@ -24,8 +24,6 @@ import {
   Min,
   MaxLength,
   Matches,
-  IsArray,
-  ArrayMaxSize,
   IsUUID,
 } from "class-validator";
 import type { Request } from "express";
@@ -74,7 +72,6 @@ class WorkflowDto {
 class DraftDto extends WorkflowDto {
   @IsString() @MaxLength(100) jobId!: string;
   @IsString() @MaxLength(2048) apiUrl!: string;
-  @IsArray() @ArrayMaxSize(10) @IsString({ each: true }) checkIds!: string[];
 }
 class RewriteDto extends WorkflowDto {
   @IsString() @MaxLength(2048) apiUrl!: string;
@@ -450,7 +447,6 @@ export class PipelineSetupController {
       body.workflow,
       body.jobId,
       this.rules(policy.definition),
-      body.checkIds,
       publicPipelineUrl() ?? body.apiUrl,
     );
     return {

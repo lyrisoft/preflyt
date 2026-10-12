@@ -87,3 +87,19 @@ export function githubReportExecutions(
         })),
     )
 }
+
+/** Prefer attached report bytes only when the server verified this exact run. */
+export function verifiedPipelineReports(
+  receipts: any[],
+  observations: Array<{ deliveryId: string; artifacts: Array<{ sha256: string }> }>,
+) {
+  const verified = new Map<string, Set<string>>()
+  for (const observation of observations)
+    for (const artifact of observation.artifacts)
+      for (const execution of githubReportExecutions(receipts, observation, artifact.sha256)) {
+        const deliveries = verified.get(execution.ruleId) ?? new Set<string>()
+        deliveries.add(observation.deliveryId)
+        verified.set(execution.ruleId, deliveries)
+      }
+  return verified
+}

@@ -37,15 +37,11 @@ import { RepositoryHealth } from '../health/repository-health'
 import { canPerform, type ScopedSession } from '../workspace/scoped-access'
 import { BranchPicker } from './branch-picker'
 import { EvidenceDialog } from './evidence-dialog'
-import {
-  PostureSummary,
-  type ControlFilter,
-  type RepositoryTab,
-} from './posture-summary'
 import { RelativeTime } from './relative-time'
 import { RepositoryActivityPanel } from './repository-activity-panel'
 import { RepositoryAssessments } from './repository-assessments'
 import { RepositoryBindings } from './repository-bindings'
+import { RepositoryCheckResults } from './repository-check-results'
 import { RepositoryCiEvidence } from './repository-ci-evidence'
 import { repositoryConfigurationHelp } from './repository-configuration-help'
 import { RepositoryControls } from './repository-controls'
@@ -53,6 +49,7 @@ import { RepositoryEvents } from './repository-events'
 import { RepositoryPullRequests } from './repository-pull-requests'
 import type { Profile } from './repository-queries'
 import { RepositoryStandards } from './repository-standards'
+import type { ControlFilter, RepositoryTab } from './repository-tabs'
 import { signalStatus, toneFill } from './repository-vocabulary'
 import { TechIcon } from './tech-icon'
 
@@ -367,13 +364,6 @@ export function RepositoryProfilePage() {
     selectTab(value)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
-  function filterControls(value: ControlFilter) {
-    setFilter(value)
-    if (tab !== 'overview') selectTab('overview')
-    document
-      .getElementById('repository-controls')
-      ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }
   const profile = result?.profile
   const technologies = [
     ...new Set(
@@ -584,21 +574,12 @@ export function RepositoryProfilePage() {
                 />
               </TabsContent>
               <TabsContent value='overview' className='space-y-5'>
-                <PostureSummary
-                  repositoryId={repositoryId}
-                  profile={profile}
-                  filter={filter}
-                  onFilter={filterControls}
-                  onOpenTab={openTab}
-                />
-                <RepositoryActivityPanel repositoryId={repositoryId} />
-                <div className='grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_19rem]'>
-                  <div id='repository-controls' className='min-w-0 scroll-mt-4'>
-                    <RepositoryControls
+                <div className='grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_19rem]'>
+                  <div className='min-w-0 space-y-5'>
+                    <RepositoryActivityPanel repositoryId={repositoryId} />
+                    <RepositoryCheckResults
                       repositoryId={repositoryId}
-                      repositoryName={result.repository.fullName}
-                      filter={filter}
-                      onFilter={setFilter}
+                      profile={profile}
                       onOpenTab={openTab}
                     />
                   </div>
@@ -644,6 +625,13 @@ export function RepositoryProfilePage() {
                       )}
                     />
                   )}
+                />
+                <RepositoryControls
+                  repositoryId={repositoryId}
+                  repositoryName={result.repository.fullName}
+                  filter={filter}
+                  onFilter={setFilter}
+                  onOpenTab={openTab}
                 />
               </TabsContent>
               <TabsContent value='assessments' className='space-y-5'>

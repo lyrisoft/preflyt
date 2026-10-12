@@ -2,6 +2,31 @@ import type { HelpSection } from '@/components/page-help-drawer'
 
 export const repositoryConfigurationHelp: HelpSection[] = [
   {
+    title: 'Saved check results',
+    content: (
+      <>
+        <p>
+          The Checks tab shows the latest saved assessment for the selected
+          standards and revision. Passed and Failed come from the server
+          evaluation; Missing evidence counts incomplete checks whose required
+          evidence is missing or unverified. Unavailable results remain a dash.
+        </p>
+        <p>
+          Each result belongs to the displayed assessed commit. It can differ
+          from the repository inspection commit. Open View assessment or a
+          check's View evidence link for the recorded source and verification
+          details. A successful CI result alone does not establish a passing
+          check.
+        </p>
+        <p>
+          Configuration setup is under Standards. Assessment activity counts
+          saved evaluations, including repeated evaluations of the same commit;
+          it does not measure passing checks or authorize merging.
+        </p>
+      </>
+    ),
+  },
+  {
     title: 'Check configuration labels',
     content: (
       <dl className='space-y-3'>
@@ -57,16 +82,14 @@ export const repositoryConfigurationHelp: HelpSection[] = [
           required; these are excluded from Setup gaps.
         </p>
         <p>
-          <strong>Configuration hints</strong> counts files found against checks
-          with setup detectors, excluding CI-only checks from the denominator.
-          When every check requires CI evidence, it shows a dash and the number
-          of CI checks instead of a misleading zero coverage ratio.
+          Configuration setup lives under Standards. Checks that need CI results
+          are excluded from Setup gaps; their actual results appear in Checks
+          and Assessments.
         </p>
         <p>
-          The configuration charts include all selected checks and separate CI
-          evidence required from missing or undetermined setup. Required and
-          advisory describe the selected requirements, not execution results.
-          Open Assessments for pass, fail and incomplete results.
+          Required and advisory describe the selected requirements, not
+          execution results. Open Assessments for pass, fail and incomplete
+          results.
         </p>
       </>
     ),

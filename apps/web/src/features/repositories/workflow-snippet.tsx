@@ -16,6 +16,7 @@ export type WorkflowSnippetData = {
   notes: string[]
   ready: boolean
   checkIds: string[]
+  execution?: 'policy'
 }
 export function WorkflowSnippet({
   setup,
@@ -55,9 +56,11 @@ export function WorkflowSnippet({
           <DialogHeader className='pr-8'>
             <DialogTitle>{title}</DialogTitle>
             <DialogDescription>
-              Add these jobs to your PR workflow. Keep dependency installation
-              before the policy step, and make the final gate depend on every
-              check job.
+              Install these jobs once. Each run executes the published branch
+              policy, including newly selected checks. Scanner images are
+              installed automatically. Keep project dependency installation
+              before the policy step and configure project commands in
+              Standards.
             </DialogDescription>
           </DialogHeader>
           <div className='flex justify-end'>

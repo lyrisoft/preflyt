@@ -3,12 +3,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import {
   ArrowUpRight,
-  Check,
   Download,
   FileCode2,
   GitPullRequest,
   Loader2,
-  Plus,
   RefreshCw,
   Search,
   Sparkles,
@@ -49,6 +47,7 @@ type CheckRule = {
 type Inspection = {
   jobs: { id: string; name: string }[]
   checkIds: string[]
+  policyRunner?: boolean
   warnings: string[]
 }
 type Setup = {
@@ -162,8 +161,7 @@ export function PipelineWorkflowSetup({
   })
   const data = query.data
   const apiUrl = data?.apiUrl ?? ''
-  const selected =
-    workflowId ?? data?.connectedWorkflowIds[0] ?? data?.workflows[0]?.id ?? ''
+  const selected = workflowId ?? data?.connectedWorkflowIds[0] ?? ''
   // Keep forced-refresh state out of the repository/workflow cache key.
   // eslint-disable-next-line @tanstack/query/exhaustive-deps
   const source = useQuery({
@@ -208,16 +206,15 @@ export function PipelineWorkflowSetup({
     onSuccess: invalidate,
   })
   const add = useMutation({
-    mutationFn: (ids: string[]) =>
+    mutationFn: () =>
       governanceRequest<Draft>(`${base}/draft`, {
         policyId,
         workflowId: selected,
         workflow: yaml,
         jobId: targetJob,
-        checkIds: ids,
         apiUrl,
       }),
-    meta: { successMessage: 'Policy checks added to the YAML draft' },
+    meta: { successMessage: 'Policy runner installed in the YAML draft' },
     onSuccess: (result) => {
       setDrafts((previous) => ({
         ...previous,
@@ -358,7 +355,8 @@ export function PipelineWorkflowSetup({
             <div>
               <CardTitle>GitHub workflow</CardTitle>
               <CardDescription>
-                Paste the policy snippet, commit it and run your workflow.
+                Install the policy runner once. Publish policy changes in
+                Preflyt; your next workflow run uses them automatically.
               </CardDescription>
             </div>
           </div>
@@ -625,30 +623,24 @@ export function PipelineWorkflowSetup({
                           className='space-y-3 border-t bg-card p-3 lg:border-t-0 lg:border-l'
                           aria-label='Policy checks'
                         >
-                          <div className='flex items-center justify-between gap-2'>
-                            <h3 className='text-sm font-semibold'>
-                              Policy checks
-                            </h3>
-                            <Button
-                              size='sm'
-                              variant='ghost'
-                              disabled={
-                                !canManage ||
-                                busy ||
-                                !targetJob ||
-                                !data.checks.some((check) => check.format)
-                              }
-                              onClick={() =>
-                                add.mutate(
-                                  data.checks
-                                    .filter((check) => check.format)
-                                    .map((check) => check.id)
-                                )
-                              }
-                            >
-                              Add all
-                            </Button>
-                          </div>
+                          <h3 className='text-sm font-semibold'>
+                            Published policy
+                          </h3>
+                          <p className='text-xs text-muted-foreground'>
+                            This runner fetches the published policy on every
+                            run. Manage checks and project commands in
+                            Standards.
+                          </p>
+                          <Button
+                            size='sm'
+                            className='w-full'
+                            disabled={!canManage || busy || !targetJob}
+                            onClick={() => add.mutate()}
+                          >
+                            {inspection?.policyRunner
+                              ? 'Update policy runner'
+                              : 'Install policy runner'}
+                          </Button>
                           {inspection && inspection.jobs.length > 1 && (
                             <Select
                               value={targetJob}
@@ -683,40 +675,20 @@ export function PipelineWorkflowSetup({
                             />
                           </div>
                           <div className='max-h-72 space-y-1 overflow-auto'>
-                            {checks.map((check) => {
-                              const added = inspection?.checkIds.includes(
-                                check.id
-                              )
-                              return (
-                                <button
-                                  key={check.id}
-                                  type='button'
-                                  disabled={
-                                    !canManage || busy || !targetJob || added
-                                  }
-                                  className='flex w-full items-start justify-between gap-2 rounded-lg border p-2.5 text-left transition-colors hover:bg-accent disabled:opacity-60'
-                                  onClick={() => add.mutate([check.id])}
-                                >
-                                  <span className='min-w-0'>
-                                    <span className='block text-sm font-medium'>
-                                      {check.title}
-                                    </span>
-                                    <span className='text-xs text-muted-foreground'>
-                                      {check.required ? 'Required' : 'Optional'}{' '}
-                                      ·{' '}
-                                      {check.format === 'sarif'
-                                        ? 'Security scan'
-                                        : 'Test / build'}
-                                    </span>
-                                  </span>
-                                  {added ? (
-                                    <Check className='mt-0.5 size-4 shrink-0 text-muted-foreground' />
-                                  ) : (
-                                    <Plus className='mt-0.5 size-4 shrink-0' />
-                                  )}
-                                </button>
-                              )
-                            })}
+                            {checks.map((check) => (
+                              <div
+                                key={check.id}
+                                className='rounded-lg border p-2.5'
+                              >
+                                <p className='text-sm font-medium'>
+                                  {check.title}
+                                </p>
+                                <p className='text-xs text-muted-foreground'>
+                                  {check.required ? 'Required' : 'Optional'} ·{' '}
+                                  {check.format?.toUpperCase()}
+                                </p>
+                              </div>
+                            ))}
                             {!checks.length && (
                               <p className='py-2 text-sm text-muted-foreground'>
                                 No matching pipeline checks.

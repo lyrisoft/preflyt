@@ -62,7 +62,6 @@ const rewritten = () =>
     workflow,
     "tests",
     rules,
-    ["tests.required"],
     "https://api.preflyt.example",
   ).workflow;
 const route = {

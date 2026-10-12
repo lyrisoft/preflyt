@@ -52,8 +52,13 @@ export class AssessmentController {
   ) {}
   @Get()
   @Header('Cache-Control', 'no-store')
-  list(@Param('repositoryId') repo: string, @Query('sha') sha?: string) {
-    return this.assessments.list(repo, sha)
+  list(
+    @Param('repositoryId') repo: string,
+    @Query('sha') sha?: string,
+    @Query('selection') selection?: string,
+    @Query('revision') revision?: string,
+  ) {
+    return this.assessments.list(repo, sha, selection, revision)
   }
   @Get(':assessmentId')
   @Header('Cache-Control', 'no-store')

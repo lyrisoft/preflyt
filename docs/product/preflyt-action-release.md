@@ -2,7 +2,7 @@
 
 The Action source is maintained only in [lyrisoft/preflyt-action](https://github.com/lyrisoft/preflyt-action)
 and distributed through [GitHub Marketplace](https://github.com/marketplace/actions/preflyt-policy-check).
-Version v1.1.0 pins commit 49019a3e7febf942b937628bc831818e4a1b295f. MIT applies to the public Action only;
+Version v2.0.0 pins commit ccc826017dd0a02c5f5e6dfb0052ef2f8e482dfe. MIT applies to the public Action only;
 the Preflyt application remains separately licensed. No runtime copy is bundled
 with the application or API Docker image.
 
@@ -13,6 +13,14 @@ No workflow_run workflow or default-branch setup is needed. Documentation stays
 separate. A setup PR changes the reviewed workflow on the selected branch and
 removes that branch's old preflyt-gate.yml if present. Custom commands, genuine
 reports and optional signatures remain supported; AI findings remain advisory.
+
+## v2.0.0 policy runner
+
+Published to GitHub Marketplace on 12 October 2026 after hosted unit and real scanner CI passed (run 38313820497). The API exports execution version 1 from the approved immutable policy. The workflow has no explicit checks/report mappings; remove the former `checks` input when upgrading. New checks apply after publishing a new branch-policy revision.
+
+Built-in Semgrep, Gitleaks and Trivy recipes provision reviewed images, with read-only source, no OIDC/GitHub credentials or Docker socket, and bounded actual SARIF. Project dependencies remain in the workflow; custom commands and reports are configured in Standards. Missing execution remains incomplete. Both check and gate jobs use the same immutable Action pin.
+
+Local validation passed for clean/failing/missing-command policies, unsafe paths, credential stripping, genuine scanner output and the actual API manifest executed in the separate Action checkout. Release tag v2.0.0 and existing tags remain immutable. The Action source PR is [#1](https://github.com/lyrisoft/preflyt-action/pull/1); publication does not merge it into the default branch. Marketplace currently renders the default-branch README, so that description updates when the reviewed source change reaches main.
 
 ## Release procedure
 

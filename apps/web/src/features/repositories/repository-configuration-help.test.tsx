@@ -40,7 +40,7 @@ it('explains every configuration label and why CI-only checks are excluded from 
     .element(dialog.getByText(/these are excluded from Setup gaps/))
     .toBeInTheDocument()
   await expect
-    .element(dialog.getByText(/excluding CI-only checks from the denominator/))
+    .element(dialog.getByText(/Configuration setup lives under Standards/))
     .toBeInTheDocument()
   await page.getByRole('button', { name: 'Close', exact: true }).click()
   await view.unmount()

@@ -16,6 +16,8 @@ Findings come from saved reports. Each one belongs to a repository and an **exac
 - **Reported issues**: CI check failures, issues inside attached JUnit and SARIF reports, and retained analyzer findings from saved Health reports.
 - **Missing or unverified results**: checks that have no usable result yet.
 
+Passing CI reports do not create reported issues. Review their results and assessed commit under **Repositories → Checks** or **Assessments**. Security findings appear under **CI** only when the workflow submits a scanner report; repository Health findings appear under **Repository health**. Missing-result counts can include older assessed commits, even when the latest CI run passed.
+
 Open the finding title or **Details** to navigate to its own page. Each page has a stable link to the saved finding and assessment. **Back to findings** restores the list filters and page.
 
 Each source uses its **latest saved report for each commit**. A Health metric card opens Findings filtered to that exact saved Health report. Choose another source or repository to leave that saved-report scope. Findings from older commits stay visible but are not labelled "open" or "resolved" for the current branch.

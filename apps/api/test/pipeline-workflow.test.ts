@@ -37,11 +37,11 @@ jobs:
     steps:
       - run: ./deploy.sh
 `;
-const add = (yaml = workflow, ids = rules.map((rule) => rule.id)) =>
-  addPolicyChecks(yaml, "test", rules, ids, "https://api.preflyt.example")
+const add = (yaml = workflow) =>
+  addPolicyChecks(yaml, "test", rules, "https://api.preflyt.example")
     .workflow;
 describe("workflow YAML editor", () => {
-  it("adds inline policy checks while retaining jobs, comments, triggers and inherited write permissions", () => {
+  it("adds one policy runner while retaining jobs, comments, triggers and inherited write permissions", () => {
     const result = add();
     const before = readWorkflow(workflow).value,
       after = readWorkflow(result).value;
@@ -63,13 +63,13 @@ describe("workflow YAML editor", () => {
     expect(() => validateSetupWorkflow(result, rules)).not.toThrow();
   });
   it("updates the same policy step on repeated additions without duplicating it or losing proof mappings", () => {
-    let result = add(workflow, ["tests.required"]);
+    let result = add(workflow);
     const doc = readWorkflow(result).document;
     doc.setIn(
       ["jobs", "test", "steps", 2, "with", "proofs"],
       '{"tests.xml":"proof.json"}',
     );
-    result = add(doc.toString(), ["security.sast"]);
+    result = add(doc.toString());
     const steps = readWorkflow(result).value.jobs.test.steps;
     expect(
       steps.filter((s: any) => s.uses === policyAction),
@@ -77,13 +77,13 @@ describe("workflow YAML editor", () => {
     expect(steps[2].with.proofs).toContain("proof.json");
   });
   it("rejects unknown checks, non-step jobs, invalid YAML and dangerous alias expansion", () => {
-    expect(() => add(workflow, ["unapproved"])).toThrow();
+    expect(() => addPolicyChecks(workflow, 'deploy', rules, 'https://api.preflyt.example')).toThrow('checkout');
+    expect(() => addPolicyChecks(workflow, "test", [], "https://api.preflyt.example")).toThrow();
     expect(() =>
       addPolicyChecks(
         workflow,
         "missing",
         rules,
-        ["tests.required"],
         "https://api.preflyt.example",
       ),
     ).toThrow();
@@ -92,7 +92,7 @@ describe("workflow YAML editor", () => {
   });
   it("rejects incomplete configuration and URLs unusable by GitHub before a setup PR is created", () => {
     expect(() =>
-      validateSetupWorkflow(add(workflow, ["tests.required"]), rules),
+      validateSetupWorkflow(add().replace('api-url:', 'checks: "{}"\n          api-url:'), rules),
     ).toThrow();
     expect(() =>
       validateSetupWorkflow(
@@ -180,20 +180,18 @@ describe("workflow YAML editor", () => {
 });
 
 it("upgrades a local Action and its built-in recipe while preserving custom inputs", () => {
-  const generated = add(workflow, ["tests.required"]);
+  const generated = add(workflow);
   const doc = readWorkflow(generated).document;
   doc.setIn(["jobs", "test", "steps", 2, "uses"], "./.github/actions/preflyt-policy");
   doc.setIn(["jobs", "test", "steps", 2, "with", "checks"], JSON.stringify({
     "tests.required": { report: "reports/tests.xml", argv: ["python3", ".github/actions/preflyt-policy/recipes.py", "tests.required", "reports/tests.xml"] },
   }));
   doc.setIn(["jobs", "test", "steps", 2, "with", "proofs"], "{}");
-  const upgraded = readWorkflow(add(doc.toString(), ["security.sast"])).value.jobs.test.steps;
+  const upgraded = readWorkflow(add(doc.toString())).value.jobs.test.steps;
   expect(upgraded.filter((step: any) => isPolicyAction(step.uses))).toHaveLength(1);
   expect(upgraded[2].uses).toBe(policyAction);
   expect(upgraded[2].with.proofs).toBe("{}");
-  expect(JSON.parse(upgraded[2].with.checks)["tests.required"]).toEqual({
-    report: "reports/tests.xml", argv: ["preflyt-recipe", "tests.required", "reports/tests.xml"],
-  });
+  expect(upgraded[2].with).not.toHaveProperty('checks');
   expect(isPolicyAction("other/preflyt-action@v1.0.0")).toBe(false);
   expect(isPolicyAction("lyrisoft/preflyt-action@main")).toBe(false);
 });

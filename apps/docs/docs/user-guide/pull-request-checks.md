@@ -30,6 +30,14 @@ sequenceDiagram
 
 A result only counts when Preflyt verifies the actual report-producing jobs for the current run attempt and PR head commit. The final gate runs in the same workflow after those jobs finish; Preflyt does not wait for that gate to finish before evaluating its predecessors. An uploaded report or a success label on its own can never produce a pass.
 
+## Review saved check results
+
+Open **Repositories → your repository → Checks** to see the latest saved assessment for the selected standards and revision. The cards show passed checks, failed checks and checks with missing or unverified evidence. The results table explains each check and links to its saved evidence.
+
+The **assessed commit** identifies the revision those results apply to. It can differ from the inspected commit in the repository profile. A successful GitHub job alone does not establish a passing Preflyt check; the saved server evaluation verifies the required evidence. When no assessment exists or verification fails, result counts remain unavailable.
+
+Assessment activity appears above the results and counts saved evaluations, including repeated evaluations of the same commit. Configuration setup and check sources are under **Standards**. GitHub's current merge permission remains separate from these historical saved results.
+
 ## Before you start
 
 Check each of these. Several need a deployment administrator.
@@ -47,7 +55,7 @@ For item 6, open **Settings → PR feedback**, choose the repository and select 
 
 The **Public Preflyt API URL** applies without a restart. If it is empty, the snippet shows `<PUBLIC_PREFLYT_API_URL>` and a note tells you to ask a deployment administrator to set it.
 
-## Add the checks to your workflow
+## Install the policy runner once
 
 1. Open **Policies** and choose the **CI jobs** tab.
 2. Choose the repository and the branch policy. Under **Policy workflow snippet**, select **Copy snippet**. You can also use **View YAML** on any standard in **Standards**.
@@ -59,7 +67,7 @@ The generated standalone snippet has two jobs. When integrating with an existing
 - **`preflyt_checks`** runs your checks and submits the results using the Preflyt Action.
 - **`preflyt_gate`** (named **Preflyt final gate**) waits for Preflyt's verified result and fails if the policy fails or is incomplete. It depends on every other job in that PR workflow. Do not add a separate `workflow_run` publication-gate workflow. Documentation and post-merge deployment workflows can remain separate.
 
-The snippet already contains your API URL, a pinned release of the Preflyt Action and the check IDs of your policy, so copy it from Preflyt rather than writing it by hand.
+The snippet contains your API URL and an immutable Preflyt Action pin. It contains no check list or report mapping. The Action fetches the published target-branch policy at the beginning of each run. Adding a check or changing a standard takes effect after you publish a new policy revision; the workflow stays the same.
 
 ```yaml
 # Shape of the generated snippet. Copy the real one from Preflyt.
@@ -80,8 +88,6 @@ jobs:
         uses: lyrisoft/preflyt-action@<pinned commit>
         with:
           api-url: https://preflyt.example.com/api
-          checks: |
-            { "tests.required": { "report": ".preflyt/results/tests.required.xml", ... } }
   preflyt_gate:
     name: Preflyt final gate
     needs: [preflyt_checks]
@@ -90,9 +96,9 @@ jobs:
 
 ### What the built-in checks run
 
-For these check IDs the Action reuses the tools already installed on the runner and does not install anything: `tests.required`, `types.required`, `build.required`, `lint.required`, `security.sast`, `secrets.scan`, `security.dependencies`, `containers.scan`, `iac.policy` and `iac.exposures`. Tests produce JUnit reports and security checks produce SARIF.
+The built-in security recipes automatically pull pinned scanner images: **Semgrep** for static application security, **Gitleaks** for secrets, and **Trivy** for dependency, container and infrastructure scans. Docker must be available on the Linux runner. Source is mounted read-only, scans receive no GitHub/OIDC credentials or Docker socket, and raw scanner logs are suppressed. Set `CONTAINER_IMAGE` in the job when selecting container image scanning.
 
-For any other check, generate the report in an earlier step, or give the check a **Workflow command** and **Result file** when you create it in [Standards](standards.md). The snippet notes any check that still needs one.
+Build, type checking, tests and lint reuse the project tools installed in the job. Keep your dependency installation before Preflyt. Configure a **Workflow command** and **Result file** in [Standards](standards.md) for a project-specific or custom control. Commands belong to the approved policy revision; editing an unpublished standard does not change an active policy. A required check without a runnable command, tool or real report stays **Incomplete**.
 
 An Action submission can include up to **10 reports**. Custom commands must produce real results for the selected check; missing or unrelated reports cannot satisfy it.
 
@@ -101,7 +107,7 @@ An Action submission can include up to **10 reports**. Custom commands must prod
 Instead of pasting, open the **CI jobs** tab and use the **GitHub workflow** panel:
 
 1. Choose the workflow to change with **Choose workflow**.
-2. Optionally use **Edit YAML** to adjust it, or **Rewrite with AI** to merge the checks into an existing workflow. Review the proposal before using it.
+2. Use **Edit YAML**, choose the job and select **Install policy runner**. **Rewrite with AI** can help preserve existing jobs. Review the proposal before using it.
 3. Choose **Create setup PR**.
 
 Preflyt opens a pull request that adds the workflow. It never edits your default branch directly, and the App needs **Contents**, **Workflows** and **Pull requests** write permission for this. **Download files** is a fallback if you would rather commit it yourself.

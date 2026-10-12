@@ -34,8 +34,8 @@ import {
 } from '@/components/ui/table'
 import { StatusBadge } from '@/components/status-badge'
 import { SurfaceIcon } from '@/components/surface-icon'
-import type { ControlFilter, RepositoryTab } from './posture-summary'
 import { useStandards, type Standards } from './repository-queries'
+import type { ControlFilter, RepositoryTab } from './repository-tabs'
 import {
   configurationOrder,
   configurationStatus,

@@ -28,9 +28,12 @@ export function resolveBindings(
     deliveryId: string
     sourceObjectId: string
     sourceIdentity?: unknown
+    sourceStatus?: string | null
+    sourceConclusion?: string | null
     sourceUpdatedAt: Date | null
     observedAt: Date
   }[],
+  verifiedReports: ReadonlyMap<string, ReadonlySet<string>> = new Map(),
 ) {
   const mappings: {
       ruleId: string
@@ -59,10 +62,23 @@ export function resolveBindings(
         b.observedAt.getTime() - a.observedAt.getTime() ||
         b.deliveryId.localeCompare(a.deliveryId),
     )
-    if (matches[0])
+    const latest = matches[0]
+    // A successful completion notification carries no report by itself. Keep
+    // the server-verified report for that exact run attempt, while a later
+    // failed, pending or unknown result must still supersede earlier success.
+    const preferred = latest?.sourceStatus === 'completed' &&
+      latest.sourceConclusion === 'success'
+      ? matches.find(row =>
+          row.sourceObjectId === latest.sourceObjectId &&
+          runAttempt(row.sourceIdentity) === runAttempt(latest.sourceIdentity) &&
+          row.sourceStatus === 'completed' && row.sourceConclusion === 'success' &&
+          verifiedReports.get(binding.ruleId)?.has(row.deliveryId))
+      : undefined
+    const chosen = preferred ?? latest
+    if (chosen)
       mappings.push({
         ruleId: binding.ruleId,
-        deliveryId: matches[0].deliveryId,
+        deliveryId: chosen.deliveryId,
         bindingApproved: true,
       })
   }
