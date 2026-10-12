@@ -166,8 +166,7 @@ export function FindingDetailsPage({
               <Button
                 variant='outline'
                 size='sm'
-                disabled={result.isFetching}
-                onClick={() => void result.refetch()}
+                onClick={() => window.location.reload()}
               >
                 <RefreshCw />
                 Refresh
