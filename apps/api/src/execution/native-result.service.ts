@@ -1,4 +1,4 @@
-import { currentStandards } from '../standards/policy-standards.js'
+import { nativeSelectionCurrent } from './native-selection-current.js'
 import { recordNativeExecutionFailure } from '../notifications/notification-event.js'
 import { nativeRequestIntegrity } from './native-request-integrity.js'
 import { ConflictException, NotFoundException } from '@nestjs/common'
@@ -77,8 +77,7 @@ export class NativeResultService {
           throw new ConflictException(
             'Native attempt changed or its worker lease expired',
           )
-        const selection = await currentStandards(tx, live.repositoryId, { expectedId: live.selectionId })
-        if (selection?.id !== live.selectionId)
+        if (!await nativeSelectionCurrent(tx, live))
           throw new ConflictException(
             'Standards changed during native execution',
           )
@@ -159,7 +158,7 @@ export class NativeResultService {
                         'REPORT_UNAVAILABLE',
                       ].includes(check.reason))),
               )))
-        if (executionFailed) await recordNativeExecutionFailure(tx, updated)
+        if (executionFailed && !live.healthAssessmentId) await recordNativeExecutionFailure(tx, updated)
         return { record: updated, duplicate: false }
       },
       { isolationLevel: 'Serializable' },
@@ -170,7 +169,7 @@ export class NativeResultService {
       'execution.run',
     )
     // Separate immutable assessment; retrying a persisted completion repairs a missed assessment without rerunning code.
-    if (['SUCCEEDED', 'FAILED', 'BLOCKED'].includes(result.record.state))
+    if (!record.healthAssessmentId && ['SUCCEEDED', 'FAILED', 'BLOCKED'].includes(result.record.state))
       await this.assessments.createNative(
         record.repositoryGithubId,
         record.sourceSha,

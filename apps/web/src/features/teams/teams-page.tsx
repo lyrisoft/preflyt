@@ -20,6 +20,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { OptionSelect } from '@/components/ui/option-select'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { AppHeader } from '@/components/layout/app-header'
 import { Main } from '@/components/layout/main'
@@ -1179,22 +1180,20 @@ function ImportTeams({
           )}
           {options.installations.length ? (
             <div className='flex gap-2'>
-              <select
-                aria-label='GitHub organization'
-                className='h-9 min-w-0 flex-1 rounded-md border bg-background px-3 text-sm'
+              <OptionSelect
+                label='GitHub organization'
+                className='min-w-0 flex-1'
                 value={installation}
-                onChange={(e) => {
-                  setInstallation(e.target.value)
+                onValueChange={(value) => {
+                  setInstallation(value)
                   setLoaded(false)
                   setTeams([])
                 }}
-              >
-                {options.installations.map((i) => (
-                  <option key={i.id} value={i.id}>
-                    {i.name}
-                  </option>
-                ))}
-              </select>
+                options={options.installations.map((i) => ({
+                  value: i.id,
+                  label: i.name,
+                }))}
+              />
               <Button
                 size='sm'
                 variant='outline'

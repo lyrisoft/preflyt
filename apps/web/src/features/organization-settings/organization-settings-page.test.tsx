@@ -160,6 +160,25 @@ it('keeps workspace settings readable across themes and viewport sizes', async (
   await expect
     .element(view.getByRole('heading', { name: 'Workspace details' }))
     .toBeVisible()
+  await expect
+    .poll(() => {
+      const headings = [...document.querySelectorAll('h2')]
+      const identity = headings
+        .find((h) => h.textContent === 'Workspace identity')
+        ?.closest('form')
+        ?.getBoundingClientRect()
+      const details = headings
+        .find((h) => h.textContent === 'Workspace details')
+        ?.closest('section')
+        ?.getBoundingClientRect()
+      return (
+        !!identity &&
+        !!details &&
+        Math.abs(identity.top - details.top) < 1 &&
+        Math.abs(identity.height - details.height) < 1
+      )
+    })
+    .toBe(true)
   try {
     for (const mobile of [false, true]) {
       await page.viewport(mobile ? 390 : 1440, mobile ? 844 : 1000)

@@ -12,6 +12,14 @@ export class FindingsController {
     return this.findings.list(req.preflytSession, query)
   }
 
+  @Get(':id') @Header('Cache-Control', 'no-store')
+  detail(@Req() req: Request & { preflytSession: AuthenticatedSession }, @Param('id') id: string, @Query('assessment') assessment?: string) {
+    return this.findings.detail(req.preflytSession, id, assessment)
+  }
+  @Get(':id/source') @Header('Cache-Control', 'no-store')
+  source(@Req() req: Request & { preflytSession: AuthenticatedSession }, @Param('id') id: string, @Query('assessment') assessment?: string) {
+    return this.findings.source(req.preflytSession, id, assessment)
+  }
   @Get(':id/assignees') @Header('Cache-Control', 'no-store')
   assignees(@Req() req: Request & { preflytSession: AuthenticatedSession }, @Param('id') id: string) {
     return this.findings.assignees(req.preflytSession, id)

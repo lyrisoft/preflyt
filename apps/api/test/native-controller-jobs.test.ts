@@ -63,8 +63,9 @@ afterEach(async () => {
 })
 async function fixture(
   ruleId:
-    'tests.required' | 'secrets.scan' | 'lint.required' = 'tests.required',
+    'tests.required' | 'secrets.scan' | 'lint.required' | 'quality.duplication' | 'tests.coverage' = 'tests.required',
   backend: 'docker' | 'kubernetes' = 'docker',
+  health = false,
 ) {
   directory = await mkdtemp(join(tmpdir(), 'preflyt-controller-contract-'))
   const now = Date.now(),
@@ -137,11 +138,12 @@ async function fixture(
     '51',
     'a'.repeat(40),
   )
+  const selectionId = health ? 'health:' + randomUUID() : 'selection'
   const { planHash, ...plan } = buildNativePlan({
     organizationId: 'org',
     repositoryId: '51',
     sourceSha: source.sourceSha,
-    selectionId: 'selection',
+    selectionId,
     rules: [
       {
         id: ruleId,
@@ -158,7 +160,7 @@ async function fixture(
     repositoryId: '51',
     sourceSha: source.sourceSha,
     sourceHash: source.sourceHash,
-    selectionId: 'selection',
+    selectionId,
     planHash,
     plan,
     approvalHash: 'f'.repeat(64),
@@ -173,7 +175,7 @@ async function fixture(
         ? '<testsuite tests="1" failures="0" errors="0" skipped="0"><testcase name="ok"/></testsuite>'
         : JSON.stringify({
             version: '2.1.0',
-            runs: [{ tool: { driver: { name: 'fixture' } }, results: [] }],
+            runs: [{ tool: { driver: { name: id === 'quality.duplication' ? 'Preflyt duplication' : id === 'tests.coverage' ? 'Preflyt test coverage' : 'fixture' } }, ...(id === 'quality.duplication' ? {properties:{preflytMeasurement:{version:1,kind:'duplication',formula:'unique-lines-v1',analyzedLines:20,duplicatedLines:0,analyzedFiles:1,clonePairs:0,minimumLines:5,minimumTokens:50,mode:'weak'}}} : {}), ...(id === 'tests.coverage' ? {properties:{preflytMeasurement:{version:1,kind:'coverage',formula:'node-covered-lines-v1',scope:'node-loaded-files',analyzedLines:10,coveredLines:6,analyzedFiles:1,tests:1,passed:1,failed:0,skipped:0,cancelled:0,todo:0}}} : {}), results: [] }],
           }),
     )
     return {
@@ -511,4 +513,58 @@ it('serializes simultaneous admissions and preserves cleanup failures as incompl
   await jobs.initialize()
   expect(await jobs.call('status', expected)).toEqual(completed)
   expect(runner).toHaveBeenCalledOnce()
+})
+
+it('signs bounded located findings only for health attempts and omits secret text',async()=>{
+ const {expected,source,runner}=await fixture('secrets.scan','docker',true)
+ const report=Buffer.from(JSON.stringify({version:'2.1.0',runs:[{tool:{driver:{name:'fixture'}},results:[{ruleId:'fixture-secret',level:'error',message:{text:'password=do-not-expose-this'},locations:[{physicalLocation:{artifactLocation:{uri:'fixture.js'},region:{startLine:1}}}]}]}]}))
+ runner.mockImplementationOnce(async(scope:any)=>({...scope,...nativeCheckOutcome('secrets.scan',1,report),adapterId:nativeAdapters['secrets.scan'].id,image:nativeToolReviews()!.reviews[0].image,toolVersion:'1',configHash:'c'.repeat(64),exitCode:1,cleanupConfirmed:true,report:report.toString('base64'),jobId:'fixture',attemptId:randomUUID(),approvalHash:expected.approvalHash,environmentId:'fixture'}))
+ await jobs!.call('admit',expected,source)
+ const result=await wait(()=>jobs!.call('status',expected));const receipt=verifyNativeReceipt(result.signature,expected)!
+ expect(receipt.checks[0].findings?.[0]).toMatchObject({path:'fixture.js',line:1,title:'Potential secret detected; sensitive details hidden'})
+ expect(JSON.stringify(receipt)).not.toContain('do-not-expose-this');expect(receipt.checks[0]).not.toHaveProperty('report')
+})
+
+it('signs measured duplication only for health and rejects missing or invalid measurement evidence',async()=>{
+ const {expected,source,runner}=await fixture('quality.duplication','docker',true)
+ await jobs!.call('admit',expected,source)
+ const result=await wait(()=>jobs!.call('status',expected))
+ const receipt=verifyNativeReceipt(result.signature,expected)!
+ expect(receipt.checks[0]).toMatchObject({state:'PASS',measurement:{analyzedLines:20,duplicatedLines:0,formula:'unique-lines-v1'}})
+ const invalid={...receipt,checks:[{...receipt.checks[0],measurement:{...receipt.checks[0].measurement!,duplicatedLines:21}}]}
+ const {signNativeReceipt}=await import('../src/execution/native-receipt.js')
+ expect(verifyNativeReceipt(signNativeReceipt(invalid,privateKey,publicKey),expected)).toBeNull()
+ expect(runner).toHaveBeenCalledOnce()
+})
+
+it('signs actual-test coverage only when its measured successful counts remain valid',async()=>{
+ const {expected,source}=await fixture('tests.coverage','docker',true)
+ await jobs!.call('admit',expected,source)
+ const result=await wait(()=>jobs!.call('status',expected))
+ const receipt=verifyNativeReceipt(result.signature,expected)!
+ expect(receipt.checks[0]).toMatchObject({state:'PASS',measurement:{kind:'coverage',tests:1,coveredLines:6,analyzedLines:10}})
+ const {signNativeReceipt}=await import('../src/execution/native-receipt.js')
+ const invalid:any={...receipt,checks:[{...receipt.checks[0],measurement:{...receipt.checks[0].measurement!,skipped:1}}]}
+ expect(verifyNativeReceipt(signNativeReceipt(invalid,privateKey,publicKey),expected)).toBeNull()
+})
+
+it('quarantines invalid source locations in the signed health receipt and preserves valid issues',async()=>{
+ const {expected,source,runner}=await fixture('secrets.scan','docker',true)
+ const report=Buffer.from(JSON.stringify({version:'2.1.0',runs:[{tool:{driver:{name:'fixture'}},results:['fixture.js','absent.js'].map(path=>({ruleId:'fixture-secret',level:'error',message:{text:'Issue'},locations:[{physicalLocation:{artifactLocation:{uri:path},region:{startLine:1}}}]}))}]}))
+ runner.mockImplementationOnce(async(scope:any)=>({...scope,...nativeCheckOutcome('secrets.scan',1,report),adapterId:nativeAdapters['secrets.scan'].id,image:nativeToolReviews()!.reviews[0].image,toolVersion:'1',configHash:'c'.repeat(64),exitCode:1,cleanupConfirmed:true,report:report.toString('base64'),jobId:'fixture',attemptId:randomUUID(),approvalHash:expected.approvalHash,environmentId:'fixture'}))
+ await jobs!.call('admit',expected,source)
+ const result=await wait(()=>jobs!.call('status',expected));const receipt=verifyNativeReceipt(result.signature,expected)!
+ expect(receipt.checks[0]).toMatchObject({state:'INCOMPLETE',reason:'SOURCE_LOCATION_INVALID'})
+ expect(receipt.checks[0].findings).toHaveLength(1)
+ expect(receipt.checks[0].findings![0].path).toBe('fixture.js')
+ expect(receipt.checks[0].reportHash).toBe(nativeCheckOutcome('secrets.scan',1,report).reportHash)
+})
+
+it('signs bounded exact-rule analyzer guidance with Health findings',async()=>{
+ const {expected,source,runner}=await fixture('lint.required','docker',true)
+ const report=Buffer.from(JSON.stringify({version:'2.1.0',runs:[{tool:{driver:{name:'fixture',rules:[{id:'fixture-rule',fullDescription:{text:'Rule explanation'},help:{text:'Remediation advice'}}]}},results:[{ruleId:'fixture-rule',level:'error',message:{text:'Issue'},locations:[{physicalLocation:{artifactLocation:{uri:'fixture.js'},region:{startLine:1}}}]}]}]}))
+ runner.mockImplementationOnce(async(scope:any)=>({...scope,...nativeCheckOutcome('lint.required',1,report),adapterId:nativeAdapters['lint.required'].id,image:nativeToolReviews()!.reviews[0].image,toolVersion:'1',configHash:'c'.repeat(64),exitCode:1,cleanupConfirmed:true,report:report.toString('base64'),jobId:'fixture',attemptId:randomUUID(),approvalHash:expected.approvalHash,environmentId:'fixture'}))
+ await jobs!.call('admit',expected,source)
+ const result=await wait(()=>jobs!.call('status',expected));const receipt=verifyNativeReceipt(result.signature,expected)!
+ expect(receipt.checks[0].findings?.[0].reportGuidance).toEqual({version:1,source:'ANALYZER_REPORT',explanation:'Rule explanation',advice:'Remediation advice'})
 })

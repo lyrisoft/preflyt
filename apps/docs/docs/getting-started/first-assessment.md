@@ -2,86 +2,40 @@
 id: first-assessment
 title: Your first report
 sidebar_label: First report
-description: Create your first repository report, then review its checks, standards and evidence.
+description: Follow your repository's first Health assessment without setting up CI.
 ---
 
 # Your first report
 
-A **report** (an assessment of one commit) shows which checks your repository meets, which fail and which still lack results. You need to be an **Owner or Admin** and to have [selected a repository](select-repositories.md).
+Selecting a repository queues a **Health assessment** of its default branch. Open the repository’s **Health** tab to follow it. You do not need a workflow, pull request or saved standards for this report.
 
-## The quick way: Create first report
+## Follow the assessment
 
-1. Open **Overview**.
-2. Under **Get your first repository report**, choose a repository with **Select a repository**.
-3. Choose **Create first report**.
+1. [Select a repository](select-repositories.md), then open its **Health** view.
+2. Watch **Queued** change to **Running**. The worker freezes the branch commit before inspection and analysis.
+3. Read the processing status, completeness and freshness separately. **Completed** means the report was saved; it can still be **Partial**.
+4. Review each analysis outcome and its limits. Open a finding to see its rule, severity, file and reported line at the assessed commit.
+5. Use **Reassess** after changes. To assess another branch, choose it in **Assessment branch**, then choose **Reassess**. The previous report remains in history.
 
-Preflyt then does three things, showing progress as it goes:
+Owners, Admins and Security Engineers with repository access can request Health analysis. Readers see only reports within their assigned scope. Completion, partial-analysis and failure notifications link to the report when notifications are enabled.
 
-1. **Inspects the repository** if it has not been inspected yet: languages, frameworks and existing CI configuration.
-2. **Saves the recommended standards** for the detected stack, unless you have already chosen your own.
-3. **Creates the report** for the inspected commit.
-
-When it finishes you see "Your first report is ready". Missing check results stay visible as missing. Merge blocking and AI source-sharing settings stay as they were.
-
-## The step-by-step way
-
-Use this when you want to choose the standards yourself first.
-
-### 1. Inspect the repository
-
-1. Open **Repositories** and open a selected repository.
-2. Choose **Discover profile**.
-
-Preflyt reads the default branch through the GitHub App and records what it finds at that commit. Nothing is built or run.
-
-The **Overview** tab then shows:
-
-- a summary of **Selected checks**, **Configuration hints**, **Recent CI results** and **Recent assessments**,
-- **Repository checks**, filtered by **All**, **Needs review** or **Files found**,
-- the detected **Stack**, **Tooling** and **Snapshot** (branch, commit and capture time).
-
-**Related files found** means a supported file exists for that check, for example a workflow that mentions a scanner. It is information, not a pass: whether the check actually ran is shown in the report. Open the **evidence** button on a row to see the files, linked to GitHub at that commit.
-
-:::info Partial inspection
-If Preflyt could not read some files, the header shows **Partial inspection**. Select it to see why. Checks that depend on unread files show **Unknown**, not missing.
+:::info Analysis availability
+Health uses qualified analyzers in a separately approved execution runtime. Without that runtime, Preflyt saves an **Inspection only / Partial** report with detected repository context and the analyses that could not run. Finding counts are unavailable. Ask the deployment operator to complete runtime qualification; a saved report does not establish that a scanner ran.
 :::
 
-Choose **Refresh profile** to inspect the latest commit again.
+Static Health defaults do not install dependencies, run package scripts or tests, build images, invoke AI, publish standards or alter GitHub protection. They do not produce a merge readiness check. See [Repository health](../user-guide/repository-health.md) for supported analyzers, source handling and labels.
 
-### 2. Choose standards
+## Existing repositories
 
-1. Open the **Standards** tab and choose **Choose standards**.
-2. Pick a **Requirement level**: **Core** (baseline requirements), **Recommended** (adds broader checks) or **Strict** (also requires resilience checks).
-3. Choose up to five standards. Standards that match the detected stack are marked **Recommended**.
-4. Review the changes Preflyt shows, then choose **Save standards**.
+Upgrading does not automatically scan every repository selected before this feature was installed. Open **Health** and choose **Assess repository** for a repository that shows **Not assessed**. Existing standards and policies remain in place.
 
-Saving standards does not turn on GitHub merge protection, and existing branch policies keep their approved version until you publish a new revision.
+## Add continuous feedback when ready
 
-### 3. Create the report
+Health gives a report about a repository revision. [Pull request checks](../user-guide/pull-request-checks.md) provide ongoing feedback about proposed changes:
 
-1. Open the **Assessments** tab and choose **New assessment**.
-2. The commit is filled with the inspected commit. You can enter another full 40-character SHA that Preflyt has a profile or CI result for.
-3. Under **CI result per control**, leave **Use the approved CI source if available** unless you need to link a specific result by hand.
-4. Choose **Create assessment**.
+1. Review recommended [standards](../user-guide/standards.md) and publish a [policy](../user-guide/policies.md) for the target branch.
+2. Review the workflow setup and create a setup PR, then merge it through your normal process.
+3. Confirm a test PR has an assessment and a matching **Preflyt / Engineering Readiness** check at its current commit.
+4. Optionally enable [AI reviews](../user-guide/ai-reviews.md) and [merge protection](../user-guide/merge-protection.md).
 
-:::caution Manual links are your claim
-A CI result you link by hand is recorded as unverified. It never turns into a pass on its own. See [Evidence and trust](../concepts/evidence-and-trust.md).
-:::
-
-## Reading the report
-
-Open a row in **Saved assessments** to see the report:
-
-- The **Merge review result** at the top: **Required checks passed**, **Required checks failed**, **Required results incomplete** or **Optional checks need attention**.
-- A **Next step** telling you what to do.
-- Failed and incomplete required checks first. Passing and optional checks are available through the filter.
-- **Source and verification details** for the digests of everything the report saved.
-
-Reports are historical: each one describes a single commit. If your GitHub App receives pull request events, Preflyt also creates reports automatically for pull request commits in repositories with saved standards.
-
-## What next
-
-- Make this run on every pull request: [Pull request checks](../user-guide/pull-request-checks.md).
-- Read [How Preflyt works](../concepts/how-preflyt-works.md) and [Status labels](../concepts/status-labels.md).
-- Set up [webhooks](../self-hosting/github-app.md#3-subscribe-to-events) to collect CI results automatically.
-- Invite your team from **Access Control**.
+The **Checks** tab shows detected setup files. **Assessments** retains commit assessments of selected standards and CI evidence; **CI activity** shows GitHub results. These views remain separate from Health. The Overview's **Set up your first CI assessment** shortcut can save recommended standards after your explicit request; automatic Health assessment does not do this.

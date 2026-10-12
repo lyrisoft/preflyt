@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { GitHubProviderService } from '../src/github/github-provider.service.js'
 
@@ -119,3 +120,29 @@ it('rejects an in-flight token minted across a connection change', async () => {
   });
   await expect(provider.installationToken(100n)).rejects.toThrow('connection changed'); expect(provider.tokens.size).toBe(0); provider.close();
 });
+
+const healthSourceFixture = () => {
+ const provider=new GitHubProviderService() as any, sha='a'.repeat(40), treeSha='b'.repeat(40), content=Buffer.from('first\nsecond\nthird\n')
+ const blobSha=createHash('sha1').update(`blob ${content.length}\0`).update(content).digest('hex')
+ const tree={sha:treeSha,truncated:false,tree:[{path:'src/app.ts',type:'blob',mode:'100644',size:content.length,sha:blobSha}]}
+ const blob={sha:blobSha,size:content.length,encoding:'base64',content:content.toString('base64')}
+ const read=vi.fn(async(path:string)=>path.includes('/commits/')?{sha,commit:{tree:{sha:treeSha}}}:path.includes('/git/trees/')?tree:blob)
+ const open=vi.spyOn(provider,'openRepository').mockResolvedValue({metadata:{owner:{login:'fixture'},name:'app'},request:read})
+ return {provider,sha,content,tree,blob,read,open}
+}
+it('verifies the immutable regular Git blob before returning numbered-source input with a contents-only token',async()=>{
+ const f=healthSourceFixture()
+ expect(await f.provider.readHealthSource(500n,501n,f.sha,'src/app.ts')).toBe(f.content.toString())
+ expect(f.open).toHaveBeenCalledWith(500n,501n,'contents');expect(f.read).toHaveBeenCalledTimes(3)
+ for(const path of ['../app.ts','/app.ts','src/%2e%2e/app.ts','src/app.ts?secret','src\\app.ts']) await expect(f.provider.readHealthSource(500n,501n,f.sha,path)).rejects.toThrow()
+ expect(f.read).toHaveBeenCalledTimes(3);f.provider.close()
+})
+it.each(['symlink','submodule','truncated','oversized','tampered'])('rejects %s source instead of showing unverified code',async(kind)=>{
+ const f=healthSourceFixture()
+ if(kind==='symlink') f.tree.tree[0].mode='120000'
+ if(kind==='submodule') f.tree.tree[0].type='commit'
+ if(kind==='truncated') f.tree.truncated=true
+ if(kind==='oversized') f.tree.tree[0].size=262145
+ if(kind==='tampered') f.blob.content=Buffer.from('tampered source text!').toString('base64')
+ await expect(f.provider.readHealthSource(500n,501n,f.sha,'src/app.ts')).rejects.toThrow();f.provider.close()
+})

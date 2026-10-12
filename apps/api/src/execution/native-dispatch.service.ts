@@ -1,4 +1,4 @@
-import { currentStandards } from '../standards/policy-standards.js'
+import { nativeSelectionCurrent } from './native-selection-current.js'
 import { recordNativeExecutionFailure } from '../notifications/notification-event.js'
 import { configurationValue } from '../configuration/runtime-configuration.js'
 import { digest } from '../assessments/assessment-digest.js'
@@ -29,15 +29,12 @@ export class NativeDispatchService {
     this.shutdown.abort()
   }
   async reconcile() {
-    if (
-      this.shutdown.signal.aborted ||
-      configurationValue('NATIVE_EXECUTION_ENABLED') !== 'true'
-    )
-      return
+    if (this.shutdown.signal.aborted) return
+    const enabled = configurationValue('NATIVE_EXECUTION_ENABLED') === 'true'
     const now = new Date()
     const rows = await this.prisma.nativeExecutionRequest.findMany({
       where: {
-        state: { in: ['QUEUED', 'PREPARING', 'RUNNING', 'CANCEL_REQUESTED'] },
+        state: { in: enabled ? ['QUEUED', 'PREPARING', 'RUNNING', 'CANCEL_REQUESTED'] : ['PREPARING', 'RUNNING', 'CANCEL_REQUESTED'] },
         OR: [{ leaseUntil: null }, { leaseUntil: { lte: now } }],
       },
       orderBy: [{ requestedAt: 'asc' }, { id: 'asc' }],
@@ -45,6 +42,7 @@ export class NativeDispatchService {
     })
     for (const row of rows) {
       if (this.shutdown.signal.aborted) return
+      if (!enabled && row.state === 'QUEUED') continue
       const lease = new Date(Date.now() + 120000)
       const claimed = await this.prisma.nativeExecutionRequest.updateMany({
         where: { id: row.id, state: row.state, leaseUntil: row.leaseUntil },
@@ -82,9 +80,7 @@ export class NativeDispatchService {
         row.repositoryGithubId,
         'execution.run',
       )
-      const selection =
-        await currentStandards(this.prisma, repo.id, { expectedId: row.selectionId })
-      if (selection?.id !== row.selectionId)
+      if (!await nativeSelectionCurrent(this.prisma, row))
         throw new Error('Native standards changed')
       const preflight = await this.status.status(
         session,
@@ -110,10 +106,9 @@ export class NativeDispatchService {
           row.repositoryGithubId,
           'execution.run',
         )
-        const latestSelection =
-          await currentStandards(this.prisma, repo.id, { expectedId: row.selectionId })
+        const selectionCurrent = await nativeSelectionCurrent(this.prisma, row)
         if (
-          latestSelection?.id !== row.selectionId ||
+          !selectionCurrent ||
           (row.sourceHash && row.sourceHash !== source.sourceHash) ||
           (row.runtimeApprovalHash &&
             row.runtimeApprovalHash !== reviewed.approvalHash)

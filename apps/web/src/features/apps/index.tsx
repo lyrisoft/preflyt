@@ -1,4 +1,3 @@
-import { toast } from 'sonner'
 import { useEffect, useState } from 'react'
 import { Link, getRouteApi } from '@tanstack/react-router'
 import {
@@ -23,6 +22,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import { toast } from 'sonner'
 import { API_BASE_URL } from '@/lib/api'
 import { chartAnimation, chartTooltipAnimation } from '@/lib/chart-motion'
 import { cn } from '@/lib/utils'
@@ -54,9 +54,17 @@ import {
 import { AppHeader } from '@/components/layout/app-header'
 import { Main } from '@/components/layout/main'
 import { PageHeader } from '@/components/page-header'
+import { PageHelpDrawer } from '@/components/page-help-drawer'
 import { StatusBadge } from '@/components/status-badge'
 import { TechIcon } from '@/features/repositories/tech-icon'
 import { useNavigationSession } from '@/features/workspace/navigation-session'
+import { useHealthPortfolio } from '../health/health-api'
+import { healthPortfolioHelp } from '../health/health-help-content'
+import {
+  InventoryHealthAction,
+  InventoryHealthCell,
+  type InventoryHealth,
+} from '../health/inventory-health'
 import { canPerform } from '../workspace/scoped-access'
 
 const route = getRouteApi('/_authenticated/apps/')
@@ -82,15 +90,17 @@ export function RepositoryInventoryTable({
   canManage,
   savingRepository,
   onSelectionChange,
+  health,
 }: {
   repositories: Repository[]
+  health?: InventoryHealth
   canManage: boolean
   savingRepository: string | null
   onSelectionChange: (repository: Repository, selected: boolean) => void
 }) {
   return (
     <div className='overflow-hidden rounded-xl border'>
-      <Table aria-label='Repository inventory' className='min-w-[1000px]'>
+      <Table aria-label='Repository inventory' className='min-w-[1100px]'>
         <TableHeader>
           <TableRow className='bg-muted/30'>
             {canManage && (
@@ -99,12 +109,13 @@ export function RepositoryInventoryTable({
               </TableHead>
             )}
             <TableHead className='px-4'>Repository</TableHead>
+            <TableHead className='px-4'>Health status</TableHead>
             <TableHead className='px-4'>Owner</TableHead>
             <TableHead className='px-4'>Default branch</TableHead>
             <TableHead className='px-4'>Visibility</TableHead>
             <TableHead className='px-4'>Stack</TableHead>
             <TableHead className='px-4'>GitHub account</TableHead>
-            <TableHead className='px-4'>Selection</TableHead>
+            <TableHead className='px-4 text-right'>Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -125,7 +136,13 @@ export function RepositoryInventoryTable({
                           onSelectionChange(repository, checked === true)
                         }
                         aria-label={`Select ${repository.fullName}`}
+                        aria-busy={saving}
                       />
+                      {saving && (
+                        <span role='status' className='sr-only'>
+                          Saving…
+                        </span>
+                      )}
                     </label>
                   </TableCell>
                 )}
@@ -153,6 +170,13 @@ export function RepositoryInventoryTable({
                       {repository.name}
                     </span>
                   )}
+                </TableCell>
+                <TableCell className='px-4'>
+                  <InventoryHealthCell
+                    repositoryId={repository.githubId}
+                    selected={repository.selected}
+                    health={health}
+                  />
                 </TableCell>
                 <TableCell className='px-4 text-muted-foreground'>
                   {repository.ownerLogin}
@@ -212,25 +236,13 @@ export function RepositoryInventoryTable({
                 <TableCell className='px-4 text-muted-foreground'>
                   {repository.installation.accountLogin}
                 </TableCell>
-                <TableCell className='px-4'>
-                  {saving ? (
-                    <span
-                      role='status'
-                      className='inline-flex items-center gap-2 text-xs text-muted-foreground'
-                    >
-                      <LoaderCircle
-                        aria-hidden='true'
-                        className='size-3.5 animate-spin'
-                      />
-                      Saving…
-                    </span>
-                  ) : (
-                    <StatusBadge
-                      tone={repository.selected ? 'info' : 'neutral'}
-                    >
-                      {repository.selected ? 'Selected' : 'Not selected'}
-                    </StatusBadge>
-                  )}
+                <TableCell className='px-4 text-right'>
+                  <InventoryHealthAction
+                    repositoryId={repository.githubId}
+                    name={repository.fullName}
+                    selected={repository.selected}
+                    health={health}
+                  />
                 </TableCell>
               </TableRow>
             )
@@ -245,6 +257,20 @@ export function Apps() {
   const { github, account } = route.useSearch()
   const session = useNavigationSession()
   const canManage = canPerform(session.data, 'repository.manage')
+  const healthQuery = useHealthPortfolio({
+    pageSize: 1000,
+    enabled: canPerform(session.data, 'assessment.read'),
+  })
+  const inventoryHealth: InventoryHealth = {
+    items: new Map(
+      (healthQuery.isError ? [] : (healthQuery.data?.items ?? [])).map(
+        (item) => [item.repositoryId, item]
+      )
+    ),
+    pending: healthQuery.isPending,
+    failed: healthQuery.isError,
+    canRead: (id) => canPerform(session.data, 'assessment.read', id),
+  }
   const [search, setSearch] = useState('')
   const [selectionFilter, setSelectionFilter] = useState('all')
   const [visibilityFilter, setVisibilityFilter] = useState('all')
@@ -271,6 +297,8 @@ export function Apps() {
       setRepositories(result.repositories)
       setInstallations(result.installations)
       setHasLoaded(true)
+      if (canPerform(session.data, 'assessment.read'))
+        void healthQuery.refetch()
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -338,8 +366,17 @@ export function Apps() {
             : 'Could not update repository selection.'
         )
       }
-      const result = await response.json() as { inspection?: string; message?: string }
-      if (result.inspection === 'RETRY') toast.warning(result.message ?? 'Repository selected. Retry inspection from the repository page.')
+      const result = (await response.json()) as {
+        inspection?: string
+        message?: string
+      }
+      if (result.inspection === 'QUEUED')
+        toast.success(result.message ?? 'Repository health assessment queued.')
+      if (result.inspection === 'RETRY')
+        toast.warning(
+          result.message ??
+            'Repository selected. Retry inspection from the repository page.'
+        )
       setRepositories((current) =>
         current.map((item) =>
           item.githubId === repository.githubId
@@ -353,6 +390,8 @@ export function Apps() {
             : item
         )
       )
+      if (canPerform(session.data, 'assessment.read'))
+        void healthQuery.refetch()
       if (selected) {
         // Read only the local inventory after adoption; do not refresh GitHub.
         try {
@@ -500,13 +539,36 @@ export function Apps() {
             icon={GitBranch}
             tone='blue'
             actions={
-              canManage ? (
-                <Button asChild>
-                  <a href={`${API_BASE_URL}/github/install`}>
-                    <Plug aria-hidden='true' /> Connect GitHub App
-                  </a>
-                </Button>
-              ) : undefined
+              <>
+                {canManage && (
+                  <Button asChild>
+                    <a href={`${API_BASE_URL}/github/install`}>
+                      <Plug aria-hidden='true' /> Connect GitHub App
+                    </a>
+                  </Button>
+                )}
+                <PageHelpDrawer
+                  title='Repositories'
+                  sections={[
+                    {
+                      title: 'Repository access and selection',
+                      content:
+                        'The inventory shows repositories available through your GitHub App installations and Preflyt permissions. Selecting a repository enables tracking and queues its initial health assessment; it does not modify code, publish a branch policy or enable merge protection. GitHub App access and Preflyt selection are separate. Connect or update the App installation to change GitHub access; authorized repository managers can change selection here.',
+                    },
+                    {
+                      title: 'Inventory metrics and refresh',
+                      content:
+                        'Available repositories counts the visible inventory. Selected for Preflyt counts explicitly selected repositories. Active installations counts connected GitHub accounts, and Private repositories counts private repositories in the inventory. Refresh inventory reloads availability, selection and saved health status. Inspection and analyzer execution are separate: detected stack or setup files do not mean checks passed.',
+                    },
+                    {
+                      title: 'Health status and reports',
+                      content:
+                        'Healthy means a completed executed assessment passed every applicable recorded analysis with complete evidence and no findings. It is green; partial or inspection-only reports are never Healthy. Findings reported means analysis completed with issues. This describes the saved commit and recorded scope, not a guarantee about all code or GitHub merge permission. The Health status column shows the latest saved assessment for each accessible selected repository. The assessed branch is shown in the report. Partial means some analysis or evidence is missing. Inspection only means no analyzer ran. Not assessed means no report exists; Not loaded or Unavailable means status could not be retrieved. In the Actions column, View report opens that saved report in the repository Health tab; Open Health opens a repository without a report. Health summary metrics are in Engineering Overview → Health. Navigating or refreshing status does not start an assessment.',
+                    },
+                    ...healthPortfolioHelp,
+                  ]}
+                />
+              </>
             }
           />
 
@@ -733,7 +795,7 @@ export function Apps() {
                   {hasLoaded
                     ? `${visibleRepositories.length} of ${repositories.length} repositories`
                     : 'Loading inventory'}{' '}
-                  · selection does not execute or modify code.
+                  · selection queues a health assessment without modifying code.
                 </p>
               </div>
               <Button
@@ -798,6 +860,12 @@ export function Apps() {
                 </SelectContent>
               </Select>
             </div>
+            {healthQuery.data?.bounded && !healthQuery.isError && (
+              <p className='text-xs text-muted-foreground'>
+                Health status is limited to 1,000 accessible repositories. Open
+                a repository’s Health tab for reports not loaded here.
+              </p>
+            )}
             {loading ? (
               <div
                 role='status'
@@ -856,6 +924,7 @@ export function Apps() {
             ) : (
               <RepositoryInventoryTable
                 repositories={visibleRepositories}
+                health={inventoryHealth}
                 canManage={canManage}
                 savingRepository={savingRepository}
                 onSelectionChange={(repository, selected) =>

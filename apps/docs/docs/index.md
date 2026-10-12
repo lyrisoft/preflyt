@@ -23,6 +23,10 @@ Preflyt gives teams a consistent way to define engineering standards, apply bran
 
 You run Preflyt on your own infrastructure with Docker Compose or the Kubernetes application bundle. A GitHub App connects the repositories you select. Your GitHub Actions workflows run the tests and scanners; optional AI reviews use the models and review instructions your organization chooses.
 
+## First value without CI
+
+Selecting a repository queues a [Health assessment](user-guide/repository-health.md) of its default branch. Review supported security findings, exact-revision source locations, analysis limits and report history. With no approved runtime, Health clearly shows an inspection-only partial report. Add CI later for continuous PR feedback.
+
 ## Features
 
 - **Repository profiles**: languages, frameworks, CI, tests, lockfiles, containers, infrastructure as code and scanner configuration, each backed by file evidence at an exact commit.

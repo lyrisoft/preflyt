@@ -5,6 +5,8 @@ on:
     paths:
       - 'docs/deployment/native-runner/**'
       - 'apps/api/scripts/native-check-fixtures.mts'
+      - 'apps/api/scripts/health-file-analysis-fixtures.mjs'
+      - 'apps/api/src/health/health-file-analysis.ts'
       - 'apps/api/src/execution/**'
       - 'apps/api/src/assessments/assessment-digest.ts'
       - 'apps/api/package.json'
@@ -40,6 +42,9 @@ jobs:
             target: ''
           - tool: semgrep
             dockerfile: Dockerfile.semgrep
+            target: ''
+          - tool: duplication
+            dockerfile: Dockerfile.duplication
             target: ''
           - tool: trivy
             dockerfile: Dockerfile.trivy
@@ -101,6 +106,10 @@ jobs:
         env:
           NATIVE_FIXTURE_TOOL: ${{ matrix.tool }}
         run: pnpm --filter @preflyt/api exec tsx scripts/native-check-fixtures.mts
+      - name: Verify file accounting and scanner failure handling
+        if: matrix.tool == 'semgrep'
+        run: |
+          PREFLYT_FILE_ANALYSIS_IMAGE="$(docker image inspect "$FIXTURE_IMAGE" --format '{{.Id}}')" node apps/api/scripts/health-file-analysis-fixtures.mjs
       - name: Publish only the verified image
         if: steps.existing.outputs.exists != 'true'
         run: docker push "$IMAGE"

@@ -7,20 +7,20 @@ description: The path from a fresh install to your first commit assessment.
 
 # Getting Started
 
-This section takes you from installation to a first repository report. That first report can reveal configuration and missing evidence; it does not mean your tests have run. To reach a verified PR result, continue through policy and workflow setup below.
+This section takes you from installation to a first repository report. Selection automatically queues Health analysis. Qualified scanners can report findings without CI; an unavailable runtime produces an inspection-only partial report. Tests have not run. To reach a verified PR result, continue through policy and workflow setup below.
 
 ```mermaid
 flowchart LR
   A[1. Run Preflyt] --> B[2. Create and configure<br/>the GitHub App]
   B --> C[3. Install the App<br/>and sign in]
   C --> D[4. Select repositories]
-  D --> E[5. Create your<br/>first report]
+  D --> E[5. Read your<br/>Health report]
 ```
 
 1. [Quick Start](quick-start.md): run a local instance and sign in as Super Admin.
 2. [Connect GitHub](connect-github.md): create the GitHub App, save it in Preflyt and sign in with GitHub.
 3. [Select repositories](select-repositories.md): choose what Preflyt may read.
-4. [Your first report](first-assessment.md): one click from the Overview, or step by step.
+4. [Your first report](first-assessment.md): follow the queued Health assessment, findings and limits.
 
 :::info Who does what
 - A **Super Admin** (the recovery account from your `.env`) configures the deployment: GitHub App credentials, sign-in and notifications.

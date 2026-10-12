@@ -1,3 +1,8 @@
+import { fileAnalysisMeasurement, fileAnalysisRules, fileAnalysisFailureReason } from '../health/health-file-analysis.js'
+import {fitHealthReceipt} from '../health/health-receipt-budget.js'
+import { duplicationMeasurement, coverageMeasurement, coverageFailureReason } from '../health/health-measurements.js'
+import { validateHealthFindingLocations } from '../health/health-finding-locations.js'
+import { healthReceiptFindings } from '../health/health-findings.js'
 import { constants } from 'node:fs'
 import {
   mkdir,
@@ -178,7 +183,7 @@ export class NativeControllerJobs {
       checks,
     }
     record.signature = signNativeReceipt(
-      value,
+      fitHealthReceipt(value),
       process.env.NATIVE_CONTROLLER_SIGNING_KEY ?? '',
       reviewed.approval.controllerPublicKey,
     )
@@ -400,7 +405,7 @@ export class NativeControllerJobs {
   }
   private async execute(
     record: JobRecord,
-    bundle: unknown,
+    bundle: ReturnType<typeof verifyNativeSourceBundle>,
     signal: AbortSignal,
   ) {
     let checks = this.checks(record.expected, 'EXECUTION_CANCELLED', true)
@@ -442,7 +447,18 @@ export class NativeControllerJobs {
           coverage: (ruleId === 'secrets.scan' ? 'FULL_RULE' : 'PARTIAL') as
             'FULL_RULE' | 'PARTIAL',
         }
-        checks[i] = safe
+        const projectedFindings = record.expected.selectionId.startsWith('health:') ? healthReceiptFindings(result.report, result.reportHash, ruleId === 'secrets.scan', ruleId === 'quality.reliability' ? 'reliability' : ruleId === 'quality.maintainability' ? 'maintainability' : ruleId === 'quality.duplication' ? 'duplication' : ruleId === 'security.hotspots' ? 'hotspot' : 'security') : undefined
+        const located = validateHealthFindingLocations(projectedFindings, bundle)
+        const findings = located.findings
+        if (located.rejected) { safe.state = 'INCOMPLETE'; safe.reason = 'SOURCE_LOCATION_INVALID' }
+        const fileAnalysis = record.expected.selectionId.startsWith('health:') && fileAnalysisRules.includes(ruleId) ? fileAnalysisMeasurement(result.report,result.reportHash) : undefined
+        const measurement = record.expected.selectionId.startsWith('health:') ? ruleId === 'quality.duplication' ? duplicationMeasurement(result.report,result.reportHash) : ruleId === 'tests.coverage' ? coverageMeasurement(result.report,result.reportHash) : undefined : undefined
+        const fileFailure = record.expected.selectionId.startsWith('health:') && fileAnalysisRules.includes(ruleId) ? fileAnalysisFailureReason(result.report,result.reportHash) : undefined
+        if(fileFailure) {safe.state='INCOMPLETE';safe.reason=fileFailure}
+        if(fileAnalysis && (!fileAnalysis.candidateFiles || !fileAnalysis.analyzedFiles)) {safe.state='INCOMPLETE';safe.reason='FILE_ANALYSIS_SCOPE_EMPTY'}
+        if(ruleId === 'quality.duplication' && (!measurement || measurement.analyzedLines===0)) {safe.state='INCOMPLETE';safe.reason='DUPLICATION_SCOPE_UNAVAILABLE'}
+        if(ruleId === 'tests.coverage' && (!measurement || measurement.kind!=='coverage')) {safe.state='INCOMPLETE';safe.reason=coverageFailureReason(result.report,result.reportHash)??'COVERAGE_UNAVAILABLE'}
+        checks[i] = { ...safe, ...(fileAnalysis ? {fileAnalysis} : {}), ...(measurement ? {measurement} : {}), ...(findings === undefined ? {} : { findings }) }
         if (!result.cleanupConfirmed) {
           cleanup = false
           break

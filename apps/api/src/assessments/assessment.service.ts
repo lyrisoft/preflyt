@@ -1,3 +1,5 @@
+import { queueFindingSources } from '../findings/finding-source-store.js'
+import { normalizeReportFindings, type ReportFinding } from '../findings/normalize-report-findings.js'
 import { pipelineVerifications, githubReportExecutions } from './pipeline-verification.js'
 import { excludePreflytFeedback } from '../github-events/preflyt-feedback.js'
 import { currentStandards, selectionBindingWhere } from '../standards/policy-standards.js'
@@ -588,6 +590,13 @@ export class AssessmentService {
         },
       },
     })
+    const sourceFindings: ReportFinding[] = []
+    for (const observation of result.report.observations) for (const ref of observation.artifacts ?? []) {
+      const artifact = artifacts.find(a => a.id === ref.id && a.sha256 === ref.sha256 && a.deliveryId === observation.deliveryId)
+      if (!artifact) continue
+      try { sourceFindings.push(...normalizeReportFindings(artifact.format, artifact.content, artifact.sha256)) } catch { /* Invalid reports never establish source locations. */ }
+    }
+    await queueFindingSources(tx, repo.id, normalized.sourceSha, sourceFindings)
     await recordAssessmentNotification(tx, assessment, repo, actorId)
     return { assessment, duplicate: false }
   }

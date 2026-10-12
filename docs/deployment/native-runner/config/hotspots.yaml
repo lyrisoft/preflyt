@@ -1,0 +1,12 @@
+# Security-sensitive uses requiring human context review, not proven vulnerabilities.
+rules:
+  - id: preflyt-js-md5-review
+    languages: [javascript, typescript]
+    severity: INFO
+    message: Review whether this MD5 hash protects security-sensitive data. MD5 is unsuitable for that purpose; non-security checksums may be acceptable with a documented rationale.
+    pattern: $CRYPTO.createHash("md5")
+  - id: preflyt-python-md5-review
+    languages: [python]
+    severity: INFO
+    message: Review whether this MD5 hash protects security-sensitive data. MD5 is unsuitable for that purpose; non-security checksums may be acceptable with a documented rationale.
+    pattern: hashlib.md5(...)

@@ -177,3 +177,23 @@ it('keeps CI-only setup and undetermined configuration neutral', async () => {
     .toHaveClass('bg-muted')
   await view.unmount()
 })
+
+it('uses reviewed decision colors without treating fix-required as success', () => {
+  expect(statusTones['to review']).toBe('warning')
+  expect(statusTones['reviewed: no change needed']).toBe('success')
+  expect(statusTones['reviewed: fix required']).toBe('warning')
+})
+
+it('uses green for Healthy even if a caller provides another tone', async () => {
+  const view = await render(<StatusBadge tone='info'>Healthy</StatusBadge>)
+  await expect
+    .element(view.getByText('Healthy'))
+    .toHaveClass('text-success-text')
+  expect(statusTones['findings reported']).toBe('error')
+})
+
+it('maps overall Health labels to their semantic tones', () => {
+  expect(statusTones.healthy).toBe('success')
+  expect(statusTones.unhealthy).toBe('error')
+  expect(statusTones['needs attention']).toBe('warning')
+})

@@ -15,7 +15,11 @@ Problems found in QA or production cost more than problems found while you desig
 
 Preflyt coordinates the scanners, tests and CI you already have. It is **not** a coding agent, an IDE, a replacement CI system or a code generator.
 
-## The workflow
+## Health before CI
+
+Selecting a repository queues a branch Health assessment at a fixed commit. Reviewed scanners can produce located findings without a workflow or saved standards. Without an approved runtime, the report is explicitly inspection-only and partial. Health findings do not satisfy CI policy gates. See [Repository health](../user-guide/repository-health.md).
+
+## The CI workflow
 
 ```mermaid
 flowchart LR
@@ -58,6 +62,7 @@ A **Related files found** result means a supported file or workflow reference ex
 | **Repository** | A GitHub repository you have explicitly selected. |
 | **Profile** | What Preflyt found in a repository at one commit. |
 | **Standard** | A versioned set of engineering checks, such as Application Security. |
-| **Report** (assessment) | A saved snapshot of selected standards and evidence at one commit, with a merge review result. |
+| **Health report** | Immutable branch analysis, supported findings, completeness and freshness; separate from CI readiness. |
+| **Report** (CI assessment) | A saved snapshot of selected standards and evidence at one commit, with a merge review result. |
 | **CI result** | A check or workflow outcome GitHub reported for a commit. |
 | **Finding** | An issue surfaced from evidence, with its own lifecycle. |

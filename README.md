@@ -1,5 +1,9 @@
 # Preflyt
 
+<p align="center">
+  <img src="apps/docs/static/img/brand/logo-panel.svg" alt="PreflytLabs" width="480" />
+</p>
+
 **Engineering confidence before production.**
 
 Preflyt is a self-hosted engineering assessment and governance platform that connects your team's standards to GitHub pull requests and CI results. It helps teams establish which checks a change must satisfy, verify the evidence for those checks, and give developers a clear, traceable readiness result before production.
@@ -25,7 +29,7 @@ Preflyt brings standards, branch policies, execution evidence and developer feed
 ## How it works
 
 1. **Connect GitHub.** Create or connect a GitHub App, install it on the intended repositories, and explicitly select repositories in Preflyt.
-2. **Inspect the repository.** Detect its languages, frameworks and related configuration files, then review recommended checks.
+2. **Read repository health.** Selection queues an assessment of the default branch. Review supported scanner findings, exact-revision source locations and report limits without setting up CI. Without a qualified runtime, the report is explicitly inspection-only and partial.
 3. **Define requirements.** Adopt versioned standards and publish a policy for the target branch. Development and main can have different requirements.
 4. **Run checks in CI.** Add the Preflyt Action to your GitHub Actions workflow. Your pipeline runs the tests and scanners; Preflyt receives their reports and verifies the configured execution evidence.
 5. **Review the result.** Preflyt saves a commit-bound assessment and publishes **Preflyt / Engineering Readiness** on the pull request. Required checks can pass, fail or remain incomplete when evidence is insufficient.
@@ -37,6 +41,7 @@ Repository inspection identifies configuration; it does not execute tests or pro
 
 | Capability | Purpose |
 | --- | --- |
+| **Repository health** | Background branch assessment, supported security findings, exact-commit source excerpts and immutable report history without CI; execution requires a qualified runtime. |
 | **Versioned standards** | Define engineering checks, reuse built-in packs, and adopt reviewed versions for repositories and teams. |
 | **Branch policies** | Specify required checks for a target branch and preserve the approved policy revision. |
 | **CI integration** | Receive GitHub workflow/check events and supported test and scanner reports, including JUnit and SARIF. |
@@ -63,7 +68,9 @@ Native execution is optional. It is not required for GitHub Actions integration.
 
 The normal onboarding path is:
 
-**Run Preflyt → create/connect an App → select repositories → review standards and workflow setup → merge the setup PR → receive PR results.**
+**Run Preflyt → create/connect an App → select repositories → read Health.**
+
+For continuous feedback: **review standards and workflow setup → merge the setup PR → receive PR results.**
 
 - [Quick start](https://lyrisoft.github.io/preflyt/getting-started/quick-start): run a local evaluation instance.
 - [Connect GitHub](https://lyrisoft.github.io/preflyt/getting-started/connect-github): guided App registration, installation and owner onboarding.

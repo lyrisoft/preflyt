@@ -4,7 +4,7 @@
 **Version:** 0.2 · **Date:** 2026-10-11
 **Related:** [SDLC capability model](../product/sdlc-capabilities.md) · [PRD](../PRD.md) · [ADR-0004](../architecture/ADR-0004-shift-left-assessment-governance.md)
 
-**Approved revision (2026-10-11):** Repository Health Assessment is inserted as P5 after P4. Former P5–P11 are now P6–P12; their scope, implementation notes and outstanding acceptance gates are preserved. P5 is planned, not implemented. See [P5 specification](../product/repository-health-assessment.md).
+**Approved revision (2026-10-11):** Repository Health Assessment is inserted as P5 after P4. Former P5–P11 are now P6–P12; their scope, implementation notes and outstanding acceptance gates are preserved. P5 core implementation is present; executed-analysis production acceptance remains pending. See [P5 specification](../product/repository-health-assessment.md).
 
 ## 1. Definition of a phase
 
@@ -184,7 +184,9 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 
 ### P5 — Repository Health Assessment
 
-**Status:** Planned; implementation and live acceptance pending. [Detailed specification](../product/repository-health-assessment.md).
+**Full phase scope:** security, reliability, maintainability, measured duplication, human hotspot review and optional measured test coverage. The first four provide supported static analysis without CI; coverage requires actual isolated tests. All six, exact-source findings, and independently qualified execution acceptance are required before P5 is complete. See [implementation and acceptance](../planning/p5-implementation.md).
+
+**Status:** Core P5.1–P5.3 implemented on the working branch; executed-analysis production acceptance pending. [Detailed specification](../product/repository-health-assessment.md).
 
 **User value:** Selecting a repository and branch immediately starts a background health assessment. Users receive actionable findings without configuring CI; optional CI provides continuous PR feedback and enforcement later.
 
@@ -192,7 +194,7 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 
 **Independently usable increments:**
 - **P5.1 Automatic first assessment:** persist the selected branch (default repository branch), queue one idempotent job after explicit selection, freeze its SHA at execution start, apply qualified stack-specific analysis defaults, show progress and a basic evidence-linked report, and notify completion/failure/partial results. No workflow, PR or manual first assessment is required. Without an approved runtime, provide a clearly partial inspection report and explain unavailable analysis.
-- **P5.2 Health dashboards and findings:** make Overview summarize organization health, make Repositories a health inventory, and add the default Health view to repository details. Present supported security, reliability and maintainability findings, severity, file/line evidence, coverage and limits; preserve separate CI activity, access controls and existing deep links.
+- **P5.2 Health dashboards and findings:** make Overview summarize organization health, make Repositories a health inventory, and add a Health tab to repository details while preserving the existing check-configuration design in the Checks tab. Present supported security, reliability and maintainability findings, severity, file/line evidence, coverage and limits; preserve separate CI activity, access controls and existing deep links.
 - **P5.3 Reassessment and history:** authorized rate-limited Reassess, branch-aware freshness and comparable report history. Preserve immutable reports when the branch advances; broad scheduled scans remain P12.
 
 **Completion gates:** Demonstrate fresh repository onboarding without CI, seeded findings and a clean fixture on qualified adapters, correct branch/SHA binding, worker retries without duplicate scans/notifications, unsupported languages and scanner failure reported honestly, cross-repository/organization denial, isolation rejection and cancellation cleanup. Prove no changes to published policy, AI routing or merge protection. Deploy and upgrade through Compose with migration/rollback and runtime qualification evidence; infrastructure qualification cannot be replaced by fixture tests.

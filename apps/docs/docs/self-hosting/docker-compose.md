@@ -166,3 +166,16 @@ Containers run as non-root with read-only filesystems, dropped capabilities and 
 - [Authentication](authentication.md)
 - [Upgrades and backups](upgrades-and-backups.md)
 - [Observability](observability.md)
+
+
+## Shared repository-assessment runner
+
+The separate reviewed Docker controller can serve both Compose and Kubernetes-hosted Preflyt. Download the application-side selector beside your `compose.yaml`:
+
+<CurlDownload file="native-runner.compose.yaml" />
+
+```bash
+docker compose -f compose.yaml -f native-runner.compose.yaml config --quiet
+```
+
+The selector chooses the Docker backend for API and worker with admission disabled. Deploy the existing dedicated controller separately; the application never receives an engine socket or engine TLS files. Supply the actual reviewed Docker approval, public reviewer keys, analyzer reviews and application-side controller key through the existing deployment configuration. Keep controller signing keys outside API/worker. This configuration does not qualify a runtime or run connected-repository code.

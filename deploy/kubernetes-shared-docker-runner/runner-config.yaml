@@ -1,0 +1,11 @@
+# Kubernetes API/worker use the existing external Docker controller.
+# No engine socket, Docker credentials, launcher identity or native Jobs enter this application deployment.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: preflyt-config
+  namespace: preflyt
+data:
+  NATIVE_RUNTIME_BACKEND: docker
+  NATIVE_PREFLIGHT_ENABLED: "false"
+  NATIVE_EXECUTION_ENABLED: "false"

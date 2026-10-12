@@ -37,6 +37,8 @@ import { Route as authSuperAdminLoginRouteImport } from './routes/(auth)/super-a
 import { Route as AuthenticatedAppsIndexRouteImport } from './routes/_authenticated/apps/index'
 import { Route as AuthenticatedContributorsIndexRouteImport } from './routes/_authenticated/contributors/index'
 import { Route as AuthenticatedContributorsContributorIdRouteImport } from './routes/_authenticated/contributors/$contributorId'
+import { Route as AuthenticatedFindingsIndexRouteImport } from './routes/_authenticated/findings/index'
+import { Route as AuthenticatedFindingsFindingIdRouteImport } from './routes/_authenticated/findings/$findingId'
 import { Route as AuthenticatedRepositoriesRepositoryIdRouteImport } from './routes/_authenticated/repositories/$repositoryId'
 import { Route as AuthenticatedSettingsIndexRouteImport } from './routes/_authenticated/settings/index'
 import { Route as AuthenticatedSettingsAccountRouteImport } from './routes/_authenticated/settings/account'
@@ -193,6 +195,18 @@ const AuthenticatedContributorsContributorIdRoute =
     path: '/contributors/$contributorId',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedFindingsIndexRoute =
+  AuthenticatedFindingsIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedFindingsRoute,
+  } as any)
+const AuthenticatedFindingsFindingIdRoute =
+  AuthenticatedFindingsFindingIdRouteImport.update({
+    id: '/$findingId',
+    path: '/$findingId',
+    getParentRoute: () => AuthenticatedFindingsRoute,
+  } as any)
 const AuthenticatedRepositoriesRepositoryIdRoute =
   AuthenticatedRepositoriesRepositoryIdRouteImport.update({
     id: '/repositories/$repositoryId',
@@ -244,7 +258,7 @@ export interface FileRoutesByFullPath {
   '/access-control': typeof AuthenticatedAccessControlRoute
   '/assessments': typeof AuthenticatedAssessmentsRoute
   '/audit-log': typeof AuthenticatedAuditLogRoute
-  '/findings': typeof AuthenticatedFindingsRoute
+  '/findings': typeof AuthenticatedFindingsRouteWithChildren
   '/integrations': typeof AuthenticatedIntegrationsRoute
   '/intelligence': typeof AuthenticatedIntelligenceRoute
   '/notifications': typeof AuthenticatedNotificationsRoute
@@ -256,6 +270,7 @@ export interface FileRoutesByFullPath {
   '/teams': typeof AuthenticatedTeamsRoute
   '/super-admin/login': typeof authSuperAdminLoginRoute
   '/contributors/$contributorId': typeof AuthenticatedContributorsContributorIdRoute
+  '/findings/$findingId': typeof AuthenticatedFindingsFindingIdRoute
   '/repositories/$repositoryId': typeof AuthenticatedRepositoriesRepositoryIdRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
@@ -263,6 +278,7 @@ export interface FileRoutesByFullPath {
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/apps/': typeof AuthenticatedAppsIndexRoute
   '/contributors/': typeof AuthenticatedContributorsIndexRoute
+  '/findings/': typeof AuthenticatedFindingsIndexRoute
   '/settings/': typeof AuthenticatedSettingsIndexRoute
 }
 export interface FileRoutesByTo {
@@ -277,7 +293,6 @@ export interface FileRoutesByTo {
   '/access-control': typeof AuthenticatedAccessControlRoute
   '/assessments': typeof AuthenticatedAssessmentsRoute
   '/audit-log': typeof AuthenticatedAuditLogRoute
-  '/findings': typeof AuthenticatedFindingsRoute
   '/integrations': typeof AuthenticatedIntegrationsRoute
   '/intelligence': typeof AuthenticatedIntelligenceRoute
   '/notifications': typeof AuthenticatedNotificationsRoute
@@ -290,6 +305,7 @@ export interface FileRoutesByTo {
   '/': typeof AuthenticatedIndexRoute
   '/super-admin/login': typeof authSuperAdminLoginRoute
   '/contributors/$contributorId': typeof AuthenticatedContributorsContributorIdRoute
+  '/findings/$findingId': typeof AuthenticatedFindingsFindingIdRoute
   '/repositories/$repositoryId': typeof AuthenticatedRepositoriesRepositoryIdRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
@@ -297,6 +313,7 @@ export interface FileRoutesByTo {
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/apps': typeof AuthenticatedAppsIndexRoute
   '/contributors': typeof AuthenticatedContributorsIndexRoute
+  '/findings': typeof AuthenticatedFindingsIndexRoute
   '/settings': typeof AuthenticatedSettingsIndexRoute
 }
 export interface FileRoutesById {
@@ -314,7 +331,7 @@ export interface FileRoutesById {
   '/_authenticated/access-control': typeof AuthenticatedAccessControlRoute
   '/_authenticated/assessments': typeof AuthenticatedAssessmentsRoute
   '/_authenticated/audit-log': typeof AuthenticatedAuditLogRoute
-  '/_authenticated/findings': typeof AuthenticatedFindingsRoute
+  '/_authenticated/findings': typeof AuthenticatedFindingsRouteWithChildren
   '/_authenticated/integrations': typeof AuthenticatedIntegrationsRoute
   '/_authenticated/intelligence': typeof AuthenticatedIntelligenceRoute
   '/_authenticated/notifications': typeof AuthenticatedNotificationsRoute
@@ -327,6 +344,7 @@ export interface FileRoutesById {
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/(auth)/super-admin/login': typeof authSuperAdminLoginRoute
   '/_authenticated/contributors/$contributorId': typeof AuthenticatedContributorsContributorIdRoute
+  '/_authenticated/findings/$findingId': typeof AuthenticatedFindingsFindingIdRoute
   '/_authenticated/repositories/$repositoryId': typeof AuthenticatedRepositoriesRepositoryIdRoute
   '/_authenticated/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/_authenticated/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
@@ -334,6 +352,7 @@ export interface FileRoutesById {
   '/_authenticated/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/_authenticated/apps/': typeof AuthenticatedAppsIndexRoute
   '/_authenticated/contributors/': typeof AuthenticatedContributorsIndexRoute
+  '/_authenticated/findings/': typeof AuthenticatedFindingsIndexRoute
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
 }
 export interface FileRouteTypes {
@@ -364,6 +383,7 @@ export interface FileRouteTypes {
     | '/teams'
     | '/super-admin/login'
     | '/contributors/$contributorId'
+    | '/findings/$findingId'
     | '/repositories/$repositoryId'
     | '/settings/account'
     | '/settings/appearance'
@@ -371,6 +391,7 @@ export interface FileRouteTypes {
     | '/settings/notifications'
     | '/apps/'
     | '/contributors/'
+    | '/findings/'
     | '/settings/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -385,7 +406,6 @@ export interface FileRouteTypes {
     | '/access-control'
     | '/assessments'
     | '/audit-log'
-    | '/findings'
     | '/integrations'
     | '/intelligence'
     | '/notifications'
@@ -398,6 +418,7 @@ export interface FileRouteTypes {
     | '/'
     | '/super-admin/login'
     | '/contributors/$contributorId'
+    | '/findings/$findingId'
     | '/repositories/$repositoryId'
     | '/settings/account'
     | '/settings/appearance'
@@ -405,6 +426,7 @@ export interface FileRouteTypes {
     | '/settings/notifications'
     | '/apps'
     | '/contributors'
+    | '/findings'
     | '/settings'
   id:
     | '__root__'
@@ -434,6 +456,7 @@ export interface FileRouteTypes {
     | '/_authenticated/'
     | '/(auth)/super-admin/login'
     | '/_authenticated/contributors/$contributorId'
+    | '/_authenticated/findings/$findingId'
     | '/_authenticated/repositories/$repositoryId'
     | '/_authenticated/settings/account'
     | '/_authenticated/settings/appearance'
@@ -441,6 +464,7 @@ export interface FileRouteTypes {
     | '/_authenticated/settings/notifications'
     | '/_authenticated/apps/'
     | '/_authenticated/contributors/'
+    | '/_authenticated/findings/'
     | '/_authenticated/settings/'
   fileRoutesById: FileRoutesById
 }
@@ -655,6 +679,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedContributorsContributorIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/findings/': {
+      id: '/_authenticated/findings/'
+      path: '/'
+      fullPath: '/findings/'
+      preLoaderRoute: typeof AuthenticatedFindingsIndexRouteImport
+      parentRoute: typeof AuthenticatedFindingsRoute
+    }
+    '/_authenticated/findings/$findingId': {
+      id: '/_authenticated/findings/$findingId'
+      path: '/$findingId'
+      fullPath: '/findings/$findingId'
+      preLoaderRoute: typeof AuthenticatedFindingsFindingIdRouteImport
+      parentRoute: typeof AuthenticatedFindingsRoute
+    }
     '/_authenticated/repositories/$repositoryId': {
       id: '/_authenticated/repositories/$repositoryId'
       path: '/repositories/$repositoryId'
@@ -723,12 +761,27 @@ const AuthenticatedSettingsRouteRouteWithChildren =
     AuthenticatedSettingsRouteRouteChildren,
   )
 
+interface AuthenticatedFindingsRouteChildren {
+  AuthenticatedFindingsFindingIdRoute: typeof AuthenticatedFindingsFindingIdRoute
+  AuthenticatedFindingsIndexRoute: typeof AuthenticatedFindingsIndexRoute
+}
+
+const AuthenticatedFindingsRouteChildren: AuthenticatedFindingsRouteChildren = {
+  AuthenticatedFindingsFindingIdRoute: AuthenticatedFindingsFindingIdRoute,
+  AuthenticatedFindingsIndexRoute: AuthenticatedFindingsIndexRoute,
+}
+
+const AuthenticatedFindingsRouteWithChildren =
+  AuthenticatedFindingsRoute._addFileChildren(
+    AuthenticatedFindingsRouteChildren,
+  )
+
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedSettingsRouteRoute: typeof AuthenticatedSettingsRouteRouteWithChildren
   AuthenticatedAccessControlRoute: typeof AuthenticatedAccessControlRoute
   AuthenticatedAssessmentsRoute: typeof AuthenticatedAssessmentsRoute
   AuthenticatedAuditLogRoute: typeof AuthenticatedAuditLogRoute
-  AuthenticatedFindingsRoute: typeof AuthenticatedFindingsRoute
+  AuthenticatedFindingsRoute: typeof AuthenticatedFindingsRouteWithChildren
   AuthenticatedIntegrationsRoute: typeof AuthenticatedIntegrationsRoute
   AuthenticatedIntelligenceRoute: typeof AuthenticatedIntelligenceRoute
   AuthenticatedNotificationsRoute: typeof AuthenticatedNotificationsRoute
@@ -750,7 +803,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAccessControlRoute: AuthenticatedAccessControlRoute,
   AuthenticatedAssessmentsRoute: AuthenticatedAssessmentsRoute,
   AuthenticatedAuditLogRoute: AuthenticatedAuditLogRoute,
-  AuthenticatedFindingsRoute: AuthenticatedFindingsRoute,
+  AuthenticatedFindingsRoute: AuthenticatedFindingsRouteWithChildren,
   AuthenticatedIntegrationsRoute: AuthenticatedIntegrationsRoute,
   AuthenticatedIntelligenceRoute: AuthenticatedIntelligenceRoute,
   AuthenticatedNotificationsRoute: AuthenticatedNotificationsRoute,

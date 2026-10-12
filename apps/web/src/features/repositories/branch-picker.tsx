@@ -23,6 +23,7 @@ export function BranchPicker({
   actorId,
   value,
   label = 'Inspect branch',
+  id = 'profile-branch',
   disabled,
   onValueChange,
 }: {
@@ -30,6 +31,7 @@ export function BranchPicker({
   actorId?: string
   value: string
   label?: string
+  id?: string
   disabled?: boolean
   onValueChange: (branch: string) => void
 }) {
@@ -63,7 +65,7 @@ export function BranchPicker({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
-          id='profile-branch'
+          id={id}
           type='button'
           variant='outline'
           size='sm'

@@ -1,3 +1,5 @@
+import { FindingSourceStore } from './findings/finding-source-store.service.js'
+import { RepositoryHealthService } from './health/repository-health.service.js'
 import { watchConfiguration } from './configuration/configuration-store.js'
 import { TeamsService } from './teams/teams.service.js'
 import { SkillReviewService } from './intelligence/skill-review.service.js'
@@ -131,10 +133,19 @@ async function start() {
       ? deliverNotificationChannelEmail(prisma, emailAuthorization, mail, job.data.deliveryId)
       : deliverNotificationEmail(prisma, emailAuthorization, mail, job.data.deliveryId))
   }, { ...consumerConfig, connection: consumer, concurrency: 2, autorun: notificationsEnabled() && emailNotificationsEnabled() })
+  const findingSources = new FindingSourceStore(prisma, githubProvider)
+  let sourceRun: Promise<void> | undefined
   const assessments = new AssessmentService(prisma)
   const aiReviews = new SkillReviewService(prisma, emailAuthorization, assessments, new AiConfigurationService(prisma, emailAuthorization), githubProvider)
   let aiReviewRun: Promise<void> | undefined
   const native = new NativeDispatchService(prisma, emailAuthorization, githubProvider, new NativeStatusService(emailAuthorization), new NativeResultService(prisma, emailAuthorization, assessments))
+  const health = new RepositoryHealthService(prisma, emailAuthorization, githubProvider, new NativeStatusService(emailAuthorization), findingSources)
+  const healthQueue = new Queue('repository-health', { ...producerConfig, connection: producer })
+  const healthWorker = new Worker('repository-health', async job => {
+    if (typeof job.data?.id !== 'string' || !/^[a-f0-9-]{36}$/.test(job.data.id)) throw new Error('Invalid health job')
+    await telemetryOperation('preflyt.repository.health', { 'health.assessment.id': job.data.id }, () => health.process(job.data.id))
+  }, { ...consumerConfig, connection: consumer, concurrency: 2 })
+  let healthRun: Promise<void> | undefined
   let nativeRun: Promise<void> | undefined
   const exceptions = new PolicyExceptionService(prisma, emailAuthorization)
   const checks = new CheckPublicationService(prisma, emailAuthorization, githubProvider, assessments, exceptions)
@@ -160,6 +171,8 @@ async function start() {
   worker.on('error', warn)
   notificationQueue.on('error', warn)
   notificationWorker.on('error', warn)
+  healthQueue.on('error', warn)
+  healthWorker.on('error', warn)
   emailQueue.on('error', warn)
   emailWorker.on('error', warn)
   worker.on('failed', (job) => {
@@ -214,6 +227,8 @@ async function start() {
       if (!teamRun) teamRun = teams.reconcile().catch(warn).finally(() => { teamRun = undefined })
       if (!identityRun) identityRun = userAccess.reconcile().catch(warn).finally(() => { identityRun = undefined })
       if (!aiReviewRun) aiReviewRun = aiReviews.reconcile().catch(warn).finally(() => { aiReviewRun = undefined })
+      if (!sourceRun) sourceRun = findingSources.reconcile().catch(warn).finally(() => { sourceRun = undefined })
+      if (!healthRun) healthRun = health.pending().then(async rows => { for (const row of rows) await healthQueue.add('assess', { id: row.id }, { jobId: row.id, removeOnComplete: true, removeOnFail: true, attempts: 3, backoff: { type: 'exponential', delay: 5000 } }) }).catch(warn).finally(() => { healthRun = undefined })
       if (!nativeRun) nativeRun = native.reconcile().catch(warn).finally(() => { nativeRun = undefined })
       if (!pipelineRun) pipelineRun = pipeline.reconcile().catch(warn).finally(() => { pipelineRun = undefined })
       if (!automationRun) automationRun = automation.reconcile().catch(warn).finally(() => { automationRun = undefined })
@@ -248,6 +263,9 @@ async function start() {
       producer.disconnect()
       consumer.disconnect()
     }
+    await healthWorker.close(force)
+    await healthQueue.close()
+    await healthRun
     await emailWorker.close(force)
     await emailQueue.close()
     mail.close()
@@ -257,6 +275,7 @@ async function start() {
     await queue.close()
     producer.disconnect()
     consumer.disconnect()
+    await sourceRun
     await teamRun
     await identityRun
     await aiReviewRun

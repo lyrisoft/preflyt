@@ -292,6 +292,10 @@ export class AuthorizationService {
         await this.requireRepository(session, repo[1], request.method === 'GET' ? 'assessment.read' : 'ai.review.run')
         return true
       }
+      if (part === 'health' || part.startsWith('health/')) {
+        await this.requireRepository(session, repo[1], request.method === 'GET' ? 'assessment.read' : /\/hotspots\/[a-f0-9]{64}\/review$/.test(part) ? 'findings.manage' : 'execution.run')
+        return true
+      }
       if (part === 'native-execution/requests' || part.startsWith('native-execution/requests/')) {
         await this.requireRepository(session, repo[1], request.method === 'GET' ? 'assessment.read' : 'execution.run')
         return true
@@ -353,6 +357,10 @@ export class AuthorizationService {
       )
       return true
     }
+    if (path === '/github/health' && request.method === 'GET') {
+      await this.requireOrganization(session, 'assessment.read')
+      return true
+    }
     if (path === '/github/install') {
       await this.requireOrganization(session, 'repository.connect')
       return true
@@ -367,7 +375,7 @@ export class AuthorizationService {
       path === '/github/repositories' ||
       path === '/github/repositories/overview' ||
       path === '/github/dashboard' ||
-      (path === '/findings' || /^\/findings\/[a-f0-9]{64}\/(triage|assignees)$/.test(path)) ||
+      (path === '/findings' || /^\/findings\/[a-f0-9]{64}(?:\/(triage|assignees|source))?$/.test(path)) ||
       path.startsWith('/contributors') ||
       path.startsWith('/organizations') ||
       path === '/standards/catalogue'

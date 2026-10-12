@@ -61,7 +61,10 @@ export function NotificationItem({
         ) : item.policyId || item.type.startsWith('POLICY_EXCEPTION_') ? (
           <Link
             to='/policies'
-            search={{ repository: item.repositoryId, policy: item.policyId ?? undefined }}
+            search={{
+              repository: item.repositoryId,
+              policy: item.policyId ?? undefined,
+            }}
             className='font-medium hover:underline'
           >
             {item.title ?? titles[item.type] ?? 'Policy update'}
@@ -93,7 +96,8 @@ export function NotificationItem({
             to='/repositories/$repositoryId'
             params={{ repositoryId: item.repositoryId }}
             search={{
-              tab: 'assessments',
+              tab: item.type.startsWith('HEALTH_') ? 'health' : 'assessments',
+              health: item.healthAssessmentId ?? undefined,
               assessment: item.assessmentId ?? undefined,
             }}
             className='font-medium hover:underline'
@@ -193,7 +197,7 @@ export function NotificationBell() {
         >
           <Bell className='size-4' />
           {!!query.data?.unreadCount && (
-            <span className='absolute end-0 top-0 min-w-4 rounded-full bg-primary px-1 text-[10px] text-primary-foreground'>
+            <span className='absolute end-0 top-0 min-w-4 rounded-full bg-red-600 px-1 text-[10px] leading-4 font-semibold text-white'>
               {query.data.unreadCount > 99 ? '99+' : query.data.unreadCount}
             </span>
           )}

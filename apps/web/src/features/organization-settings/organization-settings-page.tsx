@@ -242,13 +242,13 @@ export function OrganizationSettingsPage() {
             </p>
           ) : (
             settings.data && (
-              <div className='grid items-start gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]'>
+              <div className='grid items-stretch gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]'>
                 <form
                   onSubmit={(event) => {
                     event.preventDefault()
                     save.mutate()
                   }}
-                  className='overflow-hidden rounded-xl border bg-card shadow-xs'
+                  className='flex h-full flex-col overflow-hidden rounded-xl border bg-card shadow-xs'
                 >
                   <div className='flex items-center gap-3 border-b bg-muted/20 px-4 py-3'>
                     <SurfaceIcon icon={Building2} tone='blue' />
@@ -256,7 +256,7 @@ export function OrganizationSettingsPage() {
                       Workspace identity
                     </h2>
                   </div>
-                  <div className='space-y-4 p-4'>
+                  <div className='flex-1 space-y-4 p-4'>
                     <div className='max-w-xl space-y-2'>
                       <Label htmlFor='workspace-name'>Workspace name</Label>
                       <Input
@@ -301,37 +301,33 @@ export function OrganizationSettingsPage() {
                     </div>
                   )}
                 </form>
-                <aside className='space-y-4'>
-                  <section className='overflow-hidden rounded-xl border bg-card shadow-xs'>
-                    <div className='flex items-center gap-3 border-b bg-muted/20 px-4 py-3'>
-                      <SurfaceIcon icon={Users} tone='teal' />
-                      <h2 className='text-base font-semibold'>
-                        Workspace details
-                      </h2>
+                <section className='flex h-full flex-col overflow-hidden rounded-xl border bg-card shadow-xs'>
+                  <div className='flex items-center gap-3 border-b bg-muted/20 px-4 py-3'>
+                    <SurfaceIcon icon={Users} tone='teal' />
+                    <h2 className='text-base font-semibold'>
+                      Workspace details
+                    </h2>
+                  </div>
+                  <dl className='divide-y px-4 text-sm'>
+                    <div className='flex items-center justify-between gap-4 py-4'>
+                      <dt className='text-muted-foreground'>Your role</dt>
+                      <dd className='font-medium'>
+                        {settings.data.role.replace(/_/g, ' ')}
+                      </dd>
                     </div>
-                    <dl className='divide-y px-4 text-sm'>
-                      <div className='flex items-center justify-between gap-4 py-4'>
-                        <dt className='text-muted-foreground'>Your role</dt>
-                        <dd className='font-medium'>
-                          {settings.data.role.replace(/_/g, ' ')}
-                        </dd>
-                      </div>
-                      <div className='flex items-center justify-between gap-4 py-4'>
-                        <dt className='flex items-center gap-2 text-muted-foreground'>
-                          <CalendarDays className='size-4' />
-                          Created
-                        </dt>
-                        <dd className='font-medium tabular-nums'>
-                          {new Date(
-                            settings.data.createdAt
-                          ).toLocaleDateString()}
-                        </dd>
-                      </div>
-                    </dl>
-                  </section>
+                    <div className='flex items-center justify-between gap-4 py-4'>
+                      <dt className='flex items-center gap-2 text-muted-foreground'>
+                        <CalendarDays className='size-4' />
+                        Created
+                      </dt>
+                      <dd className='font-medium tabular-nums'>
+                        {new Date(settings.data.createdAt).toLocaleDateString()}
+                      </dd>
+                    </div>
+                  </dl>
                   <nav
                     aria-label='Related settings'
-                    className='flex flex-col gap-2'
+                    className='mt-auto flex flex-col gap-2 border-t bg-muted/20 p-4'
                   >
                     <Button
                       size='sm'
@@ -367,7 +363,7 @@ export function OrganizationSettingsPage() {
                       </Link>
                     </Button>
                   </nav>
-                </aside>
+                </section>
               </div>
             )
           )}

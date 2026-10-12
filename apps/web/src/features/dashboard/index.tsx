@@ -11,6 +11,7 @@ import {
   GitPullRequest,
   ListChecks,
   RefreshCw,
+  ShieldCheck,
 } from 'lucide-react'
 import { API_BASE_URL } from '@/lib/api'
 import { Button } from '@/components/ui/button'
@@ -50,10 +51,13 @@ import { PageHelpDrawer } from '@/components/page-help-drawer'
 import { RepositoryPicker } from '@/components/repository-picker'
 import { StatusBadge } from '@/components/status-badge'
 import { SurfaceIcon } from '@/components/surface-icon'
+import { useHealthPortfolio } from '@/features/health/health-api'
+import { healthPortfolioHelp } from '@/features/health/health-help-content'
 import { RelativeTime } from '@/features/repositories/relative-time'
 import { TechIcon } from '@/features/repositories/tech-icon'
 import { useNavigationSession } from '@/features/workspace/navigation-session'
 import { ActivityHeatmap } from './activity-heatmap'
+import { DashboardHealth, DashboardHealthMetrics } from './dashboard-health'
 import type { DashboardData } from './dashboard-types'
 import { FirstReport } from './first-report'
 import { WorkspaceStart } from './workspace-start'
@@ -99,6 +103,11 @@ export function Dashboard() {
       return response.json() as Promise<DashboardData>
     },
   })
+  const healthQuery = useHealthPortfolio({
+    repository,
+    enabled: tab === 'health',
+  })
+  const activeQuery = tab === 'health' ? healthQuery : query
   const data = query.data
   const filters = (next: {
     days?: '7' | '30' | '90' | '180'
@@ -157,60 +166,77 @@ export function Dashboard() {
                   filters({ repository: value === 'all' ? undefined : value })
                 }
               />
-              <Select
-                value={days}
-                onValueChange={(value) =>
-                  filters({ days: value as '7' | '30' | '90' | '180' })
-                }
-              >
-                <SelectTrigger className='w-56' aria-label='Assessment period'>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value='7'>Last 7 days</SelectItem>
-                  <SelectItem value='30'>Last 30 days</SelectItem>
-                  <SelectItem value='90'>Last 90 days</SelectItem>
-                  <SelectItem value='180'>Last 6 months (180 days)</SelectItem>
-                </SelectContent>
-              </Select>
+              {tab !== 'health' && (
+                <Select
+                  value={days}
+                  onValueChange={(value) =>
+                    filters({ days: value as '7' | '30' | '90' | '180' })
+                  }
+                >
+                  <SelectTrigger
+                    className='w-56'
+                    aria-label='Assessment period'
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value='7'>Last 7 days</SelectItem>
+                    <SelectItem value='30'>Last 30 days</SelectItem>
+                    <SelectItem value='90'>Last 90 days</SelectItem>
+                    <SelectItem value='180'>
+                      Last 6 months (180 days)
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
               <Button
                 variant='outline'
                 size='icon'
-                aria-label='Refresh overview'
-                disabled={query.isFetching}
-                onClick={() => void query.refetch()}
+                aria-label={
+                  tab === 'health'
+                    ? 'Refresh repository health'
+                    : 'Refresh overview'
+                }
+                disabled={activeQuery.isFetching}
+                onClick={() => void activeQuery.refetch()}
               >
-                <RefreshCw className={query.isFetching ? 'animate-spin' : ''} />
+                <RefreshCw
+                  className={activeQuery.isFetching ? 'animate-spin' : ''}
+                />
               </Button>
               <PageHelpDrawer
                 title='Engineering Overview'
-                sections={[
-                  {
-                    title: 'Summary metrics',
-                    content:
-                      'Repositories counts selected, available repositories in your authorized scope. PRs assessed counts distinct pull requests with a saved assessment in the selected period. Saved assessments count all saved assessments in that period. Standards adopted counts repositories with a saved standards selection; it is not verified check coverage.',
-                  },
-                  {
-                    title: 'Assessment activity',
-                    content:
-                      'The calendar counts saved assessments per day, using UTC. Select a day to inspect its activity. A darker or brighter cell indicates assessment volume, not passing checks or merge readiness.',
-                  },
-                  {
-                    title: 'Repository status',
-                    content:
-                      'The repository list shows the latest saved inspection, standards selection and assessment across all time. Partially inspected means some supported configuration could not be inspected and may be unknown. Inspection does not run tests or scanners.',
-                  },
-                  {
-                    title: 'Pull requests',
-                    content:
-                      'This is a summary of up to 10 recently updated tracked open pull requests from the last GitHub sync, not a complete PR list. Open Assessments for the full repository view. The date filter changes assessment counts and calendar activity; it does not limit repository status or tracked open PRs.',
-                  },
-                  {
-                    title: 'Data sources and limits',
-                    content:
-                      'This page reads saved Preflyt data from repositories you can access. Refresh reloads local data; it does not start a GitHub sync. A saved assessment or successful CI result alone does not prove a change is ready to merge. Readiness and missing evidence must be reviewed at the exact PR revision.',
-                  },
-                ]}
+                sections={
+                  tab === 'health'
+                    ? healthPortfolioHelp
+                    : [
+                        {
+                          title: 'Summary metrics',
+                          content:
+                            'Repositories counts selected, available repositories in your authorized scope. PRs assessed counts distinct pull requests with a saved assessment in the selected period. Saved assessments count all saved assessments in that period. Standards adopted counts repositories with a saved standards selection; it is not verified check coverage.',
+                        },
+                        {
+                          title: 'Assessment activity',
+                          content:
+                            'The calendar counts saved assessments per day, using UTC. Select a day to inspect its activity. A darker or brighter cell indicates assessment volume, not passing checks or merge readiness.',
+                        },
+                        {
+                          title: 'Repository status',
+                          content:
+                            'The repository list shows the latest saved inspection, standards selection and assessment across all time. Partially inspected means some supported configuration could not be inspected and may be unknown. Inspection does not run tests or scanners.',
+                        },
+                        {
+                          title: 'Pull requests',
+                          content:
+                            'This is a summary of up to 10 recently updated tracked open pull requests from the last GitHub sync, not a complete PR list. Open Assessments for the full repository view. The date filter changes assessment counts and calendar activity; it does not limit repository status or tracked open PRs.',
+                        },
+                        {
+                          title: 'Data sources and limits',
+                          content:
+                            'This page reads saved Preflyt data from repositories you can access. Refresh reloads local data; it does not start a GitHub sync. A saved assessment or successful CI result alone does not prove a change is ready to merge. Readiness and missing evidence must be reviewed at the exact PR revision.',
+                        },
+                      ]
+                }
               />
             </>
           }
@@ -268,43 +294,51 @@ export function Dashboard() {
         ) : (
           data && (
             <>
-              {data.metrics.repositories === 0 ? (
+              {data.metrics.repositories === 0 && tab !== 'health' ? (
                 <FirstReport
                   repositories={data.repositories}
                   session={session.data}
                 />
               ) : (
                 <>
-                  <FirstReport
-                    repositories={data.repositories}
-                    session={session.data}
-                  />
-                  <div className='grid gap-4 sm:grid-cols-2 xl:grid-cols-4'>
-                    {stats.map((stat) => (
-                      <Card key={stat.label}>
-                        <CardHeader className='flex flex-row items-center justify-between pb-2'>
-                          <CardTitle className='text-sm font-medium'>
-                            {stat.label}
-                          </CardTitle>
-                          <SurfaceIcon
-                            icon={stat.icon}
-                            tone={
-                              stat.icon === BookOpen
-                                ? 'teal'
-                                : stat.icon === ListChecks
-                                  ? 'violet'
-                                  : 'blue'
-                            }
-                          />
-                        </CardHeader>
-                        <CardContent>
-                          <p className='text-3xl font-semibold tracking-tight tabular-nums'>
-                            {stat.value}
-                          </p>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
+                  {tab !== 'health' && (
+                    <FirstReport
+                      repositories={data.repositories}
+                      session={session.data}
+                    />
+                  )}
+                  {tab === 'health' ? (
+                    <DashboardHealthMetrics
+                      data={healthQuery.isError ? undefined : healthQuery.data}
+                    />
+                  ) : (
+                    <div className='grid gap-4 sm:grid-cols-2 xl:grid-cols-4'>
+                      {stats.map((stat) => (
+                        <Card key={stat.label}>
+                          <CardHeader className='flex flex-row items-center justify-between pb-2'>
+                            <CardTitle className='text-sm font-medium'>
+                              {stat.label}
+                            </CardTitle>
+                            <SurfaceIcon
+                              icon={stat.icon}
+                              tone={
+                                stat.icon === BookOpen
+                                  ? 'teal'
+                                  : stat.icon === ListChecks
+                                    ? 'violet'
+                                    : 'blue'
+                              }
+                            />
+                          </CardHeader>
+                          <CardContent>
+                            <p className='text-3xl font-semibold tracking-tight tabular-nums'>
+                              {stat.value}
+                            </p>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
                   <Tabs
                     value={tab}
                     onValueChange={(value) =>
@@ -314,7 +348,10 @@ export function Dashboard() {
                           days,
                           repository,
                           tab: value as
-                            'overview' | 'repositories' | 'pull-requests',
+                            | 'overview'
+                            | 'repositories'
+                            | 'pull-requests'
+                            | 'health',
                         },
                       })
                     }
@@ -336,7 +373,19 @@ export function Dashboard() {
                         <GitPullRequest className='size-4' />
                         Pull requests
                       </TabsTrigger>
+                      <TabsTrigger value='health'>
+                        <ShieldCheck className='size-4' />
+                        Health
+                      </TabsTrigger>
                     </TabsList>
+                    <TabsContent value='health'>
+                      <DashboardHealth
+                        data={healthQuery.data}
+                        pending={healthQuery.isPending}
+                        error={healthQuery.error}
+                        retry={() => void healthQuery.refetch()}
+                      />
+                    </TabsContent>
                     <TabsContent value='overview'>
                       <div className='grid gap-4 xl:grid-cols-3'>
                         <div className='min-w-0 xl:col-span-2'>
@@ -682,7 +731,28 @@ export function Dashboard() {
                 </>
               )}
               <p className='text-xs text-muted-foreground'>
-                Local data · updated <RelativeTime value={data.generatedAt} />
+                {tab === 'health' ? (
+                  <>
+                    Latest saved health reports ·{' '}
+                    {healthQuery.dataUpdatedAt ? (
+                      <>
+                        updated{' '}
+                        <RelativeTime
+                          value={new Date(
+                            healthQuery.dataUpdatedAt
+                          ).toISOString()}
+                        />
+                      </>
+                    ) : (
+                      'not loaded'
+                    )}
+                  </>
+                ) : (
+                  <>
+                    Local data · updated{' '}
+                    <RelativeTime value={data.generatedAt} />
+                  </>
+                )}
               </p>
             </>
           )

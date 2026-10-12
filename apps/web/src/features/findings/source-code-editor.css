@@ -1,0 +1,126 @@
+.finding-code-editor {
+  --source-background: oklch(0.99 0.003 250);
+  --source-gutter: oklch(0.973 0.006 250);
+  --source-selection: oklch(0.86 0.055 250 / 0.6);
+  --source-finding: color-mix(
+    in srgb,
+    var(--danger) 14%,
+    var(--source-background)
+  );
+  --source-keyword: oklch(0.45 0.17 300);
+  --source-string: oklch(0.4 0.09 155);
+  --source-function: oklch(0.43 0.15 255);
+  --source-constant: oklch(0.45 0.12 55);
+  --source-type: oklch(0.45 0.13 335);
+  --source-comment: oklch(0.49 0.025 255);
+}
+.dark .finding-code-editor {
+  --source-background: oklch(0.165 0.027 260);
+  --source-gutter: oklch(0.18 0.028 260);
+  --source-selection: oklch(0.44 0.07 250 / 0.6);
+  --source-finding: color-mix(
+    in srgb,
+    var(--danger) 28%,
+    var(--source-background)
+  );
+  --source-keyword: oklch(0.8 0.12 300);
+  --source-string: oklch(0.83 0.1 145);
+  --source-function: oklch(0.8 0.105 240);
+  --source-constant: oklch(0.84 0.115 75);
+  --source-type: oklch(0.8 0.105 335);
+  --source-comment: oklch(0.7 0.03 255);
+}
+.finding-code-editor .source-keyword {
+  color: var(--source-keyword);
+}
+.finding-code-editor .source-string {
+  color: var(--source-string);
+}
+.finding-code-editor .source-constant {
+  color: var(--source-constant);
+}
+.finding-code-editor .source-function {
+  color: var(--source-function);
+}
+.finding-code-editor .source-type {
+  color: var(--source-type);
+}
+.finding-code-editor .source-comment {
+  color: var(--source-comment);
+  font-style: italic;
+}
+.finding-code-editor .source-punctuation {
+  color: var(--muted-foreground);
+}
+.finding-code-editor .source-invalid {
+  color: var(--danger-text);
+}
+
+.finding-code-editor .cm-reported-line,
+.finding-code-editor .cm-reported-line span {
+  color: var(--danger-text);
+}
+
+.finding-code-tooltip {
+  width: min(420px, calc(100vw - 24px));
+  max-height: min(480px, 70vh);
+  overflow: auto;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--popover);
+  color: var(--popover-foreground);
+  box-shadow: 0 12px 36px rgb(0 0 0 / 22%);
+  font-family: var(--font-sans, sans-serif);
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.cm-tooltip:has(.finding-code-tooltip),
+.cm-tooltip.finding-code-tooltip {
+  z-index: 50;
+  border: none;
+  background: transparent;
+}
+.cm-tooltip.finding-code-tooltip {
+  background: var(--popover);
+  border: 1px solid var(--border);
+}
+.finding-tooltip-meta,
+.finding-tooltip-attribution {
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+.finding-tooltip-heading {
+  font-weight: 600;
+  margin-top: 12px;
+}
+.finding-tooltip-problem {
+  color: var(--danger-text);
+}
+.finding-tooltip-title {
+  font-weight: 500;
+  margin-top: 6px;
+}
+.finding-tooltip-copy {
+  color: var(--muted-foreground);
+  margin-top: 6px;
+  white-space: pre-line;
+}
+.finding-tooltip-solution {
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+.finding-tooltip-attribution {
+  border-top: 1px solid var(--border);
+  margin-top: 14px;
+  padding-top: 10px;
+}
+.finding-code-editor .cm-reported-line {
+  cursor: help;
+}
+.finding-code-editor .cm-reported-line:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}

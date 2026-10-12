@@ -193,6 +193,8 @@ for (const script of ['backup.sh', 'restore.sh']) {
 }
 
 // Kubernetes bundle.
-execFileSync('tar', ['-czf', resolve(out, 'kubernetes.tgz'), '-C', resolve(repo, 'deploy'), 'kubernetes'])
+execFileSync('tar', ['-czf', resolve(out, 'kubernetes.tgz'), '-C', resolve(repo, 'deploy'), 'kubernetes', 'kubernetes-shared-docker-runner'])
 
-console.log('Generated:', ['compose.yaml', 'preflyt.env.example', 'backup.sh', 'restore.sh', 'kubernetes.tgz', '_generated snippets'].join(', '))
+copyFileSync(resolve(repo, 'docs/deployment/native-runner/application.compose.yaml'), resolve(out, 'native-runner.compose.yaml'))
+
+console.log('Generated:', ['compose.yaml', 'preflyt.env.example', 'backup.sh', 'restore.sh', 'kubernetes.tgz', 'native-runner.compose.yaml', '_generated snippets'].join(', '))

@@ -1,3 +1,4 @@
+import { HealthModule } from '../health/health.module.js'
 import { RulesetHistoryService } from './ruleset-history.service.js'
 import { RulesetDraftController } from './ruleset-draft.controller.js'
 import { RulesetDraftService } from './ruleset-draft.service.js'
@@ -16,7 +17,7 @@ import { RepositoryProfileService } from './repository-profile.service.js'
 import { GitHubService } from './github.service.js'
 
 @Module({
-  imports: [AuthModule, PrismaModule, CacheModule, GitHubProviderModule],
+  imports: [HealthModule, AuthModule, PrismaModule, CacheModule, GitHubProviderModule],
   controllers: [
     GitHubController,
     GitHubRulesetController,

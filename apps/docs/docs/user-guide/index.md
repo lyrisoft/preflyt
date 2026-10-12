@@ -9,7 +9,11 @@ description: How standards, policies, pull request checks and merge protection f
 
 This guide covers everything you do in Preflyt after it is installed and connected to GitHub. If you have not done that yet, start with [Getting Started](../getting-started/index.md).
 
-## How the pieces fit
+## First value without CI
+
+Explicitly selecting a repository queues a [Health assessment](repository-health.md) of its default branch. Read findings, analysis limits and revision history in Health; an unavailable runtime produces a partial inspection report. This does not change policies or publish a merge check.
+
+## Add continuous checks
 
 ```mermaid
 flowchart LR
@@ -45,6 +49,7 @@ See [Access Control](access-control.md) for the full list.
 
 | I want to… | Page |
 | --- | --- |
+| Assess a repository without CI and inspect source findings | [Repository health](repository-health.md) |
 | Create or choose what my code must meet | [Standards](standards.md) |
 | Decide which standards apply to a branch | [Policies](policies.md) |
 | Get checks running on every pull request | [Pull request checks](pull-request-checks.md) |

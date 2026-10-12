@@ -1,3 +1,4 @@
+import { RepositoryHealthService } from '../health/repository-health.service.js'
 import { RepositoryProfileService } from './repository-profile.service.js'
 import { configurationValue } from '../configuration/runtime-configuration.js'
 import { createHash, randomBytes } from 'node:crypto'
@@ -38,6 +39,7 @@ export class GitHubService {
     @Inject(RedisCacheService)
     private readonly cache?: RedisCacheService,
     @Optional() @Inject(RepositoryProfileService) private readonly profiles?: RepositoryProfileService,
+    @Optional() @Inject(RepositoryHealthService) private readonly health?: RepositoryHealthService,
   ) {}
 
   async beginInstallation(identityId: string,
@@ -466,6 +468,14 @@ export class GitHubService {
       repositoryId: repositoryId.toString(),
       selected: String(selected),
     })
+    if (selected && this.health) {
+      try {
+        const assessment = await this.health.initial(identityId, rawRepositoryId)
+        return { inspection: ['QUEUED','RUNNING'].includes(assessment.state) ? 'QUEUED' : 'READY', message: 'Repository selected. Open Health to follow its assessment.' }
+      } catch {
+        return { inspection: 'RETRY', message: 'Repository selected. Health could not be queued; open Health and start an assessment.' }
+      }
+    }
     if (selected && this.profiles) {
       try {
         const existing = await this.prisma.repositoryProfile.findFirst({ where: { repositoryId: repository.id }, select: { id: true } })
