@@ -1,6 +1,6 @@
 import {validFileAnalysis, fileAnalysisRules, type FileAnalysis} from './health-file-analysis.js'
 import type { HealthPolicyContext } from './health-policy-context.js'
-import { findingGuidance, type FindingGuidance } from './finding-guidance.js'
+import { findingGuidance, type FindingGuidance, type FindingReferenceGuidance } from './finding-guidance.js'
 import { validDuplicationMeasurement, validCoverageMeasurement, type CoverageMeasurement, type DuplicationMeasurement } from './health-measurements.js'
 import { digest } from '../assessments/assessment-digest.js'
 import type { RepositorySnapshot } from '../github/repository-profile.js'
@@ -17,7 +17,7 @@ export const healthAnalyses = [
  { id: 'security.hotspots', title: 'Security hotspot review', category: 'hotspot', scope: 'JavaScript and TypeScript createHash("md5") and Python hashlib.md5 calls. Other security-sensitive patterns are not covered by this Preflyt v1 pack.' },
  { id: 'tests.coverage', title: 'Optional test coverage', category: 'coverage', scope: 'Opt-in Node built-in JavaScript tests: loaded application files only. Vitest, Jest, pytest and files not loaded by the tests are not covered by this recipe.' },
 ] as const
-export type HealthFinding = ReportFinding & { checkId: string; evidence: 'ANALYZER_REPORTED'; guidance?: FindingGuidance }
+export type HealthFinding = ReportFinding & { checkId: string; evidence: 'ANALYZER_REPORTED'; guidance?: FindingGuidance; referenceGuidance?: FindingReferenceGuidance }
 export type HealthReport = {
  findingComparison?: { version: 1; key: string; checkIds: string[] };
  policyContext?: HealthPolicyContext;

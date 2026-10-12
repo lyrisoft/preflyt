@@ -24,8 +24,11 @@ function ruleGuidance(rule: any): ReportRuleGuidance | undefined {
     if (/-----BEGIN|Bearer\s|(?:gh[pousr]_|github_pat_|sk-)[a-zA-Z0-9_-]{8,}|(?:api[_ -]?key|password|secret|token)\s*[:=]/i.test(value)) return undefined
     return value.replace(/[\x00-\x08\x0b-\x1f\x7f]/g, ' ').trim().slice(0, 2000)
   }
-  const explanation = clean(rule?.fullDescription?.text ?? rule?.shortDescription?.text)
+  const description = clean(rule?.fullDescription?.text ?? rule?.shortDescription?.text)
   const advice = clean(rule?.help?.text)
+  const normalize = (value: string | undefined) => value?.normalize('NFKC').replace(/[\s\p{P}\p{S}]+/gu, ' ').trim().toLowerCase()
+  // Help/remediation repeated as a description is not a separate problem explanation.
+  const explanation = description && normalize(description) !== normalize(advice) ? description : undefined
   return explanation || advice ? { version:1, source:'ANALYZER_REPORT', ...(explanation ? {explanation} : {}), ...(advice ? {advice} : {}) } : undefined
 }
 function sourcePath(value: unknown) {

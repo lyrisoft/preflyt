@@ -1,3 +1,4 @@
+import { findingReferenceGuidance } from './finding-guidance.js'
 import { overallHealth } from './health-overall.js'
 import { healthPolicyContext } from './health-policy-context.js'
 import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common'
@@ -21,7 +22,7 @@ import { applicableHealthAnalyses, healthReport, comparableHealthTrend, healthTi
 const activeStates = ['QUEUED', 'RUNNING']
 const json = (value: unknown) => value as Prisma.InputJsonValue
 const sessionFor = (row: { actorId: string; organizationId: string }): AuthenticatedSession => ({ authenticated: true, identityId: row.actorId, organizationId: row.organizationId, subject: 'repository-health', email: null, role: 'WORKER' })
-const dto = (row: RepositoryHealthAssessment) => ({ overallHealth:overallHealth(row.report as HealthReport|null,row.state), id: row.id, branch: row.branch, state: row.state, sourceSha: row.sourceSha, includeCoverage: row.includeCoverage, report: row.report as HealthReport | null, reason: row.reason, cancelled: !!row.cancelledAt, createdAt: row.createdAt, startedAt: row.startedAt, finishedAt: row.finishedAt })
+const dto = (row: RepositoryHealthAssessment) => ({ overallHealth:overallHealth(row.report as HealthReport|null,row.state), id: row.id, branch: row.branch, state: row.state, sourceSha: row.sourceSha, includeCoverage: row.includeCoverage, report: row.report ? { ...(row.report as unknown as HealthReport), findings: (row.report as unknown as HealthReport).findings.map(f => ({...f,referenceGuidance:findingReferenceGuidance(f.ruleId)})) } : null, reason: row.reason, cancelled: !!row.cancelledAt, createdAt: row.createdAt, startedAt: row.startedAt, finishedAt: row.finishedAt })
 @Injectable()
 export class RepositoryHealthService {
  constructor(@Inject(PrismaService) private db: PrismaService, @Inject(AuthorizationService) private access: AuthorizationService,
@@ -152,8 +153,8 @@ export class RepositoryHealthService {
    failed: items.filter(r => r.state === 'FAILED').length,
    cancelled: items.filter(r => r.state === 'CANCELLED').length,
   }
-  const priorityFindings = repos.flatMap(repo => {
-   const row = repo.healthAssessments[0], report = row?.report as HealthReport | null
+  const priorityFindings = repos.flatMap((repo,index) => {
+   const row = chosenRows[index], report = row?.report as HealthReport | null
    if (row?.state !== 'COMPLETED' || report?.mode !== 'EXECUTED') return []
    return report.findings.filter(f => ['critical', 'high'].includes(f.severity) && report.analyses.some(a => a.id === f.checkId && a.findingsRetained !== undefined)).map(f => ({
     repositoryId: repo.githubId.toString(), repositoryName: repo.fullName, assessmentId: row.id, branch: row.branch,

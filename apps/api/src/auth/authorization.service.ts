@@ -357,6 +357,10 @@ export class AuthorizationService {
       )
       return true
     }
+    if (path === '/finding-guidance' && ['GET','POST'].includes(request.method)) {
+      await this.requireOrganization(session, 'assessment.read')
+      return true
+    }
     if (path === '/github/health' && request.method === 'GET') {
       await this.requireOrganization(session, 'assessment.read')
       return true

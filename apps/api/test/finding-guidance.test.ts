@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest'
-import { findingGuidance } from '../src/health/finding-guidance.js'
+import { findingGuidance, findingReferenceGuidance } from '../src/health/finding-guidance.js'
 import { healthReport } from '../src/health/health-report.js'
 
 it('matches only exact rule segments within the expected analyzer', () => {
@@ -34,4 +34,19 @@ it('provides safe category guidance for secret findings without repeating the va
  expect(guide.fix).toContain('revoke or rotate')
  expect(guide.limits).toContain('general secret-detection guidance')
  expect(JSON.stringify(guide)).not.toContain('never-copy-this')
+})
+
+
+it('uses the same curated problem/impact and remedy reference for CI and legacy reports across rule families',()=>{
+ const checks={'security.sast':['preflyt-js-eval','preflyt-python-dynamic-execution','preflyt-python-sql-fstring'],'quality.reliability':['preflyt-js-nan-comparison','preflyt-python-bare-except','preflyt-js-async-promise-executor','preflyt-python-return-finally'],'quality.maintainability':['preflyt-no-debugger','preflyt-python-exec-statement','preflyt-python-mutable-default'],'security.hotspots':['preflyt-js-md5-review','preflyt-python-md5-review'],'quality.duplication':['preflyt-duplicate-block-v1']}
+ for(const [check,ids] of Object.entries(checks)) for(const id of ids) {
+  const saved=findingGuidance(check,id)!, reference=findingReferenceGuidance('opt.preflyt.config.'+id)!
+  expect(reference).toMatchObject({source:'PREFLYT_RULE_REFERENCE',why:saved.why,fix:saved.fix,limits:saved.limits})
+  expect(reference.why).not.toBe(reference.fix)
+  expect(reference.why).not.toMatch(/^(Use|Replace|Remove|Avoid|Add)\b/)
+ }
+ const sql=findingReferenceGuidance('sql-string-interpolation')!
+ expect(sql.why).toContain('returning unintended records or exposing data')
+ expect(sql.fix).toContain('pass values separately')
+ for(const id of ['unknown','__proto__','sql-string-interpolation-evil',null]) expect(findingReferenceGuidance(id)).toBeUndefined()
 })

@@ -10,6 +10,7 @@ import { useNavigationSession } from '@/features/workspace/navigation-session'
 export type HealthFinding = {
   reportGuidance?: Finding['reportGuidance']
   relatedLocations?: { path: string; line: number; endLine: number }[]
+  referenceGuidance?: Finding['referenceGuidance']
   guidance?: FindingGuidance
   fingerprint: string
   category: string

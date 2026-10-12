@@ -82,3 +82,23 @@ it('rejects unsafe traceback paths, invalid coordinates and malformed explicit l
  for(const line of ['0','1000001','999999999999']) expect(parse('junit',junitFailure(`File "test.py", line ${line}, in test_product_name_is_literal_input`))[0]).toMatchObject({path:null,line:null})
  expect(parse('junit',junitFailure('File "safe.py", line 3, in test_product_name_is_literal_input','file="../private.py"'))[0]).toMatchObject({path:null,line:null})
 })
+
+
+it('does not present repeated SARIF help text as a separate problem explanation',()=>{
+ const advice='Use parameterized SQL instead of interpolating user input into a query.'
+ const result={ruleId:'sql-string-interpolation',message:{text:advice}}
+ const row=parse('sarif',guidedReport([{id:result.ruleId,fullDescription:{text:advice},help:{text:advice}}],result))[0]
+ expect(row.reportGuidance).toEqual({version:1,source:'ANALYZER_REPORT',advice})
+ expect(row.title).toBe(advice)
+ expect(row.fingerprint).toBe(parse('sarif',sarif([result]))[0].fingerprint)
+})
+
+
+it('deduplicates description/help for arbitrary analyzer rules rather than one SQL rule',()=>{
+ for(const id of ['custom-security','custom-reliability','custom-maintainability','custom-duplication']) {
+  const advice='Replace unsafe handling.'
+  const result={ruleId:id,message:{text:'Reported issue'}}
+  const row=parse('sarif',guidedReport([{id,fullDescription:{text:'REPLACE   unsafe handling!'},help:{text:advice}}],result))[0]
+  expect(row.reportGuidance).toEqual({version:1,source:'ANALYZER_REPORT',advice})
+ }
+})

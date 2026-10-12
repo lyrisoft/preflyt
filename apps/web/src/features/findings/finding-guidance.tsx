@@ -2,6 +2,7 @@ import {
   ChevronDown,
   CircleAlert,
   MessageSquareText,
+  Sparkles,
   Wrench,
 } from 'lucide-react'
 import {
@@ -16,8 +17,14 @@ import type { Finding } from './finding-types'
 /** Saved explanations sit beside their source; generic advice never claims a diagnosed cause. */
 export function FindingGuidance({ finding }: { finding: Finding }) {
   const guide = finding.guidance
-  const { title, explanation, solution, attribution, sourceLabel } =
-    findingGuidanceText(finding)
+  const {
+    title,
+    explanation,
+    solution,
+    attribution,
+    sourceLabel,
+    impactLabel,
+  } = findingGuidanceText(finding)
   const location = finding.line
     ? finding.endLine && finding.endLine > finding.line
       ? `Lines ${finding.line}–${finding.endLine}`
@@ -31,7 +38,13 @@ export function FindingGuidance({ finding }: { finding: Finding }) {
       >
         <h2>
           <CollapsibleTrigger className='group flex w-full items-center gap-3 p-4 text-start hover:bg-muted/30 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring'>
-            <SurfaceIcon icon={MessageSquareText} tone='blue' size='sm' />
+            <SurfaceIcon
+              icon={
+                sourceLabel === 'AI guidance' ? Sparkles : MessageSquareText
+              }
+              tone={sourceLabel === 'AI guidance' ? 'violet' : 'blue'}
+              size='sm'
+            />
             <span className='min-w-0 flex-1'>
               <span className='block text-sm font-semibold'>
                 Problem and solution
@@ -59,13 +72,18 @@ export function FindingGuidance({ finding }: { finding: Finding }) {
               />
               Problem
             </h3>
-            <p className='font-medium wrap-anywhere whitespace-pre-line'>
+            <p className='wrap-anywhere whitespace-pre-line text-muted-foreground'>
               {title}
             </p>
             {explanation && (
-              <p className='wrap-anywhere whitespace-pre-line text-muted-foreground'>
-                {explanation}
-              </p>
+              <div className='space-y-1'>
+                {impactLabel && (
+                  <h4 className='font-semibold'>{impactLabel}</h4>
+                )}
+                <p className='wrap-anywhere whitespace-pre-line text-muted-foreground'>
+                  {explanation}
+                </p>
+              </div>
             )}
           </section>
           <section

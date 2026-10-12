@@ -357,3 +357,22 @@ it('selects overall health from the selected branch instead of a newer report on
  await db.repositoryHealthAssessment.create({data:{repositoryId:repo.id,organizationId:owner.organizationId!,actorId:owner.identityId,branch:'other',targetRevision:1,requestKey:randomUUID(),state:'COMPLETED',sourceSha:'b'.repeat(40),report:{...healthy,findings:[{severity:'critical'}]},createdAt:new Date(Date.now()+1000)}})
  expect((await service.portfolio(owner)).items[0]).toMatchObject({id:selected.id,branch:'main',overallHealth:{status:'HEALTHY'}})
 })
+
+
+it('keeps priority findings on the selected branch, including when its report is older',async()=>{
+ const db=fixture.prisma, repo=await db.gitHubRepository.findUniqueOrThrow({where:{githubId:51n}})
+ const issue=(title:string,fingerprint:string)=>({fingerprint,category:'security',checkId:'security.sast',severity:'critical',title,ruleId:'rule',path:'app.ts',line:1,evidence:'ANALYZER_REPORTED',suppressed:false})
+ const report=(findings:any[])=>({mode:'EXECUTED',completeness:'COMPLETE',inspection:{complete:true},findings,analyses:[{id:'security.sast',title:'Security',state:findings.length?'FAIL':'PASS',findingsRetained:findings.length,findingsReported:findings.length}]})
+ const selected=await service.start(owner,'51',{branch:'main',requestKey:randomUUID()})
+ await db.repositoryHealthAssessment.update({where:{id:selected.id},data:{state:'COMPLETED',sourceSha:sha,report:report([issue('Selected branch issue','1'.repeat(64))])}})
+ await db.repositoryHealthAssessment.create({data:{repositoryId:repo.id,organizationId:owner.organizationId!,actorId:owner.identityId,branch:'other',targetRevision:1,requestKey:randomUUID(),state:'COMPLETED',sourceSha:'b'.repeat(40),report:report([issue('Other branch issue','2'.repeat(64))]),createdAt:new Date(Date.now()+1000)}})
+ const result=await service.portfolio(owner)
+ expect(result.summary.high).toBe(1)
+ expect(result.items[0]).toMatchObject({id:selected.id,branch:'main',overallHealth:{status:'UNHEALTHY'}})
+ expect(result.priorityFindings).toEqual([expect.objectContaining({assessmentId:selected.id,branch:'main',title:'Selected branch issue'})])
+ await db.repositoryHealthAssessment.update({where:{id:selected.id},data:{report:report([])}})
+ const clean=await service.portfolio(owner)
+ expect(clean.items[0].overallHealth.status).toBe('HEALTHY')
+ expect(clean.summary.high).toBe(0)
+ expect(clean.priorityFindings).toEqual([])
+})

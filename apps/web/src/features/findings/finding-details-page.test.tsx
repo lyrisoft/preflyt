@@ -19,6 +19,7 @@ const state = vi.hoisted(() => ({
   reportGuidance: false,
   testFailure: false,
   matches: false,
+  ai: 'disabled' as 'disabled' | 'cached' | 'none' | 'failed',
   fetch: vi.fn(),
 }))
 vi.mock('@/features/workspace/navigation-session', () => ({
@@ -98,12 +99,49 @@ beforeEach(() => {
     reportGuidance: false,
     testFailure: false,
     matches: false,
+    ai: 'disabled',
   })
   state.fetch
     .mockReset()
     .mockImplementation(async (url: string, init?: RequestInit) => {
       if (state.fail)
         return Response.json({ message: 'Access revoked' }, { status: 403 })
+      if (url.includes('/finding-guidance')) {
+        if (init?.method === 'POST')
+          return Response.json({
+            available: true,
+            canGenerate: true,
+            state: 'QUEUED',
+            result: null,
+          })
+        if (state.ai === 'cached')
+          return Response.json({
+            available: true,
+            canGenerate: true,
+            state: 'SUCCEEDED',
+            model: 'Configured model',
+            result: {
+              version: 1,
+              sourceSha: sha,
+              contextHash: 'saved',
+              problem: 'The query is built from untrusted input.',
+              impact: 'An attacker may change which rows are returned.',
+              solution: 'Bind the input as a query parameter.',
+              evidenceLines: [7],
+            },
+          })
+        return Response.json({
+          available: state.ai !== 'disabled',
+          canGenerate: state.ai !== 'disabled',
+          state:
+            state.ai === 'none'
+              ? 'NONE'
+              : state.ai === 'failed'
+                ? 'FAILED'
+                : 'UNAVAILABLE',
+          result: null,
+        })
+      }
       if (init?.method === 'POST')
         return Response.json({
           state: 'RESOLVED',
@@ -246,6 +284,69 @@ it('renders a full details page with a highlighted code block at the saved SHA a
     .toBeVisible()
   await expect
     .element(page.getByText('The approved CI check or workflow failed.'))
+    .toBeVisible()
+})
+it('shows saved AI guidance as the primary issue, effect and fix without requesting it again', async () => {
+  state.ai = 'cached'
+  await mount()
+  await expect
+    .element(page.getByText('The query is built from untrusted input.'))
+    .toBeVisible()
+  await expect
+    .element(page.getByText('An attacker may change which rows are returned.'))
+    .toBeVisible()
+  await expect
+    .element(page.getByText('Bind the input as a query parameter.'))
+    .toBeVisible()
+  await expect.element(page.getByText('Likely effect')).toBeVisible()
+  expect(
+    document
+      .querySelector(
+        'section[aria-label="Problem and solution"] [data-slot="surface-icon"] svg'
+      )
+      ?.classList.contains('lucide-sparkles')
+  ).toBe(true)
+  expect(
+    state.fetch.mock.calls.filter(
+      ([url, init]) =>
+        url.includes('/finding-guidance') && init?.method === 'POST'
+    )
+  ).toHaveLength(0)
+})
+it('keeps saved guidance visible while AI is unavailable or waiting to run', async () => {
+  state.reportGuidance = true
+  state.ai = 'disabled'
+  const first = await mount()
+  await expect
+    .element(page.getByText('External rule explanation.'))
+    .toBeVisible()
+  expect(
+    document
+      .querySelector(
+        'section[aria-label="Problem and solution"] [data-slot="surface-icon"] svg'
+      )
+      ?.classList.contains('lucide-message-square-text')
+  ).toBe(true)
+  expect(
+    state.fetch.mock.calls.filter(
+      ([url, init]) =>
+        url.includes('/finding-guidance') && init?.method === 'POST'
+    )
+  ).toHaveLength(0)
+  await first.unmount()
+  state.ai = 'none'
+  await mount()
+  await expect
+    .poll(
+      () =>
+        state.fetch.mock.calls.filter(
+          ([url, init]) =>
+            url.includes('/finding-guidance') && init?.method === 'POST'
+        ).length
+    )
+    .toBe(1)
+  await expect
+    .element(page.getByText('External rule explanation.'))
     .toBeVisible()
 })
 it('explains a missing source location without displaying fabricated code', async () => {

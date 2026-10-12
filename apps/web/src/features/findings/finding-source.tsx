@@ -12,9 +12,13 @@ import { SourceCodeEditor } from './source-code-editor'
 export function FindingSourceViewer({
   finding,
   source,
+  aiState,
+  onRetryAi,
 }: {
   finding: Finding
   source: UseQueryResult<FindingSource, Error>
+  aiState?: string
+  onRetryAi?: () => void
 }) {
   const data = source.isError ? undefined : source.data
   const valid =
@@ -169,6 +173,22 @@ export function FindingSourceViewer({
             )}
           </div>
         </>
+      )}
+      {aiState === 'QUEUED' || aiState === 'RUNNING' ? (
+        <p
+          role='status'
+          className='border-t px-4 py-2 text-xs text-muted-foreground'
+        >
+          Preparing AI guidance. Current guidance is shown for now.
+        </p>
+      ) : null}
+      {aiState === 'FAILED' && onRetryAi && (
+        <div className='flex flex-wrap items-center justify-between gap-2 border-t px-4 py-2 text-xs text-muted-foreground'>
+          <span>AI guidance is unavailable. Current guidance is shown.</span>
+          <Button variant='outline' size='sm' onClick={onRetryAi}>
+            Retry AI guidance
+          </Button>
+        </div>
       )}
       <FindingGuidance finding={finding} />
     </Card>

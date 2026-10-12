@@ -1,3 +1,6 @@
+import { HealthModule } from '../health/health.module.js';
+import { FindingAiGuidanceService } from '../findings/finding-ai-guidance.service.js';
+import { FindingAiGuidanceController } from '../findings/finding-ai-guidance.controller.js';
 import { PolicyExceptionController } from './policy-exception.controller.js';
 import { PolicyExceptionService } from './policy-exception.service.js';
 import { PipelineGateController } from "./pipeline-gate.controller.js";
@@ -32,13 +35,14 @@ import { PrismaModule } from "../prisma/prisma.module.js";
 import { AssessmentController } from "./assessment.controller.js";
 import { AssessmentService } from "./assessment.service.js";
 @Module({
-  imports: [AuthModule, PrismaModule, GitHubProviderModule, FindingSourceStoreModule],
+  imports: [AuthModule, PrismaModule, GitHubProviderModule, FindingSourceStoreModule, HealthModule],
   controllers: [
     PipelinePolicyController,
     PipelineGateController,
     PipelineSetupController,
     PolicyExceptionController,
     FindingsController,
+    FindingAiGuidanceController,
     NativeRequestController,
     NativeStatusController,
     RulesetDeploymentController,
@@ -54,6 +58,7 @@ import { AssessmentService } from "./assessment.service.js";
     AiConfigurationService,
     PolicyExceptionService,
     FindingsService,
+    FindingAiGuidanceService,
     NativeRequestService,
     NativePlanService,
     NativeStatusService,

@@ -1,4 +1,5 @@
 import type { StatusTone } from '@/components/status-badge'
+import type { FindingAiResult } from './finding-ai-api'
 
 export type FindingGuidance = {
   version: 1 | 2
@@ -33,7 +34,12 @@ export type Finding = {
     explanation?: string
     advice?: string
   }
+  referenceGuidance?: Omit<FindingGuidance, 'source'> & {
+    source: 'PREFLYT_RULE_REFERENCE'
+    problem?: string
+  }
   guidance?: FindingGuidance
+  aiGuidance?: FindingAiResult & { model: string | null }
   category?: string
   ruleId: string | null
   evidence: string[]

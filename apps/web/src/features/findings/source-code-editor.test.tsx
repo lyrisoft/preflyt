@@ -175,3 +175,57 @@ it('supports keyboard and tap access with a viewport-contained tooltip in both t
   document.documentElement.classList.remove('dark')
   await page.viewport(1280, 800)
 })
+
+it('separates the SQL problem and impact from repeated analyzer remediation in the tooltip', async () => {
+  const advice =
+    'Use parameterized SQL instead of interpolating user input into a query.'
+  const sqlFinding = {
+    ...finding,
+    referenceGuidance: {
+      version: 2 as const,
+      source: 'PREFLYT_RULE_REFERENCE' as const,
+      rule: 'sql-string-interpolation',
+      problem: 'Input is interpolated into SQL query text',
+      why: 'Interpolated SQL can change query behavior, potentially returning unintended records or exposing data.',
+      fix: 'Use placeholders and pass values separately to the database API.',
+      limits: 'Exploitability depends on the input source.',
+    },
+    ruleId: 'sql-string-interpolation',
+    category: 'security',
+    title: advice,
+    reportGuidance: {
+      version: 1 as const,
+      source: 'ANALYZER_REPORT' as const,
+      explanation: advice,
+      advice,
+    },
+  }
+  const view = await render(
+    <SourceCodeEditor
+      finding={sqlFinding}
+      lines={lines}
+      path='catalogue.py'
+      reportedLine={11}
+      reportedEndLine={12}
+    />
+  )
+  await page
+    .elementLocator(document.querySelector('.cm-reported-line .source-string')!)
+    .hover()
+  const tooltip = page.getByRole('tooltip', { name: 'Problem and solution' })
+  await expect.element(tooltip).toBeVisible()
+  await expect
+    .element(tooltip)
+    .toHaveTextContent('Input is interpolated into SQL query text')
+  await expect
+    .element(tooltip)
+    .toHaveTextContent(
+      'potentially returning unintended records or exposing data'
+    )
+  await expect
+    .element(tooltip)
+    .toHaveTextContent('pass values separately to the database API')
+  await expect.element(tooltip).not.toHaveTextContent(advice)
+  await expect.element(tooltip).toHaveTextContent('Preflyt rule reference')
+  await view.unmount()
+})

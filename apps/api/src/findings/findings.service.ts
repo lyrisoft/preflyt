@@ -1,3 +1,4 @@
+import { findingReferenceGuidance } from '../health/finding-guidance.js';
 import {
   BadRequestException,
   ConflictException,
@@ -281,6 +282,7 @@ export class FindingsService {
       },
     });
     for (const row of matching) {
+      row.referenceGuidance = findingReferenceGuidance(row.ruleId);
       const saved = row.origin === "ci" && dispositions.find(
         (item) => item.id === row.id && item.sourceSha === row.sourceSha,
       );

@@ -97,3 +97,23 @@ export function findingGuidance(check: string, ruleId: string | null): FindingGu
  const {check: _check, ...entry} = rules[rule]
  return {version:2, source:'PREFLYT_RULE_GUIDANCE', rule, ...entry}
 }
+
+
+export type FindingReferenceGuidance = Omit<FindingGuidance, 'source'> & {
+ source: 'PREFLYT_RULE_REFERENCE'; problem?: string;
+}
+/** Current rule knowledge for CI/legacy display, separate from saved analyzer evidence. */
+export function findingReferenceGuidance(ruleId: string | null): FindingReferenceGuidance | undefined {
+ const rule = ruleId?.split('.').at(-1)
+ if (!rule) return undefined
+ if (rule === 'sql-string-interpolation') return {
+  version:2, source:'PREFLYT_RULE_REFERENCE', rule,
+  problem:'Input is interpolated into SQL query text',
+  why:'Interpolating input into SQL makes that input part of the query itself. Quotes or SQL operators in a supplied value can change the query’s meaning, potentially returning unintended records or exposing data.',
+  fix:'Use parameter placeholders and pass values separately to the database API. For sqlite3, use execute("SELECT ... WHERE name = ?", (name,)). This keeps input as data. Verify with a test containing quotes or SQL operators.',
+  limits:'The rule reports a SQL construction pattern; whether it is exploitable depends on the input source and how the query is executed.',
+ }
+ if (!Object.hasOwn(rules,rule)) return undefined
+ const {check:_check,...entry}=rules[rule]
+ return {version:2,source:'PREFLYT_RULE_REFERENCE',rule,...entry}
+}

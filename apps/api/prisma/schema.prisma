@@ -172,6 +172,7 @@ model GitHubRepository {
   pullRequests RepositoryPullRequest[]
   ciBindings RepositoryCiBindings[]
   findingSources FindingSourceExcerpt[]
+  aiFindingGuidance AiFindingGuidance[]
   assessments    CommitAssessment[]
   standards      RepositoryStandardsSelection[]
   gatePolicies   GatePolicyRevision[]
@@ -406,6 +407,7 @@ model Organization {
   githubLink    GitHubOrganizationLink?
   githubAccessEvidence GitHubUserAccessEvidence[]
   aiProviders AiProviderConnection[]
+  aiFindingGuidance AiFindingGuidance[]
   aiRoutes AiStageRoute[]
   reviewSkills AiReviewSkill[]
   skillReviews AiSkillReview[]
@@ -1300,4 +1302,35 @@ model RepositoryHealthHotspotReview {
   createdAt DateTime @default(now())
   @@unique([assessmentId, fingerprint])
   @@index([organizationId, repositoryId, assessmentId])
+}
+
+
+// Cached advisory explanations; never assessment or merge evidence.
+model AiFindingGuidance {
+  id String @id
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  repositoryId String
+  repository GitHubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  actorId String
+  origin String
+  assessmentId String
+  findingId String
+  sourceSha String
+  inputHash String
+  snapshot Json
+  state String @default("QUEUED")
+  result Json?
+  resultHash String?
+  failure String?
+  modelLabel String?
+  usage Json?
+  leaseToken String?
+  leaseUntil DateTime?
+  attempts Int @default(0)
+  createdAt DateTime @default(now())
+  finishedAt DateTime?
+  @@index([organizationId, repositoryId, assessmentId, findingId])
+  @@index([state, leaseUntil, createdAt])
+  @@index([organizationId, createdAt])
 }

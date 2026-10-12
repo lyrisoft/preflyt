@@ -56,6 +56,8 @@ export function findingCodeTooltip(
             'Problem'
           )
           text('p', 'finding-tooltip-title', guidance.title)
+          if (guidance.explanation && guidance.impactLabel)
+            text('h3', 'finding-tooltip-heading', guidance.impactLabel)
           if (guidance.explanation)
             text('p', 'finding-tooltip-copy', guidance.explanation)
           text(

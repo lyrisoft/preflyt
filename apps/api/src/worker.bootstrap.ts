@@ -1,3 +1,5 @@
+import { FindingsService } from './findings/findings.service.js'
+import { FindingAiGuidanceService } from './findings/finding-ai-guidance.service.js'
 import { FindingSourceStore } from './findings/finding-source-store.service.js'
 import { RepositoryHealthService } from './health/repository-health.service.js'
 import { watchConfiguration } from './configuration/configuration-store.js'
@@ -140,6 +142,8 @@ async function start() {
   let aiReviewRun: Promise<void> | undefined
   const native = new NativeDispatchService(prisma, emailAuthorization, githubProvider, new NativeStatusService(emailAuthorization), new NativeResultService(prisma, emailAuthorization, assessments))
   const health = new RepositoryHealthService(prisma, emailAuthorization, githubProvider, new NativeStatusService(emailAuthorization), findingSources)
+  const findingAi = new FindingAiGuidanceService(prisma, emailAuthorization, new FindingsService(prisma, emailAuthorization, findingSources), health, findingSources, new AiConfigurationService(prisma, emailAuthorization))
+  let findingAiRun: Promise<void> | undefined
   const healthQueue = new Queue('repository-health', { ...producerConfig, connection: producer })
   const healthWorker = new Worker('repository-health', async job => {
     if (typeof job.data?.id !== 'string' || !/^[a-f0-9-]{36}$/.test(job.data.id)) throw new Error('Invalid health job')
@@ -227,6 +231,7 @@ async function start() {
       if (!teamRun) teamRun = teams.reconcile().catch(warn).finally(() => { teamRun = undefined })
       if (!identityRun) identityRun = userAccess.reconcile().catch(warn).finally(() => { identityRun = undefined })
       if (!aiReviewRun) aiReviewRun = aiReviews.reconcile().catch(warn).finally(() => { aiReviewRun = undefined })
+      if (!findingAiRun) findingAiRun = findingAi.reconcile().catch(warn).finally(() => { findingAiRun = undefined })
       if (!sourceRun) sourceRun = findingSources.reconcile().catch(warn).finally(() => { sourceRun = undefined })
       if (!healthRun) healthRun = health.pending().then(async rows => { for (const row of rows) await healthQueue.add('assess', { id: row.id }, { jobId: row.id, removeOnComplete: true, removeOnFail: true, attempts: 3, backoff: { type: 'exponential', delay: 5000 } }) }).catch(warn).finally(() => { healthRun = undefined })
       if (!nativeRun) nativeRun = native.reconcile().catch(warn).finally(() => { nativeRun = undefined })
@@ -252,6 +257,7 @@ async function start() {
     closing = true
     clearInterval(timer)
     aiReviews.close()
+    findingAi.close()
     native.close()
     sync.close()
     prSync.close()
@@ -275,6 +281,7 @@ async function start() {
     await queue.close()
     producer.disconnect()
     consumer.disconnect()
+    await findingAiRun
     await sourceRun
     await teamRun
     await identityRun

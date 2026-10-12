@@ -13,6 +13,7 @@ import { StatusBadge } from '@/components/status-badge'
 import type { HealthData } from '@/features/health/health-api'
 import { HotspotReview } from '@/features/health/hotspot-review'
 import { useNavigationSession } from '@/features/workspace/navigation-session'
+import { useFindingAiGuidance } from './finding-ai-api'
 import { findingRequest, useFindingSource } from './finding-api'
 import {
   FindingContext,
@@ -93,6 +94,7 @@ export function FindingDetailsPage({
           occurrences: 1,
           category: finding.category,
           guidance: finding.guidance,
+          referenceGuidance: finding.referenceGuidance,
           reportGuidance: finding.reportGuidance,
           relatedLocations: finding.relatedLocations,
         },
@@ -101,6 +103,23 @@ export function FindingDetailsPage({
   })
   const data = result.isError || session.isError ? undefined : result.data
   const finding = data?.finding
+  const ai = useFindingAiGuidance(
+    finding
+      ? {
+          origin: health ? 'health' : 'ci',
+          repositoryId: finding.repositoryId,
+          assessmentId: finding.assessmentId,
+          findingId: finding.id,
+        }
+      : null
+  )
+  const displayedFinding =
+    finding &&
+    ai.data?.available &&
+    ai.data.state === 'SUCCEEDED' &&
+    ai.data.result?.sourceSha === finding.sourceSha
+      ? { ...finding, aiGuidance: { ...ai.data.result, model: ai.data.model } }
+      : finding
   const back = findingsSearch.parse(
     Object.fromEntries(new URLSearchParams(search.back ?? ''))
   )
@@ -214,8 +233,21 @@ export function FindingDetailsPage({
               <div className='min-w-0 space-y-5'>
                 <FindingSourceViewer
                   key={sourcePath}
-                  finding={finding}
+                  finding={displayedFinding!}
                   source={source}
+                  aiState={
+                    ai.generationFailed
+                      ? 'FAILED'
+                      : ai.data?.available
+                        ? ai.data.state
+                        : undefined
+                  }
+                  onRetryAi={
+                    ai.data?.canGenerate &&
+                    (ai.data.state === 'FAILED' || ai.generationFailed)
+                      ? ai.retryGeneration
+                      : undefined
+                  }
                 />
                 <Card>
                   <CardHeader>
