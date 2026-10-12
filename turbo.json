@@ -7,6 +7,9 @@
       ],
       "dependsOn": [
         "^build"
+      ],
+      "passThroughEnv": [
+        "DATABASE_URL"
       ]
     },
     "lint": {
@@ -16,6 +19,9 @@
       "outputs": [],
       "dependsOn": [
         "^typecheck"
+      ],
+      "passThroughEnv": [
+        "DATABASE_URL"
       ]
     },
     "test": {

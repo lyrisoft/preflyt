@@ -1,0 +1,20 @@
+# Retain every built-in detector. Exceptions match only reviewed synthetic values
+# in their exact fixture/example files; other credentials in those files still fail.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Synthetic GitHub PAT used to verify native scanner failure and redaction"
+condition = "AND"
+targetRules = ["github-pat", "generic-api-key"]
+paths = ['''^apps/api/scripts/native-check-fixtures\.mts$''']
+regexTarget = "secret"
+regexes = ['''^ghp_xT9dK7vM2pQ8nL5sR4(?:cJ6hB3wF0aY1uE9zI2)$''']
+
+[[allowlists]]
+description = "Required password placeholder in generated self-hosting examples"
+condition = "AND"
+targetRules = ["generic-api-key"]
+paths = ['''^apps/docs/(?:scripts/generate-downloads\.mjs|docs/_generated/env-(?:local|production)\.md|static/downloads/preflyt\.env\.example)$''']
+regexTarget = "secret"
+regexes = ['''^REPLACE_WITH_24_TO_128_CHARACTERS$''']
