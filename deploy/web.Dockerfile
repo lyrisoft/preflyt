@@ -6,6 +6,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/web/package.json apps/web/package.json
 RUN pnpm install --filter @preflyt/web... --frozen-lockfile --ignore-scripts
 COPY apps/web apps/web
+COPY deploy/nginx.conf deploy/nginx.conf
 ARG PUBLIC_SITE_URL=""
 ARG PUBLIC_SITE_INDEXABLE=false
 ENV PUBLIC_SITE_URL=$PUBLIC_SITE_URL PUBLIC_SITE_INDEXABLE=$PUBLIC_SITE_INDEXABLE

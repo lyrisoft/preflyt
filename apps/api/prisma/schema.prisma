@@ -66,6 +66,7 @@ model LoginTransaction {
   browserBinding  String
   codeVerifier    String
   nonce           String
+  returnPath      String   @default("/overview")
   expiresAt       DateTime
   createdAt       DateTime @default(now())
   @@index([expiresAt])
@@ -102,6 +103,7 @@ model BootstrapChallenge {
   id         String   @id @default(cuid())
   tokenHash  String   @unique
   identityId String
+  returnPath String   @default("/overview")
   identity   Identity @relation(fields: [identityId], references: [id], onDelete: Cascade)
   expiresAt  DateTime
   createdAt  DateTime @default(now())

@@ -7,7 +7,7 @@ import { createAppRouter } from './app'
 
 export { publicPages } from './features/marketing/public-pages'
 
-export async function renderPublicPage(path = '/') {
+export async function renderPublicPage(path = '/', allowNotFound = false) {
   const handler = createRequestHandler({
     request: new Request(new URL(path, 'http://prerender.preflyt.invalid')),
     createRouter: createAppRouter,
@@ -23,7 +23,11 @@ export async function renderPublicPage(path = '/') {
       ),
     })
   )
-  if (!response.ok)
+  if (!response.ok && !(allowNotFound && response.status === 404))
     throw new Error(`Public page rendering failed: ${response.status}`)
   return (await response.text()).replace(/^<!DOCTYPE html>/i, '')
+}
+
+export async function renderNotFoundPage() {
+  return renderPublicPage('/page-not-found', true)
 }

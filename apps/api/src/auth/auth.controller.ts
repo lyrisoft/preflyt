@@ -56,7 +56,10 @@ export class AuthController {
 
   @Get('login')
   async login(@Req() req: Request, @Res() res: Response) {
-    const result = await this.auth.beginLogin(req.ip ?? 'unknown')
+    const result = await this.auth.beginLogin(
+      req.ip ?? 'unknown',
+      typeof req.query.redirect === 'string' ? req.query.redirect : undefined
+    )
     res.cookie(
       this.auth.transactionCookieName,
       result.browserBinding,
@@ -111,7 +114,9 @@ export class AuthController {
         result.sessionToken,
         cookieOptions(this.auth.secureCookie, 8 * 60 * 60 * 1000)
       )
-      return res.redirect(new URL('/overview', this.auth.frontendOrigin).href)
+      return res.redirect(
+        new URL(result.returnPath, this.auth.frontendOrigin).href
+      )
     } catch {
       return res.redirect(
         new URL('/sign-in?error=oidc', this.auth.frontendOrigin).href
@@ -143,7 +148,11 @@ export class AuthController {
       result.sessionToken,
       cookieOptions(this.auth.secureCookie, 8 * 60 * 60 * 1000)
     )
-    return res.status(201).json({ authenticated: true, role: 'OWNER' })
+    return res.status(201).json({
+      authenticated: true,
+      role: 'OWNER',
+      returnPath: result.returnPath,
+    })
   }
 
   @Get('session')

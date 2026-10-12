@@ -13,9 +13,10 @@ import {
 } from 'lucide-react'
 import { StatusBadge } from '@/components/status-badge'
 import { MarketingLayout } from './marketing-layout'
-import { ProductPreview } from './product-preview'
 import { publicPages } from './public-pages'
 import { RepositoryPreview } from './repository-preview'
+import { SectionIllustration } from './section-illustration'
+import { WorkspaceWindow } from './workspace-window'
 
 const docs = 'https://lyrisoft.github.io/preflyt/'
 type Capability =
@@ -141,6 +142,7 @@ export function ProductPage() {
       <PageMetadata path='/product' />
       <main id='main'>
         <section className='hero capability-hero container'>
+          <SectionIllustration variant='process' />
           <div className='hero-copy'>
             <p className='eyebrow'>The Preflyt platform</p>
             <h1>
@@ -184,7 +186,9 @@ export function ProductPage() {
             </a>
           ))}
         </section>
-        <ProductPreview />
+        <section className='capability-workspace container'>
+          <WorkspaceWindow />
+        </section>
         <section className='workflow-section container'>
           <div className='workflow-heading'>
             <p className='section-label'>One connected workflow</p>
@@ -488,6 +492,15 @@ export function CapabilityPage({ capability }: { capability: Capability }) {
       <PageMetadata path={`/product/${capability}`} />
       <main id='main'>
         <section className='hero capability-hero container'>
+          <SectionIllustration
+            variant={
+              capability === 'repository-health'
+                ? 'health'
+                : capability === 'standards-and-evidence'
+                  ? 'evidence'
+                  : 'protection'
+            }
+          />
           <div className='hero-copy'>
             <p className='eyebrow'>{item.label}</p>
             <h1>{page.headline}</h1>
@@ -527,9 +540,7 @@ export function CapabilityPage({ capability }: { capability: Capability }) {
         </section>
         {capability === 'repository-health' && (
           <section className='capability-demo container'>
-            <p className='section-label'>
-              Inside Preflyt · Northstar demo workspace
-            </p>
+            <p className='section-label'>Inside Preflyt · Northstar</p>
             <div className='product-preview'>
               <RepositoryPreview />
             </div>
@@ -684,6 +695,7 @@ export function SelfHostingPage() {
       <PageMetadata path='/self-hosting' />
       <main id='main'>
         <section className='hero capability-hero container'>
+          <SectionIllustration variant='hosting' />
           <div className='hero-copy'>
             <p className='eyebrow'>Self-hosted by design</p>
             <h1>

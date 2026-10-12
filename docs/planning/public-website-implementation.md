@@ -1,19 +1,19 @@
 # Preflyt website analysis and phased implementation plan
 
 **Date:** 12 October 2026  
-**Status:** W0 approved; W1 and W2 implemented in the current app
+**Status:** W1 and W2 implemented; W2 audited and committed as `bd477f3`; W3 and the current homepage revision implemented and audited; technical verification complete; visual/launch acceptance pending
 
 **Scope:** Public website within the existing `apps/web` application
 
 **W0 review package:** [Approved design and implementation contract](../design/website-w0/README.md). The user approved public `/` and protected `/overview` on 12 October 2026. The user approved the design and authorized W1 on 12 October 2026.
 
-Build a public website that explains Preflyt, demonstrates its engineering workflow and guides visitors into self-hosting or their organization's existing installation. Use Twingate as the visual mood board, with Preflyt's own brand, product language and evidence. Continue using React, Vite, TanStack Router and the existing component foundation.
+Build a public website that explains Preflyt, demonstrates its engineering workflow and guides visitors into self-hosting or their organization's existing installation. The initial Twingate mood board is retained as planning context; the user's latest Linear-style references govern the current hero, engineering figures and editorial sections. Keep Preflyt's own brand, product language and evidence. Continue using React, Vite, TanStack Router and the existing component foundation.
 
-The recommended direction is a dark, spacious engineering website with large typography, clear product demonstrations and practical calls to action. The workspace retains its compact operational design. Website milestones below are a separate delivery workstream; they do not add, rename or reorder the approved product roadmap P0–P12.
+The implemented homepage has a left-aligned **Engineering confidence before production.** hero above a full app view up to 1280px wide. Static compositions scale a 1728px canvas with the actual sidebar catalogue/groups and global header. Three original animated isometric figures precede five open product sections: Repository health, Findings, Contributors, Standards & evidence and Merge Protection. Heading/copy columns, quiet feature links, layered app views and soft outer-edge fades retain the editorial composition. The full Findings, Contributors and Repository details tour uses native responsive application UI with populated charts. Public illustrations omit Preview badges and visible “Demo workspace” captions. Focused web checks passed; visual acceptance remains pending. The workspace retains its compact operational design. Website milestones below are a separate delivery workstream; they do not add, rename or reorder the approved product roadmap P0–P12.
 
-## 1. Twingate analysis
+## 1. Initial Twingate analysis
 
-The following observations come from the current [Twingate homepage](https://www.twingate.com/), including rendered desktop views of the hero, navigation, product panels and footer.
+The initial planning observations came from the [Twingate homepage](https://www.twingate.com/), including rendered desktop views of the hero, navigation, product panels and footer. The user's later Linear-style screenshot supersedes the boxed colored product-panel direction for the homepage.
 
 | Observed pattern | Purpose | Preflyt adaptation |
 | --- | --- | --- |
@@ -34,16 +34,16 @@ The [ZTNA product page](https://www.twingate.com/product/ztna) develops its stor
 | Verified repository condition | Implication for the website |
 | --- | --- |
 | `apps/web` uses React 19, Vite, Tailwind 4, TanStack Router and shadcn primitives | Add a public route family and feature module in this app |
-| `routes/_authenticated/index.tsx` owns `/` and renders the dashboard | A public homepage at `/` requires a deliberate dashboard URL migration |
+| `routes/index.tsx` owns public `/`; `routes/_authenticated/overview.tsx` renders the protected dashboard | Keep the implemented root/dashboard migration and dashboard filter validation |
 | `routes/_authenticated/route.tsx` checks the server session before private pages load | Public routes must sit outside this protected route family |
-| `main.tsx` mounts theme, font, direction and query providers globally | Scope marketing presentation and avoid private queries on public pages |
+| `main.tsx` starts the shared app factory, which provides theme, font, direction and query context | Scope marketing presentation and avoid private queries on public pages |
 | Brand assets already exist in `public/images/brand` | Reuse the supplied marks and wordmarks |
-| `index.html` has application metadata and broad indexing defaults | Introduce route-specific metadata and public/private indexing rules |
-| `deploy/nginx.conf` serves the Vite build with SPA fallback and proxies `/api/` | Public HTML generation must work in the existing Docker/Nginx deployment |
+| The build emits route-specific public HTML, a noindex private shell and a rendered noindex 404 | Retain explicit public/private metadata and indexing rules |
+| `deploy/nginx.conf` serves generated public HTML, allowlisted private SPA routes and `/api/` proxying | Keep public HTML generation and route validation in the existing Docker/Nginx deployment |
 | `apps/docs` already provides Docusaurus documentation | Link to the existing documentation rather than duplicating a documentation system |
-| OIDC completion redirects to `/`; sidebar Overview also links to `/` | Review auth completion, setup/onboarding, navigation and root links together |
+| Public `/`, protected `/overview` and validated internal auth destinations are implemented | Keep sign-in, setup/onboarding, recovery and navigation contracts aligned |
 
-Source files: [web package](../../apps/web/package.json), [protected layout](../../apps/web/src/routes/_authenticated/route.tsx), [dashboard route](../../apps/web/src/routes/_authenticated/overview.tsx), [providers](../../apps/web/src/main.tsx), [HTML entry](../../apps/web/index.html), [Nginx configuration](../../deploy/nginx.conf), [web image](../../deploy/web.Dockerfile), [OIDC callback](../../apps/api/src/auth/auth.controller.ts), [sidebar](../../apps/web/src/components/layout/data/sidebar-data.ts).
+Source files: [web package](../../apps/web/package.json), [protected layout](../../apps/web/src/routes/_authenticated/route.tsx), [dashboard route](../../apps/web/src/routes/_authenticated/overview.tsx), [app factory and providers](../../apps/web/src/app.tsx), [startup](../../apps/web/src/main.tsx), [HTML entry](../../apps/web/index.html), [Nginx configuration](../../deploy/nginx.conf), [web image](../../deploy/web.Dockerfile), [OIDC callback](../../apps/api/src/auth/auth.controller.ts), [sidebar](../../apps/web/src/components/layout/data/sidebar-data.ts).
 
 ### Product claims
 
@@ -65,12 +65,14 @@ The [12 October branch audit](branch-audit-2026-10-12.md) records remaining P5 q
 
 **Primary visitors:** Engineering leads and platform teams evaluating repository health, consistent standards and traceable change review. Developers need to see how findings become understandable actions. Organization administrators need to understand access, deployment and operational requirements.
 
-**Hero headline:** Engineering confidence before production.
+**Current hero headline:** Engineering confidence before production.
 
-**Proposed supporting copy:** Understand repository health, investigate findings and review changes against your engineering standards—with evidence tied to the commit.
+**Current supporting copy:** Understand your repositories, connect engineering requirements to CI evidence, and review every change at the right revision.
 
-**Primary action:** Get started → the supported self-hosting/getting-started documentation.  
-**Secondary action:** See how it works → the homepage workflow section.  
+**Primary action:** Get started → the supported self-hosting/getting-started documentation.
+
+**Secondary action:** Explore Preflyt → the homepage platform section.
+
 **Utility action:** Sign in → the existing installation's `/sign-in` route.
 
 This reflects the current self-hosted model. A hosted signup, free trial, demo booking or sales funnel can replace these actions when its destination and operating model are approved. GitHub login continues through the existing sign-in flow and deployment flag.
@@ -79,28 +81,28 @@ This reflects the current self-hosted model. A hosted signup, free trial, demo b
 
 ### Art direction
 
-Use a calm technical editorial style: large promises, readable explanatory copy, generous spacing and precise product evidence. The signature visual is a commit moving through required checks into a saved assessment, with a separate human review and GitHub permission boundary.
+Use Preflyt's own technical visual language: light-weight Geist headings, readable copy, generous spacing and product evidence. The current Linear-style editorial composition uses a left-aligned hero above a wide full-app view, three original isometric engineering figures and five open flat product sections. Section headings sit on the left with explanation on the right, followed by layered app scenes, soft outer-edge fades and quiet feature links. Static scenes scale a 1728px canvas; the interactive tour retains native responsive dimensions. Use original sign-in-derived branch/code artwork and flat frames. Keep human review and GitHub enforcement separate from Preflyt's assessment result.
 
-| Element | Proposed treatment |
+| Element | Current treatment for review |
 | --- | --- |
-| Base surfaces | Charcoal background around `#0E1115`; raised panels around `#151B22`; quiet borders around `#28333F` |
-| Brand | Existing Preflyt marks and slate/blue identity; proposed lighter blue accent for dark public surfaces, subject to contrast checks |
+| Base surfaces | Scoped charcoal background `#101213`, panels `#171A1C` and quiet borders `#282D30`; dedicated light treatment |
+| Brand | Existing Preflyt marks, cobalt primary `#315BEA` and light-blue dark-theme text accents |
 | Text | Off-white headings and readable gray body text; semantic colors reserved for actual product statuses |
-| Typography | Existing Manrope for display; compatible existing body font; monospace for commit/code labels. Avoid adding proprietary fonts |
-| Type scale | Fluid hero around 40–76px, section headings 28–48px, body 16–20px; validate line breaks at each viewport |
-| Layout | Approximately 1,200px content width, 24–40px desktop gutters, 16–20px mobile gutters and an 8px spacing rhythm |
-| Sections | Wide split compositions, open text groups and purposeful diagrams; selective cards rather than repeated identical grids |
+| Typography | Geist for public headings/body; application typography retained inside product windows; monospace for commit/code labels |
+| Type scale | Fluid hero up to 68px with smaller narrow-screen sizes; clearly separated section headings and readable body copy; validate line breaks at each viewport |
+| Layout | Left-aligned hero above a full-app view up to 1280px wide; shared 1280px header/section column, responsive gutters and stacked narrow-screen content |
+| Sections | Three captioned isometric figures, then five open flat product sections with layered app scenes and quiet feature links; boxed colored canvases removed |
 | Buttons | Shared brand-filled primary Button, quieter secondary action and explicit utility links; usable mobile hit areas |
-| Product visuals | Approved, redacted captures of actual supported states, or original abstract SVG diagrams with no invented measurements |
-| Motion | One restrained workflow reveal and short hover transitions; a complete static state with reduced motion |
+| Product visuals | Authorized synthetic Northstar records in real app components; static 1728px full-app compositions with actual sidebar catalogue/groups and global header; native interactive Findings, Contributors and Repository details tour |
+| Motion | Isometric figures animate once on entering view; restrained SVG signals, hero/scroll reveals, button feedback and menu/FAQ/tab transitions; static presentation with reduced motion |
 
-These are proposed public-site tokens, not replacements for workspace theme variables. Scope them to the marketing layout so workspace font preferences, light/dark themes, card density and navigation remain intact. Provide readable public light/dark treatments and verify both.
+These public-site tokens remain scoped to the marketing layout so workspace font preferences, light/dark themes, card density and navigation remain intact. Review both public themes and reduced-motion behavior before accepting the revised design.
 
 Use the existing `StatusBadge` and shared status mapping wherever a product state is rendered. Add a mapping regression test for any new fixed label. Do not borrow the reference site's badge colors. Workspace changes continue to use `PageHeader`, `SurfaceIcon` and the [enterprise UI guidelines](../design/enterprise-ui-guidelines.md).
 
 ### Asset requirements
 
-Prepare the Preflyt wordmark variants, the workflow illustration, two or three approved product captures, a social sharing image and a small verified integration set. Strip private repository names, source, identities and metadata before public use. If a capture cannot safely demonstrate the claim, use an explanatory diagram or omit it. Do not publish fabricated dashboard data, testimonials, customer logos, certifications, reliability promises or time-saving percentages.
+Reuse the Preflyt wordmark variants and sign-in-derived SVG geometry. Three original code-native isometric SVGs illustrate repository health, revision-bound evidence and clear merge review; they animate once on entering view and remain static with reduced motion. A branded 1,200×630 social image is implemented. Public product visuals use the user-authorized synthetic Northstar workspace; no private repository names, source, identities or metrics feed these previews. The overview contains 12 repositories, 86 assessed PRs, 1420 saved assessments over 180 days and standards adopted in 10 of 12 repositories. These measurements demonstrate the product and are not commercial proof. Visible “Demo workspace” captions and public illustration Preview badges are removed without changing the synthetic-data boundary. Do not publish fabricated testimonials, customer logos, certifications, reliability promises or time-saving percentages.
 
 ## 5. Page structure
 
@@ -109,13 +111,15 @@ Prepare the Preflyt wordmark variants, the workflow illustration, two or three a
 | Section | Visitor question | Content and action |
 | --- | --- | --- |
 | Header | Where can I go? | Product, How it works, Self-hosting, Docs; Sign in and Get started |
-| Hero | What is Preflyt? | Headline, short explanation, two actions and the commit/evidence visual |
-| Three outcomes | Why use it? | Understand codebase health; apply consistent standards; trace review results |
-| Repository health | What needs attention? | Findings and assessed-code preview with qualified execution limits |
+| Hero | What is Preflyt? | Left-aligned headline, short explanation, two actions and a wide full-app overview |
+| Engineering figures | Why use it? | Three original isometric illustrations: Repository health, Revision-bound evidence and Clear merge review |
+| Repository health | What needs attention? | Comparable health reports, populated quality metrics, analysis coverage and assessed-code context with qualified execution limits |
+| Findings | Which issues need investigation? | Full findings screen with severity/check charts, summary metrics, search, filtering and a populated issue list |
+| Contributors | How is the work distributed? | Full contributors screen with participation and revision-evidence charts, summary metrics and a directory with activity sparklines |
 | Standards and CI evidence | What requirements apply? | Versioned standards, target-branch policy and exact-commit evidence |
 | Merge review | What does the result mean? | Passing, blocked and incomplete evidence; explain the GitHub boundary |
-| AI guidance | How does AI help? | Short problem/effect/fix guidance, configuration requirements and advisory role |
-| Workflow | How do I start? | Deploy → connect GitHub → select repository → inspect health → configure standards/CI |
+| Workspace tour | What will I use? | Native responsive Findings, Contributors and Repository details screens with local interactions and populated charts |
+| Workflow | How do I start? | Connect GitHub → explore a health report → define requirements → review a change |
 | Self-hosting and integrations | Will it fit our environment? | Deployment docs, GitHub/Actions and supported report formats |
 | FAQ | What are the practical limits? | CI versus Health, optional AI, access, isolation and deployment requirements |
 | Closing action and footer | What next? | Get started, sign in, documentation, GitHub source and approved company/legal links |
@@ -144,13 +148,13 @@ Public paths use `/product/...` to avoid collisions with protected `/standards`,
 
 **Approved by the user on 12 October 2026:** Make `/` public and place the existing dashboard at protected `/overview`. Retain sidebar names, groups, order and all other workspace URLs. Update only the Overview destination as part of the migration.
 
-The routing choice is settled and does not need reconfirmation. The routing migration is now applied in the current app for W0 review. Do not implement a second dashboard or move every private page under `/app`. The W0 package defines auth completion and legacy root-query handling.
+The routing choice is settled and does not need reconfirmation. The routing migration is implemented in the current app. Do not implement a second dashboard or move every private page under `/app`. The W0 package records auth completion and legacy root-query handling.
 
 For the approved migration:
 
 1. Retain the dashboard's `tab`, `days` and `repository` search validation at `/overview`.
 2. Inventory root links in sidebar/search, logos, auth completion, setup, onboarding, notifications and tests. Update workspace entry links to the protected destination.
-3. Review actual return-path handling before promising deep-link restoration. The sign-in route currently accepts `redirect`, while its provider links do not forward it and OIDC completion defaults to `/`.
+3. Preserve the sign-in route's validated `redirect` through provider links and Super Admin recovery. W3 stores the OIDC destination in the single-use login transaction and transfers it into first-owner bootstrap; callback query parameters cannot replace it.
 4. Preserve valid internal destinations through login; reject external return URLs. Define legacy dashboard query-link handling at `/`, with authentication before private data loads.
 5. Keep `/sign-in`, `/setup`, `/github-onboarding`, Super Admin recovery and provider callbacks operational. Signed-in visitors can still visit public pages and get an Open workspace action.
 
@@ -175,7 +179,7 @@ Treat this as a proposed structure; generate `routeTree.gen.ts` through the exis
 
 ### Rendering and discovery
 
-Generate HTML for an explicit allowlist of public marketing paths during the existing Vite build. W0 selects build-time rendering with Vite SSR, React and the existing TanStack route tree; prove it in W1. Retain React hydration/navigation and the current Docker image. The W0 contract covers universal router creation, browser-only providers, hydration and a separate private SPA fallback shell. A framework migration is outside this workstream.
+The existing Vite build generates HTML for an explicit allowlist of six public marketing paths using React and the existing TanStack route tree. It retains React hydration/navigation and the current Docker image, with a separate private SPA shell. W3 adds a rendered 404 page, allowlisted sitemap/robots output and branded sharing metadata. A framework migration is outside this workstream.
 
 Each public path needs its own title, description, canonical URL, sharing metadata and content in the served HTML. Build-time rendering must run without private cookies or repository API calls. Sitemap and robots output must use the configured public origin, not a hardcoded customer installation.
 
@@ -206,23 +210,35 @@ W0–W4 represent approximately 13–21 engineering/design working days with one
 
 ### W1 Homepage vertical slice
 
-**Implemented:** Public homepage, interactive demo previews, responsive navigation, Geist typography, public HTML prerendering and separate private fallback shell. See [deployment and verification](../deployment/public-homepage.md).
+**Implemented:** Public homepage, interactive synthetic Northstar previews, responsive navigation, Geist typography, public HTML prerendering and separate private fallback shell. The current visual revision adds the left-aligned hero, three original isometric figures and five open product sections. See [deployment and verification](../deployment/public-homepage.md).
 
-**Work:** Add the public layout, scoped tokens, keyboard-accessible mobile navigation and homepage. Implement the hero, three outcomes, core product sections, workflow, FAQ and footer with approved content/assets. Generate homepage HTML and essential metadata through the existing Docker build. Include required legal links only when their approved destinations exist.
+**Work:** Add the public layout, scoped tokens, keyboard-accessible mobile navigation and homepage. Implement the hero, engineering figures, five core product sections, interactive workspace tour, workflow, FAQ and footer with approved content/assets. Generate homepage HTML and essential metadata through the existing Docker build. Include required legal links only when their approved destinations exist.
 
 **Acceptance:** An anonymous visitor can read the page, understand the product and reach getting-started docs/sign-in. It works at 320px, tablet and desktop, with both themes and reduced motion. No private queries run. Existing protected pages and recovery flows still work. Served HTML contains the actual page title and meaningful content.
 
-**Release shape:** A complete reviewable homepage on the existing preview environment. W2 pages are absent from navigation until delivered.
+**Release shape:** Homepage and delivered W2 pages are available in the current app at `http://localhost:5173`. The latest visual revision remains subject to review.
 
 ### W2 Product explanation and self hosting
 
 **Implemented, 12 October 2026:** `/product`, `/product/repository-health`, `/product/standards-and-evidence`, `/product/merge-protection` and `/self-hosting`. Shared public header/footer, Geist typography, theme tokens and homepage motion are reused. Pages include workflow, prerequisites, operating limits and documentation handoffs. All six public routes have generated HTML and route-specific metadata. See [deployment and verification](../deployment/public-homepage.md).
+
+**Audit and commit:** `bd477f3` — `feat(website): implement product capabilities and self-hosting pages`. Subsequent homepage visual corrections are part of the current review, not a claim that the revised appearance has been accepted.
 
 **Work:** Deliver `/product`, the three capability pages and `/self-hosting` using a shared page composition. Explain prerequisites, supported inputs and limits alongside each capability. Use the homepage's visual grammar with enough detail for evaluation. Link to authoritative documentation for setup commands and technical contracts.
 
 **Acceptance:** Every linked page answers what it does, how it works and how to start. Public/private routes do not collide. Evidence-bound assessment, AI advisory behavior and native qualification limits remain clear. Documentation and product copy agree; product captures contain no confidential content.
 
 ### W3 Discovery and conversion completion
+
+**Implemented, 12 October 2026:** Configured canonical/Open Graph/Twitter metadata for every public page, branded sharing image, public-only sitemap and robots output, noindex private/404 documents, useful public 404 rendering and an explicit Nginx private-route allowlist checked against the generated route tree. Session-verified Open workspace remains available. Internal destinations are preserved through GitHub, OIDC, Super Admin and first-owner setup; normalized double-slash redirect attacks are rejected. The additive OIDC return-path migration was applied locally and Prisma regenerated.
+
+**Production startup correction:** Legacy dashboard query links on `/` mount the client router so the protected `/overview` redirect runs with its filters. Ordinary public visits continue hydrating generated HTML. A browser regression verifies the actual sign-in redirect and preserved filters.
+
+**Current review refinements:** The header and page sections share a 1280px desktop column with 32px side gutters (18px on phones). Within the homepage workspace tour, repository previews end after Analysis coverage; the lower Findings/Assessment history and Policy evidence block is omitted, while other full repository previews retain it.
+
+**Pre-commit audit, 12 October 2026:** Fixed the web Docker build stage to copy the Nginx configuration used by prerender validation. Made product-preview IDs unique while preserving section anchors, and derived contributor repository/PR/revision totals from the same public fixtures as Overview. Removed the superseded workflow wrapper and its unused styles/data; its interaction regression now exercises the actual full-frame preview. Production Docker build and isolated route/header smoke checks passed. The review app remains on localhost:5173; visual acceptance and W4 launch remain separate.
+
+**Technical validation passed:** 60 API auth/GitHub tests, 14 public-build configuration tests and 20 production Docker/Nginx route/header checks. The API suite includes persisted legacy-row redirect regressions; unsafe destinations are rejected before login/bootstrap grants. Earlier browser checks passed 45 auth, 8 hydration/startup and 5 preview cases. The current revision passed 135 web checks in one grouped run (including preview/data invariants, shared chart/status regressions and generated-HTML hydration/startup), the production build, web typecheck, full web lint and whitespace checks. API typecheck and auth-file lint/format checks passed. Visual acceptance and W4 launch remain pending. No analytics or measurement service was requested or added.
 
 **Work:** Complete public-route prerendering, canonical/share metadata, sitemap, indexing settings and useful not-found handling. Verify the root/auth migration delivered in W1. Add a visible Open workspace action where session state is verified. Add privacy-compatible measurement only if wanted for the deployment.
 
@@ -231,6 +247,8 @@ Initial measurement, if enabled, covers CTA clicks and documentation/sign-in han
 **Acceptance:** Public HTML and social previews work for every launch page. Private/auth pages are excluded from indexing. Login finishes at the intended protected destination, including tested internal deep links and safe legacy root-query behavior. Public pages remain readable during API/session failure.
 
 ### W4 Release verification and launch
+
+**Status:** Pending visual acceptance and release/launch verification. Historical W1/W2 checks and focused W3 technical results do not complete this gate.
 
 **Work:** Review copy and captures, run focused regressions and production-build checks, validate Docker/Nginx routing, and capture desktop/mobile views. Check accessibility, public-page loading and auth regression. Record the release checklist, previous-image rollback path and known deployment conditions.
 
@@ -267,8 +285,8 @@ Optimize the hero first: explicit asset dimensions, responsive modern images, de
 | Deployment entry and primary conversion | Self-hosting/getting-started docs | Matches the current operating model |
 | Public domain and documentation URL | Selected: configured origin and existing docs destination; final public domain supplied at deployment | Controls canonical URLs and customer deployment behavior |
 | Private installation discovery | Selected: indexing disabled by default, explicit public enablement | Keeps deployment behavior intentional |
-| Brand treatment | Prepared for review: existing logo/identity, scoped dark and light treatments | Maintains continuity with the app |
-| Public captures | Original explanatory diagrams in W0; approved product captures remain optional | No private data is needed for visual review |
+| Brand treatment | Current original Preflyt direction awaiting review: Geist, scoped themes, flat app frames, sign-in-derived artwork and original isometric figures | Maintains continuity with the app while applying the latest editorial references |
+| Public product visuals | User-authorized synthetic Northstar records; scaled 1728px static app compositions and native interactive tour; no visible Demo workspace captions | Shows product detail without publishing private workspace data |
 | Pricing, sales and legal destinations | Approved content and functioning destinations before exposure | Prevents unsupported commercial promises and dead links |
 
 ## 10. Governing references
@@ -280,3 +298,4 @@ Optimize the hero first: explicit asset dimensions, responsive modern images, de
 - [P5 implementation and limitations](p5-implementation.md)
 - [Current branch audit and release requirements](branch-audit-2026-10-12.md)
 - [Twingate homepage mood board](https://www.twingate.com/), [product explanation](https://www.twingate.com/product/ztna) and [commercial destination](https://www.twingate.com/pricing)
+- User-provided Linear-style references: current hero, isometric figures and editorial section composition.

@@ -161,8 +161,12 @@ async function newAuthService() {
   return service
 }
 
-async function startLogin(service: AuthService, invalid?: string) {
-  const started = await service.beginLogin('127.0.0.1')
+async function startLogin(
+  service: AuthService,
+  invalid?: string,
+  returnPath?: string,
+) {
+  const started = await service.beginLogin('127.0.0.1', returnPath)
   const authorization = new URL(started.url)
   const code = 'one-use-code-' + crypto.randomUUID()
   codes.set(code, {
@@ -178,6 +182,129 @@ async function startLogin(service: AuthService, invalid?: string) {
 }
 
 describe('OIDC and server-side identity sessions', () => {
+  it.each([
+    'https://attacker.example',
+    '//attacker.example',
+    '/safe/..//attacker.example',
+    '/safe/%2e%2e//attacker.example',
+    '/\\attacker.example',
+    '/path%0aLocation:evil',
+    '/path%5cevil',
+  ])(
+    'rejects an unsafe OIDC return path before creating a transaction: %s',
+    async (path) => {
+      const service = await newAuthService()
+      await expect(service.beginLogin('127.0.0.1', path)).rejects.toThrow(
+        'Invalid sign-in return path',
+      )
+      expect(await prisma.loginTransaction.count()).toBe(0)
+    },
+  )
+
+  it('preserves an internal destination through the single-use OIDC and owner bootstrap transactions', async () => {
+    const service = await newAuthService()
+    const destination = '/repositories/42?tab=health#findings'
+    const { started, request } = await startLogin(
+      service,
+      undefined,
+      destination,
+    )
+    request.query.redirect = '//attacker.example'
+    const login = await service.completeLogin(request, started.browserBinding)
+    if (login.kind !== 'bootstrap')
+      throw new Error('Expected bootstrap challenge')
+    const challenge = await prisma.bootstrapChallenge.findUniqueOrThrow({
+      where: {
+        tokenHash: createHash('sha256')
+          .update(login.challengeToken)
+          .digest('hex'),
+      },
+    })
+    expect(challenge.returnPath).toBe(destination)
+    const owner = await service.bootstrapOwner(
+      bootstrapToken,
+      login.challengeToken,
+      webOrigin,
+      '127.0.0.2',
+    )
+    expect(owner.returnPath).toBe(destination)
+    await expect(
+      service.bootstrapOwner(
+        bootstrapToken,
+        login.challengeToken,
+        webOrigin,
+        '127.0.0.2',
+      ),
+    ).rejects.toThrow()
+
+    const next = await startLogin(
+      service,
+      undefined,
+      '/assessments?repository=42',
+    )
+    const identity = await prisma.identity.findUniqueOrThrow({
+      where: { id: challenge.identityId },
+    })
+    codes.get(next.request.query.code as string)!.sub = identity.subject
+    next.request.query.redirect = '/findings'
+    const session = await service.completeLogin(
+      next.request,
+      next.started.browserBinding,
+    )
+    expect(session).toMatchObject({
+      kind: 'session',
+      returnPath: '/assessments?repository=42',
+    })
+  })
+
+  it('rejects an unsafe persisted OIDC transaction before creating identity or bootstrap proof', async () => {
+    const service = await newAuthService()
+    const { started, request } = await startLogin(service)
+    await prisma.loginTransaction.update({
+      where: {
+        stateHash: createHash('sha256')
+          .update(request.query.state as string)
+          .digest('hex'),
+      },
+      data: { returnPath: '/safe/..//attacker.example' },
+    })
+    await expect(
+      service.completeLogin(request, started.browserBinding),
+    ).rejects.toThrow('Invalid sign-in return path')
+    expect(await prisma.bootstrapChallenge.count()).toBe(0)
+    expect(await prisma.identity.count({ where: { issuer } })).toBe(0)
+    expect(await prisma.webSession.count()).toBe(0)
+    expect(await prisma.loginTransaction.count()).toBe(0)
+  })
+
+  it('rejects an unsafe persisted owner-bootstrap destination before granting ownership', async () => {
+    const service = await newAuthService()
+    const { started, request } = await startLogin(service)
+    const login = await service.completeLogin(request, started.browserBinding)
+    if (login.kind !== 'bootstrap')
+      throw new Error('Expected bootstrap challenge')
+    await prisma.bootstrapChallenge.update({
+      where: {
+        tokenHash: createHash('sha256')
+          .update(login.challengeToken)
+          .digest('hex'),
+      },
+      data: { returnPath: '//attacker.example' },
+    })
+    await expect(
+      service.bootstrapOwner(
+        bootstrapToken,
+        login.challengeToken,
+        webOrigin,
+        '127.0.0.2',
+      ),
+    ).rejects.toThrow('Invalid sign-in return path')
+    expect(await prisma.membership.count({ where: { role: 'OWNER' } })).toBe(0)
+    expect(await prisma.organizationMembership.count()).toBe(0)
+    expect(await prisma.webSession.count()).toBe(0)
+    expect(await prisma.bootstrapState.count()).toBe(0)
+  })
+
   it('preserves sessions and the password hash across repeated startup without extending expiry', async () => {
     const service = await newAuthService()
     const session = await service.loginSuperAdmin(
@@ -557,6 +684,67 @@ it('sets a persistent 24-hour admin cookie and prevents caching session decision
           .set('Cookie', cookie.split(';')[0])
       ).body,
     ).toEqual({ authenticated: false })
+  } finally {
+    await app.close()
+  }
+})
+
+it('returns to transaction-bound routes through the OIDC callback and bootstrap HTTP endpoints', async () => {
+  const service = await newAuthService()
+  const app = await NestFactory.create(
+    {
+      module: class TestModule {},
+      controllers: [AuthController],
+      providers: [{ provide: AuthService, useValue: service }],
+    },
+    { logger: false },
+  )
+  app.use(cookieParser())
+  await app.init()
+  const subject = 'return-path-owner-' + crypto.randomUUID()
+  async function callbackFor(destination: string) {
+    const started = await request(app.getHttpServer())
+      .get('/auth/login')
+      .query({ redirect: destination })
+    expect(started.status).toBe(302)
+    const authorization = new URL(started.headers.location)
+    const code = 'return-path-code-' + crypto.randomUUID()
+    codes.set(code, {
+      nonce: authorization.searchParams.get('nonce')!,
+      challenge: authorization.searchParams.get('code_challenge')!,
+      sub: subject,
+    })
+    return request(app.getHttpServer())
+      .get('/auth/callback')
+      .query({
+        state: authorization.searchParams.get('state'),
+        code,
+        redirect: '//attacker.example',
+      })
+      .set('Cookie', started.headers['set-cookie'][0].split(';')[0])
+  }
+  try {
+    const destination = '/repositories/42?tab=health#findings'
+    const callback = await callbackFor(destination)
+    expect(callback.headers.location).toBe(webOrigin + '/setup')
+    const challenge = callback.headers['set-cookie'].find((cookie: string) =>
+      cookie.startsWith(service.challengeCookieName + '='),
+    )!
+    const bootstrap = await request(app.getHttpServer())
+      .post('/auth/bootstrap')
+      .set('Origin', webOrigin)
+      .set('Cookie', challenge.split(';')[0])
+      .send({ token: bootstrapToken, redirect: '//attacker.example' })
+    expect(bootstrap.status).toBe(201)
+    expect(bootstrap.body).toEqual({
+      authenticated: true,
+      role: 'OWNER',
+      returnPath: destination,
+    })
+    const memberCallback = await callbackFor('/assessments?repository=42#latest')
+    expect(memberCallback.headers.location).toBe(
+      webOrigin + '/assessments?repository=42#latest',
+    )
   } finally {
     await app.close()
   }

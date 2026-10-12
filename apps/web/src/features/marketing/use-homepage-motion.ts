@@ -50,7 +50,7 @@ export function useHomepageMotion(ref: RefObject<HTMLDivElement | null>) {
     )
     root
       .querySelectorAll(
-        '.section-heading, .capability-card, .capability-boundary, .capability-limits, .operations-links, .feature, .ai-heading, .workflow-heading, .workflow-steps li, .hosting, .faq-section, .closing'
+        '.reference-feature, .reference-tour-heading, .reference-process, .reference-hosting, .section-heading, .capability-card, .capability-boundary, .capability-limits, .operations-links, .feature, .ai-heading, .workflow-heading, .workflow-steps li, .hosting, .faq-section, .closing'
       )
       .forEach((element) => observer.observe(element))
     reduced.addEventListener('change', cancel)

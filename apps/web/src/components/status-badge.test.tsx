@@ -198,3 +198,10 @@ it('maps overall Health labels to their semantic tones', () => {
   expect(statusTones.unhealthy).toBe('error')
   expect(statusTones['needs attention']).toBe('warning')
 })
+
+it('maps finding severity labels consistently across public previews', () => {
+  expect(statusTones.critical).toBe('error')
+  expect(statusTones.high).toBe('error')
+  expect(statusTones.medium).toBe('warning')
+  expect(statusTones.low).toBe('info')
+})

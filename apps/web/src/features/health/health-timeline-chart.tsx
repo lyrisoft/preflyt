@@ -20,14 +20,14 @@ import {
 import { SurfaceIcon } from '@/components/surface-icon'
 import type { HealthTimelinePoint } from './health-api'
 
-const utcDate = (value: number) =>
-  new Intl.DateTimeFormat(undefined, {
+const utcDate = (value: number, locale?: string) =>
+  new Intl.DateTimeFormat(locale, {
     month: 'short',
     day: 'numeric',
     timeZone: 'UTC',
   }).format(new Date(value))
-const utcTime = (value: number) =>
-  new Intl.DateTimeFormat(undefined, {
+const utcTime = (value: number, locale?: string) =>
+  new Intl.DateTimeFormat(locale, {
     hour: '2-digit',
     minute: '2-digit',
     hour12: false,
@@ -39,8 +39,12 @@ export function HealthTimelineChart({
   branch,
   onSelectReport,
   embedded = false,
+  compact = false,
+  locale,
 }: {
   embedded?: boolean
+  compact?: boolean
+  locale?: string
   points: HealthTimelinePoint[]
   branch: string
   onSelectReport: (id: string) => void
@@ -57,7 +61,7 @@ export function HealthTimelineChart({
   }
   const span =
     data.length > 1 ? data[data.length - 1].timestamp - data[0].timestamp : 0
-  const formatTick = span >= 86400000 ? utcDate : utcTime
+  const formatTick = (value: number) => span >= 86400000 ? utcDate(value, locale) : utcTime(value, locale)
   const Container = embedded ? 'div' : Card
   return (
     <Container
@@ -78,13 +82,13 @@ export function HealthTimelineChart({
           </div>
         </CardHeader>
       )}
-      <CardContent className={embedded ? 'p-4' : 'px-5 pb-5'}>
+      <CardContent className={compact ? 'p-0' : embedded ? 'p-4' : 'px-5 pb-5'}>
         {scope?.length && <p className='mb-3 text-xs text-muted-foreground'>
           Compared rule packs: {scope.map(id=>scopeNames[id] ?? id).join(', ')}. Other analyses are excluded.
         </p>}
         {embedded && <h3 className='sr-only'>Findings over time</h3>}
         <div
-          className={`relative min-w-0 ${data.length ? 'h-48 sm:h-52' : 'h-24'}`}
+          className={`relative min-w-0 ${data.length ? compact ? 'h-36' : 'h-48 sm:h-52' : 'h-24'}`}
           role='img'
           aria-label={
             data.length
@@ -159,7 +163,7 @@ export function HealthTimelineChart({
                     const point = payload?.[0]?.payload as
                       HealthTimelinePoint | undefined
                     return point
-                      ? `${new Date(point.at).toLocaleString(undefined, { timeZone: 'UTC' })} UTC · ${point.sourceSha.slice(0, 7)}`
+                      ? `${new Date(point.at).toLocaleString(locale, { timeZone: 'UTC' })} UTC · ${point.sourceSha.slice(0, 7)}`
                       : ''
                   }}
                   cursor={{ stroke: 'var(--chart-1)', strokeDasharray: '4 4' }}
@@ -194,6 +198,7 @@ export function HealthTimelineChart({
             </div>
           )}
         </div>
+        {!compact && (
         <div className='mt-4 flex flex-wrap items-center justify-between gap-x-6 gap-y-2 text-xs text-muted-foreground'>
           <span className='inline-flex items-center gap-2'>
             <span
@@ -206,6 +211,7 @@ export function HealthTimelineChart({
             Latest 30 branch reports · incomplete finding sets and incompatible scopes are excluded
           </span>
         </div>
+        )}
         {!!data.length && (
           <details className='mt-3 text-xs'>
             <summary className='w-fit cursor-pointer rounded-sm text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring'>
@@ -227,7 +233,7 @@ export function HealthTimelineChart({
                   {points.map((point) => (
                     <tr key={point.id} className='border-b last:border-0'>
                       <td className='px-3 py-2'>
-                        {new Date(point.at).toLocaleString(undefined, {
+                        {new Date(point.at).toLocaleString(locale, {
                           timeZone: 'UTC',
                         })}
                       </td>

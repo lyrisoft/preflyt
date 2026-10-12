@@ -40,7 +40,7 @@ export function MarketingLayout({ children }: { children: ReactNode }) {
     <div ref={siteRef} className='marketing-site' data-theme={resolvedTheme}>
       <link
         rel='stylesheet'
-        href='https://fonts.googleapis.com/css2?family=Geist:wght@400;450;500;600;650;700&display=swap'
+        href='https://fonts.googleapis.com/css2?family=Geist:wght@300;350;400;450;500;600;650;700&display=swap'
       />
       <a className='skip' href='#main'>
         Skip to content

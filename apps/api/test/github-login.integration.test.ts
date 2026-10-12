@@ -220,6 +220,42 @@ it('rejects missing/mismatched binding, expired state and callback replay before
     login.complete(nextState, next.browserBinding, 'code'),
   ).rejects.toThrow()
 })
+it.each(['//evil.test', '/safe/..//evil.test', '/safe/%2e%2e//evil.test'])(
+  'rejects an unsafe persisted GitHub login destination before token exchange: %s',
+  async (returnPath) => {
+    const begun = await login.begin('legacy-ip', '/repositories')
+    const state = new URL(begun.url).searchParams.get('state')!
+    await db.gitHubLoginTransaction.update({
+      where: { stateHash: hash(state) },
+      data: { returnPath },
+    })
+    await expect(
+      login.complete(state, begun.browserBinding, 'fixture-code'),
+    ).rejects.toThrow('Invalid sign-in return path')
+    expect(provider.exchange).not.toHaveBeenCalled()
+    expect(await db.gitHubOnboardingChallenge.count()).toBe(0)
+    expect(await db.webSession.count()).toBe(0)
+    expect(await db.gitHubLoginTransaction.count()).toBe(0)
+  },
+)
+it.each(['//evil.test', '/safe/..//evil.test', '/safe/%2e%2e//evil.test'])(
+  'rejects an unsafe persisted GitHub onboarding destination before granting access: %s',
+  async (returnPath) => {
+    const result = await callback()
+    await db.gitHubOnboardingChallenge.update({
+      where: { tokenHash: hash(result.challengeToken) },
+      data: { returnPath },
+    })
+    await expect(
+      login.enter(result.challengeToken, '41', 'http://localhost:5173'),
+    ).rejects.toThrow('Invalid sign-in return path')
+    expect(provider.verify).not.toHaveBeenCalled()
+    expect(await db.organization.count()).toBe(0)
+    expect(await db.organizationMembership.count()).toBe(0)
+    expect(await db.webSession.count()).toBe(0)
+    expect(await db.gitHubOnboardingChallenge.count()).toBe(1)
+  },
+)
 it('creates one verified owner workspace and preserves persistent sessions across service instances', async () => {
   const { current, session, result } = await onboard()
   expect(current.role).toBe('OWNER')
@@ -407,6 +443,8 @@ it('grants verified GitHub users built-in roles without auto-linking names or gr
 it('blocks open redirects and throttles repeated login attempts', async () => {
   for (const value of [
     '//evil.test',
+    '/safe/..//evil.test',
+    '/safe/%2e%2e//evil.test',
     'https://evil.test',
     '/\\evil.test',
     '/%0aevil',

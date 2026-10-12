@@ -4,6 +4,10 @@ export type StatusTone = 'success' | 'warning' | 'error' | 'info' | 'neutral'
 export const statusTones: Readonly<Record<string, StatusTone>> = {
   'freshness unverified': 'neutral',
   healthy: 'success',
+  critical: 'error',
+  high: 'error',
+  medium: 'warning',
+  low: 'info',
   unhealthy: 'error',
   'needs attention': 'warning',
   'findings reported': 'error',

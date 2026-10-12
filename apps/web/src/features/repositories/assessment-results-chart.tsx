@@ -10,7 +10,9 @@ export function AssessmentResultsChart({
   incomplete,
   selected,
   onSelect,
+  compact = false,
 }: {
+  compact?: boolean
   total: number
   passed: number
   failed: number
@@ -43,11 +45,21 @@ export function AssessmentResultsChart({
   ]
   const chartData = segments.filter((segment) => segment.value > 0)
   return (
-    <div className='rounded-lg border bg-muted/10 p-4'>
+    <div className={compact ? 'p-0' : 'rounded-lg border bg-muted/10 p-4'}>
       <p className='text-sm font-semibold'>All check results</p>
-      <div className='mt-4 flex flex-wrap items-center gap-5'>
+      <div
+        className={
+          compact
+            ? 'mt-3 flex flex-wrap items-center gap-3'
+            : 'mt-4 flex flex-wrap items-center gap-5'
+        }
+      >
         <div
-          className='relative h-44 w-full max-w-44 shrink-0'
+          className={
+            compact
+              ? 'relative h-32 w-32 shrink-0'
+              : 'relative h-44 w-full max-w-44 shrink-0'
+          }
           role='img'
           aria-label={`Results for ${total} checks: ${passed} passed, ${failed} failed, ${incomplete} not evaluated`}
         >
@@ -105,7 +117,11 @@ export function AssessmentResultsChart({
             <span className='mt-0.5 text-xs text-muted-foreground'>checks</span>
           </div>
         </div>
-        <div className='min-w-40 flex-1 space-y-1'>
+        <div
+          className={
+            compact ? 'min-w-28 flex-1 space-y-1' : 'min-w-40 flex-1 space-y-1'
+          }
+        >
           {segments.map((segment) => (
             <button
               key={segment.key}

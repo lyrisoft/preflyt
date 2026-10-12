@@ -22,15 +22,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { SurfaceIcon } from '@/components/surface-icon'
 import { ContributorActivitySparkline } from '@/features/contributors/contributor-activity-sparkline'
-import { demoActivity } from './demo-workspace'
+import { demoActivity, demoPullRequests } from './demo-workspace'
 
 const contributors = [
   {
     login: 'alex-northstar',
     initials: 'AN',
     role: 'Human · GitHub contributor',
-    repositories: 3,
-    prs: 48,
     reviews: 32,
     offset: 0,
   },
@@ -38,8 +36,6 @@ const contributors = [
     login: 'sam-northstar',
     initials: 'SN',
     role: 'Human · GitHub contributor',
-    repositories: 2,
-    prs: 26,
     reviews: 41,
     offset: 1,
   },
@@ -47,32 +43,38 @@ const contributors = [
     login: 'jordan-northstar',
     initials: 'JN',
     role: 'Human · GitHub contributor',
-    repositories: 2,
-    prs: 12,
     reviews: 19,
     offset: 2,
   },
 ].map((person) => ({
   ...person,
-  activity: demoActivity
-    .slice(-30)
-    .map((day, index) => ({
-      date: day.date,
-      count: Math.max(0, day.count - person.offset + (index % 3)),
-    })),
-}))
-const participation = demoActivity
-  .slice(-30)
-  .map((day, index) => ({
+  repositories: new Set(
+    demoPullRequests
+      .filter((pr) => pr.author === person.login)
+      .map((pr) => pr.repositoryId)
+  ).size,
+  prs: demoPullRequests.filter((pr) => pr.author === person.login).length,
+  activity: demoActivity.slice(-30).map((day, index) => ({
     date: day.date,
-    count: contributors.reduce(
-      (total, person) => total + person.activity[index].count,
-      0
-    ),
-  }))
+    count: Math.max(0, day.count - person.offset + (index % 3)),
+  })),
+}))
+const participation = demoActivity.slice(-30).map((day, index) => ({
+  date: day.date,
+  count: contributors.reduce(
+    (total, person) => total + person.activity[index].count,
+    0
+  ),
+}))
+const matchingSnapshots = demoPullRequests.filter(
+  (pr) => pr.assessmentSourceSha === pr.headSha
+).length
 const evidence = [
-  { name: 'Snapshot recorded', count: 64 },
-  { name: 'No matching snapshot', count: 22 },
+  { name: 'Snapshot recorded', count: matchingSnapshots },
+  {
+    name: 'No matching snapshot',
+    count: demoPullRequests.length - matchingSnapshots,
+  },
 ]
 const tooltipStyle = {
   background: 'var(--popover)',
@@ -88,7 +90,7 @@ export function ContributorsPreview() {
     person.login.includes(search.toLowerCase().trim())
   )
   return (
-    <div id='contributors-preview' className='scroll-mt-28 space-y-4'>
+    <div data-preview='contributors' className='scroll-mt-28 space-y-4'>
       <div className='flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/10 px-4 py-3 text-xs text-muted-foreground'>
         <span>Last 30 days · All repositories</span>
         <span>12 September–11 October 2026 · UTC</span>
@@ -97,25 +99,25 @@ export function ContributorsPreview() {
         {[
           {
             label: 'Observed contributors',
-            value: 3,
+            value: contributors.length,
             icon: UsersRound,
             tone: 'blue' as const,
           },
           {
             label: 'Contributed repositories',
-            value: 3,
+            value: new Set(demoPullRequests.map((pr) => pr.repositoryId)).size,
             icon: GitBranch,
             tone: 'teal' as const,
           },
           {
             label: 'Authored PRs',
-            value: 86,
+            value: demoPullRequests.length,
             icon: GitPullRequest,
             tone: 'violet' as const,
           },
           {
             label: 'PRs with saved assessments',
-            value: 64,
+            value: matchingSnapshots,
             icon: FileSearch,
             tone: 'amber' as const,
           },
@@ -199,7 +201,7 @@ export function ContributorsPreview() {
             <div
               style={{ height: 224, width: '100%' }}
               role='img'
-              aria-label='64 PRs with a recorded snapshot; 22 without a matching snapshot'
+              aria-label={`${matchingSnapshots} PRs with a recorded snapshot; ${demoPullRequests.length - matchingSnapshots} without a matching snapshot`}
             >
               <ResponsiveContainer width='100%' height='100%'>
                 <BarChart
@@ -257,7 +259,7 @@ export function ContributorsPreview() {
               className='absolute top-2.5 left-3 size-4 text-muted-foreground'
             />
             <Input
-              aria-label='Search demo contributors'
+              aria-label='Search contributors'
               placeholder='Find a contributor…'
               className='pl-9'
               value={search}
