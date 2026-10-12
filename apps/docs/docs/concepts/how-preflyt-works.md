@@ -21,6 +21,20 @@ Selecting a repository queues a branch Health assessment at a fixed commit. Revi
 
 ## The CI workflow
 
+Health and CI answer complementary questions. **Health** describes the codebase at a selected branch revision, including supported findings, completeness and freshness. **CI assessments** establish whether submitted checks meet the requirements for a change. Both feed the same Findings workspace.
+
+```mermaid
+flowchart LR
+  R[Selected repository] --> H[Branch Health assessment]
+  R --> C[CI reports and policy assessment]
+  H --> F[Unified Findings]
+  C --> F
+  F --> S[Assessed-commit source]
+  S --> G[AI or analyzer guidance]
+```
+
+In Findings, filter by source, type, repository, severity or status. Open an issue to inspect its evidence and saved source excerpt. Configured AI produces a short problem, likely effect and suggested fix, saved for later visits; analyzer/rule guidance is the fallback. AI explanations are advisory. The original evidence remains available alongside them.
+
 ```mermaid
 flowchart LR
   D[Discover<br/>profile the repository] --> A[Assess<br/>freeze standards + evidence]
@@ -39,9 +53,9 @@ flowchart LR
 
 ## The three engines
 
-- **Validation**: discovers repository context and normalises CI evidence.
+- **Validation**: discovers repository context, coordinates approved Health analysis and normalises CI evidence.
 - **Governance**: holds your standards, requirements and quality gates.
-- **Intelligence**: explains findings and correlates risk with optional AI. **AI never decides a gate result.**
+- **Intelligence**: explains findings using assessed code and supports optional PR reviews. **AI never decides a gate result.**
 
 ## What "observe mode" means
 

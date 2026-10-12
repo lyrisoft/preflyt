@@ -41,14 +41,14 @@ Branch checks are cached for one minute. Open or refresh Health to check again; 
 | Maintainability | JavaScript, TypeScript or Python source paths | Reviewed local Semgrep rules for leftover debugger statements and dynamic execution. Narrow rule coverage; findings require code review. |
 | Duplicated code | Supported JS/TS, Python, Java, Go, Ruby, PHP, C#, CSS/SCSS, SQL and Rust paths | jscpd 4.3.0 with a fixed, reviewed scope. Unique duplicated physical lines / analyzed physical lines; overlapping blocks count once. Source ranges link to the assessed revision. |
 | Security hotspot review | JavaScript, TypeScript or Python source paths | Reviewed Semgrep rules identify MD5 use for human context review. A hotspot is not a confirmed vulnerability. |
-| Test coverage | Coverage reports produced by existing CI tests | Exact-commit CI coverage ingestion is being connected. Health does not rerun tests; missing evidence shows Awaiting CI coverage. |
+| Test coverage | Coverage reports produced by existing CI tests | Exact-commit CI coverage ingestion remains pending. Health does not rerun tests; missing evidence is shown as a dash. |
 | Infrastructure configuration | Terraform or recognized Kubernetes/Helm paths | Trivy configuration analysis. Coverage is partial. |
 
 These are candidates selected from detected files, not guarantees that every language or file will be analyzed. Each tool needs a reviewed image, version, configuration and approved runtime. The base installation can produce an inspection-only report. Broad executed-analysis production acceptance is still pending; see [Native execution](native-execution.md).
 
 **Analyses completed** counts checks with validated analyzer output; **Files inspected** counts discovered source files and is not an analysis coverage denominator.
 
-Reliability and maintainability findings are classified separately when their reviewed adapters run. These initial rule packs do not provide broad language coverage or a quality grade. Duplication measurements require the reviewed jscpd adapter. Test coverage is off by default. The reviewed Node built-in recipe supplies actual loaded-file coverage when explicitly selected; other frameworks remain unavailable. Complexity still needs a qualified measured source. Health does not calculate an arbitrary combined grade or score.
+Reliability and maintainability findings are classified separately when their reviewed adapters run. These initial rule packs do not provide broad language coverage or a quality grade. Duplication measurements require the reviewed jscpd adapter. Test coverage comes from existing CI runs; Health does not offer a manual test-coverage run. Complexity still needs a qualified measured source. Overall health uses the completeness and failure rules described below, rather than averaging unrelated metrics into an arbitrary score.
 
 ## Findings and source
 

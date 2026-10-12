@@ -2,7 +2,7 @@
 id: index
 title: Getting Started
 sidebar_label: Overview
-description: The path from a fresh install to your first commit assessment.
+description: Connect repositories, read Health reports and findings, then add CI assessments and engineering policies.
 ---
 
 # Getting Started
