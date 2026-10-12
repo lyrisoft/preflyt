@@ -210,6 +210,15 @@ it('shows full-result metrics, keyboard severity filtering and mobile charts', a
   expect(
     document.querySelectorAll('[aria-label="Findings overview"] dd')[2]
   ).toHaveClass('text-danger-text')
+  const criticalMark = document.querySelector(
+    '[aria-label="Filter Critical: 5"] [aria-hidden="true"]'
+  )!
+  const highMark = document.querySelector(
+    '[aria-label="Filter High: 15"] [aria-hidden="true"]'
+  )!
+  expect(getComputedStyle(criticalMark).backgroundColor).not.toBe(
+    getComputedStyle(highMark).backgroundColor
+  )
   await expect
     .element(view.getByRole('heading', { name: 'Issues by check' }))
     .toBeVisible()

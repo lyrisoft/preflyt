@@ -16,6 +16,9 @@ const state = vi.hoisted(() => ({
   coverage: false,
   policy: false,
   measuredFiles: false,
+  manyAnalyses: false,
+  manyFindings: false,
+  manyHistory: false,
   fetch: vi.fn(),
 }))
 vi.mock('@/features/workspace/navigation-session', () => ({
@@ -203,8 +206,18 @@ const report = () => ({
       reason:
         state.mode === 'EXECUTED' ? 'FINDINGS_REPORTED' : 'REVIEW_REQUIRED',
       tool: '1.0',
-      findingsRetained: state.mode === 'EXECUTED' ? 1 : undefined,
+      findingsRetained:
+        state.mode === 'EXECUTED' ? (state.manyFindings ? 12 : 1) : undefined,
     },
+    ...(state.manyAnalyses
+      ? Array.from({ length: 7 }, (_, index) => ({
+          id: `fixture.extra-${index + 1}`,
+          title: `Extra check ${index + 1}`,
+          state: 'PASS',
+          reason: 'CHECKS_PASSED',
+          ...(index === 0 ? {} : { findingsRetained: 0 }),
+        }))
+      : []),
   ],
   findings:
     state.mode === 'EXECUTED'
@@ -220,6 +233,19 @@ const report = () => ({
             checkId: 'security.sast',
             evidence: 'ANALYZER_REPORTED',
           },
+          ...(state.manyFindings
+            ? Array.from({ length: 11 }, (_, index) => ({
+                fingerprint: (index + 2).toString(16).padStart(64, '0'),
+                category: 'security',
+                severity: 'high',
+                title: `Additional finding ${index + 2}`,
+                ruleId: 'sql-injection',
+                path: 'src/db.ts',
+                line: index + 8,
+                checkId: 'security.sast',
+                evidence: 'ANALYZER_REPORTED',
+              }))
+            : []),
           ...(state.hotspots
             ? ['c', 'd'].map((value) => ({
                 fingerprint: value.repeat(64),
@@ -258,6 +284,9 @@ beforeEach(() => {
   state.coverage = false
   state.policy = false
   state.measuredFiles = false
+  state.manyAnalyses = false
+  state.manyFindings = false
+  state.manyHistory = false
   state.fetch.mockReset()
   state.fetch.mockImplementation(
     async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -322,15 +351,27 @@ beforeEach(() => {
             ],
           })
         )
+      const requestedPage = Number(
+        new URL(url, 'http://localhost').searchParams.get('page') ?? '1'
+      )
+      const history = state.manyHistory
+        ? Array.from({ length: 12 }, (_, index) => ({
+            ...row(),
+            id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+            sourceSha: String(index + 1)
+              .padStart(7, '0')
+              .repeat(6),
+          }))
+        : [row()]
       return new Response(
         JSON.stringify({
           branch: 'development',
           assessment: row(),
           freshness: 'STALE',
           checkedAt: new Date().toISOString(),
-          history: [row()],
-          page: 1,
-          total: 1,
+          history: history.slice((requestedPage - 1) * 10, requestedPage * 10),
+          page: requestedPage,
+          total: history.length,
           trend: null,
           ...(state.hotspots
             ? {
@@ -625,7 +666,10 @@ it('hides report data if the independent freshness check reveals revoked access'
 it('shows measured duplication and its actual denominator alongside analysis coverage', async () => {
   state.duplication = true
   await mount()
-  await expect.element(page.getByText('20.0% duplicated')).toBeVisible()
+  await expect
+    .element(page.getByText('20.0% duplicated', { exact: false }))
+    .toBeVisible()
+  await page.getByText('Duplicated code', { exact: true }).click()
   await expect
     .element(
       page.getByText(
@@ -643,6 +687,7 @@ it('shows automated hotspot findings separately from optional review counts', as
       page.getByRole('link', { name: 'View security hotspots findings' })
     )
     .not.toBeInTheDocument()
+  await page.getByText('Security hotspot review', { exact: true }).click()
   await expect
     .element(page.getByText('Optional review · 1 / 2 reviewed'))
     .toBeVisible()
@@ -682,7 +727,10 @@ it('does not offer manual test execution and requests a static reassessment', as
 it('shows actual measured coverage with test counts and the loaded-file scope', async () => {
   state.coverage = true
   await mount()
-  await expect.element(page.getByText('60.0% covered')).toBeVisible()
+  await expect
+    .element(page.getByText('60.0% covered', { exact: false }))
+    .toBeVisible()
+  await page.getByText('Optional test coverage', { exact: true }).click()
   await expect
     .element(
       page.getByText(
@@ -694,6 +742,7 @@ it('shows actual measured coverage with test counts and the loaded-file scope', 
 
 it('shows the saved analyzer scope alongside the coverage outcome', async () => {
   await mount()
+  await page.getByText('Static security analysis', { exact: true }).click()
   await expect
     .element(
       page.getByText(
@@ -728,8 +777,9 @@ it('shows measured per-analyzer file counts without claiming inventory files wer
   state.measuredFiles = true
   await mount()
   await expect
-    .element(page.getByText('2 / 3 candidate files analyzed'))
+    .element(page.getByText('2 / 3 candidate files analyzed', { exact: true }))
     .toBeVisible()
+  await page.getByText('Static security analysis', { exact: true }).click()
   await expect
     .element(page.getByText('1 not analyzed.', { exact: false }))
     .toBeVisible()
@@ -795,4 +845,122 @@ it('links the five metric cards to their exact report and category', async () =>
       .element(page.getByRole('link', { name: `View ${label} findings` }))
       .toHaveAttribute('href', expect.stringContaining(`health=${id}`))
   }
+})
+
+it('paginates analyzer outcomes and keeps the detailed scope collapsed until opened', async () => {
+  state.manyAnalyses = true
+  await mount()
+  const coverage = page.getByLabelText('Analysis coverage')
+  await expect.element(coverage.getByText('8 / 8')).toBeVisible()
+  await expect
+    .element(coverage.getByText('1', { exact: true }).first())
+    .toBeVisible()
+  await expect
+    .element(coverage.getByText('1–4 of 8 analyzers · page 1 of 2'))
+    .toBeVisible()
+  await expect
+    .element(coverage.getByText('Extra check 3', { exact: true }))
+    .toBeVisible()
+  await expect
+    .element(coverage.getByText('Extra check 4', { exact: true }))
+    .not.toBeInTheDocument()
+  await expect
+    .element(
+      coverage.getByText(
+        'JavaScript, TypeScript and Python only: eval and exec calls.'
+      )
+    )
+    .not.toBeVisible()
+  await coverage.getByRole('button', { name: 'Next' }).click()
+  await expect
+    .element(coverage.getByText('5–8 of 8 analyzers · page 2 of 2'))
+    .toBeVisible()
+  await expect
+    .element(coverage.getByText('Extra check 7', { exact: true }))
+    .toBeVisible()
+  await expect
+    .element(coverage.getByText('Static security analysis', { exact: true }))
+    .not.toBeInTheDocument()
+  await coverage.getByRole('button', { name: 'Previous' }).click()
+  await coverage.getByText('Static security analysis', { exact: true }).click()
+  await expect
+    .element(
+      coverage.getByText(
+        'JavaScript, TypeScript and Python only: eval and exec calls.'
+      )
+    )
+    .toBeVisible()
+})
+
+it('explains why security findings can coexist with unavailable metrics', async () => {
+  await mount()
+  await expect
+    .element(page.getByText('Retained findings in the analyzed scope'))
+    .toBeVisible()
+  await expect
+    .element(page.getByText('No verified finding count yet').first())
+    .toBeVisible()
+  await expect
+    .element(page.getByText('No verified duplication measurement'))
+    .toBeVisible()
+  await expect
+    .element(page.getByText('No matching CI line coverage'))
+    .toBeVisible()
+})
+
+it('shows no more than ten findings per page and paginates the recorded list', async () => {
+  state.manyFindings = true
+  await mount()
+  const findings = page.getByLabelText('Repository findings')
+  await expect
+    .element(findings.getByText('1–10 of 12 findings · page 1 of 2'))
+    .toBeVisible()
+  await expect
+    .element(findings.getByText('Additional finding 11'))
+    .not.toBeInTheDocument()
+  await findings.getByRole('button', { name: 'Next findings page' }).click()
+  await expect
+    .element(findings.getByText('11–12 of 12 findings · page 2 of 2'))
+    .toBeVisible()
+  await expect
+    .element(findings.getByText('Additional finding 11'))
+    .toBeVisible()
+  await expect
+    .element(findings.getByText('Unsafe SQL expression'))
+    .not.toBeInTheDocument()
+})
+
+it('shows no more than ten history entries per page', async () => {
+  state.manyHistory = true
+  await mount()
+  await page.getByRole('tab', { name: 'Assessment history (12)' }).click()
+  const history = page.getByLabelText('Assessment history', { exact: true })
+  await expect
+    .element(history.getByText('1–10 of 12 reports · page 1 of 2'))
+    .toBeVisible()
+  await expect.element(history.getByText('0000011')).not.toBeInTheDocument()
+  await history.getByRole('button', { name: 'Next history page' }).click()
+  await expect
+    .element(history.getByText('11–12 of 12 reports · page 2 of 2'))
+    .toBeVisible()
+  await expect.element(history.getByText('0000011')).toBeVisible()
+  await expect.element(history.getByText('0000001')).not.toBeInTheDocument()
+})
+
+it('keeps findings and assessment history in separate tabs', async () => {
+  await mount()
+  await expect
+    .element(page.getByRole('tab', { name: 'Findings (1)' }))
+    .toHaveAttribute('aria-selected', 'true')
+  await expect.element(page.getByLabelText('Repository findings')).toBeVisible()
+  await expect
+    .element(page.getByLabelText('Assessment history', { exact: true }))
+    .not.toBeInTheDocument()
+  await page.getByRole('tab', { name: 'Assessment history (1)' }).click()
+  await expect
+    .element(page.getByLabelText('Assessment history', { exact: true }))
+    .toBeVisible()
+  await expect
+    .element(page.getByLabelText('Repository findings'))
+    .not.toBeInTheDocument()
 })
