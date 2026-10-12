@@ -174,7 +174,8 @@ it('preserves administrator credential bounds, cookie-backed submission and pass
 
 it.each([
   ['/access-control?tab=github#members', '/access-control?tab=github#members'],
-  ['https://untrusted.example/redirect', '/'],
+  ['https://untrusted.example/redirect', '/overview'],
+  [undefined, '/overview'],
 ])(
   'allows only same-origin administrator success destinations: %s',
   async (redirect, destination) => {

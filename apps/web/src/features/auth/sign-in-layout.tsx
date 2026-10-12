@@ -37,7 +37,13 @@ export function SignInLayout({ children, footer }: SignInLayoutProps) {
       <main className='sign-in-main'>
         <section className='sign-in-panel' aria-label='Account access'>
           <div className='sign-in-form-brand'>
-            <PreflytLogo className='h-16 w-64 max-w-full' />
+            <a
+              href='/'
+              aria-label='Preflyt home'
+              className='rounded-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring'
+            >
+              <PreflytLogo className='h-16 w-64 max-w-full' />
+            </a>
           </div>
           {children}
           <div className='sign-in-access-note'>

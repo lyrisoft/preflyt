@@ -13,6 +13,7 @@ const headerTones: Record<SurfaceTone, string> = {
 
 export function PageHeader({
   title,
+  headingLevel = 1,
   description,
   section,
   icon,
@@ -23,6 +24,7 @@ export function PageHeader({
   children,
 }: {
   title: string
+  headingLevel?: 1 | 2
   description?: string
   section?: string
   icon: LucideIcon
@@ -32,6 +34,7 @@ export function PageHeader({
   leading?: ReactNode
   children?: ReactNode
 }) {
+  const Heading = headingLevel === 1 ? 'h1' : 'h2'
   return (
     <header
       data-slot='page-header'
@@ -49,9 +52,9 @@ export function PageHeader({
               {section}
             </p>
           )}
-          <h1 className='text-xl font-semibold tracking-tight break-words sm:text-2xl'>
+          <Heading className='text-xl font-semibold tracking-tight break-words sm:text-2xl'>
             {title}
-          </h1>
+          </Heading>
           {description && (
             <p className='mt-1 max-w-[72ch] text-sm leading-relaxed text-muted-foreground'>
               {description}

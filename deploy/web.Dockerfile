@@ -6,6 +6,9 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/web/package.json apps/web/package.json
 RUN pnpm install --filter @preflyt/web... --frozen-lockfile --ignore-scripts
 COPY apps/web apps/web
+ARG PUBLIC_SITE_URL=""
+ARG PUBLIC_SITE_INDEXABLE=false
+ENV PUBLIC_SITE_URL=$PUBLIC_SITE_URL PUBLIC_SITE_INDEXABLE=$PUBLIC_SITE_INDEXABLE
 RUN VITE_API_BASE_URL=/api pnpm --filter @preflyt/web build
 
 FROM nginx:1.28-alpine@sha256:a8b39bd9cf0f83869a2162827a0caf6137ddf759d50a171451b335cecc87d236 AS runtime

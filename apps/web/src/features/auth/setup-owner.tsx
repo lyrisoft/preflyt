@@ -34,7 +34,7 @@ export function SetupOwner() {
         throw new Error(
           'The bootstrap token is invalid, expired, or already used.'
         )
-      await navigate({ to: '/', replace: true })
+      await navigate({ to: '/overview', replace: true })
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Owner setup failed.')
     } finally {

@@ -111,7 +111,7 @@ export class AuthController {
         result.sessionToken,
         cookieOptions(this.auth.secureCookie, 8 * 60 * 60 * 1000)
       )
-      return res.redirect(new URL('/', this.auth.frontendOrigin).href)
+      return res.redirect(new URL('/overview', this.auth.frontendOrigin).href)
     } catch {
       return res.redirect(
         new URL('/sign-in?error=oidc', this.auth.frontendOrigin).href

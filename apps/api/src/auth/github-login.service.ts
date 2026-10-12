@@ -27,7 +27,7 @@ import {
 const hash = (value: string) => createHash('sha256').update(value).digest('hex')
 const opaque = () => randomBytes(32).toString('base64url')
 export function loginReturnPath(raw?: string) {
-  if (!raw) return '/'
+  if (!raw) return '/overview'
   if (
     !raw.startsWith('/') ||
     raw.startsWith('//') ||

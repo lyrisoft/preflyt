@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { DirectionProvider as RdxDirProvider } from '@radix-ui/react-direction'
 import { getCookie, setCookie, removeCookie } from '@/lib/cookies'
+import { useClientReady } from '@/hooks/use-client-ready'
 
 export type Direction = 'ltr' | 'rtl'
 
@@ -18,10 +19,12 @@ type DirectionContextType = {
 const DirectionContext = createContext<DirectionContextType | null>(null)
 
 export function DirectionProvider({ children }: { children: React.ReactNode }) {
-  const [dir, _setDir] = useState<Direction>(
+  const clientReady = useClientReady()
+  const [savedDir, _setDir] = useState<Direction>(
     () => (getCookie(DIRECTION_COOKIE_NAME) as Direction) || DEFAULT_DIRECTION
   )
 
+  const dir = clientReady ? savedDir : DEFAULT_DIRECTION
   useEffect(() => {
     const htmlElement = document.documentElement
     htmlElement.setAttribute('dir', dir)

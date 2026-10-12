@@ -31,7 +31,16 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    include: ['@radix-ui/react-switch', '@tanstack/react-query'],
+    include: [
+      '@radix-ui/react-switch',
+      '@tanstack/react-query',
+      '@radix-ui/react-direction',
+      '@tanstack/react-query-devtools',
+      '@tanstack/react-router-devtools',
+      '@tanstack/react-router/ssr/client',
+      'react-dom/client',
+      'react-top-loading-bar',
+    ],
   },
   test: {
     // Keep focus, viewport and animated overlay interactions deterministic under CI load.

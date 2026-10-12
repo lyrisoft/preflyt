@@ -3,7 +3,6 @@ import { useQuery } from '@tanstack/react-query'
 import { Link, getRouteApi, useNavigate } from '@tanstack/react-router'
 import {
   ArrowUpRight,
-  BookOpen,
   ChevronLeft,
   ChevronRight,
   LayoutDashboard,
@@ -58,11 +57,12 @@ import { TechIcon } from '@/features/repositories/tech-icon'
 import { useNavigationSession } from '@/features/workspace/navigation-session'
 import { ActivityHeatmap } from './activity-heatmap'
 import { DashboardHealth, DashboardHealthMetrics } from './dashboard-health'
+import { DashboardMetrics } from './dashboard-metrics'
 import type { DashboardData } from './dashboard-types'
 import { FirstReport } from './first-report'
 import { WorkspaceStart } from './workspace-start'
 
-const route = getRouteApi('/_authenticated/')
+const route = getRouteApi('/_authenticated/overview')
 const reasons: Record<string, string> = {
   CONTEXT_UNAVAILABLE: 'Context unavailable',
   AWAITING_SYNC: 'Awaiting GitHub sync',
@@ -114,37 +114,16 @@ export function Dashboard() {
     repository?: string
   }) => {
     setRepositoryPage(1)
-    void navigate({ to: '/', search: { days, repository, tab, ...next } })
+    void navigate({
+      to: '/overview',
+      search: { days, repository, tab, ...next },
+    })
   }
   const repositoryPages = Math.max(
     1,
     Math.ceil((data?.repositories.length ?? 0) / 10)
   )
   const currentRepositoryPage = Math.min(repositoryPage, repositoryPages)
-  const stats = data
-    ? [
-        {
-          label: 'Repositories',
-          value: data.metrics.repositories.toLocaleString(),
-          icon: GitBranch,
-        },
-        {
-          label: 'PRs assessed',
-          value: data.metrics.prsAssessed.toLocaleString(),
-          icon: GitPullRequest,
-        },
-        {
-          label: 'Saved assessments',
-          value: data.metrics.snapshots.toLocaleString(),
-          icon: ListChecks,
-        },
-        {
-          label: 'Standards adopted',
-          value: `${data.metrics.standardsAdopted} / ${data.metrics.repositories}`,
-          icon: BookOpen,
-        },
-      ]
-    : []
   return (
     <>
       <AppHeader breadcrumbs={[{ label: 'Overview' }]} />
@@ -312,38 +291,13 @@ export function Dashboard() {
                       data={healthQuery.isError ? undefined : healthQuery.data}
                     />
                   ) : (
-                    <div className='grid gap-4 sm:grid-cols-2 xl:grid-cols-4'>
-                      {stats.map((stat) => (
-                        <Card key={stat.label}>
-                          <CardHeader className='flex flex-row items-center justify-between pb-2'>
-                            <CardTitle className='text-sm font-medium'>
-                              {stat.label}
-                            </CardTitle>
-                            <SurfaceIcon
-                              icon={stat.icon}
-                              tone={
-                                stat.icon === BookOpen
-                                  ? 'teal'
-                                  : stat.icon === ListChecks
-                                    ? 'violet'
-                                    : 'blue'
-                              }
-                            />
-                          </CardHeader>
-                          <CardContent>
-                            <p className='text-3xl font-semibold tracking-tight tabular-nums'>
-                              {stat.value}
-                            </p>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
+                    <DashboardMetrics metrics={data.metrics} />
                   )}
                   <Tabs
                     value={tab}
                     onValueChange={(value) =>
                       void navigate({
-                        to: '/',
+                        to: '/overview',
                         search: {
                           days,
                           repository,

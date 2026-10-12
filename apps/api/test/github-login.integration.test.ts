@@ -413,6 +413,7 @@ it('blocks open redirects and throttles repeated login attempts', async () => {
     '/ bad',
   ])
     expect(() => loginReturnPath(value)).toThrow()
+  expect(loginReturnPath()).toBe('/overview')
   expect(loginReturnPath('/repositories?tab=overview')).toBe(
     '/repositories?tab=overview',
   )

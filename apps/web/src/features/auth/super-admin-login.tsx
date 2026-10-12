@@ -62,11 +62,14 @@ export function SuperAdminLogin() {
         )
       }
 
-      const destination = new URL(redirect || '/', window.location.origin)
+      const destination = new URL(
+        redirect || '/overview',
+        window.location.origin
+      )
       const nextPath =
         destination.origin === window.location.origin
           ? `${destination.pathname}${destination.search}${destination.hash}`
-          : '/'
+          : '/overview'
       await navigate({ to: nextPath, replace: true })
     } catch (cause) {
       setError(

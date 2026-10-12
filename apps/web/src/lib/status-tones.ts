@@ -20,6 +20,7 @@ export const statusTones: Readonly<Record<string, StatusTone>> = {
   suppressed: 'neutral',
   'evidence missing': 'warning',
   synced: 'success',
+  'inspection complete': 'success',
   connected: 'success',
   'not connected': 'warning',
   approved: 'success',

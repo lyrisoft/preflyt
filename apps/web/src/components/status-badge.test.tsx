@@ -15,6 +15,7 @@ it('enforces shared semantic colors even when a caller supplies the wrong tone',
 
 it('keeps success, failure, pending and inactive states consistent', () => {
   expect(statusTones.synced).toBe('success')
+  expect(statusTones['inspection complete']).toBe('success')
   expect(statusTones.approved).toBe('success')
   expect(statusTones['model unavailable']).toBe('error')
   expect(statusTones['sync needed']).toBe('warning')

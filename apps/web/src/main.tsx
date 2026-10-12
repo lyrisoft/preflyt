@@ -1,118 +1,26 @@
 import { StrictMode } from 'react'
-import ReactDOM from 'react-dom/client'
-import { AxiosError } from 'axios'
-import {
-  MutationCache,
-  QueryCache,
-  QueryClient,
-  QueryClientProvider,
-} from '@tanstack/react-query'
-import { RouterProvider, createRouter } from '@tanstack/react-router'
-import { toast } from 'sonner'
-import { handleServerError } from '@/lib/handle-server-error'
-import { DirectionProvider } from './context/direction-provider'
-import { FontProvider } from './context/font-provider'
-import { ThemeProvider } from './context/theme-provider'
-// Generated Routes
-import { routeTree } from './routeTree.gen'
-// Styles
+import { createRoot, hydrateRoot } from 'react-dom/client'
+import { RouterProvider } from '@tanstack/react-router'
+import { hydrate } from '@tanstack/react-router/ssr/client'
+import { createAppRouter } from './app'
 import './styles/index.css'
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      retry: (failureCount, error) => {
-        // eslint-disable-next-line no-console
-        if (import.meta.env.DEV) console.log({ failureCount, error })
-
-        if (failureCount >= 0 && import.meta.env.DEV) return false
-        if (failureCount > 3 && import.meta.env.PROD) return false
-
-        return !(
-          error instanceof AxiosError &&
-          [401, 403].includes(error.response?.status ?? 0)
-        )
-      },
-      refetchOnWindowFocus: import.meta.env.PROD,
-      staleTime: 10 * 1000, // 10s
-    },
-  },
-  mutationCache: new MutationCache({
-    onError: (error, _variables, _context, mutation) => {
-      if (!mutation.options.onError && mutation.meta?.silent !== true)
-        handleServerError(error)
-    },
-    onSuccess: (_data, _variables, _context, mutation) => {
-      if (typeof mutation.meta?.successMessage === 'string')
-        toast.success(mutation.meta.successMessage)
-    },
-  }),
-  queryCache: new QueryCache({
-    onError: (error, query) => {
-      // Initial failures remain visible in the page; notify failed background refreshes.
-      if (
-        query.state.data !== undefined &&
-        query.meta?.silent !== true &&
-        !(error instanceof AxiosError && error.response?.status === 401)
-      )
-        handleServerError(error, { id: `query-error:${query.queryHash}` })
-      if (error instanceof AxiosError) {
-        if (error.response?.status === 401) {
-          toast.error('Session expired. Sign in again.', {
-            id: 'session-expired',
-          })
-          const redirect = `${router.history.location.href}`
-          router.navigate({ to: '/sign-in', search: { redirect } })
-        }
-        if (error.response?.status === 500) {
-          if (query.state.data === undefined)
-            toast.error(
-              'The server could not complete the request. Try again.',
-              { id: 'server-error' }
-            )
-          // Only navigate to error page in production to avoid disrupting HMR in development
-          if (import.meta.env.PROD) {
-            router.navigate({ to: '/500' })
-          }
-        }
-        if (error.response?.status === 403) {
-          // router.navigate("/forbidden", { replace: true });
-        }
-      }
-    },
-  }),
-})
-
-// Create a new router instance
-const router = createRouter({
-  routeTree,
-  context: { queryClient },
-  defaultPreload: 'intent',
-  defaultPreloadStaleTime: 0,
-})
-
-// Register the router instance for type safety
-declare module '@tanstack/react-router' {
-  interface Register {
-    router: typeof router
-  }
-}
-
-// Render the app
-const rootElement = document.getElementById('root')!
-if (!rootElement.innerHTML) {
-  const root = ReactDOM.createRoot(rootElement)
-  root.render(
+const router = createAppRouter()
+const root = document.getElementById('root')!
+if (root.dataset.prerendered === 'true') {
+  // Restore the route boundary state before hydrating the static homepage.
+  void hydrate(router).then(() =>
+    hydrateRoot(
+      root,
+      <StrictMode>
+        <RouterProvider router={router} />
+      </StrictMode>
+    )
+  )
+} else {
+  createRoot(root).render(
     <StrictMode>
-      <QueryClientProvider client={queryClient}>
-        <ThemeProvider>
-          <FontProvider>
-            <DirectionProvider>
-              <RouterProvider router={router} />
-            </DirectionProvider>
-          </FontProvider>
-        </ThemeProvider>
-      </QueryClientProvider>
+      <RouterProvider router={router} />
     </StrictMode>
   )
 }
