@@ -5,7 +5,7 @@ import type * as Preset from '@docusaurus/preset-classic'
 // GitHub Pages serves project sites under /<repository>/. Override both values
 // when the site moves to a custom domain (DOCS_BASE_URL=/).
 const url = process.env.DOCS_URL ?? 'https://lyrisoft.github.io'
-const baseUrl = process.env.DOCS_BASE_URL ?? '/preflyt/'
+const baseUrl = process.env.DOCS_BASE_URL ?? '/'
 const repository = 'https://github.com/lyrisoft/preflyt'
 
 const config: Config = {
