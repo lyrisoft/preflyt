@@ -28,6 +28,8 @@ The patch compacts valid SARIF even when a scanner reports partial execution. It
 
 A real Preflyt SAST reproduction retained 30 findings and 18 diagnostics in a 52,362-byte report; incomplete analysis remains blocked. The consumer build passes `DATABASE_URL` through only the Turbo build/typecheck tasks. Secret-scanner exceptions retain built-in detectors and match only reviewed synthetic values in exact fixture/example paths; a different token-shaped value in the same fixture still produces a finding.
 
+The secret-scanner exception also covers compiled copies of the required password placeholder in the docs download, JavaScript assets and search index, including its exact normalized index token. The compiled-docs scan passed with zero findings; different synthetic credentials in the native fixture and compiled download both remained detectable. Development policy v5 adopts standard v1.0.5 with the tested frontend JUnit command and preserves all five required controls plus advisory AI review.
+
 ## Release procedure
 
 1. Develop and test only in the public Action repository; do not copy private app source or history.
