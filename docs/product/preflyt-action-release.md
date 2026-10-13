@@ -2,7 +2,7 @@
 
 The Action source is maintained only in [lyrisoft/preflyt-action](https://github.com/lyrisoft/preflyt-action)
 and distributed through [GitHub Marketplace](https://github.com/marketplace/actions/preflyt-policy-check).
-Version v2.0.1 pins commit adfe42ef61cf25936d777e6115b224293cd4675f. MIT applies to the public Action only;
+Version v2.1.0 pins commit ffd33c5e44efb2f4d69d07aea3e471505046a05f. MIT applies to the public Action only;
 the Preflyt application remains separately licensed. No runtime copy is bundled
 with the application or API Docker image.
 
@@ -29,6 +29,28 @@ The patch compacts valid SARIF even when a scanner reports partial execution. It
 A real Preflyt SAST reproduction retained 30 findings and 18 diagnostics in a 52,362-byte report; incomplete analysis remains blocked. The consumer build passes `DATABASE_URL` through only the Turbo build/typecheck tasks. Secret-scanner exceptions retain built-in detectors and match only reviewed synthetic values in exact fixture/example paths; a different token-shaped value in the same fixture still produces a finding.
 
 The secret-scanner exception also covers compiled copies of the required password placeholder in the docs download, JavaScript assets and search index, including its exact normalized index token. The compiled-docs scan passed with zero findings; different synthetic credentials in the native fixture and compiled download both remained detectable. Development policy v5 adopts standard v1.0.5 with the tested frontend JUnit command and preserves all five required controls plus advisory AI review.
+
+## v2.1.0 owned SAST and independent results
+
+Published to Marketplace on 13 October 2026 after hosted Action CI passed at the
+release commit (runs 38387939605 and 38387934749). Built-in SAST now runs the
+18 MIT-licensed Preflyt SAST v1 rules offline through pinned Semgrep 1.179.0.
+The rules have a checked SHA-256 digest and real vulnerable/safe fixtures. This
+is explicit pattern coverage, not the full registry pack or exhaustive analysis.
+
+Check mode completes after genuine reports are submitted; it does not approve
+the policy. The required Preflyt final gate remains the enforcement point.
+Verified reports preserve independent pass/fail/incomplete results, including
+after the terminal gate fails. Newer attempts, cancellation, invalid reports,
+missing execution and failed collection remain unverified or incomplete.
+Old failed collection jobs are not retroactively changed; run the new Action.
+
+The companion fixes triage all 30 original alerts, enforce supported pnpm
+supply-chain settings and remove the parser incompatibilities without excluding
+production files. Local production scanning completed with zero findings and
+zero diagnostics under the owned rules. See
+[the acceptance record](../acceptance/2026-10-13-sast-and-check-attribution.md)
+for exact scope, exceptions, tests and attribution behavior.
 
 ## Release procedure
 

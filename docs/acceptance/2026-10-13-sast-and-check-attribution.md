@@ -66,3 +66,8 @@ tests passed. The API/docs/web root build passed; focused API checks passed 149
 cases, browser checks passed 55 cases, and public build checks passed 14 cases.
 API and web types and changed frontend-file lint passed. The browser runner logged
 a ResizeObserver warning while reporting all 55 cases passed.
+
+Action v2.1.0 was published to Marketplace on 13 October 2026 at immutable commit
+`ffd33c5e44efb2f4d69d07aea3e471505046a05f`. Hosted Action CI runs 38387939605 and
+38387934749 passed. Both application workflow modes and generated snippets pin
+that commit; publication preceded the companion application's push.
