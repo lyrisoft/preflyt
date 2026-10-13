@@ -6,7 +6,7 @@ import { parse } from 'yaml'
 import { expect, it } from 'vitest'
 const root = resolve(process.cwd(), '../..')
 const workflow = (name: string) => parse(readFileSync(resolve(root, '.github/workflows', name), 'utf8'))
-it('checks the PR head and submits existing reports only for same-repository development PRs', () => {
+it('checks the PR head and runs the published policy only for same-repository development PRs', () => {
   const verify = workflow('verify.yml')
   const development = workflow('development-checks.yml')
   const steps = development.jobs.checks.steps
@@ -17,7 +17,8 @@ it('checks the PR head and submits existing reports only for same-repository dev
   expect(action.if).toContain('github.event.pull_request.head.repo.full_name == github.repository')
   expect(action.if).toContain('!cancelled()')
   expect(action.uses).toMatch(/^lyrisoft\/preflyt-action@[a-f0-9]{40}$/)
-  expect(JSON.parse(action.with.checks)).toEqual({ 'build.required': { report: '.preflyt/results/build.xml' }, 'types.required': { report: '.preflyt/results/types.xml' } })
+  expect(action.with).toEqual({ 'api-url': '${{ vars.PREFLYT_API_URL }}' })
+  expect(verify.jobs.preflyt_gate.steps[0].uses).toBe(action.uses)
   expect(development.jobs.checks.permissions).toEqual({ contents: 'read', 'id-token': 'write' })
   for (const name of ['Type checks', 'Lint', 'Build validation']) expect(steps.find((step: any) => step.name === name).if).toContain('!cancelled()')
   expect(development.jobs.checks.services).toBeUndefined()

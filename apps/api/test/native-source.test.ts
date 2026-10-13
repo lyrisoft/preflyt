@@ -82,7 +82,7 @@ describe('credential-free pinned source',()=>{
     const reader=vi.spyOn(provider,'openRepository').mockResolvedValue({metadata:{owner:{login:'fixture'},name:'native'},request:request()})
     const signal=new AbortController().signal
     const result=await provider.readNativeSource(500n,51n,'a'.repeat(40),signal)
-    expect(reader).toHaveBeenCalledWith(500n,51n,'contents',signal)
+    expect(reader).toHaveBeenCalledWith(500n,51n,'contents',signal,10 * 60_000)
     expect(result.repositoryId).toBe('51');expect(JSON.stringify(result)).not.toContain('never-return-this-token')
     provider.close()
   })
