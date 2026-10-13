@@ -650,9 +650,9 @@ export class GitHubProviderService {
       warnings.push(
         'Manifest/workflow content inspection is limited to 32 files. Unread files remain unknown.',
       )
-    let cursor = 0
+    let cursor = 0, stopped = false
     const worker = async () => {
-      while (cursor < Math.min(candidates.length, 32)) {
+      while (!stopped && cursor < Math.min(candidates.length, 32)) {
         const file = candidates[cursor++]!
         if (file.size < 0 || file.size > 262_144) {
           file.contentError = 'size_limit'
@@ -685,13 +685,14 @@ export class GitHubProviderService {
           if (
             error instanceof ForbiddenException ||
             error instanceof GitHubRateLimitError
-          )
-            throw error
+          ) { stopped = true; throw error }
           file.contentError = 'unavailable_or_invalid'
         }
       }
     }
-    await Promise.all(Array.from({ length: 4 }, () => worker()))
+    const readers = await Promise.allSettled(Array.from({ length: 4 }, () => worker()))
+    const failure = readers.find(result => result.status === 'rejected')
+    if (failure?.status === 'rejected') throw failure.reason
     return {
       sourceSha: commit.sha,
       treeSha: tree.sha,

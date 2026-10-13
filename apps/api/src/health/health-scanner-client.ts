@@ -1,3 +1,4 @@
+import {HEALTH_RECEIPT_PAYLOAD} from './health-report-limits.js'
 import { Injectable } from '@nestjs/common'
 import { constants } from 'node:fs'
 import { open } from 'node:fs/promises'
@@ -37,7 +38,7 @@ export class HealthScannerClient {
         headers:{Authorization:'Bearer '+connection.apiKey,'Content-Type':'application/json'},signal:AbortSignal.timeout(30000)},res=>{
         if(res.statusCode!==200){res.resume();reject(new Error('Health scanner is temporarily unavailable'));return}
         let bytes=0;const chunks:Buffer[]=[]
-        res.on('data',chunk=>{bytes+=chunk.length;if(bytes>65536){res.destroy();reject(new Error('Invalid scanner response'))}else chunks.push(chunk)})
+        res.on('data',chunk=>{bytes+=chunk.length;if(bytes>8*1024*1024+4096){res.destroy();reject(new Error('Invalid scanner response'))}else chunks.push(chunk)})
         res.on('error',reject);res.on('end',()=>{try{resolve(JSON.parse(Buffer.concat(chunks).toString()))}catch{reject(new Error('Invalid scanner response'))}})
       })
       req.on('error',()=>reject(new Error('Health scanner connection could not be verified')))

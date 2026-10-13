@@ -133,7 +133,7 @@ export const nativeAdapters = {
     license: 'MIT',
     format: 'sarif',
     command: ['/usr/local/bin/node'],
-    args: ['/opt/preflyt/duplication/scan.mjs'],
+    args: ['--max-old-space-size=1536', '/opt/preflyt/duplication/scan.mjs'],
   },
   'iac.policy': {
     id: 'trivy-iac-v1',

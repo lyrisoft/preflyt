@@ -19,7 +19,7 @@ describe('repository health evidence', () => {
   const bytes=sarif([result()]), findings=extract(bytes)!
   expect(findings[0]).toMatchObject({path:'src/app.ts',line:4,severity:'high',title:'Unsafe expression'})
   expect(extract(sarif([result('password=really-secret-value')]),true)![0].title).not.toContain('really-secret')
-  expect(extract(sarif(Array.from({length:90},()=>result('x'.repeat(200),'src/'+'x'.repeat(490)))) )!.length).toBeLessThanOrEqual(20)
+  expect(extract(sarif(Array.from({length:90},()=>result('x'.repeat(200),'src/'+'x'.repeat(490)))) )!.length).toBe(90)
   expect(extract(Buffer.from('{}'))).toBeUndefined()
   expect(healthReceiptFindings(bytes.toString('base64'),'b'.repeat(64),false)).toBeUndefined()
  })

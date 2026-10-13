@@ -1,4 +1,4 @@
-import { fileAnalysisMeasurement, fileAnalysisRules, fileAnalysisFailureReason } from '../health/health-file-analysis.js'
+import { fileAnalysisErrors, fileAnalysisMeasurement, fileAnalysisRules, fileAnalysisFailureReason } from '../health/health-file-analysis.js'
 import {fitHealthReceipt} from '../health/health-receipt-budget.js'
 import { duplicationMeasurement, coverageMeasurement, coverageFailureReason } from '../health/health-measurements.js'
 import { validateHealthFindingLocations } from '../health/health-finding-locations.js'
@@ -106,8 +106,9 @@ export class NativeControllerJobs {
         (process.getuid && stat.uid !== process.getuid())
       )
         throw new Error('Unsafe journal permissions')
-      if (stat.size > 65536) throw new Error('Job journal exceeds bounds')
+      if (stat.size > 8 * 1024 * 1024 + 65536) throw new Error('Job journal exceeds bounds')
       const value = JSON.parse(await handle.readFile('utf8')) as JobRecord
+      if (!value.expected?.selectionId.startsWith('health:') && stat.size > 65536) throw new Error('Job journal exceeds bounds')
       if (
         value.expected?.attemptId !== id ||
         digest(value.expected) !== value.scopeHash
@@ -476,9 +477,10 @@ export class NativeControllerJobs {
         const fileFailure = record.expected.selectionId.startsWith('health:') && fileAnalysisRules.includes(ruleId) ? fileAnalysisFailureReason(result.report,result.reportHash) : undefined
         if(fileFailure) {safe.state='INCOMPLETE';safe.reason=fileFailure}
         if(fileAnalysis && (!fileAnalysis.candidateFiles || !fileAnalysis.analyzedFiles)) {safe.state='INCOMPLETE';safe.reason='FILE_ANALYSIS_SCOPE_EMPTY'}
-        if(ruleId === 'quality.duplication' && (!measurement || measurement.analyzedLines===0)) {safe.state='INCOMPLETE';safe.reason='DUPLICATION_SCOPE_UNAVAILABLE'}
+        if(ruleId === 'quality.duplication' && safe.state!=='INCOMPLETE' && (!measurement || measurement.analyzedLines===0)) {safe.state='INCOMPLETE';safe.reason='DUPLICATION_SCOPE_UNAVAILABLE'}
         if(ruleId === 'tests.coverage' && (!measurement || measurement.kind!=='coverage')) {safe.state='INCOMPLETE';safe.reason=coverageFailureReason(result.report,result.reportHash)??'COVERAGE_UNAVAILABLE'}
-        checks[i] = { ...safe, ...(fileAnalysis ? {fileAnalysis} : {}), ...(measurement ? {measurement} : {}), ...(findings === undefined ? {} : { findings }) }
+        const scanErrors = record.expected.selectionId.startsWith('health:') && (fileAnalysisRules.includes(ruleId) || ruleId==='quality.duplication') ? fileAnalysisErrors(result.report,result.reportHash) : undefined
+        checks[i] = { ...safe, ...(scanErrors ? {scanErrors} : {}), ...(fileAnalysis ? {fileAnalysis} : {}), ...(measurement ? {measurement} : {}), ...(findings === undefined ? {} : { findings }) }
         if (!result.cleanupConfirmed) {
           cleanup = false
           break

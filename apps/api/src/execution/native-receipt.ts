@@ -1,4 +1,5 @@
-import { validFileAnalysis, fileAnalysisRules, type FileAnalysis } from '../health/health-file-analysis.js'
+import {HEALTH_RECEIPT_PAYLOAD} from '../health/health-report-limits.js'
+import { validScanErrors, type ScanError, validFileAnalysis, fileAnalysisRules, type FileAnalysis } from '../health/health-file-analysis.js'
 import { validDuplicationMeasurement, validCoverageMeasurement, type HealthMeasurement } from '../health/health-measurements.js'
 import { validHealthFindings } from '../health/health-findings.js'
 import type { ReportFinding } from '../findings/normalize-report-findings.js'
@@ -37,6 +38,7 @@ export type NativeReceiptCheck = NativeCheckOutcome & {
   coverage: 'FULL_RULE' | 'PARTIAL'
   findings?: ReportFinding[]
   fileAnalysis?: FileAnalysis
+  scanErrors?: ScanError[]
   measurement?: HealthMeasurement
 }
 export type NativeReceipt = NativeReceiptScope & {
@@ -100,7 +102,7 @@ export function signNativeReceipt(
     JSON.stringify({ alg: 'EdDSA', typ: receiptType }),
   ).toString('base64url')
   const payload = Buffer.from(JSON.stringify(value)).toString('base64url')
-  if (payload.length > 40000) throw new Error('Native receipt exceeds bounds')
+  if (payload.length > (value.selectionId.startsWith('health:') ? HEALTH_RECEIPT_PAYLOAD : 40000)) throw new Error('Native receipt exceeds bounds')
   const input = header + '.' + payload
   return input + '.' + sign(null, Buffer.from(input), key).toString('base64url')
 }
@@ -124,7 +126,7 @@ export function verifyNativeReceipt(
       !reviewed ||
       !tools ||
       typeof token !== 'string' ||
-      token.length > 41000 ||
+      token.length > (expected.selectionId.startsWith('health:') ? HEALTH_RECEIPT_PAYLOAD + 1000 : 41000) ||
       expected.approvalHash !== reviewed.approvalHash ||
       !reviewed.approval.organizationIds.includes(expected.organizationId)
     )
@@ -246,7 +248,9 @@ export function verifyNativeReceipt(
           ...('findings' in check ? ['findings'] : []),
           ...('measurement' in check ? ['measurement'] : []),
           ...('fileAnalysis' in check ? ['fileAnalysis'] : []),
+          ...('scanErrors' in check ? ['scanErrors'] : []),
         ]) ||
+        ('scanErrors' in check && (!value.selectionId.startsWith('health:') || !(fileAnalysisRules.includes(check.ruleId) || check.ruleId === 'quality.duplication') || !validScanErrors(check.scanErrors))) ||
         ('fileAnalysis' in check && (!value.selectionId.startsWith('health:') || !fileAnalysisRules.includes(check.ruleId) || !validFileAnalysis(check.fileAnalysis))) ||
         ('measurement' in check && (!value.selectionId.startsWith('health:') || !(check.ruleId === 'quality.duplication' ? validDuplicationMeasurement(check.measurement) : check.ruleId === 'tests.coverage' ? validCoverageMeasurement(check.measurement) : false))) ||
         ('findings' in check && (!value.selectionId.startsWith('health:') || !validHealthFindings(check.findings) || check.findings.some((finding: { category: string }) => finding.category !== (check.ruleId === 'quality.reliability' ? 'reliability' : check.ruleId === 'quality.maintainability' ? 'maintainability' : check.ruleId === 'quality.duplication' ? 'duplication' : check.ruleId === 'security.hotspots' ? 'hotspot' : 'security')))) ||

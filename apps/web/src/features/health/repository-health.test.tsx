@@ -16,6 +16,7 @@ const state = vi.hoisted(() => ({
   hotspots: false,
   coverage: false,
   policy: false,
+  scanErrors: false,
   measuredFiles: false,
   manyAnalyses: false,
   manyFindings: false,
@@ -194,6 +195,9 @@ const report = () => ({
     {
       id: 'security.sast',
       title: 'Static security analysis',
+      ...(state.scanErrors
+        ? { scanErrors: [{ type: 'Timeout', path: 'src/large.ts' }] }
+        : {}),
       ...(state.measuredFiles
         ? {
             fileAnalysis: {
@@ -291,6 +295,7 @@ beforeEach(() => {
   state.hotspots = false
   state.coverage = false
   state.policy = false
+  state.scanErrors = false
   state.measuredFiles = false
   state.manyAnalyses = false
   state.manyFindings = false
@@ -988,13 +993,19 @@ it('shows no more than ten history entries per page', async () => {
   await expect
     .element(history.getByText('1–10 of 12 reports · page 1 of 2'))
     .toBeVisible()
-  await expect.element(history.getByText('0000011')).not.toBeInTheDocument()
+  await expect
+    .element(history.getByText('0000011', { exact: true }))
+    .not.toBeInTheDocument()
   await history.getByRole('button', { name: 'Next history page' }).click()
   await expect
     .element(history.getByText('11–12 of 12 reports · page 2 of 2'))
     .toBeVisible()
-  await expect.element(history.getByText('0000011')).toBeVisible()
-  await expect.element(history.getByText('0000001')).not.toBeInTheDocument()
+  await expect
+    .element(history.getByText('0000011', { exact: true }))
+    .toBeVisible()
+  await expect
+    .element(history.getByText('0000001', { exact: true }))
+    .not.toBeInTheDocument()
 })
 
 it('keeps findings and assessment history in separate tabs', async () => {
@@ -1033,3 +1044,12 @@ for (const [stage, label] of [
       .not.toBeInTheDocument()
   })
 }
+
+it('shows safe scanner failure locations in the existing evidence details', async () => {
+  state.scanErrors = true
+  await mount()
+  await page.getByText('Scope and evidence', { exact: true }).first().click()
+  await expect
+    .element(page.getByText('src/large.ts: Timeout', { exact: true }))
+    .toBeVisible()
+})

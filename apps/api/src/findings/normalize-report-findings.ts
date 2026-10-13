@@ -78,9 +78,9 @@ function junitLocation(test: any): {path:string|null;line:number|null;endLine:nu
   return {path:line?path:file,line:path?line:null,endLine:path?line:null}
 }
 /** Reuses bounded schema/checksum validation before projecting untrusted report data. No HTML or logs. */
-export function normalizeReportFindings(format: string, content: Uint8Array, sha256: string): ReportFinding[] {
+export function normalizeReportFindings(format: string, content: Uint8Array, sha256: string, profile: 'ci' | 'health' = 'ci'): ReportFinding[] {
   const text = Buffer.from(content).toString('utf8')
-  parseArtifact(format, text, sha256)
+  parseArtifact(format, text, sha256, profile)
   const rows: ReportFinding[] = []
   if (format === 'sarif') {
     const report = JSON.parse(text.replace(/^\uFEFF/, ''))

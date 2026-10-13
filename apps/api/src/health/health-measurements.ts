@@ -1,3 +1,4 @@
+import { HEALTH_REPORT_BYTES, HEALTH_REPORT_BASE64 } from './health-report-limits.js'
 import { createHash } from 'node:crypto'
 export type DuplicationMeasurement = {
  version: 1; kind: 'duplication'; formula: 'unique-lines-v1';
@@ -16,10 +17,10 @@ export function validDuplicationMeasurement(value: unknown): value is Duplicatio
 }
 /** Extract only the fixed wrapper's measured counters; never trust percentages or source fragments. */
 export function duplicationMeasurement(report: string | null | undefined, hash: string | null): DuplicationMeasurement | undefined {
- if (!report || !hash || report.length>350000) return undefined
+ if (!report || !hash || report.length>HEALTH_REPORT_BASE64) return undefined
  try {
   const bytes=Buffer.from(report,'base64')
-  if(bytes.length>262144 || createHash('sha256').update(bytes).digest('hex')!==hash) return undefined
+  if(bytes.length>HEALTH_REPORT_BYTES || createHash('sha256').update(bytes).digest('hex')!==hash) return undefined
   const sarif=JSON.parse(bytes.toString('utf8'))
   if(sarif.version!=='2.1.0' || sarif.runs?.length!==1 || sarif.runs[0].tool?.driver?.name!=='Preflyt duplication') return undefined
   const value=sarif.runs[0].properties?.preflytMeasurement
@@ -41,10 +42,10 @@ export function validCoverageMeasurement(value:unknown):value is CoverageMeasure
   Number(v.tests)>0&&v.tests===v.passed&&v.failed===0&&v.skipped===0&&v.cancelled===0&&v.todo===0
 }
 export function coverageMeasurement(report:string|null|undefined,hash:string|null):CoverageMeasurement|undefined {
- if(!report||!hash||report.length>350000)return undefined
+ if(!report||!hash||report.length>HEALTH_REPORT_BASE64)return undefined
  try {
   const bytes=Buffer.from(report,'base64')
-  if(bytes.length>262144||createHash('sha256').update(bytes).digest('hex')!==hash)return undefined
+  if(bytes.length>HEALTH_REPORT_BYTES||createHash('sha256').update(bytes).digest('hex')!==hash)return undefined
   const sarif=JSON.parse(bytes.toString('utf8'))
   if(sarif.version!=='2.1.0'||sarif.runs?.length!==1||sarif.runs[0].tool?.driver?.name!=='Preflyt test coverage'||sarif.runs[0].results?.length!==0)return undefined
   const value=sarif.runs[0].properties?.preflytMeasurement
@@ -53,10 +54,10 @@ export function coverageMeasurement(report:string|null|undefined,hash:string|nul
 }
 
 export function coverageFailureReason(report:string|null|undefined,hash:string|null):string|undefined {
- if(!report||!hash||report.length>350000)return undefined
+ if(!report||!hash||report.length>HEALTH_REPORT_BASE64)return undefined
  try {
   const bytes=Buffer.from(report,'base64')
-  if(bytes.length>262144||createHash('sha256').update(bytes).digest('hex')!==hash)return undefined
+  if(bytes.length>HEALTH_REPORT_BYTES||createHash('sha256').update(bytes).digest('hex')!==hash)return undefined
   const sarif=JSON.parse(bytes.toString('utf8'))
   const run=sarif.version==='2.1.0'&&sarif.runs?.length===1?sarif.runs[0]:null
   const reason=run?.tool?.driver?.name==='Preflyt test coverage'?run.properties?.preflytCoverageUnavailable:null

@@ -60,7 +60,7 @@ Filter by severity or search the report. Open a finding to navigate to a dedicat
 
 The source viewer verifies the regular Git blob at the assessed commit and saves a redacted excerpt with up to five lines before and after the reported line. It highlights the line only when it exists. Missing locations, large or binary files, symlinks, submodules, lost access and source-verification failures produce an explanation instead. Secret findings hide source completely; obvious credentials in surrounding context are redacted before storage. New reports queue excerpt capture in the background. Older findings capture their excerpt on first open. Later visits load the saved excerpt from Preflyt after checking current repository access.
 
-Counts exclude suppressed results and deduplicate matching findings from the same analyzer. Each analysis retains at most 20 findings and 5 KB of signed finding data; the complete receipt has a separate 40 KB encoded payload limit. Additional retained details may be trimmed across analyzers to fit that limit, preserving their outcomes, reported totals, measured counters and cleanup evidence. Highest-priority findings are retained first. A lower-bound value such as ≥20 means results are incomplete; missing details never establish zero issues. Truncation or invalid locations can make the report partial. **Zero reported findings applies only to the recorded scope**, not the whole repository. These bounded details belong to Health; the existing Findings page continues to track CI assessment issues.
+Counts exclude suppressed results and deduplicate matching findings from the same analyzer. Each analysis retains up to 5,000 supported findings from an 8 MiB report; the complete receipt has a separate 8 MiB encoded payload limit. Additional retained details may be trimmed across analyzers to fit that limit, preserving their outcomes, reported totals, measured counters and cleanup evidence. Highest-priority findings are retained first. A lower-bound value such as ≥132 means results are incomplete; missing details never establish zero issues. Truncation or invalid locations can make the report partial. **Zero reported findings applies only to the recorded scope**, not the whole repository. These bounded details belong to Health; the existing Findings page continues to track CI assessment issues.
 
 ## Reassessment and history
 
@@ -148,7 +148,7 @@ The strict measured Semgrep image `sha256:ab136eaf5352c9ad2d53ea454fbae762ecf0e6
 
 ### Saved analyzer explanations
 
-New native Health findings can retain plain-text rule descriptions and help from the exact uniquely matched SARIF driver rule. Each field is limited to 500 characters and remains inside the existing 5 KB per-check and 40 KB signed-receipt budgets. Ambiguous or mismatched descriptors, credential-bearing text and extra guidance fields are rejected. The detail page labels this as analyzer-provided advice from the saved report; it does not validate a defect, fetch report URLs or render HTML/Markdown. Truncated finding retention still makes the report partial.
+New native Health findings can retain plain-text rule descriptions and help from the exact uniquely matched SARIF driver rule. Each advice field is limited to 500 characters. Static Health reports accept up to 8 MiB and retain up to 5,000 supported findings per analyzer, within an 8 MiB signed-payload budget shared by the assessment. CI artifact import limits are unchanged. Ambiguous or mismatched descriptors, credential-bearing text and extra guidance fields are rejected. The detail page labels this as analyzer-provided advice from the saved report; it does not validate a defect, fetch report URLs or render HTML/Markdown. Truncated finding retention still makes the report partial.
 
 Secret findings never retain scanner-provided explanations or help. They receive saved Preflyt general secret-detection guidance on secure review, revocation/rotation, removal and reassessment; this does not claim the exact detector or credential validity. Other findings without a supplied rule explanation retain the explicit unavailable state. Historical reports are unchanged.
 
@@ -179,3 +179,11 @@ The evaluator uses captured policy `maxFailedChecks` limits for supported Health
 ### Visible scan progress
 
 An active assessment shows a spinner and its current stage above the report: inspecting the commit, fetching files, preparing scanners, scanning, verifying results or reconnecting. The page polls automatically. Queued work shows a waiting message; progress never invents a percentage or displays unfinished metrics as completed results.
+
+### Incomplete scanner reports
+
+Valid findings are retained even when another analyzer fails or a parser cannot read every file. **Scope and evidence** lists bounded scanner error types and affected file locations when the scanner supplies them. Parser errors remain incomplete; they never turn into a clean result. Review the listed source syntax or update the scanner for compatible parsing. These diagnostics omit raw source, scanner messages and credential values.
+
+Secret findings identify recognized credential types and show potential impact (medium for generic API-key patterns; high for recognized access tokens, private keys and authorization headers). A pattern match does not prove a credential is live. Dummy test data can match too; verify the reported file and line before acting. Matching values and source remain hidden.
+
+The duplication measurement excludes dependency/build folders, generated folders, type declarations and minified JavaScript. Its denominator is the recorded analyzed scope.

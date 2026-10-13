@@ -1,3 +1,4 @@
+import {HEALTH_REPORT_BYTES} from './health-report-limits.js'
 import { createPublicKey } from 'node:crypto'
 import { digest } from '../assessments/assessment-digest.js'
 import { buildNativePlan, nativeAdapters, nativeToolReviews, type NativeRuleId, type NativeToolReview } from '../execution/native-plan.js'
@@ -34,7 +35,9 @@ export function healthScannerPlan(pkg: HealthScannerPackage, input: { organizati
   if (!/^health:[a-f0-9-]{36}$/.test(input.selectionId) || input.ruleIds.some(id => !healthScannerRules.includes(id as any)))
     throw new Error('Only fixed repository health scanners are available')
   const authority = healthScannerAuthority(pkg, input.organizationId)
-  return buildNativePlan({ ...input, rules: input.ruleIds.map(id => ({ id, title: id, required: false, capability: 'execution' })) }, authority.tools)
+  const {planHash: _nativeHash, ...nativePlan} = buildNativePlan({ ...input, rules: input.ruleIds.map(id => ({ id, title: id, required: false, capability: 'execution' })) }, authority.tools)
+  const plan = {...nativePlan, steps: nativePlan.steps.map(step => ({...step, maxReportBytes: HEALTH_REPORT_BYTES}))}
+  return {...plan, planHash: digest(plan)}
 }
 
 export function admitHealthScan(pkg: HealthScannerPackage, expected: NativeReceiptExpected) {

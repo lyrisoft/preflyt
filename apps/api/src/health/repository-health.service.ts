@@ -9,6 +9,7 @@ import { PrismaService } from '../prisma/prisma.service.js'
 import {hotspotDispositionId,hotspotStates,hotspotSummary} from './hotspot-review.js'
 import { AuthorizationService, rolePermissions } from '../auth/authorization.service.js'
 import type { AuthenticatedSession } from '../auth/session.guard.js'
+import { GitHubRateLimitError } from '../github/github-rate-limit.js'
 import { GitHubProviderService } from '../github/github-provider.service.js'
 import { discoverRepositoryProfile, validProfileBranch } from '../github/repository-profile.js'
 import { NativeStatusService } from '../execution/native-status.service.js'
@@ -337,7 +338,7 @@ export class RepositoryHealthService {
     const native = await this.db.nativeExecutionRequest.findUnique({ where: { id: row.nativeRequestId } })
     if (native && ['QUEUED','PREPARING','RUNNING','CANCEL_REQUESTED'].includes(native.state)) { await this.defer(id,token); return }
    }
-   await this.finish(row,token,'FAILED',row.report as HealthReport | null, (error as any)?.status === 403 ? 'ACCESS_REVOKED' : 'SOURCE_OR_ANALYSIS_UNAVAILABLE')
+   await this.finish(row,token,'FAILED',row.report as HealthReport | null, error instanceof GitHubRateLimitError ? 'GITHUB_RATE_LIMITED' : (error as any)?.status === 403 ? 'ACCESS_REVOKED' : 'SOURCE_OR_ANALYSIS_UNAVAILABLE')
   }
  }
  private async automaticScan(row: any, token: string, session: AuthenticatedSession, repo: any) {

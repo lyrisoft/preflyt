@@ -1,3 +1,4 @@
+import {CompactCloneStore} from './compact-store.mjs'
 // Fixed, image-owned static scanner. Never read repository scanner configuration or run code.
 import { createRequire } from 'node:module'
 const { detectClonesAndStatistic } = createRequire(import.meta.url)('jscpd')
@@ -13,9 +14,9 @@ try {
  const {clones,statistic} = await detectClonesAndStatistic({
   path:[workspace], minLines:5, minTokens:50, maxLines:1000000, maxSize:'1mb',
   mode:'weak', format:['javascript','typescript','python','java','go','ruby','php','csharp','css','scss','sql','rust'],
-  ignore:['**/node_modules/**','**/.git/**','**/vendor/**','**/dist/**','**/build/**','**/coverage/**'],
+  ignore:['**/node_modules/**','**/.git/**','**/vendor/**','**/dist/**','**/build/**','**/coverage/**','**/generated/**','**/*.d.ts','**/*.min.js'],
   gitignore:false, noSymlinks:true, silent:true, reporters:[], blame:false, noTips:true,
- })
+ }, new CompactCloneStore())
  const sources = [...new Set(Object.values(statistic.formats).flatMap(format => Object.keys(format.sources)))]
  const sourceLines = new Map()
  let analyzedLines=0
@@ -60,7 +61,12 @@ try {
    .map((block,id)=>({id,physicalLocation:{artifactLocation:{uri:block.path},region:{startLine:block.line,endLine:block.endLine}}})),
  }))
  const report=JSON.stringify({version:'2.1.0',runs:[{tool:{driver:{name:'Preflyt duplication',version:'jscpd-4.3.0/unique-lines-v1'}},properties:{preflytMeasurement:measurement},results}]})
- if(Buffer.byteLength(report)>262144) throw new Error('Report exceeds bound')
+ if(Buffer.byteLength(report)>8388608) throw new Error('Report exceeds bound')
  await writeFile('/reports/report.sarif',report,{flag:'wx'})
  process.exitCode=results.length?1:0
-} catch { process.exitCode=2 }
+} catch (error) {
+ const known=['Unsafe scanner location','Invalid clone range','Invalid measured scope','Report exceeds bound']
+ const type=known.includes(error?.message)?error.message:'Duplication processing error'
+ await writeFile('/reports/report.sarif',JSON.stringify({version:'2.1.0',runs:[{tool:{driver:{name:'Preflyt duplication'}},properties:{preflytScanErrors:[{type,path:null}]},results:[]}]})).catch(()=>{})
+ process.exitCode=2
+}

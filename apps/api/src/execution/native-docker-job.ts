@@ -144,7 +144,7 @@ export function nativeDockerArgs(
       '--tmpfs',
       '/scratch:rw,nosuid,nodev,noexec,size=134217728,mode=1777',
       '--tmpfs',
-      '/reports:rw,nosuid,nodev,noexec,size=1048576,mode=1777',
+      `/reports:rw,nosuid,nodev,noexec,size=${policy === 'health' ? 67108864 : 1048576},mode=1777`,
       '--env',
       'HOME=/scratch',
       '--env',
@@ -176,6 +176,7 @@ export function verifyNativeDockerInspection(
   tool: NativeToolReview,
   sourcePath: string,
   runtime: string,
+  policy: 'native' | 'health' = 'native',
 ) {
   const config = info?.Config,
     host = info?.HostConfig
@@ -255,7 +256,7 @@ export function verifyNativeDockerInspection(
       .join(',') !== '/reports,/scratch' ||
     host.Tmpfs['/scratch'] !==
       'rw,nosuid,nodev,noexec,size=134217728,mode=1777' ||
-    host.Tmpfs['/reports'] !== 'rw,nosuid,nodev,noexec,size=1048576,mode=1777'
+    host.Tmpfs['/reports'] !== `rw,nosuid,nodev,noexec,size=${policy === 'health' ? 67108864 : 1048576},mode=1777`
   )
     throw new Error('Native container controls changed')
 }
@@ -355,19 +356,20 @@ export async function runIsolatedDockerCheck(
       tool,
       canonical,
       runtime.runtime,
+      runtime.policy,
     )
     await verifyRuntime()
     const output = await command(['start', '--attach', containerId], {
       signal: deadline,
       timeoutMs: 300000,
-      maxBytes: 360448,
+      maxBytes: runtime.policy === 'health' ? 12 * 1024 * 1024 : 360448,
     })
     const exit = (await command(['wait', containerId], { signal: deadline }))
       .toString()
       .trim()
     if (!/^\d{1,3}$/.test(exit)) throw new Error('Invalid native exit status')
     exitCode = Number(exit)
-    report = nativeRunnerReport(output, scope.sourceHash, exitCode)
+    report = nativeRunnerReport(output, scope.sourceHash, exitCode, runtime.policy === 'health')
     await verifyRuntime()
   } catch {
     reason = deadline.aborted
@@ -383,7 +385,7 @@ export async function runIsolatedDockerCheck(
         },
       )
   }
-  const outcome = nativeCheckOutcome(ruleId, exitCode, report)
+  const outcome = nativeCheckOutcome(ruleId, exitCode, report, runtime.policy === 'health' ? 'health' : 'ci')
   return {
     ...scope,
     ...outcome,

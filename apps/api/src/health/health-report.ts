@@ -1,4 +1,4 @@
-import {validFileAnalysis, fileAnalysisRules, type FileAnalysis} from './health-file-analysis.js'
+import {type ScanError, validFileAnalysis, fileAnalysisRules, type FileAnalysis} from './health-file-analysis.js'
 import type { HealthPolicyContext } from './health-policy-context.js'
 import { findingGuidance, type FindingGuidance, type FindingReferenceGuidance } from './finding-guidance.js'
 import { validDuplicationMeasurement, validCoverageMeasurement, type CoverageMeasurement, type DuplicationMeasurement } from './health-measurements.js'
@@ -13,7 +13,7 @@ export const healthAnalyses = [
  { id: 'iac.policy', title: 'Infrastructure configuration', category: 'security', scope: 'Terraform and detected Kubernetes or Helm files, using the approved Trivy configuration checks; deployed infrastructure is not tested.' },
  { id: 'quality.reliability', title: 'Reliability', category: 'reliability', scope: 'JavaScript and TypeScript NaN comparisons and async Promise executors, and Python bare except handlers and returns in finally. These Preflyt v2 rules do not measure overall application reliability.' },
  { id: 'quality.maintainability', title: 'Maintainability', category: 'maintainability', scope: 'JavaScript and TypeScript debugger statements, and Python exec calls and mutable list or dictionary defaults. These Preflyt v2 rules do not measure complexity or overall maintainability.' },
- { id: 'quality.duplication', title: 'Duplicated code', category: 'duplication', scope: 'JavaScript, TypeScript, Python, Java, Go, Ruby, PHP, C#, CSS, SCSS, SQL and Rust token blocks of at least 5 lines and 50 tokens; excluded folders and oversized files are omitted.' },
+ { id: 'quality.duplication', title: 'Duplicated code', category: 'duplication', scope: 'JavaScript, TypeScript, Python, Java, Go, Ruby, PHP, C#, CSS, SCSS, SQL and Rust token blocks of at least 5 lines and 50 tokens; dependencies, build output, generated folders, type declarations, minified JavaScript and oversized files are omitted.' },
  { id: 'security.hotspots', title: 'Security hotspot review', category: 'hotspot', scope: 'JavaScript and TypeScript createHash("md5") and Python hashlib.md5 calls. Other security-sensitive patterns are not covered by this Preflyt v1 pack.' },
  { id: 'tests.coverage', title: 'Optional test coverage', category: 'coverage', scope: 'Opt-in Node built-in JavaScript tests: loaded application files only. Vitest, Jest, pytest and files not loaded by the tests are not covered by this recipe.' },
 ] as const
@@ -23,7 +23,7 @@ export type HealthReport = {
  policyContext?: HealthPolicyContext;
  version: 1; completeness: 'COMPLETE' | 'PARTIAL'; mode: 'INSPECTION_ONLY' | 'EXECUTED';
  comparisonKey: string; inspection: { complete: boolean; fileCount: number; languages: string[] };
- analyses: Array<{ fileAnalysis?: FileAnalysis; id: string; title: string; scope?: string; state: string; reason: string; reportHash?: string | null; tool?: string; configHash?: string; findingsRetained?: number; findingsReported?: number; findingsSuppressed?: number }>;
+ analyses: Array<{ scanErrors?: ScanError[]; fileAnalysis?: FileAnalysis; id: string; title: string; scope?: string; state: string; reason: string; reportHash?: string | null; tool?: string; configHash?: string; findingsRetained?: number; findingsReported?: number; findingsSuppressed?: number }>;
  findings: HealthFinding[]; limits: string[]; measurements?: { duplication?: DuplicationMeasurement; coverage?: CoverageMeasurement };
 }
 /** Static default only. Never runs tests, package scripts, builds, or AI. */
@@ -65,7 +65,7 @@ export function healthReport(inspection: HealthReport['inspection'], analyses: H
   const scope = input.scope ?? healthAnalyses.find(definition => definition.id === input.id)?.scope
   const a = {...input, ...(scope ? {scope} : {})}
   const c = checks.find(c => c.ruleId === a.id)
-  return c ? { ...a, ...(fileAnalysisRules.includes(c.ruleId) && c.cleanupConfirmed && c.state!=='INCOMPLETE' && validFileAnalysis(c.fileAnalysis) ? {fileAnalysis:c.fileAnalysis}:{}), state: c.state, reason: c.reason, reportHash: c.reportHash, tool: c.toolVersion, configHash: c.configHash, findingsRetained: c.findings?.length, findingsReported: typeof c.summary?.results === 'number' ? c.summary.results : undefined, findingsSuppressed: typeof c.summary?.suppressed === 'number' ? c.summary.suppressed : undefined } : a
+  return c ? { ...a, ...(c.scanErrors?.length?{scanErrors:c.scanErrors}:{}), ...(fileAnalysisRules.includes(c.ruleId) && c.cleanupConfirmed && c.state!=='INCOMPLETE' && validFileAnalysis(c.fileAnalysis) ? {fileAnalysis:c.fileAnalysis}:{}), state: c.state, reason: c.reason, reportHash: c.reportHash, tool: c.toolVersion, configHash: c.configHash, findingsRetained: c.findings?.length, findingsReported: typeof c.summary?.results === 'number' ? c.summary.results : undefined, findingsSuppressed: typeof c.summary?.suppressed === 'number' ? c.summary.suppressed : undefined } : a
  })
  const executed = checks.length > 0
  const complete = inspection.complete && projected.length > 0 && projected.every(a => {

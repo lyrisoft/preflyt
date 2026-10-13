@@ -68,6 +68,7 @@ export type HealthReport = {
     id: string
     title: string
     scope?: string
+    scanErrors?: Array<{ type: string; path: string | null; line?: number }>
     fileAnalysis?: {
       version: 1
       formula: 'semgrep-candidate-files-v1'

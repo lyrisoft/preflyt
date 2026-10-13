@@ -1,16 +1,22 @@
 import type {NativeReceipt} from '../execution/native-receipt.js'
-const bytes=(value:NativeReceipt)=>Buffer.from(JSON.stringify(value)).toString('base64url').length
-const ranks:Record<string,number>={unknown:0,low:1,medium:2,high:3,critical:4}
-/** Preserve signed scope, outcomes, measured counters and cleanup; reduce only retained details. */
+import {HEALTH_RECEIPT_PAYLOAD} from './health-report-limits.js'
+const bytes=(value:NativeReceipt)=>Buffer.byteLength(JSON.stringify(value))
+/** Keep bounded results in severity order without quadratic trimming for large repositories. */
 export function fitHealthReceipt(value:NativeReceipt):NativeReceipt {
- if(!value.selectionId.startsWith('health:')||bytes(value)<=40000)return value
- const fitted={...value,checks:value.checks.map(check=>({...check,...(check.findings?{findings:[...check.findings]}:{})}))}
- while(bytes(fitted)>40000) {
-  const multiple=fitted.checks.filter(check=>(check.findings?.length??0)>1)
-  const candidates=multiple.length?multiple:fitted.checks.filter(check=>check.findings?.length)
-  if(!candidates.length)throw new Error('Native receipt metadata exceeds bounds')
-  candidates.sort((a,b)=>ranks[a.findings!.at(-1)!.severity]-ranks[b.findings!.at(-1)!.severity]||Buffer.byteLength(JSON.stringify(b.findings))-Buffer.byteLength(JSON.stringify(a.findings)))
-  candidates[0].findings!.pop()
+ const limit=Math.floor(HEALTH_RECEIPT_PAYLOAD*3/4)
+ if(!value.selectionId.startsWith('health:')||bytes(value)<=limit)return value
+ const fitted={...value,checks:value.checks.map(check=>({...check,...(check.findings?{findings:[] as typeof check.findings}:{})}))}
+ let remaining=limit-bytes(fitted)
+ if(remaining<0)throw new Error('Native receipt metadata exceeds bounds')
+ // Round-robin across analyzers preserves a useful subset from each. Each analyzer
+ // already sorts by severity. Counters remain unchanged, making truncation explicit.
+ const maximum=Math.max(0,...value.checks.map(c=>c.findings?.length??0))
+ for(let index=0;index<maximum;index++)for(let i=0;i<value.checks.length;i++){
+  const finding=value.checks[i].findings?.[index]
+  if(!finding)continue
+  const cost=Buffer.byteLength(JSON.stringify(finding))+(fitted.checks[i].findings!.length?1:0)
+  if(cost>remaining)continue
+  fitted.checks[i].findings!.push(finding);remaining-=cost
  }
  return fitted
 }

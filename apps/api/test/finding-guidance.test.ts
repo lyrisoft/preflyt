@@ -32,7 +32,7 @@ it('provides safe category guidance for secret findings without repeating the va
  const guide=findingGuidance('secrets.scan','password=never-copy-this')!
  expect(guide.rule).toBe('secret-detection')
  expect(guide.fix).toContain('revoke or rotate')
- expect(guide.limits).toContain('general secret-detection guidance')
+ expect(guide.limits).toContain('Test or example paths do not prove')
  expect(JSON.stringify(guide)).not.toContain('never-copy-this')
 })
 

@@ -137,3 +137,14 @@ describe('Docker native job controls', () => {
     ).toThrow()
   })
 })
+
+it('gives Health reports bounded working space while verifying the effective limit', () => {
+ const args=nativeDockerArgs(scope,'secrets.scan',tool,source,'runsc','health').args
+ expect(args).toContain('/reports:rw,nosuid,nodev,noexec,size=67108864,mode=1777')
+ const info=inspection()
+ info.HostConfig.Tmpfs['/reports']='rw,nosuid,nodev,noexec,size=67108864,mode=1777'
+ expect(()=>verifyNativeDockerInspection(info,scope,'secrets.scan',tool,source,'runsc','health')).not.toThrow()
+ expect(()=>verify(info)).toThrow()
+ info.HostConfig.Tmpfs['/reports']='rw,nosuid,nodev,noexec,size=134217728,mode=1777'
+ expect(()=>verifyNativeDockerInspection(info,scope,'secrets.scan',tool,source,'runsc','health')).toThrow()
+})

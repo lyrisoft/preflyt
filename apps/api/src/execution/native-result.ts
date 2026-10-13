@@ -1,3 +1,4 @@
+import {HEALTH_REPORT_BYTES} from '../health/health-report-limits.js'
 import { createHash } from 'node:crypto'
 import {
   parseArtifact,
@@ -17,6 +18,7 @@ export function nativeCheckOutcome(
   ruleId: NativeRuleId,
   exitCode: number | null,
   report: Buffer | null,
+  profile: 'ci' | 'health' = 'ci',
 ): NativeCheckOutcome {
   const result: NativeCheckOutcome = {
     ruleId,
@@ -25,7 +27,7 @@ export function nativeCheckOutcome(
     reportHash: null,
     summary: null,
   }
-  if (!report || report.length > MAX_ARTIFACT_BYTES || !report.length)
+  if (!report || report.length > (profile === 'health' ? HEALTH_REPORT_BYTES : MAX_ARTIFACT_BYTES) || !report.length)
     return result
   const adapter = nativeAdapters[ruleId]
   if (!adapter) return result
@@ -35,6 +37,7 @@ export function nativeCheckOutcome(
       adapter.format,
       report.toString('utf8'),
       result.reportHash,
+      profile,
     )
     result.summary = parsed.summary
     if (![0, 1].includes(exitCode ?? -1))

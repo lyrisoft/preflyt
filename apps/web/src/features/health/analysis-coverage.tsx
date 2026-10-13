@@ -178,6 +178,29 @@ export function AnalysisCoverage({
                     </summary>
                     <div className='space-y-3 border-t px-4 py-3 text-xs leading-relaxed text-muted-foreground'>
                       {analysis.scope && <p>{analysis.scope}</p>}
+                      {!!analysis.scanErrors?.length && (
+                        <div>
+                          <p className='font-medium text-foreground'>
+                            Scanner diagnostics
+                          </p>
+                          <ul className='mt-1 space-y-1'>
+                            {analysis.scanErrors.map((error, index) => (
+                              <li key={index} className='break-words'>
+                                {error.path ?? 'Scanner'}
+                                {error.line ? `:${error.line}` : ''}:{' '}
+                                {error.type === 'PartialParsing'
+                                  ? 'Parser could not read part of this file'
+                                  : error.type}
+                              </li>
+                            ))}
+                          </ul>
+                          <p className='mt-2'>
+                            {analysis.id === 'quality.duplication'
+                              ? 'The duplication scanner could not finish processing its report. Other analyzer results are still available.'
+                              : 'Preflyt could not fully analyze these files. Check the listed syntax or update the scanner for parser compatibility; timeouts need more scan time. Findings from the completed work are still available.'}
+                          </p>
+                        </div>
+                      )}
                       {analysis.fileAnalysis && (
                         <p>
                           {analysis.fileAnalysis.analyzedFiles} /{' '}
