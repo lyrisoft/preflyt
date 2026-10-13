@@ -2,9 +2,9 @@ import { themes as prismThemes } from 'prism-react-renderer'
 import type { Config } from '@docusaurus/types'
 import type * as Preset from '@docusaurus/preset-classic'
 
-// GitHub Pages serves project sites under /<repository>/. Override both values
-// when the site moves to a custom domain (DOCS_BASE_URL=/).
-const url = process.env.DOCS_URL ?? 'https://lyrisoft.github.io'
+// The documentation custom domain serves the site at its root.
+// Other installations may explicitly override the origin and base path.
+const url = process.env.DOCS_URL ?? 'https://docs.preflytlabs.com'
 const baseUrl = process.env.DOCS_BASE_URL ?? '/'
 const repository = 'https://github.com/lyrisoft/preflyt'
 

@@ -131,3 +131,8 @@ it('includes the image-owned coverage helper in a clean native image checkout', 
   const ignored = spawnSync('git', ['check-ignore', '--no-index', `${context}/coverage/generated.json`], { cwd: root, encoding: 'utf8' })
   expect(ignored.status).toBe(0)
 })
+
+it('builds documentation at the custom domain root rather than the legacy project path', () => {
+  const step = workflow('docs.yml').jobs.build.steps.find((step: any) => step.name?.startsWith('Type-check and build'))
+  expect(step.env).toEqual({ DOCS_URL: 'https://docs.preflytlabs.com', DOCS_BASE_URL: '/' })
+})

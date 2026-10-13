@@ -29,6 +29,9 @@ jobs:
           npm install --global pnpm@10.15.1
           pnpm install --frozen-lockfile --ignore-scripts --filter @preflyt/docs...
       - name: Type-check and build (fails on broken links and undocumented variables)
+        env:
+          DOCS_URL: https://docs.preflytlabs.com
+          DOCS_BASE_URL: /
         run: |
           pnpm --filter @preflyt/docs typecheck
           pnpm --filter @preflyt/docs build

@@ -5,7 +5,7 @@
   "description": "Preflyt user and operator documentation site",
   "scripts": {
     "dev": "node scripts/generate-downloads.mjs && docusaurus start",
-    "build": "node scripts/check-env-reference.mjs && node scripts/generate-downloads.mjs && docusaurus build",
+    "build": "node scripts/check-env-reference.mjs && node scripts/generate-downloads.mjs && docusaurus build && node scripts/check-deployment.mjs",
     "serve": "docusaurus serve",
     "clear": "docusaurus clear",
     "typecheck": "tsc --noEmit",
