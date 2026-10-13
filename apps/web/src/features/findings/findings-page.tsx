@@ -24,6 +24,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Main } from '@/components/layout/main'
 import { PageHeader } from '@/components/page-header'
 import { PageHelpDrawer } from '@/components/page-help-drawer'
+import { ResultTimestamp } from '@/components/result-timestamp'
 import { StatusBadge } from '@/components/status-badge'
 import { SurfaceIcon } from '@/components/surface-icon'
 import { useNavigationSession } from '@/features/workspace/navigation-session'
@@ -136,7 +137,7 @@ function FindingsWorkspace() {
                 {
                   title: 'Scope and limits',
                   content:
-                    'Only repositories you can assess are included. The latest saved assessment for each commit is used. Up to 200 CI assessments and 200 Health assessments, 100 CI reports and 2,000 combined results are inspected. Each source uses its latest saved report for each commit. A partial-results notice appears if a limit is reached. Historical findings are not automatically marked resolved.',
+                    'Only repositories you can assess are included. The latest saved assessment for each commit is used. Assessed at shows when the CI assessment was saved or the repository health report finished, in your browser time zone. Up to 200 CI assessments and 200 Health assessments, 100 CI reports and 2,000 combined results are inspected. Each source uses its latest saved report for each commit. A partial-results notice appears if a limit is reached. Historical findings are not automatically marked resolved.',
                 },
               ]}
             />
@@ -416,12 +417,27 @@ function FindingsWorkspace() {
                 <table className='w-full text-left text-sm'>
                   <thead className='bg-muted/50 text-muted-foreground'>
                     <tr>
-                      <th className='p-4'>Finding</th>
-                      <th className='p-4'>Type / source</th>
-                      <th className='p-4'>Severity</th>
-                      <th className='p-4'>Status</th>
-                      <th className='p-4'>Repository / commit</th>
-                      <th className='p-4'>Evidence</th>
+                      <th scope='col' className='p-4'>
+                        Finding
+                      </th>
+                      <th scope='col' className='p-4'>
+                        Type / source
+                      </th>
+                      <th scope='col' className='p-4'>
+                        Severity
+                      </th>
+                      <th scope='col' className='p-4'>
+                        Status
+                      </th>
+                      <th scope='col' className='p-4'>
+                        Repository / commit
+                      </th>
+                      <th scope='col' className='p-4 whitespace-nowrap'>
+                        Assessed at
+                      </th>
+                      <th scope='col' className='p-4'>
+                        Evidence
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -507,6 +523,9 @@ function FindingsWorkspace() {
                           </code>
                         </td>
                         <td className='p-4'>
+                          <ResultTimestamp value={row.observedAt} stacked />
+                        </td>
+                        <td className='p-4'>
                           <Button size='sm' variant='outline' asChild>
                             <Link
                               to='/findings/$findingId'
@@ -549,7 +568,9 @@ function FindingsWorkspace() {
           <div className='flex flex-wrap items-center justify-between gap-3 text-sm'>
             <p className='text-muted-foreground'>
               {result.data.total} results
-              {result.data.truncated ? ' (retained result limit reached)' : ''}{' '}
+              {result.data.truncated
+                ? ' (retained result limit reached)'
+                : ''}{' '}
               · {result.data.assessedRevisions} assessed commits
             </p>
             <div className='flex items-center gap-2'>

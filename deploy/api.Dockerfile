@@ -2,7 +2,7 @@
 FROM node:24.4.1-bookworm-slim@sha256:36ae19f59c91f3303c7a648f07493fe14c4bd91320ac8d898416327bacf1bbfa AS base
 RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
-    && npm install --global pnpm@10.15.1
+    && npm install --global pnpm@10.26.2
 WORKDIR /workspace
 
 FROM base AS build

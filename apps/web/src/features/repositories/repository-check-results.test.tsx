@@ -59,6 +59,8 @@ const evaluated = (statuses = ['PASS', 'PASS']) =>
       required: control.required,
       status: statuses[index],
       deliveryId: statuses[index] === 'INCOMPLETE' ? null : 'delivery',
+      recordedAt:
+        statuses[index] === 'INCOMPLETE' ? null : '2026-10-12T09:55:00Z',
       reasons:
         statuses[index] === 'BLOCK'
           ? ['APPROVED_CI_SOURCE_FAILED']
@@ -129,6 +131,11 @@ it('shows server-evaluated results at the assessed commit and removes configurat
     .element(page.getByText('Check configuration', { exact: true }))
     .not.toBeInTheDocument()
   await expect.element(page.getByRole('img')).not.toBeInTheDocument()
+  expect(
+    Array.from(document.querySelectorAll('tbody time'), (time) =>
+      time.getAttribute('datetime')
+    )
+  ).toEqual(['2026-10-12T09:55:00.000Z', '2026-10-12T09:55:00.000Z'])
   expect(mocks.history).toHaveBeenCalledWith('101', {
     selectionId: 'policy-selection',
     selectionRevision: 3,
@@ -157,6 +164,9 @@ it('separates failed checks from missing evidence and explains each incomplete r
   await expect
     .element(results.getByText('No CI result was collected for this check.'))
     .toBeVisible()
+  const missing = document.querySelectorAll('tbody tr')[1]
+  expect(missing.querySelector('time')).toBeNull()
+  expect(missing.children[3].textContent).toBe('-')
 })
 it('shows an honest unassessed state without borrowing a provider success or displaying zero missing results', async () => {
   mocks.history.mockReturnValue(query({ assessments: [] }))

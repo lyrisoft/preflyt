@@ -159,6 +159,7 @@ export class RepositoryHealthService {
    return report.findings.filter(f => ['critical', 'high'].includes(f.severity) && report.analyses.some(a => a.id === f.checkId && a.findingsRetained !== undefined)).map(f => ({
     repositoryId: repo.githubId.toString(), repositoryName: repo.fullName, assessmentId: row.id, branch: row.branch,
     fingerprint: f.fingerprint, title: f.title, severity: f.severity, path: f.path, line: f.line,
+    assessedAt: row.finishedAt?.toISOString() ?? null,
    }))
   }).sort((a,b) => Number(b.severity === 'critical') - Number(a.severity === 'critical') || a.repositoryName.localeCompare(b.repositoryName) || a.fingerprint.localeCompare(b.fingerprint)).slice(0,5)
   return { summary, statuses, priorityFindings, bounded: selectedScope.length > 1000, items: visible.slice((page-1)*pageSize,page*pageSize), total: visible.length, page }

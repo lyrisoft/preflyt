@@ -101,7 +101,7 @@ PostgreSQL stores application data. Valkey/Redis supports background queues and 
 
 ## Local development
 
-Use **Node.js 24.4.1** and **pnpm 10.15.1**. Install locked dependencies from the repository root:
+Use **Node.js 24.4.1** and **pnpm 10.26.2**. Install locked dependencies from the repository root:
 
 ```sh
 pnpm install --frozen-lockfile --ignore-scripts

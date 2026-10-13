@@ -30,6 +30,7 @@ import {
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
+import { ResultTimestamp } from '@/components/result-timestamp'
 import { StatusBadge } from '@/components/status-badge'
 import { SurfaceIcon } from '@/components/surface-icon'
 import { useNavigationSession } from '../workspace/navigation-session'
@@ -903,7 +904,7 @@ export function PipelineWorkflowSetup({
                 className='flex flex-wrap items-center justify-between gap-2 text-xs'
               >
                 <span className='text-muted-foreground'>
-                  {new Date(run.createdAt).toLocaleString()}
+                  <ResultTimestamp value={run.createdAt} />
                 </span>
                 <div className='flex items-center gap-3'>
                   <StatusBadge tone='neutral'>

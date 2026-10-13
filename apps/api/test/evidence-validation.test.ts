@@ -195,5 +195,8 @@ it('accepts complete report results only with a server-verified GitHub execution
   expect(check(report, true, true, 'EXPIRED').trustedExecuted).toBe(false)
   expect(check({ ...report, executedTests: 0 }).trustedExecuted).toBe(false)
   expect(check({ ...report, reportedResult: 'REPORTED_FAILURE' }).trustedExecuted).toBe(false)
+  expect(check({ ...report, reportedResult: 'REPORTED_FAILURE' })).toMatchObject({githubReportResult:'failed', githubExecution:{ruleId:'tests.required'}})
+  expect(check({ ...report, reportedResult: 'UNKNOWN' }).githubReportResult).toBe('incomplete')
+  expect(check({ ...report, reportedResult: 'REPORTED_FAILURE', reasons:['REPORT_COVERAGE_INCOMPLETE'] }).githubReportResult).toBe('incomplete')
   expect(check({ ...report, githubExecutions: undefined }).trustedExecuted).toBe(false)
 })

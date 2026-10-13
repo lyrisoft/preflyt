@@ -5,7 +5,9 @@ export type PipelineJob = { id: string; name: string; sourceSha: string; status:
 export function completedPipelineJobs(jobs: PipelineJob[], sourceSha: string) {
   const gates = jobs.filter(j => j.name === FINAL_GATE_NAME || j.name.endsWith(' / ' + FINAL_GATE_NAME))
   if (gates.length !== 1 || !['in_progress', 'completed'].includes(gates[0].status)) return null
-  if (gates[0].status === 'completed' && gates[0].conclusion !== 'success') return null
+  // The terminal policy outcome must not overwrite the independently completed
+  // collection jobs. Cancelled/unknown execution still cannot establish proof.
+  if (gates[0].status === 'completed' && !['success', 'failure'].includes(gates[0].conclusion ?? '')) return null
   const checks = jobs.filter(j => j !== gates[0])
   if (!checks.length || checks.some(j => j.status !== 'completed' || j.sourceSha !== sourceSha)) return null
   const executed = checks.filter(j => j.conclusion !== 'skipped')

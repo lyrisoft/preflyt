@@ -48,6 +48,7 @@ import { Main } from '@/components/layout/main'
 import { PageHeader } from '@/components/page-header'
 import { PageHelpDrawer } from '@/components/page-help-drawer'
 import { RepositoryPicker } from '@/components/repository-picker'
+import { ResultTimestamp } from '@/components/result-timestamp'
 import { StatusBadge } from '@/components/status-badge'
 import { SurfaceIcon } from '@/components/surface-icon'
 import { useHealthPortfolio } from '@/features/health/health-api'
@@ -625,10 +626,11 @@ export function Dashboard() {
                                           search={{ repository: repo.githubId }}
                                           className='underline-offset-4 hover:underline'
                                         >
-                                          <RelativeTime
+                                          <ResultTimestamp
                                             value={
                                               repo.latestAssessment.createdAt
                                             }
+                                            stacked
                                           />
                                         </Link>
                                       ) : (

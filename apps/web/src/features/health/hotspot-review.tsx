@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { OptionSelect } from '@/components/ui/option-select'
 import { Textarea } from '@/components/ui/textarea'
+import { ResultTimestamp } from '@/components/result-timestamp'
 import { StatusBadge } from '@/components/status-badge'
 import { SurfaceIcon } from '@/components/surface-icon'
 import { findingRequest } from '@/features/findings/finding-api'
@@ -156,7 +157,7 @@ function ReviewForm({
       </div>
       {review.updatedAt && (
         <p className='text-xs text-muted-foreground'>
-          Last reviewed {new Date(review.updatedAt).toLocaleString()}
+          Last reviewed <ResultTimestamp value={review.updatedAt} />
         </p>
       )}
       {review.canReview ? (

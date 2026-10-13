@@ -3,6 +3,7 @@ import '@/styles/index.css'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { render } from 'vitest-browser-react'
 import { page } from 'vitest/browser'
+import type * as EngineeringQueries from './engineering-queries'
 import type { BindingResult, SourceIdentity } from './engineering-queries'
 import { RepositoryBindings } from './repository-bindings'
 import type { CiEvidence, Standards } from './repository-queries'
@@ -18,7 +19,7 @@ const state = vi.hoisted(() => ({
   fetch: vi.fn(),
 }))
 vi.mock('./engineering-queries', async (original) => ({
-  ...(await original<typeof import('./engineering-queries')>()),
+  ...(await original<typeof EngineeringQueries>()),
   useBindings: () => ({
     data: state.saved,
     isPending: false,

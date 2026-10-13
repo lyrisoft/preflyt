@@ -1,5 +1,5 @@
 import { digest } from './assessment-digest.js'
-export const GATE_PREVIEW_VERSION = 2
+export const GATE_PREVIEW_VERSION = 3
 const record = (value: unknown): Record<string, any> | null =>
   value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, any>)
@@ -161,12 +161,40 @@ export function previewGate(snapshot: {
           execution.workflowId ===
             failedObservations[0].sourceIdentity?.workflowId
         if (verifiedGitHub) reasons.length = 0
+        // A completed verified collection job can carry an independently failed
+        // report. A partial scanner report never becomes a completed failure.
+        const failedReport = collectionComplete &&
+          definition.operator === 'verified_check_succeeded' &&
+          definition.capability === 'import_only' &&
+          definition.allowedSources?.includes('verified_imported_ci') &&
+          check.evidenceValidation?.version === 2 &&
+          check.evidenceValidation?.githubReportResult === 'failed' &&
+          check.evidenceValidation?.observationIntegrity === true &&
+          check.evidenceValidation?.sourceApproved === true &&
+          check.mappingTrust === 'APPROVED_SOURCE_BINDING' &&
+          check.freshness === 'FRESH_AT_COLLECTION' &&
+          check.providerResult === 'SUCCEEDED' &&
+          !check.ambiguous && !check.superseded && check.coverage !== 'INVALID' &&
+          execution?.ruleId === definition.id && execution.sourceSha === snapshot.sourceSha &&
+          failedObservations.length === 1 &&
+          failedObservations[0].sourceSha === snapshot.sourceSha &&
+          failedObservations[0].result === 'SUCCEEDED' &&
+          failedObservations[0].sourceStatus === 'completed' &&
+          failedObservations[0].sourceConclusion === 'success' &&
+          ['workflow_run', 'workflow_jobs'].includes(failedObservations[0].sourceKind) &&
+          execution.runId === failedObservations[0].sourceObjectId &&
+          execution.runAttempt === failedObservations[0].sourceIdentity?.runAttempt &&
+          execution.workflowId === failedObservations[0].sourceIdentity?.workflowId
+        if (failedReport) {
+          reasons.length = 0
+          reasons.push('REPORT_REPORTED_FAILURE')
+        }
         if (failedCi) reasons.push('APPROVED_CI_SOURCE_FAILED')
         return {
           ruleId: definition.id,
           title: typeof check.title === 'string' ? check.title : definition.id,
           required: definition.required,
-          status: failedCi ? 'BLOCK' : reasons.length ? 'INCOMPLETE' : 'PASS',
+          status: failedCi || failedReport ? 'BLOCK' : reasons.length ? 'INCOMPLETE' : 'PASS',
           reasons: [...new Set(reasons)].sort(),
           deliveryId:
             typeof check.deliveryId === 'string' ? check.deliveryId : null,

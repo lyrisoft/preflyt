@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
+import { ResultTimestamp } from '@/components/result-timestamp'
 import { StatusBadge } from '@/components/status-badge'
 import { useNavigationSession } from '../workspace/navigation-session'
 import { canPerform } from '../workspace/scoped-access'
@@ -13,6 +14,7 @@ type RequestRow = {
   state: string
   reason: string
   requestedAt: string
+  finishedAt?: string | null
 }
 type History = {
   items: RequestRow[]
@@ -239,9 +241,12 @@ export function NativeRequestHistory({
                 {reasons[row.reason] ??
                   row.reason.toLowerCase().replace(/_/g, ' ')}
               </p>
-              <time dateTime={row.requestedAt}>
-                {new Date(row.requestedAt).toLocaleString()}
-              </time>
+              <p>
+                Requested <ResultTimestamp value={row.requestedAt} />
+              </p>
+              <p>
+                Finished <ResultTimestamp value={row.finishedAt} />
+              </p>
             </div>
             {allowed &&
               ['QUEUED', 'PREPARING', 'RUNNING'].includes(row.state) && (

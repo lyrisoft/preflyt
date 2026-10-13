@@ -161,6 +161,7 @@ export type HealthPortfolioData = {
     cancelled: number
   }
   priorityFindings: {
+    assessedAt?: string | null
     repositoryId: string
     repositoryName: string
     assessmentId: string

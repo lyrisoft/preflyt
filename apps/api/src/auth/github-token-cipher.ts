@@ -81,7 +81,7 @@ export function decryptGitHubUserTokens(
     const nonce = Buffer.from(parts[1]!, 'base64url')
     const tag = Buffer.from(parts[2]!, 'base64url')
     if (nonce.length !== 12 || tag.length !== 16) throw new Error()
-    const cipher = createDecipheriv('aes-256-gcm', key, nonce)
+    const cipher = createDecipheriv('aes-256-gcm', key, nonce, { authTagLength: 16 })
     cipher.setAAD(aad)
     cipher.setAuthTag(tag)
     const plaintext = Buffer.concat([

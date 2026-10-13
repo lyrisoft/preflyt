@@ -1,3 +1,4 @@
+import type * as RouterModule from '@tanstack/react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, type RenderResult } from 'vitest-browser-react'
 import { userEvent } from 'vitest/browser'
@@ -21,7 +22,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('@tanstack/react-router', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@tanstack/react-router')>()
+  const actual = await importOriginal<typeof RouterModule>()
   return {
     ...actual,
     useNavigate: () => mocks.navigate,

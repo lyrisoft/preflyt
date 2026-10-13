@@ -35,7 +35,7 @@ Use this skill when drafting or modifying a repository workflow for a Preflyt po
 - Keep at most 10 executable reports per policy under the current intake contract. JUnit test/build and SARIF scan reports must come from the actual command at the assessed commit.
 
 ## Add the Preflyt Action
-- Add or update exactly one uses: lyrisoft/preflyt-action@adfe42ef61cf25936d777e6115b224293cd4675f step after dependency installation in the compatible job. Preserve any existing proofs input.
+- Add or update exactly one uses: lyrisoft/preflyt-action@ffd33c5e44efb2f4d69d07aea3e471505046a05f step after dependency installation in the compatible job. Preserve any existing proofs input.
 - Restrict its condition to always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository. Do not execute untrusted PR code under pull_request_target or a privileged workflow_run context.
 - Set with.api-url to the supplied apiUrl or the existing Preflyt step's value. Never invent an endpoint or credentials. Explain a missing or unreachable public HTTPS endpoint in the summary.
 - Set only with.api-url and, if needed, job-name. Remove the legacy checks input when upgrading. Preserve optional proofs; do not recreate explicit report mappings.

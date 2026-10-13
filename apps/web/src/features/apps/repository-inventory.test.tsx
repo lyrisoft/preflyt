@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import type * as RouterModule from '@tanstack/react-router'
 import '@/styles/index.css'
 import { expect, it, vi } from 'vitest'
 import { render } from 'vitest-browser-react'
@@ -8,7 +9,7 @@ import type { HealthPortfolioData } from '../health/health-api'
 import { RepositoryInventoryTable } from './index'
 
 vi.mock('@tanstack/react-router', async (original) => ({
-  ...(await original<typeof import('@tanstack/react-router')>()),
+  ...(await original<typeof RouterModule>()),
   Link: ({
     params,
     children,

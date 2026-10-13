@@ -1,5 +1,6 @@
 import { Link } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
+import { ResultTimestamp } from '@/components/result-timestamp'
 import { StatusBadge } from '@/components/status-badge'
 import { healthLabel, healthTone, type HealthPortfolioData } from './health-api'
 
@@ -72,6 +73,9 @@ export function InventoryHealthCell({
       {item.mode === 'INSPECTION_ONLY' && (
         <p className='text-xs text-muted-foreground'>Inspection only</p>
       )}
+      <p className='text-xs text-muted-foreground'>
+        Assessed <ResultTimestamp value={item.finishedAt} stacked />
+      </p>
     </div>
   )
 }

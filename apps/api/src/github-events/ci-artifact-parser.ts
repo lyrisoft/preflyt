@@ -55,7 +55,7 @@ function junit(content: string) {
   if (/<!\s*(DOCTYPE|ENTITY)\b/i.test(content)) throw invalid()
   let depth = 0, tokens = 0
   // Quotes, comments and CDATA are consumed as units so embedded markup is not treated as structure.
-  const tags = /<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>|<\?[\s\S]*?\?>|<(?:(?:"[^"]*"|'[^']*'|[^'">])*)>/g
+  const tags = new RegExp(String.raw`<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>|<\?[\s\S]*?\?>|<(?:(?:"[^"]*"|'[^']*'|[^'">])*)>`, 'g')
   for (const match of content.matchAll(tags)) {
     const tag = match[0]
     if (++tokens > 20000) throw invalid()

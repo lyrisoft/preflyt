@@ -1291,7 +1291,7 @@ export class GitHubProviderService {
     for(let page=1;page<=3;page++) {
       const reviews=await call(`${root}/reviews?per_page=100&page=${page}`);
       if(!Array.isArray(reviews)||reviews.length>100)throw new ServiceUnavailableException('Invalid review history');
-      for (const review of reviews) if (fromApp(review) && /<!-- preflyt-ai:[a-f0-9]{64} -->$/.test(review.body ?? '') && Number.isSafeInteger(review.id)) preflytReviewIds.add(review.id);
+      for (const review of reviews) if (fromApp(review) && new RegExp(String.raw`<!-- preflyt-ai:[a-f0-9]{64} -->$`).test(review.body ?? '') && Number.isSafeInteger(review.id)) preflytReviewIds.add(review.id);
       existing=reviews.find(matches);if(existing)break;
       if(reviews.length<100)break;
       if(page===3)throw new ServiceUnavailableException('Review history exceeds publication limit');

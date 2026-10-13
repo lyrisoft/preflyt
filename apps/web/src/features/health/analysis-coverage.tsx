@@ -8,6 +8,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { ResultTimestamp } from '@/components/result-timestamp'
 import { StatusBadge } from '@/components/status-badge'
 import { SurfaceIcon } from '@/components/surface-icon'
 import { RelativeTime } from '@/features/repositories/relative-time'
@@ -66,12 +67,14 @@ export function AnalysisCoverage({
   assessmentReason,
   hotspotReview,
   headCheckedAt,
+  finishedAt,
 }: {
   report: HealthReport
   assessmentId: string
   assessmentReason: string | null
   hotspotReview: HealthData['hotspotReview']
   headCheckedAt: string | null | undefined
+  finishedAt?: string | null
 }) {
   const [pagination, setPagination] = useState({ assessmentId: '', page: 1 })
   const pages = Math.max(1, Math.ceil(report.analyses.length / pageSize))
@@ -154,6 +157,16 @@ export function AnalysisCoverage({
                       </span>
                       <span className='mt-2 line-clamp-2 text-xs leading-relaxed text-muted-foreground'>
                         {outcomeSummary(analysis, report)}
+                      </span>
+                      <span className='mt-2 block text-xs text-muted-foreground'>
+                        Report completed{' '}
+                        <ResultTimestamp
+                          value={
+                            report.mode === 'EXECUTED' && analysis.reportHash
+                              ? finishedAt
+                              : null
+                          }
+                        />
                       </span>
                       <span className='mt-3 inline-flex items-center gap-1 text-xs font-medium text-foreground'>
                         Scope and evidence

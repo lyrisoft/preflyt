@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type * as QueryModule from '@tanstack/react-query'
 import {
   createMemoryHistory,
   createRootRoute,
@@ -15,7 +16,7 @@ import { workspaceSearchSchema } from './search-schema'
 
 const state = vi.hoisted(() => ({ failed: false, allowed: true }))
 vi.mock('@tanstack/react-query', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@tanstack/react-query')>()),
+  ...(await importOriginal<typeof QueryModule>()),
   useQuery: () => ({
     data: {
       repositories: [

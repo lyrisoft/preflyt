@@ -25,6 +25,8 @@ const reasonLabels: Record<string, string> = {
   SOURCE_AMBIGUOUS: 'More than one CI result could match this check.',
   SOURCE_SUPERSEDED: 'A newer CI result has replaced this one.',
   APPROVED_CI_SOURCE_FAILED: 'The approved CI check or workflow failed.',
+  REPORT_REPORTED_FAILURE:
+    'The verified report contains failed tests or scanner findings.',
   SNAPSHOT_SCHEMA_UNSUPPORTED:
     'This saved assessment format cannot be evaluated.',
   NO_REQUIRED_RULES: 'This assessment has no required checks.',

@@ -16,6 +16,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { ResultTimestamp } from '@/components/result-timestamp'
 import { StatusBadge } from '@/components/status-badge'
 import { SurfaceIcon } from '@/components/surface-icon'
 import {
@@ -244,6 +245,9 @@ export function DashboardHealth({
                           {f.path
                             ? ` · ${f.path}${f.line ? `:${f.line}` : ''}`
                             : ''}
+                        </p>
+                        <p className='text-xs text-muted-foreground'>
+                          Assessed <ResultTimestamp value={f.assessedAt} />
                         </p>
                       </div>
                       <ArrowUpRight className='mt-1 size-4 shrink-0 text-muted-foreground' />

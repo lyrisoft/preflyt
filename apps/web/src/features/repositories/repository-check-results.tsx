@@ -20,11 +20,11 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { ResultTimestamp } from '@/components/result-timestamp'
 import { StatusBadge } from '@/components/status-badge'
 import { SurfaceIcon } from '@/components/surface-icon'
 import { checkReview, reviewReason } from './assessment-result'
 import { useGatePreview } from './engineering-queries'
-import { RelativeTime } from './relative-time'
 import {
   useAssessmentList,
   useStandards,
@@ -79,6 +79,7 @@ export function RepositoryCheckResults({
       status: 'INCOMPLETE',
       reasons: [] as string[],
       deliveryId: null,
+      recordedAt: null,
     }))
   const counts = result
     ? {
@@ -224,7 +225,7 @@ export function RepositoryCheckResults({
                 </code>
               </span>
               <span className='text-muted-foreground'>
-                Saved <RelativeTime value={assessment.createdAt} />
+                Saved <ResultTimestamp value={assessment.createdAt} />
               </span>
             </div>
             <Button asChild variant='outline' size='sm'>
@@ -292,6 +293,7 @@ export function RepositoryCheckResults({
                   <TableHead className='ps-4'>Check</TableHead>
                   <TableHead>Requirement</TableHead>
                   <TableHead>Result</TableHead>
+                  <TableHead>Recorded at</TableHead>
                   <TableHead className='min-w-52'>Evidence</TableHead>
                 </TableRow>
               </TableHeader>
@@ -315,6 +317,9 @@ export function RepositoryCheckResults({
                         <StatusBadge tone={status.tone}>
                           {status.label}
                         </StatusBadge>
+                      </TableCell>
+                      <TableCell className='align-top text-xs'>
+                        <ResultTimestamp value={rule.recordedAt} stacked />
                       </TableCell>
                       <TableCell className='max-w-lg space-y-2 align-top text-xs whitespace-normal'>
                         {!result ? (

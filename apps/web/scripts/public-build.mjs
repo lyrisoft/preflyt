@@ -97,11 +97,8 @@ export function canonicalUrl(origin, path) {
 }
 
 export function escapeMarkup(value) {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('"', '&quot;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
+  const entities = { '&': '&amp;', '"': '&quot;', '<': '&lt;', '>': '&gt;' }
+  return value.replace(/[&"<>]/g, (character) => entities[character])
 }
 
 export function renderRobots(pages, config) {

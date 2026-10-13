@@ -11,6 +11,8 @@ it('verifies completed prerequisites while only the terminal gate is running', (
   expect(completedPipelineJobs([{...check, sourceSha: 'b'.repeat(40)}, gate], sha)).toBeNull();
   expect(completedPipelineJobs([gate], sha)).toBeNull();
   expect(completedPipelineJobs([check, gate, {...gate, id: '3'}], sha)).toBeNull();
+  expect(completedPipelineJobs([check, {...gate,status:'completed',conclusion:'failure'}],sha)).toEqual({jobIds:['1'],conclusion:'success'});
+  expect(completedPipelineJobs([check, {...gate,status:'completed',conclusion:'cancelled'}],sha)).toBeNull();
   expect(completedPipelineJobs([{...check, conclusion: 'failure'}, gate], sha)?.conclusion).toBe('failure');
   expect(completedPipelineJobs([{...check, steps: [{status: 'in_progress', conclusion: null}]}, gate], sha)).toBeNull();
 });

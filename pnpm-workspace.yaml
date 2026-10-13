@@ -2,3 +2,8 @@ packages:
   - 'apps/*'
 
 onlyBuiltDependencies: []
+
+# Reject fresh releases, weakened publishing trust and exotic transitive sources.
+minimumReleaseAge: 1440
+trustPolicy: no-downgrade
+blockExoticSubdeps: true

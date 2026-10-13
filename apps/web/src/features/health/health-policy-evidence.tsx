@@ -1,6 +1,7 @@
 import { Link } from '@tanstack/react-router'
 import { FileCheck2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { ResultTimestamp } from '@/components/result-timestamp'
 import { SurfaceIcon } from '@/components/surface-icon'
 import type { HealthReport } from './health-api'
 
@@ -77,7 +78,9 @@ export function HealthPolicyEvidence({
               </summary>
               <div className='mt-2 space-y-1 break-all'>
                 <p>{context.branchRef}</p>
-                <p>Captured {new Date(context.capturedAt).toLocaleString()}</p>
+                <p>
+                  Captured <ResultTimestamp value={context.capturedAt} />
+                </p>
                 <p>Policy: {context.policyId}</p>
                 <p className='font-mono'>
                   Definition checksum: {context.definitionHash}

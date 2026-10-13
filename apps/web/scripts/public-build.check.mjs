@@ -208,6 +208,7 @@ test('metadata safely escapes attributes and prevents script termination', () =>
   })
   assert.ok(document.includes('Preflyt &quot; &amp; &lt;stuff&gt;'))
   assert.ok(document.includes('\\u003c/script>'))
+  // Negative assertion: the attacker-controlled script must never appear in generated HTML.
   assert.ok(!document.includes('</script><script>alert(1)</script>'))
 })
 

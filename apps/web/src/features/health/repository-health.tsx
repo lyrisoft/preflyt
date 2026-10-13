@@ -44,10 +44,10 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { ResultTimestamp } from '@/components/result-timestamp'
 import { StatusBadge } from '@/components/status-badge'
 import { SurfaceIcon } from '@/components/surface-icon'
 import { BranchPicker } from '@/features/repositories/branch-picker'
-import { RelativeTime } from '@/features/repositories/relative-time'
 import { useNavigationSession } from '@/features/workspace/navigation-session'
 import { canPerform } from '@/features/workspace/scoped-access'
 import { AnalysisCoverage } from './analysis-coverage'
@@ -312,7 +312,7 @@ export function RepositoryHealth({
               {row.finishedAt && (
                 <span className='inline-flex items-center gap-1.5'>
                   <Clock3 className='size-3.5' />
-                  Assessed <RelativeTime value={row.finishedAt} />
+                  Assessed <ResultTimestamp value={row.finishedAt} />
                 </span>
               )}
             </div>
@@ -499,6 +499,7 @@ export function RepositoryHealth({
               assessmentReason={row.reason}
               hotspotReview={data?.hotspotReview}
               headCheckedAt={headCheckedAt}
+              finishedAt={row.finishedAt}
             />
           )}
           <div className='grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_350px]'>
@@ -599,6 +600,7 @@ export function RepositoryHealth({
                                 <TableHead className='w-28 pr-5'>
                                   Severity
                                 </TableHead>
+                                <TableHead>Assessed at</TableHead>
                               </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -638,6 +640,12 @@ export function RepositoryHealth({
                                       >
                                         {f.severity}
                                       </StatusBadge>
+                                    </TableCell>
+                                    <TableCell className='pt-4 align-top text-xs'>
+                                      <ResultTimestamp
+                                        value={row.finishedAt}
+                                        stacked
+                                      />
                                     </TableCell>
                                   </TableRow>
                                 ))}
@@ -743,7 +751,7 @@ export function RepositoryHealth({
                             <code className='text-foreground'>
                               {h.sourceSha?.slice(0, 7) ?? 'Not pinned yet'}
                             </code>
-                            <RelativeTime value={h.createdAt} />
+                            <ResultTimestamp value={h.finishedAt} />
                           </span>
                           <StatusBadge
                             tone={

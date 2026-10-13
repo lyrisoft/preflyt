@@ -98,6 +98,10 @@ jobs:
 
 The built-in security recipes automatically pull pinned scanner images: **Semgrep** for static application security, **Gitleaks** for secrets, and **Trivy** for dependency, container and infrastructure scans. Docker must be available on the Linux runner. Source is mounted read-only, scans receive no GitHub/OIDC credentials or Docker socket, and raw scanner logs are suppressed. Set `CONTAINER_IMAGE` in the job when selecting container image scanning.
 
+Built-in SAST uses **Preflyt SAST v1**, an owned, digest-checked set of 18 review-oriented JavaScript/TypeScript, Python and shell rules. The scanner runs offline. This is specific pattern coverage, not the full Semgrep registry, interfile taint analysis or an exhaustive security audit. The Action contains the exact rules and narrow fixture exceptions; a separately licensed scanner can run through a custom SARIF command.
+
+The check job completes after submitting genuine reports, including failed or partial results. Successful collection does not mean the policy passed. Each report is evaluated independently, and the required **Preflyt final gate** fails when required checks fail or remain incomplete. Missing execution output and transport errors still fail the collection job. Require the final gate in GitHub branch protection.
+
 Build, type checking, tests and lint reuse the project tools installed in the job. Keep your dependency installation before Preflyt. Configure a **Workflow command** and **Result file** in [Standards](standards.md) for a project-specific or custom control. Commands belong to the approved policy revision; editing an unpublished standard does not change an active policy. A required check without a runnable command, tool or real report stays **Incomplete**.
 
 An Action submission can include up to **10 reports**. Custom commands must produce real results for the selected check; missing or unrelated reports cannot satisfy it.

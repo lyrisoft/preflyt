@@ -1,5 +1,5 @@
 /** Immutable public Action release. Keep legacy workflows readable during migration. */
-export const policyAction = "lyrisoft/preflyt-action@adfe42ef61cf25936d777e6115b224293cd4675f";
+export const policyAction = "lyrisoft/preflyt-action@ffd33c5e44efb2f4d69d07aea3e471505046a05f";
 export function isPolicyAction(value: unknown): boolean {
   return typeof value === "string" && (
     value === "./.github/actions/preflyt-policy" ||

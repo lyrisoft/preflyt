@@ -63,15 +63,17 @@ export function resolveBindings(
         b.deliveryId.localeCompare(a.deliveryId),
     )
     const latest = matches[0]
-    // A successful completion notification carries no report by itself. Keep
-    // the server-verified report for that exact run attempt, while a later
-    // failed, pending or unknown result must still supersede earlier success.
+    // The overall workflow includes the terminal policy gate. Its failure must
+    // not erase independently verified job reports from the same exact attempt.
+    // Pending or newer attempts still supersede the previous report.
     const preferred = latest?.sourceStatus === 'completed' &&
-      latest.sourceConclusion === 'success'
+      ['success', 'failure'].includes(latest.sourceConclusion ?? '')
       ? matches.find(row =>
           row.sourceObjectId === latest.sourceObjectId &&
           runAttempt(row.sourceIdentity) === runAttempt(latest.sourceIdentity) &&
           row.sourceStatus === 'completed' && row.sourceConclusion === 'success' &&
+          (latest.sourceConclusion === 'success' || row.sourceIdentity &&
+            (row.sourceIdentity as Record<string, unknown>).verificationScope === 'jobs') &&
           verifiedReports.get(binding.ruleId)?.has(row.deliveryId))
       : undefined
     const chosen = preferred ?? latest

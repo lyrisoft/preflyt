@@ -8,6 +8,19 @@ const binding = {
   kind: 'workflow_run' as const,
   workflowId: '7',
 }
+it('retains verified collection reports after the terminal gate fails without borrowing older attempts or cancelled runs', () => {
+  const collected = { deliveryId:'jobs', sourceObjectId:'10', sourceStatus:'completed', sourceConclusion:'success',
+    sourceIdentity:{kind:'workflow_run', workflowId:'7',runAttempt:1,verificationScope:'jobs'},
+    sourceUpdatedAt:new Date('2026-10-13T10:00:00Z'),observedAt:new Date('2026-10-13T10:00:00Z') }
+  const failed = {...collected,deliveryId:'event',sourceConclusion:'failure',
+    sourceIdentity:{kind:'workflow_run',workflowId:'7',runAttempt:1},
+    sourceUpdatedAt:new Date('2026-10-13T10:01:00Z')}
+  const reports = new Map([['tests.required', new Set(['jobs'])]])
+  expect(resolveBindings([binding],[collected,failed],reports).mappings[0].deliveryId).toBe('jobs')
+  expect(resolveBindings([binding],[collected,failed]).mappings[0].deliveryId).toBe('event')
+  expect(resolveBindings([binding],[collected,{...failed,sourceConclusion:'cancelled'}],reports).mappings[0].deliveryId).toBe('event')
+  expect(resolveBindings([binding],[collected,{...failed,sourceIdentity:{...failed.sourceIdentity,runAttempt:2}}],reports).mappings[0].deliveryId).toBe('event')
+})
 const payload = (kind: string, extra: object = {}) => ({
   action: 'completed',
   installation: { id: 1 },

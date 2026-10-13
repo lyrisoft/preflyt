@@ -10,6 +10,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { ResultTimestamp } from '@/components/result-timestamp'
 import { StatusBadge } from '@/components/status-badge'
 import { reviewReason } from '@/features/repositories/assessment-result'
 import { triageLabels, type Finding } from './finding-types'
@@ -28,9 +29,7 @@ export function FindingContext({ finding }: { finding: Finding }) {
         <div>
           <dt className='text-xs text-muted-foreground'>Recorded</dt>
           <dd className='mt-1'>
-            <time dateTime={finding.observedAt}>
-              {new Date(finding.observedAt).toLocaleString()}
-            </time>
+            <ResultTimestamp value={finding.observedAt} />
           </dd>
         </div>
         <div className='min-w-0 sm:col-span-2'>

@@ -135,6 +135,15 @@ it('opens a standalone exact-assessment details link instead of a drawer', async
   await expect
     .element(view.getByRole('link', { name: 'Details', exact: true }))
     .toBeVisible()
+  await expect
+    .element(
+      view.getByRole('columnheader', { name: 'Assessed at', exact: true })
+    )
+    .toBeVisible()
+  expect(document.querySelector('time')?.dateTime).toBe(
+    '2026-10-10T00:00:00.000Z'
+  )
+  expect(document.querySelector('time')?.title).toBe('2026-10-10T00:00:00.000Z')
   await expect.element(view.getByRole('dialog')).not.toBeInTheDocument()
 })
 it('shows API failures without a misleading empty success state', async () => {
@@ -328,6 +337,7 @@ it('opens Health source details from the shared list and restores shared filters
           repository: 'org/repo',
           sourceSha: 'b'.repeat(40),
           assessmentId: health,
+          observedAt: '2026-10-12T14:35:00Z',
           severity: 'medium',
           status: 'Reported',
           path: 'src/app.ts',
@@ -371,4 +381,8 @@ it('opens Health source details from the shared list and restores shared filters
       })
     )
     .toBeVisible()
+  expect(document.querySelector('time')?.dateTime).toBe(
+    '2026-10-12T14:35:00.000Z'
+  )
+  expect(document.querySelector('time')?.textContent).toContain('2026')
 })
