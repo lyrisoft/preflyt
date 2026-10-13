@@ -2,7 +2,7 @@
 
 The Action source is maintained only in [lyrisoft/preflyt-action](https://github.com/lyrisoft/preflyt-action)
 and distributed through [GitHub Marketplace](https://github.com/marketplace/actions/preflyt-policy-check).
-Version v2.0.0 pins commit ccc826017dd0a02c5f5e6dfb0052ef2f8e482dfe. MIT applies to the public Action only;
+Version v2.0.1 pins commit adfe42ef61cf25936d777e6115b224293cd4675f. MIT applies to the public Action only;
 the Preflyt application remains separately licensed. No runtime copy is bundled
 with the application or API Docker image.
 
@@ -22,14 +22,20 @@ Built-in Semgrep, Gitleaks and Trivy recipes provision reviewed images, with rea
 
 Local validation passed for clean/failing/missing-command policies, unsafe paths, credential stripping, genuine scanner output and the actual API manifest executed in the separate Action checkout. Release tag v2.0.0 and existing tags remain immutable. The Action source PR is [#1](https://github.com/lyrisoft/preflyt-action/pull/1); publication does not merge it into the default branch. Marketplace currently renders the default-branch README, so that description updates when the reviewed source change reaches main.
 
+## v2.0.1 scanner evidence correction
+
+The patch compacts valid SARIF even when a scanner reports partial execution. It retains findings, used rule metadata and diagnostics, marks unsuccessful execution, and keeps that control incomplete. It also adds actionable CI summary details for missing commands, failed commands and unavailable reports. Hosted Action unit and pinned-scanner jobs passed at the release commit.
+
+A real Preflyt SAST reproduction retained 30 findings and 18 diagnostics in a 52,362-byte report; incomplete analysis remains blocked. The consumer build passes `DATABASE_URL` through only the Turbo build/typecheck tasks. Secret-scanner exceptions retain built-in detectors and match only reviewed synthetic values in exact fixture/example paths; a different token-shaped value in the same fixture still produces a finding.
+
 ## Release procedure
 
 1. Develop and test only in the public Action repository; do not copy private app source or history.
 2. Run Python tests and the public repository CI before publishing an immutable version tag.
-3. Update pipeline-action.ts and product workflow pins to that commit. Update the bundled
+3. Publish the version through the GitHub Marketplace release editor. Never move a released tag.
+4. Update pipeline-action.ts and product workflow pins to that published commit. Update the bundled
    workflow editing skill and increment its version when instructions change.
-4. Test check/gate modes in one PR workflow with automatic results and the configured AI model.
-5. Publish the version through the GitHub Marketplace release editor. Never move a released tag.
+5. Test check/gate modes in one PR workflow with automatic results and the configured AI model.
 
 ## v1.0.0 live verification
 
