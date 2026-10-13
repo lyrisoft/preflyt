@@ -16,7 +16,7 @@ it('checks the PR head and runs the published policy only for same-repository de
   expect(action.if).toContain("github.base_ref == 'development'")
   expect(action.if).toContain('github.event.pull_request.head.repo.full_name == github.repository')
   expect(action.if).toContain('!cancelled()')
-  expect(action.uses).toMatch(/^lyrisoft\/preflyt-action@[a-f0-9]{40}$/)
+  expect(action.uses).toBe('lyrisoft/preflyt-action@v2.1.1')
   expect(action.with).toEqual({ 'api-url': '${{ vars.PREFLYT_API_URL }}' })
   expect(verify.jobs.preflyt_gate.steps[0].uses).toBe(action.uses)
   expect(development.jobs.checks.permissions).toEqual({ contents: 'read', 'id-token': 'write' })

@@ -39,7 +39,7 @@ jobs:
         run: pnpm -r --filter @preflyt/api --filter @preflyt/web build
       - name: Preflyt development policy
         if: ${{ !cancelled() && github.event_name == 'pull_request' && github.base_ref == 'development' && github.event.pull_request.head.repo.full_name == github.repository }}
-        uses: lyrisoft/preflyt-action@ffd33c5e44efb2f4d69d07aea3e471505046a05f # v2.1.0
+        uses: lyrisoft/preflyt-action@v2.1.1
         env:
           DATABASE_URL: postgresql://fixture:fixture@127.0.0.1:1/unused
         with:

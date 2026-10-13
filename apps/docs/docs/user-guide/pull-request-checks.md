@@ -67,7 +67,7 @@ The generated standalone snippet has two jobs. When integrating with an existing
 - **`preflyt_checks`** runs your checks and submits the results using the Preflyt Action.
 - **`preflyt_gate`** (named **Preflyt final gate**) waits for Preflyt's verified result and fails if the policy fails or is incomplete. It depends on every other job in that PR workflow. Do not add a separate `workflow_run` publication-gate workflow. Documentation and post-merge deployment workflows can remain separate.
 
-The snippet contains your API URL and an immutable Preflyt Action pin. It contains no check list or report mapping. The Action fetches the published target-branch policy at the beginning of each run. Adding a check or changing a standard takes effect after you publish a new policy revision; the workflow stays the same.
+The snippet contains your API URL and the exact Preflyt Action version `v2.1.1`. It contains no check list or report mapping. The Action fetches the published target-branch policy at the beginning of each run. Adding a check or changing a standard takes effect after you publish a new policy revision; the workflow stays the same.
 
 ```yaml
 # Shape of the generated snippet. Copy the real one from Preflyt.
@@ -85,7 +85,7 @@ jobs:
       # Your dependency installation steps go here.
       - name: Preflyt policy
         if: ${{ always() && github.event_name == 'pull_request' }}
-        uses: lyrisoft/preflyt-action@<pinned commit>
+        uses: lyrisoft/preflyt-action@v2.1.1
         with:
           api-url: https://preflyt.example.com/api
   preflyt_gate:
@@ -136,6 +136,30 @@ In **Settings → PR feedback**:
 - **Review changed code with AI and comment on PRs** turns on AI review. It needs [AI set up](ai-reviews.md).
 
 Comments and AI suggestions are feedback. Findings never override the deterministic check result. When automatic AI feedback is enabled, the final gate waits for its publication; a provider or publication failure can fail the workflow even though the AI findings themselves are advisory. Inline feedback is limited to five actionable issues and deduplicated across commits; the PR summary is kept short.
+
+### Understand the final gate’s waiting stage
+
+Open **Preflyt final gate → Wait for verified Preflyt publication** in the GitHub
+Actions logs. The Action shows the current stage and elapsed time:
+
+- Check jobs: the report-producing jobs are still finishing or being verified.
+- Result submission: Preflyt has not received this run’s reports yet.
+- Result verification: Preflyt is validating reports against the run, commit and policy.
+- GitHub publication: Preflyt is publishing the verified policy result.
+- AI review: the configured review is queued or running.
+- AI feedback publication: the review finished and its feedback is being posted.
+
+After report verification completes, Preflyt requests the configured review
+immediately. It preserves permissions, source-sharing consent and review limits.
+The worker normally picks up queued reviews within its five-second polling tick;
+queue load and GitHub publication can take longer. A background retry remains
+available if immediate admission fails.
+
+Stage changes appear immediately, with a heartbeat every 30 seconds while the same
+stage is pending. Failure logs identify a safe reason or API HTTP status code.
+No private response bodies or credentials are printed. The gate still fails for
+failed or incomplete evidence and expires after fifteen minutes. AI suggestions
+remain advisory and cannot change the policy result.
 
 ## Branch policies and deployment
 

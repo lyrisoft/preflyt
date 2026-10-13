@@ -31,6 +31,7 @@ it("combines a standard into one copyable step and deduplicates its checks", () 
   expect(result.checkIds).toEqual(["tests.required", "security.sast"]);
   expect(result.ready).toBe(true);
   expect(steps[0].uses).toBe(policyAction);
+  expect(policyAction).toBe('lyrisoft/preflyt-action@v2.1.1');
   expect(steps[0].with).toEqual({ 'api-url': 'https://preflyt.example/api' });
   expect(result.execution).toBe('policy');
   expect(workflowSnippet([{ id: 'secrets.scan', title: 'Secrets' }], 'https://preflyt.example/api').snippet).toBe(result.snippet);
