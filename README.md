@@ -35,7 +35,7 @@ Preflyt brings repository health, findings, standards, branch policies and devel
 ## How it works
 
 1. **Connect GitHub.** Create or connect a GitHub App, install it on the intended repositories, and explicitly select repositories in Preflyt.
-2. **Read repository health.** Selection queues an assessment of the default branch. Review supported scanner findings, exact-revision source locations and report limits without setting up CI. Without a qualified runtime, the report is explicitly inspection-only and partial.
+2. **Read repository health.** Selection queues an assessment of the default branch. Review supported scanner findings, exact-revision source locations and report limits without setting up CI. The dedicated built-in scanner runs every applicable Health analyzer automatically; no extra repository approval is required.
 3. **Define requirements.** Adopt versioned standards and publish a policy for the target branch. Development and main can have different requirements.
 4. **Run checks in CI.** Install the Preflyt Action once in your GitHub Actions workflow. The published branch policy selects the configured commands and supported scanners. Preflyt receives their reports and verifies execution evidence for the exact commit and workflow attempt.
 5. **Review the result.** Preflyt saves a commit-bound assessment and publishes **Preflyt / Engineering Readiness** on the pull request. Required checks can pass, fail or remain incomplete when evidence is insufficient.
@@ -47,7 +47,7 @@ Repository inspection identifies configuration; it does not execute tests or pro
 
 | Capability | Purpose |
 | --- | --- |
-| **Repository health** | Assess selected branches for supported security, reliability, maintainability, duplication and infrastructure issues; view overall health, completeness, freshness and comparable report history. Scanner execution requires a qualified runtime. |
+| **Repository health** | Assess selected branches for supported security, reliability, maintainability, duplication and infrastructure issues; view overall health, completeness, freshness and comparable report history. Built-in isolated scanners run automatically without per-repository approvals. |
 | **Versioned standards** | Define engineering checks, reuse built-in packs, and adopt reviewed versions for repositories and teams. |
 | **Branch policies** | Specify required checks for a target branch and preserve the approved policy revision. |
 | **CI integration** | Receive GitHub workflow/check events and supported test and scanner reports, including JUnit and SARIF. |
@@ -152,3 +152,5 @@ Report suspected vulnerabilities privately to your Lyrisoft contact rather than 
 ## Licensing
 
 This repository does not publish a project-wide open-source license for the Preflyt application. Access to the repository or documentation does not grant redistribution rights. The separate [Preflyt Action](https://github.com/lyrisoft/preflyt-action) is MIT-licensed; that license applies to the Action, not the application. Third-party components retain their own licenses.
+
+The self-hosted Health scanner is installed once alongside Preflyt. See [Automatic Health scanner](docs/deployment/health-scanner/README.md) for local startup and dedicated-host container deployment. API and worker never receive Docker authority.

@@ -28,7 +28,7 @@ export async function verifyMountedNativeSource(root, scope) {
         const sha=await visit(path), entry={path,type:'tree',mode:'040000',sha}
         tree.push(entry);children.push(entry)
       } else if(info.isFile()) {
-        if(files.length>=2000||info.size>2097152||totalBytes+info.size>20971520) throw new Error('Source exceeds bounds')
+        if(files.length>=8000||info.size>2097152||totalBytes+info.size>67108864) throw new Error('Source exceeds bounds')
         const handle=await open(join(root,path),constants.O_RDONLY|constants.O_NOFOLLOW|constants.O_NONBLOCK)
         let bytes
         try {

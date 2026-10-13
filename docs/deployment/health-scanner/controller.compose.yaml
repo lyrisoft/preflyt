@@ -1,0 +1,35 @@
+# Deploy on a dedicated scanner host. API/worker never receive engine authority.
+name: preflyt-health-scanner
+services:
+  health-scanner:
+    image: ${PREFLYT_HEALTH_SCANNER_IMAGE:-preflyt-health-scanner:local}
+    command: [node, dist/health-scanner.js]
+    user: '1000:1000'
+    env_file: scanner.env
+    environment:
+      HEALTH_SCANNER_HOST: 0.0.0.0
+      HEALTH_SCANNER_STATE_DIRECTORY: /var/lib/preflyt/health-scanner
+      HEALTH_SCANNER_CONNECTION_FILE: /var/lib/preflyt/health-connection/connection.json
+    init: true
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    mem_limit: 1g
+    cpus: 1
+    restart: unless-stopped
+    ports: ['${PREFLYT_SCANNER_BIND_IP:-127.0.0.1}:3011:3011']
+    volumes:
+      - ./docker-tls:/run/docker-tls:ro
+      # The dedicated engine must resolve source mounts at this identical path.
+      - type: bind
+        source: /var/lib/preflyt/health-scanner
+        target: /var/lib/preflyt/health-scanner
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /var/lib/preflyt/health-connection
+        target: /var/lib/preflyt/health-connection
+        bind:
+          create_host_path: false

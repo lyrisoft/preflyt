@@ -109,10 +109,17 @@ export function verifyNativeReceipt(
   token: unknown,
   expected: NativeReceiptExpected,
   now = Date.now(),
+  authority?: {
+    reviewed: { approvalHash: string; approval: {
+      organizationIds: string[]; controllerPublicKey: string; environmentId: string;
+      controlsHash: string; toolReviewHash?: string; approvedAt: string; expiresAt: string
+    } };
+    tools: NonNullable<ReturnType<typeof nativeToolReviews>>
+  },
 ): NativeReceipt | null {
   try {
-    const reviewed = nativeRuntimeApproval(),
-      tools = nativeToolReviews(undefined, now)
+    const reviewed = authority?.reviewed ?? nativeRuntimeApproval(),
+      tools = authority?.tools ?? nativeToolReviews(undefined, now)
     if (
       !reviewed ||
       !tools ||

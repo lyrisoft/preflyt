@@ -6,6 +6,7 @@ COPY --from=node /usr/lib/libgcc_s.so.1 /usr/lib/libgcc_s.so.1
 COPY runner.mjs source-verification.mjs source-initializer.mjs adapters.json /opt/preflyt/
 COPY config /opt/preflyt/config
 COPY semgrep-measure.mjs /opt/preflyt/semgrep-measure.mjs
+COPY semgrep-locations.mjs /opt/preflyt/semgrep-locations.mjs
 RUN ln -s /usr/bin/semgrep /usr/local/bin/semgrep
 USER 65532:65532
 WORKDIR /workspace

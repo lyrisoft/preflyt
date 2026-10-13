@@ -3,7 +3,7 @@ WORKDIR /opt/preflyt/duplication
 COPY duplication/package.json duplication/package-lock.json ./
 RUN npm ci --ignore-scripts --no-audit --no-fund
 COPY duplication/scan.mjs ./
-COPY runner.mjs source-verification.mjs source-initializer.mjs adapters.json /opt/preflyt/
+COPY runner.mjs semgrep-locations.mjs source-verification.mjs source-initializer.mjs adapters.json /opt/preflyt/
 USER 65532:65532
 WORKDIR /workspace
 ENTRYPOINT ["/usr/local/bin/node", "/opt/preflyt/runner.mjs"]

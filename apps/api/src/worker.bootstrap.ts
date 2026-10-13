@@ -2,6 +2,7 @@ import { FindingsService } from './findings/findings.service.js'
 import { FindingAiGuidanceService } from './findings/finding-ai-guidance.service.js'
 import { FindingSourceStore } from './findings/finding-source-store.service.js'
 import { RepositoryHealthService } from './health/repository-health.service.js'
+import { HealthScannerClient } from './health/health-scanner-client.js'
 import { watchConfiguration } from './configuration/configuration-store.js'
 import { TeamsService } from './teams/teams.service.js'
 import { SkillReviewService } from './intelligence/skill-review.service.js'
@@ -141,7 +142,7 @@ async function start() {
   const aiReviews = new SkillReviewService(prisma, emailAuthorization, assessments, new AiConfigurationService(prisma, emailAuthorization), githubProvider)
   let aiReviewRun: Promise<void> | undefined
   const native = new NativeDispatchService(prisma, emailAuthorization, githubProvider, new NativeStatusService(emailAuthorization), new NativeResultService(prisma, emailAuthorization, assessments))
-  const health = new RepositoryHealthService(prisma, emailAuthorization, githubProvider, new NativeStatusService(emailAuthorization), findingSources)
+  const health = new RepositoryHealthService(prisma, emailAuthorization, githubProvider, new NativeStatusService(emailAuthorization), findingSources, new HealthScannerClient())
   const findingAi = new FindingAiGuidanceService(prisma, emailAuthorization, new FindingsService(prisma, emailAuthorization, findingSources), health, findingSources, new AiConfigurationService(prisma, emailAuthorization))
   let findingAiRun: Promise<void> | undefined
   const healthQueue = new Queue('repository-health', { ...producerConfig, connection: producer })

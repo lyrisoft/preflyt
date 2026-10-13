@@ -2,6 +2,7 @@
 import { spawn } from 'node:child_process'
 import { constants } from 'node:fs'
 import { open } from 'node:fs/promises'
+import {normalizeSemgrepLocations} from './semgrep-locations.mjs'
 import { verifyMountedNativeSource } from './source-verification.mjs'
 import adapters from './adapters.json' with { type: 'json' }
 const adapter = Object.hasOwn(adapters, process.argv[2]) ? adapters[process.argv[2]] : null
@@ -45,7 +46,10 @@ else {
         const bytes = Buffer.alloc(262145)
         const { bytesRead } = await handle.read(bytes, 0, bytes.length, 0)
         if (bytesRead > 262144 || bytesRead !== stat.size) throw new Error('Report changed')
-        report = bytes.subarray(0, bytesRead).toString('base64')
+        const raw = bytes.subarray(0, bytesRead)
+        // Only the trusted mounted root is translated; source validation remains strict.
+        report = adapter.format === 'sarif' ? Buffer.from(JSON.stringify(normalizeSemgrepLocations(JSON.parse(raw.toString('utf8'))))).toString('base64') : raw.toString('base64')
+        if (report.length > 349528) throw new Error('Report exceeds bounds')
       } finally { await handle.close() }
     } catch { /* Missing, symlinked, special, oversized or changing reports are incomplete. */ }
     reply(code, report)

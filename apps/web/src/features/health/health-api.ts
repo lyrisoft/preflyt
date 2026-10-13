@@ -109,6 +109,7 @@ export type HealthReport = {
   }
 }
 export type HealthAssessment = {
+  progress?: string | null
   overallHealth?: OverallHealth
   id: string
   branch: string
@@ -346,7 +347,16 @@ export const healthReasons: Record<string, string> = {
   COVERAGE_UNAVAILABLE:
     'Coverage was not verified. Tests must pass without skips and produce nonempty measured source coverage.',
   REVIEW_REQUIRED:
-    'An independent isolation review is required before analysis can run.',
+    'This older assessment predates automatic Health scanning. Reassess to run the current scanners.',
+  SCANNER_UNAVAILABLE:
+    'The Preflyt scanning service is temporarily unavailable. Retry the assessment. Your administrator can check the scanner service logs if it continues.',
+  SOURCE_ACCESS_UNAVAILABLE:
+    'Repository files could not be fetched and verified. Check GitHub access and retry the assessment.',
+  GITHUB_RATE_LIMITED:
+    'GitHub has temporarily limited repository requests. Wait for the GitHub request budget to reset, then reassess.',
+  SCANNER_PENDING: 'Waiting for the Preflyt scanners.',
+  SCANNER_RESULT_UNVERIFIED:
+    'The scanner result could not be verified. Retry the assessment; no passing result was recorded.',
   CONTROLLER_UNAVAILABLE:
     'The approved analysis controller could not be reached or verified.',
   DISPATCHER_REQUIRED: 'Reviewed analysis is not enabled by the operator.',

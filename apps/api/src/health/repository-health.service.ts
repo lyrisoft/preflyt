@@ -13,6 +13,9 @@ import { GitHubProviderService } from '../github/github-provider.service.js'
 import { discoverRepositoryProfile, validProfileBranch } from '../github/repository-profile.js'
 import { NativeStatusService } from '../execution/native-status.service.js'
 import { buildNativePlan } from '../execution/native-plan.js'
+import { HealthScannerClient } from './health-scanner-client.js'
+import { healthScannerAuthority, healthScannerPlan } from './health-scanner-package.js'
+import type { NativeReceiptExpected } from '../execution/native-receipt.js'
 import { verifiedNativeEvidence } from '../execution/native-evidence.js'
 import { nativeRequestIntegrity } from '../execution/native-request-integrity.js'
 import { digest } from '../assessments/assessment-digest.js'
@@ -22,11 +25,12 @@ import { applicableHealthAnalyses, healthReport, comparableHealthTrend, healthTi
 const activeStates = ['QUEUED', 'RUNNING']
 const json = (value: unknown) => value as Prisma.InputJsonValue
 const sessionFor = (row: { actorId: string; organizationId: string }): AuthenticatedSession => ({ authenticated: true, identityId: row.actorId, organizationId: row.organizationId, subject: 'repository-health', email: null, role: 'WORKER' })
-const dto = (row: RepositoryHealthAssessment) => ({ overallHealth:overallHealth(row.report as HealthReport|null,row.state), id: row.id, branch: row.branch, state: row.state, sourceSha: row.sourceSha, includeCoverage: row.includeCoverage, report: row.report ? { ...(row.report as unknown as HealthReport), findings: (row.report as unknown as HealthReport).findings.map(f => ({...f,referenceGuidance:findingReferenceGuidance(f.ruleId)})) } : null, reason: row.reason, cancelled: !!row.cancelledAt, createdAt: row.createdAt, startedAt: row.startedAt, finishedAt: row.finishedAt })
+const dto = (row: RepositoryHealthAssessment) => ({ overallHealth:overallHealth(row.report as HealthReport|null,row.state), id: row.id, branch: row.branch, state: row.state, sourceSha: row.sourceSha, progress: row.state === 'RUNNING' ? ((row.plan as any)?.stage ?? (row.sourceSha ? 'FETCHING_SOURCE' : 'INSPECTING')) : null, includeCoverage: row.includeCoverage, report: row.report ? { ...(row.report as unknown as HealthReport), findings: (row.report as unknown as HealthReport).findings.map(f => ({...f,referenceGuidance:findingReferenceGuidance(f.ruleId)})) } : null, reason: row.reason, cancelled: !!row.cancelledAt, createdAt: row.createdAt, startedAt: row.startedAt, finishedAt: row.finishedAt })
 @Injectable()
 export class RepositoryHealthService {
  constructor(@Inject(PrismaService) private db: PrismaService, @Inject(AuthorizationService) private access: AuthorizationService,
-  @Inject(GitHubProviderService) private github: GitHubProviderService, @Inject(NativeStatusService) private runtime: NativeStatusService, @Inject(FindingSourceStore) private sources: FindingSourceStore) {}
+  @Inject(GitHubProviderService) private github: GitHubProviderService, @Inject(NativeStatusService) private runtime: NativeStatusService, @Inject(FindingSourceStore) private sources: FindingSourceStore,
+  @Inject(HealthScannerClient) private scanner?: HealthScannerClient) {}
  async start(session: AuthenticatedSession, githubId: string, input: { branch?: string; requestKey?: string; includeCoverage?: boolean } = {}, initial = false) {
   const repo = await this.access.requireRepository(session, githubId, 'execution.run')
   if(input.includeCoverage !== undefined && typeof input.includeCoverage !== 'boolean') throw new BadRequestException('Coverage requires an explicit boolean choice')
@@ -251,6 +255,7 @@ export class RepositoryHealthService {
   try {
    const repo = await this.access.requireRepository(session, (await this.db.gitHubRepository.findUniqueOrThrow({ where: { id: row.repositoryId } })).githubId.toString(), 'execution.run')
    if (row.cancelledAt) {
+    if ((row.plan as any)?.kind==='AUTOMATIC_HEALTH' && (row.plan as any)?.expected) { await this.automaticScan(row,token,session,repo); return }
     const native = row.nativeRequestId ? await this.db.nativeExecutionRequest.findUnique({ where: { id: row.nativeRequestId } }) : null
     if (native && ['QUEUED','PREPARING','RUNNING','CANCEL_REQUESTED'].includes(native.state)) { await this.defer(id,token); return }
     await this.finish(row,token,'CANCELLED',null,'EXECUTION_CANCELLED'); return
@@ -259,11 +264,11 @@ export class RepositoryHealthService {
     const snapshot = await this.github.readRepositorySnapshot(repo.installationId, repo.githubId, row.branch)
     await this.access.requireRepository(session, repo.githubId.toString(), 'execution.run')
     const profile = discoverRepositoryProfile(snapshot), analyses = applicableHealthAnalyses(snapshot,false)
-    const plan = buildNativePlan({ organizationId: row.organizationId, repositoryId: repo.githubId.toString(), sourceSha: snapshot.sourceSha,
+    const plan = this.scanner ? { kind:'AUTOMATIC_HEALTH', stage:'FETCHING_SOURCE', planHash:'automatic-health-v1', ruleIds:analyses.map(a=>a.id), steps:[] as Array<{ruleId:string;reason:string}> } : buildNativePlan({ organizationId: row.organizationId, repositoryId: repo.githubId.toString(), sourceSha: snapshot.sourceSha,
      selectionId: 'health:' + row.id, rules: analyses.filter(a=>a.id!=='tests.coverage'||supportsNodeCoverage(snapshot)).map(a => ({ id: a.id, title: a.title, required: false, capability: 'execution' })) })
     const { planHash, ...frozenPlan } = plan
     const inspection = { complete: snapshot.complete && profile.complete, fileCount: snapshot.files.length, languages: profile.signals.find(s => s.id === 'languages')?.observations ?? [] }
-    const report = healthReport(inspection, analyses.map(a => ({ id: a.id, title: a.title, state: 'UNAVAILABLE', reason: a.id==='tests.coverage'&&!supportsNodeCoverage(snapshot)?'SUPPORTED_TESTS_REQUIRED':plan.steps.find(s => s.ruleId === a.id)?.reason ?? 'ADAPTER_UNAVAILABLE' })))
+    const report = healthReport(inspection, analyses.map(a => ({ id: a.id, title: a.title, state: 'UNAVAILABLE', reason: this.scanner?'SCANNER_PENDING':a.id==='tests.coverage'&&!supportsNodeCoverage(snapshot)?'SUPPORTED_TESTS_REQUIRED':plan.steps.find(s => s.ruleId === a.id)?.reason ?? 'ADAPTER_UNAVAILABLE' })))
     report.policyContext = await healthPolicyContext(this.db, repo.id, row.organizationId, snapshot.sourceSha, row.branch)
     await this.db.$transaction(async tx => {
      const updated = await tx.repositoryHealthAssessment.updateMany({ where: { id, leaseToken: token, state: 'RUNNING', cancelledAt: null, sourceSha: null }, data: { sourceSha: snapshot.sourceSha, plan: json(frozenPlan), report: json(report) } })
@@ -273,6 +278,10 @@ export class RepositoryHealthService {
      await tx.repositoryHealthTarget.updateMany({ where: { repositoryId: repo.id, revision: row.targetRevision, branch: row.branch }, data: { headSha: snapshot.sourceSha, headCheckedAt: new Date() } })
     })
     row = await this.db.repositoryHealthAssessment.findUniqueOrThrow({ where: { id } })
+   }
+   if ((row.plan as any)?.kind === 'AUTOMATIC_HEALTH') {
+    await this.automaticScan(row, token, session, repo)
+    return
    }
    if (Date.now() - row.startedAt!.getTime() > 2100000) {
     if (row.nativeRequestId) {
@@ -314,6 +323,13 @@ export class RepositoryHealthService {
    if (!receipt) report.analyses = report.analyses.map(a => ({ ...a, state: 'UNAVAILABLE', reason: a.reason==='SUPPORTED_TESTS_REQUIRED' ? a.reason : native.reason ?? 'RECEIPT_UNVERIFIED' }))
    await this.finish(row,token,receipt && !receipt.cancelled && receipt.checks.every(c => c.cleanupConfirmed && c.state !== 'INCOMPLETE') ? 'COMPLETED' : 'FAILED', report, receipt ? null : native.reason ?? 'RECEIPT_UNVERIFIED')
   } catch (error) {
+   if (this.scanner && (row.plan as any)?.kind==='AUTOMATIC_HEALTH' && (row.plan as any)?.expected) {
+    // Access revocation also stops the exact admitted job; never fetch more source.
+    try {
+     const stopped=await this.scanner.call('cancel',(row.plan as any).expected)
+     if(stopped.state!=='COMPLETE'||!stopped.cleanupConfirmed){await this.defer(id,token);return}
+    } catch {await this.defer(id,token);return}
+   }
    // No source/log/provider message is exposed. Admitted jobs remain tracked until cleanup is acknowledged.
    if (row.nativeRequestId) {
     await this.db.nativeExecutionRequest.updateMany({ where: { id: row.nativeRequestId, state: 'QUEUED' }, data: { state: 'CANCELLED', reason: 'EXECUTION_INTERRUPTED', finishedAt: new Date(), leaseUntil: null } })
@@ -322,6 +338,81 @@ export class RepositoryHealthService {
     if (native && ['QUEUED','PREPARING','RUNNING','CANCEL_REQUESTED'].includes(native.state)) { await this.defer(id,token); return }
    }
    await this.finish(row,token,'FAILED',row.report as HealthReport | null, (error as any)?.status === 403 ? 'ACCESS_REVOKED' : 'SOURCE_OR_ANALYSIS_UNAVAILABLE')
+  }
+ }
+ private async automaticScan(row: any, token: string, session: AuthenticatedSession, repo: any) {
+  if (!this.scanner) throw new Error('Scanner client unavailable')
+  const saved=row.plan as any
+  let preparingSource=false
+  try {
+   let pkg=saved.package??await this.scanner.package(row.organizationId)
+   let expected=saved.expected as NativeReceiptExpected|undefined
+   let source: Awaited<ReturnType<GitHubProviderService['readHealthScanSource']>>|undefined
+   if (!expected) {
+    // The export is bounded but can take longer than an ordinary worker lease.
+    await this.db.repositoryHealthAssessment.updateMany({where:{id:row.id,leaseToken:token,cancelledAt:null},data:{leaseUntil:new Date(Date.now()+12*60000)}})
+    preparingSource=true
+    source=await this.github.readHealthScanSource(repo.installationId,repo.githubId,row.sourceSha,AbortSignal.timeout(600000))
+    await this.access.requireRepository(session,repo.githubId.toString(),'execution.run')
+    preparingSource=false
+    pkg=await this.scanner.package(row.organizationId)
+    const {planHash,...plan}=healthScannerPlan(pkg,{organizationId:row.organizationId,repositoryId:repo.githubId.toString(),sourceSha:row.sourceSha,selectionId:'health:'+row.id,ruleIds:saved.ruleIds})
+    const rules=plan.steps.filter(step=>'adapterId' in step).map(step=>step.ruleId)
+    if (!rules.length) throw new Error('No applicable scanner images available')
+    expected={requestId:row.id,attemptId:row.id,organizationId:row.organizationId,repositoryId:repo.githubId.toString(),sourceSha:row.sourceSha,sourceHash:source.source.sourceHash,selectionId:'health:'+row.id,planHash,plan,ruleIds:rules,approvalHash:healthScannerAuthority(pkg,row.organizationId).reviewed.approvalHash}
+    const changed=await this.db.repositoryHealthAssessment.updateMany({where:{id:row.id,leaseToken:token,cancelledAt:null},data:{plan:json({...saved,package:pkg,expected,stage:'WAITING_SCANNER',excludedFiles:source.excludedFiles,originalTreeSha:source.originalTreeSha})}})
+    if (!changed.count) throw new Error('Health attempt changed')
+    row=await this.db.repositoryHealthAssessment.findUniqueOrThrow({where:{id:row.id}})
+   }
+   let result=await this.scanner.call('status',expected)
+   if (result.state==='NOT_FOUND' && (row.cancelledAt || Date.now()-row.startedAt.getTime()>3600000)) {await this.finish(row,token,row.cancelledAt?'CANCELLED':'FAILED',row.cancelledAt?null:row.report as HealthReport,row.cancelledAt?'EXECUTION_CANCELLED':'ASSESSMENT_TIMED_OUT');return}
+   if (result.state==='NOT_FOUND') {
+    pkg=await this.scanner.package(row.organizationId)
+    if(expected.approvalHash!==healthScannerAuthority(pkg,row.organizationId).reviewed.approvalHash){
+     const {planHash,...plan}=healthScannerPlan(pkg,{organizationId:row.organizationId,repositoryId:repo.githubId.toString(),sourceSha:row.sourceSha,selectionId:expected.selectionId,ruleIds:saved.ruleIds})
+     expected={...expected,planHash,plan,ruleIds:plan.steps.filter(step=>'adapterId' in step).map(step=>step.ruleId),approvalHash:healthScannerAuthority(pkg,row.organizationId).reviewed.approvalHash}
+     const updated=await this.db.repositoryHealthAssessment.updateMany({where:{id:row.id,leaseToken:token,cancelledAt:null},data:{plan:json({...row.plan as any,expected,package:pkg})}})
+     if(!updated.count)throw new Error('Health scope changed')
+     row=await this.db.repositoryHealthAssessment.findUniqueOrThrow({where:{id:row.id}})
+    }
+    await this.db.repositoryHealthAssessment.updateMany({where:{id:row.id,leaseToken:token,cancelledAt:null},data:{leaseUntil:new Date(Date.now()+12*60000)}})
+    source ??= await this.github.readHealthScanSource(repo.installationId,repo.githubId,row.sourceSha,AbortSignal.timeout(600000))
+    await this.access.requireRepository(session,repo.githubId.toString(),'execution.run')
+    const live=await this.db.repositoryHealthAssessment.findUniqueOrThrow({where:{id:row.id}})
+    if (live.cancelledAt || live.leaseToken!==token || source.source.sourceHash!==expected.sourceHash) throw new Error('Health scope changed')
+    result=await this.scanner.call('admit',expected,source.source)
+   }
+   const live=await this.db.repositoryHealthAssessment.findUniqueOrThrow({where:{id:row.id}})
+   if ((live.cancelledAt || Date.now()-row.startedAt.getTime()>3600000) && result.state!=='COMPLETE') result=await this.scanner.call('cancel',expected)
+   if (result.state!=='COMPLETE') {
+    await this.db.repositoryHealthAssessment.updateMany({where:{id:row.id,leaseToken:token},data:{plan:json({...row.plan as any,stage:result.state==='RUNNING'?'SCANNING':'WAITING_SCANNER'})}})
+    await this.defer(row.id,token);return
+   }
+   await this.db.repositoryHealthAssessment.updateMany({where:{id:row.id,leaseToken:token},data:{plan:json({...row.plan as any,stage:'VERIFYING_RESULTS'})}})
+   const receipt=this.scanner.verify((row.plan as any).package??pkg,expected,result.signature)
+   if (!receipt) {
+    if(result.cleanupConfirmed) {await this.finish(row,token,'FAILED',row.report as HealthReport,'SCANNER_RESULT_UNVERIFIED');return}
+    throw new Error('Scanner result could not be verified')
+   }
+   await this.access.requireRepository(session,repo.githubId.toString(),'execution.run')
+   const initial=row.report as HealthReport, excluded=(row.plan as any).excludedFiles??0
+   const report=healthReport({...initial.inspection,complete:initial.inspection.complete&&excluded===0},initial.analyses,receipt.checks,digest({kind:'automatic-health-v1',tools:receipt.toolReviewHash,scope:initial.analyses.map(a=>a.id)}))
+   report.policyContext=initial.policyContext
+   if(excluded)report.limits.push(`${excluded} binary, oversized, generated or linked files were excluded from the scanned source scope. Findings and metrics apply to retained files only.`)
+   await this.finish(row,token,receipt.cancelled?'CANCELLED':receipt.checks.some(c=>!c.cleanupConfirmed)?'FAILED':'COMPLETED',report,receipt.cancelled?'EXECUTION_CANCELLED':null)
+  } catch (error) {
+   // An uncertain admit/status response cannot abandon an owned scanner job.
+   const current=await this.db.repositoryHealthAssessment.findUniqueOrThrow({where:{id:row.id}})
+   if ((current.plan as any)?.expected) {
+    await this.db.repositoryHealthAssessment.updateMany({where:{id:row.id,leaseToken:token},data:{plan:json({...current.plan as any,stage:'RECONNECTING_SCANNER'})}})
+    await this.defer(row.id,token);return
+   }
+   const response=(error as any)?.getResponse?.()
+   const reason=(error as any)?.status===403?'ACCESS_REVOKED':response?.code==='GITHUB_RATE_LIMITED'?'GITHUB_RATE_LIMITED':preparingSource?'SOURCE_ACCESS_UNAVAILABLE':'SCANNER_UNAVAILABLE'
+   const report=row.report as HealthReport
+   const next=healthReport(report.inspection,report.analyses.map(a=>({...a,reason})))
+   next.policyContext=report.policyContext
+   await this.finish(row,token,'FAILED',next,reason)
   }
  }
  private async defer(id: string, token: string) {

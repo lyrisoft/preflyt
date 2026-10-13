@@ -31,3 +31,22 @@ it('provides root deployment configuration and a scoped versioned publishing wor
   expect(workflow.jobs.publish.permissions.packages).toBe('write')
   expect(workflow.on.push.branches).toEqual(['development', 'main'])
 })
+
+it('ships Health scanner packaging without mounting engine authority or signing keys into the application',()=>{
+ const dockerfile=readFileSync(resolve(root,'deploy/api.Dockerfile'),'utf8')
+ expect(dockerfile).toContain('AS health-scanner')
+ expect(dockerfile).toContain('COPY docs/deployment/native-runner /opt/preflyt/scanner-tools')
+ expect(dockerfile).toContain('docker-buildx')
+ const application=parse(readFileSync(resolve(root,'docs/deployment/health-scanner/application.compose.yaml'),'utf8'))
+ for(const name of ['api','worker']){
+  expect(application.services[name].volumes).toHaveLength(1)
+  expect(application.services[name].volumes[0].read_only).toBe(true)
+  expect(application.services[name].environment.HEALTH_SCANNER_CONNECTION_FILE).toBe('/run/preflyt-health/connection.json')
+  expect(JSON.stringify(application.services[name])).not.toMatch(/docker.sock|docker-tls|identity.json|SIGNING_KEY/)
+ }
+ const scanner=parse(readFileSync(resolve(root,'docs/deployment/health-scanner/controller.compose.yaml'),'utf8')).services['health-scanner']
+ expect(scanner.user).toBe('1000:1000');expect(scanner.read_only).toBe(true)
+ expect(scanner.cap_drop).toEqual(['ALL'])
+ expect(scanner.env_file).toBe('scanner.env')
+ expect(JSON.stringify(scanner)).not.toMatch(/DATABASE_URL|GITHUB_APP_PRIVATE_KEY|docker.sock/)
+})

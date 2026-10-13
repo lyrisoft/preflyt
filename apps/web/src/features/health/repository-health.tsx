@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import {
   ChevronLeft,
@@ -48,7 +48,6 @@ import { ResultTimestamp } from '@/components/result-timestamp'
 import { StatusBadge } from '@/components/status-badge'
 import { SurfaceIcon } from '@/components/surface-icon'
 import { BranchPicker } from '@/features/repositories/branch-picker'
-import { nativeStatusOptions } from '@/features/repositories/native-execution-api'
 import { useNavigationSession } from '@/features/workspace/navigation-session'
 import { canPerform } from '@/features/workspace/scoped-access'
 import { AnalysisCoverage } from './analysis-coverage'
@@ -65,7 +64,6 @@ import { healthDimensionValues } from './health-dimensions'
 import { HealthHelp } from './health-help'
 import { HealthPolicyEvidence } from './health-policy-evidence'
 import { HealthTimelineChart } from './health-timeline-chart'
-import { ScanningReadiness } from './scanning-readiness'
 
 const pageSize = 10
 
@@ -131,10 +129,6 @@ export function RepositoryHealth({
       ? checked?.checkedAt
       : data?.checkedAt
   const allowed = canPerform(session.data, 'execution.run', repositoryId)
-  const readinessOptions = nativeStatusOptions(session.data, repositoryId)
-  const readiness = useQuery(readinessOptions)
-  const scanningAvailable =
-    !readiness.isError && readiness.data?.executionAvailable === true
   const refresh = async () => {
     await cache.invalidateQueries({ queryKey: ['repository-health'] })
     await cache.invalidateQueries({ queryKey: ['health-portfolio'] })
@@ -142,13 +136,6 @@ export function RepositoryHealth({
   }
   const start = useMutation({
     mutationFn: async (value: string) => {
-      // Re-check before admission. A newly blocked scan must not silently turn
-      // into an inspection after the user selected an assessment action.
-      const current = await cache.fetchQuery(readinessOptions)
-      if (!current.executionAvailable)
-        throw new Error(
-          'Scanning availability changed. Review the updated notice and choose the action again.'
-        )
       return healthRequest<HealthAssessment>(
         `repositories/${repositoryId}/health`,
         undefined,
@@ -240,13 +227,6 @@ export function RepositoryHealth({
     : []
   return (
     <div className='space-y-5'>
-      <ScanningReadiness
-        status={readiness.isError ? undefined : readiness.data}
-        pending={readiness.isFetching || readiness.isPending}
-        error={readiness.isError}
-        platformAdmin={session.data?.platformAdmin === true}
-        refresh={() => void readiness.refetch()}
-      />
       <Card
         className='gap-0 overflow-hidden py-0'
         aria-label='Repository health summary'
@@ -287,11 +267,6 @@ export function RepositoryHealth({
                     query.isPending ||
                     query.isError ||
                     freshnessDenied ||
-                    readiness.isPending ||
-                    readiness.isFetching ||
-                    readiness.isError ||
-                    !readiness.data ||
-                    !scanningAvailable ||
                     start.isPending ||
                     (active && chosenBranch === row.branch)
                   }
@@ -304,15 +279,9 @@ export function RepositoryHealth({
                   )}
                   {start.isPending
                     ? 'Queuing…'
-                    : readiness.isPending ||
-                        readiness.isError ||
-                        !readiness.data
-                      ? 'Check scanning readiness'
-                      : !scanningAvailable
-                        ? 'Scanning blocked'
-                        : row
-                          ? 'Reassess'
-                          : 'Assess repository'}
+                    : row
+                      ? 'Reassess'
+                      : 'Assess repository'}
                 </Button>
               </>
             )}
@@ -341,6 +310,12 @@ export function RepositoryHealth({
                   {row.sourceSha?.slice(0, 7) ?? 'Commit not pinned yet'}
                 </code>
               </span>
+              {active && row.startedAt && (
+                <span className='inline-flex items-center gap-1.5'>
+                  <Clock3 className='size-3.5' />
+                  Started <ResultTimestamp value={row.startedAt} />
+                </span>
+              )}
               {row.finishedAt && (
                 <span className='inline-flex items-center gap-1.5'>
                   <Clock3 className='size-3.5' />
@@ -386,6 +361,41 @@ export function RepositoryHealth({
             </div>
           </div>
         )}
+        {active && (
+          <div
+            role='status'
+            aria-label='Assessment progress'
+            className='flex items-center gap-3 border-t bg-info/5 p-4'
+          >
+            <SurfaceIcon
+              icon={LoaderCircle}
+              tone='blue'
+              className='[&_svg]:motion-safe:animate-spin'
+            />
+            <div className='min-w-0'>
+              <p className='text-sm font-semibold'>
+                {row.cancelled
+                  ? 'Cancellation requested'
+                  : row.state === 'QUEUED'
+                    ? 'Waiting for worker capacity'
+                    : ({
+                        INSPECTING: 'Inspecting the selected commit',
+                        FETCHING_SOURCE: 'Fetching repository files',
+                        WAITING_SCANNER: 'Preparing isolated scanners',
+                        SCANNING: 'Scanning repository files',
+                        VERIFYING_RESULTS: 'Verifying scan results',
+                        RECONNECTING_SCANNER: 'Reconnecting to the scanner',
+                      }[row.progress ?? ''] ?? 'Assessment in progress')}
+              </p>
+              <p className='mt-1 text-sm leading-relaxed text-muted-foreground'>
+                {row.cancelled
+                  ? 'Waiting for the analysis runtime to confirm cleanup.'
+                  : 'Progress updates automatically. The assessment stays pinned to one commit.'}
+              </p>
+            </div>
+          </div>
+        )}
+
         {query.isPending && (
           <div
             role='status'
@@ -396,7 +406,7 @@ export function RepositoryHealth({
             <span className='sr-only'>Loading repository health…</span>
           </div>
         )}
-        {!query.isPending && !query.isError && row && (
+        {!query.isPending && !query.isError && row && !active && (
           <HealthTimelineChart
             embedded
             points={data!.timeline ?? []}
@@ -447,7 +457,7 @@ export function RepositoryHealth({
         </Card>
       ) : (
         <>
-          {report && (
+          {report && !active && (
             <div className='grid gap-4 sm:grid-cols-2 xl:grid-cols-5'>
               {metrics.map((metric) => (
                 <Link
@@ -501,29 +511,7 @@ export function RepositoryHealth({
               ))}
             </div>
           )}
-          {active && (
-            <div className='flex items-start gap-3 rounded-xl border border-info/20 bg-info/5 p-4'>
-              <LoaderCircle className='mt-0.5 size-4 shrink-0 text-info-text motion-safe:animate-spin' />
-              <div className='min-w-0'>
-                <p className='text-sm font-semibold'>
-                  {row.cancelled
-                    ? 'Cancellation requested'
-                    : row.state === 'QUEUED'
-                      ? 'Waiting for worker capacity'
-                      : 'Assessment in progress'}
-                </p>
-                <p
-                  role='status'
-                  className='mt-1 text-sm leading-relaxed text-muted-foreground'
-                >
-                  {row.cancelled
-                    ? 'Waiting for the analysis runtime to confirm cleanup.'
-                    : 'Progress updates automatically. The assessment stays pinned to one commit.'}
-                </p>
-              </div>
-            </div>
-          )}
-          {report && (
+          {report && !active && (
             <AnalysisCoverage
               key={row.id}
               report={report}
@@ -537,7 +525,7 @@ export function RepositoryHealth({
           <div className='grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_350px]'>
             <div className='min-w-0'>
               <Tabs
-                value={report ? detailTab : 'history'}
+                value={report && !active ? detailTab : 'history'}
                 onValueChange={(value) => {
                   if (value === 'findings' || value === 'history')
                     setDetailTab(value)
@@ -545,15 +533,16 @@ export function RepositoryHealth({
                 className='gap-4'
               >
                 <TabsList aria-label='Repository health details'>
-                  <TabsTrigger value='findings' disabled={!report}>
-                    Findings {report ? `(${report.findings.length})` : ''}
+                  <TabsTrigger value='findings' disabled={!report || active}>
+                    Findings{' '}
+                    {report && !active ? `(${report.findings.length})` : ''}
                   </TabsTrigger>
                   <TabsTrigger value='history'>
                     Assessment history ({data!.total})
                   </TabsTrigger>
                 </TabsList>
                 <TabsContent value='findings' className='space-y-5'>
-                  {report && (
+                  {report && !active && (
                     <Card
                       className='gap-0 overflow-hidden py-0'
                       aria-label='Repository findings'
@@ -845,7 +834,7 @@ export function RepositoryHealth({
               </Tabs>
             </div>
             <aside className='min-w-0 space-y-5' aria-label='Analysis details'>
-              {report && (
+              {report && !active && (
                 <HealthPolicyEvidence
                   report={report}
                   repositoryId={repositoryId}

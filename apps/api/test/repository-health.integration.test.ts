@@ -19,11 +19,13 @@ import { nativeRuntimeApproval } from '../src/execution/native-runtime.js'
 import { nativeToolReviews, nativeAdapters } from '../src/execution/native-plan.js'
 import { signNativeReceipt, verifyNativeReceipt } from '../src/execution/native-receipt.js'
 import { digest } from '../src/assessments/assessment-digest.js'
+import { HealthScannerClient } from '../src/health/health-scanner-client.js'
+import { healthScannerAuthority } from '../src/health/health-scanner-package.js'
 import type { AuthenticatedSession } from '../src/auth/session.guard.js'
 vi.mock('../src/execution/native-runtime.js',()=>({nativeRuntimeApproval:vi.fn()}))
 let app: INestApplication
 let fixture: Awaited<ReturnType<typeof disposableDatabase>>, service: RepositoryHealthService, owner: AuthenticatedSession, developer: AuthenticatedSession, outsider: AuthenticatedSession, repoId: string
-const provider={readRepositorySnapshot:vi.fn(),verifyReadinessBranch:vi.fn(),readHealthSource:vi.fn()}, runtime={status:vi.fn()}
+const provider={readRepositorySnapshot:vi.fn(),verifyReadinessBranch:vi.fn(),readHealthSource:vi.fn(),readHealthScanSource:vi.fn()}, runtime={status:vi.fn()}
 const sha='a'.repeat(40)
 beforeAll(async()=>{
  fixture=await disposableDatabase('health')
@@ -56,6 +58,39 @@ it('selection queues once without needing CI, standards or an immediate source r
  await service.process(rows[0].id);await service.process(rows[0].id)
  const report=await service.get(owner,'51');expect(report.assessment).toMatchObject({state:'COMPLETED',sourceSha:sha,report:{mode:'INSPECTION_ONLY',completeness:'PARTIAL'}})
  expect(await fixture.prisma.notificationEvent.count()).toBe(1);expect(await fixture.prisma.repositoryStandardsSelection.count()).toBe(0);expect(await fixture.prisma.gatePolicyRevision.count()).toBe(0);expect(await fixture.prisma.commitAssessment.count()).toBe(0)
+})
+it('automatically scans the selected repository without standards, CI or manual runtime approval and stores verified findings',async()=>{
+ const key=generateKeyPairSync('ed25519'),publicKey=key.publicKey.export({type:'spki',format:'pem'}).toString(),privateKey=key.privateKey.export({type:'pkcs8',format:'pem'}).toString()
+ const ids=['secrets.scan','security.sast','quality.reliability','quality.maintainability','quality.duplication','security.hotspots'] as const
+ const pkg={version:1 as const,environmentId:'health-fixture',runtime:'runc' as const,controlsHash:'d'.repeat(64),controllerPublicKey:publicKey,createdAt:new Date(Date.now()-60000).toISOString(),tools:ids.map(ruleId=>({ruleId,image:'sha256:'+'b'.repeat(64),toolVersion:'fixture-1',license:nativeAdapters[ruleId].license,configHash:'c'.repeat(64),reviewDigest:'d'.repeat(64),expiresAt:'2099-01-01T00:00:00Z',databaseBuiltAt:null}))}
+ let admitted=false
+ const scanner={package:vi.fn(async()=>pkg),verify:new HealthScannerClient().verify,call:vi.fn(async(action:string,input:any)=>{
+  if(action==='status'&&!admitted)return {state:'NOT_FOUND'}
+  if(action==='admit'){admitted=true;return {state:'PREPARING'}}
+  const {plan,ruleIds,...scope}=input,authority=healthScannerAuthority(pkg,owner.organizationId!)
+  const receipt:any={...scope,version:1,environmentId:pkg.environmentId,controlsHash:pkg.controlsHash,toolReviewHash:authority.tools.reviewHash,startedAt:new Date(Date.now()-1000).toISOString(),finishedAt:new Date().toISOString(),cancelled:false,checks:ruleIds.map((ruleId:any)=>{
+   const tool=pkg.tools.find(tool=>tool.ruleId===ruleId)!,adapter=nativeAdapters[ruleId as keyof typeof nativeAdapters]
+   return {ruleId,state:'INCOMPLETE',reason:'SCAN_ERRORS',reportHash:null,summary:null,adapterId:adapter.id,image:tool.image,toolVersion:tool.toolVersion,configHash:tool.configHash,commandHash:digest(adapter),exitCode:null,cleanupConfirmed:true,coverage:'PARTIAL',findings:[]}
+  })}
+  const sast=receipt.checks.find((check:any)=>check.ruleId==='security.sast')
+  Object.assign(sast,{state:'FAIL',reason:'FINDINGS_REPORTED',reportHash:'f'.repeat(64),summary:{runs:1,results:1,suppressed:0},exitCode:1,fileAnalysis:{version:1,formula:'semgrep-candidate-files-v1',scope:'js-ts-python',candidateFiles:1,analyzedFiles:1,skippedFiles:0,pathsDigest:'e'.repeat(64)},findings:[{category:'security',fingerprint:'f'.repeat(64),severity:'high',title:'Dynamic code execution requires review',ruleId:'preflyt-js-eval',path:'app.ts',line:1,endLine:1,suppressed:false}]})
+  return {state:'COMPLETE',signature:signNativeReceipt(receipt,privateKey,publicKey),cleanupConfirmed:true}
+ })}
+ provider.readHealthScanSource.mockResolvedValue({source:{sourceHash:'e'.repeat(64)},excludedFiles:0,originalTreeSha:'b'.repeat(40)})
+ runtime.status.mockClear()
+ service=new RepositoryHealthService(fixture.prisma,new AuthorizationService(fixture.prisma),provider as any,runtime as any,new FindingSourceStore(fixture.prisma,provider as any),scanner as any)
+ const scan=await service.initial(owner.identityId,'51')
+ await service.process(scan.id)
+ expect(scanner.call).toHaveBeenCalledWith('admit',expect.objectContaining({repositoryId:'51',sourceSha:sha,selectionId:'health:'+scan.id}),expect.anything())
+ await fixture.prisma.repositoryHealthAssessment.update({where:{id:scan.id},data:{leaseUntil:null}})
+ await service.process(scan.id)
+ const result=await service.get(owner,'51')
+ expect(result.assessment).toMatchObject({state:'COMPLETED',report:{mode:'EXECUTED',findings:[expect.objectContaining({severity:'high',path:'app.ts',line:1})]}})
+ expect(runtime.status).not.toHaveBeenCalled()
+ expect(await fixture.prisma.nativeExecutionRequest.count()).toBe(0)
+ expect(await fixture.prisma.repositoryStandardsSelection.count()).toBe(0)
+ expect(await fixture.prisma.commitAssessment.count()).toBe(0)
+ await expect(service.get(outsider,'51')).rejects.toThrow()
 })
 it('enforces organization scope, separate execution permission, invalid branch and reassessment limits',async()=>{
  await expect(service.initial(outsider.identityId,'51')).rejects.toThrow();await expect(service.start(developer,'51',{requestKey:randomUUID()})).rejects.toThrow();await expect(service.start(owner,'51',{branch:'refs/main',requestKey:randomUUID()})).rejects.toThrow()

@@ -7,7 +7,7 @@ description: Read branch analysis, exact-revision findings, limits and report hi
 
 # Repository health
 
-Health assesses a selected branch without requiring CI. Explicit repository selection queues the first assessment; **Reassess** creates another revision report. The API and general worker inspect GitHub metadata and coordinate work. Qualified scanners run in the separate approved runtime.
+Health assesses a selected branch without requiring CI. Explicit repository selection queues the first assessment; **Reassess** creates another revision report. The API and worker fetch the exact selected commit and coordinate work. The built-in scanner service automatically runs every applicable fixed Health analyzer in isolated containers. GitHub connection, repository selection and existing Preflyt permissions are the authorization; no additional approval, policy selection or CI workflow is required. Health never installs dependencies or executes repository scripts.
 
 ## Read a report
 
@@ -35,7 +35,7 @@ Branch checks are cached for one minute. Open or refresh Health to check again; 
 | Analysis | Applicability | Current adapter and limits |
 | --- | --- | --- |
 | Secret detection | Selected repositories | Gitleaks; recorded full-rule scope can be verified. Secret values and excerpts are hidden. |
-| Static security analysis | JavaScript, TypeScript, Python, Java, Go, Ruby, PHP or C# source paths | Semgrep CE with reviewed local rules. Coverage is partial and depends on those rules. |
+| Static security analysis | JavaScript, TypeScript or Python source paths | Semgrep CE with reviewed local rules. Coverage is partial and depends on those rules. |
 | Dependency vulnerabilities | Recognized dependency manifests or lockfiles | Trivy with a reviewed offline database. Coverage is partial; database freshness is required. |
 | Reliability | JavaScript, TypeScript or Python source paths | Reviewed local Semgrep rules for NaN comparisons and broad exception catches. Narrow rule coverage; findings require code review. |
 | Maintainability | JavaScript, TypeScript or Python source paths | Reviewed local Semgrep rules for leftover debugger statements and dynamic execution. Narrow rule coverage; findings require code review. |
@@ -44,7 +44,7 @@ Branch checks are cached for one minute. Open or refresh Health to check again; 
 | Test coverage | Coverage reports produced by existing CI tests | Exact-commit CI coverage ingestion remains pending. Health does not rerun tests; missing evidence is shown as a dash. |
 | Infrastructure configuration | Terraform or recognized Kubernetes/Helm paths | Trivy configuration analysis. Coverage is partial. |
 
-These are candidates selected from detected files, not guarantees that every language or file will be analyzed. Each tool needs a reviewed image, version, configuration and approved runtime. The base installation can produce an inspection-only report. Broad executed-analysis production acceptance is still pending; see [Native execution](native-execution.md).
+These analyzers are selected from detected files; supported rules and languages determine their recorded scope. The packaged Health scanner prepares pinned images and checks isolation automatically. No signed runtime approval is required. Binary, oversized, generated or linked files are excluded explicitly. Source or scanner failures remain visible instead of becoming clean results. General native repository-command execution has separate controls; see [Native execution](native-execution.md).
 
 **Analyses completed** counts checks with validated analyzer output; **Files inspected** counts discovered source files and is not an analysis coverage denominator.
 
@@ -175,3 +175,7 @@ The duplicate Selection status column was removed. Authorized users retain the r
 Overall health summarizes the latest saved assessment on the selected branch and commit. It never averages previous commits or mixes raw finding counts with coverage percentages. Critical/high retained findings or a captured required analysis failing its policy limit produce **Unhealthy** (red), even when another analysis is missing. Without a known blocking failure, missing or partial applicable analyses, invalid policy context or missing required coverage produce **Incomplete** (gray). Complete results with advisory findings produce **Needs attention** (amber). Complete clean results meeting recorded requirements produce **Healthy** (green). Queued/running assessments retain their progress state. Freshness is shown separately; a healthy historical commit does not establish the current branch is healthy.
 
 The evaluator uses captured policy `maxFailedChecks` limits for supported Health analysis IDs. The current policy contract does not configure coverage or duplication percentage targets; no percentage limits are invented. Coverage stays CI-derived, and absent coverage blocks Healthy only when recorded requirements require it. This summary does not change CI gate evidence or GitHub merge permissions.
+
+### Visible scan progress
+
+An active assessment shows a spinner and its current stage above the report: inspecting the commit, fetching files, preparing scanners, scanning, verifying results or reconnecting. The page polls automatically. Queued work shows a waiting message; progress never invents a percentage or displays unfinished metrics as completed results.

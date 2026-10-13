@@ -13,7 +13,9 @@
     "prisma:migrate": "prisma migrate deploy",
     "start:worker:dev": "tsx watch src/worker.ts",
     "start:worker": "node --env-file-if-exists=.env dist/worker.js",
-    "start:native-controller": "node dist/execution-controller.js"
+    "start:native-controller": "node dist/execution-controller.js",
+    "start:health-scanner:dev": "tsx src/health-scanner.ts",
+    "start:health-scanner": "node dist/health-scanner.js"
   },
   "dependencies": {
     "@kubernetes/client-node": "2.0.0",

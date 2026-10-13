@@ -79,6 +79,7 @@ export function nativeDockerArgs(
   tool: NativeToolReview,
   sourcePath: string,
   runtime: 'runsc' | 'kata' | 'runc',
+  policy: 'native' | 'health' = 'native',
 ) {
   if (
     !/^[a-f0-9-]{36}$/.test(scope.requestId) ||
@@ -92,7 +93,7 @@ export function nativeDockerArgs(
     !['runsc', 'kata', 'runc'].includes(runtime)
   )
     throw new Error('Invalid native job scope')
-  const reviewed = nativeToolReviews(JSON.stringify([tool]))
+  const reviewed = nativeToolReviews(JSON.stringify([tool]), Date.now(), policy)
   if (
     !reviewed ||
     !Object.hasOwn(nativeAdapters, ruleId) ||
@@ -278,6 +279,29 @@ export async function runNativeDockerCheck(
     throw new Error('Independent Docker runner review required')
   const tool = inventory.reviews.find((tool) => tool.ruleId === ruleId)
   if (!tool) throw new Error('Tool review required')
+  return runIsolatedDockerCheck(scope, ruleId, tool, sourcePath, {
+    runtime: reviewed.approval.runtime,
+    approvalHash: reviewed.approvalHash,
+    environmentId: reviewed.approval.environmentId,
+    verify: async () => {
+      const current = nativeDockerApproval(), tools = nativeToolReviews()
+      if (current?.approvalHash !== reviewed.approvalHash || tools?.reviewHash !== inventory.reviewHash ||
+        digest(dockerControlsProjection(JSON.parse((await command(['info', '--format', '{{json .}}'], { signal })).toString()), reviewed.approval.runtime)) !== reviewed.approval.controlsHash)
+        throw new Error('Docker runtime approval changed')
+    },
+  }, signal, command)
+}
+
+/** Common enforced container controls. Health calls this only for package-owned static scanners. */
+export async function runIsolatedDockerCheck(
+  scope: DockerJobScope,
+  ruleId: NativeRuleId,
+  tool: NativeToolReview,
+  sourcePath: string,
+  runtime: { runtime: 'runc' | 'runsc' | 'kata'; approvalHash: string; environmentId: string; verify: () => Promise<void>; policy?: 'health' },
+  signal?: AbortSignal,
+  command: DockerCommand = dockerCommand,
+) {
   const canonical = await realpath(sourcePath)
   if (
     canonical !== sourcePath ||
@@ -290,32 +314,15 @@ export async function runNativeDockerCheck(
     constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
   )
   await sourceDirectory.close()
-  const verifyRuntime = async () => {
-    const current = nativeDockerApproval(),
-      tools = nativeToolReviews()
-    if (
-      current?.approvalHash !== reviewed.approvalHash ||
-      tools?.reviewHash !== inventory.reviewHash ||
-      digest(
-        dockerControlsProjection(
-          JSON.parse(
-            (
-              await command(['info', '--format', '{{json .}}'], { signal })
-            ).toString(),
-          ),
-          reviewed.approval.runtime,
-        ),
-      ) !== reviewed.approval.controlsHash
-    )
-      throw new Error('Docker runtime approval changed')
-  }
+  const verifyRuntime = runtime.verify
   await verifyRuntime()
   const invocation = nativeDockerArgs(
     scope,
     ruleId,
     tool,
     canonical,
-    reviewed.approval.runtime,
+    runtime.runtime,
+    runtime.policy ?? 'native',
   )
   const startedAt = new Date().toISOString()
   const deadline = AbortSignal.any([
@@ -347,7 +354,7 @@ export async function runNativeDockerCheck(
       ruleId,
       tool,
       canonical,
-      reviewed.approval.runtime,
+      runtime.runtime,
     )
     await verifyRuntime()
     const output = await command(['start', '--attach', containerId], {
@@ -387,8 +394,8 @@ export async function runNativeDockerCheck(
     adapterId: nativeAdapters[ruleId].id,
     configHash: tool.configHash,
     toolVersion: tool.toolVersion,
-    approvalHash: reviewed.approvalHash,
-    environmentId: reviewed.approval.environmentId,
+    approvalHash: runtime.approvalHash,
+    environmentId: runtime.environmentId,
     startedAt,
     finishedAt: new Date().toISOString(),
     exitCode,

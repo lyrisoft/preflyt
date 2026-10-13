@@ -187,6 +187,7 @@ const hex = (v: unknown) => typeof v === 'string' && /^[a-f0-9]{64}$/.test(v)
 export function nativeToolReviews(
   raw = process.env.NATIVE_TOOL_REVIEWS ?? '[]',
   now = Date.now(),
+  policy: 'native' | 'health' = 'native',
 ) {
   try {
     if (raw.length > 65536) return null
@@ -204,7 +205,7 @@ export function nativeToolReviews(
         Object.keys(item).sort().join(',') !== exactKeys ||
         typeof item.image !== 'string' ||
         item.image.length > 256 ||
-        !/^[a-z0-9]+(?:[.-][a-z0-9]+)*(?::[0-9]{1,5})?\/[a-z0-9]+(?:[._/-][a-z0-9]+)*@sha256:[a-f0-9]{64}$/.test(
+        !(policy === 'health' && /^sha256:[a-f0-9]{64}$/.test(item.image)) && !/^[a-z0-9]+(?:[.-][a-z0-9]+)*(?::[0-9]{1,5})?\/[a-z0-9]+(?:[._/-][a-z0-9]+)*@sha256:[a-f0-9]{64}$/.test(
           item.image,
         ) ||
         typeof item.toolVersion !== 'string' ||
@@ -215,13 +216,14 @@ export function nativeToolReviews(
         typeof item.expiresAt !== 'string' ||
         !Number.isFinite(Date.parse(item.expiresAt)) ||
         Date.parse(item.expiresAt) <= now ||
-        Date.parse(item.expiresAt) > now + 30 * 86400000 ||
+        (policy === 'native' && Date.parse(item.expiresAt) > now + 30 * 86400000) ||
+        (policy === 'health' && ['tests.required', 'tests.coverage', 'lint.required'].includes(item.ruleId)) ||
         (item.ruleId === 'security.dependencies'
           ? typeof item.databaseBuiltAt !== 'string' ||
             !item.databaseBuiltAt ||
             !Number.isFinite(Date.parse(item.databaseBuiltAt)) ||
             Date.parse(item.databaseBuiltAt) > now ||
-            now - Date.parse(item.databaseBuiltAt) > 86400000
+            (policy === 'native' && now - Date.parse(item.databaseBuiltAt) > 86400000)
           : item.databaseBuiltAt !== null)
       )
         return null

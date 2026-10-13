@@ -63,9 +63,28 @@ export class NativeControllerJobs {
       runNativeDockerCheck(scope, ruleId, path, signal),
     private recover?: (expected: NativeReceiptExpected) => Promise<void>,
     private backend: 'docker' | 'kubernetes' = 'docker',
+    private admission: (expected: NativeReceiptExpected) => {
+      reviewed: { backend: 'docker' | 'kubernetes'; approvalHash: string; approval: {
+        environmentId: string; controlsHash: string; controllerPublicKey: string
+      } };
+      tools: { reviews: import('./native-plan.js').NativeToolReview[]; reviewHash: string };
+      rules: NativeRuleId[]
+    } = nativeAdmission,
   ) {}
   get available() {
     return this.ready
+  }
+  get idle() { return this.ready && !this.active && !this.admitting }
+  /** Health receipts are already durable in the application; never prune live jobs or source. */
+  async pruneHealthJournals(now = Date.now()) {
+    if (!this.idle) return
+    for (const id of await readdir(this.directory)) {
+      if (!uuid(id)) throw new Error('Unexpected controller journal entry')
+      const record = await this.read(id)
+      if (record.expected.selectionId.startsWith('health:') && record.state === 'COMPLETE' &&
+          !record.cleanupPending && !record.workspaceRoot && now - Date.parse(record.startedAt) > 7 * 86400000)
+        await rm(this.path(id), { recursive: true })
+    }
   }
   private path(id: string) {
     if (!uuid(id)) throw new Error('Invalid attempt')
@@ -143,7 +162,7 @@ export class NativeControllerJobs {
     reason: string,
     cleanupConfirmed: boolean,
   ): NativeReceiptCheck[] {
-    const { tools, rules } = nativeAdmission(expected)
+    const { tools, rules } = this.admission(expected)
     return rules.map((ruleId) => {
       const tool = tools.reviews.find((t) => t.ruleId === ruleId)!,
         adapter = nativeAdapters[ruleId]
@@ -169,7 +188,7 @@ export class NativeControllerJobs {
     checks: NativeReceiptCheck[],
     cancelled: boolean,
   ) {
-    const { reviewed, tools } = nativeAdmission(record.expected)
+    const { reviewed, tools } = this.admission(record.expected)
     const { plan, ruleIds, ...scope } = record.expected
     const value: NativeReceipt = {
       ...scope,
@@ -340,6 +359,7 @@ export class NativeControllerJobs {
         this.active.abort.abort()
       return {
         state: record.state,
+        ...(record.expected.selectionId.startsWith('health:') ? {cleanupConfirmed: record.state === 'COMPLETE' && !record.cleanupPending && !record.workspaceRoot} : {}),
         ...(record.signature ? { signature: record.signature } : {}),
       }
     }
@@ -354,7 +374,7 @@ export class NativeControllerJobs {
   }
   private async admit(expected: NativeReceiptExpected, source: unknown) {
     const hash = digest(expected)
-    const { reviewed } = nativeAdmission(expected)
+    const { reviewed } = this.admission(expected)
     if (
       reviewed.backend !== this.backend ||
       (this.backend === 'kubernetes' && !this.recover)
@@ -421,7 +441,7 @@ export class NativeControllerJobs {
     try {
       for (let i = 0; i < checks.length; i++) {
         if (signal.aborted) break
-        nativeAdmission(record.expected)
+        this.admission(record.expected)
         const ruleId = checks[i].ruleId as NativeRuleId
         const result = await this.runner(
           this.scope(record.expected),

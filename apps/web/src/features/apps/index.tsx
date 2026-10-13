@@ -795,8 +795,7 @@ export function Apps() {
                   {hasLoaded
                     ? `${visibleRepositories.length} of ${repositories.length} repositories`
                     : 'Loading inventory'}{' '}
-                  · selection starts repository inspection without modifying
-                  code.
+                  · selecting a repository automatically starts its Health scan.
                 </p>
               </div>
               <Button
@@ -814,21 +813,6 @@ export function Apps() {
                 Refresh inventory
               </Button>
             </div>
-            <p className='max-w-prose text-sm text-muted-foreground'>
-              Scanners run only when your administrator has configured an
-              approved scanning environment. Otherwise, selection saves an
-              inspection-only report with no scanner metrics. Open Health to
-              check readiness, or read the{' '}
-              <a
-                className='text-link'
-                href='https://docs.preflytlabs.com/user-guide/native-execution#health-scanning-blocked'
-                target='_blank'
-                rel='noreferrer'
-              >
-                scanning setup guide
-              </a>
-              .
-            </p>
             <div className='flex flex-wrap gap-3'>
               <div className='relative min-w-56 flex-1'>
                 <SearchIcon

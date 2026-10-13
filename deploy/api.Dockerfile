@@ -38,3 +38,11 @@ FROM docker:29-cli@sha256:1a4c7cb63513f349bdad01fcc6e0f3f2f67d37b9da86f14dc0d4a0
 FROM runtime AS native-docker-controller
 COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
 CMD ["node", "dist/execution-controller.js"]
+
+# Dedicated fixed Health scanners; no application credentials or engine socket in API/worker.
+FROM native-docker-controller AS health-scanner
+COPY --from=docker-cli /usr/local/libexec/docker/cli-plugins/docker-buildx /usr/local/libexec/docker/cli-plugins/docker-buildx
+COPY docs/deployment/native-runner /opt/preflyt/scanner-tools
+ENV HEALTH_SCANNER_TOOLS_DIRECTORY=/opt/preflyt/scanner-tools
+EXPOSE 3011
+CMD ["node", "dist/health-scanner.js"]

@@ -4,6 +4,7 @@ import {opendir,lstat,open,writeFile} from 'node:fs/promises'
 import {constants} from 'node:fs'
 import {join} from 'node:path'
 import {createHash} from 'node:crypto'
+import {normalizeSemgrepLocations} from './semgrep-locations.mjs'
 const configs={'security.sast':'semgrep','quality.reliability':'reliability','quality.maintainability':'maintainability','security.hotspots':'hotspots'}
 const config=configs[process.argv[2]]
 const eligible=path=>/\.(?:js|jsx|ts|tsx|mjs|cjs|py)$/i.test(path)&&!/(?:^|\/)(?:node_modules|vendor|dist|build|coverage|\.git)\//.test(path)
@@ -23,23 +24,23 @@ try {
  const result=spawnSync('/usr/local/bin/semgrep',['scan','--config',`/opt/preflyt/config/${config}.yaml`,'--metrics','off','--disable-version-check','--no-git-ignore','--max-target-bytes','1048576','--strict','--sarif','--output','/reports/report.sarif','--json-output','/reports/semgrep-stats.json','--error','/workspace'],{cwd:'/workspace',env:process.env,stdio:'ignore',timeout:270000})
  if(result.error||!Number.isInteger(result.status))throw new Error('Scan failed')
  exit=[0,1].includes(result.status)?result.status:2
- const report=await read('/reports/report.sarif',262144)
+ const report=normalizeSemgrepLocations(await read('/reports/report.sarif',262144))
  try {
   const stats=await read('/reports/semgrep-stats.json',2097152)
-  if(!Array.isArray(stats.errors)||stats.errors.length||!Array.isArray(stats.paths?.scanned)||stats.paths.scanned.length>2000) {exit=2;throw new Error('Scan metadata unavailable')}
+  if(!Array.isArray(stats.errors)||stats.errors.length||!Array.isArray(stats.paths?.scanned)||stats.paths.scanned.length>8000) {exit=2;throw new Error('Scan metadata unavailable')}
   const candidates=new Set()
   let count=0
   const walk=async(relative='')=>{
    if(relative.split('/').length>32)throw new Error('Unbounded source')
    for await(const entry of await opendir(join('/workspace',relative))){
     const path=pathOf(relative?relative+'/'+entry.name:entry.name),info=await lstat(join('/workspace',path))
-    if(info.isSymbolicLink()||++count>10000)throw new Error('Invalid source')
+    if(info.isSymbolicLink()||++count>20000)throw new Error('Invalid source')
     if(info.isDirectory())await walk(path)
     else if(info.isFile()&&info.size<=1048576&&eligible(path))candidates.add(path)
    }
   }
   await walk()
-  if(candidates.size>2000)throw new Error('Unbounded candidate scope')
+  if(candidates.size>8000)throw new Error('Unbounded candidate scope')
   const scanned=new Set(stats.paths.scanned.map(pathOf))
   if([...scanned].some(path=>!candidates.has(path)))throw new Error('Unexpected analyzed file')
   if(report.version!=='2.1.0'||report.runs?.length!==1)throw new Error('Invalid SARIF')

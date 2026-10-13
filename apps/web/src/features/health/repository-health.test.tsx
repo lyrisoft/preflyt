@@ -9,6 +9,7 @@ import { RepositoryHealth } from './repository-health'
 const state = vi.hoisted(() => ({
   mode: 'EXECUTED',
   state: 'COMPLETED',
+  progress: 'SCANNING',
   role: 'OWNER',
   timeline: false,
   duplication: false,
@@ -272,6 +273,7 @@ const row = () => ({
   id,
   branch: 'development',
   state: state.state,
+  progress: state.progress,
   sourceSha: sha,
   report: report(),
   reason: null,
@@ -282,6 +284,7 @@ const row = () => ({
 beforeEach(() => {
   state.mode = 'EXECUTED'
   state.state = 'COMPLETED'
+  state.progress = 'SCANNING'
   state.role = 'OWNER'
   state.timeline = false
   state.duplication = false
@@ -445,145 +448,30 @@ function mount(selectedBranch?: string) {
     </QueryClientProvider>
   )
 }
-it('blocks assessment upfront, explains the approval fix and links Super Admins to configuration', async () => {
+it('starts Health directly without an approval banner or native-execution readiness request', async () => {
   state.scanning = false
   state.readinessReason = 'REVIEW_REQUIRED'
-  state.platformAdmin = true
   await mount()
-  const notice = page.getByRole('status', { name: 'Scanning readiness' })
-  await expect.element(notice).toBeVisible()
-  await expect
-    .element(notice.getByText('Repository scanning is blocked'))
-    .toBeVisible()
-  await expect
-    .element(notice.getByText('This is a Preflyt deployment', { exact: false }))
-    .toBeVisible()
-  await expect
-    .element(
-      notice.getByText('Signed approvals and reviewer keys', { exact: false })
-    )
-    .toBeVisible()
-  await expect
-    .element(notice.getByRole('link', { name: 'Open configuration' }))
-    .toHaveAttribute('href', '/organization-settings?tab=configuration')
-  await expect
-    .element(notice.getByRole('link', { name: 'Scanning setup guide' }))
-    .toHaveAttribute(
-      'href',
-      'https://docs.preflytlabs.com/user-guide/native-execution#health-scanning-blocked'
-    )
-  expect(
-    state.fetch.mock.calls.some(([, init]) => init?.method === 'POST')
-  ).toBe(false)
-  await expect
-    .element(
-      page.getByRole('button', { name: 'Scanning blocked', exact: true })
-    )
-    .toBeDisabled()
-})
-
-it.each([
-  ['PREFLIGHT_DISABLED', 'enable Native runtime preflight'],
-  ['REVIEW_REQUIRED', 'Install or renew the signed runtime approval'],
-  ['CONTROLLER_UNAVAILABLE', 'Check the controller service'],
-  [
-    'DISPATCHER_REQUIRED',
-    'enable Native execution in Preflyt and on the controller',
-  ],
-  ['RUNTIME_CONTROLS_CHANGED', 'Restore the approved controls'],
-  ['UNKNOWN_REASON', 'Follow the scanning setup guide'],
-])(
-  'explains %s without sending ordinary users to restricted configuration',
-  async (reason, action) => {
-    state.scanning = false
-    state.readinessReason = reason
-    await mount()
-    const notice = page.getByRole('status', { name: 'Scanning readiness' })
-    await expect
-      .element(notice.getByText(action, { exact: false }))
-      .toBeVisible()
-    await expect
-      .element(notice.getByText('Ask your Preflyt administrator to fix it'))
-      .toBeVisible()
-    await expect
-      .element(notice.getByRole('link', { name: 'Open configuration' }))
-      .not.toBeInTheDocument()
-    await expect
-      .element(page.getByRole('button', { name: 'Reassess', exact: true }))
-      .not.toBeInTheDocument()
-  }
-)
-
-it('does not admit an assessment when readiness fails, and recovers after retry', async () => {
-  state.readinessFailure = true
-  await mount()
-  await expect
-    .element(page.getByText('Scanning readiness is unavailable'))
-    .toBeVisible()
-  await expect
-    .element(page.getByRole('button', { name: 'Check scanning readiness' }))
-    .toBeDisabled()
-  expect(
-    state.fetch.mock.calls.some(([, init]) => init?.method === 'POST')
-  ).toBe(false)
-  state.readinessFailure = false
-  await page.getByRole('button', { name: 'Check again', exact: true }).click()
   await expect
     .element(page.getByRole('button', { name: 'Reassess', exact: true }))
     .toBeEnabled()
   await expect
     .element(page.getByRole('status', { name: 'Scanning readiness' }))
     .not.toBeInTheDocument()
-})
-
-it('checks availability again and prevents a newly blocked scan from silently becoming inspection', async () => {
-  await mount()
   await expect
-    .element(page.getByRole('button', { name: 'Reassess', exact: true }))
-    .toBeEnabled()
-  state.scanning = false
-  state.readinessReason = 'REVIEW_REQUIRED'
+    .element(page.getByRole('link', { name: 'Open configuration' }))
+    .not.toBeInTheDocument()
   await page.getByRole('button', { name: 'Reassess', exact: true }).click()
   await expect
-    .element(page.getByText('Scanning availability changed.', { exact: false }))
-    .toBeVisible()
-  await expect
-    .element(page.getByText('Repository scanning is blocked'))
-    .toBeVisible()
+    .poll(() =>
+      state.fetch.mock.calls.some(([, init]) => init?.method === 'POST')
+    )
+    .toBe(true)
   expect(
-    state.fetch.mock.calls.some(([, init]) => init?.method === 'POST')
+    state.fetch.mock.calls.some(([url]) =>
+      String(url).includes('/native-execution/status')
+    )
   ).toBe(false)
-})
-
-it('rejects malformed ready responses rather than allowing assessment', async () => {
-  state.readinessReason = 'REVIEW_REQUIRED'
-  await mount()
-  await expect
-    .element(page.getByText('Scanning readiness is unavailable'))
-    .toBeVisible()
-  await expect
-    .element(page.getByRole('button', { name: 'Check scanning readiness' }))
-    .toBeDisabled()
-})
-
-it('shows the blocker before report metrics and fits a 320px viewport', async () => {
-  await page.viewport(320, 900)
-  state.scanning = false
-  state.readinessReason = 'REVIEW_REQUIRED'
-  state.platformAdmin = true
-  await mount()
-  await expect
-    .element(page.getByText('Repository scanning is blocked'))
-    .toBeVisible()
-  const notice = document.querySelector('[aria-label="Scanning readiness"]')!
-  const report = document.querySelector(
-    '[aria-label="Repository health summary"]'
-  )!
-  expect(
-    notice.compareDocumentPosition(report) & Node.DOCUMENT_POSITION_FOLLOWING
-  ).toBeTruthy()
-  expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(320)
-  await page.viewport(1280, 800)
 })
 
 it('links findings to their exact Health details page instead of a drawer', async () => {
@@ -643,7 +531,7 @@ it('prevents reassessment against a fallback branch while the persisted target i
   state.fetch.mockImplementation(() => new Promise(() => {}))
   await mount()
   await expect
-    .element(page.getByRole('button', { name: 'Check scanning readiness' }))
+    .element(page.getByRole('button', { name: 'Assess repository' }))
     .toBeDisabled()
   await expect
     .element(page.getByRole('combobox', { name: 'Assessment branch' }))
@@ -1126,3 +1014,22 @@ it('keeps findings and assessment history in separate tabs', async () => {
     .element(page.getByLabelText('Repository findings'))
     .not.toBeInTheDocument()
 })
+
+for (const [stage, label] of [
+  ['FETCHING_SOURCE', 'Fetching repository files'],
+  ['SCANNING', 'Scanning repository files'],
+  ['VERIFYING_RESULTS', 'Verifying scan results'],
+]) {
+  it(`shows visible progress for ${stage} before report metrics`, async () => {
+    state.state = 'RUNNING'
+    state.progress = stage
+    await mount()
+    await expect
+      .element(page.getByRole('status', { name: 'Assessment progress' }))
+      .toBeVisible()
+    await expect.element(page.getByText(label, { exact: true })).toBeVisible()
+    await expect
+      .element(page.getByRole('link', { name: 'View security findings' }))
+      .not.toBeInTheDocument()
+  })
+}
