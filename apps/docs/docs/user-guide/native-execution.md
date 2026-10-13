@@ -39,6 +39,25 @@ Native onboarding is an advanced operator task, not a single enable switch:
 
 The [operator runbook](https://github.com/lyrisoft/preflyt/blob/development/docs/operations/native-execution.md) and [runner deployment files](https://github.com/lyrisoft/preflyt/tree/development/docs/deployment/native-runner) contain the exact signed schemas, Docker/Kubernetes overrides and credential contracts. These source links require access to the private Preflyt repository. Arrange that access with Lyrisoft before attempting native setup; this page is not a complete standalone production installer.
 
+## Health scanning blocked
+
+Repository Health checks scanning readiness before enabling an assessment action. A warning above the report shows the current blocker, who can resolve it and links to setup. While scanning is blocked or readiness cannot be checked, the assessment action stays disabled until **Check again** confirms readiness. Existing reports remain readable. Initial repository selection can still save an inspection-only report: it does not run analyzers or provide finding counts when the runtime is unavailable.
+
+The **deployment operator** configures the controller and signed trust material. A **local Super Admin** can open **Settings → Configuration**, select **Native execution**, and manage the two enablement switches. Workspace Owners and Admins do not automatically have platform configuration access. Ask your Preflyt administrator to coordinate with the operator; changing a branch policy does not repair this runtime.
+
+Runtime verification is a Preflyt installation responsibility, not an additional repository-consent process. Connecting GitHub, selecting the repository and having the required Preflyt permission authorize repository access and the assessment request. Users do not approve each scan. The current deployment prerequisite is a setup limitation, not the intended repository onboarding experience.
+
+| Blocker | Where and how to fix it |
+| --- | --- |
+| Environment verification disabled | Complete [Operator setup](#operator-setup), then enable **Native runtime preflight** in Settings → Configuration → Native execution. |
+| Signed approval missing or invalid | In the API, worker and controller deployment configuration, install the matching signed `NATIVE_RUNTIME_APPROVAL` (Kubernetes) or `NATIVE_DOCKER_APPROVAL` (Docker) and `NATIVE_RUNTIME_REVIEW_KEYS`. Verify the approval covers the workspace, selected backend, deployed controls and current expiry. Obtain a new independent review if it expired or the deployment changed. |
+| Controller cannot be verified | Check the dedicated controller is running and its HTTPS origin matches the approval. Check connectivity and the shared `NATIVE_CONTROLLER_API_KEY`. Use the operator logs for the precise connection or signature failure; do not bypass verification. |
+| Execution disabled | After runtime and scanner-image review, enable **Native execution** in Settings → Configuration → Native execution and on the controller. Preflight success alone does not enable scans. |
+| Controls changed | Restore the reviewed isolation, networking and resource controls, or obtain and deploy a new signed review. |
+| Readiness request failed | Check Preflyt API connectivity and repository read permission. Retry **Check again**; if it still fails, the deployment operator should inspect API/controller logs. |
+
+Signed approvals, reviewer keys, controller credentials and tool inventories are deployment settings, not fields that repository users can create in the app. Follow the [configuration reference](../self-hosting/configuration.md#native-execution) and the operator runbook linked above. Recreate API, worker and controller services after changing their environment, then return to Health and select **Check again**. When readiness succeeds, the assessment action becomes available. Each analyzer still requires its reviewed image and supported scope; runtime readiness does not guarantee complete coverage.
+
 ## Use it in Preflyt
 
 1. Select and inspect the repository, and save its standards. Native requests use the **recorded commit and selection**, not an arbitrary branch tip.

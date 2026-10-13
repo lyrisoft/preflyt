@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import {
   ChevronLeft,
@@ -48,6 +48,7 @@ import { ResultTimestamp } from '@/components/result-timestamp'
 import { StatusBadge } from '@/components/status-badge'
 import { SurfaceIcon } from '@/components/surface-icon'
 import { BranchPicker } from '@/features/repositories/branch-picker'
+import { nativeStatusOptions } from '@/features/repositories/native-execution-api'
 import { useNavigationSession } from '@/features/workspace/navigation-session'
 import { canPerform } from '@/features/workspace/scoped-access'
 import { AnalysisCoverage } from './analysis-coverage'
@@ -64,6 +65,7 @@ import { healthDimensionValues } from './health-dimensions'
 import { HealthHelp } from './health-help'
 import { HealthPolicyEvidence } from './health-policy-evidence'
 import { HealthTimelineChart } from './health-timeline-chart'
+import { ScanningReadiness } from './scanning-readiness'
 
 const pageSize = 10
 
@@ -129,18 +131,30 @@ export function RepositoryHealth({
       ? checked?.checkedAt
       : data?.checkedAt
   const allowed = canPerform(session.data, 'execution.run', repositoryId)
+  const readinessOptions = nativeStatusOptions(session.data, repositoryId)
+  const readiness = useQuery(readinessOptions)
+  const scanningAvailable =
+    !readiness.isError && readiness.data?.executionAvailable === true
   const refresh = async () => {
     await cache.invalidateQueries({ queryKey: ['repository-health'] })
     await cache.invalidateQueries({ queryKey: ['health-portfolio'] })
     await cache.invalidateQueries({ queryKey: ['health-freshness'] })
   }
   const start = useMutation({
-    mutationFn: (value: string) =>
-      healthRequest<HealthAssessment>(
+    mutationFn: async (value: string) => {
+      // Re-check before admission. A newly blocked scan must not silently turn
+      // into an inspection after the user selected an assessment action.
+      const current = await cache.fetchQuery(readinessOptions)
+      if (!current.executionAvailable)
+        throw new Error(
+          'Scanning availability changed. Review the updated notice and choose the action again.'
+        )
+      return healthRequest<HealthAssessment>(
         `repositories/${repositoryId}/health`,
         undefined,
         { branch: value, requestKey: crypto.randomUUID() }
-      ),
+      )
+    },
     onSuccess: async () => {
       setSelectedReport(undefined)
       setPage(1)
@@ -226,6 +240,13 @@ export function RepositoryHealth({
     : []
   return (
     <div className='space-y-5'>
+      <ScanningReadiness
+        status={readiness.isError ? undefined : readiness.data}
+        pending={readiness.isFetching || readiness.isPending}
+        error={readiness.isError}
+        platformAdmin={session.data?.platformAdmin === true}
+        refresh={() => void readiness.refetch()}
+      />
       <Card
         className='gap-0 overflow-hidden py-0'
         aria-label='Repository health summary'
@@ -266,6 +287,11 @@ export function RepositoryHealth({
                     query.isPending ||
                     query.isError ||
                     freshnessDenied ||
+                    readiness.isPending ||
+                    readiness.isFetching ||
+                    readiness.isError ||
+                    !readiness.data ||
+                    !scanningAvailable ||
                     start.isPending ||
                     (active && chosenBranch === row.branch)
                   }
@@ -278,9 +304,15 @@ export function RepositoryHealth({
                   )}
                   {start.isPending
                     ? 'Queuing…'
-                    : row
-                      ? 'Reassess'
-                      : 'Assess repository'}
+                    : readiness.isPending ||
+                        readiness.isError ||
+                        !readiness.data
+                      ? 'Check scanning readiness'
+                      : !scanningAvailable
+                        ? 'Scanning blocked'
+                        : row
+                          ? 'Reassess'
+                          : 'Assess repository'}
                 </Button>
               </>
             )}

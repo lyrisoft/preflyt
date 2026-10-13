@@ -3,6 +3,8 @@ export type StatusTone = 'success' | 'warning' | 'error' | 'info' | 'neutral'
 /** Shared semantics take precedence over caller tone for recognized status labels. */
 export const statusTones: Readonly<Record<string, StatusTone>> = {
   'freshness unverified': 'neutral',
+  'scanning blocked': 'warning',
+  'readiness unverified': 'warning',
   healthy: 'success',
   critical: 'error',
   high: 'error',

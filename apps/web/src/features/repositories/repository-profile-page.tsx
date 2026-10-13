@@ -458,7 +458,7 @@ export function RepositoryProfilePage() {
                     </div>
                     <p className='text-xs text-muted-foreground'>
                       {tab === 'health'
-                        ? 'Reassess to analyze the selected branch.'
+                        ? 'Open Health to inspect or analyze the selected branch.'
                         : 'Refresh profile to inspect the selected branch.'}
                     </p>
                   </div>
