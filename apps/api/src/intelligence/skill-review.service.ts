@@ -688,15 +688,31 @@ export class SkillReviewService {
     );
     if (!sameReviewPr(expected, live.context)) throw new Error("PR changed");
   }
-  /** Durable PR observations come from signed webhook processing. Claims rotate fairly and retry admission failures once per minute. */
-  async dispatchAutomatic() {
+  /** A verified submission wakes only its own PR; normal admission checks still apply. */
+  async dispatchVerifiedPipeline(submissionId: string) {
+    const submission = await this.db.pipelineRunSubmission.findUnique({ where: { id: submissionId } });
+    if (!submission || submission.state !== 'COMPLETE' || !submission.assessmentId) return;
+    await this.dispatchAutomatic({
+      repositoryId: submission.repositoryId, number: submission.prNumber,
+      sourceSha: submission.sourceSha, policyId: submission.policyId,
+      policyHash: submission.policyHash, assessmentId: submission.assessmentId,
+    });
+  }
+  /** Signed observations use periodic recovery; newly verified runs bypass only its admission cooldown. */
+  async dispatchAutomatic(verified?: {
+    repositoryId: string; number: number; sourceSha: string;
+    policyId: string; policyHash: string; assessmentId: string;
+  }) {
     if (!skillReviewsEnabled() || !this.github || this.closing) return;
     const pr = await this.db.repositoryPullRequest.findFirst({
       where: {
-        OR: [
+        ...(verified ? {
+          repositoryId: verified.repositoryId, number: verified.number,
+          context: { path: ['head', 'sha'], equals: verified.sourceSha },
+        } : { OR: [
           { aiReviewAttemptAt: null },
           { aiReviewAttemptAt: { lt: new Date(Date.now() - 60000) } },
-        ],
+        ] }),
         repository: {
           selected: true,
           available: true,
@@ -750,6 +766,8 @@ export class SkillReviewService {
     const config = pr.repository.readinessAutomation;
     const scoped = config?.aiReviews === true;
     if (!route?.enabled || (!scoped && !route.automaticReviews) || !policy || (scoped && !route.allowSource)) return;
+    if (verified && (!scoped || policy.id !== verified.policyId || policy.definitionHash !== verified.policyHash ||
+      context.head.sha !== verified.sourceSha)) return;
     // The pipeline supplies the exact PR assessment. Enabling reviews never sends
     // historic PR code: only verified runs submitted after this authorization.
     // Upgrade an already enabled preference using its original, audited consent.
@@ -767,6 +785,7 @@ export class SkillReviewService {
       assessmentId: { not: null }, createdAt: { gte: authorizationAt! },
     }, orderBy: { createdAt: "desc" } }) : null;
     if (scoped && !run) return;
+    if (verified && run?.assessmentId !== verified.assessmentId) return;
     let assessment = await this.db.commitAssessment.findFirst({
       where: {
         repositoryId: pr.repositoryId,

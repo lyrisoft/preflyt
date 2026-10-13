@@ -157,7 +157,8 @@ async function start() {
   let driftRun: Promise<void> | undefined
   const automation = new ReadinessAutomationService(prisma, emailAuthorization, githubProvider, assessments, checks, exceptions)
   let automationRun: Promise<void> | undefined
-  const pipeline = new PipelineProcessingService(prisma, emailAuthorization, githubProvider, assessments)
+  const pipeline = new PipelineProcessingService(prisma, emailAuthorization, githubProvider, assessments,
+    submissionId => aiReviews.dispatchVerifiedPipeline(submissionId))
   let pipelineRun: Promise<void> | undefined
   let lastWarning = 0
   const warn = () => {

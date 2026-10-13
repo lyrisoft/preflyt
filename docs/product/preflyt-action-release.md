@@ -2,7 +2,7 @@
 
 The Action source is maintained only in [lyrisoft/preflyt-action](https://github.com/lyrisoft/preflyt-action)
 and distributed through [GitHub Marketplace](https://github.com/marketplace/actions/preflyt-policy-check).
-Version v2.1.0 pins commit ffd33c5e44efb2f4d69d07aea3e471505046a05f. MIT applies to the public Action only;
+Version v2.1.1 resolves to release commit f05b72de4b4f80877bea619e520302f3379f6ba4. MIT applies to the public Action only;
 the Preflyt application remains separately licensed. No runtime copy is bundled
 with the application or API Docker image.
 
@@ -18,7 +18,7 @@ reports and optional signatures remain supported; AI findings remain advisory.
 
 Published to GitHub Marketplace on 12 October 2026 after hosted unit and real scanner CI passed (run 38313820497). The API exports execution version 1 from the approved immutable policy. The workflow has no explicit checks/report mappings; remove the former `checks` input when upgrading. New checks apply after publishing a new branch-policy revision.
 
-Built-in Semgrep, Gitleaks and Trivy recipes provision reviewed images, with read-only source, no OIDC/GitHub credentials or Docker socket, and bounded actual SARIF. Project dependencies remain in the workflow; custom commands and reports are configured in Standards. Missing execution remains incomplete. Both check and gate jobs use the same immutable Action pin.
+Built-in Semgrep, Gitleaks and Trivy recipes provision reviewed images, with read-only source, no OIDC/GitHub credentials or Docker socket, and bounded actual SARIF. Project dependencies remain in the workflow; custom commands and reports are configured in Standards. Missing execution remains incomplete. Both check and gate jobs use the same exact Action release version.
 
 Local validation passed for clean/failing/missing-command policies, unsafe paths, credential stripping, genuine scanner output and the actual API manifest executed in the separate Action checkout. Release tag v2.0.0 and existing tags remain immutable. The Action source PR is [#1](https://github.com/lyrisoft/preflyt-action/pull/1); publication does not merge it into the default branch. Marketplace currently renders the default-branch README, so that description updates when the reviewed source change reaches main.
 
@@ -52,12 +52,32 @@ zero diagnostics under the owned rules. See
 [the acceptance record](../acceptance/2026-10-13-sast-and-check-attribution.md)
 for exact scope, exceptions, tests and attribution behavior.
 
+## v2.1.1 gate progress and immediate review admission
+
+Published to Marketplace on 13 October 2026 at commit
+`f05b72de4b4f80877bea619e520302f3379f6ba4`, before the companion Preflyt push.
+Hosted unit and real pinned-scanner jobs passed (runs 38444073543 and 38444063044).
+
+The final gate logs each waiting stage immediately and emits a heartbeat every
+30 seconds: check jobs, report submission, report verification, GitHub publication,
+AI review and AI feedback publication. Failure output uses safe local reasons or
+HTTP status codes, without raw API bodies, exceptions, provider responses or tokens.
+The existing fifteen-minute timeout and fail-closed enforcement remain unchanged.
+Older APIs without stages remain compatible.
+
+Verified submission completion now requests the configured automatic review for
+that exact repository, PR, commit, policy and assessment, without waiting for the
+one-minute admission retry. Existing access, source consent, repository enablement,
+rate limits and idempotency still apply. The review worker normally picks up queued
+work on its five-second tick; queue load and publication can still add time.
+The periodic dispatcher remains a recovery path if immediate admission fails.
+
 ## Release procedure
 
 1. Develop and test only in the public Action repository; do not copy private app source or history.
 2. Run Python tests and the public repository CI before publishing an immutable version tag.
 3. Publish the version through the GitHub Marketplace release editor. Never move a released tag.
-4. Update pipeline-action.ts and product workflow pins to that published commit. Update the bundled
+4. Update pipeline-action.ts and product workflows to that exact published version tag. Update the bundled
    workflow editing skill and increment its version when instructions change.
 5. Test check/gate modes in one PR workflow with automatic results and the configured AI model.
 

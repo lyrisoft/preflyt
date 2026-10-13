@@ -51,6 +51,7 @@ export class PipelineProcessingService {
     private readonly access: AuthorizationService,
     private readonly github: GitHubProviderService,
     private readonly assessments: AssessmentService,
+    private readonly onVerified?: (submissionId: string) => Promise<void>,
   ) {
     this.publications = new CheckPublicationService(
       prisma,
@@ -441,12 +442,13 @@ export class PipelineProcessingService {
             { timeout: 120000 },
           );
         }
-        await finish({
+        const completed = await finish({
           state: "COMPLETE",
           assessmentId: saved.assessment.id,
           commentUrl,
           failureCode: proofIncomplete && preview.status !== "PASS" ? "EXECUTION_PROOF_INCOMPLETE" : null,
         });
+        if (!completed.count) continue;
         await this.prisma.auditEvent.createMany({
           data: [
             {
@@ -465,6 +467,14 @@ export class PipelineProcessingService {
           ],
           skipDuplicates: true,
         });
+        // Dispatch is optional and independently recoverable. Its failure must
+        // never turn an already verified submission back into pending evidence.
+        try { await this.onVerified?.(row.id); } catch {
+          await this.prisma.auditEvent.createMany({ data: [{
+            id: `pipeline-ai-dispatch:${row.id}`, event: 'ai.review.pipeline_dispatch_unavailable',
+            actorId: row.submittedById, metadata: { submissionId: row.id },
+          }], skipDuplicates: true }).catch(() => undefined);
+        }
       } catch {
         await finish({
           state: row.attempts >= 11 ? "FAILED" : "PENDING",

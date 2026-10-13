@@ -35,14 +35,14 @@ Use this skill when drafting or modifying a repository workflow for a Preflyt po
 - Keep at most 10 executable reports per policy under the current intake contract. JUnit test/build and SARIF scan reports must come from the actual command at the assessed commit.
 
 ## Add the Preflyt Action
-- Add or update exactly one uses: lyrisoft/preflyt-action@ffd33c5e44efb2f4d69d07aea3e471505046a05f step after dependency installation in the compatible job. Preserve any existing proofs input.
+- Add or update exactly one uses: lyrisoft/preflyt-action@v2.1.1 step after dependency installation in the compatible job. Preserve any existing proofs input.
 - Restrict its condition to always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository. Do not execute untrusted PR code under pull_request_target or a privileged workflow_run context.
 - Set with.api-url to the supplied apiUrl or the existing Preflyt step's value. Never invent an endpoint or credentials. Explain a missing or unreachable public HTTPS endpoint in the summary.
 - Set only with.api-url and, if needed, job-name. Remove the legacy checks input when upgrading. Preserve optional proofs; do not recreate explicit report mappings.
 - Do not add continue-on-error to the policy step, swallow failures with || true, waive required checks, change branch rules or assert that proof verification is configured. A YAML draft does not prove execution, passing checks, publication or merge protection.
 
 ## Chain the final gate
-- Add one terminal job named Preflyt final gate in this same PR workflow, with needs covering every other job, if: always() && !cancelled() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository, contents: read and id-token: write. Its only Action step uses the same pinned Preflyt release with mode: gate and the same api-url. Do not add workflow_run or a separate publication workflow. Keep documentation workflows separate.
+- Add one terminal job named Preflyt final gate in this same PR workflow, with needs covering every other job, if: always() && !cancelled() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository, contents: read and id-token: write. Its only Action step uses the same exact Preflyt release version with mode: gate and the same api-url. Do not add workflow_run or a separate publication workflow. Keep documentation workflows separate.
 
 ## Review and return
 - Check YAML indentation, expression syntax, report paths, permissions and step placement. Keep secrets as GitHub secret references; never return literal tokens, private keys or provider credentials. Do not interpolate untrusted PR titles or comments into shell commands.

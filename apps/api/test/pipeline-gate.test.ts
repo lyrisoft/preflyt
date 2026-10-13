@@ -17,6 +17,17 @@ vi.mock("../src/assessments/pipeline-identity.js", () => ({
   pipelineIdentity: mocks.identity,
 }));
 describe("final publication gate", () => {
+  it('distinguishes execution verification, publication, AI processing and feedback without changing outcomes', () => {
+    expect(publicationGateResult({ state: 'PROCESSING' }, null)).toMatchObject({ state: 'PENDING', stage: 'RESULT_VERIFICATION' })
+    expect(publicationGateResult({ state: 'COMPLETE' }, null)).toMatchObject({ state: 'PENDING', stage: 'GITHUB_PUBLICATION' })
+    expect(publicationGateResult({ state: 'STALE' }, null)).toMatchObject({ state: 'FAILED', stage: 'CONTEXT_CHANGED' })
+    const checks = [{ id: 'review' }], snapshot = { checks }
+    expect(pipelineAiResult(checks, [])).toMatchObject({ state: 'PENDING', stage: 'AI_REVIEW' })
+    expect(pipelineAiResult(checks, [{ snapshot, state: 'RUNNING', feedbackState: 'NOT_REQUESTED' }])).toMatchObject({ stage: 'AI_REVIEW' })
+    expect(pipelineAiResult(checks, [{ snapshot, state: 'SUCCEEDED', feedbackState: 'RETRY' }])).toMatchObject({ state: 'PENDING', stage: 'AI_PUBLICATION' })
+    expect(pipelineAiResult(checks, [{ snapshot, state: 'SUCCEEDED', feedbackState: 'FAILED' }])).toMatchObject({ state: 'FAILED', stage: 'AI_PUBLICATION_FAILED' })
+    expect(pipelineAiResult(checks, [{ snapshot, state: 'SUCCEEDED', feedbackState: 'PUBLISHED' }])).toMatchObject({ state: 'PASSED', stage: 'COMPLETE' })
+  })
   it("passes only a verified published success; missing, failed and stale results fail closed", () => {
     expect(publicationGateResult({ state: "PENDING" }, null).state).toBe(
       "PENDING",
