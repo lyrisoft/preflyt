@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { signInProviderHref, signInReturnPath } from './return-path'
 import { SignInLayout } from './sign-in-layout'
 
 export function SuperAdminLogin() {
@@ -62,12 +63,7 @@ export function SuperAdminLogin() {
         )
       }
 
-      const destination = new URL(redirect || '/', window.location.origin)
-      const nextPath =
-        destination.origin === window.location.origin
-          ? `${destination.pathname}${destination.search}${destination.hash}`
-          : '/'
-      await navigate({ to: nextPath, replace: true })
+      await navigate({ to: signInReturnPath(redirect), replace: true })
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -194,7 +190,7 @@ export function SuperAdminLogin() {
           )}
           <div className='mt-6 border-t pt-5'>
             <a
-              href='/sign-in'
+              href={signInProviderHref('', '/sign-in', redirect)}
               className='inline-flex min-h-8 items-center rounded-sm text-xs font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring'
             >
               Back to organization sign-in

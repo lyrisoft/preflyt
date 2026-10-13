@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { RefreshCw, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { PageHelpDrawer } from '@/components/page-help-drawer'
+import { ResultTimestamp } from '@/components/result-timestamp'
 import { StatusBadge } from '@/components/status-badge'
 import { useNavigationSession } from '../workspace/navigation-session'
 import { governanceRequest } from './governance-api'
@@ -132,7 +133,7 @@ export function NativeExecutionStatus({
       {data && <NativeCheckPlan repositoryId={repositoryId} />}
       {data && (
         <p className='mt-3 text-xs text-muted-foreground'>
-          Checked {new Date(data.checkedAt).toLocaleString()}
+          Checked <ResultTimestamp value={data.checkedAt} />
         </p>
       )}
     </section>

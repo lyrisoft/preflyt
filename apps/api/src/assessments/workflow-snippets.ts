@@ -64,12 +64,7 @@ export function workflowSnippet(
   apiUrl = publicPipelineUrl(),
 ) {
   const unique = [...new Map(rules.map((r) => [r.id, r])).values()];
-  const checks = Object.fromEntries(
-    unique.flatMap((r) => {
-      const execution = checkExecution(r);
-      return execution ? [[r.id, execution]] : [];
-    }),
-  );
+  const executable = unique.filter(r => checkReportFormat(r.id));
   const notes: string[] = [];
   const unsupported = unique.filter(
     (r) =>
@@ -85,7 +80,7 @@ export function workflowSnippet(
   );
   if (custom.length)
     notes.push(
-      `Generate the named report in an earlier step, or add a workflow command to: ${custom.map((r) => r.title).join(", ")}.`,
+      `Configure a Workflow command and Result file in this standard for: ${custom.map((r) => r.title).join(", ")}. Unconfigured checks remain incomplete.`,
     );
   if (unique.some((r) => r.id === "containers.scan" && !r.workflowCommand))
     notes.push(
@@ -95,7 +90,7 @@ export function workflowSnippet(
     notes.push(
       "A deployment administrator must set the public Preflyt API URL once in Settings → Configuration.",
     );
-  if (Object.keys(checks).length > 10)
+  if (executable.length > 10)
     notes.push(
       "This policy exceeds the current limit of 10 execution reports per workflow run.",
     );
@@ -105,11 +100,11 @@ export function workflowSnippet(
     uses: policyAction,
     with: {
       "api-url": apiUrl ?? "<PUBLIC_PREFLYT_API_URL>",
-      checks: JSON.stringify(checks, null, 2),
     },
   };
   const snippet =
-    '# Add these jobs to your PR workflow. Install project dependencies before the Preflyt step.\n' +
+    '# Install once. Each run fetches the published target-branch policy and executes its checks.\n' +
+    '# Supported scanner images are provisioned automatically. Configure project commands in Standards.\n' +
     '# If reusing existing jobs, keep their steps and make preflyt_gate depend on every check job.\n' +
     stringify({ jobs: { preflyt_checks: { 'runs-on': 'ubuntu-latest',
       permissions: { contents: 'read', 'id-token': 'write' }, steps: [
@@ -119,7 +114,8 @@ export function workflowSnippet(
   return {
     snippet,
     notes,
-    ready: !!apiUrl && Object.keys(checks).length <= 10,
-    checkIds: Object.keys(checks),
+    ready: !!apiUrl && executable.length <= 10,
+    checkIds: executable.map(r => r.id),
+    execution: 'policy' as const,
   };
 }

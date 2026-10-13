@@ -206,6 +206,13 @@ export function validateRuleEvidence(
         report.findings === 0 &&
         !report.reasons.includes('REPORT_COVERAGE_INCOMPLETE'))
   const githubExecution = report?.githubExecutions?.find(e => e.ruleId === ruleId)
+  const githubReportResult = githubExecution && report?.integrity === 'VALID'
+    ? report.reportedResult === 'REPORTED_FAILURE' &&
+      !report.reasons.includes('REPORT_COVERAGE_INCOMPLETE') &&
+      (expectedFormat === 'junit' ? (report.executedTests ?? 0) >= 1 : !!report.tools?.length)
+      ? 'failed'
+      : report.reportedResult === 'REPORTED_SUCCESS' ? 'passed' : 'incomplete'
+    : null
   const githubExecuted = !!githubExecution && report?.integrity === 'VALID' &&
     report.reportedResult === 'REPORTED_SUCCESS' &&
     (expectedFormat === 'junit' ? (report.executedTests ?? 0) >= 1 : report.findings === 0 &&
@@ -237,7 +244,7 @@ export function validateRuleEvidence(
         : 'INCOMPLETE',
     trustedExecuted: trusted && !reasons.size,
     executionContractDigest: signedExecution ? contracts!.digest : null,
-    ...(githubExecuted ? { githubExecution } : {}),
+    ...(githubReportResult ? { githubExecution, githubReportResult } : {}),
     sourceApproved,
     observationIntegrity: observation?.observationIntegrity ?? null,
     expectedFormat,

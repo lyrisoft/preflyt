@@ -19,6 +19,7 @@ import { currentStandards } from "../standards/policy-standards.js";
 import { digest } from "./assessment-digest.js";
 import { checkReportFormat } from "./check-report-adapters.js";
 import { normalizePipelineSubmission } from "./pipeline-submission.js";
+import { policyExecution, POLICY_EXECUTION_VERSION } from './policy-execution.js';
 
 const numeric = (value: unknown): value is string =>
   typeof value === "string" &&
@@ -156,6 +157,8 @@ export class PipelinePolicyController {
         required: boolean;
         capability: string;
         thresholds: unknown;
+        workflowCommand?: string;
+        reportPath?: string;
       }[];
     };
     if (
@@ -187,6 +190,7 @@ export class PipelinePolicyController {
     const exported = {
       signerWorkflow,
       schemaVersion: 1,
+      executionVersion: POLICY_EXECUTION_VERSION,
       id: policy.id,
       definitionHash: policy.definitionHash,
       repositoryId: claims.repository_id,
@@ -203,6 +207,7 @@ export class PipelinePolicyController {
         capability: rule.capability,
         thresholds: rule.thresholds,
         format: checkReportFormat(rule.id) ?? null,
+        execution: policyExecution(rule),
       })),
     };
     return { repo, config, session, run, claims, policy, exported };

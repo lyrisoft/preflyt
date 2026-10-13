@@ -27,8 +27,8 @@ const tones = [
   'bg-emerald-500/65',
   'bg-emerald-500',
 ]
-const dateLabel = (date: string) =>
-  new Intl.DateTimeFormat(undefined, {
+const dateLabel = (date: string, locale?: string) =>
+  new Intl.DateTimeFormat(locale, {
     dateStyle: 'medium',
     timeZone: 'UTC',
   }).format(new Date(`${date}T00:00:00Z`))
@@ -37,9 +37,11 @@ export function ActivityHeatmap({
   from,
   to,
   activity,
+  locale,
 }: {
   from: string
   to: string
+  locale?: string
   activity: ActivityDay[]
 }) {
   const weeks = activityWeeks(from, to, activity)
@@ -53,7 +55,7 @@ export function ActivityHeatmap({
           <CardTitle>Assessment activity</CardTitle>
           <CardDescription>
             {total.toLocaleString()} assessment{total === 1 ? '' : 's'} recorded
-            · {dateLabel(from)}–{dateLabel(to)}
+            · {dateLabel(from, locale)}–{dateLabel(to, locale)}
           </CardDescription>
         </div>
       </CardHeader>
@@ -88,7 +90,7 @@ export function ActivityHeatmap({
                     className='h-4 text-[10px] text-muted-foreground'
                   >
                     {first
-                      ? new Intl.DateTimeFormat(undefined, {
+                      ? new Intl.DateTimeFormat(locale, {
                           month: 'short',
                           timeZone: 'UTC',
                         }).format(new Date(`${first.date}T00:00:00Z`))
@@ -101,7 +103,7 @@ export function ActivityHeatmap({
                           <button
                             type='button'
                             onClick={() => setSelected(day)}
-                            aria-label={`${dateLabel(day.date)}: ${day.count} saved assessments`}
+                            aria-label={`${dateLabel(day.date, locale)}: ${day.count} saved assessments`}
                             aria-pressed={selected?.date === day.date}
                             className={cn(
                               'size-6 rounded-[3px] chart-cell-motion outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring',
@@ -112,7 +114,7 @@ export function ActivityHeatmap({
                           />
                         </TooltipTrigger>
                         <TooltipContent className='motion-reduce:animate-none motion-reduce:transition-none'>
-                          {dateLabel(day.date)} · {day.count} assessment
+                          {dateLabel(day.date, locale)} · {day.count} assessment
                           {day.count === 1 ? '' : 's'}
                         </TooltipContent>
                       </Tooltip>
@@ -128,7 +130,7 @@ export function ActivityHeatmap({
         <div className='mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground'>
           <p role='status'>
             {selected
-              ? `${dateLabel(selected.date)}: ${selected.count} assessments`
+              ? `${dateLabel(selected.date, locale)}: ${selected.count} assessments`
               : 'Select a day to inspect activity. Dates use UTC.'}
           </p>
           <div

@@ -75,21 +75,11 @@
     "license": "LGPL-2.1-only",
     "format": "sarif",
     "command": [
-      "/usr/local/bin/semgrep"
+      "/usr/local/bin/node"
     ],
     "args": [
-      "scan",
-      "--config",
-      "/opt/preflyt/config/semgrep.yaml",
-      "--metrics",
-      "off",
-      "--disable-version-check",
-      "--no-git-ignore",
-      "--sarif",
-      "--output",
-      "/reports/report.sarif",
-      "--error",
-      "/workspace"
+      "/opt/preflyt/semgrep-measure.mjs",
+      "security.sast"
     ]
   },
   "iac.policy": {
@@ -143,6 +133,70 @@
       "/reports/report.sarif",
       "--error",
       "/workspace"
+    ]
+  },
+  "quality.reliability": {
+    "id": "semgrep-reliability-v1",
+    "tool": "Semgrep CE",
+    "license": "LGPL-2.1-only",
+    "format": "sarif",
+    "command": [
+      "/usr/local/bin/node"
+    ],
+    "args": [
+      "/opt/preflyt/semgrep-measure.mjs",
+      "quality.reliability"
+    ]
+  },
+  "quality.maintainability": {
+    "id": "semgrep-maintainability-v1",
+    "tool": "Semgrep CE",
+    "license": "LGPL-2.1-only",
+    "format": "sarif",
+    "command": [
+      "/usr/local/bin/node"
+    ],
+    "args": [
+      "/opt/preflyt/semgrep-measure.mjs",
+      "quality.maintainability"
+    ]
+  },
+  "quality.duplication": {
+    "id": "jscpd-unique-lines-v1",
+    "tool": "jscpd",
+    "license": "MIT",
+    "format": "sarif",
+    "command": [
+      "/usr/local/bin/node"
+    ],
+    "args": [
+      "/opt/preflyt/duplication/scan.mjs"
+    ]
+  },
+  "security.hotspots": {
+    "id": "semgrep-hotspots-v1",
+    "tool": "Semgrep CE",
+    "license": "LGPL-2.1-only",
+    "format": "sarif",
+    "command": [
+      "/usr/local/bin/node"
+    ],
+    "args": [
+      "/opt/preflyt/semgrep-measure.mjs",
+      "security.hotspots"
+    ]
+  },
+  "tests.coverage": {
+    "id": "node-event-coverage-v1",
+    "tool": "Node.js",
+    "license": "MIT",
+    "format": "sarif",
+    "command": [
+      "/usr/local/bin/node"
+    ],
+    "args": [
+      "--experimental-test-coverage",
+      "/opt/preflyt/coverage/run.mjs"
     ]
   }
 }

@@ -1,3 +1,7 @@
+import { validFileAnalysis, fileAnalysisRules, type FileAnalysis } from '../health/health-file-analysis.js'
+import { validDuplicationMeasurement, validCoverageMeasurement, type HealthMeasurement } from '../health/health-measurements.js'
+import { validHealthFindings } from '../health/health-findings.js'
+import type { ReportFinding } from '../findings/normalize-report-findings.js'
 import { createPrivateKey, createPublicKey, sign, verify } from 'node:crypto'
 import { digest } from '../assessments/assessment-digest.js'
 import {
@@ -31,6 +35,9 @@ export type NativeReceiptCheck = NativeCheckOutcome & {
   exitCode: number | null
   cleanupConfirmed: boolean
   coverage: 'FULL_RULE' | 'PARTIAL'
+  findings?: ReportFinding[]
+  fileAnalysis?: FileAnalysis
+  measurement?: HealthMeasurement
 }
 export type NativeReceipt = NativeReceiptScope & {
   version: 1
@@ -64,7 +71,7 @@ const counters = new Set([
   'unknown',
   'suppressed',
 ])
-/** Never sign scanner messages, paths, source snippets or raw logs. */
+/** Counters only; health findings use a separate bounded, redacted projection. Never sign source or logs. */
 export function nativeReceiptSummary(value: Record<string, unknown> | null) {
   if (!value) return null
   return Object.fromEntries(
@@ -229,7 +236,13 @@ export function verifyNativeReceipt(
           'exitCode',
           'cleanupConfirmed',
           'coverage',
+          ...('findings' in check ? ['findings'] : []),
+          ...('measurement' in check ? ['measurement'] : []),
+          ...('fileAnalysis' in check ? ['fileAnalysis'] : []),
         ]) ||
+        ('fileAnalysis' in check && (!value.selectionId.startsWith('health:') || !fileAnalysisRules.includes(check.ruleId) || !validFileAnalysis(check.fileAnalysis))) ||
+        ('measurement' in check && (!value.selectionId.startsWith('health:') || !(check.ruleId === 'quality.duplication' ? validDuplicationMeasurement(check.measurement) : check.ruleId === 'tests.coverage' ? validCoverageMeasurement(check.measurement) : false))) ||
+        ('findings' in check && (!value.selectionId.startsWith('health:') || !validHealthFindings(check.findings) || check.findings.some((finding: { category: string }) => finding.category !== (check.ruleId === 'quality.reliability' ? 'reliability' : check.ruleId === 'quality.maintainability' ? 'maintainability' : check.ruleId === 'quality.duplication' ? 'duplication' : check.ruleId === 'security.hotspots' ? 'hotspot' : 'security')))) ||
         !adapter ||
         !tool ||
         !step ||
@@ -271,6 +284,8 @@ export function verifyNativeReceipt(
         )
       )
         return null
+      if (check.ruleId === 'quality.duplication' && check.state !== 'INCOMPLETE' && (!validDuplicationMeasurement(check.measurement) || check.measurement.analyzedLines === 0 || check.measurement.analyzedFiles === 0 || (check.state === 'PASS' ? check.measurement.clonePairs !== 0 : check.measurement.clonePairs === 0))) return null
+      if(check.ruleId==='tests.coverage' && check.state!=='INCOMPLETE' && (check.state!=='PASS'||!validCoverageMeasurement(check.measurement))) return null
       // A signed success still requires execution, complete coverage and confirmed cleanup.
       if (check.state !== 'INCOMPLETE') {
         if (

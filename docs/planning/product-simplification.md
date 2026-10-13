@@ -7,7 +7,7 @@ Date: 2026-10-10
 
 Know what needs fixing before merge, and apply engineering standards consistently across repositories.
 
-This plan governs page content, information hierarchy and everyday workflows. Preserve the familiar grouped sidebar and its direct links; the five-destination consolidation was rejected because it made tools harder to find. It does not rename or reorder delivery phases P0–P11, remove capabilities, change authorization, or imply that pending phase acceptance is complete. The friction audit remains the supporting backlog for installation and operational improvements.
+This plan governs page content, information hierarchy and everyday workflows. Preserve the familiar grouped sidebar and its direct links; the five-destination consolidation was rejected because it made tools harder to find. It does not rename or reorder delivery phases P0–P12, remove capabilities, change authorization, or imply that pending phase acceptance is complete. The friction audit remains the supporting backlog for installation and operational improvements.
 
 ## Problem
 

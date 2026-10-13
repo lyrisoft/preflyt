@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { OptionSelect } from '@/components/ui/option-select'
 import {
   Sheet,
   SheetContent,
@@ -517,21 +518,20 @@ function DraftWizard({
                     <Label htmlFor='ruleset-approvals'>
                       Required approvals
                     </Label>
-                    <select
+                    <OptionSelect
                       id='ruleset-approvals'
-                      className='h-9 rounded-md border bg-background px-3 text-sm'
+                      label='Required approvals'
                       value={options.approvals}
                       disabled={!options.requirePullRequest}
-                      onChange={(e) =>
-                        update({ approvals: Number(e.target.value) })
+                      onValueChange={(value) =>
+                        update({ approvals: Number(value) })
                       }
-                    >
-                      {[0, 1, 2, 3, 4, 5, 6].map((n) => (
-                        <option key={n} value={n}>
-                          {n}
-                        </option>
-                      ))}
-                    </select>
+                      className='w-24'
+                      options={[0, 1, 2, 3, 4, 5, 6].map((value) => ({
+                        value,
+                        label: value,
+                      }))}
+                    />
                   </div>
                 </fieldset>
               )}

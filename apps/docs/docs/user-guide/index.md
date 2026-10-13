@@ -2,14 +2,22 @@
 id: index
 title: User Guide
 sidebar_label: Overview
-description: How standards, policies, pull request checks and merge protection fit together in Preflyt.
+description: Understand repository health, investigate unified findings, and apply standards and policies to code changes.
 ---
 
 # User Guide
 
 This guide covers everything you do in Preflyt after it is installed and connected to GitHub. If you have not done that yet, start with [Getting Started](../getting-started/index.md).
 
-## How the pieces fit
+## First value without CI
+
+Explicitly selecting a repository queues a [Health assessment](repository-health.md) of its default branch. Read findings, analysis limits and revision history in Health; an unavailable runtime produces a partial inspection report. This does not change policies or publish a merge check.
+
+## Investigate and prioritize findings
+
+[Findings](findings.md) brings together issues from Health and CI assessments. Filter by source, finding type, repository, severity and status, then inspect the affected source at the assessed commit. Saved AI guidance explains the issue, likely effect and suggested fix when configured; analyzer/rule guidance provides the fallback. Use repository health summaries and comparable assessment history to decide where to focus, and [Contributors](contributors.md) to understand recorded repository activity.
+
+## Govern changes with CI
 
 ```mermaid
 flowchart LR
@@ -45,6 +53,7 @@ See [Access Control](access-control.md) for the full list.
 
 | I want to… | Page |
 | --- | --- |
+| Assess a repository without CI and inspect source findings | [Repository health](repository-health.md) |
 | Create or choose what my code must meet | [Standards](standards.md) |
 | Decide which standards apply to a branch | [Policies](policies.md) |
 | Get checks running on every pull request | [Pull request checks](pull-request-checks.md) |

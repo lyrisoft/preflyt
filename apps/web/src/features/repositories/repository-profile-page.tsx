@@ -31,24 +31,25 @@ import { Main } from '@/components/layout/main'
 import { PageHeader } from '@/components/page-header'
 import { PageHelpDrawer } from '@/components/page-help-drawer'
 import { StatusBadge } from '@/components/status-badge'
+import { useHealth } from '../health/health-api'
+import { healthHelp } from '../health/health-help-content'
+import { RepositoryHealth } from '../health/repository-health'
 import { canPerform, type ScopedSession } from '../workspace/scoped-access'
 import { BranchPicker } from './branch-picker'
 import { EvidenceDialog } from './evidence-dialog'
-import {
-  PostureSummary,
-  type ControlFilter,
-  type RepositoryTab,
-} from './posture-summary'
 import { RelativeTime } from './relative-time'
 import { RepositoryActivityPanel } from './repository-activity-panel'
 import { RepositoryAssessments } from './repository-assessments'
 import { RepositoryBindings } from './repository-bindings'
+import { RepositoryCheckResults } from './repository-check-results'
 import { RepositoryCiEvidence } from './repository-ci-evidence'
+import { repositoryConfigurationHelp } from './repository-configuration-help'
 import { RepositoryControls } from './repository-controls'
 import { RepositoryEvents } from './repository-events'
 import { RepositoryPullRequests } from './repository-pull-requests'
 import type { Profile } from './repository-queries'
 import { RepositoryStandards } from './repository-standards'
+import type { ControlFilter, RepositoryTab } from './repository-tabs'
 import { signalStatus, toneFill } from './repository-vocabulary'
 import { TechIcon } from './tech-icon'
 
@@ -212,6 +213,8 @@ function RepositoryHelp({ limitations }: { limitations: string[] }) {
     <PageHelpDrawer
       title='Repository'
       sections={[
+        ...healthHelp,
+        ...repositoryConfigurationHelp,
         {
           title: 'Understanding repository status',
           content: (
@@ -232,7 +235,7 @@ function RepositoryHelp({ limitations }: { limitations: string[] }) {
 
 export function RepositoryProfilePage() {
   const { repositoryId } = route.useParams()
-  const { tab = 'overview', assessment } = route.useSearch()
+  const { tab = 'health', assessment, health } = route.useSearch()
   const navigate = route.useNavigate()
   const queryClient = useQueryClient()
   const [branchChoice, setBranchChoice] = useState<{
@@ -327,21 +330,32 @@ export function RepositoryProfilePage() {
     loading || profileQuery.isError || accessDenied
       ? undefined
       : profileQuery.data
+  const healthTarget = useHealth(repositoryId, health, 1, tab === 'health')
+  const healthBranch = healthTarget.isSuccess
+    ? branchChoice?.repositoryId === repositoryId
+      ? branchChoice.branch
+      : (healthTarget.data.branch ?? result?.repository.defaultBranch ?? '')
+    : ''
   const inspectionBranch =
     branchChoice?.repositoryId === repositoryId
       ? branchChoice.branch
       : (result?.profile?.branch ?? result?.repository.defaultBranch ?? '')
+  const selectedBranch = tab === 'health' ? healthBranch : inspectionBranch
   const error = mutationError?.message ?? profileQuery.error?.message ?? ''
   const canDiscover = canPerform(
     sessionQuery.data,
     'repository.manage',
     repositoryId
   )
+  const canSelectBranch =
+    tab === 'health'
+      ? canPerform(sessionQuery.data, 'execution.run', repositoryId)
+      : canDiscover
   function selectTab(value: string) {
     void navigate({
       search: (old) => ({
         ...old,
-        tab: value === 'overview' ? undefined : (value as typeof tab),
+        tab: value === 'health' ? undefined : (value as typeof tab),
       }),
       replace: true,
     })
@@ -349,13 +363,6 @@ export function RepositoryProfilePage() {
   function openTab(value: RepositoryTab) {
     selectTab(value)
     window.scrollTo({ top: 0, behavior: 'smooth' })
-  }
-  function filterControls(value: ControlFilter) {
-    setFilter(value)
-    if (tab !== 'overview') selectTab('overview')
-    document
-      .getElementById('repository-controls')
-      ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
   const profile = result?.profile
   const technologies = [
@@ -395,51 +402,64 @@ export function RepositoryProfilePage() {
             tone='blue'
             actions={
               <>
-                {canDiscover && result && tab !== 'assessments' ? (
+                {canSelectBranch && result && tab !== 'assessments' ? (
                   <div className='flex flex-col gap-2'>
                     <label
                       className='text-xs font-medium text-muted-foreground'
                       htmlFor='profile-branch'
                     >
-                      Inspect branch
+                      {tab === 'health' ? 'Branch' : 'Inspect branch'}
                     </label>
                     <div className='flex flex-wrap items-center gap-2'>
                       <BranchPicker
                         repositoryId={repositoryId}
                         actorId={sessionQuery.data?.identityId}
-                        value={inspectionBranch}
-                        disabled={discovering}
+                        label={
+                          tab === 'health'
+                            ? 'Repository branch'
+                            : 'Inspect branch'
+                        }
+                        value={selectedBranch}
+                        disabled={
+                          tab === 'health'
+                            ? healthTarget.isPending || healthTarget.isError
+                            : discovering
+                        }
                         onValueChange={(branch) =>
                           setBranchChoice({ repositoryId, branch })
                         }
                       />
-                      <Button
-                        size='sm'
-                        variant='outline'
-                        disabled={
-                          loading || discovering || !inspectionBranch.trim()
-                        }
-                        onClick={() =>
-                          discovery.mutate({
-                            id: repositoryId,
-                            branch: inspectionBranch.trim(),
-                          })
-                        }
-                      >
-                        {discovering ? (
-                          <LoaderCircle className='animate-spin' />
-                        ) : (
-                          <RefreshCw />
-                        )}
-                        {discovering
-                          ? 'Discovering…'
-                          : profile
-                            ? 'Refresh profile'
-                            : 'Discover profile'}
-                      </Button>
+                      {tab !== 'health' && (
+                        <Button
+                          size='sm'
+                          variant='outline'
+                          disabled={
+                            loading || discovering || !inspectionBranch.trim()
+                          }
+                          onClick={() =>
+                            discovery.mutate({
+                              id: repositoryId,
+                              branch: inspectionBranch.trim(),
+                            })
+                          }
+                        >
+                          {discovering ? (
+                            <LoaderCircle className='animate-spin' />
+                          ) : (
+                            <RefreshCw />
+                          )}
+                          {discovering
+                            ? 'Discovering…'
+                            : profile
+                              ? 'Refresh profile'
+                              : 'Discover profile'}
+                        </Button>
+                      )}
                     </div>
                     <p className='text-xs text-muted-foreground'>
-                      Select a branch. Only that branch will be inspected.
+                      {tab === 'health'
+                        ? 'Reassess to analyze the selected branch.'
+                        : 'Refresh profile to inspect the selected branch.'}
                     </p>
                   </div>
                 ) : null}
@@ -537,27 +557,29 @@ export function RepositoryProfilePage() {
           result && (
             <Tabs value={tab} onValueChange={selectTab} className='gap-5'>
               <TabsList className='no-scrollbar max-w-full flex-nowrap overflow-x-auto'>
-                <TabsTrigger value='overview'>Overview</TabsTrigger>
+                <TabsTrigger value='health'>Health</TabsTrigger>
+                <TabsTrigger value='overview'>Checks</TabsTrigger>
                 <TabsTrigger value='standards'>Standards</TabsTrigger>
                 <TabsTrigger value='assessments'>Assessments</TabsTrigger>
                 <TabsTrigger value='activity'>CI activity</TabsTrigger>
               </TabsList>
-              <TabsContent value='overview' className='space-y-5'>
-                <PostureSummary
+              <TabsContent value='health'>
+                <RepositoryHealth
+                  key={repositoryId + (health ?? '')}
                   repositoryId={repositoryId}
-                  profile={profile}
-                  filter={filter}
-                  onFilter={filterControls}
-                  onOpenTab={openTab}
+                  name={result.repository.fullName}
+                  defaultBranch={result.repository.defaultBranch}
+                  assessmentId={health}
+                  selectedBranch={healthBranch}
                 />
-                <RepositoryActivityPanel repositoryId={repositoryId} />
-                <div className='grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_19rem]'>
-                  <div id='repository-controls' className='min-w-0 scroll-mt-4'>
-                    <RepositoryControls
+              </TabsContent>
+              <TabsContent value='overview' className='space-y-5'>
+                <div className='grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_19rem]'>
+                  <div className='min-w-0 space-y-5'>
+                    <RepositoryActivityPanel repositoryId={repositoryId} />
+                    <RepositoryCheckResults
                       repositoryId={repositoryId}
-                      repositoryName={result.repository.fullName}
-                      filter={filter}
-                      onFilter={setFilter}
+                      profile={profile}
                       onOpenTab={openTab}
                     />
                   </div>
@@ -603,6 +625,13 @@ export function RepositoryProfilePage() {
                       )}
                     />
                   )}
+                />
+                <RepositoryControls
+                  repositoryId={repositoryId}
+                  repositoryName={result.repository.fullName}
+                  filter={filter}
+                  onFilter={setFilter}
+                  onOpenTab={openTab}
                 />
               </TabsContent>
               <TabsContent value='assessments' className='space-y-5'>

@@ -31,11 +31,9 @@ it("combines a standard into one copyable step and deduplicates its checks", () 
   expect(result.checkIds).toEqual(["tests.required", "security.sast"]);
   expect(result.ready).toBe(true);
   expect(steps[0].uses).toBe(policyAction);
-  expect(JSON.parse(steps[0].with.checks)["tests.required"].argv).toEqual([
-    "preflyt-recipe",
-    "tests.required",
-    ".preflyt/results/tests.required.xml",
-  ]);
+  expect(steps[0].with).toEqual({ 'api-url': 'https://preflyt.example/api' });
+  expect(result.execution).toBe('policy');
+  expect(workflowSnippet([{ id: 'secrets.scan', title: 'Secrets' }], 'https://preflyt.example/api').snippet).toBe(result.snippet);
   expect(steps[0].if).toContain("head.repo.full_name == github.repository");
 });
 it("preserves custom check commands and the repository's report path", () => {

@@ -1,3 +1,4 @@
+import { contributorDailyActivity } from './contributor-daily-activity.js'
 import { configurationValue } from '../configuration/runtime-configuration.js'
 import {
   BadRequestException,
@@ -121,9 +122,10 @@ export class ContributorsService {
       seen.set(row.contributorId, group)
     }
     // Deduplicate PRs/reviews/commits by stable source object, independent of webhook redelivery and backfill.
-    const unique = (group: typeof observations, rel: string) => {
+    const unique = (group: typeof observations, rel: string | string[]) => {
+      const relationships = Array.isArray(rel) ? rel : [rel]
       const result = new Map<string, (typeof observations)[number]>()
-      for (const r of group.filter((r) => r.relationship === rel)) {
+      for (const r of group.filter((r) => relationships.includes(r.relationship))) {
         const key = `${r.repositoryId}:${r.sourceObjectId}`
         if (!result.has(key)) result.set(key, r)
       }
@@ -182,7 +184,7 @@ export class ContributorsService {
         const c = group[0].contributor,
           prs = unique(group, 'PR_AUTHOR'),
           reviews = unique(group, 'REVIEWER'),
-          commits = unique(group, 'COMMIT_AUTHOR')
+          commits = unique(group, ['COMMIT_AUTHOR', 'COMMITTER'])
         return {
           id: c.id,
           login: c.login,
@@ -254,7 +256,7 @@ export class ContributorsService {
     }
     for (const row of unique(observations, 'REVIEWER').values())
       addContribution(row, 'reviews')
-    for (const row of unique(observations, 'COMMIT_AUTHOR').values())
+    for (const row of unique(observations, ['COMMIT_AUTHOR', 'COMMITTER']).values())
       addContribution(row, 'commits')
     // Zero-fill the selected UTC window; series totals reconcile with the activity cards.
     const contributionActivity = []
@@ -335,9 +337,9 @@ export class ContributorsService {
       pageSize: 20,
       total: data.length,
       truncated: truncated || assessments.length > 5000,
-      contributors: contributorId
-        ? data
-        : data.slice((page - 1) * 20, page * 20),
+      contributors: (contributorId ? data : data.slice((page - 1) * 20, page * 20)).map(c=>({...c,
+        dailyActivity: activityAllowed ? contributorDailyActivity(seen.get(c.id)??[],from,now) : null,
+      })),
       lastReceivedAt: receipt?.receivedAt.toISOString() ?? null,
       collectionEnabled:
         configurationValue('GITHUB_EVENTS_ENABLED') === 'true' &&

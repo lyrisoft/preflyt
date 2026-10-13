@@ -2,42 +2,32 @@
 id: select-repositories
 title: Select repositories
 sidebar_label: Select repositories
-description: Choose which repositories Preflyt is allowed to profile and assess.
+description: Choose explicit repository scope and start a background Health assessment.
 ---
 
 # Select repositories
 
-Installing the GitHub App makes repositories **available**. Preflyt only works with the ones you **select**. This keeps the scope explicit and auditable.
+Installing the GitHub App makes repositories **available**. Selecting a repository in Preflyt enables tracking and queues its initial **Health assessment**. Existing installations are not automatically rescanned during upgrade.
 
 ## Choose repositories
 
-1. Open **Repositories** in the sidebar.
-2. The summary tiles show **Available repositories**, **Selected for Preflyt**, **Active installations** and **Private repositories**.
-3. Below, each repository is a card. Tick the checkbox in the corner of a card to **select** it. Use **Search repositories** and the selection and visibility filters to narrow a long list.
-4. Selected repositories link to their own page. Select one to open it.
+1. Open **Repositories**. The Health summary shows reports across repositories you can access.
+2. Find the **Repository inventory** below the GitHub connection information. Search by repository, account or branch, and use the selection and visibility filters.
+3. An Owner or Admin can select the repository using its selection control. The queue confirmation links the next step to **Health**.
+4. Open the repository to see its default-branch assessment. To use another branch, choose **Assessment branch**, then **Reassess**.
 
-![The Repositories page before GitHub is connected, showing empty inventory](/img/screens/repositories.png)
+Selecting queues work in the background. It does not wait for a scan in your browser. Qualified analyzers run only in the approved isolated runtime; if unavailable, the report clearly identifies inspection-only results and missing analysis.
 
-Only a Preflyt **Owner or Admin** can change selection. Other roles see the inventory without the checkboxes, and attempting the change returns "Only a Preflyt Owner or Admin can change repository selection."
+## What selection changes
 
-If the list is empty, check that:
+- Preflyt can inspect the selected repository and record GitHub events within your installation's access scope.
+- The initial Health report uses fixed static analysis defaults. It does not execute project scripts, run tests, install dependencies or build images.
+- Existing standards, published policies, AI routing and merge protection remain as configured.
+- Selection does not grant other users access. Roles and repository assignments still control visibility and actions.
+- Deselecting prevents new source retrieval and execution. In-flight work is stopped through the runtime's cleanup process.
 
-- the GitHub App is installed on the organization and has access to those repositories,
-- the Super Admin saved the App credentials and restarted the API and worker,
-- you are signed in with a role that can connect repositories.
+## Missing repositories or lost access
 
-Use **Refresh repositories** to re-read the list from GitHub. The page otherwise shows the last successful sync.
+Use **Refresh inventory** to synchronize available repositories. Check that the GitHub App is installed on the intended organization and has access to those repositories. A Super Admin configures App credentials in Settings; manifest registration saves them automatically without a routine restart. If GitHub reports lost access, reconnect the App or restore its selected repository access.
 
-If GitHub reports that the App lost access to repositories, the page tells you to reconnect the App to restore it.
-
-## What selecting does and does not do
-
-- **Selecting** lets Preflyt read the repository's metadata and file contents to build a [profile](first-assessment.md#1-inspect-the-repository), and lets webhook events for it be recorded. Events for repositories that are **not selected** are acknowledged and discarded.
-- **Selecting does not** run any repository code, build or test.
-- **Selecting does not** give other people access. Access comes from roles and repository assignment in [Access Control](../self-hosting/authentication.md).
-
-## Next
-
-[Your first report](first-assessment.md).
-
-Selecting a repository automatically inspects its files to detect the stack. It does not execute code. Recommended checks are preselected when you open **Choose standards** for a repository without a saved selection; existing standards, published policies and model routing are preserved. If inspection fails, the repository stays selected and **Refresh profile** lets you retry.
+[Follow your first report](first-assessment.md).

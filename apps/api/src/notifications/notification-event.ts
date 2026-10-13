@@ -181,6 +181,7 @@ export const governanceNotificationTypes = [
   "RULESET_DRIFTED",
 ];
 export const assessmentNotificationTypes = [
+  "HEALTH_ASSESSMENT_COMPLETED", "HEALTH_ASSESSMENT_PARTIAL", "HEALTH_ASSESSMENT_FAILED",
   "NATIVE_EXECUTION_FAILED",
   "CRITICAL_FINDINGS_REPORTED",
   "ASSESSMENT_COMPLETED",
@@ -282,7 +283,7 @@ export async function recordNativeExecutionFailure(
     | "actorId"
   >,
 ) {
-  if (!notificationsEnabled() || !request.controllerJobId) return;
+  if (!notificationsEnabled() || !request.controllerJobId || (request as NativeExecutionRequest).healthAssessmentId) return;
   const repo = await tx.gitHubRepository.findFirst({
     where: {
       id: request.repositoryId,

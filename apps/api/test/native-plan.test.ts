@@ -1,4 +1,5 @@
 import 'reflect-metadata'
+import { readFileSync } from 'node:fs'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   nativeAdapters,
@@ -174,7 +175,9 @@ describe('revision-bound plans', () => {
     expect(nativeAdapters['security.dependencies'].args).toContain(
       '--offline-scan',
     )
-    expect(nativeAdapters['security.sast'].args).toContain('off')
+    const wrapper=readFileSync(new URL('../../../docs/deployment/native-runner/semgrep-measure.mjs',import.meta.url),'utf8')
+    expect(wrapper).toContain("'--metrics','off'")
+    expect(wrapper).toContain("'--disable-version-check'")
   })
   it.each([
     { sourceSha: 'main' },
@@ -247,4 +250,13 @@ describe('plan access', () => {
       'Inspect this repository',
     )
   })
+})
+
+it('keeps runner adapters identical to admitted plans including quality checks', () => {
+ const runner=JSON.parse(readFileSync(new URL('../../../docs/deployment/native-runner/adapters.json',import.meta.url),'utf8'))
+ expect(runner).toEqual(nativeAdapters)
+ for (const id of ['quality.reliability','quality.maintainability'] as const) {
+  expect(nativeAdapters[id].command).toEqual(['/usr/local/bin/node'])
+  expect(nativeAdapters[id].args).toEqual(['/opt/preflyt/semgrep-measure.mjs',id])
+ }
 })

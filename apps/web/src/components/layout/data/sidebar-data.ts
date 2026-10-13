@@ -7,13 +7,13 @@ import {
   ShieldAlert,
   UsersRound,
   Settings,
-  Command,
   GitBranch,
   LayoutDashboard,
   ListChecks,
   Plug,
   SlidersHorizontal,
 } from 'lucide-react'
+import { PreflytMark } from '@/components/preflyt-brand'
 import { type SidebarData } from '../types'
 
 export const sidebarData: SidebarData = {
@@ -25,7 +25,7 @@ export const sidebarData: SidebarData = {
   teams: [
     {
       name: 'Preflyt',
-      logo: Command,
+      logo: PreflytMark,
       plan: 'Engineering Assurance Platform',
     },
   ],
@@ -35,7 +35,7 @@ export const sidebarData: SidebarData = {
       items: [
         {
           title: 'Overview',
-          url: '/',
+          url: '/overview',
           icon: LayoutDashboard,
         },
         {

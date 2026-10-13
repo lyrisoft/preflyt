@@ -55,7 +55,7 @@ const steps = [
   },
   {
     id: 'assess',
-    title: 'Create your first report',
+    title: 'Create your first CI assessment',
     description:
       'See which checks have results and what still needs attention.',
     action: 'Create assessment',
@@ -97,10 +97,11 @@ export function FirstReport({
       <CardHeader className='gap-4 sm:flex-row sm:items-start'>
         <SurfaceIcon icon={GitBranch} tone='teal' />
         <div className='min-w-0 space-y-2'>
-          <CardTitle>Get your first repository report</CardTitle>
+          <CardTitle>Set up your first CI assessment</CardTitle>
           <CardDescription>
-            Find missing checks and engineering issues before they reach your
-            main branch.
+            Optionally connect standards and CI evidence for ongoing pull
+            request feedback. Repository Health is available in the Health tab
+            without CI.
           </CardDescription>
           {repository && (
             <p className='text-xs break-all text-muted-foreground'>

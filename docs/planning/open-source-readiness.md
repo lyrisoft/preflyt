@@ -1,12 +1,12 @@
 # Preflyt Open-Source Readiness Plan
 
-**Status:** Deferred / future planning document — **not authorization to make the repository public**  
-**Owner:** Lyrisoft Technologies Limited  
+**Status:** Deferred / future planning document — **not authorization to make the repository public**
+**Owner:** Lyrisoft Technologies Limited
 **Target:** A secure, legally compliant, maintainable public-source release when explicitly approved.
 
 ## Objective
 
-Prepare Preflyt for eventual public open-source development and self-hosted distribution without disrupting ongoing P0–P11 delivery. **Do not change GitHub repository visibility, publish artifacts, rotate production secrets, or alter licenses based solely on this plan.** All such actions require a separate review and authorization.
+Prepare Preflyt for eventual public open-source development and self-hosted distribution without disrupting ongoing P0–P12 delivery. **Do not change GitHub repository visibility, publish artifacts, rotate production secrets, or alter licenses based solely on this plan.** All such actions require a separate review and authorization.
 
 ## 1. Licensing and intellectual property
 
@@ -35,7 +35,7 @@ Prepare:
 - `GOVERNANCE.md`: maintainer roles, decision process, releases and contribution rights.
 - `SUPPORT.md`: community vs commercial support expectations.
 - `CHANGELOG.md`, release notes, `.github/CODEOWNERS`, issue templates and PR template.
-- Accurate README distinguishing implemented features from P0–P11 plans; never market unimplemented CLI, Operator, k6 or AI capabilities as released.
+- Accurate README distinguishing implemented features from P0–P12 plans; never market unimplemented CLI, Operator, k6 or AI capabilities as released.
 
 ## 4. Self-hosting and distribution
 

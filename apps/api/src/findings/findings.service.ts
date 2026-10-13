@@ -1,3 +1,4 @@
+import { findingReferenceGuidance } from '../health/finding-guidance.js';
 import {
   BadRequestException,
   ConflictException,
@@ -15,12 +16,16 @@ import type { AuthenticatedSession } from "../auth/session.guard.js";
 import { digest } from "../assessments/assessment-digest.js";
 import { previewGate } from "../assessments/gate-preview.js";
 import { normalizeReportFindings } from "./normalize-report-findings.js";
+import { FindingSourceStore } from "./finding-source-store.service.js";
+import { hiddenSource } from "./finding-source-store.js";
+import type { HealthReport } from "../health/health-report.js";
 import { summarizeFindings } from "./findings-summary.js";
 @Injectable()
 export class FindingsService {
   constructor(
     @Inject(PrismaService) private readonly db: PrismaService,
     @Inject(AuthorizationService) private readonly access: AuthorizationService,
+    @Inject(FindingSourceStore) private readonly sources: FindingSourceStore,
   ) {}
   async list(
     session: AuthenticatedSession,
@@ -28,6 +33,10 @@ export class FindingsService {
     lookupId?: string,
   ) {
     const triage = String(query.triage ?? "all");
+    const category = String(query.category ?? "all");
+    // Legacy Health card links remain exact-report filters; the default list is shared.
+    const source = String(query.source ?? (query.origin === "health" ? "health" : "all"));
+    const health = query.health === undefined ? undefined : String(query.health);
     const repository = String(query.repository ?? "all"),
       kind = String(query.kind ?? "findings"),
       severity = String(query.severity ?? "all"),
@@ -38,9 +47,12 @@ export class FindingsService {
     if (
       !["all", "REPORTED", "IN_REVIEW", "RESOLVED"].includes(triage) ||
       !["findings", "gaps"].includes(kind) ||
+      !["all", "ci", "health"].includes(source) ||
+      (health !== undefined && (!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(health) || source !== "health" || repository === "all")) ||
       !["all", "critical", "high", "medium", "low", "unknown"].includes(
         severity,
       ) ||
+      !["all","security","reliability","maintainability","duplication","hotspot","coverage","tests","check"].includes(category) ||
       search.length > 100 ||
       !Number.isSafeInteger(page) ||
       page < 1
@@ -59,8 +71,10 @@ export class FindingsService {
       throw new ForbiddenException(
         "You do not have access to this repository. Ask your administrator for access.",
       );
-    const records = await this.db.commitAssessment.findMany({
-      where: { repositoryId: { in: selected.map((item) => item.id) } },
+    const assessment = lookupId && query.assessment !== undefined ? String(query.assessment) : undefined;
+    if (assessment !== undefined && !/^[a-zA-Z0-9_-]{1,80}$/.test(assessment)) throw new BadRequestException("Choose a valid assessment");
+    const records = source === "health" ? [] : await this.db.commitAssessment.findMany({
+      where: { repositoryId: { in: selected.map((item) => item.id) }, ...(assessment ? { id: assessment } : {}) },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: 201,
     });
@@ -117,6 +131,7 @@ export class FindingsService {
         report = snapshot.report as any,
         plan = snapshot.plan as any;
       const base = {
+        origin: "ci",
         repositoryId: String(repo.githubId),
         repository: repo.fullName,
         sourceSha: snapshot.sourceSha,
@@ -204,6 +219,46 @@ export class FindingsService {
           }
         }
     }
+    const healthRecords = source === "ci" || lookupId ? [] : await this.db.repositoryHealthAssessment.findMany({
+      where: {
+        repositoryId: { in: selected.map(item => item.id) },
+        organizationId: session.organizationId!,
+        state: { in: ["COMPLETED", "FAILED"] },
+        ...(health ? { id: health } : {}),
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: 201,
+    });
+    if (health && !healthRecords.length) throw new NotFoundException("This saved Health report is unavailable in your scope.");
+    const latestHealth = new Map<string, (typeof healthRecords)[number]>();
+    for (const saved of healthRecords.slice(0, 200)) {
+      if (!saved.sourceSha || !saved.report) continue;
+      const key = `${saved.repositoryId}:${saved.sourceSha}`;
+      if (!latestHealth.has(key)) latestHealth.set(key, saved);
+    }
+    let incompleteHealth = false;
+    for (const saved of latestHealth.values()) {
+      const report = saved.report as unknown as HealthReport;
+      const repo = selected.find(item => item.id === saved.repositoryId)!;
+      if (report.completeness !== "COMPLETE") incompleteHealth = true;
+      for (const finding of report.findings) {
+        if (rows.length >= 2000) { detailTruncated = true; break; }
+        rows.push({
+          ...finding,
+          id: digest(["health", String(repo.githubId), saved.sourceSha, finding.fingerprint]),
+          origin: "health",
+          health: saved.id,
+          healthFingerprint: finding.fingerprint,
+          repositoryId: String(repo.githubId), repository: repo.fullName,
+          sourceSha: saved.sourceSha, assessmentId: saved.id,
+          observedAt: (saved.finishedAt ?? saved.createdAt).toISOString(),
+          status: "Reported", evidence: [finding.evidence],
+          verification: "Verified analyzer receipt", occurrences: 1,
+        });
+      }
+    }
+    // Put both sources in one stable chronological order before deduplication/pagination.
+    rows.sort((a, b) => b.observedAt.localeCompare(a.observedAt) || a.id.localeCompare(b.id));
     const unique = new Map<string, any>();
     for (const row of rows) {
       const existing = unique.get(row.id);
@@ -213,6 +268,8 @@ export class FindingsService {
     let matching = [...unique.values()].filter(
       (row) =>
         (severity === "all" || row.severity === severity) &&
+        (category === 'all' || row.category === category ||
+          (['check','evidence'].includes(row.category) && ({security:/^(?:security\.(?!hotspots$)|secrets\.|iac\.)/,reliability:/^quality\.reliability$/,maintainability:/^quality\.maintainability$/,duplication:/^quality\.duplication$/,hotspot:/^security\.hotspots$/,coverage:/^tests\.coverage$/} as Record<string,RegExp>)[category]?.test(row.ruleId ?? ''))) &&
         (!search ||
           `${row.title} ${row.repository} ${row.ruleId ?? ""} ${row.path ?? ""}`
             .toLowerCase()
@@ -221,11 +278,12 @@ export class FindingsService {
     const dispositions = await this.db.findingDisposition.findMany({
       where: {
         organizationId: session.organizationId!,
-        id: { in: matching.map((row) => row.id) },
+        id: { in: matching.filter(row => row.origin === "ci").map((row) => row.id) },
       },
     });
     for (const row of matching) {
-      const saved = dispositions.find(
+      row.referenceGuidance = findingReferenceGuidance(row.ruleId);
+      const saved = row.origin === "ci" && dispositions.find(
         (item) => item.id === row.id && item.sourceSha === row.sourceSha,
       );
       row.triage = saved
@@ -255,26 +313,45 @@ export class FindingsService {
       pageSize: 50,
       truncated:
         records.length > 200 ||
+        healthRecords.length > 200 ||
         new Set(artifactRefs).size > 100 ||
         detailTruncated,
       repositories: scope.map((repo) => ({
         githubId: String(repo.githubId),
         fullName: repo.fullName,
       })),
-      assessedRevisions: latest.size,
+      assessedRevisions: new Set([...latest.keys(), ...latestHealth.keys()]).size,
+      incompleteHealth,
+      inspectionOnly: source === "health" && latestHealth.size > 0 && [...latestHealth.values()].every(saved => (saved.report as unknown as HealthReport).mode === "INSPECTION_ONLY"),
     };
   }
 
-  private async finding(session: AuthenticatedSession, id: string) {
+  private async finding(session: AuthenticatedSession, id: string, assessment?: string) {
     if (!/^[a-f0-9]{64}$/.test(id))
       throw new BadRequestException("Choose a valid finding");
     for (const kind of ["findings", "gaps"]) {
-      const result = await this.list(session, { kind }, id);
+      const result = await this.list(session, { kind, source: "ci", ...(assessment ? { assessment } : {}) }, id);
       if (result.rows[0]) return result.rows[0];
     }
     throw new NotFoundException(
       "Finding is unavailable in your current scope or retained assessment window",
     );
+  }
+  async detail(session: AuthenticatedSession, id: string, assessment?: string) {
+    const finding = await this.finding(session, id, assessment);
+    await this.access.requireRepository(session, finding.repositoryId, "assessment.read");
+    return { finding, canManage: !!rolePermissions[session.role]?.includes("findings.manage") };
+  }
+  async source(session: AuthenticatedSession, id: string, assessment?: string) {
+    const finding = await this.finding(session, id, assessment);
+    const repo = await this.access.requireRepository(session, finding.repositoryId, "assessment.read");
+    const base = { path: finding.path, line: finding.line, endLine: finding.endLine ?? finding.line, sourceSha: finding.sourceSha, lines: [] as Array<{ number: number; text: string }>, reason: null as string | null, truncated: false };
+    if (hiddenSource(finding)) return { ...base, reason: 'Secret source is hidden to protect credentials.' };
+    if (!finding.path) return { ...base, reason: finding.category === 'check' || finding.category === 'evidence' ? 'This is a check result, not a finding at a code location. Review its assessment evidence below.' : 'The report did not supply a file location.' };
+    const excerpt = await this.sources.read(repo.id, finding.sourceSha, finding);
+    await this.access.requireRepository(session, finding.repositoryId, "assessment.read");
+    return { ...base, ...excerpt };
+
   }
   async assignees(session: AuthenticatedSession, id: string) {
     await this.access.requireOrganization(session, "findings.manage");

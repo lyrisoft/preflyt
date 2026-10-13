@@ -68,3 +68,8 @@ References: [Kubernetes security contexts](https://kubernetes.io/docs/tasks/conf
 ### Advisory AI reviews
 
 Enable AI model configuration and advisory reviews in Settings → Configuration only after model/skill setup. Supply the same separate stable `AI_PROVIDER_ENCRYPTION_KEY` in API and worker Secrets. The existing worker processes explicit evidence-only reviews; it needs model egress, not runtime-control permissions. See [review skills deployment](../../docs/operations/review-skills.md).
+
+
+### Shared Docker assessment runner
+
+Kubernetes-hosted Preflyt can use the same dedicated Docker controller as a Compose-hosted deployment. Render `kubectl kustomize deploy/kubernetes-shared-docker-runner` to select this backend while leaving execution disabled. No Kubernetes native launcher, Docker socket or engine credentials are added to the application. Supply the actual reviewed controller approval and application-side key through the existing Secret/configuration contract. See [shared runner qualification](../../docs/operations/p5-runner-qualification.md). The Kubernetes-native job launcher remains a separate optional backend.

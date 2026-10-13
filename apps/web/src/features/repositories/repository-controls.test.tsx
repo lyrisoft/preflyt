@@ -29,12 +29,12 @@ beforeEach(async () => {
     profileSnapshot: null,
   } as unknown as Standards
 })
-const mount = () =>
+const mount = (filter: 'all' | 'review' | 'ci' = 'all') =>
   render(
     <RepositoryControls
       repositoryId='101'
       repositoryName='org/service'
-      filter='all'
+      filter={filter}
       onFilter={vi.fn()}
       onOpenTab={vi.fn()}
     />
@@ -81,5 +81,74 @@ it('keeps saved requirements neutral and found-file setup green', async () => {
   await expect
     .element(page.getByRole('button', { name: 'Choose standards' }))
     .not.toBeInTheDocument()
+  await view.unmount()
+})
+
+it('excludes build and type checks without detectors from setup gaps but retains them in CI checks', async () => {
+  state.data.selection = {
+    profile: 'RECOMMENDED',
+    revision: 3,
+  } as Standards['selection']
+  state.data.controls = ['Build validation', 'Type checking'].map(
+    (title, index) => ({
+      id: index ? 'types.required' : 'build.required',
+      title,
+      required: true,
+      configuration: 'NOT_INSPECTED',
+      capability: 'import_only',
+      evidence: [],
+      reason: 'Repository inspection has no setup detector for this check.',
+    })
+  )
+  let view = await mount('review')
+  await expect
+    .element(page.getByRole('button', { name: 'Setup gaps 0', exact: true }))
+    .toBeVisible()
+  await expect
+    .element(page.getByText('No checks match this filter.'))
+    .toBeVisible()
+  await view.unmount()
+  view = await mount('ci')
+  await expect
+    .element(page.getByRole('button', { name: 'CI checks 2', exact: true }))
+    .toHaveAttribute('aria-pressed', 'true')
+  await expect
+    .element(
+      page.getByRole('button', { name: 'View Build validation details' })
+    )
+    .toBeVisible()
+  await expect
+    .element(page.getByRole('button', { name: 'View Type checking details' }))
+    .toBeVisible()
+  await expect
+    .element(
+      page
+        .getByRole('cell', { name: 'CI evidence required', exact: true })
+        .first()
+    )
+    .toBeVisible()
+  await view.unmount()
+})
+it('still exposes genuine missing and undetermined setup in setup gaps', async () => {
+  state.data.controls = ['MISSING', 'UNKNOWN'].map((configuration, index) => ({
+    ...state.data.controls[0],
+    id: String(index),
+    configuration,
+  }))
+  const view = await mount('review')
+  await expect
+    .element(page.getByRole('button', { name: 'Setup gaps 2', exact: true }))
+    .toBeVisible()
+  await expect
+    .element(page.getByRole('cell', { name: 'Not found', exact: true }))
+    .toBeVisible()
+  await expect
+    .element(
+      page.getByRole('cell', {
+        name: 'Configuration not determined',
+        exact: true,
+      })
+    )
+    .toBeVisible()
   await view.unmount()
 })

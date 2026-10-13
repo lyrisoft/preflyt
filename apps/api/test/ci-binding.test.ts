@@ -8,6 +8,19 @@ const binding = {
   kind: 'workflow_run' as const,
   workflowId: '7',
 }
+it('retains verified collection reports after the terminal gate fails without borrowing older attempts or cancelled runs', () => {
+  const collected = { deliveryId:'jobs', sourceObjectId:'10', sourceStatus:'completed', sourceConclusion:'success',
+    sourceIdentity:{kind:'workflow_run', workflowId:'7',runAttempt:1,verificationScope:'jobs'},
+    sourceUpdatedAt:new Date('2026-10-13T10:00:00Z'),observedAt:new Date('2026-10-13T10:00:00Z') }
+  const failed = {...collected,deliveryId:'event',sourceConclusion:'failure',
+    sourceIdentity:{kind:'workflow_run',workflowId:'7',runAttempt:1},
+    sourceUpdatedAt:new Date('2026-10-13T10:01:00Z')}
+  const reports = new Map([['tests.required', new Set(['jobs'])]])
+  expect(resolveBindings([binding],[collected,failed],reports).mappings[0].deliveryId).toBe('jobs')
+  expect(resolveBindings([binding],[collected,failed]).mappings[0].deliveryId).toBe('event')
+  expect(resolveBindings([binding],[collected,{...failed,sourceConclusion:'cancelled'}],reports).mappings[0].deliveryId).toBe('event')
+  expect(resolveBindings([binding],[collected,{...failed,sourceIdentity:{...failed.sourceIdentity,runAttempt:2}}],reports).mappings[0].deliveryId).toBe('event')
+})
 const payload = (kind: string, extra: object = {}) => ({
   action: 'completed',
   installation: { id: 1 },
@@ -109,4 +122,45 @@ it('chooses the newest workflow attempt regardless of delivery order and timesta
       })),
     ).ambiguousRules,
   ).toEqual(['tests.required'])
+})
+
+const verifiedJobReport = {
+  deliveryId: 'verified-jobs',
+  sourceObjectId: '10',
+  sourceIdentity: { kind: 'workflow_run', workflowId: '7', runAttempt: 3 },
+  sourceStatus: 'completed',
+  sourceConclusion: 'success',
+  sourceUpdatedAt: new Date('2026-10-12T20:56:00Z'),
+  observedAt: new Date('2026-10-12T20:56:00Z'),
+}
+const completion = {
+  ...verifiedJobReport,
+  deliveryId: 'workflow-completed',
+  sourceUpdatedAt: new Date('2026-10-12T20:57:00Z'),
+  observedAt: new Date('2026-10-12T20:57:00Z'),
+}
+const verifiedReports = new Map([['tests.required', new Set(['verified-jobs'])]])
+it('keeps a verified report when the same run attempt later completes successfully', () => {
+  expect(resolveBindings([binding], [completion, verifiedJobReport], verifiedReports).mappings[0].deliveryId)
+    .toBe('verified-jobs')
+  expect(resolveBindings([binding], [completion, verifiedJobReport]).mappings[0].deliveryId)
+    .toBe('workflow-completed')
+  expect(resolveBindings([{...binding, ruleId:'build.required'}], [completion, verifiedJobReport], verifiedReports).mappings[0].deliveryId)
+    .toBe('workflow-completed')
+})
+it.each([
+  ['completed', 'failure'],
+  ['completed', 'cancelled'],
+  ['in_progress', null],
+  ['completed', null],
+])('does not hide a later %s/%s result behind a verified successful report', (sourceStatus, sourceConclusion) => {
+  expect(resolveBindings([binding], [{...completion, sourceStatus, sourceConclusion}, verifiedJobReport], verifiedReports).mappings[0].deliveryId)
+    .toBe('workflow-completed')
+})
+it('does not reuse verified reports from an older attempt or ambiguous workflow runs', () => {
+  const newerAttempt={...completion, sourceIdentity:{...completion.sourceIdentity,runAttempt:4}}
+  expect(resolveBindings([binding], [newerAttempt, verifiedJobReport], verifiedReports).mappings[0].deliveryId)
+    .toBe('workflow-completed')
+  expect(resolveBindings([binding], [{...completion,sourceObjectId:'other-run'}, verifiedJobReport], verifiedReports).ambiguousRules)
+    .toEqual(['tests.required'])
 })

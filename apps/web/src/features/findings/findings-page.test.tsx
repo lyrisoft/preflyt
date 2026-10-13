@@ -26,8 +26,28 @@ vi.mock('../workspace/navigation-session', () => ({
   }),
 }))
 vi.mock('@tanstack/react-router', () => ({
-  Link: ({ children }: { children: React.ReactNode }) => (
-    <a href='/apps'>{children}</a>
+  getRouteApi: () => ({ useSearch: () => ({}) }),
+  Link: ({
+    children,
+    to,
+    params,
+    search,
+  }: {
+    children: React.ReactNode
+    to: string
+    params?: { findingId?: string; repositoryId?: string }
+    search?: Record<string, string>
+  }) => (
+    <a
+      href={
+        to
+          .replace('$findingId', params?.findingId ?? '')
+          .replace('$repositoryId', params?.repositoryId ?? '') +
+        (search ? '?' + new URLSearchParams(search) : '')
+      }
+    >
+      {children}
+    </a>
   ),
 }))
 const summary = {
@@ -76,7 +96,7 @@ it('shows a useful empty state without fabricated findings', async () => {
     .element(view.getByRole('tab', { name: 'Missing or unverified results' }))
     .toBeVisible()
 })
-it('opens exact commit evidence and preserves unverified report status', async () => {
+it('opens a standalone exact-assessment details link instead of a drawer', async () => {
   state.query = {
     data: {
       rows: [
@@ -107,38 +127,24 @@ it('opens exact commit evidence and preserves unverified report status', async (
   }
   const view = await render(<FindingsPage />)
   await expect
-    .element(view.getByRole('table').getByText('Reported', { exact: true }))
-    .toHaveClass('text-info-text')
-  await view.getByRole('button', { name: 'Details', exact: true }).click()
+    .element(view.getByRole('link', { name: 'Unsafe query', exact: true }))
+    .toHaveAttribute(
+      'href',
+      expect.stringContaining('/findings/f?assessment=saved')
+    )
+  await expect
+    .element(view.getByRole('link', { name: 'Details', exact: true }))
+    .toBeVisible()
   await expect
     .element(
-      view.getByText(
-        'Admin-associated report; source not independently verified'
-      )
+      view.getByRole('columnheader', { name: 'Assessed at', exact: true })
     )
     .toBeVisible()
-  await expect
-    .element(view.getByText('a'.repeat(40), { exact: true }))
-    .toBeVisible()
-  await expect
-    .element(view.getByText('The approved CI check or workflow failed.'))
-    .toBeVisible()
-  await expect
-    .element(view.getByText('d'.repeat(64), { exact: true }))
-    .toBeVisible()
-  await expect
-    .element(view.getByText('APPROVED_CI_SOURCE_FAILED', { exact: true }))
-    .not.toBeVisible()
-  await view.getByText('Technical evidence', { exact: true }).click()
-  await expect
-    .element(view.getByText('APPROVED_CI_SOURCE_FAILED', { exact: true }))
-    .toBeVisible()
-  await expect
-    .element(view.getByRole('link', { name: 'View assessment' }))
-    .toBeVisible()
-  await expect
-    .element(view.getByRole('button', { name: 'Save changes' }))
-    .not.toBeInTheDocument()
+  expect(document.querySelector('time')?.dateTime).toBe(
+    '2026-10-10T00:00:00.000Z'
+  )
+  expect(document.querySelector('time')?.title).toBe('2026-10-10T00:00:00.000Z')
+  await expect.element(view.getByRole('dialog')).not.toBeInTheDocument()
 })
 it('shows API failures without a misleading empty success state', async () => {
   state.query = {
@@ -213,14 +219,22 @@ it('shows full-result metrics, keyboard severity filtering and mobile charts', a
   expect(
     document.querySelectorAll('[aria-label="Findings overview"] dd')[2]
   ).toHaveClass('text-danger-text')
+  const criticalMark = document.querySelector(
+    '[aria-label="Filter Critical: 5"] [aria-hidden="true"]'
+  )!
+  const highMark = document.querySelector(
+    '[aria-label="Filter High: 15"] [aria-hidden="true"]'
+  )!
+  expect(getComputedStyle(criticalMark).backgroundColor).not.toBe(
+    getComputedStyle(highMark).backgroundColor
+  )
   await expect
     .element(view.getByRole('heading', { name: 'Issues by check' }))
     .toBeVisible()
   await expect
     .element(view.getByText('Results are partial.', { exact: false }))
-    .toBeVisible()
-  const high = view.getByRole('button', { name: 'Filter High: 15' })
-  await high.click()
+    .not.toBeInTheDocument()
+  await view.getByRole('button', { name: 'Filter High: 15' }).click()
   expect(state.key).toContain('high')
   await userEvent.keyboard('{Tab}{Enter}')
   expect(state.key).toContain('medium')
@@ -239,68 +253,6 @@ it('shows full-result metrics, keyboard severity filtering and mobile charts', a
   await page.viewport(1280, 800)
 })
 
-it('provides compact custom triage controls with required resolution notes on mobile', async () => {
-  await page.viewport(390, 844)
-  state.save.mockClear()
-  state.query = {
-    data: {
-      summary,
-      canManage: true,
-      rows: [
-        {
-          id: 'a'.repeat(64),
-          title: 'Missing tests',
-          repositoryId: '1',
-          repository: 'org/repo',
-          sourceSha: 'b'.repeat(40),
-          assessmentId: 'saved',
-          observedAt: '2026-10-10T00:00:00Z',
-          severity: 'high',
-          status: 'Reported',
-          path: null,
-          line: null,
-          ruleId: 'tests.required',
-          evidence: [],
-          verification: 'ADMIN_ASSOCIATED_UNVERIFIED',
-          occurrences: 1,
-          triage: {
-            state: 'REPORTED',
-            assigneeId: null,
-            note: '',
-            revision: 0,
-          },
-        },
-      ],
-      total: 1,
-      repositories: [],
-      pageSize: 50,
-      assessedRevisions: 1,
-    },
-    refetch: vi.fn(),
-  }
-  const view = await render(<FindingsPage />)
-  await view.getByRole('button', { name: 'Details' }).click()
-  await view.getByLabelText('Status', { exact: true }).click()
-  await view.getByRole('option', { name: 'Resolved', exact: true }).click()
-  await expect
-    .element(view.getByLabelText('Resolution or review note'))
-    .toBeRequired()
-  await view
-    .getByLabelText('Resolution or review note')
-    .fill('Fixed in the next commit; historical evidence retained')
-  await view.getByLabelText('Assignee', { exact: true }).click()
-  await view.getByRole('option', { name: 'developer', exact: true }).click()
-  await view.getByRole('button', { name: 'Save changes' }).click()
-  expect(state.save).toHaveBeenCalledOnce()
-  expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390)
-  const drawer = document.querySelector('[data-slot="sheet-content"]')!
-  expect(drawer.scrollTop).toBe(0)
-  expect(
-    drawer.querySelector('[data-slot="sheet-header"]')!.getBoundingClientRect()
-      .top
-  ).toBeGreaterThanOrEqual(0)
-})
-
 it('applies search and tab changes without changing findings query scope', async () => {
   const view = await render(<FindingsPage />)
   await view
@@ -310,6 +262,9 @@ it('applies search and tab changes without changing findings query scope', async
   await view.getByRole('button', { name: 'Apply', exact: true }).click()
   expect(state.key).toEqual([
     'findings',
+    'all',
+    'all',
+    undefined,
     'org',
     'findings',
     'all',
@@ -321,6 +276,9 @@ it('applies search and tab changes without changing findings query scope', async
   await view.getByRole('tab', { name: 'Missing or unverified results' }).click()
   expect(state.key).toEqual([
     'findings',
+    'all',
+    'all',
+    undefined,
     'org',
     'gaps',
     'all',
@@ -343,4 +301,88 @@ it('shows a loading surface before metrics are available', async () => {
   await expect
     .element(view.getByText('No saved assessments yet'))
     .not.toBeInTheDocument()
+})
+
+it('filters the shared list by source and finding type with keyboard controls', async () => {
+  const view = await render(<FindingsPage />)
+  await view.getByRole('combobox', { name: 'Finding source' }).click()
+  await page
+    .getByRole('option', { name: 'Repository health', exact: true })
+    .click()
+  expect(state.key[2]).toBe('health')
+  await view.getByRole('combobox', { name: 'Finding type' }).click()
+  await page.getByRole('option', { name: 'Reliability', exact: true }).click()
+  expect(state.key[1]).toBe('reliability')
+  await view.getByRole('combobox', { name: 'Finding source' }).click()
+  await page.getByRole('option', { name: 'CI', exact: true }).click()
+  expect(state.key[2]).toBe('ci')
+  await view.getByRole('combobox', { name: 'Finding type' }).click()
+  await page.getByRole('option', { name: 'Test failures', exact: true }).click()
+  expect(state.key[1]).toBe('tests')
+})
+it('opens Health source details from the shared list and restores shared filters on return', async () => {
+  const fingerprint = 'a'.repeat(64),
+    health = 'd1845495-dda8-48b1-b61f-af7cb843abcb'
+  state.query = {
+    data: {
+      rows: [
+        {
+          id: 'global-list-id',
+          origin: 'health',
+          health,
+          healthFingerprint: fingerprint,
+          title: 'Reliability finding',
+          category: 'reliability',
+          repositoryId: '11',
+          repository: 'org/repo',
+          sourceSha: 'b'.repeat(40),
+          assessmentId: health,
+          observedAt: '2026-10-12T14:35:00Z',
+          severity: 'medium',
+          status: 'Reported',
+          path: 'src/app.ts',
+          line: 3,
+        },
+      ],
+      total: 1,
+      assessedRevisions: 1,
+      repositories: [],
+      pageSize: 50,
+    },
+    refetch: vi.fn(),
+  }
+  const view = await render(<FindingsPage />)
+  const link = view.getByRole('link', {
+    name: 'Reliability finding',
+    exact: true,
+  })
+  await expect
+    .element(link)
+    .toHaveAttribute(
+      'href',
+      expect.stringContaining('/findings/' + fingerprint + '?')
+    )
+  await expect
+    .element(link)
+    .toHaveAttribute(
+      'href',
+      expect.stringContaining(
+        'origin=health&health=' + health + '&repository=11'
+      )
+    )
+  await expect
+    .element(link)
+    .toHaveAttribute('href', expect.stringContaining('source%3Dall'))
+  await expect
+    .element(
+      view.getByRole('cell', {
+        name: 'Reliability Repository health',
+        exact: true,
+      })
+    )
+    .toBeVisible()
+  expect(document.querySelector('time')?.dateTime).toBe(
+    '2026-10-12T14:35:00.000Z'
+  )
+  expect(document.querySelector('time')?.textContent).toContain('2026')
 })

@@ -12,6 +12,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { AuthLayout } from './auth-layout'
+import { signInReturnPath } from './return-path'
 
 export function SetupOwner() {
   const navigate = useNavigate()
@@ -34,7 +35,8 @@ export function SetupOwner() {
         throw new Error(
           'The bootstrap token is invalid, expired, or already used.'
         )
-      await navigate({ to: '/', replace: true })
+      const result = (await response.json()) as { returnPath?: string }
+      await navigate({ to: signInReturnPath(result.returnPath), replace: true })
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Owner setup failed.')
     } finally {

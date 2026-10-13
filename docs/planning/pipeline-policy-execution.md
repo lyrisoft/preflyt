@@ -82,3 +82,13 @@ is a separate failing workflow/check. PR comments are informational and do not
 determine the gate result. No report download or execution of PR code occurs in it.
 The processor now publishes the exact verified assessment before optional comments.
 Tests are written but were not run. The preceding pending-gate note is superseded.
+
+## Policy-only execution — 12 October 2026
+
+Supersedes explicit workflow check/report mappings. The approved design installs one runner per repository and fetches the published PR target-branch policy on every run. The API exports execution version 1 with commands and output paths from that immutable definition. New checks apply after a new policy revision is approved and published; editing library content alone does not change an active policy.
+
+The separate public Action provisions pinned Semgrep, Gitleaks and Trivy containers for built-in scanner recipes. Project dependencies remain in the workflow; project/custom commands live in Standards. Source mounts are read-only for scanners, credentials and the Docker socket are excluded, and report limits remain 10 × 256 KiB with a 900 KiB submission cap. Only unused SARIF rule descriptions are removed, preserving findings and diagnostics. Unconfigured, unavailable, timed-out and missing-report checks remain incomplete.
+
+The editor installs or upgrades one policy runner, without per-check Add controls. Generated YAML is independent of the selected check list. The previous explicit mapping helper and Action input are removed; Preflyt is the only consumer being migrated. Existing exact-commit, run-attempt, policy integrity, authorization, GitHub verification and final publication gates remain in force.
+
+Validation includes policy export access/staleness/integrity regressions, workflow preservation, the actual API manifest executed by the separate Action, clean/failing/missing-command outcomes, path protection, credential stripping and real Docker scanners. The Action must be tested and published first; Preflyt changes are pushed only after its immutable release is available.

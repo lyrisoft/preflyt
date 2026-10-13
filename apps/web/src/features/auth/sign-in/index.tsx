@@ -11,10 +11,14 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { signInProviderHref, signInReturnPath } from '../return-path'
 import { SignInLayout } from '../sign-in-layout'
 
 export function SignIn() {
-  const { error } = useSearch({ from: '/(auth)/sign-in' })
+  const { error, redirect } = useSearch({ from: '/(auth)/sign-in' })
+  const returnSearch = redirect
+    ? { redirect: signInReturnPath(redirect) }
+    : undefined
   const [githubEnabled, setGitHubEnabled] = useState(false)
   const [oidcEnabled, setOidcEnabled] = useState(false)
   const [methodsError, setMethodsError] = useState('')
@@ -117,7 +121,13 @@ export function SignIn() {
               <>
                 {githubEnabled && (
                   <Button asChild className='h-11 w-full justify-start px-4'>
-                    <a href={API_BASE_URL + '/auth/github/login'}>
+                    <a
+                      href={signInProviderHref(
+                        API_BASE_URL,
+                        '/auth/github/login',
+                        redirect
+                      )}
+                    >
                       <svg
                         aria-hidden='true'
                         className='size-4 fill-current'
@@ -139,7 +149,13 @@ export function SignIn() {
                     variant={githubEnabled ? 'outline' : 'default'}
                     className='h-11 w-full justify-start px-4'
                   >
-                    <a href={API_BASE_URL + '/auth/login'}>
+                    <a
+                      href={signInProviderHref(
+                        API_BASE_URL,
+                        '/auth/login',
+                        redirect
+                      )}
+                    >
                       <LockKeyhole aria-hidden='true' className='size-4' />
                       Continue with SSO
                       <ArrowRight
@@ -151,7 +167,7 @@ export function SignIn() {
                 )}
                 {needsSetup && (
                   <Button asChild className='h-11 w-full justify-start px-4'>
-                    <Link to='/super-admin/login'>
+                    <Link to='/super-admin/login' search={returnSearch}>
                       <LockKeyhole aria-hidden='true' className='size-4' />
                       Start setup
                       <ArrowRight
@@ -185,6 +201,7 @@ export function SignIn() {
             <div className='border-t pt-5'>
               <Link
                 to='/super-admin/login'
+                search={returnSearch}
                 className='inline-flex min-h-8 items-center gap-2 rounded-sm text-xs font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring'
               >
                 <LockKeyhole aria-hidden='true' className='size-3.5' />

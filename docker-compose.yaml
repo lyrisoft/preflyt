@@ -265,6 +265,9 @@ services:
     build:
       context: .
       dockerfile: deploy/web.Dockerfile
+      args:
+        PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-}
+        PUBLIC_SITE_INDEXABLE: ${PUBLIC_SITE_INDEXABLE:-false}
     restart: unless-stopped
     ports:
       - '127.0.0.1:${PREFLYT_HTTP_PORT:-8080}:8080'

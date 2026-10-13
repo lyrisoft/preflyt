@@ -1,3 +1,4 @@
+import { FindingSourceStore } from '../src/findings/finding-source-store.service.js'
 import 'reflect-metadata'
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { NestFactory } from '@nestjs/core'
@@ -38,6 +39,7 @@ let orgA: string,
   memberId: string
 let beforeBackfill = async () => {}
 let backfillObservations: { event: string; body: any }[] = []
+const readFindingSource = vi.fn()
 const origin = 'http://localhost:5173',
   sha = 'a'.repeat(40)
 const actor = (id: string, path: string) =>
@@ -111,6 +113,7 @@ beforeAll(async () => {
       providers: [
         SessionGuard,
         OwnerAdminGuard,
+        FindingSourceStore,
         FindingsService,
         ContributorsService,
         AssessmentService,
@@ -127,6 +130,7 @@ beforeAll(async () => {
         {
           provide: GitHubProviderService,
           useValue: {
+            readHealthSource: readFindingSource,
             readContributorBackfill: async () => {
               await beforeBackfill()
               return {
@@ -161,6 +165,7 @@ afterAll(async () => {
   vi.unstubAllEnvs()
 })
 beforeEach(async () => {
+  readFindingSource.mockReset()
   beforeBackfill = async () => {}
   backfillObservations = []
   await db.contributorObservation.deleteMany()
@@ -658,6 +663,9 @@ it('findings uses authorized saved commits and rejects invalid filters, foreign 
   expect(response.body.repositories.map((r: any) => r.githubId)).toEqual(['11'])
   await actor(developer, '/findings?repository=12').expect(403)
   await actor(developer, '/findings?severity=invalid').expect(400)
+  await actor(developer, '/findings?category=invalid').expect(400)
+  const filteredCategory=await actor(developer, '/findings?category=reliability').expect(200)
+  expect(filteredCategory.body.rows.every((row:any)=>row.category==='reliability'||row.ruleId==='quality.reliability')).toBe(true)
   await actor(developer, '/findings?page=0').expect(400)
   const report = { ...(assessment.report as any), checks: [{ ruleId: 'ci', required: true, coverage: 'MISSING' }] }
   await db.commitAssessment.update({ where: { id: assessment.id }, data: { report, assessmentHash: digest({ request: assessment.request, plan: assessment.plan, report }) } })
@@ -716,4 +724,125 @@ it('assigns and resolves finding triage without changing evidence, rejects unaut
   expect(updated.triage.revision).toBe(2)
   expect((await db.commitAssessment.findUniqueOrThrow({ where: { id: assessment.id } })).assessmentHash).toBe(hash)
   expect(await db.auditEvent.count({ where: { event: 'finding.triage_updated' } })).toBe(2)
+})
+
+it('opens pinned finding details without inferring a source location for check evidence', async () => {
+ const {assessment}=await complianceFixture()
+ const report={...(assessment.report as any),checks:[{ruleId:'ci',required:true,coverage:'MISSING'}]}
+ await db.commitAssessment.update({where:{id:assessment.id},data:{report,assessmentHash:digest({request:assessment.request,plan:assessment.plan,report})}})
+ const row=(await actor(developer,'/findings?kind=gaps').expect(200)).body.rows[0]
+ await request(app.getHttpServer()).get('/findings/'+row.id).expect(401)
+ const details=await actor(developer,`/findings/${row.id}?assessment=${assessment.id}`).expect(200)
+ expect(details.headers['cache-control']).toBe('no-store')
+ expect(details.body).toMatchObject({canManage:false,finding:{id:row.id,sourceSha:sha,assessmentId:assessment.id}})
+ const source=await actor(developer,`/findings/${row.id}/source?assessment=${assessment.id}`).expect(200)
+ expect(source.body).toMatchObject({sourceSha:sha,path:null,line:null,lines:[]})
+ expect(source.body.reason).toContain('not a finding at a code location')
+ expect(readFindingSource).not.toHaveBeenCalled()
+ await actor(developer,`/findings/${row.id}?assessment=../invalid`).expect(400)
+ await db.repositoryGrant.deleteMany({where:{membershipId:memberId}})
+ await actor(developer,`/findings/${row.id}`).expect(404)
+ await actor(developer,`/findings/${row.id}/source`).expect(404)
+})
+
+async function savedHealthFixture(githubId=11n, count=3, sourceSha=sha, createdAt=new Date()) {
+  const repo=await db.gitHubRepository.findUniqueOrThrow({where:{githubId}})
+  const report={version:1,mode:'EXECUTED',completeness:'PARTIAL',inspection:{complete:true,fileCount:5,languages:['typescript']},comparisonKey:'fixture',limits:[],analyses:[],findings:Array.from({length:count},(_,index)=>({
+    fingerprint:digest(['fixture',index]), category:index%2?'reliability':'security',severity:index%2?'medium':'high',title:`Health issue ${index}`,ruleId:`rule-${index}`,checkId:index%2?'quality.reliability':'security.sast',path:'src/app.ts',line:index+1,endLine:index+1,suppressed:false,evidence:'ANALYZER_REPORTED'
+  }))}
+  return db.repositoryHealthAssessment.create({data:{repositoryId:repo.id,organizationId:githubId===21n?orgB:orgA,branch:'main',targetRevision:1,requestKey:randomUUID(),actorId:owner,state:'COMPLETED',sourceSha,report,createdAt,finishedAt:createdAt}})
+}
+it('unifies CI and Health results while keeping scoped source identities and filtered metrics',async()=>{
+  const {assessment}=await complianceFixture()
+  const plan={...(assessment.plan as any),checks:[...(assessment.plan as any).checks,{id:'security.sast',title:'CI security check',required:true,severity:'high',operator:'verified_check_succeeded',capability:'import_only',allowedSources:['verified_imported_ci']}]}
+  const report={...(assessment.report as any),checks:[{ruleId:'ci',required:true,coverage:'MISSING'},{ruleId:'security.sast',title:'CI security check',required:true,providerResult:'FAILED',mappingTrust:'APPROVED_SOURCE_BINDING',freshness:'FRESH_AT_COLLECTION',ambiguous:false,superseded:false,deliveryId:'fixture-delivery',evidenceValidation:{version:2,observationIntegrity:true,sourceApproved:true}}],observations:[{deliveryId:'fixture-delivery',sourceSha:sha,result:'FAILED',sourceStatus:'completed',sourceKind:'check_run'}]}
+  await db.commitAssessment.update({where:{id:assessment.id},data:{plan,report,assessmentHash:digest({request:assessment.request,plan,report})}})
+  const health=await savedHealthFixture()
+  await savedHealthFixture(12n,9)
+  await savedHealthFixture(21n,9)
+  const result=(await actor(developer,'/findings').expect(200)).body
+  expect(result.rows).toHaveLength(4)
+  expect(result.summary).toMatchObject({reportedIssues:4,evidenceGaps:1,affectedRepositories:1,criticalHigh:3})
+  expect(result.assessedRevisions).toBe(1)
+  expect(result.incompleteHealth).toBe(true)
+  expect(result.rows.every((r:any)=>r.repositoryId==='11')).toBe(true)
+  expect(new Set(result.rows.map((r:any)=>r.origin))).toEqual(new Set(['ci','health']))
+  const row=result.rows.find((r:any)=>r.origin==='health')
+  expect(row).toMatchObject({health:health.id,assessmentId:health.id,sourceSha:sha,path:'src/app.ts'})
+  expect(row.id).not.toBe(row.healthFingerprint)
+  expect((await actor(developer,'/findings?source=ci&kind=gaps').expect(200)).body).toMatchObject({total:1,summary:{reportedIssues:1,evidenceGaps:1}})
+  const filtered=(await actor(developer,'/findings?source=health&category=reliability').expect(200)).body
+  expect(filtered).toMatchObject({total:1,summary:{reportedIssues:1,criticalHigh:0,evidenceGaps:0}})
+  expect(filtered.rows[0].category).toBe('reliability')
+  expect((await actor(developer,'/findings?source=health&severity=high&q=issue%202').expect(200)).body.total).toBe(1)
+  expect((await actor(developer,'/findings?source=health&triage=RESOLVED').expect(200)).body.total).toBe(0)
+  await actor(developer,'/findings?source=invalid').expect(400)
+  await actor(developer,'/findings?source=health&health=invalid&repository=11').expect(400)
+  await actor(developer,`/findings?source=ci&health=${health.id}&repository=11`).expect(400)
+  await actor(developer,'/findings?source=health&repository=12').expect(403)
+  // The CI-specific mutation/details API cannot accept a Health list identity.
+  await actor(owner,`/findings/${row.id}`).expect(404)
+  await mutate(owner,`/findings/${row.id}/triage`,{state:'REPORTED',note:'',expectedRevision:0}).expect(404)
+})
+it('keeps the latest Health report per commit and supports exact-report links and pagination',async()=>{
+  const prior=await savedHealthFixture(11n,2,sha,new Date('2026-10-01'))
+  const latest=await savedHealthFixture(11n,60,sha,new Date('2026-10-02'))
+  const other=await savedHealthFixture(11n,2,'b'.repeat(40),new Date('2026-10-03'))
+  const denied=await savedHealthFixture(12n)
+  const first=(await actor(developer,'/findings?source=health').expect(200)).body
+  const next=(await actor(developer,'/findings?source=health&page=2').expect(200)).body
+  expect(first.total).toBe(62)
+  expect(first.rows).toHaveLength(50)
+  expect(next.rows).toHaveLength(12)
+  expect(first.summary).toEqual(next.summary)
+  expect(first.summary.reportedIssues).toBe(62)
+  expect(first.assessedRevisions).toBe(2)
+  expect(first.rows[0].health).toBe(other.id)
+  expect(first.rows.some((r:any)=>r.health===prior.id)).toBe(false)
+  expect(first.rows.some((r:any)=>r.health===latest.id)).toBe(true)
+  const exact=(await actor(developer,`/findings?origin=health&repository=11&health=${prior.id}`).expect(200)).body
+  expect(exact.total).toBe(2)
+  expect(exact.rows.every((r:any)=>r.health===prior.id)).toBe(true)
+  await actor(developer,`/findings?source=health&repository=11&health=${denied.id}`).expect(404)
+  // Revoking the repository grant removes both sources from the shared endpoint.
+  await db.repositoryGrant.deleteMany({where:{membershipId:memberId}})
+  expect((await actor(developer,'/findings').expect(200)).body.rows).toEqual([])
+})
+it('shows inspection-only exact reports without inventing findings or coverage',async()=>{
+  const health=await savedHealthFixture(11n,0)
+  await db.repositoryHealthAssessment.update({where:{id:health.id},data:{report:{...(health.report as any),mode:'INSPECTION_ONLY'}}})
+  const exact=(await actor(developer,`/findings?source=health&repository=11&health=${health.id}&category=coverage&kind=gaps`).expect(200)).body
+  expect(exact).toMatchObject({rows:[],total:0,inspectionOnly:true,incompleteHealth:true,truncated:false})
+})
+
+it('returns directory sparklines only from authorized scoped activity',async()=>{
+ const response=await actor(developer,'/contributors?days=7').expect(200)
+ expect(response.body.contributors).toHaveLength(1)
+ const series=response.body.contributors[0].dailyActivity
+ expect(series).toHaveLength(7)
+ expect(series.reduce((sum:number,day:any)=>sum+day.count,0)).toBe(1)
+ await actor(developer,'/contributors?repository=12').expect(403)
+ const viewerResult=await actor(viewer,'/contributors?days=7').expect(200)
+ if(!viewerResult.body.permissions.activity) expect(viewerResult.body.contributors.every((c:any)=>c.dailyActivity===null)).toBe(true)
+})
+
+it('includes committer-only activity in profile counts and chart without double-counting author/committer roles',async()=>{
+ const contributor=await db.contributor.findFirstOrThrow({where:{githubUserId:'11',installationId:1n}})
+ const observedAt=new Date()
+ const observed=(relationship:'COMMIT_AUTHOR'|'COMMITTER',sourceObjectId:string)=>({actor:{githubUserId:'11',login:'person11',kind:'HUMAN' as const},relationship,sourceObjectId,sourceSha:sha,pullRequestNumber:null,action:'pushed',state:null,merged:false,observedAt})
+ await captureContributors(db,randomUUID(),'committer-fixture',1n,11n,[observed('COMMITTER','commit-one'),observed('COMMITTER','commit-two')])
+ const path=`/contributors/${contributor.id}?repository=11&days=30`
+ const first=(await actor(developer,path).expect(200)).body
+ expect(first.contributors[0].commits).toBe(2)
+ expect(first.contributionActivity.reduce((total:number,day:any)=>total+day.commits,0)).toBe(2)
+ expect(first.observations.filter((o:any)=>o.relationship==='COMMITTER')).toHaveLength(2)
+ await captureContributors(db,randomUUID(),'author-fixture',1n,11n,[observed('COMMIT_AUTHOR','commit-one'),observed('COMMITTER','commit-one')])
+ const both=(await actor(developer,path).expect(200)).body
+ expect(both.contributors[0].commits).toBe(2)
+ expect(both.contributionActivity.reduce((total:number,day:any)=>total+day.commits,0)).toBe(2)
+ const onlyAuthor=(await actor(developer,path+'&relationship=COMMIT_AUTHOR').expect(200)).body
+ expect(onlyAuthor.contributors[0].commits).toBe(1)
+ const onlyCommitter=(await actor(developer,path+'&relationship=COMMITTER').expect(200)).body
+ expect(onlyCommitter.contributors[0].commits).toBe(2)
+ await actor(developer,`/contributors/${contributor.id}?repository=12`).expect(403)
 })

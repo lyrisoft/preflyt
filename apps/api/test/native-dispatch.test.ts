@@ -161,7 +161,8 @@ it('does not dispatch without explicit deployment opt-in', async () => {
   const { service, db } = fixture()
   vi.stubEnv('NATIVE_EXECUTION_ENABLED', 'false')
   await service.reconcile()
-  expect(db.nativeExecutionRequest.findMany).not.toHaveBeenCalled()
+  expect(db.nativeExecutionRequest.findMany).toHaveBeenCalledWith(expect.objectContaining({where: expect.objectContaining({state: {in: ['PREPARING', 'RUNNING', 'CANCEL_REQUESTED']}})}))
+  expect(nativeControllerCall).not.toHaveBeenCalled()
 })
 it('keeps cancellation pending rather than claiming unconfirmed cleanup', async () => {
   const { service, row, github, results } = fixture('CANCEL_REQUESTED')

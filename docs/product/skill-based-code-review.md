@@ -1,7 +1,7 @@
 # Skill-Based AI Engineering Review
 
 **Status:** Instruction-only catalogue, saved-assessment evidence review, bounded exact-commit PR diff review, automatic published-policy dispatch and opt-in neutral GitHub summaries implemented.
-**Scope:** Read-only pull-request analysis. Not a general coding agent.  
+**Scope:** Read-only pull-request analysis. Not a general coding agent.
 **Related:** [Code Quality Review](code-quality-review.md), [AI routing](../architecture/ADR-0004-shift-left-assessment-governance.md), [RBAC](rbac-and-authorization.md).
 
 ## Implemented first increment
@@ -74,7 +74,7 @@ Assessment → **Code Quality → AI Review**: show which skills ran/skipped/fai
 - **P2:** versioned skill catalogue/enablement and advisory review policies, without giving AI gate authority.
 - **P3:** correlate with verified scanner evidence; skill instructions cannot bypass sandbox rules.
 - **P4:** multiple skills per PR, routing, correlation, validation, GitHub summary and opt-in inline feedback.
-- **P5:** reuse approved skills in CLI/IDE via server authorization and local policy.
+- **P6:** reuse approved skills in CLI/IDE via server authorization and local policy.
 
 ## Acceptance
 

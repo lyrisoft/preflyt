@@ -2,6 +2,7 @@ import { expect, it, vi } from 'vitest'
 import {
   githubReportExecutions,
   pipelineVerifications,
+  verifiedPipelineReports,
 } from '../src/assessments/pipeline-verification.js'
 const observation = {
   sourceKind: 'workflow_run',
@@ -23,6 +24,24 @@ const receipt = {
   reports: [{ ruleId: 'tests.required', sha256: 'hash' }],
   jobIds: ['3'],
 }
+it('prefers only attached reports bound to the server-verified workflow and attempt', () => {
+  const jobs={...observation,deliveryId:'jobs',sourceKind:'workflow_jobs',
+    sourceIdentity:{...observation.sourceIdentity,jobIds:['3'],verificationScope:'jobs'},
+    artifacts:[{sha256:'hash'}]}
+  const proof={...receipt,verificationScope:'jobs'}
+  const selected=verifiedPipelineReports([proof],[jobs])
+  expect([...selected.get('tests.required')!]).toEqual(['jobs'])
+  expect(verifiedPipelineReports([], [jobs]).size).toBe(0)
+  for(const rejected of [
+    {...jobs,artifacts:[{sha256:'other'}]},
+    {...jobs,sourceSha:'b'.repeat(40)},
+    {...jobs,sourceObjectId:'other'},
+    {...jobs,sourceConclusion:'failure'},
+    {...jobs,sourceIdentity:{...jobs.sourceIdentity,runAttempt:2}},
+    {...jobs,sourceIdentity:{...jobs.sourceIdentity,workflowId:'other'}},
+    {...jobs,sourceIdentity:{...jobs.sourceIdentity,jobIds:['other']}},
+  ]) expect(verifiedPipelineReports([proof],[rejected]).size).toBe(0)
+})
 it('links exact submitted report bytes, rule and run attempt, excluding other and manual reports', () => {
   expect(githubReportExecutions([receipt], observation, 'hash')).toMatchObject([
     { ruleId: 'tests.required', runId: '1' },

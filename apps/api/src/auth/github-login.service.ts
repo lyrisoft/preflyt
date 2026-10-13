@@ -15,6 +15,7 @@ import {
 } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service.js'
 import { AuthService } from './auth.service.js'
+import { loginReturnPath } from './auth-return-path.js'
 import {
   GitHubIdentityProvider,
   githubLoginCallback,
@@ -24,23 +25,9 @@ import {
   encryptGitHubUserTokens,
   githubUserTokenEncryptionKey,
 } from './github-token-cipher.js'
+export { loginReturnPath } from './auth-return-path.js'
 const hash = (value: string) => createHash('sha256').update(value).digest('hex')
 const opaque = () => randomBytes(32).toString('base64url')
-export function loginReturnPath(raw?: string) {
-  if (!raw) return '/'
-  if (
-    !raw.startsWith('/') ||
-    raw.startsWith('//') ||
-    /[\\\u0000-\u0020\u007f]/u.test(raw) ||
-    /%0[ad]|%5c/i.test(raw) ||
-    raw.length > 2048
-  )
-    throw new ForbiddenException('Invalid sign-in return path')
-  const parsed = new URL(raw, 'https://preflyt.invalid')
-  if (parsed.origin !== 'https://preflyt.invalid')
-    throw new ForbiddenException('Invalid sign-in return path')
-  return parsed.pathname + parsed.search + parsed.hash
-}
 @Injectable()
 export class GitHubLoginService implements OnModuleInit {
   constructor(
@@ -213,6 +200,7 @@ export class GitHubLoginService implements OnModuleInit {
     })
     if (consumed.count !== 1)
       throw new UnauthorizedException('GitHub sign-in has already been used')
+    const returnPath = loginReturnPath(transaction.returnPath)
     const tokens = await this.provider.exchange(code, transaction.codeVerifier)
     const user = await this.provider.user(tokens.accessToken)
     const challengeToken = opaque()
@@ -286,7 +274,7 @@ export class GitHubLoginService implements OnModuleInit {
           linkingSessionHash: transaction.linkingSessionHash,
           accountId: account.id,
           tokenHash: hash(challengeToken),
-          returnPath: transaction.returnPath,
+          returnPath,
           expiresAt: new Date(Date.now() + 600000),
         },
       })
@@ -482,6 +470,11 @@ export class GitHubLoginService implements OnModuleInit {
     const { challenge, token, accessExpiresAt } = await this.challenge(raw)
     if (challenge.linkingIdentity) throw new ForbiddenException('Confirm account linking in Settings')
     if (challenge.linkingOrganizationId) await this.assertLinkSession(challenge, existingSessionToken)
+    const returnPath = loginReturnPath(
+      challenge.linkingOrganizationId
+        ? '/access-control?tab=github'
+        : challenge.returnPath,
+    )
     const verified = await this.provider.verify(
       token,
       BigInt(installationId),
@@ -759,9 +752,7 @@ export class GitHubLoginService implements OnModuleInit {
     return {
       sessionToken,
       expiresAt,
-      returnPath: challenge.linkingOrganizationId
-        ? '/access-control?tab=github'
-        : challenge.returnPath,
+      returnPath,
     }
   }
 }

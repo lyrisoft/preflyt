@@ -6,7 +6,7 @@ Preflyt supports a common check contract for Docker and Kubernetes deployments: 
 
 The Docker launcher and image-owned report wrapper have passed disposable fixtures for Gitleaks secret detection, the bundled JavaScript/TypeScript and Python Semgrep rules, fixed JavaScript/TypeScript and Python lint rules, unsafe Terraform and Kubernetes configuration, and Node's built-in test runner. Clean scans and tests pass; zero or skipped tests remain incomplete. These fixtures use ordinary Docker with generated source only. They do not approve execution against connected repositories or establish broad SAST coverage. Signed receipt-to-policy integration is covered by separate isolated database fixtures; the generated scanner fixtures do not prove live production gate enforcement.
 
-Docker and Kubernetes job dispatch, signed result ingestion and policy-gate integration are implemented and fixture-tested. Kubernetes lifecycle tests cover both a simulated API and generated Node source on a dedicated local kind cluster, including scheduling-gate admission and UID-owned cleanup. These ordinary-runc fixtures do not certify a production cluster or independently reviewed effective isolation. Complete adapter coverage and independently reviewed live acceptance remain P3 work. Local Docker availability must not enable production execution by itself.
+Docker and Kubernetes job dispatch, signed result ingestion and policy-gate integration are implemented and fixture-tested. Kubernetes lifecycle tests cover both a simulated API and generated Node source on a dedicated local kind cluster, including scheduling-gate admission and UID-owned cleanup. These ordinary-runc fixtures do not certify a production cluster or approved effective isolation. Complete adapter coverage and signed deployment acceptance remain P3 work. Local Docker availability must not enable production execution by itself.
 
 ## Shared defaults
 
@@ -22,7 +22,7 @@ Docker and Kubernetes job dispatch, signed result ingestion and policy-gate inte
 
 Run the launcher as a separate service on a dedicated runner host. The API and integration worker must not have Docker access. The runner may use the engine's default seccomp profile; never set `seccomp=unconfined`. `seccomp=default` is a filename, not Docker's built-in default profile selector.
 
-Real repository execution requires a configured `runsc` or `kata` runtime and an independent signed review covering runtime isolation, engine configuration, organization scope and the tool inventory. `NATIVE_DOCKER_APPROVAL` carries that review; `NATIVE_RUNTIME_REVIEW_KEYS` contains trusted Ed25519 public keys. The review expires within 30 days and changes to the engine or tool inventory invalidate it. Review approval cannot be issued by the execution job itself.
+Real repository execution requires a configured `runsc` or `kata` runtime and a signed, deployment-scoped approval covering runtime isolation, engine configuration, organization scope and the tool inventory. With the owner's explicit authorization, the responsible operator may sign this review; record that provenance accurately. `NATIVE_DOCKER_APPROVAL` carries that review; `NATIVE_RUNTIME_REVIEW_KEYS` contains trusted Ed25519 public keys. The review expires within 30 days and changes to the engine or tool inventory invalidate it. Review approval cannot be issued by the execution job itself.
 
 The deployment must keep signing and application credentials outside scanner containers. A containerized launcher needs only its dedicated engine connection and private job storage, with the same source path visible to that engine. Do not mount a general-purpose host Docker socket into the API or worker. Docker and Kubernetes are operator choices; Docker execution does not require a Kubernetes cluster.
 
@@ -55,7 +55,7 @@ Only the image build downloads the vendor database. Runtime scan containers rema
 
 `deploy/api.Dockerfile` provides the separate `native-docker-controller` target with an immutable official Docker CLI. The normal API and worker use the `runtime` target without that CLI. `execution-controller.js` rejects application/database/GitHub/model/cloud credentials and is absent from the API/worker import graphs.
 
-Set `NATIVE_RUNTIME_BACKEND=docker` on the API status client and the dedicated controller; supply the same independently signed `NATIVE_DOCKER_APPROVAL` and trusted review keys. Enable `NATIVE_PREFLIGHT_ENABLED=true` on the API only after configuring that reviewed controller. The status client calls the reviewed HTTPS controller origin and verifies a short-lived nonce-bound signature. It never connects to the Docker engine. A missing Docker review does not fall back to Kubernetes. Kubernetes remains the existing default for installations using its reviewed preflight configuration.
+Set `NATIVE_RUNTIME_BACKEND=docker` on the API status client and the dedicated controller; supply the same signed `NATIVE_DOCKER_APPROVAL` and trusted review keys. Enable `NATIVE_PREFLIGHT_ENABLED=true` on the API only after configuring that reviewed controller. The status client calls the reviewed HTTPS controller origin and verifies a short-lived nonce-bound signature. It never connects to the Docker engine. A missing Docker review does not fall back to Kubernetes. Kubernetes remains the existing default for installations using its reviewed preflight configuration.
 
 Copy `controller.env.example` to a protected `controller.env`. Place your dedicated engine's client certificate, private key and CA certificate in protected `docker-tls` files named `cert.pem`, `key.pem` and `ca.pem`, readable only by the controller's deployment identity. The engine must enforce mutual TLS. Use a dedicated Docker engine; this connection grants trusted controller authority over that engine. Do not share the application host engine. TLS client settings are available to the controller's Docker CLI only and are never passed to scanner containers.
 
@@ -63,13 +63,13 @@ Run `docker compose -f controller.compose.yaml up -d` from this directory with `
 
 ### Source-binding upgrade
 
-Scanner images now include `source-verification.mjs`. The trusted wrapper verifies the actual mounted files, Git tree structure and executable modes against the controller source hash before and after the command; the child receives no controller metadata/credentials. Report envelopes use version 2 and include the verified source hash. Old wrapper images cannot supply accepted receipts. Rebuild/publish/review all scanner digests and update the independently signed tool-inventory/runtime review before enabling execution. Generated fixture harnesses verify the same envelope.
+Scanner images now include `source-verification.mjs`. The trusted wrapper verifies the actual mounted files, Git tree structure and executable modes against the controller source hash before and after the command; the child receives no controller metadata/credentials. Report envelopes use version 2 and include the verified source hash. Old wrapper images cannot supply accepted receipts. Rebuild/publish/review all scanner digests and update the signed tool-inventory/runtime review before enabling execution. Generated fixture harnesses verify the same envelope.
 
 For a storage-limited development machine, build only the Node fixture image and run `NATIVE_FIXTURE_TOOL=node pnpm --filter @preflyt/api exec tsx scripts/native-check-fixtures.mts`. This runs four generated outcomes (passing, failing, empty and skipped tests); it does not authorize real-repository execution.
 
 ### Opt-in Kubernetes launcher
 
-Keep the base `../native-preflight/compose.yaml` deployment observation-only. Use `kubernetes-launcher-rbac.yaml` only in the independently reviewed sandbox namespace, after replacing the exact namespace, service-account and RuntimeClass names. The launcher identity can create/read/delete Jobs and immutable source ConfigMaps, inspect Pods/logs, and remove a Pod scheduling gate. It cannot read Secrets, exec/attach into Pods, create Pods directly or change protections. API/worker identities receive none of this authority.
+Keep the base `../native-preflight/compose.yaml` deployment observation-only. Use `kubernetes-launcher-rbac.yaml` only in the approved sandbox namespace, after replacing the exact namespace, service-account and RuntimeClass names. The launcher identity can create/read/delete Jobs and immutable source ConfigMaps, inspect Pods/logs, and remove a Pod scheduling gate. It cannot read Secrets, exec/attach into Pods, create Pods directly or change protections. API/worker identities receive none of this authority.
 
 The optional `kubernetes-controller.execution.yaml` override mounts a protected launcher token and an owned 0700 journal directory. Relative paths resolve beside the base Compose file; put `launcher-token` there and set `NATIVE_KUBERNETES_JOURNAL_DIRECTORY` to the pre-created absolute journal path. Use the same API image by immutable digest, with the image-owned source initializer bundled into all reviewed scanner images. Explicitly enable application execution only after its signed preflight verifies the current review and controller capability.
 
@@ -88,7 +88,7 @@ PREFLYT_FIXTURE_KUBECONFIG=/private/tmp/preflyt-gap-kind.kubeconfig pnpm --filte
 kind delete cluster --name preflyt-gap-fixture --kubeconfig /private/tmp/preflyt-gap-kind.kubeconfig
 ```
 
-This is a generated-source lifecycle test using ordinary runc, not independent strong-isolation approval. Connected repositories still require a reviewed gVisor/Kata runtime. Kubernetes omits false host-access booleans in API responses; verification normalizes only those documented false defaults, while enabled flags remain rejected. Cleanup has a separate 30-second deadline and never marks evidence complete if deletion cannot be confirmed.
+This is a generated-source lifecycle test using ordinary runc, not signed strong-isolation approval. Connected repositories still require a reviewed gVisor/Kata runtime. Kubernetes omits false host-access booleans in API responses; verification normalizes only those documented false defaults, while enabled flags remain rejected. Cleanup has a separate 30-second deadline and never marks evidence complete if deletion cannot be confirmed.
 
 ## Versioned scanner publication
 

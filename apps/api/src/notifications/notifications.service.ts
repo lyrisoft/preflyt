@@ -236,6 +236,9 @@ export class NotificationsService {
               ? policy
               : undefined,
           ),
+          ...(row.event.branchRef ? { details: ['Branch: ' + row.event.branchRef] } : {}),
+          healthAssessmentId: row.event.healthAssessmentId,
+          branchRef: row.event.branchRef,
           id: row.id,
           readAt: row.readAt,
           createdAt: row.event.createdAt,

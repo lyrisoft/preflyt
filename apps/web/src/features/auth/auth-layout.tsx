@@ -1,4 +1,4 @@
-import { ShieldCheck } from 'lucide-react'
+import { PreflytLogo } from '@/components/preflyt-brand'
 
 type AuthLayoutProps = {
   children: React.ReactNode
@@ -18,15 +18,9 @@ export function AuthLayout({ children, footer }: AuthLayoutProps) {
 
       <main className='relative z-10 flex w-full max-w-md flex-col items-center gap-7'>
         <div className='flex flex-col items-center gap-3 text-center'>
-          <div className='flex size-11 items-center justify-center rounded-xl border border-white/10 bg-white/5 shadow-lg shadow-black/20'>
-            <ShieldCheck
-              aria-hidden='true'
-              className='size-5 text-sky-300'
-              strokeWidth={1.8}
-            />
-          </div>
+          <PreflytLogo className='h-20 w-72 max-w-full' />
           <div>
-            <h1 className='text-xl font-semibold tracking-tight'>Preflyt</h1>
+            <h1 className='sr-only'>Preflyt</h1>
             <p className='mt-1 text-[10px] font-medium tracking-[0.22em] text-muted-foreground uppercase'>
               Engineering control plane
             </p>

@@ -1,6 +1,6 @@
 # Implementation gap closure
 
-Status: active, audited against source and executable checks on 2026-10-10. This ledger distinguishes implementation, generated-fixture acceptance and production acceptance. It does not renumber P0–P11 or substitute imported CI coverage for native scanner coverage.
+Status: active, audited against source and executable checks on 2026-10-10. This ledger distinguishes implementation, generated-fixture acceptance and production acceptance. It does not renumber P0–P12 or substitute imported CI coverage for native scanner coverage.
 
 ## Completed implementation in this closure
 

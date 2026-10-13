@@ -42,6 +42,7 @@ export type GatePreview = {
     status: string
     reasons: string[]
     deliveryId: string | null
+    recordedAt?: string | null
   }[]
 }
 export function useGatePreview(
@@ -82,10 +83,16 @@ export type BindingResult = {
 }
 export function useBindings(repo: string, policyId?: string) {
   return useQuery({
-    queryKey: policyId ? ['ci-bindings', repo, policyId] : ['ci-bindings', repo],
+    queryKey: policyId
+      ? ['ci-bindings', repo, policyId]
+      : ['ci-bindings', repo],
     retry: false,
     queryFn: ({ signal }) =>
-      engineeringRead<BindingResult>(repo, `/ci-bindings${policyId ? `?policy=${encodeURIComponent(policyId)}` : ''}`, signal),
+      engineeringRead<BindingResult>(
+        repo,
+        `/ci-bindings${policyId ? `?policy=${encodeURIComponent(policyId)}` : ''}`,
+        signal
+      ),
   })
 }
 export type PrContext = {

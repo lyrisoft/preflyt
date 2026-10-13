@@ -169,7 +169,7 @@ export function decryptAiCredential(
       Buffer.from(parts[3]!, "base64url").toString("base64url") !== parts[3]
     )
       throw new Error();
-    const cipher = createDecipheriv("aes-256-gcm", aiCredentialKey(), nonce);
+    const cipher = createDecipheriv("aes-256-gcm", aiCredentialKey(), nonce, { authTagLength: 16 });
     cipher.setAAD(aad(org, id, endpointHash));
     cipher.setAuthTag(tag);
     return Buffer.concat([

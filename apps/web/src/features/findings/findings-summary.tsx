@@ -35,7 +35,7 @@ export type FindingsSummary = {
   byCheck: { name: string; count: number }[]
 }
 const colors: Record<string, string> = {
-  critical: 'var(--destructive)',
+  critical: 'var(--severity-critical-mark)',
   high: 'var(--destructive)',
   medium: 'var(--warning)',
   low: 'var(--info)',

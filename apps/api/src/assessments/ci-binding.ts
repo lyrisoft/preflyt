@@ -28,9 +28,12 @@ export function resolveBindings(
     deliveryId: string
     sourceObjectId: string
     sourceIdentity?: unknown
+    sourceStatus?: string | null
+    sourceConclusion?: string | null
     sourceUpdatedAt: Date | null
     observedAt: Date
   }[],
+  verifiedReports: ReadonlyMap<string, ReadonlySet<string>> = new Map(),
 ) {
   const mappings: {
       ruleId: string
@@ -59,10 +62,25 @@ export function resolveBindings(
         b.observedAt.getTime() - a.observedAt.getTime() ||
         b.deliveryId.localeCompare(a.deliveryId),
     )
-    if (matches[0])
+    const latest = matches[0]
+    // The overall workflow includes the terminal policy gate. Its failure must
+    // not erase independently verified job reports from the same exact attempt.
+    // Pending or newer attempts still supersede the previous report.
+    const preferred = latest?.sourceStatus === 'completed' &&
+      ['success', 'failure'].includes(latest.sourceConclusion ?? '')
+      ? matches.find(row =>
+          row.sourceObjectId === latest.sourceObjectId &&
+          runAttempt(row.sourceIdentity) === runAttempt(latest.sourceIdentity) &&
+          row.sourceStatus === 'completed' && row.sourceConclusion === 'success' &&
+          (latest.sourceConclusion === 'success' || row.sourceIdentity &&
+            (row.sourceIdentity as Record<string, unknown>).verificationScope === 'jobs') &&
+          verifiedReports.get(binding.ruleId)?.has(row.deliveryId))
+      : undefined
+    const chosen = preferred ?? latest
+    if (chosen)
       mappings.push({
         ruleId: binding.ruleId,
-        deliveryId: matches[0].deliveryId,
+        deliveryId: chosen.deliveryId,
         bindingApproved: true,
       })
   }

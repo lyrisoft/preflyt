@@ -10,6 +10,7 @@ const sidebars: SidebarsConfig = {
   ],
   userGuide: [
     'user-guide/index',
+    'user-guide/repository-health',
     'user-guide/standards',
     'user-guide/policies',
     'user-guide/pull-request-checks',

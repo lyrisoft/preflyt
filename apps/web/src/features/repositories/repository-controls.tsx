@@ -34,8 +34,8 @@ import {
 } from '@/components/ui/table'
 import { StatusBadge } from '@/components/status-badge'
 import { SurfaceIcon } from '@/components/surface-icon'
-import type { ControlFilter, RepositoryTab } from './posture-summary'
 import { useStandards, type Standards } from './repository-queries'
+import type { ControlFilter, RepositoryTab } from './repository-tabs'
 import {
   configurationOrder,
   configurationStatus,
@@ -46,6 +46,7 @@ const filters: { value: ControlFilter; label: string }[] = [
   { value: 'all', label: 'All' },
   { value: 'review', label: 'Setup gaps' },
   { value: 'found', label: 'Files found' },
+  { value: 'ci', label: 'CI checks' },
 ]
 const pageSize = 8
 const githubPath = (value: string) =>
@@ -63,7 +64,7 @@ function ControlDetails({
   onClose: () => void
 }) {
   const status = configurationStatus[control?.configuration ?? ''] ?? {
-    label: 'Not determined',
+    label: 'Configuration not determined',
     tone: 'neutral' as const,
   }
   const sourceSha = standards?.profileSnapshot?.sourceSha
@@ -188,14 +189,19 @@ export function RepositoryControls({
   const counts: Record<ControlFilter, number> = {
     all: controls.length,
     found: controls.filter((c) => c.configuration === 'HINT_DETECTED').length,
-    review: controls.filter((c) => c.configuration !== 'HINT_DETECTED').length,
+    review: controls.filter((c) =>
+      ['MISSING', 'UNKNOWN'].includes(c.configuration)
+    ).length,
+    ci: controls.filter((c) => c.configuration === 'NOT_INSPECTED').length,
   }
   const visible = controls.filter((control) =>
     filter === 'all'
       ? true
       : filter === 'found'
         ? control.configuration === 'HINT_DETECTED'
-        : control.configuration !== 'HINT_DETECTED'
+        : filter === 'ci'
+          ? control.configuration === 'NOT_INSPECTED'
+          : ['MISSING', 'UNKNOWN'].includes(control.configuration)
   )
   const pages = Math.max(1, Math.ceil(visible.length / pageSize))
   const page = Math.min(
@@ -316,7 +322,10 @@ export function RepositoryControls({
                   pageControls.map((control) => {
                     const status = configurationStatus[
                       control.configuration
-                    ] ?? { label: 'Not determined', tone: 'neutral' as const }
+                    ] ?? {
+                      label: 'Configuration not determined',
+                      tone: 'neutral' as const,
+                    }
                     return (
                       <TableRow key={control.id}>
                         <TableCell className='max-w-[24rem] min-w-48 ps-6 whitespace-normal sm:min-w-56'>

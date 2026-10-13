@@ -1,7 +1,7 @@
 # Engineering Contributors: activity and policy evidence
 
 **Status:** Activity capture, scoped directory/profile UI and historical saved-standards compliance summaries are implemented. Published-policy adherence, confirmed findings and advanced trends remain planned. See [implemented subset](../operations/scoped-access-contributors.md).
-**Delivery:** P1 data capture → P2 policy attribution → P3 usable Contributors UI → P10/P11 advanced trends. **Existing phase order unchanged.**
+**Delivery:** P1 data capture → P2 policy attribution → P3 usable Contributors UI → P11/P12 advanced trends. **Existing phase order unchanged.**
 
 ## Importing existing activity
 
@@ -47,7 +47,7 @@ Ingest signed PR/review/push/check events with idempotency and revision correctn
 | **P1** | Capture PR authors, reviewers, commits and contributor identities with provenance alongside CI evidence; expose verified associations on PR assessment details |
 | **P2** | Link deterministic gate outcomes and evidence coverage to authored PR revisions; show first-pass/final outcomes on PR detail |
 | **P3** | Deliver working **Contributors** sidebar page, searchable list, summary metrics, charts and contributor detail with repository/PR/review/assessment drill-down |
-| **P10–P11** | Add authorized team-level aggregates, historical trends, advanced policy comparisons and engineering improvement reporting |
+| **P11–P12** | Add authorized team-level aggregates, historical trends, advanced policy comparisons and engineering improvement reporting |
 
 **P3 acceptance:** a connected repository with seeded contributor/PR/check fixtures shows correct list, charts and profile drill-down; filtering changes all metrics consistently; unauthorized repository activity never appears; missing evidence is not treated as compliant; bots and private/unlinked identities are labeled accurately; activity metrics are reproducible from source records. Existing P0–P3 release workflows must remain usable.
 

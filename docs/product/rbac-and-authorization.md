@@ -45,9 +45,9 @@ Full login, bootstrap, revocation, migration and acceptance contracts: [ADR-0007
 | **P2** | Separate policy draft/publish/enforce, exception request/approve, version-change authorization | Developer cannot enable blocking gate; requester cannot approve own exception |
 | **P3** | Independent sandbox execution admission, tool permissions and worker identity | Authorized assessment user cannot escalate to unsafe code execution |
 | **P4** | AI provider and model-routing administration, usage visibility, source-egress permissions | Developer cannot reveal/rotate provider secrets or bypass model egress policy |
-| **P5–P6** | CLI user identity and QA/release-candidate permissions | Local identity cannot forge trusted server gate or QA sign-off |
-| **P7–P9** | Performance target registration, test execution and high-impact approval | Unauthorized target, production load or quota bypass denied |
-| **P10–P11** | Incident evidence scoping, policy proposal approvals and provider-specific permissions | Production recommendations cannot directly enforce policy |
+| **P6–P7** | CLI user identity and QA/release-candidate permissions | Local identity cannot forge trusted server gate or QA sign-off |
+| **P8–P10** | Performance target registration, test execution and high-impact approval | Unauthorized target, production load or quota bypass denied |
+| **P11–P12** | Incident evidence scoping, policy proposal approvals and provider-specific permissions | Production recommendations cannot directly enforce policy |
 
 **Delivery rule:** RBAC functionality required by a phase is included in that phase's deployable, usable acceptance criteria. Never add an independent phase or invalidate already completed tasks without implementation review.
 

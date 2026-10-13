@@ -1,3 +1,4 @@
+import type { ProviderUsage } from "./skill-inference.js";
 import { actionableFindings, conciseReviewSummary } from "./pr-review-feedback.js";
 import { currentStandards } from "../standards/policy-standards.js";
 import { effectiveAiRoute } from "./effective-ai-route.js";
@@ -1099,7 +1100,7 @@ export class SkillReviewService {
       );
       let findings: Awaited<ReturnType<typeof runSkillInference>> | undefined,
         providerId: string | undefined;
-      const usage: import("./skill-inference.js").ProviderUsage[] &
+      const usage: ProviderUsage[] &
         { providerId?: string }[] = [];
       let responseFailure: AiResponseError | undefined;
       for (const pin of snapshot.providers) {

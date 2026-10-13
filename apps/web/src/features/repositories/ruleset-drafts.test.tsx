@@ -1,10 +1,11 @@
+import type * as QueryModule from '@tanstack/react-query'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { RulesetDrafts } from './ruleset-drafts'
 
 const query = vi.hoisted(() => ({ value: {} as Record<string, unknown> }))
 vi.mock('@tanstack/react-query', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@tanstack/react-query')>()),
+  ...(await importOriginal<typeof QueryModule>()),
   useQuery: () => query.value,
 }))
 const render = (canDraft = false) =>

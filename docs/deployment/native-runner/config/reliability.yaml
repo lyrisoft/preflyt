@@ -1,0 +1,38 @@
+# Preflyt reliability rules v2. Review the matched code; findings are advisory.
+rules:
+  - id: preflyt-js-nan-comparison
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: NaN is never equal to itself. Use Number.isNaN(value) to test for NaN.
+    pattern-either:
+      - pattern: $X === NaN
+      - pattern: $X == NaN
+      - pattern: $X !== NaN
+      - pattern: $X != NaN
+  - id: preflyt-python-bare-except
+    languages: [python]
+    severity: WARNING
+    message: A bare except catches interruption and exit signals too. Catch the expected exception type so unexpected failures remain visible.
+    pattern: |
+      try:
+        ...
+      except:
+        ...
+
+  - id: preflyt-js-async-promise-executor
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: An async Promise executor can lose thrown errors. Use an async function directly or a synchronous executor with explicit rejection.
+    pattern-either:
+      - pattern: new Promise(async ($RESOLVE, $REJECT) => { ... })
+      - pattern: new Promise(async ($RESOLVE) => { ... })
+  - id: preflyt-python-return-finally
+    languages: [python]
+    severity: ERROR
+    message: Returning from finally can replace a pending return or suppress an exception. Move the return outside the cleanup block.
+    pattern: |
+      try:
+        ...
+      finally:
+        ...
+        return ...

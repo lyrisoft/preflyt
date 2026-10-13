@@ -408,3 +408,25 @@ describe('native results in published policy evaluation', () => {
     expect(f.evaluate().status).toBe('INCOMPLETE')
   })
 })
+
+it('verifies a fitted eight-analyzer health receipt without changing failed outcomes or recorded totals',async()=>{
+ const f=fixture()
+ const ids=['secrets.scan','security.sast','security.dependencies','iac.policy','quality.reliability','quality.maintainability','quality.duplication','security.hotspots'] as const
+ vi.stubEnv('NATIVE_TOOL_REVIEWS',JSON.stringify(ids.map(ruleId=>({ruleId,image:'registry.example/scanner@sha256:'+'a'.repeat(64),toolVersion:'1',license:nativeAdapters[ruleId].license,configHash:'b'.repeat(64),reviewDigest:'c'.repeat(64),expiresAt:new Date(f.now+86400000).toISOString(),databaseBuiltAt:ruleId==='security.dependencies'?new Date(f.now-1000).toISOString():null}))))
+ const tools=nativeToolReviews(undefined,f.now)!
+ f.approval.toolReviewHash=tools.reviewHash
+ const built=buildNativePlan({organizationId:'org',repositoryId:'51',sourceSha:f.expected.sourceSha,selectionId:'health:fixture',rules:ids.map(id=>({id,title:id,required:false,capability:'execution'}))},tools)
+ const {planHash,...plan}=built
+ const expected={...f.expected,selectionId:'health:fixture',planHash,plan,ruleIds:[...ids]}
+ const value:NativeReceipt={...f.value,selectionId:expected.selectionId,planHash,toolReviewHash:tools.reviewHash,checks:ids.map(ruleId=>({ruleId,state:'FAIL' as const,reason:'FINDINGS_REPORTED',reportHash:'a'.repeat(64),summary:{runs:1,results:20,suppressed:0},adapterId:nativeAdapters[ruleId].id,image:tools.reviews.find(r=>r.ruleId===ruleId)!.image,toolVersion:'1',configHash:'b'.repeat(64),commandHash:digest(nativeAdapters[ruleId]),exitCode:1,cleanupConfirmed:true,coverage:'PARTIAL' as const,...(['security.sast','quality.reliability','quality.maintainability','security.hotspots'].includes(ruleId)?{fileAnalysis:{version:1 as const,formula:'semgrep-candidate-files-v1' as const,scope:'js-ts-python' as const,candidateFiles:20,analyzedFiles:19,skippedFiles:1,pathsDigest:'e'.repeat(64)}}:{}),...(ruleId==='quality.duplication'?{measurement:{version:1 as const,kind:'duplication' as const,formula:'unique-lines-v1' as const,analyzedLines:100,duplicatedLines:20,analyzedFiles:2,clonePairs:10,minimumLines:5 as const,minimumTokens:50 as const,mode:'weak' as const}}:{}),findings:Array.from({length:20},(_,i)=>({fingerprint:String(i%10).repeat(64),category:ruleId==='quality.reliability'?'reliability':ruleId==='quality.maintainability'?'maintainability':ruleId==='quality.duplication'?'duplication':ruleId==='security.hotspots'?'hotspot':'security',severity:i===0?'critical':'low',title:'x'.repeat(200),path:'src/'+'x'.repeat(450)+'.js',line:i+1,ruleId:'fixture.rule',suppressed:false,...(ruleId==='quality.duplication'?{relatedLocations:[{path:'matching.js',line:4,endLine:12}]}:{})}))}))}
+ const {fitHealthReceipt}=await import('../src/health/health-receipt-budget.js')
+ const fitted=fitHealthReceipt(value)
+ expect(()=>f.seal(value)).toThrow('exceeds bounds')
+ const verified=verifyNativeReceipt(f.seal(fitted),expected,f.now)
+ expect(verified?.checks).toHaveLength(8)
+ expect(verified?.checks.find(check=>check.ruleId==='security.sast')?.fileAnalysis).toMatchObject({candidateFiles:20,analyzedFiles:19,skippedFiles:1})
+ expect(verified?.checks.find(check=>check.ruleId==='quality.duplication')?.findings?.[0].relatedLocations).toEqual([{path:'matching.js',line:4,endLine:12}])
+ expect(verified?.checks.every(check=>check.state==='FAIL'&&check.summary?.results===20&&check.findings!.length>0&&check.findings!.length<20)).toBe(true)
+ const {healthReport}=await import('../src/health/health-report.js')
+ expect(healthReport({complete:true,fileCount:10,languages:['JavaScript']},ids.map(id=>({id,title:id,state:'READY',reason:'READY'})),verified!.checks).completeness).toBe('PARTIAL')
+})

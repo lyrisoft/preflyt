@@ -37,6 +37,7 @@ import {
 } from '@/components/ui/sheet'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { PageHelpDrawer } from '@/components/page-help-drawer'
+import { ResultTimestamp } from '@/components/result-timestamp'
 import { StatusBadge } from '@/components/status-badge'
 import { SurfaceIcon } from '@/components/surface-icon'
 import { SkillReviewPanel } from '../intelligence/skill-review-panel'
@@ -56,7 +57,6 @@ import {
 } from './evidence-validation-panel'
 import { GateEvaluationDetails, GatePreviewPanel } from './gate-preview-panel'
 import { NativeExecutionStatus } from './native-execution-status'
-import { RelativeTime } from './relative-time'
 import {
   useAssessmentList,
   useCiEvidence,
@@ -242,7 +242,7 @@ function AssessmentCreator({
                       <SelectItem key={item.deliveryId} value={item.deliveryId}>
                         {sourceLabel(item.sourceKind, item.sourceObjectId)} ·{' '}
                         {ciResultStatus[item.result].label} ·{' '}
-                        {new Date(item.observedAt).toLocaleString()}
+                        <ResultTimestamp value={item.observedAt} />
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -387,7 +387,7 @@ function AssessmentListRow({
             {assessment.sourceSha.slice(0, 7)}
           </code>
         </span>
-        <RelativeTime
+        <ResultTimestamp
           value={assessment.createdAt}
           className='text-xs text-muted-foreground sm:text-sm'
         />
@@ -874,7 +874,8 @@ export function AssessmentReport({
                       {data.sourceSha.slice(0, 12)}
                     </code>{' '}
                     · Standards revision {data.request.selectionRevision} ·
-                    collected <RelativeTime value={data.report.collectedAt} />
+                    collected{' '}
+                    <ResultTimestamp value={data.report.collectedAt} />
                   </p>
                   {initialSha && initialSha !== data.sourceSha && (
                     <div
@@ -1041,6 +1042,12 @@ export function AssessmentReport({
                                     </span>
                                     <span className='mt-0.5 block text-xs text-muted-foreground'>
                                       {check.required ? 'Required' : 'Optional'}
+                                    </span>
+                                    <span className='mt-1 block text-xs text-muted-foreground'>
+                                      Recorded at{' '}
+                                      <ResultTimestamp
+                                        value={rule?.recordedAt}
+                                      />
                                     </span>
                                   </span>
                                   <StatusBadge

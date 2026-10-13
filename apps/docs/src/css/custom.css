@@ -548,3 +548,7 @@ button[class*='collapseSidebarButton']:hover {
     scroll-behavior: auto !important;
   }
 }
+
+/* Supplied monochrome mark remains legible on the light navigation surface. */
+html[data-theme='light'] .navbar__logo img { filter: invert(1); }
+.pf-brand-logo { width: min(100%, 320px); height: auto; border-radius: 12px; }

@@ -1,10 +1,10 @@
 {
   "name": "preflyt",
   "private": true,
-  "packageManager": "pnpm@10.15.1",
+  "packageManager": "pnpm@10.26.2",
   "engines": {
     "node": ">=24.4.1 <25",
-    "pnpm": ">=10.15.1 <11"
+    "pnpm": ">=10.26.2 <11"
   },
   "scripts": {
     "dev": "pnpm --filter @preflyt/web dev",

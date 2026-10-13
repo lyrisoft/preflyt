@@ -21,6 +21,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { PageHelpDrawer } from '@/components/page-help-drawer'
+import { ResultTimestamp } from '@/components/result-timestamp'
 import { StatusBadge } from '@/components/status-badge'
 import { SurfaceIcon } from '@/components/surface-icon'
 
@@ -244,9 +245,7 @@ export function CheckPublications({
                               </StatusBadge>
                             </TableCell>
                             <TableCell className='text-xs text-muted-foreground'>
-                              {item.updatedAt
-                                ? new Date(item.updatedAt).toLocaleString()
-                                : '—'}
+                              <ResultTimestamp value={item.updatedAt} stacked />
                             </TableCell>
                             <TableCell className='text-right'>
                               {item.htmlUrl && (

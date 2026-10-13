@@ -15,6 +15,7 @@ it('enforces shared semantic colors even when a caller supplies the wrong tone',
 
 it('keeps success, failure, pending and inactive states consistent', () => {
   expect(statusTones.synced).toBe('success')
+  expect(statusTones['inspection complete']).toBe('success')
   expect(statusTones.approved).toBe('success')
   expect(statusTones['model unavailable']).toBe('error')
   expect(statusTones['sync needed']).toBe('warning')
@@ -160,4 +161,47 @@ it('separates setup gaps, file observations and undetermined setup', async () =>
   await expect.element(view.getByText('Suggested')).toHaveClass('bg-muted')
   await expect.element(view.getByText('Required')).toHaveClass('bg-muted')
   await view.unmount()
+})
+
+it('keeps CI-only setup and undetermined configuration neutral', async () => {
+  const view = await render(
+    <>
+      <StatusBadge tone='warning'>CI evidence required</StatusBadge>
+      <StatusBadge tone='warning'>Configuration not determined</StatusBadge>
+    </>
+  )
+  await expect
+    .element(view.getByText('CI evidence required'))
+    .toHaveClass('bg-muted')
+  await expect
+    .element(view.getByText('Configuration not determined'))
+    .toHaveClass('bg-muted')
+  await view.unmount()
+})
+
+it('uses reviewed decision colors without treating fix-required as success', () => {
+  expect(statusTones['to review']).toBe('warning')
+  expect(statusTones['reviewed: no change needed']).toBe('success')
+  expect(statusTones['reviewed: fix required']).toBe('warning')
+})
+
+it('uses green for Healthy even if a caller provides another tone', async () => {
+  const view = await render(<StatusBadge tone='info'>Healthy</StatusBadge>)
+  await expect
+    .element(view.getByText('Healthy'))
+    .toHaveClass('text-success-text')
+  expect(statusTones['findings reported']).toBe('error')
+})
+
+it('maps overall Health labels to their semantic tones', () => {
+  expect(statusTones.healthy).toBe('success')
+  expect(statusTones.unhealthy).toBe('error')
+  expect(statusTones['needs attention']).toBe('warning')
+})
+
+it('maps finding severity labels consistently across public previews', () => {
+  expect(statusTones.critical).toBe('error')
+  expect(statusTones.high).toBe('error')
+  expect(statusTones.medium).toBe('warning')
+  expect(statusTones.low).toBe('info')
 })

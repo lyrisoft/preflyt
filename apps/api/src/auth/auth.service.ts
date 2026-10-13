@@ -1,6 +1,7 @@
 import { configurationValue } from '../configuration/runtime-configuration.js'
 import { withDatabaseStartupRetry } from '../prisma/database-startup.js'
 import { githubLoginEnabled } from './github-identity-provider.js'
+import { loginReturnPath } from './auth-return-path.js'
 import { rolePermissions } from './authorization.service.js'
 import {
   createHash,
@@ -218,7 +219,8 @@ export class AuthService implements OnModuleInit {
     await withDatabaseStartupRetry('Super Admin initialization', () => this.seedSuperAdmin())
   }
 
-  async beginLogin(ip: string) {
+  async beginLogin(ip: string, rawReturn?: string) {
+    const returnPath = loginReturnPath(rawReturn)
     await this.rateLimit('login', ip, 20)
     const config = this.requireConfig()
     const state = oidc.randomState()
@@ -232,6 +234,7 @@ export class AuthService implements OnModuleInit {
         browserBinding: digest(browserBinding),
         codeVerifier,
         nonce,
+        returnPath,
         expiresAt: new Date(Date.now() + shortTtlMs),
       },
     })
@@ -417,6 +420,7 @@ export class AuthService implements OnModuleInit {
       })
       throw new UnauthorizedException('Sign-in expired or already used')
     }
+    const returnPath = loginReturnPath(transaction.returnPath)
 
     const callbackUrl = new URL(this.redirectUri!.href)
     for (const key of ['code', 'state', 'iss', 'error', 'error_description']) {
@@ -477,7 +481,11 @@ export class AuthService implements OnModuleInit {
       await this.audit('login_succeeded', identity.id, {
         role: identity.membership.role,
       })
-      return { kind: 'session' as const, ...session }
+      return {
+        kind: 'session' as const,
+        ...session,
+        returnPath,
+      }
     }
 
     const owners = await this.prisma.membership.count({
@@ -494,6 +502,7 @@ export class AuthService implements OnModuleInit {
       data: {
         tokenHash: digest(challengeToken),
         identityId: identity.id,
+        returnPath,
         expiresAt: new Date(Date.now() + shortTtlMs),
       },
     })
@@ -526,6 +535,7 @@ export class AuthService implements OnModuleInit {
       },
     })
     if (!challenge) throw new UnauthorizedException('Bootstrap session expired')
+    const returnPath = loginReturnPath(challenge.returnPath)
 
     const rawSession = opaque()
     const expiresAt = new Date(Date.now() + sessionTtlMs)
@@ -596,7 +606,11 @@ export class AuthService implements OnModuleInit {
       }
       throw error
     }
-    return { sessionToken: rawSession, expiresAt }
+    return {
+      sessionToken: rawSession,
+      expiresAt,
+      returnPath,
+    }
   }
 
   async currentSession(token?: string) {

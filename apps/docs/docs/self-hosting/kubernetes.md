@@ -113,3 +113,16 @@ Saved GitHub and governance connections refresh immediately in the API and withi
 ## Native checks
 
 Native execution stays disabled by default. Scanner jobs belong in a dedicated, reviewed execution environment, not the application namespace. Do not give the API or worker Kubernetes Job or Docker control as a shortcut.
+
+
+## Shared repository-assessment runner
+
+A Kubernetes-hosted Preflyt can use the same dedicated Docker controller as a Compose-hosted instance. The download includes the sibling `kubernetes-shared-docker-runner` folder. From the `kubernetes` folder, render that overlay instead of the base when choosing the shared Docker backend:
+
+```bash
+kubectl kustomize ../kubernetes-shared-docker-runner > preflyt-shared-runner.yaml
+```
+
+This render selects the Docker backend for API and worker and leaves admission disabled. It does not install a Docker engine, mount a socket or create native Kubernetes jobs. Use the existing reviewed Docker controller endpoint, Docker approval, reviewer public keys, analyzer reviews and application-side controller key through the deployment configuration/Secrets. Controller signing keys and engine TLS credentials stay on the dedicated controller. Enable admission only after actual runtime qualification; imported CI and repository inspection remain available while it is disabled.
+
+Native Kubernetes jobs are a separate optional backend; Kubernetes hosting alone does not require them.

@@ -12,7 +12,7 @@ const activityDefinitions = [
   ],
   [
     'Commits linked to contributor',
-    'Distinct commits linked to this contributor by the available GitHub evidence.',
+    'Distinct commits where GitHub records this contributor as author or committer. A commit counts once per repository even when the contributor has both roles. This does not imply authorship for committer-only records.',
   ],
 ]
 const complianceDefinitions = [

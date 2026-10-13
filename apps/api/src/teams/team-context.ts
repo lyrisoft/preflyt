@@ -1,3 +1,4 @@
+import type { PackRef } from "../standards/catalogue.js";
 import { verifyNestedScope } from './nested-team-scope.js';
 import { ConflictException } from "@nestjs/common";
 import type { PrismaService } from "../prisma/prisma.service.js";
@@ -98,7 +99,7 @@ export async function inheritedTeamStandards(
       label: a.team.name,
       profile: a.profile,
       packs:
-        a.packs as unknown as (import("../standards/catalogue.js").PackRef & {
+        a.packs as unknown as (PackRef & {
           digest: string;
         })[],
     })),

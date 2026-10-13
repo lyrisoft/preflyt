@@ -1,19 +1,21 @@
 # Preflyt — Product Requirements Document
 
-**Product:** Preflyt  
-**Positioning:** AI-native Shift Left engineering platform  
-**Tagline:** Engineering confidence before production  
-**Owner:** Lyrisoft Technologies  
+**Product:** Preflyt
+**Positioning:** Self-hosted repository health and engineering governance platform
+**Tagline:** Engineering confidence before production
+**Owner:** Lyrisoft Technologies
 **Status:** Product roadmap for engineering and product review; implemented capabilities and remaining scope are tracked in README and the incremental delivery plan
-**Version:** 0.5 — GitHub-first identity and inherited organization onboarding
-**Date:** 2026-10-09
+**Version:** 0.6 — Repository health, unified findings and AI guidance positioning
+**Date:** 2026-10-12
 **Source of architectural decisions:** [ADR-0001](architecture/ADR-0001-typescript-first-stack.md) · [ADR-0002](architecture/ADR-0002-safe-execution-fixtures-remediation-contract.md) · [ADR-0003](architecture/ADR-0003-oidc-user-authentication.md) · [ADR-0004](architecture/ADR-0004-shift-left-assessment-governance.md) · [ADR-0007](architecture/ADR-0007-github-first-identity-and-organizations.md)
 
 ---
 
 ## 1. Executive summary
 
-**Preflyt is a self-hosted, AI-native Shift Left engineering platform that helps organizations find and prevent security vulnerabilities, software defects, infrastructure misconfigurations, reliability failures, and other engineering risks earlier in the software development lifecycle (SDLC).**
+**Preflyt is a self-hosted repository health and engineering governance platform that helps organizations understand their codebase, prioritize security and quality findings, and assess changes before production.**
+
+Two complementary workflows deliver that value: repository Health assesses a selected branch at a fixed commit, while CI assessments evaluate submitted execution evidence against engineering requirements. Unified Findings brings issues from both workflows together with source context and saved AI explanations of the problem, likely effect and suggested fix. Analyzer/rule guidance remains available without AI. Health scanner execution requires a qualified runtime; inspection-only reports explicitly show incomplete analysis.
 
 Preflyt does not replace Git hosting, CI/CD or software scanners. It combines engineering standards, deterministic technical checks, imported CI evidence, AI-assisted engineering assessment and source-control feedback into a **continuous engineering assessment and quality-gate system**.
 
@@ -50,7 +52,14 @@ Existing engineering tools are numerous but fragmented. Developers may see sever
 
 ### Value proposition
 
-**Prevent engineering issues before production through continuous evidence-based assessments and enforceable, explainable quality gates.**
+**Understand repository health, turn findings into actionable work, and govern changes with traceable evidence before production.**
+
+- **Developers:** investigate issues with assessed-commit source and concise guidance in one place.
+- **Engineering leads:** prioritize security and quality risks across repositories, distinguish missing analysis from clean results, and compare compatible assessments over time.
+- **Platform and security teams:** reuse standards and branch policies, consume existing CI results, and introduce GitHub merge protection when explicitly enabled.
+- **Organizations:** self-host the platform, scope repository access, and choose AI providers and source-sharing settings.
+
+Repository health describes the saved branch revision and analysis scope. CI readiness describes whether a change has the required evidence. These are distinct outcomes; AI explains them but cannot override either evaluation. Broader SDLC capabilities below remain roadmap requirements unless marked implemented in the delivery plan.
 
 Do not claim that Preflyt guarantees vulnerability-free software, regulatory certification, lower cloud bills, or zero downtime.
 
@@ -189,11 +198,11 @@ Preflyt targets GitHub identity and inherited GitHub organizations under [ADR-00
 
 ### Engineering Contributors module
 
-Preflyt shall provide a **Contributors** item in the Engineering sidebar when implemented in P3. The list shows authorized GitHub contributors, activity metrics, charts, policy adherence and assessment coverage, with repository/time filters. Selecting a contributor opens a detail page with their repositories, commits, PRs, reviews, assessments, findings and policy evidence. P1 captures identity/activity metadata; P2 links revision-specific gate evidence; P3 ships the complete usable list and drill-down; P10/P11 add advanced trends. Missing evidence and private GitHub membership are explicitly represented. No opaque AI-generated employee productivity scores. See [Engineering Contributors](product/engineering-contributors.md).
+Preflyt shall provide a **Contributors** item in the Engineering sidebar when implemented in P3. The list shows authorized GitHub contributors, activity metrics, charts, policy adherence and assessment coverage, with repository/time filters. Selecting a contributor opens a detail page with their repositories, commits, PRs, reviews, assessments, findings and policy evidence. P1 captures identity/activity metadata; P2 links revision-specific gate evidence; P3 ships the complete usable list and drill-down; P11/P12 add advanced trends. Missing evidence and private GitHub membership are explicitly represented. No opaque AI-generated employee productivity scores. See [Engineering Contributors](product/engineering-contributors.md).
 
 ### MVP experience contract
 
-The [MVP Product Experience Contract](product/mvp-product-experience.md) is the authoritative target for navigation, enterprise dashboard, repository/assessment/finding/policy/contributor pages and role-aware states. The [Enterprise UI Guidelines](design/enterprise-ui-guidelines.md) and [Codex/Claude implementation guardrails](agents/product-implementation-guardrails.md) require API-backed, evidence-based, accessible, incremental implementation while preserving existing Shadcn Admin and P0–P11 order. These documents do not imply unimplemented pages already exist.
+The [MVP Product Experience Contract](product/mvp-product-experience.md) is the authoritative target for navigation, enterprise dashboard, repository/assessment/finding/policy/contributor pages and role-aware states. The [Enterprise UI Guidelines](design/enterprise-ui-guidelines.md) and [Codex/Claude implementation guardrails](agents/product-implementation-guardrails.md) require API-backed, evidence-based, accessible, incremental implementation while preserving existing Shadcn Admin and P0–P12 order. These documents do not imply unimplemented pages already exist.
 
 ### GitHub organization ruleset governance (P2)
 
@@ -211,7 +220,7 @@ Preflyt requires tenant- and repository-scoped notifications driven by durable e
 
 ### PR Code Quality Review and AI Review Skills
 
-Code quality is a first-class assessment domain. P1 imports lint, typecheck, coverage and static-analysis evidence with exact revision/provenance and optional read-only AI review; P2 provides a versioned Code Quality policy pack and deterministic gates; P3 adds native analyzers only after sandbox approval; P4 adds contextual multi-skill AI review and optional deduplicated GitHub inline feedback; P5 reuses findings in CLI/IDE. Agents may apply approved versioned instruction-only skills (candidate examples: Ponytail and Thermo-Nuclear Code Quality Review), subject to license/security review, model routing, egress and RBAC. Skill output is advisory and cannot block a PR without independent deterministic evidence. See [Code Quality Review](product/code-quality-review.md) and [Skill-Based Review](product/skill-based-code-review.md).
+Code quality is a first-class assessment domain. P1 imports lint, typecheck, coverage and static-analysis evidence with exact revision/provenance and optional read-only AI review; P2 provides a versioned Code Quality policy pack and deterministic gates; P3 adds native analyzers only after sandbox approval; P4 adds contextual multi-skill AI review and optional deduplicated GitHub inline feedback; P6 reuses findings in CLI/IDE. Agents may apply approved versioned instruction-only skills (candidate examples: Ponytail and Thermo-Nuclear Code Quality Review), subject to license/security review, model routing, egress and RBAC. Skill output is advisory and cannot block a PR without independent deterministic evidence. See [Code Quality Review](product/code-quality-review.md) and [Skill-Based Review](product/skill-based-code-review.md).
 
 ### Teams and scoped policy assignments
 
@@ -223,12 +232,12 @@ Preflyt shall support locally created and GitHub-imported teams. Authorized admi
 
 | Stage | Primary goal | Planned workflow | Release slices |
 | --- | --- | --- | --- |
-| **Developer laptop** | Prevent defects before commit/push | Explicit CLI/pre-commit lint, secrets, types, tests, IaC/migration checks and local policy feedback | P5 |
-| **Repository** | Establish engineering posture/standards | Discover stack, profile controls, baseline and later scheduled drift assessment | P0, P1–P3, P11 |
+| **Developer laptop** | Prevent defects before commit/push | Explicit CLI/pre-commit lint, secrets, types, tests, IaC/migration checks and local policy feedback | P6 |
+| **Repository** | Deliver first value without CI and maintain engineering health | Discover stack, automatically assess the selected branch, report findings and freshness; optional CI provides continuous feedback | P0, P5, P1–P3, P12 |
 | **Pull request / CI** | Enforce change quality before merge | Import CI evidence, diff-aware planning, revision-bound gates, approved native validation and optional AI advice | P1–P4 |
-| **QA / functional validation** | Validate functional and compatibility readiness | Unit/integration/E2E/contract/regression evidence and QA gate | P6 |
-| **Performance / staging** | Catch latency and resilience regressions | k6 smoke, load, stress, spike, soak, breakpoint, scalability, regression, budgets and baselines | P7–P9, P11 |
-| **Production feedback** | Convert escaped defects into earlier preventive controls | Link incident/deploy evidence to missing checks and propose owner-approved policy changes | P10 |
+| **QA / functional validation** | Validate functional and compatibility readiness | Unit/integration/E2E/contract/regression evidence and QA gate | P7 |
+| **Performance / staging** | Catch latency and resilience regressions | k6 smoke, load, stress, spike, soak, breakpoint, scalability, regression, budgets and baselines | P8–P10, P12 |
+| **Production feedback** | Convert escaped defects into earlier preventive controls | Link incident/deploy evidence to missing checks and propose owner-approved policy changes | P11 |
 
 Requirements/design artifact validation is a later optional entrypoint alongside these six stages; production monitoring itself remains Shift Right and is used to improve earlier gates.
 
@@ -292,7 +301,7 @@ flowchart TD
 
 No phase is considered delivered merely because a database, frontend shell, queue, infrastructure module or model gateway exists. **Every phase must ship a complete, deployable, user-visible vertical slice**, with its own installation/upgrade path, auth/security and safe-execution controls, end-to-end success/failure tests, observability, configuration, supported limitations and tested rollback. Earlier phases must keep working after later upgrades.
 
-The sequence of independently useful releases is: **P0 Repository Posture → P1 CI Evidence → P2 Policy Gates → P3 Secure Native Validation → P4 Advanced AI Engineering Intelligence → P5 Developer CLI → P6 QA Readiness → P7 k6 Evidence/Gates → P8 Managed k6 Smoke/Load → P9 Advanced Performance → P10 Production Feedback → P11 Provider/Scale Extensions**.
+The sequence of independently useful releases is: **P0 Repository Posture → P1 CI Evidence → P2 Policy Gates → P3 Secure Native Validation → P4 Advanced AI Engineering Intelligence → P5 Repository Health Assessment → P6 Developer CLI → P7 QA Readiness → P8 k6 Evidence/Gates → P9 Managed k6 Smoke/Load → P10 Advanced Performance → P11 Production Feedback → P12 Provider/Scale Extensions**.
 
 Implementation tasks, dependencies, release criteria and rollback gates for every slice are in [docs/roadmap/incremental-delivery.md](roadmap/incremental-delivery.md). Do not treat the umbrella MVP/V1 labels below as excuses to defer a usable outcome until all their components are implemented.
 
@@ -329,11 +338,12 @@ The PoC does **not** need to generate a patch or remediation PR. If a future sep
 
 Deliver as separate working releases, not one all-or-nothing project:
 
-- **P5 Developer Experience:** independently usable P5.1 shared local engine/CLI, P5.2 authenticated organization/policy sync, P5.3 VS Code diagnostics, P5.4 AI explanation and PR gate visibility, P5.5 opt-in Git hooks/editor compatibility. See [developer CLI and IDE specification](product/developer-cli-ide-extension.md).
-- **P6 QA readiness:** import test suites and release candidate evidence, then add API-contract/database compatibility checks and QA gates.
-- **P7 Performance evidence:** import existing k6 result artifacts, apply performance budgets and publish comparable baseline reports **without needing a Preflyt-owned load generator**.
-- **P8 Managed performance:** authorized non-production k6 **smoke and load** tests using controlled execution, thresholds, results and cancellation.
-- **P9 Advanced performance:** safe **stress, spike, soak/endurance, breakpoint, scalability and regression** scenarios with workload limits, meaningful baselines and reporting.
+- **P5 Repository Health Assessment:** automatic selected-branch analysis, a basic report and notification without CI; then organization/repository Health dashboards, supported findings, freshness and comparable reassessment history. Planned; see [phase specification](product/repository-health-assessment.md).
+- **P6 Developer Experience:** independently usable P6.1 shared local engine/CLI, P6.2 authenticated organization/policy sync, P6.3 VS Code diagnostics, P6.4 AI explanation and PR gate visibility, P6.5 opt-in Git hooks/editor compatibility. See [developer CLI and IDE specification](product/developer-cli-ide-extension.md).
+- **P7 QA readiness:** import test suites and release candidate evidence, then add API-contract/database compatibility checks and QA gates.
+- **P8 Performance evidence:** import existing k6 result artifacts, apply performance budgets and publish comparable baseline reports **without needing a Preflyt-owned load generator**.
+- **P9 Managed performance:** authorized non-production k6 **smoke and load** tests using controlled execution, thresholds, results and cancellation.
+- **P10 Advanced performance:** safe **stress, spike, soak/endurance, breakpoint, scalability and regression** scenarios with workload limits, meaningful baselines and reporting.
 - Optional domain extensions: reliability/observability readiness, versioned exceptions and approval workflows, GitLab and design/requirements checks, each delivered as a separate usable vertical slice.
 
 Complex distributed k6 Operator execution and organization-wide trends are later extensions unless validated demand justifies an earlier deployable slice.
@@ -342,8 +352,8 @@ Complex distributed k6 Operator execution and organization-wide trends are later
 
 ### 7.4 V2 — production feedback and broader engineering intelligence
 
-- **P10 Production feedback:** read-only incident/deployment context, correlation with prior engineering evidence, owner-reviewed proposed checks, and recurrence tracking.
-- **P11 Expansion:** GitLab and other provider adapters, scheduled posture/drift reports, optional distributed k6 Operator execution, observability correlations and broader cost/compliance/reliability policies.
+- **P11 Production feedback:** read-only incident/deployment context, correlation with prior engineering evidence, owner-reviewed proposed checks, and recurrence tracking.
+- **P12 Expansion:** GitLab and other provider adapters, scheduled posture/drift reports, optional distributed k6 Operator execution, observability correlations and broader cost/compliance/reliability policies.
 - Broader cross-repository assessment trends, context-aware AI *advice*, and additional local/design-stage integrations may ship as independently useful follow-on releases.
 - Automated code remediation remains a **separately authorized optional module**, not a condition for any stage to be usable.
 
@@ -425,12 +435,13 @@ The [SDLC capability document](product/sdlc-capabilities.md) defines inputs, out
 | FR-052 | P2 | Policy quality gate | A required failing check BLOCKs, absent evidence is INCOMPLETE and a new commit does not inherit old PASS |
 | FR-053 | P3 | Safely executed native scanners/tests | Seeded issue detected in approved sandbox; missing approved executor fails closed to ingest-only |
 | FR-054 | P4 | Optional AI explanation | Evidence-linked explanation never changes a deterministic gate; no-AI operation remains usable |
-| FR-055 | P5 | Local developer checks | CLI detects seeded local issue and marks its result advisory, not a trusted CI pass |
-| FR-056 | P6 | QA release readiness | Release candidate includes test-suite identity, required contract checks and incomplete/failing gate semantics |
-| FR-057 | P7 | Import k6 reports and evaluate budgets | Existing k6 result becomes an evidence-backed performance report without managed load generation |
-| FR-058 | P8 | Execute bounded k6 smoke/load on registered non-production target | Achieved workload, p95/error thresholds, evidence and safe cancellation are visible |
-| FR-059 | P9 | Advanced k6 stress/spike/soak/breakpoint/scalability | Workload-specific limits, emergency stop, baseline comparability and complete results are enforced |
-| FR-060 | P10 | Production feedback to earlier engineering standards | SRE links incident and release to previous control gaps and produces an owner-reviewable policy proposal |
+| FR-054A | P5 | Automatic repository health assessment without CI | Repository selection starts one branch-bound job; a supported scan produces an evidence-linked report and notification, with partial/failure states and unchanged merge protection |
+| FR-055 | P6 | Local developer checks | CLI detects seeded local issue and marks its result advisory, not a trusted CI pass |
+| FR-056 | P7 | QA release readiness | Release candidate includes test-suite identity, required contract checks and incomplete/failing gate semantics |
+| FR-057 | P8 | Import k6 reports and evaluate budgets | Existing k6 result becomes an evidence-backed performance report without managed load generation |
+| FR-058 | P9 | Execute bounded k6 smoke/load on registered non-production target | Achieved workload, p95/error thresholds, evidence and safe cancellation are visible |
+| FR-059 | P10 | Advanced k6 stress/spike/soak/breakpoint/scalability | Workload-specific limits, emergency stop, baseline comparability and complete results are enforced |
+| FR-060 | P11 | Production feedback to earlier engineering standards | SRE links incident and release to previous control gaps and produces an owner-reviewable policy proposal |
 | FR-061 | All | Complete deployable usable vertical slice | Phase can be installed/upgraded, demonstrated, monitored and safely rolled back without later phases |
 
 ### 8.6 User interface, feedback and audit
@@ -657,9 +668,10 @@ The release ownership model is **end-to-end vertical slices**, not standalone in
 
 - **P0–P3:** repository profile → imported CI evidence → required quality gate → approved native scans/tests.
 - **P4:** optional read-only AI explanation, isolated from policy evaluation.
-- **P5–P6:** local developer checks and QA/release-candidate assessments.
-- **P7–P9:** k6 performance evidence/imports, managed smoke/load, then advanced controlled performance profiles.
-- **P10–P11:** production feedback, provider expansion, scheduled baselines and advanced operations.
+- **P5:** automatic repository health assessment, dashboards and reassessment without requiring CI.
+- **P6–P7:** local developer checks and QA/release-candidate assessments.
+- **P8–P10:** k6 performance evidence/imports, managed smoke/load, then advanced controlled performance profiles.
+- **P11–P12:** production feedback, provider expansion, scheduled baselines and advanced operations.
 
 A task can be developed behind a feature flag in parallel, but it cannot be counted as delivered until its **usable phase-level acceptance test** and rollback procedure pass.
 

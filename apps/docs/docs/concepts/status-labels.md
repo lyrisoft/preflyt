@@ -21,9 +21,13 @@ Every status in Preflyt has a **text label** as well as a colour, so meaning nev
 
 Green marks a confirmed positive state. **Related files found** is green because configuration was found; it does not mean a check executed or passed. **Unknown** is amber and still needs attention.
 
+## Health reports
+
+Processing, completeness and freshness are independent. Completed means a report was saved; Partial means analysis is incomplete. Inspection only means no analyzer ran. Current and Stale compare the report to the selected branch head at the displayed check time; Freshness unverified means the head comparison is unavailable. See the full [Health label definitions](../user-guide/repository-health.md#read-a-report).
+
 ## Repository checks
 
-Shown on the repository **Overview**. Filter the list with **All**, **Needs review** or **Files found**.
+Shown on the repository **Configuration**. Filter the list with **All**, **Needs review** or **Files found**.
 
 | Label | Meaning |
 | --- | --- |

@@ -378,7 +378,7 @@ export class GitHubProviderService {
   async readNativeSource(installationId: bigint, repositoryId: bigint, sourceSha: string, signal?: AbortSignal) {
     if (!/^[a-f0-9]{40}$/.test(sourceSha)) throw new BadRequestException('Use an exact source commit for native checks')
     signal?.throwIfAborted()
-    const reader = await this.openRepository(installationId, repositoryId, 'contents', signal)
+    const reader = await this.openRepository(installationId, repositoryId, 'contents', signal, 10 * 60_000)
     const base = `/repos/${encodeURIComponent(reader.metadata.owner.login)}/${encodeURIComponent(reader.metadata.name)}`
     return readPinnedNativeSource(reader.request, base, repositoryId.toString(), sourceSha, signal)
   }
@@ -1233,6 +1233,23 @@ export class GitHubProviderService {
     return {source:'GITHUB_RULE_SUITES',scope:'CURRENT_GITHUB_PAGE',counting:'MATCHED_RULE_OCCURRENCES',page:options.page,period:options.period,hasMore:page.hasMore,scannedSuites:page.details.length,suites,summary:summarizeRulesetSuites(suites),fetchedAt:page.fetchedAt,repositoryName:page.repositoryName,rulesetId}
   }
 
+  async readHealthSource(installationId: bigint, repositoryId: bigint, sourceSha: string, path: string) {
+    if (!/^[a-f0-9]{40}$/.test(sourceSha) || !path || path.length > 500 || /[\\%?#\x00-\x1f]/.test(path) || path.split('/').some(p => ['', '.', '..'].includes(p))) throw new BadRequestException('Invalid source location')
+    const reader = await this.openRepository(installationId, repositoryId, 'contents')
+    const base = `/repos/${encodeURIComponent(reader.metadata.owner.login)}/${encodeURIComponent(reader.metadata.name)}`
+    const commit = await reader.request<Record<string, any>>(`${base}/commits/${sourceSha}`)
+    if (commit.sha !== sourceSha || !/^[a-f0-9]{40}$/.test(commit.commit?.tree?.sha ?? '')) throw new ServiceUnavailableException('Assessed source revision could not be verified')
+    const tree = await reader.request<Record<string, any>>(`${base}/git/trees/${commit.commit.tree.sha}?recursive=1`)
+    if (tree.sha !== commit.commit.tree.sha || !Array.isArray(tree.tree) || tree.truncated || tree.tree.length > 10000) throw new ServiceUnavailableException('Source tree exceeds excerpt verification limits')
+    const entry = tree.tree.find((f: any) => f.path === path)
+    if (entry?.type !== 'blob' || !['100644','100755'].includes(entry.mode) || !/^[a-f0-9]{40}$/.test(entry.sha) || !Number.isSafeInteger(entry.size) || entry.size < 0 || entry.size > 262144) throw new ServiceUnavailableException('Regular source file is unavailable or too large')
+    const file = await reader.request<Record<string, any>>(`${base}/git/blobs/${entry.sha}`)
+    if (file.sha !== entry.sha || file.encoding !== 'base64' || file.size !== entry.size || typeof file.content !== 'string' || file.content.length > 360000) throw new ServiceUnavailableException('Source excerpt unavailable or too large')
+    const bytes = Buffer.from(file.content, 'base64')
+    if (bytes.length !== file.size || bytes.includes(0) || createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex') !== file.sha) throw new ServiceUnavailableException('Source integrity could not be verified')
+    return bytes.toString('utf8')
+  }
+
   async verifyReadinessBranch(installationId: bigint, repositoryId: bigint, branch: string) {
     if(!validProfileBranch(branch))throw new BadRequestException('Invalid branch')
     const reader=await this.openRepository(installationId,repositoryId,'contents')
@@ -1274,7 +1291,7 @@ export class GitHubProviderService {
     for(let page=1;page<=3;page++) {
       const reviews=await call(`${root}/reviews?per_page=100&page=${page}`);
       if(!Array.isArray(reviews)||reviews.length>100)throw new ServiceUnavailableException('Invalid review history');
-      for (const review of reviews) if (fromApp(review) && /<!-- preflyt-ai:[a-f0-9]{64} -->$/.test(review.body ?? '') && Number.isSafeInteger(review.id)) preflytReviewIds.add(review.id);
+      for (const review of reviews) if (fromApp(review) && new RegExp(String.raw`<!-- preflyt-ai:[a-f0-9]{64} -->$`).test(review.body ?? '') && Number.isSafeInteger(review.id)) preflytReviewIds.add(review.id);
       existing=reviews.find(matches);if(existing)break;
       if(reviews.length<100)break;
       if(page===3)throw new ServiceUnavailableException('Review history exceeds publication limit');
@@ -1463,6 +1480,7 @@ export class GitHubProviderService {
     repositoryId: bigint,
     permission: 'contents' | 'pull_requests' | 'metadata' | 'actions' | 'checks' | 'administration' = 'contents',
     externalSignal?: AbortSignal,
+    timeoutMs = 60_000,
   ) {
     try {
       await this.verifyInstallation(installationId)
@@ -1491,7 +1509,7 @@ export class GitHubProviderService {
         'Unable to authorize repository inspection',
       )
     }
-    const timeout = AbortSignal.timeout(60_000)
+    const timeout = AbortSignal.timeout(timeoutMs)
     const signal = externalSignal ? AbortSignal.any([externalSignal, timeout]) : timeout
     signal.throwIfAborted()
     const request = async <T>(path: string): Promise<T> => {

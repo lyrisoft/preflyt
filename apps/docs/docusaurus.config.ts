@@ -11,7 +11,7 @@ const repository = 'https://github.com/lyrisoft/preflyt'
 const config: Config = {
   title: 'Preflyt',
   tagline: 'Engineering confidence before production',
-  favicon: 'img/logo.svg',
+  favicon: 'img/brand/favicon.svg',
   url,
   baseUrl,
   organizationName: 'lyrisoft',
@@ -68,7 +68,7 @@ const config: Config = {
     colorMode: { respectPrefersColorScheme: true },
     navbar: {
       title: 'Preflyt',
-      logo: { alt: 'Preflyt', src: 'img/logo.svg', srcDark: 'img/logo-dark.svg' },
+      logo: { alt: 'Preflyt', src: 'img/brand/mark-white.png', srcDark: 'img/brand/mark-color.png' },
       items: [
         {
           type: 'docSidebar',

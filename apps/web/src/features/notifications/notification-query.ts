@@ -14,6 +14,8 @@ export type Item = {
   actionLabel?: string
   repository: string
   repositoryId: string
+  healthAssessmentId?: string | null
+  branchRef?: string | null
   assessmentId: string | null
   policyId?: string | null
   emailDelivery?: {

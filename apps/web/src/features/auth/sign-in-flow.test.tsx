@@ -3,6 +3,7 @@ import '@/styles/index.css'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { render } from 'vitest-browser-react'
 import { API_BASE_URL } from '@/lib/api'
+import { SetupOwner } from './setup-owner'
 import { SignIn } from './sign-in'
 import { SuperAdminLogin } from './super-admin-login'
 
@@ -15,8 +16,17 @@ const state = vi.hoisted(() => ({
 vi.mock('@tanstack/react-router', () => ({
   useSearch: () => state.search,
   useNavigate: () => state.navigate,
-  Link: ({ to, children, ...props }: { to: string; children: ReactNode }) => (
-    <a href={to} {...props}>
+  Link: ({
+    to,
+    search,
+    children,
+    ...props
+  }: {
+    to: string
+    search?: Record<string, string>
+    children: ReactNode
+  }) => (
+    <a href={search ? `${to}?${new URLSearchParams(search)}` : to} {...props}>
       {children}
     </a>
   ),
@@ -53,6 +63,73 @@ it('discovers configured sign-in methods with cookies and preserves provider log
     expect.objectContaining({ credentials: 'include' })
   )
 })
+
+it.each([
+  [
+    '/repositories/42?tab=health#findings',
+    '/repositories/42?tab=health#findings',
+  ],
+  ['//untrusted.example/redirect', '/overview'],
+  ['/safe/..//untrusted.example/redirect', '/overview'],
+  ['/safe/%2e%2e//untrusted.example/redirect', '/overview'],
+  ['https://untrusted.example/redirect', '/overview'],
+  ['/\\untrusted.example/redirect', '/overview'],
+  ['/repositories%0d%0aLocation:evil', '/overview'],
+])(
+  'forwards only safe internal destinations through every sign-in option: %s',
+  async (redirect, destination) => {
+    state.search = { redirect }
+    const query = new URLSearchParams({ redirect: destination })
+    const view = await render(<SignIn />)
+    await expect
+      .element(view.getByRole('link', { name: 'Continue with GitHub' }))
+      .toHaveAttribute('href', `${API_BASE_URL}/auth/github/login?${query}`)
+    await expect
+      .element(view.getByRole('link', { name: 'Continue with SSO' }))
+      .toHaveAttribute('href', `${API_BASE_URL}/auth/login?${query}`)
+    await expect
+      .element(view.getByRole('link', { name: 'Super Admin access' }))
+      .toHaveAttribute('href', `/super-admin/login?${query}`)
+  }
+)
+
+it('keeps a destination while moving between local and organization sign-in', async () => {
+  state.search = { redirect: '/findings?severity=high' }
+  const view = await render(<SuperAdminLogin />)
+  await expect
+    .element(view.getByRole('link', { name: 'Back to organization sign-in' }))
+    .toHaveAttribute('href', '/sign-in?redirect=%2Ffindings%3Fseverity%3Dhigh')
+})
+
+it.each([
+  [
+    '/repositories/42?tab=health#findings',
+    '/repositories/42?tab=health#findings',
+  ],
+  ['https://untrusted.example/redirect', '/overview'],
+  [undefined, '/overview'],
+])(
+  'uses the server-bound setup destination after owner bootstrap: %s',
+  async (returnPath, destination) => {
+    state.fetch.mockResolvedValue(
+      new Response(
+        JSON.stringify({ authenticated: true, role: 'OWNER', returnPath })
+      )
+    )
+    const view = await render(<SetupOwner />)
+    await view
+      .getByLabelText('Bootstrap token')
+      .fill('fixture-bootstrap-token-with-enough-length')
+    await view.getByRole('button', { name: 'Create Owner account' }).click()
+    await expect
+      .poll(() => state.navigate.mock.calls)
+      .toEqual([[{ to: destination, replace: true }]])
+    expect(state.fetch).toHaveBeenCalledWith(
+      `${API_BASE_URL}/auth/bootstrap`,
+      expect.objectContaining({ method: 'POST', credentials: 'include' })
+    )
+  }
+)
 
 it.each([
   { github: false, oidc: false, superAdmin: false },
@@ -174,7 +251,12 @@ it('preserves administrator credential bounds, cookie-backed submission and pass
 
 it.each([
   ['/access-control?tab=github#members', '/access-control?tab=github#members'],
-  ['https://untrusted.example/redirect', '/'],
+  ['https://untrusted.example/redirect', '/overview'],
+  ['//untrusted.example/redirect', '/overview'],
+  ['/safe/..//untrusted.example/redirect', '/overview'],
+  ['/\\untrusted.example/redirect', '/overview'],
+  ['/repositories%5cevil', '/overview'],
+  [undefined, '/overview'],
 ])(
   'allows only same-origin administrator success destinations: %s',
   async (redirect, destination) => {

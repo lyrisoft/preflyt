@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { ShieldCheck } from 'lucide-react'
+import { PreflytLogo } from '@/components/preflyt-brand'
 import { SignInBackground, SignInIllustration } from './sign-in-illustration'
 import './sign-in.css'
 
@@ -36,13 +36,14 @@ export function SignInLayout({ children, footer }: SignInLayoutProps) {
 
       <main className='sign-in-main'>
         <section className='sign-in-panel' aria-label='Account access'>
-          <div className='sign-in-form-brand' role='img' aria-label='Preflyt'>
-            <span className='sign-in-form-mark' aria-hidden='true'>
-              <ShieldCheck className='size-6' strokeWidth={2} />
-            </span>
-            <span className='sign-in-form-name' aria-hidden='true'>
-              Preflyt
-            </span>
+          <div className='sign-in-form-brand'>
+            <a
+              href='/'
+              aria-label='Preflyt home'
+              className='rounded-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring'
+            >
+              <PreflytLogo className='h-16 w-64 max-w-full' />
+            </a>
           </div>
           {children}
           <div className='sign-in-access-note'>

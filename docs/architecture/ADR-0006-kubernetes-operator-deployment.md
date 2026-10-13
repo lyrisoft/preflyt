@@ -1,7 +1,7 @@
 # ADR-0006: Kubernetes deployment via Helm-bootstrapped Preflyt Operator
 
-**Status:** Accepted deployment direction; not implemented  
-**Date:** 2026-10-08  
+**Status:** Accepted deployment direction; not implemented
+**Date:** 2026-10-08
 **Related:** [PRD](../PRD.md), [incremental delivery](../roadmap/incremental-delivery.md), [execution isolation](ADR-0002-safe-execution-fixtures-remediation-contract.md)
 
 ## Decision
@@ -66,13 +66,13 @@ CRD schema must validate required configuration, mutually exclusive bundled/exte
 - Database migration coordination, upgrade compatibility, backup prerequisites, rollback limitations and CRD conversion are explicit lifecycle designs—not assumed safe automatically.
 - Operator does not bypass approved sandbox isolation for real repository code. k6 Operator is a separate controller used later for distributed performance workloads.
 
-## Phase delivery without reordering P0–P11
+## Phase delivery without reordering P0–P12
 
 - **P0:** Docker Compose remains the deployable requirement. Document CRD/configuration shape and Helm/operator packaging design; do not block already-running P0 on an unbuilt Operator.
 - **P1–P3:** Ship a **minimal usable Operator** as an additive Kubernetes deployment capability once its tested chart, CRD, reconciler, installation, health, uninstall and rollback flow are complete. Prefer a dedicated release slice within the existing phase; do not declare partial scaffolding usable.
-- **P4–P6:** Expand reconciliation for newly shipped components, secret/config rotation and controlled upgrades.
-- **P7–P9:** Add configuration for performance workers and optional k6 Operator integration.
-- **P10–P11:** Improve HA, scaling, observability, drift handling and production lifecycle safeguards.
+- **P4–P7:** Expand reconciliation for newly shipped components, secret/config rotation and controlled upgrades.
+- **P8–P10:** Add configuration for performance workers and optional k6 Operator integration.
+- **P11–P12:** Improve HA, scaling, observability, drift handling and production lifecycle safeguards.
 
 The current repository has implemented Compose services and a locally rendered/tested [plain Kubernetes application bundle](../../deploy/kubernetes/README.md) as an interim deployment path. No chart, CRD, Operator reconciliation or live-cluster acceptance is claimed. This does not replace the preferred Operator lifecycle decision or mark its acceptance criteria complete.
 

@@ -66,6 +66,7 @@ model LoginTransaction {
   browserBinding  String
   codeVerifier    String
   nonce           String
+  returnPath      String   @default("/overview")
   expiresAt       DateTime
   createdAt       DateTime @default(now())
   @@index([expiresAt])
@@ -102,6 +103,7 @@ model BootstrapChallenge {
   id         String   @id @default(cuid())
   tokenHash  String   @unique
   identityId String
+  returnPath String   @default("/overview")
   identity   Identity @relation(fields: [identityId], references: [id], onDelete: Cascade)
   expiresAt  DateTime
   createdAt  DateTime @default(now())
@@ -171,6 +173,8 @@ model GitHubRepository {
   contributorObservations ContributorObservation[]
   pullRequests RepositoryPullRequest[]
   ciBindings RepositoryCiBindings[]
+  findingSources FindingSourceExcerpt[]
+  aiFindingGuidance AiFindingGuidance[]
   assessments    CommitAssessment[]
   standards      RepositoryStandardsSelection[]
   gatePolicies   GatePolicyRevision[]
@@ -183,6 +187,9 @@ model GitHubRepository {
   rulesetDeployments GitHubRulesetDeployment[]
   ruleSuiteSnapshots GitHubRuleSuiteSnapshot[]
   insightsSync GitHubInsightsSync?
+  healthTarget RepositoryHealthTarget?
+  healthAssessments RepositoryHealthAssessment[]
+  healthHotspotReviews RepositoryHealthHotspotReview[]
   nativeRequests NativeExecutionRequest[]
   skillReviews AiSkillReview[]
   teamScopes TeamRepositoryScope[]
@@ -402,6 +409,7 @@ model Organization {
   githubLink    GitHubOrganizationLink?
   githubAccessEvidence GitHubUserAccessEvidence[]
   aiProviders AiProviderConnection[]
+  aiFindingGuidance AiFindingGuidance[]
   aiRoutes AiStageRoute[]
   reviewSkills AiReviewSkill[]
   skillReviews AiSkillReview[]
@@ -623,6 +631,8 @@ model GitHubUserAccessEvidence {
 model NotificationEvent {
   id String @id @default(cuid())
   assessmentId String? @unique
+  healthAssessmentId String? @unique
+  branchRef String?
   policyId String? @unique
   schemaVersion Int @default(1)
   organizationId String
@@ -868,6 +878,7 @@ model NativeExecutionRequest {
   finishedAt DateTime?
   receiptHash String?
   receiptSignature   String?
+  healthAssessmentId String? @unique
   @@unique([repositoryId,requestKey])
   @@index([organizationId,repositoryId,requestedAt,id])
   @@index([state,leaseUntil,requestedAt])
@@ -1209,4 +1220,119 @@ model GitHubAppManifestTransaction {
   createdAt DateTime @default(now())
   @@index([actorId, sessionHash, createdAt])
   @@index([expiresAt])
+}
+
+// Repository health is independent of policy selections and CI gate evidence.
+model RepositoryHealthTarget {
+  repositoryId String @id
+  repository GitHubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  organizationId String
+  branch String
+  headSha String?
+  headCheckedAt DateTime?
+  revision Int @default(1)
+  actorId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+model RepositoryHealthAssessment {
+  id String @id @default(uuid())
+  repositoryId String
+  repository GitHubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  organizationId String
+  branch String
+  targetRevision Int
+  requestKey String
+  includeCoverage Boolean @default(false)
+  actorId String
+  state String @default("QUEUED")
+  sourceSha String?
+  profileId String?
+  plan Json?
+  report Json?
+  reason String?
+  nativeRequestId String? @unique
+  leaseToken String?
+  leaseUntil DateTime?
+  attempts Int @default(0)
+  cancelledAt DateTime?
+  startedAt DateTime?
+  finishedAt DateTime?
+  createdAt DateTime @default(now())
+  @@unique([repositoryId, requestKey])
+  @@index([repositoryId, branch, createdAt, id])
+  @@index([organizationId, state, leaseUntil])
+  hotspotReviews RepositoryHealthHotspotReview[]
+}
+
+// Verified, redacted source display snapshots. Never part of assessment/gate evidence.
+model FindingSourceExcerpt {
+  id String @id
+  repositoryId String
+  repository GitHubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  sourceSha String
+  path String
+  line Int?
+  endLine Int?
+  contextLines Int @default(8)
+  version Int @default(1)
+  content Json?
+  contentHash String?
+  attempts Int @default(0)
+  retryAfter DateTime @default(now())
+  capturedAt DateTime?
+  createdAt DateTime @default(now())
+  @@index([contentHash, attempts, retryAfter])
+  @@index([repositoryId, sourceSha])
+}
+
+// Human hotspot decisions remain separate from immutable assessments and CI triage.
+model RepositoryHealthHotspotReview {
+  id String @id
+  repositoryId String
+  repository GitHubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  assessmentId String
+  assessment RepositoryHealthAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  organizationId String
+  fingerprint String
+  sourceSha String
+  state String @default("TO_REVIEW")
+  note String @default("")
+  revision Int @default(1)
+  updatedById String
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+  @@unique([assessmentId, fingerprint])
+  @@index([organizationId, repositoryId, assessmentId])
+}
+
+
+// Cached advisory explanations; never assessment or merge evidence.
+model AiFindingGuidance {
+  id String @id
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  repositoryId String
+  repository GitHubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  actorId String
+  origin String
+  assessmentId String
+  findingId String
+  sourceSha String
+  inputHash String
+  snapshot Json
+  state String @default("QUEUED")
+  result Json?
+  resultHash String?
+  failure String?
+  modelLabel String?
+  usage Json?
+  leaseToken String?
+  leaseUntil DateTime?
+  attempts Int @default(0)
+  createdAt DateTime @default(now())
+  finishedAt DateTime?
+  @@index([organizationId, repositoryId, assessmentId, findingId])
+  @@index([state, leaseUntil, createdAt])
+  @@index([organizationId, createdAt])
 }

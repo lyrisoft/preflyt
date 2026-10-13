@@ -129,14 +129,14 @@ export function sameInlineIssue(
 ) {
   if (issue.path !== prior.path) return false;
   const marker =
-    /<!-- preflyt-issue:([a-f0-9]{64});anchor:([a-f0-9]{64}) -->/.exec(
+    new RegExp(String.raw`<!-- preflyt-issue:([a-f0-9]{64});anchor:([a-f0-9]{64}) -->`).exec(
       prior.body,
     );
   if (issue.fingerprint === (prior.fingerprint ?? marker?.[1])) return true;
   const priorAnchor = prior.anchor ?? marker?.[2];
   // Distinct locations with the same wording remain distinct issues.
   if (priorAnchor && priorAnchor !== issue.anchor) return false;
-  const oldText = prior.description ?? prior.body.replace(/<!--.*?-->/g, "");
+  const oldText = prior.description ?? prior.body.replace(new RegExp(String.raw`<!--.*?-->`, 'g'), "");
   const a = tokens(issue.description),
     b = tokens(oldText);
   if (a.size < 4 || b.size < 4)

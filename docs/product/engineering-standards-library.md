@@ -1,7 +1,7 @@
 # Preflyt Engineering Standards Library
 
 **Status:** Built-in catalogue, repository selection, CI evidence mapping, versioned organization authoring and policy/check governance are implemented in source. Native execution, broader inheritance and live enforcement acceptance remain pending.
-**Applies to:** Repository onboarding, assessments, CI/PR quality gates, and later SDLC stages  
+**Applies to:** Repository onboarding, assessments, CI/PR quality gates, and later SDLC stages
 **Related:** [PRD](../PRD.md) · [Incremental delivery plan](../roadmap/incremental-delivery.md) · [ADR-0004](../architecture/ADR-0004-shift-left-assessment-governance.md)
 
 ## Purpose
@@ -22,9 +22,9 @@ The first five packs are implemented. API, database, production-readiness, perfo
 | `frontend-application` | Frontend Applications | Typecheck/lint/build, component tests, dependency security | P0 → P2/P3 |
 | `infrastructure-as-code` | Infrastructure as Code | Terraform/OpenTofu policy, Kubernetes/Docker security, unsafe exposures | P0 → P2/P3 |
 | `api-engineering` | API Engineering | OpenAPI validity, consumer/provider compatibility, breaking changes | P0 catalogue, enforce when adapters available |
-| `database-engineering` | Database Engineering | Destructive migrations, compatibility, controlled schema-change evidence | P0 catalogue → P6 |
+| `database-engineering` | Database Engineering | Destructive migrations, compatibility, controlled schema-change evidence | P0 catalogue → P7 |
 | `production-readiness` | Production Readiness | Readiness/health, graceful shutdown, timeouts, telemetry assertions | P0 catalogue → V1 |
-| `performance-engineering` | Performance Engineering | Approved k6 thresholds, baseline comparability, latency/error budgets | P0 catalogue → P7–P9 |
+| `performance-engineering` | Performance Engineering | Approved k6 thresholds, baseline comparability, latency/error budgets | P0 catalogue → P8–P10 |
 | `compliance-baseline` | Compliance Evidence Baseline | Organization-defined control evidence and audit requirements | P0 catalogue → later |
 
 Catalogue presence **does not imply executable support**. Each rule declares `available`, `import_only`, `executable`, or `planned` capability and must never appear compliant when the required adapter/evidence is missing.
@@ -118,9 +118,9 @@ Organizations can assign versioned standards at organization, **team** or indivi
 
 **P3 — native check support:** add eligible security/testing/IaC adapters running in approved execution environments. Use capability reporting, not fictitious green checks.
 
-**P6–P9 — specialized packs:** expand contract testing, database/reliability, k6 budgets and advanced performance gate evidence.
+**P7–P10 — specialized packs:** expand contract testing, database/reliability, k6 budgets and advanced performance gate evidence.
 
-**P10+ — feedback and recommendations:** incident-derived suggestions for policy revisions requiring human approval; add organization libraries and trend analytics.
+**P11+ — feedback and recommendations:** incident-derived suggestions for policy revisions requiring human approval; add organization libraries and trend analytics.
 
 ## P0 acceptance
 

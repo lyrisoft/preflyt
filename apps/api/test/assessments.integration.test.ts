@@ -288,6 +288,19 @@ describe('immutable exact-SHA assessment API', () => {
     expect(historical.body.report.observations).toHaveLength(1)
     expect(historical.body.assessmentHash).toBe(stored.assessmentHash)
   })
+  it('queues verified source locations with new assessments without changing their evidence hash', async () => {
+    const { selection, delivery } = await ready()
+    const content = JSON.stringify({ version: '2.1.0', runs: [{ tool: { driver: { name: 'fixture' } }, results: [{ ruleId: 'unsafe-query', level: 'error', message: { text: 'Unsafe query' }, locations: [{ physicalLocation: { artifactLocation: { uri: 'src/app.ts' }, region: { startLine: 2, endLine: 3 } } }] }] }] })
+    const sha256 = createHash('sha256').update(content).digest('hex'), parsed = parseArtifact('sarif', content, sha256)
+    await prisma.ciArtifactImport.create({ data: { deliveryId: delivery.id, format: 'sarif', sha256, parserVersion: 1, content: parsed.bytes, summary: parsed.summary, uploadedById: actorId } })
+    const result = await create(assessmentBody(selection.id, delivery.id))
+    expect(result.status).toBe(201)
+    const queued = await prisma.findingSourceExcerpt.findMany()
+    expect(queued).toHaveLength(1)
+    expect(queued[0]).toMatchObject({ sourceSha: 'a'.repeat(40), path: 'src/app.ts', line: 2, endLine: 3, content: null, capturedAt: null })
+    const saved = result.body.assessment
+    expect(saved.assessmentHash).toBe(digest({ request: saved.request, plan: saved.plan, report: saved.report }))
+  })
   it('deduplicates concurrent requests and rejects request-key reuse with altered input', async () => {
     const { selection, delivery } = await ready()
     const value = assessmentBody(selection.id, delivery.id)
@@ -303,6 +316,33 @@ describe('immutable exact-SHA assessment API', () => {
       await prisma.auditEvent.count({ where: { event: 'assessment.created' } }),
     ).toBe(1)
     expect((await create({ ...value, mappings: [] })).status).toBe(409)
+  })
+  it('filters assessment history by exact standards selection and revision', async () => {
+    const { selection, delivery } = await ready()
+    const saved = await create(assessmentBody(selection.id, delivery.id))
+    expect(saved.status).toBe(201)
+    const current = await prisma.commitAssessment.findUniqueOrThrow({ where: { id: saved.body.assessment.id } })
+    const requestV2 = { ...(current.request as Record<string, unknown>), selectionRevision: selection.revision + 1 }
+    const newer = await prisma.commitAssessment.create({ data: {
+      ...current, id: randomUUID(), requestKey: randomUUID(), request: JSON.parse(JSON.stringify(requestV2)),
+      createdAt: new Date(current.createdAt.getTime() + 1000),
+      assessmentHash: digest({ request: requestV2, plan: current.plan, report: current.report }),
+      plan: JSON.parse(JSON.stringify(current.plan)), report: JSON.parse(JSON.stringify(current.report)),
+    } })
+    const url = `/github/repositories/501/assessments?selection=${selection.id}&revision=${selection.revision}`
+    const result = await request(app.getHttpServer()).get(url).set('Cookie', 'test.sid=VIEWER')
+    expect(result.status).toBe(200)
+    expect(result.body.assessments.map((row: { id: string }) => row.id)).toEqual([current.id])
+    const otherRevision = await request(app.getHttpServer()).get(url.replace(`revision=${selection.revision}`, `revision=${selection.revision + 1}`)).set('Cookie', 'test.sid=VIEWER')
+    expect(otherRevision.body.assessments.map((row: { id: string }) => row.id)).toEqual([newer.id])
+    const anotherSelection = await request(app.getHttpServer()).get(url.replace(selection.id, 'other-selection')).set('Cookie', 'test.sid=VIEWER')
+    expect(anotherSelection.body.assessments).toEqual([])
+    for (const query of ['selection=valid', 'revision=1', 'selection=valid&revision=0', 'selection=valid&revision=1.5', 'selection=valid&revision=2147483648']) {
+      expect((await request(app.getHttpServer()).get('/github/repositories/501/assessments?' + query).set('Cookie', 'test.sid=VIEWER')).status).toBe(400)
+    }
+    expect((await request(app.getHttpServer()).get(url)).status).toBe(401)
+    await prisma.gitHubRepository.update({ where: { githubId: 501n }, data: { selected: false } })
+    expect((await request(app.getHttpServer()).get(url).set('Cookie', 'test.sid=VIEWER')).status).toBe(403)
   })
   it('requires admin/origin/current selection for creation and active repository access for every read', async () => {
     const { selection, delivery } = await ready()

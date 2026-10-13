@@ -174,11 +174,18 @@ it.each([false, true])(
 )
 
 it.each([false, true])(
-  'starts keyboard access directly at the sign-in form in dark=%s',
+  'provides keyboard access to the homepage logo and then the sign-in form in dark=%s',
   async (dark) => {
     await page.viewport(1440, 900)
     const view = await entry(dark)
     const username = view.getByLabelText('Username')
+    await userEvent.keyboard('{Tab}')
+    await expect
+      .element(view.getByRole('link', { name: 'Preflyt home' }))
+      .toHaveFocus()
+    await expect
+      .element(view.getByRole('link', { name: 'Preflyt home' }))
+      .toHaveAttribute('href', '/')
     await userEvent.keyboard('{Tab}')
     await expect.element(username).toHaveFocus()
     expect(username.element().matches(':focus-visible')).toBe(true)

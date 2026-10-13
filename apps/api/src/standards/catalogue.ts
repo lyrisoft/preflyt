@@ -537,16 +537,20 @@ export function posture(
       required: rule.requiredIn.includes(profile),
       assessmentResult: null,
       configuration:
-        !signal || signal.state === "unknown"
-          ? "UNKNOWN"
-          : signal.state === "detected"
-            ? "HINT_DETECTED"
-            : "MISSING",
+        !rule.signal
+          ? "NOT_INSPECTED"
+          : !signal || signal.state === "unknown"
+            ? "UNKNOWN"
+            : signal.state === "detected"
+              ? "HINT_DETECTED"
+              : "MISSING",
       evidence: signal?.evidence ?? [],
       reason:
-        signal?.state === "detected"
-          ? "Configuration hint only; execution and compliance are not evaluated."
-          : "Required evidence has not been mapped or evaluated.",
+        !rule.signal
+          ? "Repository inspection has no setup detector for this check. Review CI execution evidence in Assessments."
+          : signal?.state === "detected"
+            ? "Configuration hint only; execution and compliance are not evaluated."
+            : "Required evidence has not been mapped or evaluated.",
     };
   });
 }

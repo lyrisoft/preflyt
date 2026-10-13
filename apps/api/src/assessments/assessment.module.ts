@@ -1,3 +1,6 @@
+import { HealthModule } from '../health/health.module.js';
+import { FindingAiGuidanceService } from '../findings/finding-ai-guidance.service.js';
+import { FindingAiGuidanceController } from '../findings/finding-ai-guidance.controller.js';
 import { PolicyExceptionController } from './policy-exception.controller.js';
 import { PolicyExceptionService } from './policy-exception.service.js';
 import { PipelineGateController } from "./pipeline-gate.controller.js";
@@ -25,19 +28,21 @@ import { GatePolicyController } from "./gate-policy.controller.js";
 import { GatePolicyService } from "./gate-policy.service.js";
 import { PipelineSetupController } from "./pipeline-setup.controller.js";
 import { PipelinePolicyController } from "./pipeline-policy.controller.js";
+import { FindingSourceStoreModule } from "../findings/finding-source-store.module.js";
 import { Module } from "@nestjs/common";
 import { AuthModule } from "../auth/auth.module.js";
 import { PrismaModule } from "../prisma/prisma.module.js";
 import { AssessmentController } from "./assessment.controller.js";
 import { AssessmentService } from "./assessment.service.js";
 @Module({
-  imports: [AuthModule, PrismaModule, GitHubProviderModule],
+  imports: [AuthModule, PrismaModule, GitHubProviderModule, FindingSourceStoreModule, HealthModule],
   controllers: [
     PipelinePolicyController,
     PipelineGateController,
     PipelineSetupController,
     PolicyExceptionController,
     FindingsController,
+    FindingAiGuidanceController,
     NativeRequestController,
     NativeStatusController,
     RulesetDeploymentController,
@@ -53,6 +58,7 @@ import { AssessmentService } from "./assessment.service.js";
     AiConfigurationService,
     PolicyExceptionService,
     FindingsService,
+    FindingAiGuidanceService,
     NativeRequestService,
     NativePlanService,
     NativeStatusService,

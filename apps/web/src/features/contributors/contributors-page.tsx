@@ -35,6 +35,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { OptionSelect } from '@/components/ui/option-select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { AppHeader } from '@/components/layout/app-header'
@@ -44,6 +45,7 @@ import { RepositoryPicker } from '@/components/repository-picker'
 import { SurfaceIcon } from '@/components/surface-icon'
 import { useNavigationSession } from '../workspace/navigation-session'
 import { canPerform } from '../workspace/scoped-access'
+import { ContributorActivitySparkline } from './contributor-activity-sparkline'
 import {
   ContributorActivitySummary,
   type ContributionDay,
@@ -63,6 +65,7 @@ import type { ContributorSearch } from './search-schema'
 import { TabPagination } from './tab-pagination'
 
 type Contributor = {
+  dailyActivity?: { date: string; count: number }[] | null
   id: string
   login: string
   kind: string
@@ -350,7 +353,6 @@ export function ContributorsPage({
   function filter(action: () => void) {
     action()
   }
-  const selectClass = 'h-9 rounded-md border bg-background px-3 text-sm'
   const metrics = contributorId
     ? [
         { label: 'Authored PRs', n: c?.authoredPrs, icon: GitPullRequest },
@@ -454,17 +456,16 @@ export function ContributorsPage({
         <div className='flex flex-wrap gap-3 rounded-xl border bg-card p-4'>
           <label className='flex flex-col gap-1 text-xs text-muted-foreground'>
             Period
-            <select
+            <OptionSelect
+              label='Period'
               value={days}
-              className={selectClass}
-              onChange={(e) => filter(() => setDays(e.target.value))}
-            >
-              {[7, 30, 90, 180].map((d) => (
-                <option key={d} value={d}>
-                  Last {d} days
-                </option>
-              ))}
-            </select>
+              className='w-44'
+              onValueChange={(value) => filter(() => setDays(value))}
+              options={[7, 30, 90, 180].map((d) => ({
+                value: d,
+                label: `Last ${d} days`,
+              }))}
+            />
           </label>
           <label className='flex flex-col gap-1 text-xs text-muted-foreground'>
             Repository
@@ -479,38 +480,41 @@ export function ContributorsPage({
           </label>
           <label className='flex flex-col gap-1 text-xs text-muted-foreground'>
             Identity
-            <select
+            <OptionSelect
+              label='Identity'
               value={kind}
-              className={selectClass}
-              onChange={(e) => filter(() => setKind(e.target.value))}
-            >
-              <option value='all'>All identities</option>
-              <option value='HUMAN'>Human</option>
-              <option value='BOT'>Bot</option>
-              <option value='UNKNOWN'>Unknown</option>
-            </select>
+              className='w-44'
+              onValueChange={(value) => filter(() => setKind(value))}
+              options={[
+                ['all', 'All identities'],
+                ['HUMAN', 'Human'],
+                ['BOT', 'Bot'],
+                ['UNKNOWN', 'Unknown'],
+              ].map(([value, label]) => ({ value, label }))}
+            />
           </label>
           {(!data || data.permissions.activity) && (
             <label className='flex flex-col gap-1 text-xs text-muted-foreground'>
               Relationship
-              <select
+              <OptionSelect
+                label='Relationship'
                 value={relationship}
-                className={selectClass}
-                onChange={(e) => filter(() => setRelationship(e.target.value))}
-              >
-                <option value='all'>All participation</option>
-                {[
-                  'PR_AUTHOR',
-                  'REVIEWER',
-                  'COMMIT_AUTHOR',
-                  'COMMITTER',
-                  'MERGE_ACTOR',
-                ].map((r) => (
-                  <option key={r} value={r}>
-                    {r.replace(/_/g, ' ').toLowerCase()}
-                  </option>
-                ))}
-              </select>
+                className='w-48'
+                onValueChange={(value) => filter(() => setRelationship(value))}
+                options={[
+                  { value: 'all', label: 'All participation' },
+                  ...[
+                    'PR_AUTHOR',
+                    'REVIEWER',
+                    'COMMIT_AUTHOR',
+                    'COMMITTER',
+                    'MERGE_ACTOR',
+                  ].map((value) => ({
+                    value,
+                    label: value.replace(/_/g, ' ').toLowerCase(),
+                  })),
+                ]}
+              />
             </label>
           )}
           {!contributorId && (
@@ -836,6 +840,7 @@ export function ContributorsPage({
                           <thead>
                             <tr className='border-b text-xs text-muted-foreground'>
                               <th className='p-3'>Contributor</th>
+                              <th className='p-3'>Activity</th>
                               <th className='p-3'>Repositories</th>
                               <th className='p-3'>Authored PRs</th>
                               <th className='p-3'>Reviews</th>
@@ -876,6 +881,17 @@ export function ContributorsPage({
                                       </p>
                                     </div>
                                   </div>
+                                </td>
+                                <td className='p-3'>
+                                  <ContributorActivitySparkline
+                                    login={c.login}
+                                    activity={
+                                      data.permissions.activity
+                                        ? c.dailyActivity
+                                        : null
+                                    }
+                                    partial={data.truncated}
+                                  />
                                 </td>
                                 <td className='p-3 tabular-nums'>
                                   {c.repositoryCount}

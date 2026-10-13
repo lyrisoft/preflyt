@@ -1,0 +1,28 @@
+# Retain every built-in detector. Exceptions match only reviewed synthetic values
+# in their exact fixture/example files; other credentials in those files still fail.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Synthetic GitHub PAT used to verify native scanner failure and redaction"
+condition = "AND"
+targetRules = ["github-pat", "generic-api-key"]
+paths = ['''^apps/api/scripts/native-check-fixtures\.mts$''']
+regexTarget = "secret"
+regexes = ['''^ghp_xT9dK7vM2pQ8nL5sR4(?:cJ6hB3wF0aY1uE9zI2)$''']
+
+[[allowlists]]
+description = "Required password placeholder in self-hosting examples and their compiled documentation copies"
+condition = "AND"
+targetRules = ["generic-api-key"]
+paths = ['''^apps/docs/(?:scripts/generate-downloads\.mjs|docs/_generated/env-(?:local|production)\.md|static/downloads/preflyt\.env\.example|build/(?:downloads/preflyt\.env\.example|assets/js/[^/]+\.js|search-index\.json))$''']
+regexTarget = "secret"
+regexes = ['''^REPLACE_WITH_24_TO_128_CHARACTERS$''']
+
+[[allowlists]]
+description = "Normalized search-index token of the required password placeholder"
+condition = "AND"
+targetRules = ["generic-api-key"]
+paths = ['''^apps/docs/build/search-index\.json$''']
+regexTarget = "secret"
+regexes = ['''^replace_with_24_to_128_charact$''']

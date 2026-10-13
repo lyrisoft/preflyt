@@ -1,0 +1,9 @@
+{
+  "name": "preflyt-native-duplication",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "jscpd": "4.3.0"
+  }
+}

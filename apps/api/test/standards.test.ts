@@ -129,3 +129,24 @@ it('publishes implemented report checks as new immutable versions while retainin
     expect(old.digest).not.toBe(pack.digest)
   }
 })
+
+
+it('separates checks without setup detectors from missing or inconclusive configuration', () => {
+  const controls = posture(
+    [{ id: 'baseline-engineering', version: '1.1.0' }, { id: 'backend-service', version: '1.1.0' }],
+    'RECOMMENDED',
+    [signal('ci'), signal('tests', [], 'not_detected')],
+  )
+  for (const id of ['types.required', 'build.required']) {
+    expect(controls.find((control) => control.id === id)).toMatchObject({
+      configuration: 'NOT_INSPECTED',
+      assessmentResult: null,
+      required: true,
+      evidence: [],
+      reason: expect.stringContaining('no setup detector'),
+    })
+  }
+  expect(controls.find((control) => control.id === 'tests.required')?.configuration).toBe('MISSING')
+  expect(controls.find((control) => control.id === 'dependencies.locked')?.configuration).toBe('UNKNOWN')
+  expect(controls.find((control) => control.id === 'ci.configured')?.configuration).toBe('HINT_DETECTED')
+})

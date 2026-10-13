@@ -1,4 +1,6 @@
-import { pipelineVerifications, githubReportExecutions } from './pipeline-verification.js'
+import { queueFindingSources } from '../findings/finding-source-store.js'
+import { normalizeReportFindings, type ReportFinding } from '../findings/normalize-report-findings.js'
+import { pipelineVerifications, githubReportExecutions, verifiedPipelineReports } from './pipeline-verification.js'
 import { excludePreflytFeedback } from '../github-events/preflyt-feedback.js'
 import { currentStandards, selectionBindingWhere } from '../standards/policy-standards.js'
 import {
@@ -87,17 +89,30 @@ export class AssessmentService {
     )
       throw new ConflictException('Assessment integrity check failed')
   }
-  async list(id: string, sha?: string) {
+  async list(id: string, sha?: string, selection?: string, revision?: string) {
     if (
       sha !== undefined &&
       (typeof sha !== 'string' || !/^[a-f0-9]{40}$/i.test(sha))
     )
       throw new BadRequestException('A full commit SHA is required')
+    if (
+      (selection !== undefined || revision !== undefined) &&
+      (typeof selection !== 'string' ||
+        !/^[a-zA-Z0-9_-]{1,80}$/.test(selection) ||
+        typeof revision !== 'string' ||
+        !/^[1-9]\d{0,9}$/.test(revision) ||
+        Number(revision) > 2147483647)
+    )
+      throw new BadRequestException('Choose a valid standards selection and revision')
     const repo = await this.repository(id)
     const assessments = await this.prisma.commitAssessment.findMany({
       where: {
         repositoryId: repo.id,
         ...(sha ? { sourceSha: sha.toLowerCase() } : {}),
+        ...(selection ? {
+          selectionId: selection,
+          request: { path: ['selectionRevision'], equals: Number(revision) },
+        } : {}),
       },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: 50,
@@ -167,7 +182,7 @@ export class AssessmentService {
       const selectedPipeline = pipelineRun ?? (githubVerification[0] ? {
         runId: githubVerification[0].runId, runAttempt: githubVerification[0].runAttempt,
       } : undefined)
-      const key = `auto:${digest({ pipelineRun: selectedPipeline, githubVerification, repositoryId: repo.id, sourceSha, actorId, pullRequest,
+      const key = `auto:${digest({ bindingResolution: 'verified-pipeline-reports-v1', pipelineRun: selectedPipeline, githubVerification, repositoryId: repo.id, sourceSha, actorId, pullRequest,
         selection, observations, profile, binding,
         native: native.map(freezeNativeEvidence), proofPolicy: reportProofPolicy()?.digest ?? null })}`
       return this.persist(tx, repo, id, { sourceSha, expectedSelectionId: selectionId,
@@ -399,6 +414,7 @@ export class AssessmentService {
       orderBy: { revision: 'desc' },
     })
     const bindingActive = binding?.selectionId === selection.id
+    const githubVerification = await pipelineVerifications(tx, repo.id, normalized.sourceSha, selection.id)
     const approved = bindingActive
       ? rows.length > 100
         ? {
@@ -414,6 +430,7 @@ export class AssessmentService {
                   runAttempt(o.sourceIdentity) === (trigger as any).pipelineRun.runAttempt &&
                   (o.sourceKind === 'workflow_jobs' || o.sourceKind === 'workflow_run'))
               : observations,
+            verifiedPipelineReports(githubVerification, observations),
           )
       : { mappings: [], ambiguousRules: [] }
     const manualRules = new Set(input.mappings.map((m) => m.ruleId))
@@ -446,7 +463,6 @@ export class AssessmentService {
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: MAX_VALIDATION_ARTIFACTS,
     })
-    const githubVerification = await pipelineVerifications(tx, repo.id, normalized.sourceSha, selection.id)
     const validations = new Map<string, ObservationValidation>()
     for (const row of observations.filter((o) =>
       mappedIds.includes(o.deliveryId),
@@ -588,6 +604,13 @@ export class AssessmentService {
         },
       },
     })
+    const sourceFindings: ReportFinding[] = []
+    for (const observation of result.report.observations) for (const ref of observation.artifacts ?? []) {
+      const artifact = artifacts.find(a => a.id === ref.id && a.sha256 === ref.sha256 && a.deliveryId === observation.deliveryId)
+      if (!artifact) continue
+      try { sourceFindings.push(...normalizeReportFindings(artifact.format, artifact.content, artifact.sha256)) } catch { /* Invalid reports never establish source locations. */ }
+    }
+    await queueFindingSources(tx, repo.id, normalized.sourceSha, sourceFindings)
     await recordAssessmentNotification(tx, assessment, repo, actorId)
     return { assessment, duplicate: false }
   }

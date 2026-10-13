@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { CheckCheck, Inbox, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { OptionSelect } from '@/components/ui/option-select'
 import { AppHeader } from '@/components/layout/app-header'
 import { Main } from '@/components/layout/main'
 import { PageHeader } from '@/components/page-header'
@@ -200,17 +201,13 @@ function Filter({
   return (
     <label className='space-y-1 text-xs text-muted-foreground'>
       {label}
-      <select
-        className='block h-9 max-w-64 rounded-md border bg-background px-3 text-sm text-foreground focus-visible:ring-2 focus-visible:ring-ring'
+      <OptionSelect
+        label={label}
+        className='w-full max-w-64'
         value={value}
-        onChange={(e) => onChange(e.target.value)}
-      >
-        {options.map(([key, text]) => (
-          <option key={key} value={key}>
-            {text}
-          </option>
-        ))}
-      </select>
+        onValueChange={onChange}
+        options={options.map(([value, label]) => ({ value, label }))}
+      />
     </label>
   )
 }

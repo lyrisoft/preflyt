@@ -37,10 +37,10 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { ResultTimestamp } from '@/components/result-timestamp'
 import { StatusBadge } from '@/components/status-badge'
 import { CiActivityCharts, CiActivityEmpty } from './ci-activity-charts'
 import { ReportList } from './ci-reports'
-import { RelativeTime } from './relative-time'
 import { useCiEvidence, type CiObservation } from './repository-queries'
 import { ciResultStatus, sentence, sourceLabel } from './repository-vocabulary'
 
@@ -265,7 +265,7 @@ export function RepositoryCiEvidence({
                         : 'None'}
                     </TableCell>
                     <TableCell className='text-xs text-muted-foreground'>
-                      <RelativeTime value={item.observedAt} />
+                      <ResultTimestamp value={item.observedAt} />
                     </TableCell>
                     <TableCell className='pe-6 text-end'>
                       <DropdownMenu>

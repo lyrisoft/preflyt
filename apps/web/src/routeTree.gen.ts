@@ -9,8 +9,10 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as GithubOnboardingRouteImport } from './routes/github-onboarding'
+import { Route as SelfHostingRouteImport } from './routes/self-hosting'
 import { Route as SetupRouteImport } from './routes/setup'
 import { Route as authSignInRouteImport } from './routes/(auth)/sign-in'
 import { Route as errors401RouteImport } from './routes/(errors)/401'
@@ -18,7 +20,6 @@ import { Route as errors403RouteImport } from './routes/(errors)/403'
 import { Route as errors404RouteImport } from './routes/(errors)/404'
 import { Route as errors500RouteImport } from './routes/(errors)/500'
 import { Route as errors503RouteImport } from './routes/(errors)/503'
-import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
 import { Route as AuthenticatedAccessControlRouteImport } from './routes/_authenticated/access-control'
 import { Route as AuthenticatedAssessmentsRouteImport } from './routes/_authenticated/assessments'
 import { Route as AuthenticatedAuditLogRouteImport } from './routes/_authenticated/audit-log'
@@ -27,16 +28,23 @@ import { Route as AuthenticatedIntegrationsRouteImport } from './routes/_authent
 import { Route as AuthenticatedIntelligenceRouteImport } from './routes/_authenticated/intelligence'
 import { Route as AuthenticatedNotificationsRouteImport } from './routes/_authenticated/notifications'
 import { Route as AuthenticatedOrganizationSettingsRouteImport } from './routes/_authenticated/organization-settings'
+import { Route as AuthenticatedOverviewRouteImport } from './routes/_authenticated/overview'
 import { Route as AuthenticatedPoliciesRouteImport } from './routes/_authenticated/policies'
 import { Route as AuthenticatedQualityGatesRouteImport } from './routes/_authenticated/quality-gates'
 import { Route as AuthenticatedSettingsRouteRouteImport } from './routes/_authenticated/settings/route'
 import { Route as AuthenticatedSkillsRouteImport } from './routes/_authenticated/skills'
 import { Route as AuthenticatedStandardsRouteImport } from './routes/_authenticated/standards'
 import { Route as AuthenticatedTeamsRouteImport } from './routes/_authenticated/teams'
+import { Route as ProductIndexRouteImport } from './routes/product.index'
+import { Route as ProductMergeProtectionRouteImport } from './routes/product.merge-protection'
+import { Route as ProductRepositoryHealthRouteImport } from './routes/product.repository-health'
+import { Route as ProductStandardsAndEvidenceRouteImport } from './routes/product.standards-and-evidence'
 import { Route as authSuperAdminLoginRouteImport } from './routes/(auth)/super-admin/login'
 import { Route as AuthenticatedAppsIndexRouteImport } from './routes/_authenticated/apps/index'
 import { Route as AuthenticatedContributorsIndexRouteImport } from './routes/_authenticated/contributors/index'
 import { Route as AuthenticatedContributorsContributorIdRouteImport } from './routes/_authenticated/contributors/$contributorId'
+import { Route as AuthenticatedFindingsIndexRouteImport } from './routes/_authenticated/findings/index'
+import { Route as AuthenticatedFindingsFindingIdRouteImport } from './routes/_authenticated/findings/$findingId'
 import { Route as AuthenticatedRepositoriesRepositoryIdRouteImport } from './routes/_authenticated/repositories/$repositoryId'
 import { Route as AuthenticatedSettingsIndexRouteImport } from './routes/_authenticated/settings/index'
 import { Route as AuthenticatedSettingsAccountRouteImport } from './routes/_authenticated/settings/account'
@@ -44,6 +52,11 @@ import { Route as AuthenticatedSettingsAppearanceRouteImport } from './routes/_a
 import { Route as AuthenticatedSettingsDisplayRouteImport } from './routes/_authenticated/settings/display'
 import { Route as AuthenticatedSettingsNotificationsRouteImport } from './routes/_authenticated/settings/notifications'
 
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
   getParentRoute: () => rootRouteImport,
@@ -51,6 +64,11 @@ const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
 const GithubOnboardingRoute = GithubOnboardingRouteImport.update({
   id: '/github-onboarding',
   path: '/github-onboarding',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SelfHostingRoute = SelfHostingRouteImport.update({
+  id: '/self-hosting',
+  path: '/self-hosting',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SetupRoute = SetupRouteImport.update({
@@ -87,11 +105,6 @@ const errors503Route = errors503RouteImport.update({
   id: '/(errors)/503',
   path: '/503',
   getParentRoute: () => rootRouteImport,
-} as any)
-const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedAccessControlRoute =
   AuthenticatedAccessControlRouteImport.update({
@@ -139,6 +152,11 @@ const AuthenticatedOrganizationSettingsRoute =
     path: '/organization-settings',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedOverviewRoute = AuthenticatedOverviewRouteImport.update({
+  id: '/overview',
+  path: '/overview',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedPoliciesRoute = AuthenticatedPoliciesRouteImport.update({
   id: '/policies',
   path: '/policies',
@@ -171,6 +189,27 @@ const AuthenticatedTeamsRoute = AuthenticatedTeamsRouteImport.update({
   path: '/teams',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const ProductIndexRoute = ProductIndexRouteImport.update({
+  id: '/product/',
+  path: '/product/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProductMergeProtectionRoute = ProductMergeProtectionRouteImport.update({
+  id: '/product/merge-protection',
+  path: '/product/merge-protection',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProductRepositoryHealthRoute = ProductRepositoryHealthRouteImport.update({
+  id: '/product/repository-health',
+  path: '/product/repository-health',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProductStandardsAndEvidenceRoute =
+  ProductStandardsAndEvidenceRouteImport.update({
+    id: '/product/standards-and-evidence',
+    path: '/product/standards-and-evidence',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const authSuperAdminLoginRoute = authSuperAdminLoginRouteImport.update({
   id: '/(auth)/super-admin/login',
   path: '/super-admin/login',
@@ -192,6 +231,18 @@ const AuthenticatedContributorsContributorIdRoute =
     id: '/contributors/$contributorId',
     path: '/contributors/$contributorId',
     getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedFindingsIndexRoute =
+  AuthenticatedFindingsIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedFindingsRoute,
+  } as any)
+const AuthenticatedFindingsFindingIdRoute =
+  AuthenticatedFindingsFindingIdRouteImport.update({
+    id: '/$findingId',
+    path: '/$findingId',
+    getParentRoute: () => AuthenticatedFindingsRoute,
   } as any)
 const AuthenticatedRepositoriesRepositoryIdRoute =
   AuthenticatedRepositoriesRepositoryIdRouteImport.update({
@@ -231,8 +282,9 @@ const AuthenticatedSettingsNotificationsRoute =
   } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof AuthenticatedIndexRoute
+  '/': typeof IndexRoute
   '/github-onboarding': typeof GithubOnboardingRoute
+  '/self-hosting': typeof SelfHostingRoute
   '/setup': typeof SetupRoute
   '/settings': typeof AuthenticatedSettingsRouteRouteWithChildren
   '/sign-in': typeof authSignInRoute
@@ -244,18 +296,24 @@ export interface FileRoutesByFullPath {
   '/access-control': typeof AuthenticatedAccessControlRoute
   '/assessments': typeof AuthenticatedAssessmentsRoute
   '/audit-log': typeof AuthenticatedAuditLogRoute
-  '/findings': typeof AuthenticatedFindingsRoute
+  '/findings': typeof AuthenticatedFindingsRouteWithChildren
   '/integrations': typeof AuthenticatedIntegrationsRoute
   '/intelligence': typeof AuthenticatedIntelligenceRoute
   '/notifications': typeof AuthenticatedNotificationsRoute
   '/organization-settings': typeof AuthenticatedOrganizationSettingsRoute
+  '/overview': typeof AuthenticatedOverviewRoute
   '/policies': typeof AuthenticatedPoliciesRoute
   '/quality-gates': typeof AuthenticatedQualityGatesRoute
   '/skills': typeof AuthenticatedSkillsRoute
   '/standards': typeof AuthenticatedStandardsRoute
   '/teams': typeof AuthenticatedTeamsRoute
+  '/product/merge-protection': typeof ProductMergeProtectionRoute
+  '/product/repository-health': typeof ProductRepositoryHealthRoute
+  '/product/standards-and-evidence': typeof ProductStandardsAndEvidenceRoute
+  '/product/': typeof ProductIndexRoute
   '/super-admin/login': typeof authSuperAdminLoginRoute
   '/contributors/$contributorId': typeof AuthenticatedContributorsContributorIdRoute
+  '/findings/$findingId': typeof AuthenticatedFindingsFindingIdRoute
   '/repositories/$repositoryId': typeof AuthenticatedRepositoriesRepositoryIdRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
@@ -263,10 +321,13 @@ export interface FileRoutesByFullPath {
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/apps/': typeof AuthenticatedAppsIndexRoute
   '/contributors/': typeof AuthenticatedContributorsIndexRoute
+  '/findings/': typeof AuthenticatedFindingsIndexRoute
   '/settings/': typeof AuthenticatedSettingsIndexRoute
 }
 export interface FileRoutesByTo {
+  '/': typeof IndexRoute
   '/github-onboarding': typeof GithubOnboardingRoute
+  '/self-hosting': typeof SelfHostingRoute
   '/setup': typeof SetupRoute
   '/sign-in': typeof authSignInRoute
   '/401': typeof errors401Route
@@ -277,19 +338,23 @@ export interface FileRoutesByTo {
   '/access-control': typeof AuthenticatedAccessControlRoute
   '/assessments': typeof AuthenticatedAssessmentsRoute
   '/audit-log': typeof AuthenticatedAuditLogRoute
-  '/findings': typeof AuthenticatedFindingsRoute
   '/integrations': typeof AuthenticatedIntegrationsRoute
   '/intelligence': typeof AuthenticatedIntelligenceRoute
   '/notifications': typeof AuthenticatedNotificationsRoute
   '/organization-settings': typeof AuthenticatedOrganizationSettingsRoute
+  '/overview': typeof AuthenticatedOverviewRoute
   '/policies': typeof AuthenticatedPoliciesRoute
   '/quality-gates': typeof AuthenticatedQualityGatesRoute
   '/skills': typeof AuthenticatedSkillsRoute
   '/standards': typeof AuthenticatedStandardsRoute
   '/teams': typeof AuthenticatedTeamsRoute
-  '/': typeof AuthenticatedIndexRoute
+  '/product/merge-protection': typeof ProductMergeProtectionRoute
+  '/product/repository-health': typeof ProductRepositoryHealthRoute
+  '/product/standards-and-evidence': typeof ProductStandardsAndEvidenceRoute
+  '/product': typeof ProductIndexRoute
   '/super-admin/login': typeof authSuperAdminLoginRoute
   '/contributors/$contributorId': typeof AuthenticatedContributorsContributorIdRoute
+  '/findings/$findingId': typeof AuthenticatedFindingsFindingIdRoute
   '/repositories/$repositoryId': typeof AuthenticatedRepositoriesRepositoryIdRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
@@ -297,12 +362,15 @@ export interface FileRoutesByTo {
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/apps': typeof AuthenticatedAppsIndexRoute
   '/contributors': typeof AuthenticatedContributorsIndexRoute
+  '/findings': typeof AuthenticatedFindingsIndexRoute
   '/settings': typeof AuthenticatedSettingsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
+  '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/github-onboarding': typeof GithubOnboardingRoute
+  '/self-hosting': typeof SelfHostingRoute
   '/setup': typeof SetupRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRouteRouteWithChildren
   '/(auth)/sign-in': typeof authSignInRoute
@@ -314,19 +382,24 @@ export interface FileRoutesById {
   '/_authenticated/access-control': typeof AuthenticatedAccessControlRoute
   '/_authenticated/assessments': typeof AuthenticatedAssessmentsRoute
   '/_authenticated/audit-log': typeof AuthenticatedAuditLogRoute
-  '/_authenticated/findings': typeof AuthenticatedFindingsRoute
+  '/_authenticated/findings': typeof AuthenticatedFindingsRouteWithChildren
   '/_authenticated/integrations': typeof AuthenticatedIntegrationsRoute
   '/_authenticated/intelligence': typeof AuthenticatedIntelligenceRoute
   '/_authenticated/notifications': typeof AuthenticatedNotificationsRoute
   '/_authenticated/organization-settings': typeof AuthenticatedOrganizationSettingsRoute
+  '/_authenticated/overview': typeof AuthenticatedOverviewRoute
   '/_authenticated/policies': typeof AuthenticatedPoliciesRoute
   '/_authenticated/quality-gates': typeof AuthenticatedQualityGatesRoute
   '/_authenticated/skills': typeof AuthenticatedSkillsRoute
   '/_authenticated/standards': typeof AuthenticatedStandardsRoute
   '/_authenticated/teams': typeof AuthenticatedTeamsRoute
-  '/_authenticated/': typeof AuthenticatedIndexRoute
+  '/product/merge-protection': typeof ProductMergeProtectionRoute
+  '/product/repository-health': typeof ProductRepositoryHealthRoute
+  '/product/standards-and-evidence': typeof ProductStandardsAndEvidenceRoute
+  '/product/': typeof ProductIndexRoute
   '/(auth)/super-admin/login': typeof authSuperAdminLoginRoute
   '/_authenticated/contributors/$contributorId': typeof AuthenticatedContributorsContributorIdRoute
+  '/_authenticated/findings/$findingId': typeof AuthenticatedFindingsFindingIdRoute
   '/_authenticated/repositories/$repositoryId': typeof AuthenticatedRepositoriesRepositoryIdRoute
   '/_authenticated/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/_authenticated/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
@@ -334,6 +407,7 @@ export interface FileRoutesById {
   '/_authenticated/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/_authenticated/apps/': typeof AuthenticatedAppsIndexRoute
   '/_authenticated/contributors/': typeof AuthenticatedContributorsIndexRoute
+  '/_authenticated/findings/': typeof AuthenticatedFindingsIndexRoute
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
 }
 export interface FileRouteTypes {
@@ -341,6 +415,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/github-onboarding'
+    | '/self-hosting'
     | '/setup'
     | '/settings'
     | '/sign-in'
@@ -357,13 +432,19 @@ export interface FileRouteTypes {
     | '/intelligence'
     | '/notifications'
     | '/organization-settings'
+    | '/overview'
     | '/policies'
     | '/quality-gates'
     | '/skills'
     | '/standards'
     | '/teams'
+    | '/product/merge-protection'
+    | '/product/repository-health'
+    | '/product/standards-and-evidence'
+    | '/product/'
     | '/super-admin/login'
     | '/contributors/$contributorId'
+    | '/findings/$findingId'
     | '/repositories/$repositoryId'
     | '/settings/account'
     | '/settings/appearance'
@@ -371,10 +452,13 @@ export interface FileRouteTypes {
     | '/settings/notifications'
     | '/apps/'
     | '/contributors/'
+    | '/findings/'
     | '/settings/'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/'
     | '/github-onboarding'
+    | '/self-hosting'
     | '/setup'
     | '/sign-in'
     | '/401'
@@ -385,19 +469,23 @@ export interface FileRouteTypes {
     | '/access-control'
     | '/assessments'
     | '/audit-log'
-    | '/findings'
     | '/integrations'
     | '/intelligence'
     | '/notifications'
     | '/organization-settings'
+    | '/overview'
     | '/policies'
     | '/quality-gates'
     | '/skills'
     | '/standards'
     | '/teams'
-    | '/'
+    | '/product/merge-protection'
+    | '/product/repository-health'
+    | '/product/standards-and-evidence'
+    | '/product'
     | '/super-admin/login'
     | '/contributors/$contributorId'
+    | '/findings/$findingId'
     | '/repositories/$repositoryId'
     | '/settings/account'
     | '/settings/appearance'
@@ -405,11 +493,14 @@ export interface FileRouteTypes {
     | '/settings/notifications'
     | '/apps'
     | '/contributors'
+    | '/findings'
     | '/settings'
   id:
     | '__root__'
+    | '/'
     | '/_authenticated'
     | '/github-onboarding'
+    | '/self-hosting'
     | '/setup'
     | '/_authenticated/settings'
     | '/(auth)/sign-in'
@@ -426,14 +517,19 @@ export interface FileRouteTypes {
     | '/_authenticated/intelligence'
     | '/_authenticated/notifications'
     | '/_authenticated/organization-settings'
+    | '/_authenticated/overview'
     | '/_authenticated/policies'
     | '/_authenticated/quality-gates'
     | '/_authenticated/skills'
     | '/_authenticated/standards'
     | '/_authenticated/teams'
-    | '/_authenticated/'
+    | '/product/merge-protection'
+    | '/product/repository-health'
+    | '/product/standards-and-evidence'
+    | '/product/'
     | '/(auth)/super-admin/login'
     | '/_authenticated/contributors/$contributorId'
+    | '/_authenticated/findings/$findingId'
     | '/_authenticated/repositories/$repositoryId'
     | '/_authenticated/settings/account'
     | '/_authenticated/settings/appearance'
@@ -441,12 +537,15 @@ export interface FileRouteTypes {
     | '/_authenticated/settings/notifications'
     | '/_authenticated/apps/'
     | '/_authenticated/contributors/'
+    | '/_authenticated/findings/'
     | '/_authenticated/settings/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
+  IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   GithubOnboardingRoute: typeof GithubOnboardingRoute
+  SelfHostingRoute: typeof SelfHostingRoute
   SetupRoute: typeof SetupRoute
   authSignInRoute: typeof authSignInRoute
   errors401Route: typeof errors401Route
@@ -454,11 +553,22 @@ export interface RootRouteChildren {
   errors404Route: typeof errors404Route
   errors500Route: typeof errors500Route
   errors503Route: typeof errors503Route
+  ProductMergeProtectionRoute: typeof ProductMergeProtectionRoute
+  ProductRepositoryHealthRoute: typeof ProductRepositoryHealthRoute
+  ProductStandardsAndEvidenceRoute: typeof ProductStandardsAndEvidenceRoute
+  ProductIndexRoute: typeof ProductIndexRoute
   authSuperAdminLoginRoute: typeof authSuperAdminLoginRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_authenticated': {
       id: '/_authenticated'
       path: ''
@@ -471,6 +581,13 @@ declare module '@tanstack/react-router' {
       path: '/github-onboarding'
       fullPath: '/github-onboarding'
       preLoaderRoute: typeof GithubOnboardingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/self-hosting': {
+      id: '/self-hosting'
+      path: '/self-hosting'
+      fullPath: '/self-hosting'
+      preLoaderRoute: typeof SelfHostingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/setup': {
@@ -521,13 +638,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/503'
       preLoaderRoute: typeof errors503RouteImport
       parentRoute: typeof rootRouteImport
-    }
-    '/_authenticated/': {
-      id: '/_authenticated/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof AuthenticatedIndexRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/access-control': {
       id: '/_authenticated/access-control'
@@ -585,6 +695,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedOrganizationSettingsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/overview': {
+      id: '/_authenticated/overview'
+      path: '/overview'
+      fullPath: '/overview'
+      preLoaderRoute: typeof AuthenticatedOverviewRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/policies': {
       id: '/_authenticated/policies'
       path: '/policies'
@@ -627,6 +744,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedTeamsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/product/': {
+      id: '/product/'
+      path: '/product'
+      fullPath: '/product/'
+      preLoaderRoute: typeof ProductIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/product/merge-protection': {
+      id: '/product/merge-protection'
+      path: '/product/merge-protection'
+      fullPath: '/product/merge-protection'
+      preLoaderRoute: typeof ProductMergeProtectionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/product/repository-health': {
+      id: '/product/repository-health'
+      path: '/product/repository-health'
+      fullPath: '/product/repository-health'
+      preLoaderRoute: typeof ProductRepositoryHealthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/product/standards-and-evidence': {
+      id: '/product/standards-and-evidence'
+      path: '/product/standards-and-evidence'
+      fullPath: '/product/standards-and-evidence'
+      preLoaderRoute: typeof ProductStandardsAndEvidenceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/(auth)/super-admin/login': {
       id: '/(auth)/super-admin/login'
       path: '/super-admin/login'
@@ -654,6 +799,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/contributors/$contributorId'
       preLoaderRoute: typeof AuthenticatedContributorsContributorIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/findings/': {
+      id: '/_authenticated/findings/'
+      path: '/'
+      fullPath: '/findings/'
+      preLoaderRoute: typeof AuthenticatedFindingsIndexRouteImport
+      parentRoute: typeof AuthenticatedFindingsRoute
+    }
+    '/_authenticated/findings/$findingId': {
+      id: '/_authenticated/findings/$findingId'
+      path: '/$findingId'
+      fullPath: '/findings/$findingId'
+      preLoaderRoute: typeof AuthenticatedFindingsFindingIdRouteImport
+      parentRoute: typeof AuthenticatedFindingsRoute
     }
     '/_authenticated/repositories/$repositoryId': {
       id: '/_authenticated/repositories/$repositoryId'
@@ -723,22 +882,37 @@ const AuthenticatedSettingsRouteRouteWithChildren =
     AuthenticatedSettingsRouteRouteChildren,
   )
 
+interface AuthenticatedFindingsRouteChildren {
+  AuthenticatedFindingsFindingIdRoute: typeof AuthenticatedFindingsFindingIdRoute
+  AuthenticatedFindingsIndexRoute: typeof AuthenticatedFindingsIndexRoute
+}
+
+const AuthenticatedFindingsRouteChildren: AuthenticatedFindingsRouteChildren = {
+  AuthenticatedFindingsFindingIdRoute: AuthenticatedFindingsFindingIdRoute,
+  AuthenticatedFindingsIndexRoute: AuthenticatedFindingsIndexRoute,
+}
+
+const AuthenticatedFindingsRouteWithChildren =
+  AuthenticatedFindingsRoute._addFileChildren(
+    AuthenticatedFindingsRouteChildren,
+  )
+
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedSettingsRouteRoute: typeof AuthenticatedSettingsRouteRouteWithChildren
   AuthenticatedAccessControlRoute: typeof AuthenticatedAccessControlRoute
   AuthenticatedAssessmentsRoute: typeof AuthenticatedAssessmentsRoute
   AuthenticatedAuditLogRoute: typeof AuthenticatedAuditLogRoute
-  AuthenticatedFindingsRoute: typeof AuthenticatedFindingsRoute
+  AuthenticatedFindingsRoute: typeof AuthenticatedFindingsRouteWithChildren
   AuthenticatedIntegrationsRoute: typeof AuthenticatedIntegrationsRoute
   AuthenticatedIntelligenceRoute: typeof AuthenticatedIntelligenceRoute
   AuthenticatedNotificationsRoute: typeof AuthenticatedNotificationsRoute
   AuthenticatedOrganizationSettingsRoute: typeof AuthenticatedOrganizationSettingsRoute
+  AuthenticatedOverviewRoute: typeof AuthenticatedOverviewRoute
   AuthenticatedPoliciesRoute: typeof AuthenticatedPoliciesRoute
   AuthenticatedQualityGatesRoute: typeof AuthenticatedQualityGatesRoute
   AuthenticatedSkillsRoute: typeof AuthenticatedSkillsRoute
   AuthenticatedStandardsRoute: typeof AuthenticatedStandardsRoute
   AuthenticatedTeamsRoute: typeof AuthenticatedTeamsRoute
-  AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedContributorsContributorIdRoute: typeof AuthenticatedContributorsContributorIdRoute
   AuthenticatedRepositoriesRepositoryIdRoute: typeof AuthenticatedRepositoriesRepositoryIdRoute
   AuthenticatedAppsIndexRoute: typeof AuthenticatedAppsIndexRoute
@@ -750,18 +924,18 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAccessControlRoute: AuthenticatedAccessControlRoute,
   AuthenticatedAssessmentsRoute: AuthenticatedAssessmentsRoute,
   AuthenticatedAuditLogRoute: AuthenticatedAuditLogRoute,
-  AuthenticatedFindingsRoute: AuthenticatedFindingsRoute,
+  AuthenticatedFindingsRoute: AuthenticatedFindingsRouteWithChildren,
   AuthenticatedIntegrationsRoute: AuthenticatedIntegrationsRoute,
   AuthenticatedIntelligenceRoute: AuthenticatedIntelligenceRoute,
   AuthenticatedNotificationsRoute: AuthenticatedNotificationsRoute,
   AuthenticatedOrganizationSettingsRoute:
     AuthenticatedOrganizationSettingsRoute,
+  AuthenticatedOverviewRoute: AuthenticatedOverviewRoute,
   AuthenticatedPoliciesRoute: AuthenticatedPoliciesRoute,
   AuthenticatedQualityGatesRoute: AuthenticatedQualityGatesRoute,
   AuthenticatedSkillsRoute: AuthenticatedSkillsRoute,
   AuthenticatedStandardsRoute: AuthenticatedStandardsRoute,
   AuthenticatedTeamsRoute: AuthenticatedTeamsRoute,
-  AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedContributorsContributorIdRoute:
     AuthenticatedContributorsContributorIdRoute,
   AuthenticatedRepositoriesRepositoryIdRoute:
@@ -774,8 +948,10 @@ const AuthenticatedRouteRouteWithChildren =
   AuthenticatedRouteRoute._addFileChildren(AuthenticatedRouteRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
+  IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   GithubOnboardingRoute: GithubOnboardingRoute,
+  SelfHostingRoute: SelfHostingRoute,
   SetupRoute: SetupRoute,
   authSignInRoute: authSignInRoute,
   errors401Route: errors401Route,
@@ -783,6 +959,10 @@ const rootRouteChildren: RootRouteChildren = {
   errors404Route: errors404Route,
   errors500Route: errors500Route,
   errors503Route: errors503Route,
+  ProductMergeProtectionRoute: ProductMergeProtectionRoute,
+  ProductRepositoryHealthRoute: ProductRepositoryHealthRoute,
+  ProductStandardsAndEvidenceRoute: ProductStandardsAndEvidenceRoute,
+  ProductIndexRoute: ProductIndexRoute,
   authSuperAdminLoginRoute: authSuperAdminLoginRoute,
 }
 export const routeTree = rootRouteImport

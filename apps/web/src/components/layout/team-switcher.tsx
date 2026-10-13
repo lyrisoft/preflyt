@@ -15,6 +15,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from '@/components/ui/sidebar'
+import { PreflytMark } from '@/components/preflyt-brand'
 import { useOrganizations } from '@/features/access-control/organization-queries'
 
 function GitHubIcon({ className }: { className?: string }) {
@@ -93,9 +94,7 @@ export function TeamSwitcher({ teams }: TeamSwitcherProps) {
               aria-label={`Switch organization: ${activeTeam.name}`}
               className='data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground'
             >
-              <div className='flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground'>
-                <activeTeam.logo className='size-4' />
-              </div>
+              <PreflytMark className='size-10' />
               <div className='grid flex-1 text-start text-sm leading-tight'>
                 <span className='truncate font-semibold'>
                   {activeTeam.name}

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { previewGate } from '../src/assessments/gate-preview.js'
+import { datedGatePreview } from '../src/assessments/assessment-result-dates.js'
 const sha = 'a'.repeat(40)
 const fixture = () => ({
   sourceSha: sha,
@@ -42,6 +43,25 @@ const fixture = () => ({
   },
 })
 describe('historical deterministic gate preview', () => {
+  it('adds only matched evidence dates without changing gate results or their hash', () => {
+    const value: any = fixture()
+    value.report.checks[0].deliveryId = 'matched'
+    value.report.observations = [
+      { deliveryId: 'other', observedAt: '2026-10-13T10:00:00Z' },
+      { deliveryId: 'matched', observedAt: '2026-10-12T09:55:00Z' },
+    ]
+    const dated = datedGatePreview(value)
+    expect(dated.rules[0].recordedAt).toBe('2026-10-12T09:55:00Z')
+    expect({ ...dated, rules: dated.rules.map(({ recordedAt: _date, ...rule }) => rule) }).toEqual(previewGate(value))
+    for (const observations of [[], [{ deliveryId: 'matched', observedAt: 'invalid' }], [
+      { deliveryId: 'matched', observedAt: '2026-10-12T09:55:00Z' },
+      { deliveryId: 'matched', observedAt: '2026-10-12T10:00:00Z' },
+    ]]) {
+      value.report.observations = observations
+      expect(datedGatePreview(value).rules[0].recordedAt).toBeNull()
+    }
+    expect(datedGatePreview({ ...value, report: null }).rules).toEqual([])
+  })
   it('evaluates a configuration-only requirement and remains historical and unpublished', () => {
     expect(previewGate(fixture())).toMatchObject({
       status: 'PASS',
@@ -186,7 +206,7 @@ const failedFixture = () => {
 describe('approved negative CI evidence', () => {
   it('blocks a required failed source with exact-revision integrity and approved binding', () => {
     expect(previewGate(failedFixture())).toMatchObject({
-      evaluatorVersion: 2,
+      evaluatorVersion: 3,
       status: 'BLOCK',
       publication: 'DISABLED',
       requiredRulesBlocked: 1,
@@ -306,6 +326,39 @@ const githubFixture = () => {
   return value
 }
 describe('server-verified GitHub execution preview', () => {
+  it('preserves passed, failed and incomplete reports independently in one successful collection job', () => {
+    const value = githubFixture()
+    const definition = value.plan.checks[0]
+    const check = value.report.checks[0]
+    const ids = ['tests.required', 'build.required', 'security.sast']
+    value.plan.checks = ids.map(id => ({...definition, id}))
+    value.report.checks = ids.map((ruleId, index) => ({
+      ...check, ruleId,
+      evidenceValidation: {...check.evidenceValidation,
+        githubExecution: {...check.evidenceValidation.githubExecution, ruleId},
+        status: index ? 'INCOMPLETE' : 'VERIFIED', trustedExecuted: index === 0,
+        githubReportResult: ['passed','failed','incomplete'][index],
+        reasons: index ? ['REPORT_REPORTED_FAILURE'] : [],
+      },
+    }))
+    expect(previewGate(value)).toMatchObject({
+      status:'BLOCK', requiredRulesSatisfied:1, requiredRulesBlocked:1, requiredRulesIncomplete:1,
+      rules:[{ruleId:ids[0],status:'PASS'},{ruleId:ids[1],status:'BLOCK'},{ruleId:ids[2],status:'INCOMPLETE'}],
+    })
+  })
+  it('fails only the independently failed report while partial execution remains incomplete', () => {
+    const value = githubFixture()
+    Object.assign(value.report.checks[0].evidenceValidation, {
+      status: 'INCOMPLETE', trustedExecuted: false,
+      reasons: ['REPORT_REPORTED_FAILURE'], githubReportResult: 'failed',
+    })
+    expect(previewGate(value)).toMatchObject({ status: 'BLOCK', requiredRulesBlocked: 1 })
+    value.report.checks[0].evidenceValidation.githubReportResult = 'incomplete'
+    expect(previewGate(value).status).toBe('INCOMPLETE')
+    value.report.checks[0].evidenceValidation.githubReportResult = 'failed'
+    value.report.checks[0].evidenceValidation.observationIntegrity = false
+    expect(previewGate(value).status).toBe('INCOMPLETE')
+  })
   it('passes a verified configured run without requiring a report signature', () => {
     expect(previewGate(githubFixture())).toMatchObject({
       status: 'PASS',

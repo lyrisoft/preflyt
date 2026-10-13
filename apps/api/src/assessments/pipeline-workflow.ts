@@ -1,9 +1,8 @@
-import { checkExecution, type SnippetRule } from "./workflow-snippets.js";
+import { type SnippetRule } from "./workflow-snippets.js";
 import { BadRequestException } from "@nestjs/common";
 import { parseDocument } from "yaml";
 import { digest } from "./assessment-digest.js";
 import { checkReportFormat } from "./check-report-adapters.js";
-import { setupConfiguration } from "./pipeline-setup-package.js";
 
 import { chainPublicationGate } from "./pipeline-gate-workflow.js";
 import { policyAction, isPolicyAction } from "./pipeline-action.js";
@@ -97,28 +96,14 @@ export function inspectWorkflow(
     warnings.push(
       "Add the policy checks to a job before creating the setup PR.",
     );
-  const ids: string[] = [];
-  for (const step of steps) {
-    if (typeof step.with?.checks === "string") {
-      try {
-        ids.push(...Object.keys(JSON.parse(step.with.checks)));
-      } catch {
-        warnings.push(
-          "Use inline check configuration in this workflow, or keep the referenced checks file in the repository.",
-        );
-      }
-    }
-  }
-  const missing = rules.filter(
-    (rule) => checkReportFormat(rule.id) && !ids.includes(rule.id),
-  );
-  if (missing.length)
-    warnings.push(
-      `${missing.length} policy check${missing.length === 1 ? "" : "s"} still need a workflow step.`,
-    );
+  const policyRunner = steps.length === 1 && steps[0].uses === policyAction &&
+    steps[0].with?.checks === undefined;
+  const ids = policyRunner ? rules.filter(rule => checkReportFormat(rule.id)).map(rule => rule.id) : [];
+  if (steps.length && !policyRunner)
+    warnings.push('Upgrade this workflow to the policy runner. Check lists and report mappings are managed in Preflyt.');
   if (steps.length)
     warnings.push(
-      "Preflyt runs supported check recipes automatically. Custom report checks need their configured command or an earlier report-producing step.",
+      "Each run fetches the published policy. Scanner images are provisioned automatically; configure project and custom check commands in Standards.",
     );
   const unsupported = rules.filter(
     (rule) => !checkReportFormat(rule.id) && rule.id !== "ci.configured",
@@ -135,6 +120,7 @@ export function inspectWorkflow(
         name: typeof job.name === "string" ? job.name : id,
       })),
     checkIds: [...new Set(ids)],
+    policyRunner,
     warnings,
   };
 }
@@ -143,7 +129,6 @@ export function addPolicyChecks(
   yaml: string,
   jobId: string,
   rules: WorkflowRule[],
-  ids: string[],
   apiUrl: string,
 ) {
   const { document, value } = readWorkflow(yaml);
@@ -157,55 +142,30 @@ export function addPolicyChecks(
   if (!object(job) || !Array.isArray(job.steps))
     throw new BadRequestException("Choose a job with workflow steps");
   if (
-    !ids.length ||
-    ids.length > 10 ||
-    ids.some((id) => !rules.some((r) => r.id === id) || !checkReportFormat(id))
+    !rules.length || rules.length > 64
   )
-    throw new BadRequestException("Choose pipeline checks from this policy");
+    throw new BadRequestException("Choose a published policy with supported check limits");
   if (workflowChecks(yaml).length > 1)
     throw new BadRequestException("Keep one Preflyt policy step per workflow");
-  const index = job.steps.findIndex((step: any) => isPolicyAction(step.uses));
+  const index = job.steps.findIndex((step: any) => isPolicyAction(step.uses) && step.with?.mode !== 'gate');
   if (index < 0 && workflowChecks(yaml).length)
     throw new BadRequestException(
       "Add checks to the job that already contains the Preflyt step",
     );
-  let checks: Record<string, unknown> = {};
-  if (index >= 0) {
-    try {
-      checks = JSON.parse(job.steps[index].with?.checks);
-    } catch {
-      throw new BadRequestException(
-        "Move the existing checks file configuration into this workflow before adding checks",
-      );
-    }
-    if (!object(checks))
-      throw new BadRequestException(
-        "The existing check configuration is invalid",
-      );
-  }
-  // Resolve built-in recipes from the installed Action, not repository-local files.
-  for (const execution of Object.values(checks)) {
-    if (object(execution) && Array.isArray(execution.argv) &&
-      execution.argv[0] === "python3" &&
-      execution.argv[1] === ".github/actions/preflyt-policy/recipes.py") {
-      execution.argv = ["preflyt-recipe", ...execution.argv.slice(2)];
-    }
-  }
-  for (const id of ids)
-    if (!(id in checks))
-      checks[id] = checkExecution(rules.find((r) => r.id === id)!)!;
-  if (Object.keys(checks).length > 10)
-    throw new BadRequestException("A policy run supports up to 10 reports");
+  const checkoutIndex = job.steps.findIndex((s: any) => typeof s.uses === 'string' && s.uses.startsWith('actions/checkout@'));
+  if (checkoutIndex < 0 || (index >= 0 && checkoutIndex >= index))
+    throw new BadRequestException('Choose a check job with actions/checkout before the policy runner');
+  const { checks: _legacyChecks, ...inputs } = index >= 0
+    ? job.steps[index].with ?? {} : {};
   const step = {
     ...(index >= 0 ? job.steps[index] : {}),
     name: "Preflyt policy",
     if: "${{ always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}",
     uses: policyAction,
     with: {
-      ...(index >= 0 ? job.steps[index].with : {}),
+      ...inputs,
       "api-url": apiUrl,
       "job-name": typeof job.name === "string" ? job.name : jobId,
-      checks: JSON.stringify(checks, null, 2),
     },
   };
   if (index >= 0) document.setIn(["jobs", jobId, "steps", index], step);
@@ -267,17 +227,19 @@ export function validateSetupWorkflow(yaml: string, rules: WorkflowRule[]) {
     );
   const step = steps[0];
   if (
-    typeof step.with?.checks !== "string" ||
+    step.uses !== policyAction ||
+    step.with?.checks !== undefined ||
     typeof step.with?.["api-url"] !== "string"
   )
     throw new BadRequestException(
-      "Add the policy checks and Preflyt API URL in the workflow",
+      "Install the current policy runner and remove explicit check mappings from the workflow",
     );
-  setupConfiguration(
-    step.with["api-url"],
-    step.with.checks,
-    rules.map((rule) => rule.id),
-  );
+  let url: URL;
+  try { url = new URL(step.with["api-url"]); }
+  catch { throw new BadRequestException('Use the public HTTPS Preflyt API URL'); }
+  if (url.protocol !== 'https:' || !url.hostname || url.username || url.password || url.search || url.hash ||
+    ['localhost','127.0.0.1','[::1]'].includes(url.hostname))
+    throw new BadRequestException('Use the public HTTPS Preflyt API URL');
   const { value } = readWorkflow(yaml);
   const jobs = Object.values(value.jobs);
   const job = jobs.find((job) =>

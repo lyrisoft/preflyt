@@ -23,8 +23,8 @@ Notification record: recipient, channel, event reference, read_at, delivered_at,
 | Policy publication, ruleset drift, exception request/expiry | Policy managers, authorized approvers | P2 |
 | Critical verified security finding or execution failure | Security engineer, repository owner | P3 |
 | Sustained AI provider outage or budget threshold | Organization admin | P4 |
-| QA/performance threshold failures | Authorized test owner and repository lead | P6–P9 |
-| Production incident correlation | Authorized operational owners | P10 |
+| QA/performance threshold failures | Authorized test owner and repository lead | P7–P10 |
+| Production incident correlation | Authorized operational owners | P11 |
 
 Personal recipients are resolved from current RBAC, resource scope and explicit subscriptions. Organization email channels use addresses explicitly saved by an Owner or Admin and receive generic updates from the organization’s currently selected repositories. No cross-tenant leakage. Avoid sending restricted finding details to users lacking evidence permission. Self-approval of exceptions remains prohibited.
 
@@ -53,7 +53,7 @@ Channels receive new supported events independently of personal preferences. Sav
 - **P2.N1:** quality-gate/policy/exception/ruleset notifications, configured email adapter, delivery history and retry visibility.
 - **P3.N1:** critical security and execution failure events with severity-aware routing.
 - **P4.N1:** AI provider/budget availability notifications with debounce to avoid alert storms.
-- **P6–P11:** QA/performance/production events and optional Slack/Teams/signed webhooks, digests and advanced routing.
+- **P7–P12:** QA/performance/production events and optional Slack/Teams/signed webhooks, digests and advanced routing.
 
 Each increment must be independently usable within its existing phase, without invalidating already completed work.
 

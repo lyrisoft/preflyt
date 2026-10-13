@@ -40,3 +40,6 @@ Preflyt keeps only minimal records: stable GitHub user IDs, the commit, pull req
 Viewers can browse the directory but cannot open detailed contributor activity or policy evidence. Other roles see the repositories they have access to.
 
 Use the **Help** button on the page for definitions and counting rules.
+
+
+**Commits linked to contributor** includes recorded commit-author and committer participation. A commit counts once per repository, including when the same contributor has both roles or an event is delivered again. The contribution chart uses the same definition as this metric. The underlying Activity tab retains the original relationship, so committer participation does not imply authorship. Directory sparklines show recorded participation across the selected relationship filters.

@@ -1,3 +1,4 @@
+import {fileAnalysisMeasurement,fileAnalysisRules} from '../src/health/health-file-analysis.js'
 // Explicit disposable fixtures only. This script cannot select a connected repository or publish GitHub checks.
 import { execFileSync } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
@@ -20,14 +21,22 @@ import {
 } from '../src/execution/native-source.js'
 import { createNativeWorkspace } from '../src/execution/native-workspace.js'
 import { digest } from '../src/assessments/assessment-digest.js'
+import {duplicationMeasurement,coverageMeasurement,coverageFailureReason} from '../src/health/health-measurements.js'
 import { nativeCheckOutcome } from '../src/execution/native-result.js'
 if (
   process.env.NATIVE_FIXTURE_TOOL &&
-  !['node', 'gitleaks', 'semgrep', 'trivy', 'trivy-offline'].includes(
+  !['node', 'gitleaks', 'semgrep', 'trivy', 'trivy-offline', 'duplication'].includes(
     process.env.NATIVE_FIXTURE_TOOL,
   )
 )
   throw new Error('Choose an installed fixture tool')
+if (process.env.NATIVE_FIXTURE_IMAGE) {
+ assert.ok(process.env.NATIVE_FIXTURE_TOOL, 'An exact candidate image requires one fixture tool')
+ assert.match(process.env.NATIVE_FIXTURE_IMAGE, /^sha256:[a-f0-9]{64}$/)
+}
+const fixtureRuntime = process.env.NATIVE_FIXTURE_RUNTIME ?? 'runc'
+if (fixtureRuntime !== 'runc' && fixtureRuntime !== 'runsc' && fixtureRuntime !== 'kata')
+  throw new Error('Choose runc, runsc or kata for generated fixtures')
 const root = await mkdtemp(join(tmpdir(), 'preflyt-p3-fixtures-'))
 const git = (args: string[], input?: Buffer | string) =>
   execFileSync('git', args, {
@@ -58,6 +67,7 @@ assert.deepEqual(
   nativeAdapters,
   'Image adapter contracts must match the API',
 )
+const duplicateBlock = 'export function calculate(items) {\n  let total = 0;\n  for (const item of items) {\n    if (item.active) {\n      total += item.price * item.quantity;\n      if (item.discount > 0) {\n        total -= item.price * item.discount;\n      }\n    }\n  }\n  return Math.round(total * 100) / 100;\n}\n'
 const fixtures: Array<{
   id: string
   ruleId: NativeRuleId
@@ -65,6 +75,24 @@ const fixtures: Array<{
   files: Record<string, string>
   expected: string
 }> = [
+  {id:'coverage-measured',ruleId:'tests.coverage',tool:'node',files:{'app.js':'exports.choose = (flag) => {\n  if (flag) {\n    return 1;\n  }\n  return 2;\n};\n','app.test.js':'const {test}=require("node:test"); const assert=require("node:assert/strict"); const {choose}=require("./app.js"); test("actual branch",()=>assert.equal(choose(true),1));\n'},expected:'PASS'},
+  {id:'coverage-failing-tests',ruleId:'tests.coverage',tool:'node',files:{'app.test.js':'const {test}=require("node:test");test("fails",()=>{throw new Error("seeded")});\n'},expected:'INCOMPLETE'},
+  {id:'coverage-skipped-tests',ruleId:'tests.coverage',tool:'node',files:{'app.test.js':'const {test}=require("node:test");test.skip("not run",()=>{});\n'},expected:'INCOMPLETE'},
+  {id:'coverage-vitest-declared',ruleId:'tests.coverage',tool:'node',files:{'package.json':'{"devDependencies":{"vitest":"1.0.0"}}','app.test.js':'const {test}=require("node:test");test("actual",()=>{});\n'},expected:'INCOMPLETE'},
+  {id:'coverage-jest-globals',ruleId:'tests.coverage',tool:'node',files:{'app.test.js':'test("unrecognized global",()=>{});\n'},expected:'INCOMPLETE'},
+  {id:'coverage-no-tests',ruleId:'tests.coverage',tool:'node',files:{'app.js':'exports.value = 1;\n'},expected:'INCOMPLETE'},
+  {id:'coverage-no-source',ruleId:'tests.coverage',tool:'node',files:{'app.test.js':'const {test}=require("node:test");test("only test source",()=>{});\n'},expected:'INCOMPLETE'},
+
+  {id:'hotspot-seeded',ruleId:'security.hotspots',tool:'semgrep',files:{'app.js':'const digest = crypto.createHash("md5");\n'},expected:'FAIL'},
+  {id:'hotspot-clean',ruleId:'security.hotspots',tool:'semgrep',files:{'app.js':'const digest = crypto.createHash("sha256");\n'},expected:'PASS'},
+
+  {id:'duplication-seeded',ruleId:'quality.duplication',tool:'duplication',files:{'first.js':duplicateBlock,'second.js':duplicateBlock},expected:'FAIL'},
+  {id:'duplication-clean',ruleId:'quality.duplication',tool:'duplication',files:{'first.js':duplicateBlock},expected:'PASS'},
+  {id:'reliability-seeded',ruleId:'quality.reliability',tool:'semgrep',files:{'app.js':'const bad = value === NaN;\n'},expected:'FAIL'},
+  {id:'reliability-clean',ruleId:'quality.reliability',tool:'semgrep',files:{'app.js':'const bad = Number.isNaN(value);\n'},expected:'PASS'},
+  {id:'maintainability-seeded',ruleId:'quality.maintainability',tool:'semgrep',files:{'app.js':'debugger;\n'},expected:'FAIL'},
+  {id:'maintainability-clean',ruleId:'quality.maintainability',tool:'semgrep',files:{'app.js':'export const value = 1;\n'},expected:'PASS'},
+
   {
     id: 'dependency-vulnerability',
     ruleId: 'security.dependencies',
@@ -75,6 +103,22 @@ const fixtures: Array<{
         dependencies: { lodash: { version: '4.17.19' } } }),
     },
     expected: 'FAIL',
+  },
+  {
+    id: 'dependency-clean',
+    ruleId: 'security.dependencies',
+    tool: 'trivy-offline',
+    files: {
+      'package-lock.json': JSON.stringify({ name: 'fixture', version: '1.0.0', lockfileVersion: 2, requires: true, packages: { '': { name: 'fixture', version: '1.0.0' } }, dependencies: {} }),
+    },
+    expected: 'PASS',
+  },
+  {
+    id: 'iac-clean',
+    ruleId: 'iac.policy',
+    tool: 'trivy',
+    files: { 'main.tf': 'terraform {\n  required_version = ">= 1.0.0"\n}\n' },
+    expected: 'PASS',
   },
   {
     id: 'secret-failure',
@@ -256,7 +300,7 @@ try {
         await dockerCommand([
           'image',
           'inspect',
-          'preflyt-native-' + fixture.tool + ':fixture',
+          process.env.NATIVE_FIXTURE_IMAGE ?? 'preflyt-native-' + fixture.tool + ':fixture',
           '--format',
           '{{json .Id}}',
         ])
@@ -275,7 +319,7 @@ try {
           await dockerCommand([
             'create',
             '--runtime',
-            'runc',
+            fixtureRuntime,
             '--network',
             'none',
             '--user',
@@ -352,7 +396,7 @@ try {
       fixture.ruleId,
       review,
       workspace.workspace,
-      'runc',
+      fixtureRuntime,
     )
     // Local content-addressed images are test artifacts, not approved production registry images.
     const effectiveReview = { ...review, image }
@@ -382,7 +426,7 @@ try {
         fixture.ruleId,
         effectiveReview,
         workspace.workspace,
-        'runc',
+        fixtureRuntime,
       )
       const output = await dockerCommand(
         ['start', '--attach', invocation.jobId],
@@ -398,12 +442,34 @@ try {
       const report = envelope.report
         ? Buffer.from(envelope.report, 'base64')
         : null
+      if (fixture.ruleId === 'quality.duplication') {
+        const measurement = duplicationMeasurement(envelope.report, report ? createHash('sha256').update(report).digest('hex') : null)
+        assert.ok(measurement && measurement.analyzedLines > 0, 'Measured duplication scope is required')
+        assert.equal(measurement.duplicatedLines > 0, fixture.expected === 'FAIL')
+      }
+      if(['coverage-vitest-declared','coverage-jest-globals'].includes(fixture.id)) {
+        assert.equal(coverageFailureReason(envelope.report, report ? createHash('sha256').update(report).digest('hex') : null), 'SUPPORTED_TESTS_REQUIRED')
+        assert.equal(coverageMeasurement(envelope.report, report ? createHash('sha256').update(report).digest('hex') : null), undefined)
+      }
+      if(fixture.ruleId === 'tests.coverage' && fixture.expected==='PASS') {
+        const measurement=coverageMeasurement(envelope.report,report?createHash('sha256').update(report).digest('hex'):null)
+        assert.ok(measurement,'Coverage requires measured actual tests')
+        assert.equal(measurement.tests,1)
+        assert.ok(measurement.coveredLines < measurement.analyzedLines, 'Untested branch must remain uncovered')
+      }
       const outcome = nativeCheckOutcome(fixture.ruleId, exit, report)
       assert.equal(
         outcome.state,
         fixture.expected,
         fixture.id + ': ' + JSON.stringify(outcome),
       )
+      if(fileAnalysisRules.includes(fixture.ruleId)) {
+       const measured=fileAnalysisMeasurement(report?.toString('base64'),report?createHash('sha256').update(report).digest('hex'):null)
+       assert.ok(measured, 'Expected actual Semgrep file counters')
+       assert.ok(measured.candidateFiles>0)
+       assert.equal(measured.analyzedFiles,measured.candidateFiles)
+       assert.equal(measured.skippedFiles,0)
+      }
       if (fixture.id === 'secret-failure')
         assert.ok(
           !report?.includes(
@@ -420,7 +486,7 @@ try {
         fixture.ruleId,
         { ...review, image },
         workspace.workspace,
-        'runc',
+        fixtureRuntime,
       )
       assert.equal(inspection.HostConfig.NetworkMode, 'none')
       assert.equal(inspection.HostConfig.ReadonlyRootfs, true)

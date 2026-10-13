@@ -1,8 +1,12 @@
 # Preflyt
 
+<p align="center">
+  <img src="apps/docs/static/img/brand/logo-panel.svg" alt="PreflytLabs" width="480" />
+</p>
+
 **Engineering confidence before production.**
 
-Preflyt is a self-hosted engineering assessment and governance platform that connects your team's standards to GitHub pull requests and CI results. It helps teams establish which checks a change must satisfy, verify the evidence for those checks, and give developers a clear, traceable readiness result before production.
+Preflyt is a self-hosted repository health and engineering governance platform. It helps teams understand the condition of their codebase, investigate security and quality findings, and assess whether proposed changes meet their engineering standards. Repository assessments and CI results come together in one workspace, with exact-commit evidence and optional AI guidance that explains the problem, likely effect and suggested fix.
 
 Developed by **Lyrisoft Technologies**.
 
@@ -15,17 +19,19 @@ Developed by **Lyrisoft Technologies**.
 Tests, scanners and CI pipelines produce useful results, but those results often live in separate tools. Teams still need to answer:
 
 - Which engineering requirements apply to this repository and target branch?
+- What security, reliability and maintainability issues exist in the codebase, even before CI is connected?
+- Which findings need attention, where is the affected code, and what should we do next?
 - Did the required checks run against the current commit?
 - Is the evidence sufficient to establish a pass, or is something missing?
 - What must a developer fix before the change can progress?
 - Can the team explain the decision later?
 
-Preflyt brings standards, branch policies, execution evidence and developer feedback into one workflow. Teams can catch defects and missing controls earlier, apply consistent requirements across repositories, and review the evidence behind each result.
+Preflyt brings repository health, findings, standards, branch policies and developer feedback into one workflow. Developers get code context and practical guidance; engineering leads can prioritize repository risks and follow comparable assessment trends; platform teams can apply consistent requirements and trace the evidence behind each result. Existing CI pipelines continue running tests and publishing their results.
 
 ## How it works
 
 1. **Connect GitHub.** Create or connect a GitHub App, install it on the intended repositories, and explicitly select repositories in Preflyt.
-2. **Inspect the repository.** Detect its languages, frameworks and related configuration files, then review recommended checks.
+2. **Read repository health.** Selection queues an assessment of the default branch. Review supported scanner findings, exact-revision source locations and report limits without setting up CI. Without a qualified runtime, the report is explicitly inspection-only and partial.
 3. **Define requirements.** Adopt versioned standards and publish a policy for the target branch. Development and main can have different requirements.
 4. **Run checks in CI.** Add the Preflyt Action to your GitHub Actions workflow. Your pipeline runs the tests and scanners; Preflyt receives their reports and verifies the configured execution evidence.
 5. **Review the result.** Preflyt saves a commit-bound assessment and publishes **Preflyt / Engineering Readiness** on the pull request. Required checks can pass, fail or remain incomplete when evidence is insufficient.
@@ -37,19 +43,22 @@ Repository inspection identifies configuration; it does not execute tests or pro
 
 | Capability | Purpose |
 | --- | --- |
+| **Repository health** | Assess selected branches for supported security, reliability, maintainability, duplication and infrastructure issues; view overall health, completeness, freshness and comparable report history. Scanner execution requires a qualified runtime. |
 | **Versioned standards** | Define engineering checks, reuse built-in packs, and adopt reviewed versions for repositories and teams. |
 | **Branch policies** | Specify required checks for a target branch and preserve the approved policy revision. |
 | **CI integration** | Receive GitHub workflow/check events and supported test and scanner reports, including JUnit and SARIF. |
 | **Commit-bound assessments** | Show passing, failing and incomplete checks with the evidence used to evaluate them. |
 | **PR feedback** | Publish readiness checks and optional actionable AI review comments where developers work. |
 | **Merge protection** | Inspect GitHub rulesets and optionally manage activation, drift detection and rollback. |
-| **Findings and audit history** | Track issues, assignments and review notes, with scoped access and paginated audit records. |
+| **Unified findings** | Investigate CI and repository-health findings in one worklist, filtered by source, type, repository, severity and status, with assessed-commit source excerpts where available. |
+| **AI finding guidance** | Save concise problem, likely effect and suggested-fix explanations from assessed code. Use analyzer/rule guidance when AI is unavailable or unconfigured. |
+| **Contributor visibility and audit history** | Review recorded repository, commit, PR and review activity alongside scoped audit records, without turning activity into an employee performance score. |
 | **Teams and access control** | Apply standards across explicit repository scopes and manage organization roles and permissions. |
 | **Self-hosting** | Run the application with Docker Compose or the Kubernetes application bundle, with backup and observability guidance. |
 
 ### Optional AI reviews
 
-AI reviews help explain findings and review changed code using organization-selected models and review skills. Supported connections include OpenAI, Anthropic, Google, DeepSeek and OpenAI-compatible endpoints.
+AI guidance explains individual findings using code from the assessed commit and saves the result for later visits. Configured AI is the primary explanation when a valid result is available; analyzer/rule guidance remains the fallback. Optional PR reviews use organization-selected models and review skills. Supported connections include OpenAI, Anthropic, Google, DeepSeek and OpenAI-compatible endpoints.
 
 Code sharing is explicitly configured. AI findings are advisory: they do not change deterministic policy results, waive required checks or authorize a merge. When AI feedback is configured as part of a workflow, a provider or publication failure can still prevent that workflow from completing successfully.
 
@@ -63,7 +72,9 @@ Native execution is optional. It is not required for GitHub Actions integration.
 
 The normal onboarding path is:
 
-**Run Preflyt → create/connect an App → select repositories → review standards and workflow setup → merge the setup PR → receive PR results.**
+**Run Preflyt → create/connect an App → select repositories → read Health.**
+
+For continuous feedback: **review standards and workflow setup → merge the setup PR → receive PR results.**
 
 - [Quick start](https://lyrisoft.github.io/preflyt/getting-started/quick-start): run a local evaluation instance.
 - [Connect GitHub](https://lyrisoft.github.io/preflyt/getting-started/connect-github): guided App registration, installation and owner onboarding.
@@ -90,7 +101,7 @@ PostgreSQL stores application data. Valkey/Redis supports background queues and 
 
 ## Local development
 
-Use **Node.js 24.4.1** and **pnpm 10.15.1**. Install locked dependencies from the repository root:
+Use **Node.js 24.4.1** and **pnpm 10.26.2**. Install locked dependencies from the repository root:
 
 ```sh
 pnpm install --frozen-lockfile --ignore-scripts

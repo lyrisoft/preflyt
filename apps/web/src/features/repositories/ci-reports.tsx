@@ -1,5 +1,5 @@
+import { ResultTimestamp } from '@/components/result-timestamp'
 import { CiProvenance } from './ci-provenance'
-import { RelativeTime } from './relative-time'
 import type { ArtifactSummary } from './repository-queries'
 import { sentence } from './repository-vocabulary'
 
@@ -27,7 +27,7 @@ export function ReportList({
             </span>
             <span className='text-xs text-muted-foreground'>
               Parser v{artifact.parserVersion} ·{' '}
-              <RelativeTime value={artifact.createdAt} />
+              <ResultTimestamp value={artifact.createdAt} />
             </span>
           </p>
           <p className='text-xs text-muted-foreground'>
