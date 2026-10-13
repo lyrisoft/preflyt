@@ -1,7 +1,7 @@
 # Preflyt incremental delivery plan: usable vertical slices
 
 **Status:** Ordered delivery roadmap with explicit source-implementation notes. Only entries marked implemented describe current code; phase completion still requires its deployment and live acceptance gates.
-**Version:** 0.2 · **Date:** 2026-10-11
+**Version:** 0.2 · **Updated:** 2026-10-13
 **Related:** [SDLC capability model](../product/sdlc-capabilities.md) · [PRD](../PRD.md) · [ADR-0004](../architecture/ADR-0004-shift-left-assessment-governance.md)
 
 **Approved revision (2026-10-11):** Repository Health Assessment is inserted as P5 after P4. Former P5–P11 are now P6–P12; their scope, implementation notes and outstanding acceptance gates are preserved. P5 core implementation is present; executed-analysis production acceptance remains pending. See [P5 specification](../product/repository-health-assessment.md).
@@ -29,7 +29,7 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 | **P1** | **CI Evidence Assessments** | GitHub PR/CI + UI | Import check/test results, view revision-bound assessment without executing repo code |
 | **P2** | **Policy Quality Gates** | PR/CI + UI | Apply mandatory/advisory policy, publish exact-SHA status and clear PASS/WARN/BLOCK/INCOMPLETE |
 | **P3** | **Native Secure Validation** | PR + approved executor | Execute security/testing/IaC scans safely and enrich findings beyond imported evidence |
-| **P4** | **Advanced AI Engineering Intelligence** | SDLC assessments | Advanced model-routed investigations and recommendations; deterministic gates remain independent |
+| **P4** | **Advanced AI Engineering Intelligence** | SDLC assessments | Advanced model-routed investigations and recommendations; optional P4.RI repository-aware review follow-up; deterministic gates remain independent |
 | **P5** | **Repository Health Assessment** | Repository selection + Health UI | Automatically assess a selected branch, report actionable findings and freshness without requiring CI |
 | **P6** | **Developer Experience: CLI + IDE** | Laptop / VS Code | Shared local engine, CLI, policy sync, inline diagnostics, AI explanations and optional Git hooks |
 | **P7** | **QA Release Readiness** | QA/CI + UI | Import end-to-end/contract/regression evidence and validate release candidate readiness |
@@ -39,7 +39,7 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 | **P11** | **Production Feedback Loop** | Read-only incident/deploy integration | Link escaped incidents to releases and earlier checks; propose human-approved improvements |
 | **P12** | **Operational Expansion** | GitLab / scheduled profiles | Expand providers, distributed k6, trends, observability correlations and cost/compliance checks |
 
-**P0–P3 form the first commercially meaningful MVP foundation.** P4 expands the core AI intelligence capability; P5 delivers automatic repository health and first value without CI; P6–P10 deepen Shift Left through local, QA and performance workflows; P11 moves production learnings earlier; P12 expands scale and integrations. The first deliverable is P0, **not** an empty architecture scaffold.
+**P0–P3 form the first commercially meaningful MVP foundation.** P4 expands the core AI intelligence capability, with P4.RI as a separately accepted optional follow-up; P5 delivers automatic repository health and first value without CI; P6–P10 deepen Shift Left through local, QA and performance workflows; P11 moves production learnings earlier; P12 expands scale and integrations. The first deliverable is P0, **not** an empty architecture scaffold.
 
 ## 3. Detailed per-phase tasks and completion gates
 
@@ -182,6 +182,25 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 
 - **P4.CQ:** Multi-skill contextual PR review with pinned skill versions, evidence validation, deduplication, cost/egress controls and opt-in GitHub inline feedback. See [Skill-Based Review](../product/skill-based-code-review.md).
 
+#### P4.RI — Versioned Repository Intelligence for AI PR reviews (planned additive follow-up)
+
+**User value:** A developer receives an evidence-linked AI review informed by related functions, callers, tests, contracts, and configuration outside the changed PR lines. A repository owner can inspect whether searchable code context is indexed, current, incomplete, or unavailable. This **extends** the existing P0 repository discovery/health assessment and P4 review skills/worker, rather than introducing a second health assessment, a separate review pipeline, or a new top-level release phase.
+
+**Implementation baseline (2026-10-13):** Existing `RepositoryProfileService.discover` persists exact-commit language/framework/configuration hints, paths, and Git blob SHAs; it does not persist raw source or embeddings. Saved assessments and skill applicability already require a matching source SHA. Current PR source review uses verified bounded diff lines (up to 200 files, 300 changed lines, and 24 KiB) and has no repository-wide semantic retrieval. Keep those contracts intact.
+
+**Independently usable, ordered sub-slices:**
+
+- **P4.RI.1 — Opt-in indexing and inspection:** Add an organization/repository-controlled, default-off code indexing setting, data-classification and retention policy, and a durable idempotent background indexing request linked to initial **Create first report / Discover profile** and explicit **Refresh profile**. Reuse GitHub App read permissions and the existing worker/queue/outbox patterns; discovery and assessments must finish even if indexing is disabled or fails. Read supported text blobs at a pinned tree/commit with strict file/byte/time/rate limits; exclude generated/vendor/binary, credentials and sensitive paths. Normalize language-aware chunks (symbol/function/class when supported, safe bounded fallback otherwise), store provenance and content hashes, and display repository index status, coverage, revision, exclusions, and errors. Provide a scoped repository UI/API to inspect/search indexed context; **no AI inference is required to inspect index status**. This slice is usable before CI retrieval exists.
+- **P4.RI.2 — Hybrid, revision-safe PR retrieval:** Introduce optional versioned code metadata and semantic embeddings (prefer existing PostgreSQL plus a deployable, optional pgvector extension; verify supported embedding model/endpoint and schema/migration/backups first). Combine semantic similarity with exact path/symbol search and known import/reference relations; unsupported language relationships remain unknown, never invented. Extend existing `ReviewContext`, review prompt, context digest and validated reference schema with bounded **related-context** entries, separate from citable changed-line `diff:*` refs. On an open same-repository PR, resolve the review's exact base/head commits; retrieve from a compatible pinned base index and overlay the proposed PR changes, or fetch and verify exact blobs when necessary. Never silently use the newest default-branch index for an unrelated commit. Reuse approved skills, policy pins, model routing, source-sharing consent, token limits and existing neutral/inline review publishing. Related-context citations support reasoning; GitHub inline comments still require a verified changed-line anchor. Deliver an opt-in cross-file review demonstration with a meaningful improvement over diff-only review.
+- **P4.RI.3 — Incremental freshness and lifecycle:** Schedule bounded updates after permitted push/merge/repository refresh events; use blob/content hashes to skip unchanged chunks, remove deleted/renamed content, handle force-push/rebases and concurrent worker races, and make index publication atomic per revision. Keep immutable source-revision references and a bounded snapshot/retention strategy. A stale, partial, pending, missing, or revoked index is visibly labeled and **never treated as current proof**. Fall back to existing verified diff-only AI review or report context unavailability according to the enabled AI-review policy; do not alter deterministic readiness/gate semantics. Cleanly revoke access and purge/restrict stored source/embeddings according to authorization and retention policy.
+- **P4.RI.4 — Safety, observability and rollout evaluation:** Enforce repository/organization isolation at every read/query, protect stored code and derived embeddings at rest/backups, require separate authorization for indexing and for sending retrieved context to hosted models, scrub source/secrets from logs and traces, treat code/comments/docs as untrusted instructions, and preserve instruction-only skill/tool boundaries. Record indexing coverage/freshness, failures, queue time, embedding/LLM token usage, retrieval latency and cost. Add rate limits, circuit breakers, partial-index handling, migration/rollback and model/embedding-provider failure fixtures. Run an opt-in pilot comparing diff-only vs retrieved-context reviews on seeded cross-file defects, irrelevant matches and false positives; measure actionable finding precision, latency, bytes/token disclosure and cost before enabling by default.
+
+**Entry dependencies:** Working P0 selected-repository discovery/profile, P1/P2 revision-bound evidence and authorization, and existing P4 approved instruction-only AI review/route workflow. No dependency on optional P3 native code execution; indexing is **read-only retrieval/parsing, not build/test/scanner execution**. Use approved isolated processing if a parser or dependency could execute untrusted repository code.
+
+**Done when:** (1) a selected repository produces a version-pinned, inspectable index without changing its health result; (2) a seeded PR that changes one function can cite verified related code outside the diff and detect a demonstrated cross-file risk; (3) stale/base-mismatched/missing indexes are never silently used; (4) changed/deleted/renamed files and revoked access are reconciled safely; (5) no repository snippets reach an unapproved model, and no AI suggestion changes the deterministic gate; (6) opt-out, failure and rollback preserve existing repository assessment, CI gate and diff-only AI review workflows. Each sub-slice requires independently tested success/failure paths, a clean-deploy demo, docs, migration/backup/rollback evidence and review before marking complete.
+
+**Explicit exclusions:** Cross-repository search, cross-organization learning, production incident causality, automatic code writes/PR creation, executable third-party skills, blanket code-comprehension claims and mandatory embeddings for deterministic CI checks.
+
 ### P5 — Repository Health Assessment
 
 **Full phase scope:** security, reliability, maintainability, measured duplication, human hotspot review and optional measured test coverage. The first four provide supported static analysis without CI; coverage requires actual isolated tests. All six, exact-source findings, and independently qualified execution acceptance are required before P5 is complete. See [implementation and acceptance](../planning/p5-implementation.md).
@@ -300,8 +319,8 @@ These subphases map to the global deployment phases above and may be tracked as 
 | Stage | Usable first slice | Second slice | Third slice | Advanced slice |
 | --- | --- | --- | --- | --- |
 | Laptop | P6.1 shared engine + CLI | P6.2 organization policy sync | P6.3 VS Code diagnostics; P6.4 AI and PR status | P6.5 Git hooks/editor compatibility |
-| Repository | R1 discovery/profile (P0) | Automatic health assessment (P5.1) | Health dashboards and history (P5.2–P5.3) | Scheduled drift / cross-repo standards (P12) |
-| PR/CI | P1 CI evidence viewer | P2 deterministic quality gate | P3 isolated scanner/test jobs | P4 AI explanation |
+| Repository | R1 discovery/profile (P0) | Automatic health assessment (P5.1) | Health dashboards and history (P5.2–P5.3) | Optional P4.RI.1 versioned code index; scheduled drift / cross-repo standards (P12) |
+| PR/CI | P1 CI evidence viewer | P2 deterministic quality gate | P3 isolated scanner/test jobs | P4 AI review + optional P4.RI.2–RI.4 cross-file context |
 | QA | Q1 imported suite/candidate report (P7) | Q2 contract/migration tests (P7) | Q3 QA quality gates/sign-off (P7) | Cross-service matrix later |
 | Performance | F1 import k6 reports (P8) | F2 smoke/load execution (P9) | F3 advanced workload profiles (P10) | F4 distributed/correlation (P12) |
 | Production | O1 incidents/deploy mapping (P11) | O2 correlation to missed checks (P11) | O3 policy proposal and approval (P11) | Outcome trends later |
@@ -339,6 +358,8 @@ flowchart TD
     P1 --> P2["P2 Quality Gates"]
     P2 --> P3["P3 Safe Native Scans"]
     P3 --> P4["P4 Optional AI Explanations"]
+    P0 --> P4RI["P4.RI Versioned Code Intelligence"]
+    P4 --> P4RI
     P0 --> P5["P5 Repository Health"]
     P3 --> P5
     P3 --> P6["P6 CLI + IDE Extension"]
@@ -351,7 +372,7 @@ flowchart TD
     P10 --> P12["P12 Provider / Scale Expansion"]
 ~~~
 
-AI is a core product capability introduced in P0/P1; inference is optional at runtime, and deterministic checks remain functional without model access. P8 (import k6 results) can be prioritized soon after P2 because it needs **no managed load generator**. P9 requires separately verified target/runner safety; P3 real-repository execution approval is not bypassed by test infrastructure.
+AI is a core product capability introduced in P0/P1; inference is optional at runtime, and deterministic checks remain functional without model access. P4.RI is an optional repository-intelligence extension of P0/P4, not a prerequisite for P5–P12 or deterministic checks. P8 (import k6 results) can be prioritized soon after P2 because it needs **no managed load generator**. P9 requires separately verified target/runner safety; P3 real-repository execution approval is not bypassed by test infrastructure.
 
 P0 deployment is intentionally useful without a scanner, model or extensive policy framework. All subsequent releases **add** capability without requiring a full platform rewrite.
 
