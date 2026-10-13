@@ -1,0 +1,20 @@
+# Explicit execution override for ../native-preflight/compose.yaml. The base stays read-only.
+# Pre-create the private journal path as UID 1000, mode 0700; do not copy application environment files.
+services:
+  controller:
+    environment:
+      NATIVE_EXECUTION_ENABLED: "true"
+      NATIVE_CLUSTER_TOKEN_FILE: /run/native/launcher-token
+      NATIVE_CONTROLLER_STATE_DIRECTORY: /var/lib/preflyt/native-jobs
+    volumes:
+      - type: bind
+        source: ./launcher-token
+        target: /run/native/launcher-token
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${NATIVE_KUBERNETES_JOURNAL_DIRECTORY:?Set a pre-created private controller journal path}
+        target: /var/lib/preflyt/native-jobs
+        bind:
+          create_host_path: false

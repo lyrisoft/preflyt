@@ -1,216 +1,154 @@
 # Preflyt
 
+<p align="center">
+  <img src="apps/docs/static/img/brand/logo-panel.svg" alt="PreflytLabs" width="480" />
+</p>
+
 **Engineering confidence before production.**
 
-Preflyt is a planned **self-hosted, AI-native Shift Left engineering platform**. It helps engineering teams detect and prevent security vulnerabilities, software defects, reliability failures and infrastructure risks **earlier in the software development lifecycle**, using continuous assessments, explicit engineering standards, policy-based quality gates and actionable developer feedback.
+**Engineering Assurance & Readiness Platform**
 
-> **Status: product specification / pre-implementation.** This repository documents the intended platform; it does **not** yet contain runnable services, deployment manifests, scanners or an operational UI. Capabilities below are proposed unless otherwise stated.
+Preflyt is a self-hosted engineering assurance platform that assesses repository health and verifies CI evidence against approved engineering standards, giving teams a traceable readiness result for each assessed change. It connects supported security and quality findings, versioned policies, verified execution evidence and advisory AI guidance in one workspace.
+
+Identify engineering risks early, verify that changes satisfy approved requirements, and give engineering leaders evidence they can review across repositories. A readiness result can pass, fail or remain incomplete; missing evidence never becomes a pass. Continuous PR feedback requires the configured CI integration, and repository scanner execution requires a qualified runtime.
 
 Developed by **Lyrisoft Technologies**.
 
-## Why Preflyt?
+[Documentation](https://lyrisoft.github.io/preflyt/) · [Getting started](https://lyrisoft.github.io/preflyt/getting-started) · [Self-hosting](https://lyrisoft.github.io/preflyt/self-hosting) · [Preflyt Action](https://github.com/lyrisoft/preflyt-action)
 
-Problems discovered in QA, pre-production or production cost more to diagnose and fix than problems found during design, development, pull request review or CI. Existing scanners and CI systems produce valuable signals, but engineering teams still need to decide **which checks apply, whether the evidence is trustworthy, and whether a change is ready to progress**.
+![Preflyt Engineering Overview showing repository coverage, pull request assessments, adopted standards and assessment activity.](apps/docs/static/img/engineering-overview.png)
 
-Preflyt coordinates that work. It is **not a coding agent, another IDE, a replacement CI platform, or a general-purpose code generation tool**.
+## The problem
 
-**Shift Left workflow: Discover → Assess → Validate → Enforce → Improve**
+Tests, scanners and CI pipelines produce useful results, but those results often live in separate tools. Teams still need to answer:
 
-Its main output is an **Engineering Readiness Report**: a traceable account of which required engineering checks passed, failed, were not applicable or lacked sufficient evidence at a specific repository revision.
+- Which engineering requirements apply to this repository and target branch?
+- What security, reliability and maintainability issues exist in the codebase, even before CI is connected?
+- Which findings need attention, where is the affected code, and what should we do next?
+- Did the required checks run against the current commit?
+- Is the evidence sufficient to establish a pass, or is something missing?
+- What must a developer fix before the change can progress?
+- Can the team explain the decision later?
 
-## Three core engines
+Preflyt brings repository health, findings, standards, branch policies and developer feedback into one workflow. Developers get code context and practical guidance; engineering leads can prioritize repository risks and follow comparable assessment trends; platform teams can apply consistent requirements and trace the evidence behind each result. Existing CI pipelines continue running tests and publishing their results.
 
-| Engine | Purpose |
+## How it works
+
+1. **Connect GitHub.** Create or connect a GitHub App, install it on the intended repositories, and explicitly select repositories in Preflyt.
+2. **Read repository health.** Selection queues an assessment of the default branch. Review supported scanner findings, exact-revision source locations and report limits without setting up CI. Without a qualified runtime, the report is explicitly inspection-only and partial.
+3. **Define requirements.** Adopt versioned standards and publish a policy for the target branch. Development and main can have different requirements.
+4. **Run checks in CI.** Install the Preflyt Action once in your GitHub Actions workflow. The published branch policy selects the configured commands and supported scanners. Preflyt receives their reports and verifies execution evidence for the exact commit and workflow attempt.
+5. **Review the result.** Preflyt saves a commit-bound assessment and publishes **Preflyt / Engineering Readiness** on the pull request. Required checks can pass, fail or remain incomplete when evidence is insufficient.
+6. **Optionally enforce the policy.** Require the check in GitHub, or explicitly activate Preflyt-managed merge protection. GitHub enforces whether a merge is allowed.
+
+Repository inspection identifies configuration; it does not execute tests or prove that a check passed. Saving repository standards and publishing a branch policy are separate actions. Neither automatically enables merge protection.
+
+## What Preflyt provides
+
+| Capability | Purpose |
 | --- | --- |
-| **Engineering Validation Engine** | Discover repository context, select applicable scanners/tests, import CI results or run approved checks, and normalize evidence |
-| **Engineering Governance Engine** | Define engineering policies, apply required checks, evaluate deterministic quality gates and audit exceptions |
-| **Engineering Intelligence Engine** | Explain findings, correlate risks and recommend improvements using optional AI; **AI never determines the gate result** |
+| **Repository health** | Assess selected branches for supported security, reliability, maintainability, duplication and infrastructure issues; view overall health, completeness, freshness and comparable report history. Scanner execution requires a qualified runtime. |
+| **Versioned standards** | Define engineering checks, reuse built-in packs, and adopt reviewed versions for repositories and teams. |
+| **Branch policies** | Specify required checks for a target branch and preserve the approved policy revision. |
+| **CI integration** | Receive GitHub workflow/check events and supported test and scanner reports, including JUnit and SARIF. |
+| **Commit-bound assessments** | Show passing, failing and incomplete checks with the evidence used to evaluate them. |
+| **PR feedback** | Publish readiness checks and optional actionable AI review comments where developers work. |
+| **Merge protection** | Inspect GitHub rulesets and optionally manage activation, drift detection and rollback. |
+| **Unified findings** | Investigate CI and repository-health findings in one worklist, filtered by source, type, repository, severity and status, with assessed-commit source excerpts where available. |
+| **AI finding guidance** | Save concise problem, likely effect and suggested-fix explanations from assessed code. Use analyzer/rule guidance when AI is unavailable or unconfigured. |
+| **Contributor visibility and audit history** | Review recorded repository, commit, PR and review activity alongside scoped audit records, without turning activity into an employee performance score. |
+| **Teams and access control** | Apply standards across explicit repository scopes and manage organization roles and permissions. |
+| **Self-hosting** | Run the application with Docker Compose or the Kubernetes application bundle, with backup and observability guidance. |
 
-### Shift Left coverage
+### Optional AI reviews
 
-| Area | Example controls |
-| --- | --- |
-| **Security** | Code/SAST, dependencies, leaked secrets, containers, API security, IaC misconfigurations |
-| **Testing and software quality** | Lint/typecheck, unit/integration/contract tests, regression checks |
-| **Reliability** | Graceful shutdown, timeouts, retries, health checks, readiness, resilience |
-| **Infrastructure** | Terraform/OpenTofu, Kubernetes, Docker and cloud policy validation |
-| **Databases** | Destructive migration detection, backward compatibility, query-performance tests |
-| **Performance** | k6 smoke, load, stress, spike, soak/endurance, breakpoint, scalability and regression tests; versioned budgets, comparability and target safety |
-| **Observability** | Trace/log/metric instrumentation and health/telemetry contracts |
-| **Compliance** | Organization-defined requirements, controls and auditable evidence |
-| **Cost** | IaC plan cost estimates and engineering budgets |
+AI guidance explains individual findings using code from the assessed commit and saves the result for later visits. Configured AI is the primary explanation when a valid result is available; analyzer/rule guidance remains the fallback. Optional PR reviews use organization-selected models and review skills. Supported connections include OpenAI, Anthropic, Google, DeepSeek and OpenAI-compatible endpoints.
 
-**MVP priority:** repository posture plus security, testing/code quality and infrastructure assessments on **GitHub pull requests and CI**. Other stages and deeper domain checks arrive in deployable increments.
+Code sharing is explicitly configured. AI findings are advisory: they do not change deterministic policy results, waive required checks or authorize a merge. When AI feedback is configured as part of a workflow, a provider or publication failure can still prevent that workflow from completing successfully.
 
-### Shift Left at each SDLC stage
+### Optional native execution
 
-| Stage | What Preflyt will help engineers do | Delivery |
+Preflyt also includes an advanced path for running fixed checks in a separately reviewed Docker or Kubernetes sandbox. It requires dedicated isolation, trusted runtime/tool reviews and operator setup. Adapter coverage is limited, and production release acceptance is not complete.
+
+Native execution is optional. It is not required for GitHub Actions integration. See the [native execution guide](https://lyrisoft.github.io/preflyt/user-guide/native-execution) before evaluating this path.
+
+## Get started
+
+The normal onboarding path is:
+
+**Run Preflyt → create/connect an App → select repositories → read Health.**
+
+For continuous feedback: **review standards and workflow setup → merge the setup PR → receive PR results.**
+
+- [Quick start](https://lyrisoft.github.io/preflyt/getting-started/quick-start): run a local evaluation instance.
+- [Connect GitHub](https://lyrisoft.github.io/preflyt/getting-started/connect-github): guided App registration, installation and owner onboarding.
+- [Pull request checks](https://lyrisoft.github.io/preflyt/user-guide/pull-request-checks): connect branch policies to your workflow.
+- [Docker Compose](https://lyrisoft.github.io/preflyt/self-hosting/docker-compose) and [Kubernetes](https://lyrisoft.github.io/preflyt/self-hosting/kubernetes): deployment requirements and downloadable configuration.
+
+One GitHub App supports repository access, PR reviews and check publication. Setup-PR writes and ruleset administration are optional permissions; a separate governance App is optional too. The public Preflyt Action uses short-lived GitHub OIDC authentication rather than a Preflyt API key. External report signatures are optional for the normal verified GitHub workflow path.
+
+GitHub Actions and webhooks need a reachable HTTPS API endpoint. A localhost installation requires a tunnel for live integration. Application images are currently private on GHCR and require package pull access; the public Action does not grant that access.
+
+## Architecture
+
+Preflyt is a TypeScript monorepo managed with pnpm and Turborepo.
+
+| Component | Location | Responsibility |
 | --- | --- | --- |
-| **Developer laptop** | Run local checks before commit, sync organization policy, receive actionable feedback | V1 |
-| **Repository** | Discover stack, find missing controls, apply repository engineering standards | MVP |
-| **PR / CI** | Evaluate changes, import/run safe checks, publish evidence-backed quality gates | MVP |
-| **QA** | Evaluate test coverage, API contracts, regressions and database migration compatibility | V1 |
-| **Performance / staging** | Import and execute safe k6 workloads; compare baselines and performance budgets | V1 basic; advanced later |
-| **Production feedback** | Trace escaped defects to revisions and recommend stronger earlier controls | V2 |
+| Web application | [`apps/web`](apps/web) | React workspace UI for repositories, standards, policies and results. |
+| API and worker | [`apps/api`](apps/api) | NestJS API, authorization, GitHub integration, assessment processing and background jobs. |
+| Documentation | [`apps/docs`](apps/docs) | Docusaurus user and self-hosting documentation. |
+| Deployment assets | [`deploy`](deploy) | Container definitions, Kubernetes manifests and infrastructure configuration. |
+| Engineering reference | [`docs`](docs) | Architecture decisions, operator runbooks, product contracts and acceptance records. |
 
-For detailed user journeys, triggers, check examples, stage contracts and performance workloads, see [Capabilities across the SDLC](docs/product/sdlc-capabilities.md).
+PostgreSQL stores application data. Valkey/Redis supports background queues and caching. The API and worker share the application codebase; execution controllers are separate, optional deployment components.
 
-## Example: a pull request assessment
+## Local development
 
-A developer opens a PR. Preflyt discovers changed paths and applicable organization standards, ingests CI evidence or executes eligible checks in an approved sandbox, then evaluates rules.
+Use **Node.js 24.4.1** and **pnpm 10.26.2**. Install locked dependencies from the repository root:
 
-~~~text
-Preflyt / payment-api / PR #184
-Revision: <pinned commit>
-Policy: production-readiness-v3
+```sh
+pnpm install --frozen-lockfile --ignore-scripts
+```
 
-Security              PASS
-Testing               PASS
-Infrastructure        PASS
-Reliability           BLOCK        Shutdown test failed
-Performance           INCOMPLETE   Required benchmark not available
+Configure the API using [`apps/api/.env.example`](apps/api/.env.example), provide PostgreSQL and the required queue/configuration settings, and apply migrations before starting services. Follow the [configuration guide](https://lyrisoft.github.io/preflyt/self-hosting/configuration) for encryption keys and authentication setup. Never commit populated environment files or credentials.
 
-Engineering gate: BLOCK
-AI explanation (optional): Request draining during SIGTERM needs review.
+After configuration, prepare the database and generated client:
 
-Developer action: Correct the failed check and rerun the assessment.
-Preflyt does not modify source code as part of this workflow.
-~~~
+```sh
+pnpm --filter @preflyt/api prisma:migrate
+pnpm db:generate
+```
 
-A quality gate is tied to a **specific commit SHA and policy version**. Passing old checks cannot automatically give a new commit a passing result.
+Run the components in separate terminals:
 
-### Gate semantics
+```sh
+pnpm dev:api
+pnpm dev:worker
+pnpm dev
+```
 
-- **PASS:** all mandatory applicable checks have trusted passing evidence.
-- **WARN:** mandatory evidence is complete; only warnings remain.
-- **BLOCK:** blocking policy violation or required check failure.
-- **INCOMPLETE:** missing, stale, skipped, failed-to-run or untrusted mandatory evidence; **never silently green**.
-- **NOT_APPLICABLE:** a rule formally does not apply under versioned criteria.
+To work on documentation:
 
-Quality-gate **enforcement** may start advisory before an authorized policy owner makes it merge-blocking. The gate is computed deterministically; AI never waives rules or invents successful tests.
+```sh
+pnpm dev:docs
+pnpm build:docs
+```
 
-## Planned user journey
+For browser tests, install the test browser with `pnpm test:browser:install`. Workspace verification commands include `pnpm typecheck`, `pnpm lint`, `pnpm test` and `pnpm build`; API integration tests require their documented test infrastructure. See [`docs/operations`](docs/operations) for operational details and [`AGENTS.md`](AGENTS.md) for repository implementation conventions.
 
-1. An administrator signs in with the configured OIDC identity provider and connects selected GitHub repositories.
-2. Preflyt constructs a **Repository Engineering Profile** from languages, test tools, manifests, CI, IaC and deployment evidence.
-3. A policy owner chooses a **versioned engineering baseline** and configures check applicability and enforcement mode.
-4. Every relevant PR/CI event creates a **revision-bound AssessmentPlan**.
-5. Preflyt collects scanner/test evidence from CI or performs allowed checks in an independently approved isolation environment.
-6. The platform normalizes findings and computes an **Engineering Readiness Report** and quality gate.
-7. Optional AI explains observed issues and recommends engineering changes, clearly distinguishing facts and hypotheses.
-8. Developers receive PR/dashboard feedback; changed code starts a new assessment rather than inheriting stale readiness.
+## Project status
 
-## Architecture (proposed)
+Preflyt is under active development. The GitHub workflow integration, standards, assessments, access control and guided App onboarding have focused test coverage and recorded live acceptance runs. That does not establish production qualification for every deployment or optional execution path.
 
-~~~mermaid
-flowchart TD
-  SCM["GitHub / CI (GitLab later)"] --> API["NestJS assessment API"]
-  WEB["React + TypeScript UI"] --> API
-  API --> DB[("PostgreSQL + Prisma")]
-  API --> Q[("Redis + BullMQ")]
-  API --> RULES["Versioned governance policies"]
-  Q --> PLAN["Assessment planner"]
-  PLAN --> CHECKS["External CI evidence / approved sandbox validation"]
-  CHECKS --> RESULTS["Normalized findings and evidence"]
-  RESULTS --> GOV["Deterministic quality-gate evaluator"]
-  RESULTS --> INTEL["Optional TypeScript AI assessment worker"]
-  INTEL --> LLM["LiteLLM -> frontier / local models"]
-  GOV --> REPORT["Engineering readiness report"]
-  INTEL --> REPORT
-  REPORT --> API
-  API --> SCM
-  API --> OBS["OpenTelemetry / SigNoz"]
-~~~
+Use the [acceptance records](docs/acceptance) and [operator runbooks](docs/operations) for the scope and limits of verified behavior. Kubernetes live-cluster acceptance and complete native execution release acceptance remain outstanding. The Kubernetes Operator is planned; the current bundle uses ordinary manifests.
 
-### Application stack
+## Feedback and security
 
-| Layer | Planned technology |
-| --- | --- |
-| Frontend | **Shadcn Admin source code pulled at a pinned commit and developed into Preflyt's React + Vite + TypeScript app**, with Tailwind/shadcn/ui and reviewed dependencies |
-| API / control plane | Node.js + NestJS + TypeScript |
-| Background execution | TypeScript workers; Redis + BullMQ |
-| AI assessment | Read-only/advisory TypeScript worker; model-independent contracts |
-| Model gateway | LiteLLM container; optional OpenAI, Anthropic, DeepSeek or local endpoints |
-| Database | PostgreSQL + Prisma |
-| Evidence / artifacts | S3-compatible object storage |
-| Test and scanner execution | TypeScript controller, approved isolated Docker/Kubernetes backends |
-| Scanners (candidate tools) | Trivy, Gitleaks, Semgrep CE, Checkov and repository-native tools; license review required |
-| Monorepo | pnpm workspaces + Turborepo |
-| Observability | OpenTelemetry; optional self-hosted SigNoz |
+Use [GitHub issues](https://github.com/lyrisoft/preflyt/issues) for product feedback and reproducible defects. Include the affected version, workflow or commit, expected behavior and sanitized diagnostics. Exclude credentials, private source code and sensitive report contents.
 
-**AI is optional for core operation.** Preflyt can import checks, enforce policies and publish readiness without any frontier-model keys or local LLM.
+Report suspected vulnerabilities privately to your Lyrisoft contact rather than in a public issue.
 
-## Security and execution safety
+## Licensing
 
-**Safe execution is an MVP prerequisite, not an advanced V1 feature.** Running package installation, test hooks, scanners, builds or other commands against a connected repository can execute untrusted code.
-
-- For **real** connected repositories, Preflyt-run code requires an independently security-reviewed stronger sandbox boundary (e.g. dedicated hardened Kubernetes workers with gVisor/Kata or equivalent, after validation), controlled quotas, no production/model/Git write credentials, restricted network egress and audit evidence.
-- If an approved executor is missing or fails admission, Preflyt **does not run repository code**. It may import existing CI evidence, but missing mandatory results stay **INCOMPLETE**.
-- Local Docker-based execution is restricted to explicitly designated disposable test fixtures.
-- The core Git integration does **not** require permissions to push branches, approve/merge PRs or edit code. Check/status publishing uses narrowly scoped permissions.
-- Organization policies, report evidence and Git statuses must be revision-bound, auditable and resistant to prompt injection or stale result reuse.
-- Source-code egress to external AI models requires organization-approved model/data policy; API keys remain server-side.
-
-See [ADR-0002](docs/architecture/ADR-0002-safe-execution-fixtures-remediation-contract.md) for the enforceable execution isolation baseline and a **separate optional future remediation specification**.
-
-## Roadmap
-
-| Stage | Priority | Outcome |
-| --- | --- | --- |
-| **Proof of concept** | One vertical slice | PR → repository profile → security/test/IaC assessment → deterministic gate → readiness report and GitHub feedback; **no code writing** |
-| **MVP** | Core Shift Left platform | GitHub integration, policy baselines, assessment planner, safe validation/imports, findings, readiness, optional AI explanation, audit and reporting |
-| **V1** | Broader lifecycle coverage | Reliability/observability/database/performance checks, design/pre-prod/developer entrypoints, GitLab, richer policies and exceptions |
-| **V2** | Engineering intelligence at scale | More domain coverage, historical trend analysis, recurring issue patterns, organizational standards and integrations |
-| **Optional future module** | Separately approved | AI-assisted code remediation or fix PRs; not required for Preflyt to deliver Shift Left value |
-
-**Every engineering phase must be deployable and usable on its own.** The first usable release is a GitHub-connected **Repository Posture** view, not an empty backend. Subsequent slices add CI evidence, deterministic quality gates, approved scans, optional AI explanations, a local CLI, QA readiness, performance testing and production feedback, with each existing capability preserved.
-
-The roadmap is directional, not a delivery promise. See the [phase-by-phase vertical-slice delivery plan](docs/roadmap/incremental-delivery.md) for P0–P11, implementation tasks, acceptance demonstrations, operations and rollback requirements; the [PRD](docs/PRD.md) defines product acceptance criteria.
-
-## Proposed monorepo
-
-This structure is planned; the directories below are **not yet implemented**.
-
-~~~text
-apps/
-  web/                      # React / Vite assessment UI
-  api/                      # NestJS control plane
-services/
-  assessment-worker/        # Planning, check orchestration and normalization
-  execution-worker/         # Approved sandbox dispatch and artifact collection
-  intelligence-worker/      # Optional TypeScript AI assessment service
-  integration-worker/       # GitHub/GitLab and CI adapters
-packages/
-  contracts/                # Versioned API, check and evidence schemas
-  database/                 # Prisma
-  policies/                 # Rules, profiles, enforcement
-  integrations/             # Provider and scanner adapters
-  ui/                       # Shared React components
-infra/
-  compose/                  # Local evaluation (planned)
-  helm/                     # Production deployment (planned)
-docs/
-  PRD.md
-  architecture/
-pnpm-workspace.yaml
-turbo.json
-~~~
-
-## Documents and decision records
-
-- [Product Requirements Document](docs/PRD.md): user journeys, validation domains, policy semantics, functional requirements and acceptance criteria.
-- [SDLC capabilities](docs/product/sdlc-capabilities.md): laptop, repository, PR/CI, QA, performance/staging, production-feedback experience.
-- [Incremental delivery plan](docs/roadmap/incremental-delivery.md): **independently deployable P0–P11 vertical releases**, implementation tasks and acceptance gates.
-- [ADR-0001 — TypeScript-first application stack](docs/architecture/ADR-0001-typescript-first-stack.md)
-- [ADR-0002 — MVP safe execution and optional remediation contract](docs/architecture/ADR-0002-safe-execution-fixtures-remediation-contract.md)
-- [ADR-0003 — OIDC human authentication](docs/architecture/ADR-0003-oidc-user-authentication.md)
-- [ADR-0004 — Assessment and governance architecture](docs/architecture/ADR-0004-shift-left-assessment-governance.md)
-- [ADR-0005 — Build Preflyt on the pinned Shadcn Admin source codebase](docs/architecture/ADR-0005-shadcn-admin-frontend.md)
-
-## Development status
-
-**Preflyt is currently a documented product design, not a functioning platform.** There is no documented install command and no claim that Docker Compose, Helm, services, scanners, UI or AI integration are running. Future contributions should follow branch protection, scoped security policy and reviewable PRs.
-
-## License
-
-**Preflyt's source license is not yet selected.** The licensing and redistribution requirements of third-party engines, rulesets, models and gateways must be reviewed before shipping or commercializing the platform.
+This repository does not publish a project-wide open-source license for the Preflyt application. Access to the repository or documentation does not grant redistribution rights. The separate [Preflyt Action](https://github.com/lyrisoft/preflyt-action) is MIT-licensed; that license applies to the Action, not the application. Third-party components retain their own licenses.

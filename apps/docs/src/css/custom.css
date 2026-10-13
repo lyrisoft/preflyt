@@ -1,0 +1,554 @@
+/*
+ * Preflyt documentation theme.
+ * Tokens mirror apps/web/src/styles/theme.css so the docs read as part of the
+ * product: same neutrals, primary, radius, type and status colours.
+ */
+
+:root {
+  /* Preflyt tokens (light) */
+  --pf-background: oklch(1 0 0);
+  --pf-foreground: oklch(0.129 0.042 264.695);
+  --pf-surface: oklch(0.984 0.003 247.858);
+  --pf-muted: oklch(0.968 0.007 247.896);
+  --pf-muted-foreground: oklch(0.554 0.046 257.417);
+  --pf-border: oklch(0.929 0.013 255.508);
+  --pf-primary: #29465b;
+  --pf-primary-foreground: oklch(0.984 0.003 247.858);
+  --pf-accent: #edf2f5;
+  --pf-accent-foreground: #29465b;
+  --pf-ring: #45677e;
+  --pf-radius: 0.625rem;
+  --pf-success: oklch(0.627 0.194 149.214);
+  --pf-success-text: oklch(0.448 0.119 151.328);
+  --pf-warning: oklch(0.666 0.179 58.318);
+  --pf-warning-text: oklch(0.555 0.163 48.998);
+  --pf-danger: oklch(0.577 0.245 27.325);
+  --pf-danger-text: oklch(0.505 0.213 27.518);
+  --pf-info: oklch(0.546 0.245 262.881);
+  --pf-info-text: oklch(0.488 0.243 264.376);
+
+  /* Infima mapping */
+  --ifm-color-primary: #29465b;
+  --ifm-color-primary-dark: #253f52;
+  --ifm-color-primary-darker: #233b4d;
+  --ifm-color-primary-darkest: #1d3140;
+  --ifm-color-primary-light: #2d4d64;
+  --ifm-color-primary-lighter: #305169;
+  --ifm-color-primary-lightest: #375d78;
+  --ifm-background-color: var(--pf-background);
+  --ifm-background-surface-color: var(--pf-background);
+  --ifm-font-color-base: var(--pf-foreground);
+  --ifm-heading-color: var(--pf-foreground);
+  --ifm-color-content-secondary: var(--pf-muted-foreground);
+  --ifm-toc-border-color: var(--pf-border);
+  --ifm-hr-border-color: var(--pf-border);
+  --ifm-table-border-color: var(--pf-border);
+  --ifm-table-stripe-background: transparent;
+  --ifm-table-head-background: var(--pf-muted);
+
+  --ifm-font-family-base:
+    Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --ifm-heading-font-family: var(--ifm-font-family-base);
+  --ifm-font-family-monospace:
+    'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --ifm-font-size-base: 15px;
+  --ifm-line-height-base: 1.65;
+  --ifm-heading-font-weight: 650;
+  --ifm-h1-font-size: 2rem;
+  --ifm-h2-font-size: 1.4rem;
+  --ifm-h3-font-size: 1.1rem;
+  --ifm-code-font-size: 88%;
+  --ifm-code-border-radius: 6px;
+  --ifm-code-background: var(--pf-muted);
+
+  --ifm-global-radius: var(--pf-radius);
+  --ifm-button-border-radius: 8px;
+  --ifm-global-shadow-lw: none;
+  --ifm-global-shadow-md: 0 1px 2px rgb(15 23 42 / 6%);
+  --ifm-navbar-height: 3.5rem;
+  --ifm-navbar-shadow: none;
+  --ifm-navbar-background-color: color-mix(in oklch, var(--pf-background) 85%, transparent);
+  --ifm-menu-color: var(--pf-muted-foreground);
+  --ifm-menu-color-active: var(--pf-accent-foreground);
+  --ifm-menu-color-background-active: var(--pf-accent);
+  --ifm-menu-color-background-hover: var(--pf-muted);
+  --ifm-link-color: var(--ifm-color-primary);
+  --ifm-link-hover-decoration: underline;
+  --ifm-footer-background-color: var(--pf-surface);
+  --ifm-footer-link-color: var(--pf-muted-foreground);
+  --ifm-footer-link-hover-color: var(--pf-foreground);
+  --ifm-footer-title-color: var(--pf-foreground);
+  --docsearch-searchbox-background: var(--pf-muted);
+}
+
+html[data-theme='dark'] {
+  --pf-background: oklch(0.129 0.042 264.695);
+  --pf-foreground: oklch(0.984 0.003 247.858);
+  --pf-surface: oklch(0.14 0.04 259.21);
+  --pf-muted: oklch(0.279 0.041 260.031);
+  --pf-muted-foreground: oklch(0.704 0.04 256.788);
+  --pf-border: oklch(1 0 0 / 10%);
+  --pf-primary: #a3bacb;
+  --pf-primary-foreground: #102331;
+  --pf-accent: #213442;
+  --pf-accent-foreground: #d8e4ec;
+  --pf-ring: #a3bacb;
+  --pf-success-text: oklch(0.792 0.209 151.711);
+  --pf-warning-text: oklch(0.828 0.189 84.429);
+  --pf-danger-text: oklch(0.704 0.191 22.216);
+  --pf-info-text: oklch(0.707 0.165 254.624);
+
+  --ifm-color-primary: #a3bacb;
+  --ifm-color-primary-dark: #8faabf;
+  --ifm-color-primary-darker: #85a2b9;
+  --ifm-color-primary-darkest: #6888a1;
+  --ifm-color-primary-light: #b7c9d7;
+  --ifm-color-primary-lighter: #c1d1dd;
+  --ifm-color-primary-lightest: #dfe8ee;
+  --ifm-code-background: oklch(0.21 0.04 262);
+  --ifm-global-shadow-md: none;
+
+  /* Infima's own dark defaults are neutral grey; restate the Preflyt mapping. */
+  --ifm-background-color: var(--pf-background);
+  --ifm-background-surface-color: var(--pf-background);
+  --ifm-font-color-base: var(--pf-foreground);
+  --ifm-heading-color: var(--pf-foreground);
+  --ifm-color-content-secondary: var(--pf-muted-foreground);
+  --ifm-toc-border-color: var(--pf-border);
+  --ifm-hr-border-color: var(--pf-border);
+  --ifm-table-border-color: var(--pf-border);
+  --ifm-table-head-background: var(--pf-muted);
+  --ifm-navbar-background-color: color-mix(in oklch, var(--pf-background) 85%, transparent);
+  --ifm-menu-color: var(--pf-muted-foreground);
+  --ifm-menu-color-active: var(--pf-accent-foreground);
+  --ifm-menu-color-background-active: var(--pf-accent);
+  --ifm-menu-color-background-hover: var(--pf-muted);
+  --ifm-footer-background-color: var(--pf-surface);
+  --ifm-footer-link-color: var(--pf-muted-foreground);
+  --ifm-footer-link-hover-color: var(--pf-foreground);
+  --ifm-footer-title-color: var(--pf-foreground);
+  --docsearch-searchbox-background: var(--pf-muted);
+}
+
+/* ===== Base ===== */
+
+body {
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: 'cv11', 'ss01';
+}
+
+h1,
+h2,
+h3 {
+  letter-spacing: -0.015em;
+}
+
+.markdown h2 {
+  margin-top: 2.25rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--pf-border);
+}
+
+.markdown h1:first-child + p,
+.markdown > header + p {
+  font-size: 1.05rem;
+  color: var(--pf-muted-foreground);
+}
+
+:focus-visible {
+  outline: 2px solid var(--pf-ring);
+  outline-offset: 2px;
+}
+
+/* ===== Navbar ===== */
+
+.navbar {
+  border-bottom: 1px solid var(--pf-border);
+  backdrop-filter: saturate(140%) blur(10px);
+  -webkit-backdrop-filter: saturate(140%) blur(10px);
+}
+
+.navbar__logo {
+  height: 1.9rem;
+  margin-right: 0.6rem;
+}
+
+.navbar__title {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.navbar__link {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--pf-muted-foreground);
+  border-radius: 6px;
+  padding: 0.35rem 0.7rem;
+}
+
+.navbar__link:hover {
+  color: var(--pf-foreground);
+}
+
+.navbar__link--active {
+  color: var(--pf-foreground);
+  background: var(--pf-muted);
+}
+
+.navbar__search-input,
+.navbar .DocSearch-Button {
+  border: 1px solid var(--pf-border);
+  border-radius: 8px;
+  background: var(--pf-muted);
+}
+
+/* ===== Sidebar ===== */
+
+.theme-doc-sidebar-container {
+  border-right-color: var(--pf-border) !important;
+}
+
+.menu {
+  padding: 1rem 0.75rem;
+  font-size: 0.875rem;
+}
+
+.menu__link {
+  border-radius: 6px;
+  padding: 0.35rem 0.7rem;
+  font-weight: 500;
+}
+
+.menu__link--active:not(.menu__link--sublist) {
+  font-weight: 600;
+  background: var(--pf-accent);
+  color: var(--pf-accent-foreground);
+}
+
+button[class*='collapseSidebarButton'] {
+  border-top: 1px solid var(--pf-border);
+  background: var(--pf-background);
+  color: var(--pf-muted-foreground);
+}
+
+button[class*='collapseSidebarButton']:hover {
+  background: var(--pf-muted);
+}
+
+.menu__list-item:not(:first-child) {
+  margin-top: 0.15rem;
+}
+
+/* ===== Content chrome ===== */
+
+.theme-doc-breadcrumbs {
+  margin-bottom: 1rem;
+}
+
+.breadcrumbs__link {
+  font-size: 0.8rem;
+  border-radius: 6px;
+  background: var(--pf-muted);
+}
+
+.table-of-contents__link {
+  font-size: 0.8rem;
+}
+
+.table-of-contents__link--active {
+  color: var(--pf-foreground);
+  font-weight: 600;
+}
+
+.pagination-nav__link {
+  border-color: var(--pf-border);
+  border-radius: var(--pf-radius);
+}
+
+.pagination-nav__link:hover {
+  border-color: var(--pf-ring);
+}
+
+.theme-edit-this-page {
+  font-size: 0.85rem;
+  color: var(--pf-muted-foreground);
+}
+
+/* ===== Tables: bordered, rounded, quiet header ===== */
+
+.markdown table {
+  display: table;
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid var(--pf-border);
+  border-radius: var(--pf-radius);
+  overflow: hidden;
+  font-size: 0.9rem;
+}
+
+.markdown table thead tr {
+  border: 0;
+}
+
+.markdown table th {
+  background: var(--pf-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-align: left;
+  color: var(--pf-foreground);
+}
+
+.markdown table th,
+.markdown table td {
+  border: 0;
+  border-bottom: 1px solid var(--pf-border);
+  padding: 0.6rem 0.85rem;
+  vertical-align: top;
+}
+
+.markdown table tr:last-child td {
+  border-bottom: 0;
+}
+
+.markdown table tr {
+  background: transparent;
+}
+
+/* Tables scroll inside their own region on small screens. */
+@media (max-width: 996px) {
+  .markdown table {
+    display: block;
+    overflow-x: auto;
+  }
+}
+
+/* ===== Code ===== */
+
+.markdown :not(pre) > code {
+  border: 1px solid var(--pf-border);
+  padding: 0.1em 0.35em;
+}
+
+.theme-code-block {
+  border: 1px solid var(--pf-border);
+  border-radius: var(--pf-radius);
+  box-shadow: none;
+}
+
+/* Long files (the compose file is ~350 lines) scroll inside the block so the
+   steps after it stay in reach. The copy button still copies the whole file. */
+.long-code pre {
+  max-height: 24rem;
+  overflow: auto;
+}
+
+/* ===== Admonitions: tinted cards, full border, no side stripe ===== */
+
+.theme-admonition.alert {
+  --ifm-alert-border-left-width: 0;
+  --ifm-alert-padding-vertical: 0.9rem;
+  --ifm-alert-padding-horizontal: 1rem;
+  border: 1px solid var(--pf-tone-border);
+  border-radius: var(--pf-radius);
+  background: var(--pf-tone-bg);
+  color: var(--pf-foreground);
+  box-shadow: none;
+  font-size: 0.925rem;
+}
+
+.theme-admonition [class*='admonitionHeading'] {
+  color: var(--pf-tone-text);
+  text-transform: none;
+  font-size: 0.85rem;
+  letter-spacing: 0;
+}
+
+.theme-admonition [class*='admonitionIcon'] svg {
+  fill: var(--pf-tone-text);
+}
+
+.alert--secondary {
+  --pf-tone-text: var(--pf-foreground);
+  --pf-tone-bg: var(--pf-muted);
+  --pf-tone-border: var(--pf-border);
+}
+
+.alert--info {
+  --pf-tone-text: var(--pf-info-text);
+  --pf-tone-bg: color-mix(in oklch, var(--pf-info) 8%, transparent);
+  --pf-tone-border: color-mix(in oklch, var(--pf-info) 22%, transparent);
+}
+
+.alert--success {
+  --pf-tone-text: var(--pf-success-text);
+  --pf-tone-bg: color-mix(in oklch, var(--pf-success) 8%, transparent);
+  --pf-tone-border: color-mix(in oklch, var(--pf-success) 22%, transparent);
+}
+
+.alert--warning {
+  --pf-tone-text: var(--pf-warning-text);
+  --pf-tone-bg: color-mix(in oklch, var(--pf-warning) 9%, transparent);
+  --pf-tone-border: color-mix(in oklch, var(--pf-warning) 26%, transparent);
+}
+
+.alert--danger {
+  --pf-tone-text: var(--pf-danger-text);
+  --pf-tone-bg: color-mix(in oklch, var(--pf-danger) 8%, transparent);
+  --pf-tone-border: color-mix(in oklch, var(--pf-danger) 24%, transparent);
+}
+
+/* ===== Buttons ===== */
+
+.button {
+  font-weight: 600;
+  font-size: 0.875rem;
+  padding: 0.55rem 1rem;
+}
+
+.button--primary {
+  --ifm-button-background-color: var(--pf-primary);
+  --ifm-button-border-color: var(--pf-primary);
+  --ifm-button-color: var(--pf-primary-foreground);
+}
+
+.button--secondary {
+  --ifm-button-background-color: var(--pf-background);
+  --ifm-button-border-color: var(--pf-border);
+  --ifm-button-color: var(--pf-foreground);
+}
+
+.button--secondary:hover {
+  --ifm-button-background-color: var(--pf-muted);
+}
+
+/* Infima recolours secondary buttons per theme; keep them on Preflyt tokens. */
+.button.button--secondary,
+[data-theme='dark'] .button.button--secondary {
+  color: var(--pf-foreground);
+  background-color: var(--pf-background);
+  border-color: var(--pf-border);
+}
+
+.button.button--secondary:hover,
+[data-theme='dark'] .button.button--secondary:hover {
+  background-color: var(--pf-muted);
+}
+
+/* ===== Images (product screenshots) ===== */
+
+.markdown img {
+  border: 1px solid var(--pf-border);
+  border-radius: var(--pf-radius);
+}
+
+.navbar img,
+.footer img {
+  border: 0;
+}
+
+/* ===== Landing hero ===== */
+
+.pf-hero {
+  margin: 0.5rem 0 2rem;
+  padding: 2rem;
+  border: 1px solid var(--pf-border);
+  border-radius: calc(var(--pf-radius) + 6px);
+  background: color-mix(in oklch, var(--pf-primary) 4%, var(--pf-background));
+}
+
+.pf-eyebrow {
+  margin: 0 0 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--pf-muted-foreground);
+}
+
+.pf-hero__title {
+  margin: 0 0 0.75rem;
+  font-size: clamp(1.6rem, 1.2rem + 1.6vw, 2.25rem);
+  line-height: 1.15;
+}
+
+.pf-hero__lead {
+  max-width: 62ch;
+  margin-bottom: 1.25rem;
+  font-size: 1.05rem;
+  color: var(--pf-muted-foreground);
+}
+
+.pf-hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+@media (max-width: 600px) {
+  .pf-hero {
+    padding: 1.25rem;
+  }
+}
+
+/* ===== Status badges, matching the app's StatusBadge ===== */
+
+.badge-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 1.4rem;
+  padding: 0.05rem 0.5rem;
+  border: 1px solid var(--pf-border);
+  border-radius: 8px;
+  background: var(--pf-muted);
+  color: var(--pf-foreground);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.badge-status::before {
+  content: '';
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.badge-available {
+  color: var(--pf-success-text);
+  border-color: color-mix(in oklch, var(--pf-success) 22%, transparent);
+  background: color-mix(in oklch, var(--pf-success) 10%, transparent);
+}
+
+.badge-planned {
+  color: var(--pf-muted-foreground);
+}
+
+/* ===== Footer ===== */
+
+.footer {
+  border-top: 1px solid var(--pf-border);
+  padding: 2.5rem 1rem;
+}
+
+.footer__copyright {
+  font-size: 0.8rem;
+  color: var(--pf-muted-foreground);
+}
+
+/* ===== Motion ===== */
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Supplied monochrome mark remains legible on the light navigation surface. */
+html[data-theme='light'] .navbar__logo img { filter: invert(1); }
+.pf-brand-logo { width: min(100%, 320px); height: auto; border-radius: 12px; }

@@ -1,0 +1,29 @@
+# Dedicated reviewed controller. Execution stays disabled by default.
+name: preflyt-native-docker-controller
+services:
+  controller:
+    image: ${PREFLYT_NATIVE_CONTROLLER_IMAGE:?Set the reviewed native controller image digest}
+    command: [node, dist/execution-controller.js]
+    env_file: controller.env
+    user: '1000:1000'
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    mem_limit: 512m
+    cpus: 0.5
+    restart: unless-stopped
+    ports: ['127.0.0.1:3010:3010']
+    volumes:
+      - ./docker-tls:/run/docker-tls:ro
+      # Precreate as controller uid 1000, mode 0700; the dedicated engine must see this identical path.
+      - type: bind
+        source: ${NATIVE_CONTROLLER_STATE_DIRECTORY:-/var/lib/preflyt/native-jobs}
+        target: ${NATIVE_CONTROLLER_STATE_DIRECTORY:-/var/lib/preflyt/native-jobs}
+        bind:
+          create_host_path: false
+    healthcheck:
+      test: [CMD, node, -e, 'fetch("http://127.0.0.1:3010/health/live",{signal:AbortSignal.timeout(3000)}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))']
+      interval: 30s
+      timeout: 5s
+      retries: 3

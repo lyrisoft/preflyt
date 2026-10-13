@@ -1,0 +1,24 @@
+# Preflyt maintainability rules v2. Review the matched code; findings are advisory.
+rules:
+  - id: preflyt-no-debugger
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: A debugger statement interrupts execution when a debugger is attached. Remove leftover debugging statements from production code.
+    pattern: debugger;
+  - id: preflyt-python-exec-statement
+    languages: [python]
+    severity: WARNING
+    message: Dynamic execution obscures dependencies and control flow. Prefer an explicit function call or dispatch table where possible.
+    pattern: exec(...)
+
+  - id: preflyt-python-mutable-default
+    languages: [python]
+    severity: WARNING
+    message: A mutable default argument is reused across calls. Use None and create a fresh collection inside the function unless shared state is intentional.
+    pattern-either:
+      - pattern: |
+          def $FUNC(..., $ARG=[], ...):
+            ...
+      - pattern: |
+          def $FUNC(..., $ARG={}, ...):
+            ...

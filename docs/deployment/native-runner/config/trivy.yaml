@@ -1,0 +1,5 @@
+cache:
+  backend: memory
+misconfiguration:
+  # SARIF results feed the finding count; successful checks must not become findings.
+  include-non-failures: false

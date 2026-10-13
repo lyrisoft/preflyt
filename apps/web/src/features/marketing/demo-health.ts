@@ -1,0 +1,178 @@
+import type { HealthReport } from '@/features/health/health-api'
+
+// Isolated demo report: retained findings do not imply complete analysis or merge readiness.
+export const demoHealthReport: HealthReport = {
+  completeness: 'COMPLETE',
+  mode: 'EXECUTED',
+  inspection: { complete: true, fileCount: 248, languages: ['TypeScript'] },
+  analyses: [
+    {
+      id: 'secrets.scan',
+      title: 'Secret detection',
+      state: 'PASS',
+      reason: 'NO_FINDINGS',
+      scope: 'Tracked source and configuration files at the assessed commit.',
+      tool: 'Gitleaks',
+      findingsRetained: 0,
+    },
+    {
+      id: 'security.sast',
+      title: 'Static security analysis',
+      state: 'PASS',
+      reason: 'NO_FINDINGS',
+      scope: 'All supported TypeScript candidate files were analyzed.',
+      tool: 'Semgrep',
+      findingsRetained: 0,
+    },
+    {
+      id: 'security.dependencies',
+      title: 'Dependency vulnerabilities',
+      state: 'FAIL',
+      reason: 'FINDINGS_REPORTED',
+      scope: 'Dependencies from the lockfile at commit 7c82a1f.',
+      tool: 'Trivy',
+      findingsRetained: 2,
+    },
+    {
+      id: 'iac.policy',
+      title: 'Infrastructure configuration',
+      state: 'FAIL',
+      reason: 'FINDINGS_REPORTED',
+      scope: 'Kubernetes manifests at the assessed revision.',
+      tool: 'Trivy',
+      findingsRetained: 1,
+    },
+    {
+      id: 'quality.maintainability',
+      title: 'Maintainability',
+      state: 'PASS',
+      reason: 'NO_FINDINGS',
+      scope: 'Supported TypeScript source files.',
+      findingsRetained: 0,
+    },
+    {
+      id: 'quality.reliability',
+      title: 'Reliability',
+      state: 'PASS',
+      reason: 'NO_FINDINGS',
+      findingsRetained: 0,
+    },
+    {
+      id: 'quality.duplication',
+      title: 'Duplication',
+      state: 'PASS',
+      reason: 'NO_FINDINGS',
+      findingsRetained: 0,
+    },
+    {
+      id: 'tests.coverage',
+      title: 'Test coverage',
+      state: 'PASS',
+      reason: 'MEASURED_COVERAGE',
+    },
+  ],
+  findings: [
+    {
+      fingerprint: 'demo-dependency-1',
+      category: 'security',
+      severity: 'high',
+      title: 'Dependency includes a vulnerable transitive package',
+      ruleId: 'dependency-review',
+      path: 'package-lock.json',
+      line: 128,
+      checkId: 'security.dependencies',
+      evidence: 'Recorded dependency analysis',
+    },
+    {
+      fingerprint: 'demo-dependency-2',
+      category: 'security',
+      severity: 'medium',
+      title: 'Dependency update requires review',
+      ruleId: 'dependency-review',
+      path: 'package-lock.json',
+      line: 246,
+      checkId: 'security.dependencies',
+      evidence: 'Recorded dependency analysis',
+    },
+    {
+      fingerprint: 'demo-config-1',
+      category: 'security',
+      severity: 'medium',
+      title: 'Container security context permits privilege escalation',
+      ruleId: 'container-security-context',
+      path: 'deploy/api.yaml',
+      line: 34,
+      checkId: 'iac.policy',
+      evidence: 'Recorded configuration analysis',
+    },
+  ],
+  limits: [
+    'Coverage measures loaded source files; unimported files are excluded.',
+  ],
+  measurements: {
+    duplication: {
+      version: 1,
+      formula: 'unique-lines-v1',
+      analyzedLines: 10000,
+      duplicatedLines: 240,
+      analyzedFiles: 182,
+      clonePairs: 8,
+    },
+    coverage: {
+      version: 1,
+      formula: 'node-covered-lines-v1',
+      scope: 'node-loaded-files',
+      analyzedLines: 10000,
+      coveredLines: 9160,
+      analyzedFiles: 164,
+      tests: 420,
+      passed: 420,
+    },
+  },
+}
+export const demoHealthHistory = [
+  {
+    sha: '7c82a1f',
+    at: '2026-10-11T14:30:00Z',
+    date: '11 Oct 2026 · 14:30',
+    findings: 3,
+  },
+  {
+    sha: '6ab019d',
+    at: '2026-10-09T09:15:00Z',
+    date: '9 Oct 2026 · 09:15',
+    findings: 4,
+  },
+  {
+    sha: '4de082b',
+    at: '2026-10-07T16:40:00Z',
+    date: '7 Oct 2026 · 16:40',
+    findings: 5,
+  },
+  {
+    sha: '3bc971a',
+    at: '2026-10-05T11:20:00Z',
+    date: '5 Oct 2026 · 11:20',
+    findings: 7,
+  },
+  {
+    sha: '2af640c',
+    at: '2026-10-03T10:05:00Z',
+    date: '3 Oct 2026 · 10:05',
+    findings: 9,
+  },
+  {
+    sha: '1ed530b',
+    at: '2026-10-01T08:00:00Z',
+    date: '1 Oct 2026 · 08:00',
+    findings: 12,
+  },
+]
+export const demoHealthTimeline = [...demoHealthHistory]
+  .reverse()
+  .map((item) => ({
+    id: item.sha,
+    sourceSha: item.sha,
+    at: item.at,
+    findings: item.findings,
+  }))

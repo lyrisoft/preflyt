@@ -1,7 +1,7 @@
 # ADR-0005: Build Preflyt on the Shadcn Admin source codebase
 
-**Status:** Selected for implementation planning; upstream pin, audit and application integration pending  
-**Date:** 2026-10-08  
+**Status:** Pinned source baseline imported; Preflyt screens, session-aware navigation and API integration are implemented. Remaining product scope and release acceptance are tracked separately.
+**Date:** 2026-10-08
 **Related:** [ADR-0001](ADR-0001-typescript-first-stack.md), [ADR-0003](ADR-0003-oidc-user-authentication.md), [ADR-0004](ADR-0004-shift-left-assessment-governance.md), [Incremental delivery plan](../roadmap/incremental-delivery.md)
 
 ## Context
@@ -39,7 +39,7 @@ Use React + Vite + TypeScript, Tailwind CSS and shadcn/ui while keeping the alre
 - **Backend authority:** NestJS authenticates/authorizes every action. The browser never holds GitHub App credentials, model-provider keys, cluster/sandbox credentials or decisions that should be enforced server-side.
 - **Routing:** standardize on one typed router after evaluating the imported router and dependencies.
 - **Data access:** use a typed API client and TanStack Query where appropriate; TanStack Table for repository/assessment/finding data. Forms may use React Hook Form + Zod; charts may use Recharts. These are implementation choices to validate against the imported versions, not mandatory reasons to rebuild the app.
-- **Product readiness:** a visible module must be backed by a usable end-to-end workflow. Hide unsupported P1–P11 features rather than leaving deceptive clickable placeholders.
+- **Product readiness:** a visible module must be backed by a usable end-to-end workflow. Hide unsupported P1–P12 features rather than leaving deceptive clickable placeholders.
 - **Open-source licensing:** review upstream and all dependencies/assets before distribution; record whether any code modifications require notices or other actions.
 
 ## Architecture
@@ -103,4 +103,4 @@ Importing and rendering Shadcn Admin alone is **not P0 completion**.
 | Adopt a full React-admin management framework | Not selected; adds another application framework and more opinionated data/navigation architecture |
 | Rebuild dashboard from scratch | Rejected unless upstream audit proves the source unsuitable or insecure |
 
-**Implementation status:** This ADR specifies how to build the frontend. It does not claim the Shadcn Admin source has already been pulled into Preflyt. The upstream baseline SHA will be selected and recorded **before** the P0 import PR.
+**Implementation status:** The source at e16c87f213a5ba5e45964e9b67c792105ec74d26 is imported into apps/web with a pnpm/Turborepo workspace. See [provenance, dependency changes and verification](../vendor/shadcn-admin.md). OIDC sign-in, first-Owner bootstrap, protected routes and initial GitHub installation/repository selection are implemented. Repository profiles, scoped access administration, contributors, standards, policies, assessments and notifications now have API-backed screens. Docker Compose packages the current application; Kubernetes packaging remains pending. Full asset/accessibility review and phase-level clean-deployment acceptance are separate release activities. See [current capabilities](../../README.md) and [delivery status](../roadmap/incremental-delivery.md). Source import alone does not complete P0.

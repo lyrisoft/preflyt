@@ -1,0 +1,299 @@
+name: preflyt
+
+x-otel: &otel
+  OTEL_SDK_DISABLED: ${OTEL_SDK_DISABLED:-true}
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+  OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL:-http/protobuf}
+  OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
+  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:-}
+  OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: ${OTEL_EXPORTER_OTLP_METRICS_ENDPOINT:-}
+  OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: ${OTEL_EXPORTER_OTLP_LOGS_ENDPOINT:-}
+  OTEL_TRACES_EXPORTER: ${OTEL_TRACES_EXPORTER:-otlp}
+  OTEL_METRICS_EXPORTER: ${OTEL_METRICS_EXPORTER:-otlp}
+  OTEL_LOGS_EXPORTER: ${OTEL_LOGS_EXPORTER:-otlp}
+  OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES:-service.namespace=preflyt}
+  OTEL_TRACES_SAMPLER: ${OTEL_TRACES_SAMPLER:-parentbased_traceidratio}
+  OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-0.1}
+  OTEL_METRIC_EXPORT_INTERVAL: ${OTEL_METRIC_EXPORT_INTERVAL:-60000}
+  OTEL_EXPORTER_OTLP_TIMEOUT: ${OTEL_EXPORTER_OTLP_TIMEOUT:-3000}
+  OTEL_PROPAGATORS: ${OTEL_PROPAGATORS:-tracecontext,baggage}
+
+services:
+  db:
+    image: postgres:16-bookworm@sha256:0ea6700a3b4f0ae6ce746519073558aed4d88a79d8d07622a9a644946c7319c4
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: preflyt_owner
+      POSTGRES_DB: preflyt
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in root .env}
+      DATABASE_APP_PASSWORD: ${DATABASE_APP_PASSWORD:?Set DATABASE_APP_PASSWORD in root .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./deploy/postgres/01-runtime-role.sh:/docker-entrypoint-initdb.d/01-runtime-role.sh:ro
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -h 127.0.0.1 -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    mem_limit: 1g
+    cpus: 1.0
+    networks: [backend]
+
+  migrate:
+    image: ${PREFLYT_IMAGE_REGISTRY:-preflyt-local}/preflyt-api-migration:${PREFLYT_VERSION:-development}
+    build:
+      context: .
+      dockerfile: deploy/api.Dockerfile
+      target: migration
+    environment:
+      DATABASE_URL: postgresql://preflyt_owner:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@db:5432/${PREFLYT_DATABASE:-preflyt}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: 'no'
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 1g
+    cpus: 1.0
+    networks: [backend]
+
+  api:
+    image: ${PREFLYT_IMAGE_REGISTRY:-preflyt-local}/preflyt-api:${PREFLYT_VERSION:-development}
+    build:
+      context: .
+      dockerfile: deploy/api.Dockerfile
+      target: runtime
+    init: true
+    restart: unless-stopped
+    environment:
+      <<: *otel
+      NODE_ENV: production
+      OTEL_SERVICE_NAME: preflyt-api
+      API_HOST: 0.0.0.0
+      API_PORT: '3000'
+      REDIS_URL: ${REDIS_URL:-redis://cache:6379/0}
+      REDIS_CACHE_PREFIX: ${REDIS_CACHE_PREFIX:-preflyt:production:cache}
+      QUEUE_REDIS_URL: ${QUEUE_REDIS_URL:-redis://queue:6379/0}
+      QUEUE_PREFIX: ${QUEUE_PREFIX:-preflyt:production:queue}
+      DATABASE_URL: postgresql://preflyt_app:${DATABASE_APP_PASSWORD:?Set DATABASE_APP_PASSWORD}@db:5432/${PREFLYT_DATABASE:-preflyt}
+      WEB_ORIGIN: ${WEB_ORIGIN:?Set WEB_ORIGIN}
+      COOKIE_SECURE: 'true'
+      # Legacy application values below are imported once. Use Settings thereafter.
+      OIDC_ISSUER: ${OIDC_ISSUER:-}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
+      OIDC_REDIRECT_URI: ${OIDC_REDIRECT_URI:-}
+      BOOTSTRAP_TOKEN_SHA256: ${BOOTSTRAP_TOKEN_SHA256:-}
+      SUPER_ADMIN_USERNAME: ${SUPER_ADMIN_USERNAME:-}
+      SUPER_ADMIN_PASSWORD: ${SUPER_ADMIN_PASSWORD:-}
+      AI_CONFIGURATION_ENABLED: ${AI_CONFIGURATION_ENABLED:-false}
+      AI_REVIEWS_ENABLED: ${AI_REVIEWS_ENABLED:-false}
+      CONFIGURATION_ENCRYPTION_KEY: ${CONFIGURATION_ENCRYPTION_KEY:?Set CONFIGURATION_ENCRYPTION_KEY}
+      AI_PROVIDER_ENCRYPTION_KEY: ${AI_PROVIDER_ENCRYPTION_KEY:-}
+      NOTIFICATIONS_ENABLED: ${NOTIFICATIONS_ENABLED:-false}
+      NOTIFICATION_EMAIL_ENABLED: ${NOTIFICATION_EMAIL_ENABLED:-false}
+      GITHUB_EVENTS_ENABLED: ${GITHUB_EVENTS_ENABLED:-false}
+      GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:-}
+      GITHUB_CHECK_PUBLICATION_ENABLED: ${GITHUB_CHECK_PUBLICATION_ENABLED:-false}
+      NATIVE_TOOL_REVIEWS: ${NATIVE_TOOL_REVIEWS:-[]}
+      NATIVE_PREFLIGHT_ENABLED: ${NATIVE_PREFLIGHT_ENABLED:-false}
+      NATIVE_EXECUTION_ENABLED: ${NATIVE_EXECUTION_ENABLED:-false}
+      NATIVE_RUNTIME_BACKEND: ${NATIVE_RUNTIME_BACKEND:-kubernetes}
+      NATIVE_DOCKER_APPROVAL: ${NATIVE_DOCKER_APPROVAL:-}
+      NATIVE_RUNTIME_APPROVAL: ${NATIVE_RUNTIME_APPROVAL:-}
+      NATIVE_RUNTIME_REVIEW_KEYS: ${NATIVE_RUNTIME_REVIEW_KEYS:-[]}
+      NATIVE_CONTROLLER_API_KEY: ${NATIVE_CONTROLLER_API_KEY:-}
+      RULESET_INSIGHTS_SYNC_ENABLED: ${RULESET_INSIGHTS_SYNC_ENABLED:-false}
+      RULESET_INSIGHTS_RETENTION_DAYS: ${RULESET_INSIGHTS_RETENTION_DAYS:-90}
+      AUTOMATIC_CHECK_PUBLICATION_ENABLED: ${AUTOMATIC_CHECK_PUBLICATION_ENABLED:-false}
+      CI_REPORT_PROOF_MODE: ${CI_REPORT_PROOF_MODE:-github-native}
+      CI_ORGANIZATION_SIGNER_KEYS: ${CI_ORGANIZATION_SIGNER_KEYS:-}
+      CI_EXECUTION_CONTRACTS: ${CI_EXECUTION_CONTRACTS:-}
+      GITHUB_RULESET_ACTIVATION_ENABLED: ${GITHUB_RULESET_ACTIVATION_ENABLED:-false}
+      GITHUB_LOGIN_ENABLED: ${GITHUB_LOGIN_ENABLED:-false}
+      GITHUB_LOGIN_CALLBACK_URL: ${WEB_ORIGIN:?Set WEB_ORIGIN}/api/auth/github/callback
+      GITHUB_USER_TOKEN_ENCRYPTION_KEY: ${GITHUB_USER_TOKEN_ENCRYPTION_KEY:-}
+      GITHUB_APP_ID: ${GITHUB_APP_ID:-}
+      GITHUB_APP_CLIENT_ID: ${GITHUB_APP_CLIENT_ID:-}
+      GITHUB_APP_CLIENT_SECRET: ${GITHUB_APP_CLIENT_SECRET:-}
+      GITHUB_APP_PRIVATE_KEY: ${GITHUB_APP_PRIVATE_KEY:-}
+      GITHUB_APP_OAUTH_CALLBACK_URL: ${WEB_ORIGIN:?Set WEB_ORIGIN}/api/github/oauth/callback
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: [CMD, node, -e, 'fetch("http://127.0.0.1:3000/health/ready",{signal:AbortSignal.timeout(3000)}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 1g
+    cpus: 1.0
+    networks: [backend, egress]
+
+  worker:
+    image: ${PREFLYT_IMAGE_REGISTRY:-preflyt-local}/preflyt-api:${PREFLYT_VERSION:-development}
+    build:
+      context: .
+      dockerfile: deploy/api.Dockerfile
+      target: runtime
+    command: [node, dist/worker.js]
+    init: true
+    restart: unless-stopped
+    environment:
+      <<: *otel
+      NODE_ENV: production
+      DATABASE_URL: postgresql://preflyt_app:${DATABASE_APP_PASSWORD:?Set DATABASE_APP_PASSWORD}@db:5432/${PREFLYT_DATABASE:-preflyt}
+      AI_CONFIGURATION_ENABLED: ${AI_CONFIGURATION_ENABLED:-false}
+      AI_REVIEWS_ENABLED: ${AI_REVIEWS_ENABLED:-false}
+      CONFIGURATION_ENCRYPTION_KEY: ${CONFIGURATION_ENCRYPTION_KEY:?Set CONFIGURATION_ENCRYPTION_KEY}
+      AI_PROVIDER_ENCRYPTION_KEY: ${AI_PROVIDER_ENCRYPTION_KEY:-}
+      NOTIFICATIONS_ENABLED: ${NOTIFICATIONS_ENABLED:-false}
+      NOTIFICATION_EMAIL_ENABLED: ${NOTIFICATION_EMAIL_ENABLED:-false}
+      GITHUB_EVENTS_ENABLED: ${GITHUB_EVENTS_ENABLED:-false}
+      GITHUB_CHECK_PUBLICATION_ENABLED: ${GITHUB_CHECK_PUBLICATION_ENABLED:-false}
+      RULESET_INSIGHTS_SYNC_ENABLED: ${RULESET_INSIGHTS_SYNC_ENABLED:-false}
+      RULESET_INSIGHTS_RETENTION_DAYS: ${RULESET_INSIGHTS_RETENTION_DAYS:-90}
+      AUTOMATIC_CHECK_PUBLICATION_ENABLED: ${AUTOMATIC_CHECK_PUBLICATION_ENABLED:-false}
+      CI_REPORT_PROOF_MODE: ${CI_REPORT_PROOF_MODE:-github-native}
+      CI_ORGANIZATION_SIGNER_KEYS: ${CI_ORGANIZATION_SIGNER_KEYS:-}
+      CI_EXECUTION_CONTRACTS: ${CI_EXECUTION_CONTRACTS:-}
+      NATIVE_PREFLIGHT_ENABLED: ${NATIVE_PREFLIGHT_ENABLED:-false}
+      NATIVE_EXECUTION_ENABLED: ${NATIVE_EXECUTION_ENABLED:-false}
+      NATIVE_RUNTIME_BACKEND: ${NATIVE_RUNTIME_BACKEND:-kubernetes}
+      NATIVE_DOCKER_APPROVAL: ${NATIVE_DOCKER_APPROVAL:-}
+      NATIVE_RUNTIME_APPROVAL: ${NATIVE_RUNTIME_APPROVAL:-}
+      NATIVE_RUNTIME_REVIEW_KEYS: ${NATIVE_RUNTIME_REVIEW_KEYS:-[]}
+      NATIVE_TOOL_REVIEWS: ${NATIVE_TOOL_REVIEWS:-[]}
+      NATIVE_CONTROLLER_API_KEY: ${NATIVE_CONTROLLER_API_KEY:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      WEB_ORIGIN: ${WEB_ORIGIN:?Set WEB_ORIGIN}
+      GITHUB_USER_TOKEN_ENCRYPTION_KEY: ${GITHUB_USER_TOKEN_ENCRYPTION_KEY:-}
+      GITHUB_APP_ID: ${GITHUB_APP_ID:-}
+      GITHUB_APP_PRIVATE_KEY: ${GITHUB_APP_PRIVATE_KEY:-}
+      GITHUB_APP_CLIENT_ID: ${GITHUB_APP_CLIENT_ID:-}
+      GITHUB_APP_CLIENT_SECRET: ${GITHUB_APP_CLIENT_SECRET:-}
+      OTEL_SERVICE_NAME: preflyt-worker
+      QUEUE_REDIS_URL: ${QUEUE_REDIS_URL:-redis://queue:6379/0}
+      QUEUE_PREFIX: ${QUEUE_PREFIX:-preflyt:production:queue}
+    depends_on:
+      queue:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: [CMD, node, -e, 'const fs=require("fs");try{process.exit(Date.now()-Number(fs.readFileSync("/tmp/preflyt-github-worker-heartbeat","utf8"))<20000?0:1)}catch{process.exit(1)}']
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 512m
+    cpus: 1.0
+    networks: [backend, egress]
+
+  cache:
+    image: valkey/valkey:7.2-alpine@sha256:c6c2f0020be34bbf684a53a0ef716ab16ff70295186d4d9f2518435beb7afbff
+    command: [valkey-server, --maxmemory, 128mb, --maxmemory-policy, allkeys-lru, --save, '']
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, valkey-cli, ping]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    mem_limit: 256m
+    cpus: 0.5
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    tmpfs: [/tmp]
+    user: valkey
+    networks: [backend]
+
+  queue:
+    image: valkey/valkey:7.2-alpine@sha256:c6c2f0020be34bbf684a53a0ef716ab16ff70295186d4d9f2518435beb7afbff
+    command: [valkey-server, --appendonly, 'yes', --appendfsync, everysec, --maxmemory, 256mb, --maxmemory-policy, noeviction]
+    restart: unless-stopped
+    volumes: [queue_data:/data]
+    healthcheck:
+      test: [CMD, valkey-cli, ping]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    mem_limit: 512m
+    cpus: 0.5
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    user: valkey
+    read_only: true
+    tmpfs: [/tmp]
+    networks: [backend]
+
+  otel-collector:
+    profiles: [observability]
+    image: otel/opentelemetry-collector-contrib:0.162.0@sha256:39923a8e431bd1f57be82411999d389fcfe40857492e4365456d97a4c1f74be6
+    command: [--config=/etc/otelcol/config.yaml]
+    environment:
+      COLLECTOR_UPSTREAM_ENDPOINT: ${COLLECTOR_UPSTREAM_ENDPOINT:-}
+      COLLECTOR_UPSTREAM_HEADERS: ${COLLECTOR_UPSTREAM_HEADERS:-{}}
+    volumes:
+      - ./deploy/otel-collector.yaml:/etc/otelcol/config.yaml:ro
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
+    cpus: 0.5
+    networks: [backend, egress]
+
+  web:
+    image: ${PREFLYT_IMAGE_REGISTRY:-preflyt-local}/preflyt-web:${PREFLYT_VERSION:-development}
+    build:
+      context: .
+      dockerfile: deploy/web.Dockerfile
+      args:
+        PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-}
+        PUBLIC_SITE_INDEXABLE: ${PUBLIC_SITE_INDEXABLE:-false}
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:${PREFLYT_HTTP_PORT:-8080}:8080'
+    depends_on:
+      api:
+        condition: service_healthy
+        restart: true
+    healthcheck:
+      test: [CMD, wget, -q, --spider, http://127.0.0.1:8080/healthz]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
+    cpus: 1.0
+    networks: [backend, ingress]
+
+volumes:
+  postgres_data:
+  queue_data:
+
+networks:
+  backend:
+    internal: true
+  egress:
+  ingress:

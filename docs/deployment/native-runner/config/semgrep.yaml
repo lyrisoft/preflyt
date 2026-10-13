@@ -1,0 +1,24 @@
+# Preflyt static security rules v2. Matched patterns require review.
+rules:
+  - id: preflyt-js-eval
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: Dynamic code execution requires review.
+    pattern: eval(...)
+  - id: preflyt-python-dynamic-execution
+    languages: [python]
+    severity: ERROR
+    message: Dynamic code execution requires review.
+    pattern-either:
+      - pattern: eval(...)
+      - pattern: exec(...)
+
+  - id: preflyt-python-sql-fstring
+    languages: [python]
+    severity: ERROR
+    message: SQL built with an f-string needs review. Bind values through the database API instead of inserting them into SQL text.
+    patterns:
+      - pattern: $DB.execute($QUERY, ...)
+      - metavariable-regex:
+          metavariable: $QUERY
+          regex: "(?i)^f[\"'](?:SELECT|INSERT|UPDATE|DELETE|REPLACE)\\b"

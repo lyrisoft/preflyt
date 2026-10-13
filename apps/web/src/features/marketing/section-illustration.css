@@ -1,0 +1,97 @@
+.section-illustration {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+  color: var(--section-art-ink, var(--website-accent, currentColor));
+  opacity: var(--section-art-opacity, 1);
+}
+
+.section-illustration :is(path, circle) {
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.section-illustration__branches {
+  stroke: currentColor;
+  stroke-width: 9;
+  opacity: var(--section-art-branch-opacity, 0.14);
+}
+
+.section-illustration__points {
+  fill: var(--section-art-surface, var(--website-bg, transparent));
+  stroke: currentColor;
+  stroke-width: 5.5;
+  opacity: var(--section-art-point-opacity, 0.22);
+}
+
+.section-illustration__bands {
+  stroke: currentColor;
+  stroke-width: 12;
+  opacity: var(--section-art-band-opacity, 0.12);
+}
+
+.section-illustration__glyphs {
+  stroke: currentColor;
+  stroke-width: 14;
+  opacity: var(--section-art-glyph-opacity, 0.14);
+}
+
+.section-illustration__providers {
+  opacity: var(--section-art-provider-opacity, 0.075);
+}
+
+.section-illustration__crosshairs {
+  stroke: currentColor;
+  stroke-width: 1.5;
+  opacity: 0.16;
+}
+
+.section-illustration__signal {
+  display: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .section-illustration__signal {
+    display: block;
+    stroke: currentColor;
+    stroke-width: 9;
+    stroke-dasharray: 3 97;
+    opacity: 0;
+    animation: preflyt-section-travel 3.6s cubic-bezier(0.23, 1, 0.32, 1) both;
+    animation-play-state: var(--section-art-motion-state, running);
+  }
+
+  .section-illustration__providers {
+    animation: preflyt-section-icons 900ms cubic-bezier(0.23, 1, 0.32, 1) both;
+    animation-play-state: var(--section-art-motion-state, running);
+  }
+}
+
+@keyframes preflyt-section-travel {
+  from {
+    stroke-dashoffset: 100;
+    opacity: 0;
+  }
+  25% {
+    opacity: 0.28;
+  }
+  to {
+    stroke-dashoffset: 0;
+    opacity: 0;
+  }
+}
+
+@keyframes preflyt-section-icons {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: var(--section-art-provider-opacity, 0.075);
+  }
+}

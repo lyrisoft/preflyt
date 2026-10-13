@@ -1,0 +1,715 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: preflyt
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: preflyt-config
+  labels:
+    app.kubernetes.io/part-of: preflyt
+  namespace: preflyt
+data:
+  NODE_ENV: production
+  WEB_ORIGIN: https://preflyt.example.com
+  COOKIE_SECURE: "true"
+  API_HOST: 0.0.0.0
+  API_PORT: "3000"
+  REDIS_URL: redis://cache:6379/0
+  REDIS_CACHE_PREFIX: preflyt:production:cache
+  QUEUE_REDIS_URL: redis://queue:6379/0
+  QUEUE_PREFIX: preflyt:production:queue
+  OTEL_SDK_DISABLED: "true"
+  NATIVE_RUNTIME_BACKEND: kubernetes
+  CI_REPORT_PROOF_MODE: github-native
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: preflyt-db-init
+  labels:
+    app.kubernetes.io/part-of: preflyt
+  namespace: preflyt
+data:
+  01-runtime-role.sh: >
+    #!/bin/sh
+
+    set -eu
+
+    : "${DATABASE_APP_PASSWORD:?DATABASE_APP_PASSWORD is required}"
+
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB"
+    \
+      --set=app_password="$DATABASE_APP_PASSWORD" <<'SQL'
+    SELECT format('CREATE ROLE preflyt_app LOGIN NOSUPERUSER NOCREATEDB
+    NOCREATEROLE NOINHERIT PASSWORD %L', :'app_password') \gexec
+
+    GRANT CONNECT ON DATABASE preflyt TO preflyt_app;
+
+    GRANT USAGE ON SCHEMA public TO preflyt_app;
+
+    ALTER DEFAULT PRIVILEGES FOR ROLE preflyt_owner IN SCHEMA public
+      GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO preflyt_app;
+    ALTER DEFAULT PRIVILEGES FOR ROLE preflyt_owner IN SCHEMA public
+      GRANT USAGE, SELECT ON SEQUENCES TO preflyt_app;
+    SQL
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  labels:
+    app.kubernetes.io/part-of: preflyt
+  namespace: preflyt
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+        app.kubernetes.io/part-of: preflyt
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: api
+          image: ghcr.io/lyrisoft/preflyt-api:development
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          ports:
+            - containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: preflyt-config
+            - secretRef:
+                name: preflyt-api-secrets
+          env:
+            - name: OTEL_SERVICE_NAME
+              value: preflyt-api
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 3000
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 3000
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 6
+          startupProbe:
+            httpGet:
+              path: /health/live
+              port: 3000
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 30
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+  labels:
+    app.kubernetes.io/part-of: preflyt
+  namespace: preflyt
+spec:
+  selector:
+    app: api
+  ports:
+    - name: tcp
+      port: 3000
+      targetPort: 3000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+  labels:
+    app.kubernetes.io/part-of: preflyt
+  namespace: preflyt
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app: worker
+  template:
+    metadata:
+      labels:
+        app: worker
+        app.kubernetes.io/part-of: preflyt
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: worker
+          image: ghcr.io/lyrisoft/preflyt-api:development
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          command:
+            - node
+            - dist/worker.js
+          envFrom:
+            - configMapRef:
+                name: preflyt-config
+            - secretRef:
+                name: preflyt-worker-secrets
+          env:
+            - name: OTEL_SERVICE_NAME
+              value: preflyt-worker
+          livenessProbe:
+            exec:
+              command:
+                - node
+                - -e
+                - const
+                  fs=require("fs");try{process.exit(Date.now()-Number(fs.readFileSync("/tmp/preflyt-github-worker-heartbeat","utf8"))<20000?0:1)}catch{process.exit(1)}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 3
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 128Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  labels:
+    app.kubernetes.io/part-of: preflyt
+  namespace: preflyt
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+        app.kubernetes.io/part-of: preflyt
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        runAsGroup: 101
+        fsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: web
+          image: ghcr.io/lyrisoft/preflyt-web:development
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 6
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  labels:
+    app.kubernetes.io/part-of: preflyt
+  namespace: preflyt
+spec:
+  selector:
+    app: web
+  ports:
+    - name: tcp
+      port: 8080
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cache
+  labels:
+    app.kubernetes.io/part-of: preflyt
+  namespace: preflyt
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cache
+  template:
+    metadata:
+      labels:
+        app: cache
+        app.kubernetes.io/part-of: preflyt
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: cache
+          image: valkey/valkey:7.2-alpine@sha256:c6c2f0020be34bbf684a53a0ef716ab16ff70295186d4d9f2518435beb7afbff
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: data
+              mountPath: /data
+          command:
+            - valkey-server
+            - --maxmemory
+            - 128mb
+            - --maxmemory-policy
+            - allkeys-lru
+            - --save
+            - ""
+          ports:
+            - containerPort: 6379
+          readinessProbe:
+            exec:
+              command:
+                - valkey-cli
+                - ping
+            periodSeconds: 5
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 128Mi
+        - name: data
+          emptyDir:
+            sizeLimit: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cache
+  labels:
+    app.kubernetes.io/part-of: preflyt
+  namespace: preflyt
+spec:
+  selector:
+    app: cache
+  ports:
+    - name: tcp
+      port: 6379
+      targetPort: 6379
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: db
+  labels:
+    app.kubernetes.io/part-of: preflyt
+  namespace: preflyt
+spec:
+  serviceName: db
+  replicas: 1
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
+  selector:
+    matchLabels:
+      app: db
+  template:
+    metadata:
+      labels:
+        app: db
+        app.kubernetes.io/part-of: preflyt
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: db
+          image: postgres:16-bookworm@sha256:0ea6700a3b4f0ae6ce746519073558aed4d88a79d8d07622a9a644946c7319c4
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          ports:
+            - containerPort: 5432
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: tmp
+              mountPath: /tmp
+            - name: socket
+              mountPath: /var/run/postgresql
+            - name: init
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+          env:
+            - name: POSTGRES_USER
+              value: preflyt_owner
+            - name: POSTGRES_DB
+              value: preflyt
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: preflyt-db-secrets
+                  key: POSTGRES_PASSWORD
+            - name: DATABASE_APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: preflyt-db-secrets
+                  key: DATABASE_APP_PASSWORD
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -h
+                - 127.0.0.1
+                - -U
+                - preflyt_owner
+                - -d
+                - preflyt
+            periodSeconds: 5
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 128Mi
+        - name: socket
+          emptyDir:
+            sizeLimit: 32Mi
+        - name: init
+          configMap:
+            name: preflyt-db-init
+            defaultMode: 292
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 20Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: db
+  labels:
+    app.kubernetes.io/part-of: preflyt
+  namespace: preflyt
+spec:
+  selector:
+    app: db
+  ports:
+    - name: tcp
+      port: 5432
+      targetPort: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: queue
+  labels:
+    app.kubernetes.io/part-of: preflyt
+  namespace: preflyt
+spec:
+  serviceName: queue
+  replicas: 1
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
+  selector:
+    matchLabels:
+      app: queue
+  template:
+    metadata:
+      labels:
+        app: queue
+        app.kubernetes.io/part-of: preflyt
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: queue
+          image: valkey/valkey:7.2-alpine@sha256:c6c2f0020be34bbf684a53a0ef716ab16ff70295186d4d9f2518435beb7afbff
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          ports:
+            - containerPort: 6379
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+          command:
+            - valkey-server
+            - --appendonly
+            - yes
+            - --appendfsync
+            - everysec
+            - --maxmemory
+            - 256mb
+            - --maxmemory-policy
+            - noeviction
+          readinessProbe:
+            exec:
+              command:
+                - valkey-cli
+                - ping
+            periodSeconds: 5
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 128Mi
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 2Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: queue
+  labels:
+    app.kubernetes.io/part-of: preflyt
+  namespace: preflyt
+spec:
+  selector:
+    app: queue
+  ports:
+    - name: tcp
+      port: 6379
+      targetPort: 6379
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: db-clients
+  labels:
+    app.kubernetes.io/part-of: preflyt
+  namespace: preflyt
+spec:
+  podSelector:
+    matchLabels:
+      app: db
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values:
+                  - api
+                  - worker
+                  - migrate
+      ports:
+        - protocol: TCP
+          port: 5432
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cache-clients
+  labels:
+    app.kubernetes.io/part-of: preflyt
+  namespace: preflyt
+spec:
+  podSelector:
+    matchLabels:
+      app: cache
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values:
+                  - api
+                  - worker
+      ports:
+        - protocol: TCP
+          port: 6379
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: queue-clients
+  labels:
+    app.kubernetes.io/part-of: preflyt
+  namespace: preflyt
+spec:
+  podSelector:
+    matchLabels:
+      app: queue
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values:
+                  - api
+                  - worker
+      ports:
+        - protocol: TCP
+          port: 6379
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-clients
+  labels:
+    app.kubernetes.io/part-of: preflyt
+  namespace: preflyt
+spec:
+  podSelector:
+    matchLabels:
+      app: api
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: web
+      ports:
+        - protocol: TCP
+          port: 3000

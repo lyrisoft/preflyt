@@ -1,0 +1,9 @@
+# Test database safety
+
+Never run destructive integration tests with the application's DATABASE_URL. During NODE_ENV=test, PrismaService refuses non-local hosts and database names outside the explicit `preflyt_test` / `preflyt_*_test_*` convention before constructing a client. The legacy standards test also validates its destination before initialization. The guard applies to tests regardless of which dotenv file or parent shell supplied DATABASE_URL.
+
+Integration tests must create a disposable database, apply migrations there, pass its URL to the test process and remove only that database afterwards. Tests that create their own fixtures can use the local configured connection solely to create/drop a uniquely named test database, then construct Prisma with that new URL. Keep fixture creation/drop paths constrained to the generated name. Never bypass the guard by changing NODE_ENV or relabeling application databases.
+
+A 2026-10-09 local test incident deleted repository/installations and cascading history because an older test inherited the application's URL. A protected post-incident snapshot was created with explicit user approval. The verified original installation, two selected repositories and five digest-checked standards selections were reconstructed from current GitHub metadata and retained audit events. Complete historical profiles and policy history were not recovered; no approval, trusted result or gate outcome was fabricated. This is a partial recovery, not restoration of the full database.
+
+Production deployment must maintain independent database backups and test restore procedures. A post-incident snapshot cannot recover data already deleted. Test database naming is a fail-closed local safeguard, not a substitute for a separate least-privilege test database role and a separate production environment.

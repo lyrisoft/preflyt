@@ -1,0 +1,75 @@
+import { observePullRequest } from '../assessments/pull-request-state.js'
+import { AssessmentService } from '../assessments/assessment.service.js'
+import { importCiEvidence } from './ci-evidence.js'
+import { PrismaService } from '../prisma/prisma.service.js'
+
+/** Replay-safe historical assessment creation and ordered observed PR state; no gate evaluation. */
+export class GitHubEventProcessor {
+  private readonly assessments: AssessmentService
+  constructor(private readonly prisma: PrismaService) {
+    this.assessments = new AssessmentService(prisma)
+  }
+
+  async process(id: string) {
+    await this.prisma.$transaction(async (tx) => {
+      const delivery = await tx.gitHubWebhookDelivery.findUnique({
+        where: { id },
+      })
+      if (!delivery || delivery.state !== 'RECEIVED') return
+      // Compare-and-set claims the delivery inside the transaction and serializes duplicate jobs.
+      const claimed = await tx.gitHubWebhookDelivery.updateMany({
+        where: { id, state: 'RECEIVED' },
+        data: { state: 'PROCESSED', processedAt: new Date() },
+      })
+      if (claimed.count !== 1) return
+      const installation = await tx.gitHubInstallation.updateMany({
+        where: { id: delivery.installationId, active: true },
+        data: { active: true },
+      })
+      const repository =
+        installation.count === 1
+          ? await tx.gitHubRepository.updateMany({
+              where: {
+                githubId: delivery.repositoryGithubId,
+                installationId: delivery.installationId,
+                selected: true,
+                available: true,
+              },
+              data: { selected: true },
+            })
+          : { count: 0 }
+      if (repository.count !== 1) {
+        await tx.gitHubWebhookDelivery.update({
+          where: { id },
+          data: { state: 'IGNORED', reason: 'repository_access_changed' },
+        })
+        return
+      }
+      await observePullRequest(tx, delivery)
+      const evidence = importCiEvidence(delivery)
+      let assessmentId: string | null = null
+      let assessmentReason: string | null = null
+      if (evidence) await tx.importedCiEvidence.create({ data: evidence })
+      if (evidence || delivery.event === 'pull_request') {
+        const snapshot = await this.assessments.createForDelivery(tx, delivery)
+        assessmentId = snapshot.assessment?.id ?? null
+        assessmentReason = snapshot.reason
+      }
+      await tx.auditEvent.create({
+        data: {
+          event: 'github_event_processed',
+          actorId: null,
+          metadata: {
+            deliveryId: id,
+            event: delivery.event,
+            action: delivery.action,
+            repositoryId: delivery.repositoryGithubId.toString(),
+            sourceSha: delivery.sourceSha,
+            assessmentId,
+            assessmentReason,
+          },
+        },
+      })
+    })
+  }
+}

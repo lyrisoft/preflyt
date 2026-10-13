@@ -1,0 +1,23 @@
+# Preflyt
+
+> Engineering confidence before production. Preflyt is a self-hosted Shift Left engineering platform by Lyrisoft Technologies that helps teams find security, quality, reliability and infrastructure risks earlier, using explicit engineering standards and traceable evidence at exact commits.
+
+Preflyt coordinates existing scanners and CI rather than replacing them. It is not a coding agent, an IDE or a CI platform. Its main output is an evidence-backed account of which required engineering checks passed, failed, were not applicable or lacked evidence at a specific repository revision. AI may explain findings but never decides a gate result.
+
+## Available today
+
+- GitHub App installation with explicit repository selection
+- Commit-pinned repository profiles: languages, frameworks, CI, tests, lockfiles, containers, infrastructure as code and scanner configuration, each with file evidence
+- Engineering Standards Library: five versioned packs (Baseline Engineering, Application Security, Backend Services, Frontend Applications, Infrastructure as Code) with profile-based recommendations, adopted in observe mode
+- Exact-commit assessment snapshots, created manually or automatically for pull request head commits
+- Signed GitHub pull request and CI webhook ingestion with revision-bound check and workflow results
+- Bounded JUnit and SARIF report imports, approved CI source bindings and signed report provenance
+- Observe-only quality gate preview; optional readiness check publication and ruleset activation through a separate governance GitHub App
+- GitHub or OIDC sign-in, organizations, teams and role-based access control
+- Self-hosted deployment with Docker Compose or a single-instance Kubernetes bundle
+
+## Not yet available
+
+- Native scanner execution in production: implemented but disabled by default until an independent runtime isolation review
+- Helm and Operator packaging for Kubernetes
+- A published Preflyt policy GitHub Action: a local Action and workflow snippets exist, but no public release yet

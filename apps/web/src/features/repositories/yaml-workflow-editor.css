@@ -1,0 +1,111 @@
+.yaml-workflow-editor {
+  --yaml-background: oklch(0.99 0.003 250);
+  --yaml-gutter: oklch(0.973 0.006 250);
+  --yaml-active-line: oklch(0.95 0.012 250 / 0.65);
+  --yaml-selection: oklch(0.86 0.055 250 / 0.6);
+  --yaml-key: oklch(0.43 0.15 255);
+  --yaml-string: oklch(0.4 0.09 155);
+  --yaml-constant: oklch(0.45 0.17 300);
+  --yaml-number: oklch(0.45 0.12 55);
+  --yaml-meta: oklch(0.45 0.13 335);
+  --yaml-comment: oklch(0.49 0.025 255);
+  --yaml-punctuation: oklch(0.49 0.03 255);
+}
+
+.dark .yaml-workflow-editor {
+  --yaml-background: oklch(0.165 0.027 260);
+  --yaml-gutter: oklch(0.18 0.028 260);
+  --yaml-active-line: oklch(0.25 0.032 260 / 0.6);
+  --yaml-selection: oklch(0.44 0.07 250 / 0.6);
+  --yaml-key: oklch(0.8 0.105 240);
+  --yaml-string: oklch(0.83 0.1 145);
+  --yaml-constant: oklch(0.8 0.12 300);
+  --yaml-number: oklch(0.84 0.115 75);
+  --yaml-meta: oklch(0.8 0.105 335);
+  --yaml-comment: oklch(0.7 0.03 255);
+  --yaml-punctuation: oklch(0.73 0.035 255);
+}
+
+.yaml-workflow-editor .yaml-key {
+  color: var(--yaml-key);
+}
+.yaml-workflow-editor .yaml-string {
+  color: var(--yaml-string);
+}
+.yaml-workflow-editor .yaml-constant {
+  color: var(--yaml-constant);
+}
+.yaml-workflow-editor .yaml-number {
+  color: var(--yaml-number);
+}
+.yaml-workflow-editor .yaml-expression,
+.yaml-workflow-editor .yaml-meta {
+  color: var(--yaml-meta);
+}
+.yaml-workflow-editor .yaml-comment {
+  color: var(--yaml-comment);
+  font-style: italic;
+}
+.yaml-workflow-editor .yaml-punctuation {
+  color: var(--yaml-punctuation);
+}
+.yaml-workflow-editor .yaml-invalid {
+  color: var(--danger-text);
+  text-decoration: underline wavy;
+}
+
+.yaml-workflow-editor:fullscreen {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  background: var(--yaml-background);
+}
+.yaml-workflow-editor:fullscreen .yaml-editor-host {
+  flex: 1;
+  overflow: hidden;
+}
+.yaml-workflow-editor:fullscreen .cm-editor {
+  height: 100%;
+}
+
+.pipeline-workflow-editor:fullscreen {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+  background: var(--card);
+}
+.pipeline-workflow-editor:fullscreen .workflow-editor-layout {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+@media (min-width: 64rem) {
+  .pipeline-workflow-editor:fullscreen .workflow-editor-layout {
+    grid-template-rows: minmax(0, 1fr);
+    overflow: hidden;
+  }
+  .pipeline-workflow-editor:fullscreen .yaml-workflow-editor,
+  .pipeline-workflow-editor:fullscreen .workflow-editor-review-column {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .pipeline-workflow-editor:fullscreen .yaml-workflow-editor {
+    flex: 1;
+  }
+  .pipeline-workflow-editor:fullscreen .yaml-editor-host {
+    flex: 1;
+    overflow: hidden;
+  }
+  .pipeline-workflow-editor:fullscreen .cm-editor {
+    height: 100%;
+  }
+  .pipeline-workflow-editor:fullscreen aside {
+    min-height: 0;
+    overflow: auto;
+  }
+}

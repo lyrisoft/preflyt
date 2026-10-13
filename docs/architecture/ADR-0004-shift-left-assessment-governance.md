@@ -1,9 +1,9 @@
 # ADR-0004: Shift Left assessment and governance architecture
 
-**Status:** Accepted product direction; implementation pending  
-**Date:** 2026-10-08  
-**Decision owner:** Preflyt Product / Engineering  
-**Supersedes:** Remediation-first prioritization in the original product definition (not the safety rules in ADR-0002)  
+**Status:** Accepted product direction; repository profiling, imported assessments, versioned policies and flag-gated GitHub governance are implemented in source. Native execution, AI intelligence and live enforcement acceptance remain pending.
+**Date:** 2026-10-08
+**Decision owner:** Preflyt Product / Engineering
+**Supersedes:** Remediation-first prioritization in the original product definition (not the safety rules in ADR-0002)
 **Related:** [Product requirements](../PRD.md), [TypeScript stack](ADR-0001-typescript-first-stack.md), [Execution safety and optional remediation](ADR-0002-safe-execution-fixtures-remediation-contract.md), [OIDC authentication](ADR-0003-oidc-user-authentication.md)
 
 ## Context
@@ -39,7 +39,7 @@ No single check is universally applicable. Assessment *plans* depend on reposito
 
 The [six-stage SDLC capability model](../product/sdlc-capabilities.md) distinguishes **developer laptop, repository, PR/CI, QA, performance/staging, and production-feedback** use cases, alongside optional requirements/design checks. Production integration is **feedback into earlier assurance**, not a production auto-remediation or APM platform.
 
-**Delivery rule:** each phase must produce a **deployable and usable** product slice, not only an architecture component. The [P0–P11 incremental delivery plan](../roadmap/incremental-delivery.md) is the implementation release contract. Later stages must extend a common Assessment/Policy/Evidence model without blocking earlier useful releases.
+**Delivery rule:** each phase must produce a **deployable and usable** product slice, not only an architecture component. The [P0–P12 incremental delivery plan](../roadmap/incremental-delivery.md) is the implementation release contract. Later stages must extend a common Assessment/Policy/Evidence model without blocking earlier useful releases.
 
 ## Assessment model
 
@@ -132,7 +132,13 @@ flowchart TD
 
 **MVP user-value slices:** P0 connects and profiles selected GitHub repositories; P1 imports CI evidence; P2 publishes an actual deterministic PR quality gate; P3 adds safe native scanners/testing in an independently approved executor. Each can be deployed and used without the later releases. AI explanation is an **optional P4 enhancement**, not a prerequisite.
 
-Subsequent phases use the same planning/reporting contracts: P5 local developer CLI, P6 QA readiness, P7 k6 result ingestion/performance budgets, P8 managed k6 smoke/load, P9 advanced controlled stress/spike/soak/breakpoint/scalability, P10 production-feedback-based policy improvement and P11 optional provider/scaling extensions. Compare test results only where environment and workload are meaningfully comparable; gate impact is determined by recorded evidence and policy, not AI.
+Subsequent phases use the same planning/reporting contracts: P6 local developer CLI, P7 QA readiness, P8 k6 result ingestion/performance budgets, P9 managed k6 smoke/load, P10 advanced controlled stress/spike/soak/breakpoint/scalability, P11 production-feedback-based policy improvement and P12 optional provider/scaling extensions. Compare test results only where environment and workload are meaningfully comparable; gate impact is determined by recorded evidence and policy, not AI.
+
+## Built-in engineering policy packs
+
+The Engineering Governance Engine includes a **first-party versioned Engineering Standards Library**. Initial packs cover baseline, application security, backend, frontend and IaC; additional packs for APIs, databases, production readiness, performance and compliance expand in later phases. Packs are declarative, stage/repository aware and require explicit rule evidence and capability status. P0 supports catalogue/recommendations and policy selection, P1 evidence mapping, P2 deterministic quality gates, and P3 approved native checks. Unsupported or missing evidence never becomes PASS. Updates are pinned and owner-approved before changing enforcement. AI may recommend, but cannot activate or waive policy. See [Engineering Standards Library](../product/engineering-standards-library.md).
+
+**GitHub ruleset integration:** Preflyt policies determine required engineering evidence; the deterministic readiness check is published for the exact commit; GitHub organization rulesets enforce required status checks and branch protection. P2 provides safe-default ruleset management through a separately privileged, explicitly authorized integration with preflight, approval, audit and drift protection. See [GitHub Ruleset Management](../product/github-ruleset-management.md).
 
 ## Governance and quality gates
 
@@ -162,6 +168,10 @@ Every increment must include a working end-to-end user workflow, named trigger a
 
 The GitHub PR pipeline begins with imported evidence and does not wait for a sandbox; P3 enables native execution only after the mandatory ADR-0002 isolation approval. The k6 pathway starts with imported reports and budgets before Preflyt performs any load testing. Production evidence is read-only and requires human approval before policies change.
 
+## Organization AI provider and stage routing
+
+Organizations configure multiple hosted/local providers, write-only encrypted credentials, stage-specific primary/fallback models, privacy/egress and cost limits. P0 delivers configuration; P1 first CI explanation; P4 advanced intelligence. Backend routing is tenant-scoped, audited and cannot bypass policy. No provider keys enter browsers or untrusted sandboxes. Model outages do not change gate outcomes.
+
 ## Acceptance criteria for this decision
 
 - [ ] A GitHub PR change is assessed against a versioned ruleset with exact revision-bound, evidence-backed quality gate.
@@ -180,4 +190,4 @@ The GitHub PR pipeline begins with imported evidence and does not wait for a san
 - [ ] Imported k6 result assessment works before Preflyt-run load generation is enabled.
 - [ ] Production telemetry cannot autonomously alter gate enforcement or deploy changes.
 
-**Implementation status:** architecture decision only. This ADR does not claim any checks, control plane, UI, sandbox or source-control integration has shipped.
+**Implementation status:** This ADR defines the target architecture. Repository profiling, CI imports, immutable assessments, standards authoring, deterministic policy evaluation and flag-gated GitHub check publication/ruleset activation are implemented in source. Native requests remain blocked until dispatch and the approved execution runtime are complete. AI intelligence, exceptions and later lifecycle stages remain unfinished. See [current capabilities](../../README.md) and [release gates](../roadmap/incremental-delivery.md); source implementation does not establish live release acceptance.

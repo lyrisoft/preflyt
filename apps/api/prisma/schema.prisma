@@ -1,0 +1,1338 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum MemberRole {
+  OWNER
+  ADMIN
+  DEVELOPER
+  VIEWER
+  SUPER_ADMIN
+}
+
+enum GitHubSetupPhase {
+  INSTALLATION
+  USER_AUTHORIZATION
+}
+
+model Identity {
+  id          String   @id @default(cuid())
+  issuer      String
+  subject     String
+  displayName String?
+  email       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  organizationMemberships OrganizationMembership[]
+  membership  Membership?
+  superAdminCredential SuperAdminCredential?
+  sessions    WebSession[]
+  bootstrapChallenges BootstrapChallenge[]
+  githubSetupTransactions GitHubSetupTransaction[]
+  githubInstallations GitHubInstallation[]
+  githubAccounts GitHubUserAccount[]
+  loginLinkSource IdentityLoginLink? @relation("LoginLinkSource")
+  loginLinkTarget IdentityLoginLink? @relation("LoginLinkTarget")
+  @@unique([issuer, subject])
+}
+
+model Membership {
+  id         String     @id @default(cuid())
+  identityId String     @unique
+  identity   Identity   @relation(fields: [identityId], references: [id], onDelete: Cascade)
+  role       MemberRole
+  active     Boolean    @default(true)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+}
+
+model SuperAdminCredential {
+  id           String   @id
+  username     String   @unique
+  passwordHash String
+  identityId   String   @unique
+  identity     Identity @relation(fields: [identityId], references: [id], onDelete: Cascade)
+  updatedAt    DateTime @updatedAt
+}
+
+model LoginTransaction {
+  id              String   @id @default(cuid())
+  stateHash       String   @unique
+  browserBinding  String
+  codeVerifier    String
+  nonce           String
+  returnPath      String   @default("/overview")
+  expiresAt       DateTime
+  createdAt       DateTime @default(now())
+  @@index([expiresAt])
+}
+
+model WebSession {
+  activeOrganizationId String?
+  id           String   @id @default(cuid())
+  tokenHash    String   @unique
+  identityId   String
+  identity     Identity @relation(fields: [identityId], references: [id], onDelete: Cascade)
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  lastSeenAt   DateTime @default(now())
+  @@index([identityId, expiresAt])
+}
+
+model BootstrapState {
+  id         Int       @id @default(1)
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+}
+
+model AuditEvent {
+  id         String   @id @default(cuid())
+  event      String
+  actorId    String?
+  metadata   Json     @default("{}")
+  createdAt  DateTime @default(now())
+  @@index([event, createdAt])
+}
+
+model BootstrapChallenge {
+  id         String   @id @default(cuid())
+  tokenHash  String   @unique
+  identityId String
+  returnPath String   @default("/overview")
+  identity   Identity @relation(fields: [identityId], references: [id], onDelete: Cascade)
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  @@index([expiresAt])
+}
+
+model AuthThrottle {
+  id          String   @id @default(cuid())
+  action      String
+  keyHash     String
+  windowStart DateTime
+  count       Int      @default(0)
+  @@unique([action, keyHash, windowStart])
+}
+
+model GitHubSetupTransaction {
+  organizationId String @default("preflyt-default")
+  id                  String          @id @default(cuid())
+  stateHash           String          @unique
+  browserBindingHash  String
+  identityId          String
+  identity            Identity        @relation(fields: [identityId], references: [id], onDelete: Cascade)
+  phase               GitHubSetupPhase @default(INSTALLATION)
+  installationId      BigInt?
+  codeVerifier        String?
+  expiresAt           DateTime
+  createdAt           DateTime        @default(now())
+  @@index([expiresAt])
+}
+
+model GitHubInstallation {
+  organizationId String @default("preflyt-default")
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  id                  BigInt             @id
+  accountLogin        String
+  accountType         String
+  repositorySelection String
+  permissions         Json
+  connectedById       String
+  connectedBy         Identity           @relation(fields: [connectedById], references: [id], onDelete: Restrict)
+  active              Boolean            @default(true)
+  accessRevision      Int @default(0)
+  syncState           String @default("UNKNOWN")
+  lastSyncAttemptAt   DateTime?
+  syncLeaseUntil      DateTime?
+  lastVerifiedAt      DateTime?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  repositories        GitHubRepository[]
+}
+
+model GitHubRepository {
+  id             String            @id @default(cuid())
+  githubId       BigInt            @unique
+  installationId BigInt
+  installation   GitHubInstallation @relation(fields: [installationId], references: [id], onDelete: Cascade)
+  name           String
+  fullName       String
+  ownerLogin     String
+  defaultBranch  String?
+  isPrivate      Boolean
+  available      Boolean @default(true)
+  selected       Boolean           @default(false)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  repositoryGrants RepositoryGrant[]
+  contributorObservations ContributorObservation[]
+  pullRequests RepositoryPullRequest[]
+  ciBindings RepositoryCiBindings[]
+  findingSources FindingSourceExcerpt[]
+  aiFindingGuidance AiFindingGuidance[]
+  assessments    CommitAssessment[]
+  standards      RepositoryStandardsSelection[]
+  gatePolicies   GatePolicyRevision[]
+  policyExceptions PolicyException[]
+  rulesetDrafts  GitHubRulesetDraft[]
+  checkPublications GitHubCheckPublication[]
+  readinessAutomation ReadinessAutomation?
+  readinessTasks ReadinessTask[]
+  pipelineSubmissions PipelineRunSubmission[]
+  rulesetDeployments GitHubRulesetDeployment[]
+  ruleSuiteSnapshots GitHubRuleSuiteSnapshot[]
+  insightsSync GitHubInsightsSync?
+  healthTarget RepositoryHealthTarget?
+  healthAssessments RepositoryHealthAssessment[]
+  healthHotspotReviews RepositoryHealthHotspotReview[]
+  nativeRequests NativeExecutionRequest[]
+  skillReviews AiSkillReview[]
+  teamScopes TeamRepositoryScope[]
+  profiles       RepositoryProfile[]
+  @@index([installationId, selected])
+}
+
+model RepositoryProfile {
+  id           String @id @default(cuid())
+  repositoryId String
+  repository   GitHubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  sourceSha    String
+  treeSha      String
+  branch       String
+  fullName     String
+  version      Int
+  complete     Boolean
+  report       Json
+  createdAt    DateTime @default(now())
+  @@index([repositoryId, createdAt])
+}
+
+// Durable inbox; Redis loss cannot discard accepted deliveries. No raw payloads or tokens.
+enum GitHubDeliveryState {
+  RECEIVED
+  PROCESSED
+  IGNORED
+  FAILED
+}
+
+model GitHubWebhookDelivery {
+  pullRequestContext Json?
+  id                 String @id
+  ciEvidence         ImportedCiEvidence?
+  traceParent        String?
+  payloadHash        String
+  event              String
+  action             String
+  installationId     BigInt
+  repositoryGithubId BigInt
+  sourceSha          String
+  sourceIdentity Json?
+  sourceObjectId     String
+  sourceNumber       Int?
+  sourceStatus       String?
+  sourceConclusion   String?
+  sourceUpdatedAt    DateTime?
+  state              GitHubDeliveryState @default(RECEIVED)
+  reason             String?
+  receivedAt         DateTime @default(now())
+  processedAt        DateTime?
+  @@index([state, receivedAt])
+  @@index([repositoryGithubId, receivedAt])
+}
+
+// Immutable observations of externally executed CI; not Preflyt policy verdicts.
+enum ImportedCiResult {
+  SUCCEEDED
+  FAILED
+  PENDING
+  NOT_EXECUTED
+  UNKNOWN
+}
+
+model ImportedCiEvidence {
+  deliveryId         String @id
+  artifacts          CiArtifactImport[]
+  delivery           GitHubWebhookDelivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  version            Int @default(1)
+  repositoryGithubId BigInt
+  installationId     BigInt
+  sourceSha          String
+  sourceKind         String
+  sourceIdentity Json?
+  sourceObjectId     String
+  sourceAction       String
+  sourceStatus       String?
+  sourceConclusion   String?
+  sourceUpdatedAt    DateTime?
+  result             ImportedCiResult
+  sourcePayloadHash  String
+  evidenceHash       String
+  observedAt         DateTime
+  importedAt         DateTime @default(now())
+  @@index([repositoryGithubId, installationId, observedAt])
+  @@index([repositoryGithubId, sourceSha, observedAt])
+}
+
+// Administrator-associated original bytes. Separate immutable attestations can verify provenance.
+model CiArtifactImport {
+  id            String @id @default(cuid())
+  deliveryId    String
+  evidence      ImportedCiEvidence @relation(fields: [deliveryId], references: [deliveryId], onDelete: Cascade, map: "CiArtifactImport_evidence_fkey")
+  format        String
+  sha256        String
+  parserVersion Int @default(1)
+  verification  String @default("ADMIN_ASSOCIATED_UNVERIFIED")
+  content       Bytes
+  summary       Json
+  uploadedById  String
+  attestations CiArtifactAttestation[]
+  createdAt     DateTime @default(now())
+  @@unique([deliveryId, format, sha256])
+}
+
+// Append-only adopted pack versions; catalogue/profile changes never auto-upgrade selection.
+model RepositoryStandardsSelection {
+  teamContext Json?
+  id                String @id @default(cuid())
+  repositoryId      String
+  repository        GitHubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  revision          Int
+  profile           String
+  packs             Json
+  selectedById      String
+  profileSnapshotId String?
+  sourceSha         String?
+  createdAt         DateTime @default(now())
+  @@unique([repositoryId, revision])
+}
+
+// Immutable exact-SHA reports; administrative associations never establish trusted gates.
+model CommitAssessment {
+  id             String @id @default(cuid())
+  repositoryId   String
+  repository     GitHubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  sourceSha      String
+  selectionId    String
+  requestKey     String
+  inputHash      String
+  request        Json
+  plan           Json
+  report         Json
+  assessmentHash String
+  skillReviews AiSkillReview[]
+  createdAt      DateTime @default(now())
+  @@unique([repositoryId, requestKey])
+  @@index([repositoryId, sourceSha, createdAt])
+  @@index([repositoryId, createdAt])
+}
+
+model GitHubAccessDelivery {
+  id String @id
+  payloadHash String
+  installationId BigInt
+  event String
+  action String
+  state GitHubDeliveryState @default(RECEIVED)
+  receivedAt DateTime @default(now())
+  processedAt DateTime?
+  @@index([state, receivedAt])
+}
+
+model RepositoryCiBindings {
+  id String @id @default(cuid())
+  repositoryId String
+  repository GitHubRepository @relation(fields:[repositoryId],references:[id],onDelete:Cascade)
+  revision Int
+  selectionId String
+  bindings Json
+  createdAt DateTime @default(now())
+  @@unique([repositoryId,revision])
+}
+
+model RepositoryPullRequest {
+ aiReviewAttemptAt DateTime?
+ verifiedInstallationId String?
+ verifiedAccessRevision Int?
+ id String @id @default(cuid())
+ repositoryId String
+ repository GitHubRepository @relation(fields:[repositoryId],references:[id],onDelete:Cascade)
+ number Int
+ objectId String
+ context Json
+ sourceUpdatedAt DateTime?
+ revision Int @default(1)
+ syncState String @default("PENDING")
+ verifiedAt DateTime?
+ lastSyncAttemptAt DateTime?
+ @@unique([repositoryId,number])
+ @@index([lastSyncAttemptAt])
+}
+
+// Append-only cryptographic verification receipts. Original uploads/labels stay unchanged.
+model CiArtifactAttestation {
+  id String @id @default(cuid())
+  artifactId String
+  artifact CiArtifactImport @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+  bundle Bytes
+  bundleSha256 String
+  policyDigest String
+  receiptHash String
+  claims Json
+  verifiedById String
+  createdAt DateTime @default(now())
+  @@unique([artifactId, policyDigest])
+}
+
+
+enum OrganizationRole {
+  OWNER
+  ADMIN
+  POLICY_MANAGER
+  SECURITY_ENGINEER
+  ENGINEERING_LEAD
+  DEVELOPER
+  AUDITOR
+  VIEWER
+}
+
+model Organization {
+  id            String                   @id @default(cuid())
+  name          String
+  createdAt     DateTime                 @default(now())
+  memberships   OrganizationMembership[]
+  installations GitHubInstallation[]
+  githubLink    GitHubOrganizationLink?
+  githubAccessEvidence GitHubUserAccessEvidence[]
+  aiProviders AiProviderConnection[]
+  aiFindingGuidance AiFindingGuidance[]
+  aiRoutes AiStageRoute[]
+  reviewSkills AiReviewSkill[]
+  skillReviews AiSkillReview[]
+  teams PreflytTeam[]
+  reviewBudgets AiReviewBudget[]
+  notificationChannels OrganizationNotificationChannel[]
+  policyExceptions PolicyException[]
+}
+
+model OrganizationMembership {
+  id             String            @id @default(cuid())
+  organizationId String
+  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  identityId     String
+  identity       Identity          @relation(fields: [identityId], references: [id], onDelete: Cascade)
+  role           OrganizationRole
+  active         Boolean           @default(true)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  teamMembers TeamMember[]
+  grants         RepositoryGrant[]
+
+  @@unique([organizationId, identityId])
+}
+
+model RepositoryGrant {
+  id           String                 @id @default(cuid())
+  membershipId String
+  membership   OrganizationMembership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  repositoryId String
+  repository   GitHubRepository       @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  createdAt    DateTime               @default(now())
+
+  @@unique([membershipId, repositoryId])
+}
+
+// Stable provider identity is installation-scoped; Git author names are never identity keys.
+model Contributor {
+  id             String                   @id @default(cuid())
+  installationId BigInt
+  githubUserId   String
+  login          String
+  kind           String
+  lastObservedAt DateTime
+  observations   ContributorObservation[]
+
+  @@unique([installationId, githubUserId])
+}
+
+// Immutable signed observations. Raw payload, email, review body and commit messages are omitted.
+model ContributorDelivery {
+  id           String   @id
+  payloadHash  String
+  repositoryId String
+  observedAt   DateTime
+  receivedAt   DateTime @default(now())
+}
+
+model ContributorObservation {
+  id                String           @id @default(cuid())
+  deliveryId        String
+  repositoryId      String
+  repository        GitHubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  contributorId     String
+  contributor       Contributor      @relation(fields: [contributorId], references: [id], onDelete: Cascade)
+  relationship      String
+  sourceObjectId    String
+  sourceSha         String
+  pullRequestNumber Int?
+  action            String
+  state             String?
+  merged            Boolean          @default(false)
+  observedAt        DateTime
+
+  @@unique([deliveryId, contributorId, relationship, sourceObjectId])
+  @@index([repositoryId, observedAt])
+  @@index([contributorId, observedAt])
+}
+
+// Immutable definitions; approval/publication transitions have independent audited actors.
+model GatePolicyRevision {
+  exceptions PolicyException[]
+  id            String @id @default(cuid())
+  repositoryId  String
+  repository    GitHubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  organizationId String
+  branchRef     String
+  revision      Int
+  selectionId   String
+  definition    Json
+  definitionHash String
+  state         String @default("DRAFT")
+  draftedById   String
+  approvedById  String?
+  publishedById String?
+  createdAt     DateTime @default(now())
+  approvedAt    DateTime?
+  publishedAt   DateTime?
+  @@unique([repositoryId, branchRef, revision])
+  @@index([organizationId, repositoryId, createdAt])
+  approvalKind String @default("INDEPENDENT")
+}
+
+// Provider links are explicit. Never populate these by matching usernames or emails.
+model GitHubUserAccount {
+  id           String @id @default(cuid())
+  host         String
+  githubUserId BigInt
+  identityId   String
+  identity     Identity @relation(fields: [identityId], references: [id], onDelete: Restrict)
+  login        String
+  displayName  String?
+  avatarUrl    String?
+  verifiedAt   DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  credential   GitHubUserCredential?
+
+  @@unique([host, githubUserId])
+  @@unique([identityId, host])
+  onboardingChallenges GitHubOnboardingChallenge[]
+  accessEvidence GitHubUserAccessEvidence[]
+}
+
+// Existing internal organization IDs, installations and audit actors stay unchanged.
+model GitHubOrganizationLink {
+  id                   String @id @default(cuid())
+  host                 String
+  githubOrganizationId BigInt
+  organizationId       String @unique
+  organization         Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  login                String
+  verifiedAt           DateTime
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@unique([host, githubOrganizationId])
+}
+
+// AES-256-GCM envelope bound to the account ID; never store plaintext provider tokens.
+// Rotation is serialized by the credential row lock; authorization evidence is stored separately.
+model GitHubUserCredential {
+  accountId        String @id
+  account          GitHubUserAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  encryptedTokens  String
+  accessExpiresAt  DateTime
+  refreshExpiresAt DateTime
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([refreshExpiresAt])
+}
+
+// Historical actors remain intact; linked accounts count as one person for approvals.
+model IdentityLoginLink {
+  id String @id @default(cuid())
+  sourceIdentityId String @unique
+  source Identity @relation("LoginLinkSource", fields: [sourceIdentityId], references: [id], onDelete: Restrict)
+  targetIdentityId String @unique
+  target Identity @relation("LoginLinkTarget", fields: [targetIdentityId], references: [id], onDelete: Restrict)
+  githubUserId BigInt
+  linkedAt DateTime @default(now())
+}
+
+// Human login is distinct from authenticated App installation setup.
+model GitHubLoginTransaction {
+  id                 String   @id @default(cuid())
+  stateHash          String   @unique
+  browserBindingHash String
+  codeVerifier       String
+  returnPath         String
+  expiresAt          DateTime
+  createdAt          DateTime @default(now())
+
+  linkingIdentity Boolean @default(false)
+  linkingOrganizationId String?
+  linkingOwnerId String?
+  linkingSessionHash String?
+
+  @@index([expiresAt])
+}
+
+// Restricted identity proof, not a WebSession or a workspace access grant.
+model GitHubOnboardingChallenge {
+  id         String            @id @default(cuid())
+  tokenHash  String            @unique
+  accountId  String
+  account    GitHubUserAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  returnPath String
+  expiresAt  DateTime
+  createdAt  DateTime          @default(now())
+
+  linkingIdentity Boolean @default(false)
+  linkingOrganizationId String?
+  linkingOwnerId String?
+  linkingSessionHash String?
+
+  @@index([expiresAt])
+}
+
+// Provider authorization only; local Preflyt grants are checked on every request.
+model GitHubUserAccessEvidence {
+  id                  String            @id @default(cuid())
+  accountId           String
+  account             GitHubUserAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  organizationId      String
+  organization        Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  installationId      BigInt
+  accessRevision      Int
+  repositoryGithubIds BigInt[]
+  verifiedAt          DateTime
+  expiresAt           DateTime
+
+  @@unique([accountId, organizationId])
+  @@index([expiresAt])
+}
+
+// Durable, redacted assessment outbox. Delivery is independent of gate decisions.
+model NotificationEvent {
+  id String @id @default(cuid())
+  assessmentId String? @unique
+  healthAssessmentId String? @unique
+  branchRef String?
+  policyId String? @unique
+  schemaVersion Int @default(1)
+  organizationId String
+  repositoryId String
+  repositoryGithubId String
+  repositoryName String
+  sourceSha String?
+  actorId String?
+  type String
+  severity String
+  createdAt DateTime @default(now())
+  deliveredAt DateTime?
+  attempts Int @default(0)
+  failedAt DateTime?
+  notifications InboxNotification[]
+  channelDeliveries NotificationChannelDelivery[]
+  @@index([deliveredAt, failedAt, createdAt])
+}
+model InboxNotification {
+  id String @id @default(cuid())
+  eventId String
+  event NotificationEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  identityId String
+  readAt DateTime?
+  deliveredAt DateTime @default(now())
+  emailDelivery NotificationEmailDelivery?
+  @@unique([eventId, identityId])
+  @@index([identityId, readAt, deliveredAt])
+}
+
+model NotificationPreference {
+  identityId String
+  organizationId String
+  assessments Boolean @default(true)
+  email Boolean @default(false)
+  updatedAt DateTime @updatedAt
+  @@id([identityId, organizationId])
+}
+
+model NotificationEmailDelivery {
+  id String @id @default(cuid())
+  inboxId String @unique
+  inbox InboxNotification @relation(fields: [inboxId], references: [id], onDelete: Cascade)
+  state String @default("PENDING")
+  attempts Int @default(0)
+  nextAttemptAt DateTime @default(now())
+  leaseUntil DateTime?
+  sentAt DateTime?
+  failureCode String?
+  createdAt DateTime @default(now())
+  @@index([state, nextAttemptAt, leaseUntil])
+}
+
+model GitHubRulesetDraft {
+  id String @id @default(cuid())
+  repositoryId String
+  repository GitHubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  organizationId String
+  name String
+  profile String
+  options Json
+  definition Json
+  definitionHash String
+  selectionId String?
+  packs Json
+  revision Int @default(1)
+  draftedById String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([organizationId, repositoryId, updatedAt])
+}
+
+// Durable publication intent and read-back receipt, including published-policy evidence hashes.
+model GitHubCheckPublication {
+  id String @id
+  repositoryId String
+  repository GitHubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  organizationId String
+  assessmentId String
+  prNumber Int
+  sourceSha String
+  installationId String
+  previewHash String
+  policyId String?
+  policyHash String?
+  evaluationHash String?
+  conclusion String
+  state String @default("PUBLISHING")
+  leaseToken String
+  actorId String
+  checkRunId String?
+  appId String?
+  htmlUrl String?
+  verifiedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([organizationId, repositoryId, createdAt])
+}
+
+// Repository-scoped explicit authorization for the background publisher.
+model ReadinessAutomation {
+ repositoryId String @id
+ repository GitHubRepository @relation(fields:[repositoryId],references:[id],onDelete:Cascade)
+ organizationId String
+ actorId String
+ enabled Boolean @default(false)
+ pipelineComments Boolean @default(false)
+ aiReviews Boolean @default(false)
+ aiReviewsEnabledAt DateTime?
+ revision Int @default(1)
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+}
+// Durable per-PR job; generation changes cannot be lost while a lease is running.
+model ReadinessTask {
+ id String @id @default(cuid())
+ repositoryId String
+ repository GitHubRepository @relation(fields:[repositoryId],references:[id],onDelete:Cascade)
+ prNumber Int
+ revision Int @default(1)
+ state String @default("PENDING")
+ sourceSha String?
+ branchRef String?
+ assessmentId String?
+ policyId String?
+ policyHash String?
+ evaluationHash String?
+ externalId String?
+ checkRunId String?
+ appId String?
+ htmlUrl String?
+ conclusion String?
+ verifiedAt DateTime?
+ nextAttemptAt DateTime @default(now())
+ attempts Int @default(0)
+ leaseToken String?
+ leaseUntil DateTime?
+ message String?
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@unique([repositoryId,prNumber])
+ @@index([nextAttemptAt,leaseUntil])
+}
+model GitHubRulesetDeployment {
+ id String @id @default(cuid())
+ repositoryId String
+ repository GitHubRepository @relation(fields:[repositoryId],references:[id],onDelete:Cascade)
+ organizationId String
+ draftId String
+ draftHash String
+ definition Json
+ definitionHash String
+ preview Json
+ previewHash String
+ proposedById String
+ approvedById String?
+ approvalKind String @default("INDEPENDENT")
+ state String @default("PREVIEW")
+ githubRulesetId String?
+ governanceAppId String
+ governanceInstallationId String
+ observedHash String?
+ observedDefinition Json?
+ verifiedAt DateTime?
+ lastSyncAttemptAt DateTime?
+ leaseToken String?
+ leaseUntil DateTime?
+ message String?
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@index([repositoryId,organizationId,createdAt])
+ @@index([lastSyncAttemptAt])
+}
+
+// Provider evaluations are immutable, bounded historical evidence, never gate inputs.
+model GitHubRuleSuiteSnapshot {
+  id String @id @default(cuid())
+  repositoryId String
+  repository GitHubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  suiteId BigInt
+  rulesetIds BigInt[]
+  actor String
+  ref String
+  sourceSha String
+  pushedAt DateTime
+  fetchedAt DateTime
+  raw Json
+  digest String
+  @@unique([repositoryId, suiteId])
+  @@index([repositoryId, pushedAt, suiteId])
+}
+
+model GitHubInsightsSync {
+  repositoryId String @id
+  repository GitHubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  nextPage Int @default(1)
+  nextRunAt DateTime @default(now())
+  leaseId String?
+  leaseUntil DateTime?
+  lastFetchedAt DateTime?
+  lastSweepAt DateTime?
+  error Boolean @default(false)
+  @@index([nextRunAt])
+}
+
+// Durable native attempts; blocked requests never become passing assessment evidence.
+enum NativeExecutionState {
+  BLOCKED
+  QUEUED
+  PREPARING
+  RUNNING
+  CANCEL_REQUESTED
+  SUCCEEDED
+  FAILED
+  CANCELLED
+  TIMED_OUT
+}
+model NativeExecutionRequest {
+  id String @id @default(uuid())
+  organizationId String
+  repositoryId String
+  repository GitHubRepository @relation(fields:[repositoryId],references:[id],onDelete:Cascade)
+  repositoryGithubId String
+  actorId String
+  requestKey String
+  inputHash String
+  sourceSha String
+  selectionId String
+  planHash String
+  plan Json
+  ruleIds Json
+  state NativeExecutionState @default(BLOCKED)
+  reason String?
+  runtimeApprovalHash String?
+  sourceHash String?
+  environmentId String?
+  controllerJobId String?
+  leaseUntil DateTime?
+  attempts Int @default(0)
+  requestedAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  cancelledById String?
+  finishedAt DateTime?
+  receiptHash String?
+  receiptSignature   String?
+  healthAssessmentId String? @unique
+  @@unique([repositoryId,requestKey])
+  @@index([organizationId,repositoryId,requestedAt,id])
+  @@index([state,leaseUntil,requestedAt])
+}
+
+model OrganizationStandardVersion {
+  id             String @id @default(uuid())
+  organizationId String
+  packId         String
+  revision       Int
+  definition     Json
+  digest         String
+  createdById    String
+  createdAt      DateTime @default(now())
+
+  @@unique([organizationId, packId, revision])
+  @@index([organizationId, createdAt])
+}
+
+model AiProviderConnection {
+  inputPriceCentsPerMillion Int?
+  outputPriceCentsPerMillion Int?
+  id String @id @default(uuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  name String
+  endpointId String
+  endpoint Json?
+  modelId String
+  encryptedCredential String?
+  credentialEndpointDigest String?
+  enabled Boolean @default(false)
+  revision Int @default(1)
+  testStatus String @default("NOT_TESTED")
+  testedAt DateTime?
+  testedRevision Int?
+  testedEndpointDigest String?
+  createdById String
+  updatedAt DateTime @updatedAt
+  @@index([organizationId, updatedAt])
+}
+model AiStageRoute {
+  publishInline Boolean @default(false)
+  automaticReviews Boolean @default(false)
+  publishSummary Boolean @default(false)
+  id String @id @default(uuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  stage String
+  primaryId String?
+  fallbackId String?
+  enabled Boolean @default(false)
+  allowSource Boolean @default(false)
+  maxInputTokens Int @default(8000)
+  maxOutputTokens Int @default(1000)
+  dailyBudgetCents Int @default(1000)
+  revision Int @default(1)
+  updatedById String
+  updatedAt DateTime @updatedAt
+  @@unique([organizationId, stage])
+}
+
+model AiReviewSkill {
+  languages String[] @default([])
+  frameworks String[] @default([])
+  id String @id @default(uuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  skillKey String
+  version Int
+  name String
+  description String
+  instructions String
+  stages String[]
+  repositories String[]
+  source String
+  license String
+  contentDigest String
+  status String @default("DRAFT")
+  enabled Boolean @default(false)
+  createdById String
+  approvedById String?
+  approvedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([organizationId, skillKey, version])
+  @@index([organizationId, createdAt])
+}
+model AiSkillReview {
+  usage Json?
+  inlineFeedbackUrl String?
+  automaticKey String? @unique
+  feedbackState String @default("NOT_REQUESTED")
+  feedbackUrl String?
+  feedbackAttempts Int @default(0)
+  feedbackAttemptAt DateTime?
+  id String @id @default(uuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  repositoryId String
+  repository GitHubRepository @relation(fields: [repositoryId], references: [id], onDelete: Restrict)
+  assessmentId String
+  assessment CommitAssessment @relation(fields: [assessmentId], references: [id], onDelete: Restrict)
+  actorId String
+  fingerprint String
+  stage String
+  snapshot Json
+  reservedMicroCents BigInt
+  state String @default("QUEUED")
+  result Json?
+  failure String?
+  providerId String?
+  latencyMs Int?
+  startedAt DateTime?
+  finishedAt DateTime?
+  createdAt DateTime @default(now())
+  @@unique([organizationId, actorId, fingerprint])
+  @@index([state, createdAt])
+  @@index([organizationId, repositoryId, assessmentId, createdAt])
+}
+model AiReviewBudget {
+  id String @id @default(uuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  stage String
+  day String
+  reservedMicroCents BigInt @default(0)
+  @@unique([organizationId, stage, day])
+}
+
+// Team membership never grants Preflyt or GitHub access. Scopes require explicit authorization.
+model PreflytTeam {
+  id String @id @default(uuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  name String
+  description String @default("")
+  source String @default("LOCAL")
+  githubTeamId String?
+  githubOrganizationId String?
+  githubSlug String?
+  parentGithubTeamId String?
+  installationId BigInt?
+  importedMembers Json @default("[]")
+  nestedScope Json @default("[]")
+  scopeRevision Int @default(1)
+  syncState String @default("LOCAL")
+  syncedAt DateTime?
+  revision Int @default(1)
+  createdById String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  members TeamMember[]
+  repositories TeamRepositoryScope[]
+  assignments TeamPolicyAssignment[]
+  @@unique([organizationId, githubTeamId])
+  @@index([organizationId, name, id])
+}
+model TeamMember {
+  id String @id @default(uuid())
+  teamId String
+  team PreflytTeam @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  membershipId String
+  membership OrganizationMembership @relation(fields: [membershipId], references: [id], onDelete: Restrict)
+  @@unique([teamId, membershipId])
+}
+model TeamRepositoryScope {
+  id String @id @default(uuid())
+  teamId String
+  team PreflytTeam @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  repositoryId String
+  repository GitHubRepository @relation(fields: [repositoryId], references: [id], onDelete: Restrict)
+  origin String
+  providerPresent Boolean @default(true)
+  policyScopeEnabled Boolean @default(false)
+  approvedById String?
+  verifiedAt DateTime?
+  @@unique([teamId, repositoryId])
+}
+model TeamPolicyAssignment {
+  id String @id @default(uuid())
+  teamId String
+  team PreflytTeam @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  branchRef String
+  profile String
+  packs Json
+  digest String
+  createdById String
+  createdAt DateTime @default(now())
+  @@index([teamId, branchRef, createdAt])
+  supersededAt DateTime?
+}
+
+// Human triage belongs to a specific saved finding; it never changes gate evidence.
+model FindingDisposition {
+  id String @id
+  organizationId String
+  repositoryGithubId String
+  assessmentId String
+  sourceSha String
+  state String @default("REPORTED")
+  assigneeId String?
+  note String @default("")
+  revision Int @default(1)
+  updatedById String
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+  @@index([organizationId, repositoryGithubId, state])
+}
+
+// Deployment-wide operational settings; connection roots and encryption keys stay outside the database.
+model DeploymentConfiguration {
+  id String @id
+  revision Int @default(1)
+  values Json
+  encryptedSecrets String?
+  updatedById String?
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+}
+
+
+// Organization-managed destinations; independent of personal inbox preferences.
+model OrganizationNotificationChannel {
+  id String @id @default(cuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  type String @default("EMAIL")
+  name String
+  recipients String[]
+  enabled Boolean @default(true)
+  revision Int @default(1)
+  createdById String
+  updatedById String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+  deliveries NotificationChannelDelivery[]
+  @@index([organizationId, deletedAt, createdAt])
+}
+
+model NotificationChannelDelivery {
+  id String @id @default(cuid())
+  channelId String
+  channel OrganizationNotificationChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  eventId String?
+  event NotificationEvent? @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  organizationId String
+  recipient String
+  requestedById String?
+  kind String @default("EVENT")
+  state String @default("PENDING")
+  attempts Int @default(0)
+  nextAttemptAt DateTime @default(now())
+  leaseUntil DateTime?
+  sentAt DateTime?
+  failureCode String?
+  createdAt DateTime @default(now())
+  @@unique([channelId, eventId, recipient])
+  @@index([channelId, createdAt])
+  @@index([state, nextAttemptAt, leaseUntil])
+}
+
+// Runner assertions await completed-run and evidence verification before gate use.
+model PipelineRunSubmission {
+  id String @id
+  repositoryId String
+  repository GitHubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  organizationId String
+  policyId String
+  policyHash String
+  sourceSha String
+  workflowSha String
+  runId String
+  runAttempt Int
+  prNumber Int
+  inputHash String
+  payload Json
+  submittedById String
+  state String @default("PENDING")
+  assessmentId String?
+  commentUrl String?
+  failureCode String?
+  attempts Int @default(0)
+  nextAttemptAt DateTime @default(now())
+  leaseToken String?
+  leaseUntil DateTime?
+  createdAt DateTime @default(now())
+  @@index([repositoryId, createdAt])
+  @@index([state, createdAt])
+  @@index([nextAttemptAt])
+}
+
+// Approved exceptions never mutate the frozen policy or its original evidence.
+model PolicyException {
+  id String @id @default(cuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  repositoryId String
+  repository GitHubRepository @relation(fields: [repositoryId], references: [id], onDelete: Restrict)
+  policyId String
+  policy GatePolicyRevision @relation(fields: [policyId], references: [id], onDelete: Restrict)
+  policyHash String
+  branchRef String
+  sourceSha String
+  ruleIds Json
+  reason String
+  requestedById String
+  approvedById String?
+  revokedById String?
+  state String @default("REQUESTED")
+  requestHash String @unique
+  revision Int @default(1)
+  expiresAt DateTime
+  approvedAt DateTime?
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([organizationId, repositoryId, createdAt])
+  @@index([repositoryId, policyId, sourceSha, state])
+  @@index([state, expiresAt])
+}
+
+// One-use, browser/session-bound GitHub registration. Contains no generated credentials.
+model GitHubAppManifestTransaction {
+  id String @id @default(cuid())
+  stateHash String @unique
+  bindingHash String
+  sessionHash String
+  actorId String
+  configurationRevision Int
+  apiUrl String
+  organization String
+  manifest Json
+  status String @default("PENDING")
+  appSlug String?
+  expiresAt DateTime
+  consumedAt DateTime?
+  createdAt DateTime @default(now())
+  @@index([actorId, sessionHash, createdAt])
+  @@index([expiresAt])
+}
+
+// Repository health is independent of policy selections and CI gate evidence.
+model RepositoryHealthTarget {
+  repositoryId String @id
+  repository GitHubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  organizationId String
+  branch String
+  headSha String?
+  headCheckedAt DateTime?
+  revision Int @default(1)
+  actorId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+model RepositoryHealthAssessment {
+  id String @id @default(uuid())
+  repositoryId String
+  repository GitHubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  organizationId String
+  branch String
+  targetRevision Int
+  requestKey String
+  includeCoverage Boolean @default(false)
+  actorId String
+  state String @default("QUEUED")
+  sourceSha String?
+  profileId String?
+  plan Json?
+  report Json?
+  reason String?
+  nativeRequestId String? @unique
+  leaseToken String?
+  leaseUntil DateTime?
+  attempts Int @default(0)
+  cancelledAt DateTime?
+  startedAt DateTime?
+  finishedAt DateTime?
+  createdAt DateTime @default(now())
+  @@unique([repositoryId, requestKey])
+  @@index([repositoryId, branch, createdAt, id])
+  @@index([organizationId, state, leaseUntil])
+  hotspotReviews RepositoryHealthHotspotReview[]
+}
+
+// Verified, redacted source display snapshots. Never part of assessment/gate evidence.
+model FindingSourceExcerpt {
+  id String @id
+  repositoryId String
+  repository GitHubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  sourceSha String
+  path String
+  line Int?
+  endLine Int?
+  contextLines Int @default(8)
+  version Int @default(1)
+  content Json?
+  contentHash String?
+  attempts Int @default(0)
+  retryAfter DateTime @default(now())
+  capturedAt DateTime?
+  createdAt DateTime @default(now())
+  @@index([contentHash, attempts, retryAfter])
+  @@index([repositoryId, sourceSha])
+}
+
+// Human hotspot decisions remain separate from immutable assessments and CI triage.
+model RepositoryHealthHotspotReview {
+  id String @id
+  repositoryId String
+  repository GitHubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  assessmentId String
+  assessment RepositoryHealthAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  organizationId String
+  fingerprint String
+  sourceSha String
+  state String @default("TO_REVIEW")
+  note String @default("")
+  revision Int @default(1)
+  updatedById String
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+  @@unique([assessmentId, fingerprint])
+  @@index([organizationId, repositoryId, assessmentId])
+}
+
+
+// Cached advisory explanations; never assessment or merge evidence.
+model AiFindingGuidance {
+  id String @id
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  repositoryId String
+  repository GitHubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  actorId String
+  origin String
+  assessmentId String
+  findingId String
+  sourceSha String
+  inputHash String
+  snapshot Json
+  state String @default("QUEUED")
+  result Json?
+  resultHash String?
+  failure String?
+  modelLabel String?
+  usage Json?
+  leaseToken String?
+  leaseUntil DateTime?
+  attempts Int @default(0)
+  createdAt DateTime @default(now())
+  finishedAt DateTime?
+  @@index([organizationId, repositoryId, assessmentId, findingId])
+  @@index([state, leaseUntil, createdAt])
+  @@index([organizationId, createdAt])
+}

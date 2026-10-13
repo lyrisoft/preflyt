@@ -1,0 +1,36 @@
+{
+  "name": "@preflyt/docs",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Preflyt user and operator documentation site",
+  "scripts": {
+    "dev": "node scripts/generate-downloads.mjs && docusaurus start",
+    "build": "node scripts/check-env-reference.mjs && node scripts/generate-downloads.mjs && docusaurus build",
+    "serve": "docusaurus serve",
+    "clear": "docusaurus clear",
+    "typecheck": "tsc --noEmit",
+    "generate": "node scripts/generate-downloads.mjs"
+  },
+  "dependencies": {
+    "@docusaurus/core": "3.10.2",
+    "@docusaurus/preset-classic": "3.10.2",
+    "@docusaurus/theme-mermaid": "3.10.2",
+    "@easyops-cn/docusaurus-search-local": "0.55.3",
+    "@mdx-js/react": "^3.1.0",
+    "@mermaid-js/layout-elk": "^0.1.9",
+    "clsx": "^2.1.1",
+    "prism-react-renderer": "^2.4.1",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5"
+  },
+  "devDependencies": {
+    "@docusaurus/module-type-aliases": "3.10.2",
+    "@docusaurus/tsconfig": "3.10.2",
+    "@docusaurus/types": "3.10.2",
+    "typescript": "~6.0.3",
+    "yaml": "^2.9.1"
+  },
+  "engines": {
+    "node": ">=24.4.1 <25"
+  }
+}

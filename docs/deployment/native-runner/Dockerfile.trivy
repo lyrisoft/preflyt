@@ -1,0 +1,15 @@
+FROM aquasec/trivy@sha256:af6acf9a6b85dfe389a1941505c0ce9efef52a4719635e1a962f022a3d855daa AS tool
+FROM tool AS database
+RUN trivy image --download-db-only --cache-dir /opt/preflyt/trivy-cache
+FROM node@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS base
+COPY --from=tool /usr/local/bin/trivy /usr/local/bin/trivy
+COPY runner.mjs offline-database.mjs source-verification.mjs source-initializer.mjs adapters.json /opt/preflyt/
+COPY config /opt/preflyt/config
+USER 65532:65532
+WORKDIR /workspace
+ENTRYPOINT ["/usr/local/bin/node", "/opt/preflyt/runner.mjs"]
+
+# Build with --target dependencies; the default target stays database-free for IaC.
+FROM base AS dependencies
+COPY --from=database /opt/preflyt/trivy-cache/db /opt/preflyt/trivy-cache/db
+FROM base AS runtime

@@ -1,0 +1,58 @@
+# Commit assessment snapshots (P1 manual and CI-triggered slices)
+
+## User workflow
+
+Open an accessible selected repository profile, save its Engineering Standards selection, then expand **Create commit assessment** in the existing **Commit assessments** panel. Enter a full commit SHA already present in a saved profile or imported CI observation for that repository. Optionally associate an exact-SHA CI observation with each selected rule. Owners, Admins and Super Admins may create snapshots; authenticated members can inspect history/details. Existing theme and navigation are preserved. No runner, model, additional service or environment variable is needed.
+
+The snapshot freezes a versioned AssessmentRequest, AssessmentPlan and evidence report. It includes exact commit, adoption profile, selected pack definitions/versions/digests, required/advisory checks, collection limits, same-SHA profile evidence when available, signed CI delivery/object IDs, source digests, provider outcomes/timestamps, freshness and bounded artifact summaries/pointers. Upload bytes, logs and credentials are never copied to the report. Tool/environment verification remains explicitly unknown.
+
+Manual CI-to-rule associations are **ADMIN_ASSOCIATED_UNVERIFIED**. [Approved source bindings](ci-bindings.md) automatically associate exact signed provider identities as APPROVED_SOURCE_BINDING, without upgrading execution trust. A signed GitHub webhook proves the reported source observation was ingested; it does not prove that a named rule was covered, that tests executed, or that the report came from the correct tool. Arbitrary successful jobs cannot satisfy required tests/security merely because an admin associates them. Rules retain null rule outcomes and qualityGate stays null. Missing mandatory evidence yields INCOMPLETE coverage; a policy with no required checks is NOT_EVALUATED, never vacuous PASS. Exact-revision configuration hints can be CONFIGURATION_OBSERVED, which does not establish trusted executed coverage.
+
+Coverage vocabulary: MISSING, UNKNOWN, UNSUPPORTED, CONFIGURATION_OBSERVED, UNVERIFIED, PENDING, SKIPPED, EXPIRED, FUTURE, SUPERSEDED and AMBIGUOUS. Provider outcomes remain separately visible, including failures. Planned adapters remain UNSUPPORTED even when associated with a successful job. Missing timestamps do not inherit receipt-time freshness. Future/expired timestamps cannot appear fresh. Newer observations of the same source kind/object mark older selected evidence superseded; conflicting equal/unknown-time observations are ambiguous. Stable check/app and workflow source identities are supported through approved bindings; trusted tool identity and coverage validation remain outstanding.
+
+## Automatic CI assessments
+
+With the existing signed GitHub webhook ingestion and worker enabled, every supported `check_run` or `workflow_run` delivery processed for a selected, active repository creates a snapshot if standards have been adopted. Pending, completed, skipped and rerun observations remain distinct historical snapshots. The worker pins the latest adopted selection at processing time, not the policy at the provider event timestamp. The request records `trigger: GITHUB_CI`, `sourceDeliveryId`, null actor and any active approved source mappings. This includes the triggering exact-SHA observation even for delayed deliveries; unrelated commit profiles are never borrowed. No current PR head or branch readiness is inferred, and no gate is published.
+
+Delivery claim, evidence import, snapshot and both audits share one database transaction. Duplicate jobs produce one snapshot; failures roll back all four writes so durable-inbox retries can recover. Automatic request keys use the internal `github:<delivery UUID>` namespace, separate from manual UUID keys. Invalid adopted definitions fail closed and retry through the existing worker failure/reconciliation policy. Revoked selection or installation access ignores the delivery without importing evidence or creating a snapshot.
+
+Repositories without adopted standards still ingest their CI evidence, with `assessmentReason: standards_not_adopted` in the processing audit. Adopting standards later does not backfill previously processed deliveries; use a manual snapshot or a new CI delivery. PR-only events remain event history and do not create automatic assessments. Artifacts arriving after processing require a new manual snapshot to include their summaries. Existing worker command is `pnpm dev:worker`; no new service, environment variable or migration is required beyond the assessment migration below. Deploy the API and worker from the same release and apply migrations before starting the updated worker.
+
+## Contracts
+
+Authenticated `GET /github/repositories/:repositoryId/assessments` lists the latest 50 snapshots; optional `?sha=<full-40-character-SHA>` filters exact revisions. `GET .../assessments/:assessmentId` returns a repository-scoped snapshot after verifying its stored digest. Current selection/installation access is required for list/detail/create. These endpoints use Cache-Control: no-store. Every snapshot is historical: no current branch/PR readiness is asserted, and freshness is frozen at collection rather than continually relabeled as current.
+
+Admin-only `POST .../assessments` requires the configured browser origin and accepts only:
+
+```json
+{
+  "sourceSha": "<full commit SHA>",
+  "expectedSelectionId": "<current saved standards selection ID>",
+  "requestKey": "<UUID for this exact request; reuse only on retry>",
+  "mappings": [{ "ruleId": "tests.required", "deliveryId": "<same-commit delivery UUID>" }]
+}
+```
+
+The server resolves the latest adopted selection under the same installation/repository locking order used by selection and evidence writers. A missing/stale selection returns 409. Pack versions/digests are checked, not caller-supplied. Unknown versions/digest changes fail closed. Each rule may have at most one association; IDs must belong to selected rules and this repository/installation/SHA's collected evidence. A commit with no pinned profile or CI evidence returns 404 rather than creating an invented subject. Unknown fields and forged gate values are rejected. Commit requests cover all selected pack rules; PR/base/changed-path applicability is explicitly not evaluated in this initial slice.
+
+A UUID is idempotent within a repository for normalized commit, selection, sorted mappings and actor. Concurrent identical retries return the same snapshot with one audit; changed input reusing a key returns 409. Replay may return the original historical selection after a later adoption, but cannot bypass revoked repository access. The UI retains its key for retries and rotates it for new inputs/successful requests. Persisted [source bindings](ci-bindings.md) require explicit administrative approval; snapshots do not infer rule coverage from job success or names.
+
+Collection retains at most 100 CI observations with bounded artifact summaries. Manual requests collect the latest received observations. Automatic requests reserve a slot for their triggering delivery if it falls outside that window. A 101st observation sets collectionTruncated and incomplete coverage; associations outside the collected set are rejected rather than silently dropped. A same-SHA profile is selected if present; a profile from another SHA is never borrowed. The plan freezes definition versions and broad selected-pack scope, not inferred code execution. Collection, snapshot and audit commit atomically; audit failure rolls everything back. Later evidence, reruns, artifacts, discovery or standards changes require a new request/snapshot and never rewrite old reports.
+
+Assessment SHA-256 covers `{request, plan, report}` encoded as UTF-8 canonical JSON: recursively sort object keys by code-unit order, omit undefined object values, preserve array order, use JSON number/string/null encoding and ISO timestamps. This remains reproducible after PostgreSQL JSONB key reordering. Storage IDs, storage-created timestamp and request-key/input-hash columns are outside this content projection. Reads/replays reject content whose digest differs; hashes are integrity comparisons, not independent execution proof. Source delivery/evidence/artifact hashes retain their own documented projections. Original artifact IDs/hashes remain references after source retention cleanup; the report preserves redacted summaries, not deleted original bytes.
+
+## Deployment, tests and rollback
+
+Apply additive migration `20261009010000_commit_assessments` and regenerate the Prisma client before using the new API. Existing Compose migrations/Dockerfiles include the module and UI. There is no new service/dependency or repository write permission. The migration creates one table, indexes and repository foreign key only; existing identities, profiles, standards selections and CI artifacts are unchanged. Back up PostgreSQL before upgrading. Repository deletion cascades assessments. Retain referenced original CI/artifact evidence as long as needed for report reproducibility. Rollback to the preceding compatible API retains the added table; no database reset is necessary.
+
+Scoped verification covers frozen plans, unverified associations, expired/future/unknown freshness, skipped/pending/failing results, equal-time conflicts, superseded results, exact-SHA and repository isolation, immutable historical selections/evidence summaries, JSONB-safe digest reproduction/tamper rejection, bounded collection, idempotency, roles/origin/revocation and transactional audit rollback, CI-trigger replay, atomic processor rollback, absent adoption and delayed triggering-observation retention. Frontend checks are types, touched-file lint/format; browser tests remain skipped. Published image/clean-deployment and live GitHub demonstrations remain release acceptance, not claims from these local checks.
+
+[PR-triggered assessments](pr-assessments.md) now freeze signed head/base context for open same-repository PRs, including incomplete snapshots before head CI exists. They remain historical and do not establish current PR readiness.
+
+[Current PR state and CI links](current-pr-state.md) now provide locally served, recently verified PR context and matching historical assessment links. These still do not establish executed coverage or a quality gate.
+
+Next slices: trusted rule coverage and normalized finding occurrences, deterministic P2 policy gates and exact-SHA GitHub feedback. Those must not upgrade manual associations or raw administrator uploads silently.
+
+[Evidence validation](evidence-validation.md) now freezes report integrity and missing execution-trust prerequisites in new snapshots. Invalid evidence is explicitly marked INVALID; administrator uploads remain unverified.
+
+[Signed CI provenance](ci-provenance.md) adds opt-in offline attestation verification and report controls. New validator v2 snapshots may establish report provenance while execution trust remains incomplete.

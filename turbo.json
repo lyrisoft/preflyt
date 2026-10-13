@@ -1,0 +1,38 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "tasks": {
+    "build": {
+      "outputs": [
+        "dist/**"
+      ],
+      "dependsOn": [
+        "^build"
+      ],
+      "passThroughEnv": [
+        "DATABASE_URL"
+      ]
+    },
+    "lint": {
+      "outputs": []
+    },
+    "typecheck": {
+      "outputs": [],
+      "dependsOn": [
+        "^typecheck"
+      ],
+      "passThroughEnv": [
+        "DATABASE_URL"
+      ]
+    },
+    "test": {
+      "cache": false,
+      "outputs": [],
+      "passThroughEnv": [
+        "PLAYWRIGHT_BROWSERS_PATH"
+      ]
+    },
+    "format:check": {
+      "outputs": []
+    }
+  }
+}

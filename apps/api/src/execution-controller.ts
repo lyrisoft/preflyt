@@ -1,0 +1,157 @@
+import {
+  runNativeKubernetesCheck,
+  cleanupNativeKubernetesJob,
+} from './execution/native-kubernetes-job.js'
+import { nativeKubernetesClient } from './execution/native-kubernetes-client.js'
+import { nativeRuntimeApproval } from './execution/native-runtime.js'
+import type { NativeRuleId, NativeToolReview } from './execution/native-plan.js'
+// This dedicated entry point never loads API/worker credentials or the default kube context.
+import { NativeControllerJobs } from './execution/native-controller-jobs.js'
+import { createNativeController } from './execution/native-controller.js'
+import {
+  nativeDockerApproval,
+  dockerControlsProjection,
+} from './execution/native-docker-approval.js'
+import { dockerCommand } from './execution/native-docker-job.js'
+import { nativeToolReviews } from './execution/native-plan.js'
+import { digest } from './assessments/assessment-digest.js'
+const forbidden = [
+  'DATABASE_URL',
+  'QUEUE_REDIS_URL',
+  'GITHUB_APP_PRIVATE_KEY',
+  'GITHUB_GOVERNANCE_APP_PRIVATE_KEY',
+  'GITHUB_GOVERNANCE_PRIVATE_KEY',
+  'GITHUB_APP_CLIENT_SECRET',
+  'GITHUB_USER_TOKEN_ENCRYPTION_KEY',
+  'OIDC_CLIENT_SECRET',
+  'OPENAI_API_KEY',
+  'ANTHROPIC_API_KEY',
+  'AWS_ACCESS_KEY_ID',
+  'AWS_SECRET_ACCESS_KEY',
+  'AWS_SESSION_TOKEN',
+  'AZURE_CLIENT_SECRET',
+  'GOOGLE_APPLICATION_CREDENTIALS',
+  'REDIS_URL',
+  'SMTP_PASSWORD',
+  'AI_PROVIDER_ENCRYPTION_KEY',
+  'CONFIGURATION_ENCRYPTION_KEY',
+]
+if (forbidden.some((key) => process.env[key]))
+  throw new Error(
+    'Native controller must use its dedicated secret-free deployment environment',
+  )
+const port = Number(process.env.NATIVE_CONTROLLER_PORT ?? '3010')
+if (!Number.isInteger(port) || port < 1 || port > 65535)
+  throw new Error('Invalid native controller port')
+const backend = process.env.NATIVE_RUNTIME_BACKEND ?? 'kubernetes'
+if (!['docker', 'kubernetes'].includes(backend))
+  throw new Error('Invalid native runtime backend')
+const directory =
+  process.env.NATIVE_CONTROLLER_STATE_DIRECTORY ??
+  '/var/lib/preflyt/native-jobs'
+const jobs =
+  process.env.NATIVE_EXECUTION_ENABLED !== 'true'
+    ? undefined
+    : backend === 'docker'
+      ? new NativeControllerJobs(directory)
+      : new NativeControllerJobs(
+          directory,
+          (scope, ruleId, _path, signal, source) =>
+            runNativeKubernetesCheck(scope, ruleId, source, signal),
+          async (expected) => {
+            const reviewed = nativeRuntimeApproval()
+            if (
+              !reviewed ||
+              reviewed.backend !== 'kubernetes' ||
+              reviewed.approvalHash !== expected.approvalHash
+            )
+              throw new Error(
+                'Original Kubernetes review required for recovery',
+              )
+            const client = await nativeKubernetesClient(reviewed.approval)
+            const {
+              requestId,
+              organizationId,
+              repositoryId,
+              sourceSha,
+              sourceHash,
+              planHash,
+            } = expected
+            for (const ruleId of expected.ruleIds as NativeRuleId[]) {
+              const step = (expected.plan as any).steps.find(
+                (s: any) => s.ruleId === ruleId,
+              )
+              if (!step) throw new Error('Recovery tool unavailable')
+              const tool: NativeToolReview = {
+                ruleId,
+                image: step.image,
+                toolVersion: step.toolVersion,
+                license: step.license,
+                configHash: step.configHash,
+                reviewDigest: step.reviewDigest,
+                expiresAt: step.reviewExpiresAt,
+                databaseBuiltAt: step.databaseBuiltAt,
+              }
+              await cleanupNativeKubernetesJob(
+                client,
+                reviewed.approval,
+                {
+                  requestId,
+                  organizationId,
+                  repositoryId,
+                  sourceSha,
+                  sourceHash,
+                  planHash,
+                },
+                ruleId,
+                tool,
+              )
+            }
+          },
+          'kubernetes',
+        )
+if (jobs) await jobs.initialize()
+const server = createNativeController(
+  undefined,
+  backend === 'docker'
+    ? {
+        review: nativeDockerApproval,
+        observe: async (reviewed) => {
+          if (!('runtime' in reviewed.approval))
+            throw new Error('Docker review required')
+          const controlsHash = digest(
+            dockerControlsProjection(
+              JSON.parse(
+                (
+                  await dockerCommand(['info', '--format', '{{json .}}'])
+                ).toString(),
+              ),
+              reviewed.approval.runtime,
+            ),
+          )
+          const failed = [
+            ...(controlsHash !== reviewed.approval.controlsHash
+              ? ['Docker controls changed']
+              : []),
+            ...(nativeToolReviews()?.reviewHash !==
+            reviewed.approval.toolReviewHash
+              ? ['Tool review changed']
+              : []),
+          ]
+          return { verified: failed.length === 0, failed, controlsHash }
+        },
+      }
+    : undefined,
+  jobs,
+)
+server.listen(port, process.env.NATIVE_CONTROLLER_HOST ?? '0.0.0.0', () =>
+  console.info(
+    'Native controller started; execution requires current independent review and explicit opt-in',
+  ),
+)
+for (const signal of ['SIGTERM', 'SIGINT'])
+  process.once(signal, async () => {
+    server.close()
+    server.closeAllConnections()
+    await jobs?.close()
+  })

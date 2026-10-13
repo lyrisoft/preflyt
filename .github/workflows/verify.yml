@@ -1,0 +1,48 @@
+name: Verify implementation
+on:
+  workflow_call:
+  pull_request:
+    branches: [development, main]
+permissions:
+  contents: read
+concurrency:
+  group: preflyt-verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  scope:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify branch target
+        env:
+          TARGET_BRANCH: ${{ github.base_ref || github.ref_name }}
+        run: |
+          case "$TARGET_BRANCH" in
+            development|main) ;;
+            *) echo 'PR verification supports only development and main.' >&2; exit 1 ;;
+          esac
+  development:
+    needs: scope
+    if: ${{ (github.base_ref || github.ref_name) == 'development' }}
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/development-checks.yml
+  main:
+    needs: scope
+    if: ${{ (github.base_ref || github.ref_name) == 'main' }}
+    uses: ./.github/workflows/main-regression.yml
+  preflyt_gate:
+    name: Preflyt final gate
+    needs: [scope, development, main]
+    if: ${{ always() && !cancelled() && github.event_name == 'pull_request' && github.base_ref == 'development' && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Verify results, AI review and PR publication
+        uses: lyrisoft/preflyt-action@v2.1.1
+        with:
+          mode: gate
+          api-url: ${{ vars.PREFLYT_API_URL }}

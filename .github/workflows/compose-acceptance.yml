@@ -1,0 +1,92 @@
+name: Verify container deployment
+on:
+  workflow_call:
+    inputs:
+      published_images:
+        description: Pull and verify published commit images instead of building locally
+        required: false
+        type: boolean
+        default: false
+jobs:
+  compose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      PREFLYT_PUBLISHED_IMAGES: ${{ inputs.published_images }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24.4.1
+      - name: Configure an isolated deployment fixture
+        env:
+          COMPOSE_PROJECT_NAME: preflyt-ci-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          node --input-type=module <<'JS'
+          import { randomBytes } from 'node:crypto';
+          import { writeFileSync } from 'node:fs';
+          const values = {
+            POSTGRES_PASSWORD: randomBytes(24).toString('hex'),
+            DATABASE_APP_PASSWORD: randomBytes(24).toString('hex'),
+            CONFIGURATION_ENCRYPTION_KEY: randomBytes(32).toString('base64'),
+            SUPER_ADMIN_USERNAME: 'release-fixture-admin',
+            SUPER_ADMIN_PASSWORD: randomBytes(32).toString('hex'),
+            PREFLYT_IMAGE_REGISTRY: process.env.PREFLYT_PUBLISHED_IMAGES === 'true' ? `ghcr.io/${process.env.GITHUB_REPOSITORY_OWNER}` : 'preflyt-local',
+            PREFLYT_VERSION: process.env.PREFLYT_PUBLISHED_IMAGES === 'true' ? `sha-${process.env.GITHUB_SHA}` : `ci-${process.env.GITHUB_RUN_ID}-${process.env.GITHUB_RUN_ATTEMPT}`,
+            PREFLYT_HTTP_PORT: '38080',
+            WEB_ORIGIN: 'http://localhost:38080',
+            OTEL_SDK_DISABLED: 'true',
+            PREFLYT_SMOKE_CONFIGURATION: 'true',
+          };
+          writeFileSync(`${process.env.RUNNER_TEMP}/preflyt-compose.env`, Object.entries(values).map(([key,value]) => `${key}=${value}`).join('\n') + '\n', { mode: 0o600, flag: 'wx' });
+          JS
+          echo "PREFLYT_ENV_FILE=$RUNNER_TEMP/preflyt-compose.env" >> "$GITHUB_ENV"
+          echo "COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME" >> "$GITHUB_ENV"
+      - name: Authenticate published image reads
+        if: inputs.published_images
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build or pull and start all required services
+        run: |
+          docker compose --env-file "$PREFLYT_ENV_FILE" -f docker-compose.yaml -f compose.local.yaml config --quiet
+          if [ "$PREFLYT_PUBLISHED_IMAGES" = true ]; then
+            docker compose --env-file "$PREFLYT_ENV_FILE" -f docker-compose.yaml -f compose.local.yaml pull
+            for image in preflyt-api preflyt-api-migration preflyt-web; do
+              revision=$(docker image inspect "ghcr.io/$GITHUB_REPOSITORY_OWNER/$image:sha-$GITHUB_SHA" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')
+              test "$revision" = "$GITHUB_SHA"
+            done
+          else
+            docker compose --env-file "$PREFLYT_ENV_FILE" -f docker-compose.yaml -f compose.local.yaml build
+          fi
+          docker compose --env-file "$PREFLYT_ENV_FILE" -f docker-compose.yaml -f compose.local.yaml up -d --no-build --wait --wait-timeout 180
+      - name: Verify login, origin checks and protected routes
+        run: node --env-file="$PREFLYT_ENV_FILE" scripts/deploy/smoke.mjs
+      - name: Verify migration replay and protected backup restore
+        run: |
+          dc() { docker compose --env-file "$PREFLYT_ENV_FILE" -f docker-compose.yaml -f compose.local.yaml "$@"; }
+          dc run --rm migrate
+          sh scripts/deploy/backup.sh "$RUNNER_TEMP/preflyt-acceptance.dump"
+          test "$(stat -c '%a' "$RUNNER_TEMP/preflyt-acceptance.dump")" = 600
+          sh scripts/deploy/restore.sh "$RUNNER_TEMP/preflyt-acceptance.dump" preflyt_restore_ci
+          original=$(dc exec -T db psql -U preflyt_owner -d preflyt -Atc 'SELECT count(*) FROM "Identity"')
+          restored=$(dc exec -T db psql -U preflyt_owner -d preflyt_restore_ci -Atc 'SELECT count(*) FROM "Identity"')
+          test "$original" -ge 1
+          test "$original" = "$restored"
+          migrations=$(dc exec -T db psql -U preflyt_owner -d preflyt -Atc 'SELECT count(*) FROM "_prisma_migrations" WHERE "finished_at" IS NOT NULL')
+          restored_migrations=$(dc exec -T db psql -U preflyt_owner -d preflyt_restore_ci -Atc 'SELECT count(*) FROM "_prisma_migrations" WHERE "finished_at" IS NOT NULL')
+          test "$migrations" = "$restored_migrations"
+          dc restart api worker web
+          dc up -d --no-build --wait --wait-timeout 180
+          node --env-file="$PREFLYT_ENV_FILE" scripts/deploy/smoke.mjs
+      - name: Preserve only redacted readiness diagnostics
+        if: failure()
+        run: docker compose --env-file "$PREFLYT_ENV_FILE" -f docker-compose.yaml -f compose.local.yaml ps --all
+      - name: Remove only this isolated fixture project
+        if: always()
+        run: |
+          case "$COMPOSE_PROJECT_NAME" in preflyt-ci-*) ;; *) exit 1 ;; esac
+          docker compose --env-file "$PREFLYT_ENV_FILE" -f docker-compose.yaml -f compose.local.yaml down --volumes --remove-orphans
+          rm -f "$PREFLYT_ENV_FILE" "$RUNNER_TEMP/preflyt-acceptance.dump"

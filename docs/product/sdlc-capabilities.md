@@ -1,8 +1,8 @@
 # Preflyt across the Software Development Lifecycle
 
-**Status:** Proposed product capabilities; not implemented  
-**Version:** 0.1 · **Date:** 2026-10-08  
-**Positioning:** AI-native Shift Left engineering assessment and governance platform, **not a coding agent**  
+**Status:** Target capabilities across six lifecycle stages. Repository profiling, imported PR/CI assessments and flag-gated GitHub governance are implemented in source; native execution, AI intelligence and later lifecycle stages remain unfinished. See [current capabilities](../../README.md) for deployment limits.
+**Version:** 0.1 · **Date:** 2026-10-08
+**Positioning:** AI-native Shift Left engineering assessment and governance platform, **not a coding agent**
 **Related:** [PRD](../PRD.md) · [Incremental delivery plan](../roadmap/incremental-delivery.md) · [ADR-0004](../architecture/ADR-0004-shift-left-assessment-governance.md) · [ADR-0002](../architecture/ADR-0002-safe-execution-fixtures-remediation-contract.md)
 
 ## 1. One platform across six SDLC stages
@@ -24,7 +24,7 @@ All stages use the same **Assessment → CheckEvidence → Finding → PolicyEva
 
 ## 2. Developer laptop — before commit
 
-**Planned experience:** opt-in Preflyt CLI and later pre-commit/IDE integrations. Developers run deterministic fast checks on their working tree: lint/typecheck, changed-path unit tests, secret scanning, dependency manifests, Terraform/Kubernetes/Docker configuration, API/schema contracts and database migration patterns.
+**Planned experience:** shared local assessment engine powering an opt-in Preflyt CLI and VS Code extension in P6.1–P6.5, with pre-commit integration and additional editor compatibility delivered incrementally. See [developer CLI and IDE specification](developer-cli-ide-extension.md). Developers run deterministic fast checks on their working tree: lint/typecheck, changed-path unit tests, secret scanning, dependency manifests, Terraform/Kubernetes/Docker configuration, API/schema contracts and database migration patterns.
 
 ~~~text
 preflyt check
@@ -46,7 +46,9 @@ When onboarded, Preflyt inventories language/runtime, manifest/lockfiles, test t
 
 An authorized engineering owner applies versioned policy baselines. Preflyt reports required checks, imported evidence, unsupported checks, gaps (e.g. secret scanning absent), and compliance with defined engineering standards. Later scheduled reassessments detect changes in dependencies or engineering policy coverage, independently of code merges.
 
-**Usable increments:** R1 connect/discover/display the profile; R2 baseline control coverage and policies; R3 scheduled posture rechecks and drift trends.
+**P5 planned first-value flow:** connect/select repository → choose branch (default preselected) → automatic queued analysis → evidence-linked health report and notification. No CI setup is required. Preflyt owns scheduling and qualified isolated analysis; unavailable execution produces an explicitly partial inspection report. Existing standards and published policies are preserved. CI remains an optional continuous feedback/enforcement step. See [Repository Health Assessment](repository-health-assessment.md).
+
+**Usable increments:** R1 discovery/profile (P0); automatic initial assessment (P5.1); Health dashboards (P5.2); manual reassessment, freshness and comparable history (P5.3); broader scheduled drift (P12).
 
 ## 4. Pull request / CI — primary MVP gate
 

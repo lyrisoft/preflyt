@@ -1,0 +1,68 @@
+# Optional execution authority, separate from the read-only observer and application identities.
+# Replace the exact reviewed names before deployment. No secrets, exec, attach or direct Pod creation.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: preflyt-native-launcher
+  namespace: preflyt-controller
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: preflyt-native-launcher
+  namespace: preflyt-sandbox-reviewed
+rules:
+  - apiGroups: [batch]
+    resources: [jobs]
+    verbs: [create, get, delete]
+  - apiGroups: [""]
+    resources: [configmaps]
+    verbs: [create, get, delete]
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list, patch]
+  - apiGroups: [""]
+    resources: [pods/log]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: preflyt-native-launcher
+  namespace: preflyt-sandbox-reviewed
+subjects:
+  - kind: ServiceAccount
+    name: preflyt-native-launcher
+    namespace: preflyt-controller
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: preflyt-native-launcher
+---
+# Reuse the existing narrow observer permissions, without expanding the observer's own authority.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: preflyt-native-launcher-observation
+  namespace: preflyt-sandbox-reviewed
+subjects:
+  - kind: ServiceAccount
+    name: preflyt-native-launcher
+    namespace: preflyt-controller
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: preflyt-native-observer
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: preflyt-native-launcher-observation
+subjects:
+  - kind: ServiceAccount
+    name: preflyt-native-launcher
+    namespace: preflyt-controller
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: preflyt-native-observer-reviewed

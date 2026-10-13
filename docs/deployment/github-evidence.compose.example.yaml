@@ -1,0 +1,40 @@
+# Optional production evidence override. Review and copy before deploying.
+# Applies to docker-compose.yaml; the base verifier image does not bundle gh/roots.
+# Host directory contains reviewed gh and trusted-root.json, readable/executable by UID 1000.
+# Managed App credentials/flags are provisioned in Settings → Configuration.
+# The governance environment fields below remain only for backwards-compatible API first import.
+# Saved database values take precedence; changing this environment later does not override them.
+# API and worker both decrypt ALL managed secrets using their shared configuration encryption root.
+# API-only environment forwarding is not governance-secret isolation from the worker.
+# Never pass that root or managed credentials to web, migrations, controllers or scanners.
+# Connections need API/worker restart; managed capability switches refresh every five seconds.
+# Evidence paths, file mounts and trust contracts below remain deployment-managed.
+x-evidence-environment: &evidence-environment
+  CI_ATTESTATION_GH_PATH: /opt/preflyt-attestation/gh
+  CI_ATTESTATION_GH_SHA256: ${CI_ATTESTATION_GH_SHA256:?Set reviewed binary SHA-256}
+  CI_ATTESTATION_ROOT_PATH: /opt/preflyt-attestation/trusted-root.json
+  CI_ATTESTATION_ROOT_SHA256: ${CI_ATTESTATION_ROOT_SHA256:?Set reviewed root SHA-256}
+  CI_ATTESTATION_WORKFLOWS: ${CI_ATTESTATION_WORKFLOWS:?Set exact workflow allowlist JSON}
+  CI_EXECUTION_CONTRACTS: ${CI_EXECUTION_CONTRACTS:?Set reviewed execution contracts JSON}
+x-evidence-mount: &evidence-mount
+  type: bind
+  source: ${PREFLYT_ATTESTATION_DIR:?Set absolute reviewed verifier directory}
+  target: /opt/preflyt-attestation
+  read_only: true
+services:
+  api:
+    environment:
+      <<: *evidence-environment
+      NODE_ENV: production
+      GITHUB_RULESET_ACTIVATION_ENABLED: ${GITHUB_RULESET_ACTIVATION_ENABLED:-false}
+      GITHUB_GOVERNANCE_APP_ID: ${GITHUB_GOVERNANCE_APP_ID:-}
+      GITHUB_GOVERNANCE_PRIVATE_KEY: ${GITHUB_GOVERNANCE_PRIVATE_KEY:-}
+      GITHUB_GOVERNANCE_INSTALLATION_ID: ${GITHUB_GOVERNANCE_INSTALLATION_ID:-}
+    volumes:
+      - *evidence-mount
+  worker:
+    environment:
+      <<: *evidence-environment
+      NODE_ENV: production
+    volumes:
+      - *evidence-mount

@@ -1,0 +1,15 @@
+rules:
+  - id: preflyt-no-debugger
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: Remove the debugger statement before merging.
+    pattern: debugger;
+  - id: preflyt-python-bare-except
+    languages: [python]
+    severity: ERROR
+    message: Catch a specific exception so unexpected failures remain visible.
+    pattern: |
+      try:
+        ...
+      except:
+        ...
