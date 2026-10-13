@@ -6,12 +6,12 @@ export default function DocsHero() {
   return (
     <div className='pf-hero'>
       <img className='pf-brand-logo' src={useBaseUrl('img/brand/logo-panel.svg')} alt='PreflytLabs' width={840} height={280} />
-      <p className='pf-eyebrow'>Repository health and engineering governance</p>
-      <h1 className='pf-hero__title'>Engineering confidence before production</h1>
+      <p className='pf-eyebrow'>Engineering Assurance &amp; Readiness Platform</p>
+      <h1 className='pf-hero__title'>Every change. Verified against your standards.</h1>
       <p className='pf-hero__lead'>
-        Understand your codebase, prioritize findings and assess changes with
-        confidence. Preflyt brings repository health, CI evidence, engineering
-        standards and AI guidance into one self-hosted workspace.
+        Assess repository health and verify CI evidence against approved
+        engineering standards. Get traceable readiness results and advisory AI
+        guidance in one self-hosted workspace.
       </p>
       <div className='pf-hero__actions'>
         <Link className='button button--primary' to='/getting-started/quick-start'>

@@ -6,11 +6,17 @@ product
 
 ## Users
 
-Developers, engineering leads and organization administrators working with connected GitHub repositories.
+Developers, engineering managers, platform/DevOps and security engineers working with connected GitHub repositories. CTOs, VPs of Engineering and platform/infrastructure leaders are the intended buyers. Initial customer focus is teams of roughly 10–100 developers in fintech, payments, lending, insurance technology and regulated software; this is a targeting strategy, not a compliance certification claim.
 
 ## Product Purpose
 
-Connect engineering standards, repository assessments, trusted CI results and merge governance in one organization-scoped workspace. AI Reviews support human decisions; deterministic evidence owns merge decisions.
+Preflyt is a self-hosted Engineering Assurance & Readiness Platform that assesses repository health and verifies CI evidence against approved engineering standards, giving teams a traceable readiness result for each assessed change. Identify risks early, verify approved requirements and provide auditable readiness evidence across repositories. AI supports investigation and recommendations; deterministic checks own readiness evaluation, and GitHub enforces explicitly configured merge rules. Missing or untrusted required evidence remains incomplete. Continuous feedback depends on configured assessments and CI integration.
+
+Tagline: Engineering confidence before production.
+
+Website headline: Every change. Verified against your standards.
+
+Canonical positioning: [Product positioning](docs/product/product-positioning.md).
 
 ## Brand Personality
 

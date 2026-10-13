@@ -33,7 +33,7 @@ const capabilities: {
     label: 'Repository health',
     title: 'Find the issue. Keep the context.',
     description:
-      'Explore supported analysis, inspect the assessed source and follow changes across comparable reports.',
+      'Identify supported security and quality risks, inspect the assessed source and follow comparable repository health reports.',
     icon: GitBranch,
   },
   {
@@ -41,7 +41,7 @@ const capabilities: {
     label: 'Standards & evidence',
     title: 'Your standards. A traceable result.',
     description:
-      'Turn engineering requirements into versioned policies and evaluate the evidence from your existing CI.',
+      'Apply approved engineering requirements through versioned policies and verified evidence from your existing CI.',
     icon: BookOpen,
   },
   {
@@ -49,7 +49,7 @@ const capabilities: {
     label: 'Merge Protection',
     title: 'A clear review before the merge.',
     description:
-      'Publish the current Preflyt result, then configure GitHub to require it through a reviewed activation.',
+      'Connect readiness results to reviewed GitHub protections, with current evidence and an explicit activation.',
     icon: ShieldCheck,
   },
 ]
@@ -144,15 +144,17 @@ export function ProductPage() {
         <section className='hero capability-hero container'>
           <SectionIllustration variant='process' />
           <div className='hero-copy'>
-            <p className='eyebrow'>The Preflyt platform</p>
+            <p className='eyebrow'>Engineering assurance &amp; readiness</p>
             <h1>
-              See the code.
+              Engineering confidence.
               <br />
-              Understand the <em>change.</em>
+              Backed by <em>evidence.</em>
             </h1>
             <p className='hero-description'>
-              A connected view of repository health, engineering requirements
-              and the evidence behind each pull request.
+              Connect repository health, approved standards and verified CI
+              evidence in one self-hosted platform. Give developers and
+              engineering leaders a traceable readiness result for each assessed
+              change.
             </p>
             <div className='hero-actions'>
               <a className='button' href='#capabilities'>
@@ -162,7 +164,7 @@ export function ProductPage() {
               <DocLink path='getting-started'>Get started</DocLink>
             </div>
             <p className='hero-note'>
-              Self-hosted. GitHub native. Evidence at the core.
+              Engineering confidence before production.
             </p>
           </div>
           <EvidenceFlow />
@@ -219,8 +221,8 @@ export function ProductPage() {
             ]}
           />
           <p className='workflow-note'>
-            Repository Health helps investigate the codebase. Verified CI
-            evidence supports the merge review.
+            Identify repository risks early. Verify approved requirements.
+            Review readiness with the evidence behind the result.
           </p>
         </section>
         <section className='capability-boundary container'>
@@ -303,7 +305,7 @@ const content = {
       </>
     ),
     intro:
-      'Find supported security and quality issues, inspect their source at the assessed commit and understand what the analysis actually covered.',
+      'Identify engineering risks early with supported security and quality analysis. Inspect the assessed source, prioritize findings and see what the analysis actually covered.',
     detailTitle: 'A finding is the beginning.',
     detail:
       'The report keeps repository, branch, commit and analyzer outcomes together. Follow a reported issue to its rule, location, saved source context and available guidance.',
@@ -366,7 +368,7 @@ const content = {
       </>
     ),
     intro:
-      'Connect versioned standards to branch policies and the verified results from your existing GitHub Actions workflows.',
+      'Verify code changes against approved engineering requirements. Connect versioned standards, branch policies and CI results to the exact assessed commit.',
     detailTitle: 'Requirements that keep their context.',
     detail:
       'Choose built-in standards or create organization standards. Published policies retain their chosen versions, so editing a standard does not silently change the requirements for a branch.',
@@ -429,7 +431,7 @@ const content = {
       </>
     ),
     intro:
-      'Give pull requests a current evidence-backed result, then explicitly configure GitHub to require the Preflyt check.',
+      'Use evidence-backed readiness results to enforce approved requirements through GitHub. Review and explicitly activate the protections your team needs.',
     detailTitle: 'A result. A rule. An explicit activation.',
     detail:
       'Preflyt publishes Preflyt / Engineering Readiness for the current pull request. GitHub enforces it when your branch rules require that check. Review the affected branches and pull requests before activating a managed ruleset.',
@@ -704,9 +706,9 @@ export function SelfHostingPage() {
               Your engineering <em>standards.</em>
             </h1>
             <p className='hero-description'>
-              Run the same Preflyt application images on a single host or in
-              your Kubernetes cluster. Keep deployment, access and operations
-              under your control.
+              Run your engineering assurance platform on a single host or in
+              your Kubernetes cluster. Keep deployment, repository access and
+              optional AI connections under your control.
             </p>
             <div className='hero-actions'>
               <a

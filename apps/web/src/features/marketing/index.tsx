@@ -152,14 +152,18 @@ export function MarketingHomepage() {
       <main id='main' className='reference-home'>
         <section className='reference-hero container'>
           <div className='hero-copy'>
+            <span className='reference-label'>
+              Engineering Assurance &amp; Readiness Platform
+            </span>
             <h1>
-              Engineering confidence
+              Every change.
               <br />
-              before production.
+              Verified against your standards.
             </h1>
             <p>
-              Understand your repositories, connect engineering requirements to
-              CI evidence, and review every change at the right revision.
+              Assess repository health, apply approved engineering standards and
+              verify CI evidence before code reaches production. Know what
+              passed, what failed and what still needs evidence.
             </p>
             <div className='reference-actions'>
               <a href={docs} className='button'>

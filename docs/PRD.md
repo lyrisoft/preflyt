@@ -1,23 +1,25 @@
 # Preflyt — Product Requirements Document
 
 **Product:** Preflyt
-**Positioning:** Self-hosted repository health and engineering governance platform
+**Positioning:** Self-hosted Engineering Assurance & Readiness Platform
 **Tagline:** Engineering confidence before production
 **Owner:** Lyrisoft Technologies
 **Status:** Product roadmap for engineering and product review; implemented capabilities and remaining scope are tracked in README and the incremental delivery plan
-**Version:** 0.6 — Repository health, unified findings and AI guidance positioning
-**Date:** 2026-10-12
+**Version:** 0.7 — Engineering assurance and readiness positioning
+**Date:** 2026-10-13
 **Source of architectural decisions:** [ADR-0001](architecture/ADR-0001-typescript-first-stack.md) · [ADR-0002](architecture/ADR-0002-safe-execution-fixtures-remediation-contract.md) · [ADR-0003](architecture/ADR-0003-oidc-user-authentication.md) · [ADR-0004](architecture/ADR-0004-shift-left-assessment-governance.md) · [ADR-0007](architecture/ADR-0007-github-first-identity-and-organizations.md)
 
 ---
 
 ## 1. Executive summary
 
-**Preflyt is a self-hosted repository health and engineering governance platform that helps organizations understand their codebase, prioritize security and quality findings, and assess changes before production.**
+**Preflyt is a self-hosted engineering assurance platform that assesses repository health and verifies CI evidence against approved engineering standards, giving teams a traceable readiness result for each assessed change.**
+
+The product prioritizes identifying engineering risks early, verifying approved requirements and giving engineering leaders reliable readiness evidence across repositories. The initial customer focus is engineering teams of roughly 10–100 developers in fintech, payments, lending, insurance technology and regulated software, with CTOs, VPs of Engineering and platform/infrastructure leaders as intended buyers. This focus does not imply regulatory certification or a guarantee of production safety. See [Product positioning](product/product-positioning.md) for audience, approved copy and claim boundaries.
 
 Two complementary workflows deliver that value: repository Health assesses a selected branch at a fixed commit, while CI assessments evaluate submitted execution evidence against engineering requirements. Unified Findings brings issues from both workflows together with source context and saved AI explanations of the problem, likely effect and suggested fix. Analyzer/rule guidance remains available without AI. Health scanner execution requires a qualified runtime; inspection-only reports explicitly show incomplete analysis.
 
-Preflyt does not replace Git hosting, CI/CD or software scanners. It combines engineering standards, deterministic technical checks, imported CI evidence, AI-assisted engineering assessment and source-control feedback into a **continuous engineering assessment and quality-gate system**.
+Preflyt does not replace Git hosting, GitHub Actions, established testing frameworks or comprehensive scanner products. It connects repository health, engineering requirements, verified execution evidence and readiness evaluation in one engineering assurance workflow. Continuous PR feedback depends on the configured CI integration; broader assessment schedules remain subject to the implemented capability and deployment configuration.
 
 Preflyt has three core engines:
 

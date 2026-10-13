@@ -4,7 +4,7 @@ id: index
 title: Preflyt Documentation
 hide_title: true
 sidebar_label: Welcome
-description: Understand repository health, investigate findings and govern code changes with CI evidence and AI guidance in one self-hosted platform.
+description: A self-hosted engineering assurance platform connecting repository health, approved standards and verified CI evidence to traceable readiness results.
 ---
 
 import DocsHero from '@site/src/components/DocsHero'
@@ -13,15 +13,15 @@ import DocsHero from '@site/src/components/DocsHero'
 
 ![Preflyt Engineering Overview showing repository coverage, pull request assessments, adopted standards and assessment activity.](/img/engineering-overview.png)
 
-Preflyt is a self-hosted repository health and engineering governance platform. It helps teams understand the condition of their codebase, investigate security and quality findings, and assess changes against their engineering standards. Repository health and CI assessments share a findings workspace, so developers can move from a reported issue to the affected code and suggested next steps.
+Preflyt is a self-hosted **Engineering Assurance & Readiness Platform**. It assesses repository health and verifies CI evidence against approved engineering standards, giving teams a traceable readiness result for each assessed change. Repository health and CI assessments share a findings workspace, so developers can move from a reported issue to its evidence, assessed source and suggested next steps.
 
 ## Why teams use Preflyt
 
 Teams need to understand both the code they already own and the changes they are about to merge. Scanner reports, test failures and repository configuration often live in separate places, making it difficult to prioritize problems or tell whether a result still applies.
 
-Preflyt connects those results to their repository, branch and assessed commit. Developers get source context and guidance; engineering leads get health summaries and comparable finding trends; platform teams get reusable standards, branch policies and traceable readiness decisions. Missing analysis remains visible rather than looking like a clean result.
+Preflyt connects those results to their repository, branch and assessed commit. Teams can identify engineering risks early, verify approved requirements and review readiness with the evidence behind each result. Developers get source context and advisory guidance; engineering leads get health summaries and comparable trends; platform teams get reusable standards and branch policies. Missing analysis and unverified required results remain incomplete rather than looking like a pass.
 
-You run Preflyt on your own infrastructure with Docker Compose or the Kubernetes application bundle. A GitHub App connects the repositories you select. Your GitHub Actions workflows run the tests and scanners; optional AI reviews use the models and review instructions your organization chooses.
+You run Preflyt on your own infrastructure with Docker Compose or the Kubernetes application bundle. A GitHub App connects the repositories you select. The installed Action runs commands and supported scanners from the published policy inside your GitHub Actions workflow; optional AI reviews use the models and review instructions your organization chooses. Continuous PR feedback depends on that configured integration. GitHub applies merge restrictions when you explicitly enable them.
 
 ## First value without CI
 

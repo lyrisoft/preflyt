@@ -27,7 +27,7 @@ it.each([320, 768, 1440])(
     const view = await render(<MarketingHomepage />)
     await expect
       .element(view.getByRole('heading', { level: 1 }))
-      .toHaveTextContent('Engineering confidence')
+      .toHaveTextContent(/Every change\.\s*Verified against your standards\./)
     await expect
       .poll(() => document.documentElement.scrollWidth)
       .toBeLessThanOrEqual(window.innerWidth)

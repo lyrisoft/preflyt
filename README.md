@@ -6,7 +6,11 @@
 
 **Engineering confidence before production.**
 
-Preflyt is a self-hosted repository health and engineering governance platform. It helps teams understand the condition of their codebase, investigate security and quality findings, and assess whether proposed changes meet their engineering standards. Repository assessments and CI results come together in one workspace, with exact-commit evidence and optional AI guidance that explains the problem, likely effect and suggested fix.
+**Engineering Assurance & Readiness Platform**
+
+Preflyt is a self-hosted engineering assurance platform that assesses repository health and verifies CI evidence against approved engineering standards, giving teams a traceable readiness result for each assessed change. It connects supported security and quality findings, versioned policies, verified execution evidence and advisory AI guidance in one workspace.
+
+Identify engineering risks early, verify that changes satisfy approved requirements, and give engineering leaders evidence they can review across repositories. A readiness result can pass, fail or remain incomplete; missing evidence never becomes a pass. Continuous PR feedback requires the configured CI integration, and repository scanner execution requires a qualified runtime.
 
 Developed by **Lyrisoft Technologies**.
 
@@ -33,7 +37,7 @@ Preflyt brings repository health, findings, standards, branch policies and devel
 1. **Connect GitHub.** Create or connect a GitHub App, install it on the intended repositories, and explicitly select repositories in Preflyt.
 2. **Read repository health.** Selection queues an assessment of the default branch. Review supported scanner findings, exact-revision source locations and report limits without setting up CI. Without a qualified runtime, the report is explicitly inspection-only and partial.
 3. **Define requirements.** Adopt versioned standards and publish a policy for the target branch. Development and main can have different requirements.
-4. **Run checks in CI.** Add the Preflyt Action to your GitHub Actions workflow. Your pipeline runs the tests and scanners; Preflyt receives their reports and verifies the configured execution evidence.
+4. **Run checks in CI.** Install the Preflyt Action once in your GitHub Actions workflow. The published branch policy selects the configured commands and supported scanners. Preflyt receives their reports and verifies execution evidence for the exact commit and workflow attempt.
 5. **Review the result.** Preflyt saves a commit-bound assessment and publishes **Preflyt / Engineering Readiness** on the pull request. Required checks can pass, fail or remain incomplete when evidence is insufficient.
 6. **Optionally enforce the policy.** Require the check in GitHub, or explicitly activate Preflyt-managed merge protection. GitHub enforces whether a merge is allowed.
 
