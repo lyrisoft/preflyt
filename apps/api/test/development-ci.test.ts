@@ -111,3 +111,23 @@ it('combines actual test outcomes and rejects missing or malformed current repor
     expect(merge().status).toBe(1); expect(existsSync(out)).toBe(false)
   } finally { rmSync(dir, { recursive: true, force: true }) }
 })
+
+it('checks Pages configuration with a read-only build token before spending build time', () => {
+  const docs = workflow('docs.yml'), steps = docs.jobs.build.steps
+  expect(docs.jobs.build.permissions).toEqual({ contents: 'read', pages: 'read' })
+  expect(docs.jobs.deploy.permissions).toEqual({ pages: 'write', 'id-token': 'write' })
+  const pages = steps.findIndex((step: any) => step.uses?.startsWith('actions/configure-pages@'))
+  expect(pages).toBeGreaterThan(0)
+  expect(pages).toBeLessThan(steps.findIndex((step: any) => step.name === 'Install locked dependencies'))
+  expect(steps[pages].with?.enablement).not.toBe(true)
+})
+it('includes the image-owned coverage helper in a clean native image checkout', () => {
+  const context = 'docs/deployment/native-runner'
+  const helper = `${context}/coverage/run.mjs`
+  const tracked = spawnSync('git', ['ls-files', '--error-unmatch', helper], { cwd: root, encoding: 'utf8' })
+  expect(tracked.status, tracked.stderr).toBe(0)
+  expect(readFileSync(resolve(root, context, 'Dockerfile.node'), 'utf8')).toContain('COPY coverage /opt/preflyt/coverage')
+  expect(readFileSync(resolve(root, helper), 'utf8')).toContain("isolation:'process'")
+  const ignored = spawnSync('git', ['check-ignore', '--no-index', `${context}/coverage/generated.json`], { cwd: root, encoding: 'utf8' })
+  expect(ignored.status).toBe(0)
+})
