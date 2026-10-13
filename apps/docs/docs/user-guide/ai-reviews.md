@@ -58,3 +58,13 @@ See [Pull request checks](pull-request-checks.md).
 - AI output is kept separate from observed evidence in reports.
 - AI never overrides a failed or incomplete check.
 - AI is optional. Everything else in Preflyt works without it.
+
+## View saved PR reviews
+
+Open an assessment's **AI reviews** tab. Reviews from another assessment appear here only when the PR number and complete head and base revisions match. They are labelled **Saved on another assessment of this PR revision**, with a link to the original assessment. They remain historical advisory results, not replacement evidence for the displayed assessment.
+
+The tab starts with the review date, suggestion count and a compact list. Select **Details** to read the full recommendation, impact and cited code. Expand **Review details** for coverage, publication and model metadata. **New review** keeps review setup out of the result list.
+
+Saved actionable issues also appear under **Findings**. Their details use the same code editor, inline problem and solution, reviewed timestamp and triage controls as other findings.
+
+Each new issue includes a severity and potential impact: **low** for minor effects, **medium** for bounded functional or security impact, **high** for plausible major disruption, data loss or unauthorized access, and **critical** only for evidence-supported widespread compromise or catastrophic impact. Ratings remain advisory and must be supported by the supplied evidence. Reviews without actionable issues return no suggestions. Historical reviews without ratings display **-**; run a new review to obtain a current impact assessment.

@@ -24,9 +24,11 @@ export function FindingSourceViewer({
   const valid =
     data?.sourceSha === finding.sourceSha && data?.path === finding.path
   const github =
-    finding.path && /^[a-f0-9]{40}$/.test(finding.sourceSha)
-      ? `https://github.com/${finding.repository}/blob/${finding.sourceSha}/${finding.path.split('/').map(encodeURIComponent).join('/')}${finding.line ? `#L${finding.line}${finding.endLine && finding.endLine > finding.line ? `-L${finding.endLine}` : ''}` : ''}`
-      : null
+    finding.origin === 'ai' && finding.codeSide === 'LEFT'
+      ? finding.pullRequestUrl
+      : finding.path && /^[a-f0-9]{40}$/.test(finding.sourceSha)
+        ? `https://github.com/${finding.repository}/blob/${finding.sourceSha}/${finding.path.split('/').map(encodeURIComponent).join('/')}${finding.line ? `#L${finding.line}${finding.endLine && finding.endLine > finding.line ? `-L${finding.endLine}` : ''}` : ''}`
+        : null
   return (
     <Card
       className='min-w-0 gap-0 overflow-hidden py-0'
@@ -160,7 +162,10 @@ export function FindingSourceViewer({
           />
           <div className='space-y-1 border-t px-4 py-3 text-xs text-muted-foreground'>
             <p>
-              Source at commit <code>{finding.sourceSha.slice(0, 12)}</code>
+              {finding.origin === 'ai' && finding.codeSide === 'LEFT'
+                ? 'Reviewed PR diff before the change, assessed commit '
+                : 'Source at commit '}
+              <code>{finding.sourceSha.slice(0, 12)}</code>
               {finding.line
                 ? ` · Reported ${finding.endLine && finding.endLine !== finding.line ? `lines ${finding.line}–${finding.endLine}` : `line ${finding.line}`}`
                 : ' · No line was supplied; no code is highlighted.'}

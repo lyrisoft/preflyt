@@ -13,6 +13,15 @@ const isRemediation = (text: string | null | undefined) =>
 
 /** Both presentations separate the code issue/impact from remediation without inventing an unknown cause. */
 export function findingGuidanceText(finding: Finding) {
+  if (finding.origin === 'ai' && finding.recommendation)
+    return {
+      title: finding.title,
+      explanation: finding.impact ?? null,
+      solution: finding.recommendation,
+      impactLabel: finding.impact ? 'Potential impact' : undefined,
+      sourceLabel: 'AI review',
+      attribution: `Saved PR review · commit ${finding.sourceSha.slice(0, 12)} · Suggestions only. Review this hypothesis against the cited code.`,
+    }
   const ai = finding.aiGuidance
   if (
     ai &&

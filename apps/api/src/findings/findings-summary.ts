@@ -4,6 +4,7 @@ type SummaryRow = {
   status: string
   severity: string
   ruleId: string | null
+  checkTitle?: string
 }
 const severities = ['critical', 'high', 'medium', 'low', 'unknown'] as const
 /** Aggregate the same scoped, deduplicated and filtered rows before pagination. */
@@ -15,7 +16,7 @@ export function summarizeFindings(rows: SummaryRow[], kind: string) {
   const groups = new Map<string, number>()
   for (const row of chartRows) {
     const name =
-      row.ruleId ??
+      (row.category === 'ai' ? row.checkTitle ?? 'AI review' : row.ruleId) ??
       (row.category === 'evidence' ? 'Missing evidence' : 'Unspecified check')
     groups.set(name, (groups.get(name) ?? 0) + 1)
   }

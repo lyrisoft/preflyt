@@ -40,6 +40,7 @@ export function FindingDetailsPage({
   const params = new URLSearchParams(
     search.assessment ? { assessment: search.assessment } : {}
   )
+  if (search.origin === 'ai') params.set('origin', 'ai')
   const path = health
     ? `github/repositories/${search.repository}/health?assessment=${search.health}`
     : `findings/${findingId}?${params}`
@@ -104,7 +105,7 @@ export function FindingDetailsPage({
   const data = result.isError || session.isError ? undefined : result.data
   const finding = data?.finding
   const ai = useFindingAiGuidance(
-    finding
+    finding && finding.origin !== 'ai'
       ? {
           origin: health ? 'health' : 'ci',
           repositoryId: finding.repositoryId,
@@ -191,13 +192,22 @@ export function FindingDetailsPage({
         >
           {finding && (
             <div className='flex flex-wrap items-center gap-2'>
-              <StatusBadge
-                tone={severityTone[finding.severity] ?? 'neutral'}
-                className='capitalize'
-              >
-                {finding.severity}
-              </StatusBadge>
+              {finding.origin === 'ai' && finding.severity === 'unknown' ? (
+                <span className='text-xs text-muted-foreground'>
+                  Severity: - (not rated in this saved review)
+                </span>
+              ) : (
+                <StatusBadge
+                  tone={severityTone[finding.severity] ?? 'neutral'}
+                  className='capitalize'
+                >
+                  {finding.severity}
+                </StatusBadge>
+              )}
               <StatusBadge tone='neutral'>{finding.status}</StatusBadge>
+              {finding.origin === 'ai' && (
+                <StatusBadge tone='info'>Suggestions only</StatusBadge>
+              )}
               {health && (
                 <StatusBadge tone='neutral'>Health assessment</StatusBadge>
               )}
@@ -253,7 +263,17 @@ export function FindingDetailsPage({
                     <CardTitle>Finding evidence</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <FindingEvidence evidence={finding.evidence} />
+                    <FindingEvidence
+                      evidence={
+                        finding.origin === 'ai'
+                          ? (finding.evidenceLocations?.map((e) =>
+                              e.path
+                                ? `${e.path}:${e.line} (${e.side?.toLowerCase()})`
+                                : (e.label ?? e.ref)
+                            ) ?? finding.evidence)
+                          : finding.evidence
+                      }
+                    />
                   </CardContent>
                 </Card>
               </div>

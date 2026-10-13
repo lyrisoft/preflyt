@@ -9,6 +9,23 @@ const state = vi.hoisted(() => ({
   save: vi.fn(),
   invalidate: vi.fn(),
 }))
+vi.mock('@tanstack/react-router', () => ({
+  Link: ({
+    children,
+    params,
+    search,
+  }: {
+    children: React.ReactNode
+    params: { repositoryId: string }
+    search: Record<string, string>
+  }) => (
+    <a
+      href={`/repositories/${params.repositoryId}?${new URLSearchParams(search)}`}
+    >
+      {children}
+    </a>
+  ),
+}))
 vi.mock('@tanstack/react-query', () => ({
   useQuery: (o: { queryKey: string[] }) =>
     o.queryKey[0] === 'skill-reviews'
@@ -109,7 +126,8 @@ it('labels inferred suggestions and maps evidence references to known checks', a
       stage='repository'
     />
   )
-  await expect.element(view.getByText('AI suggestion')).toBeVisible()
+  await expect.element(view.getByText('Suggestions only')).toBeVisible()
+  await view.getByText('Recommendation and evidence', { exact: true }).click()
   await expect
     .element(view.getByText('Evidence: security.secret'))
     .toBeVisible()
@@ -176,6 +194,7 @@ it('paginates history and hides review requests from viewers', async () => {
     .element(view.getByRole('button', { name: 'Run review' }))
     .not.toBeInTheDocument()
   await view.getByRole('button', { name: 'Next', exact: true }).click()
+  await view.getByText('Review details', { exact: true }).click()
   await expect
     .element(view.getByText('Skill 5 · skill v1', { exact: true }))
     .toBeVisible()
@@ -212,4 +231,79 @@ it('shares PR changes only when explicitly requested', async () => {
       includeSource: true,
     }
   )
+})
+it('labels related PR revision reviews and links their original assessment', async () => {
+  state.reviews = {
+    data: {
+      enabled: true,
+      checks: [check],
+      reviews: [
+        {
+          ...review,
+          assessmentId: 'original',
+          relatedAssessment: true,
+          result: {
+            ...review.result,
+            findings: review.result.findings.map((f) => ({
+              ...f,
+              findingId: 'a'.repeat(64),
+            })),
+          },
+          finishedAt: '2026-10-13T18:30:00Z',
+        },
+      ],
+    },
+  }
+  const view = await render(
+    <SkillReviewPanel
+      repositoryId='123'
+      assessmentId='new-report'
+      stage='pull_request'
+    />
+  )
+  await expect
+    .element(
+      view.getByText('Same PR revision ·', {
+        exact: false,
+      })
+    )
+    .toBeVisible()
+  await expect
+    .element(view.getByRole('link', { name: 'Open original assessment' }))
+    .toHaveAttribute('href', expect.stringContaining('assessment=original'))
+  await expect
+    .element(view.getByRole('link', { name: 'Details' }))
+    .toHaveAttribute('href', expect.stringContaining('origin=ai'))
+  await expect
+    .element(view.getByText('Missing secret scan evidence'))
+    .toBeVisible()
+})
+
+it('keeps recommendations, evidence and new-review controls collapsed when results exist', async () => {
+  state.reviews = {
+    data: { enabled: true, checks: [check], reviews: [review] },
+  }
+  const view = await render(
+    <SkillReviewPanel
+      repositoryId='123'
+      assessmentId='assessment'
+      stage='repository'
+    />
+  )
+  await expect
+    .element(view.getByRole('table', { name: 'AI suggestions' }))
+    .toBeVisible()
+  await expect
+    .element(view.getByText('Completed', { exact: true }))
+    .toBeVisible()
+  await expect
+    .element(view.getByRole('button', { name: 'Run review' }))
+    .not.toBeInTheDocument()
+  await expect
+    .element(view.getByText('Run the configured check', { exact: true }))
+    .not.toBeVisible()
+  await view.getByText('New review', { exact: true }).click()
+  await expect
+    .element(view.getByRole('button', { name: 'Run review' }))
+    .toBeVisible()
 })

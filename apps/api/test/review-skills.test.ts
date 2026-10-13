@@ -114,3 +114,14 @@ it("bounds structured review output", () => {
     validateSkillOutput("a".repeat(20001), context, ["skill"]),
   ).toThrow();
 });
+it('requires impact-based severity for new inference but preserves unrated historical output', () => {
+  expect(validateSkillOutput(output(), context, ['skill'])[0].severity).toBeUndefined()
+  expect(() => validateSkillOutput(output(), context, ['skill'], undefined, true)).toThrow()
+  for (const severity of ['critical', 'high', 'medium', 'low']) {
+    const raw = output({ findings: [{ ...finding, severity, impact: 'A missing report limits investigation of this commit.' }] })
+    expect(validateSkillOutput(raw, context, ['skill'], undefined, true)[0]).toMatchObject({ severity, impact: 'A missing report limits investigation of this commit.' })
+  }
+  for (const fields of [{ severity: 'urgent', impact: 'Bounded impact.' }, { severity: 'low', impact: '' }, { severity: 'low' }, { impact: 'Bounded impact.' }]) {
+    expect(() => validateSkillOutput(output({ findings: [{ ...finding, ...fields }] }), context, ['skill'], undefined, true)).toThrow()
+  }
+})

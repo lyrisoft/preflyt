@@ -1,5 +1,6 @@
 import type { ProviderUsage } from "./skill-inference.js";
 import { actionableFindings, conciseReviewSummary } from "./pr-review-feedback.js";
+import { aiReviewFindingRows, sameReviewedPrRevision } from '../findings/ai-review-findings.js';
 import { currentStandards } from "../standards/policy-standards.js";
 import { effectiveAiRoute } from "./effective-ai-route.js";
 import {
@@ -59,6 +60,7 @@ const reviewTasks = (checks: AiCheck[], skills: AiReviewSkill[]) =>
   });
 export const skillReviewsEnabled = aiReviewsEnabled;
 type Snapshot = {
+  reviewContractVersion?: 2;
   automatic?: {
     key: string;
     policyId: string;
@@ -186,12 +188,23 @@ export class SkillReviewService {
           skillApplicability(s, profile, assessment.sourceSha).eligible,
       ),
     }));
+    const prNumber = (assessment.request as any)?.pullRequest?.number;
+    const prContext = readPullRequestContext((assessment.request as any)?.pullRequest);
+    const related = stage === 'pull_request' && Number.isSafeInteger(prNumber) && prNumber > 0 &&
+      !!prContext && prContext.head.sha === assessment.sourceSha;
     const records = await this.db.aiSkillReview.findMany({
       where: {
         organizationId: session.organizationId!,
         repositoryId: repo.id,
-        assessmentId,
+        ...(related ? { OR: [{ assessmentId }, { stage: 'pull_request',
+          assessment: { sourceSha: assessment.sourceSha,
+            AND: [
+              { request: { path: ['pullRequest', 'number'], equals: prNumber } },
+              ...(['head', 'base'] as const).flatMap(side => (['repositoryId', 'ref', 'sha'] as const).map(field =>
+                ({ request: { path: ['pullRequest', side, field], equals: prContext![side][field] } }))),
+            ] } }] } : { assessmentId }),
       },
+      include: { assessment: true },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: 50,
     });
@@ -203,7 +216,22 @@ export class SkillReviewService {
     } catch {}
     return {
       enabled: skillReviewsEnabled(),
-      reviews: records.map((r) => publicReview(r, allowUsage)),
+      reviews: records.filter(r => r.assessmentId === assessmentId ||
+        (related && r.assessment.repositoryId === repo.id && sameReviewedPrRevision(r.assessment, assessment)))
+         .map(r => {
+          const output = publicReview(r, allowUsage);
+          const rows = aiReviewFindingRows(r, repo);
+          return { ...output, relatedAssessment: r.assessmentId !== assessmentId,
+            result: output.result && typeof output.result === 'object' ? {
+              ...output.result as any,
+              findings: ((output.result as any).findings ?? []).map((finding: any) => ({ ...finding,
+                findingId: rows.find(row => row.ruleId === finding.checkId && row.title === finding.summary &&
+                  row.recommendation === finding.recommendation && Array.isArray(finding.evidenceRefs) &&
+                  digest([...row.evidence].sort()) === digest([...finding.evidenceRefs].sort()))?.id ?? null,
+              })),
+            } : output.result,
+          };
+        }),
       checks,
     };
   }
@@ -346,6 +374,7 @@ export class SkillReviewService {
         "Test and enable a model connection before running reviews",
       );
     const snapshot: Snapshot = {
+      reviewContractVersion: 2,
       ...(options.automatic ? { automatic: options.automatic } : {}),
       context,
       skills,

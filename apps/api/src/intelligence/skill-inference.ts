@@ -49,7 +49,7 @@ export async function runSkillInference(
     signal,
     (raw, key) => {
       try {
-        return validateSkillOutput(raw, context, skills.map((s) => s.id), key);
+        return validateSkillOutput(raw, context, skills.map((s) => s.id), key, true);
       } catch (error) {
         // Retain only a fixed diagnostic code, never model content or credentials.
         const message = error instanceof Error ? error.message : "";
@@ -69,7 +69,7 @@ export async function runSkillInference(
         sourceSha: { type: "string", enum: [context.sourceSha] },
         findings: { type: "array", maxItems: 20, items: {
           type: "object", additionalProperties: false,
-          required: ["checkId", "evidenceRefs", "summary", "recommendation"],
+          required: ["checkId", "evidenceRefs", "summary", "recommendation", "severity", "impact"],
           properties: {
             checkId: { type: "string", enum: skills.map((s) => s.id) },
             evidenceRefs: { type: "array", minItems: 1, maxItems: 10, items: {
@@ -77,6 +77,8 @@ export async function runSkillInference(
             } },
             summary: { type: "string", maxLength: 600 },
             recommendation: { type: "string", maxLength: 600 },
+            severity: { type: 'string', enum: ['critical', 'high', 'medium', 'low'] },
+            impact: { type: 'string', minLength: 1, maxLength: 600 },
           },
         } },
       },

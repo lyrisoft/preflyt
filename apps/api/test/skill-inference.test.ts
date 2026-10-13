@@ -41,6 +41,8 @@ const output = JSON.stringify({
       evidenceRefs: ["check:0"],
       summary: "Build evidence is missing.",
       recommendation: "Collect a verified build result.",
+      severity: "low",
+      impact: "The team cannot inspect the build outcome from this assessment.",
     },
   ],
 });
@@ -113,6 +115,7 @@ it.each(aiProviderPresets)(
       expect(body.response_format.type).toBe("json_schema");
       expect(body.response_format.json_schema).toMatchObject({ strict: true, schema: {
         properties: { findings: { items: { properties: {
+          severity: { enum: ["critical", "high", "medium", "low"] }, impact: { type: "string" },
           checkId: { enum: ["skill"] }, evidenceRefs: { items: { enum: ["check:0"] } },
         } } } },
       } });

@@ -386,3 +386,91 @@ it('opens Health source details from the shared list and restores shared filters
   )
   expect(document.querySelector('time')?.textContent).toContain('2026')
 })
+it('uses the shared finding table and details route for rated PR suggestions', async () => {
+  state.query = {
+    data: {
+      summary,
+      aiSummary: { suggestions: 1, repositories: 1, pullRequests: 1 },
+      total: 1,
+      assessedRevisions: 1,
+      repositories: [],
+      pageSize: 50,
+      rows: [
+        {
+          id: 'e'.repeat(64),
+          origin: 'ai',
+          title: 'A queued review can be lost.',
+          recommendation: 'Persist the queue.',
+          impact: 'This PR can lose feedback.',
+          repositoryId: '11',
+          repository: 'org/project',
+          sourceSha: 'a'.repeat(40),
+          assessmentId: 'original',
+          observedAt: '2026-10-13T18:30:00Z',
+          pullRequest: 101,
+          pullRequestUrl: 'https://github.com/org/project/pull/101',
+          category: 'ai',
+          severity: 'medium',
+          status: 'AI suggestion',
+          path: 'src/worker.ts',
+          line: 42,
+          triage: { state: 'REPORTED' },
+        },
+      ],
+    },
+    refetch: vi.fn(),
+  }
+  const view = await render(<FindingsPage />)
+  await expect
+    .element(view.getByRole('tab', { name: 'AI suggestions' }))
+    .not.toBeInTheDocument()
+  await expect
+    .element(view.getByRole('columnheader', { name: 'Severity' }))
+    .toBeVisible()
+  await expect
+    .element(view.getByRole('cell', { name: 'medium', exact: true }))
+    .toBeVisible()
+  await expect
+    .element(view.getByRole('link', { name: 'Details', exact: true }))
+    .toHaveAttribute('href', expect.stringContaining('origin=ai'))
+  await expect.element(view.getByText('src/worker.ts:42')).toBeVisible()
+  await expect
+    .element(view.getByRole('link', { name: 'PR #101' }))
+    .toBeVisible()
+  await expect
+    .element(view.getByRole('combobox', { name: 'Severity' }))
+    .not.toBeDisabled()
+  expect(state.key).toContain('all')
+})
+
+it('contains long review titles in the accessible chart data at phone widths', async () => {
+  state.query = {
+    data: {
+      summary: {
+        ...summary,
+        chartTotal: 1,
+        byCheck: [
+          {
+            name: 'Preflyt application PR review with a long title '.repeat(8),
+            count: 1,
+          },
+        ],
+      },
+      rows: [],
+      total: 0,
+      assessedRevisions: 1,
+      repositories: [],
+      pageSize: 50,
+    },
+    refetch: vi.fn(),
+  }
+  await page.viewport(390, 844)
+  const view = await render(<FindingsPage />)
+  await expect
+    .element(view.getByRole('heading', { name: 'Issues by check' }))
+    .toBeVisible()
+  await expect
+    .poll(() => document.documentElement.scrollWidth <= window.innerWidth)
+    .toBe(true)
+  await page.viewport(1280, 800)
+})

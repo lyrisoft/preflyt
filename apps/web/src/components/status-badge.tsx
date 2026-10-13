@@ -26,7 +26,16 @@ export function StatusBadge({
             : tone
           : tone
       }
-      className={cn('min-h-6', className)}
+      className={cn(
+        'min-h-6',
+        typeof children === 'string' &&
+          children.trim().toLowerCase() === 'critical' &&
+          'border-severity-critical/30 bg-severity-critical text-white',
+        typeof children === 'string' &&
+          children.trim().toLowerCase() === 'high' &&
+          'border-severity-high/30 bg-severity-high/10 text-severity-high-text',
+        className
+      )}
     >
       <span
         aria-hidden='true'

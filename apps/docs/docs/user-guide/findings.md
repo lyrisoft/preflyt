@@ -7,7 +7,7 @@ description: See and triage issues reported by your checks across all repositori
 
 # Findings
 
-**Findings** collects issues from **CI** and **repository Health assessments**, across every repository you can assess. Open it from **Workspace → Findings**.
+**Findings** collects issues from **CI**, **repository Health assessments**, and **advisory PR AI reviews**, across every repository you can assess. Open it from **Workspace → Findings**.
 
 ## What is listed
 
@@ -15,6 +15,7 @@ Findings come from saved reports. Each one belongs to a repository and an **exac
 
 - **Reported issues**: CI check failures, issues inside attached JUnit and SARIF reports, and retained analyzer findings from saved Health reports.
 - **Missing or unverified results**: checks that have no usable result yet.
+AI review issues appear in **Reported issues** alongside CI and Health findings. They include their recommendation, severity, reviewed date, original assessment and exact commit. They contribute to finding counts but never change CI pass/fail or readiness results.
 
 Passing CI reports do not create reported issues. Review their results and assessed commit under **Repositories → Checks** or **Assessments**. Security findings appear under **CI** only when the workflow submits a scanner report; repository Health findings appear under **Repository health**. Missing-result counts can include older assessed commits, even when the latest CI run passed.
 
@@ -26,7 +27,7 @@ Each source uses its **latest saved report for each commit**. A Health metric ca
 
 Use the filters at the top:
 
-- **Source**: All sources, CI or Repository health,
+- **Source**: All sources, CI, Repository health or AI review,
 - **Finding type**: Security, Reliability, Maintainability, Duplication, Security hotspots, Test coverage, Test failures or Failed checks,
 - **All repositories** to narrow to one repository,
 - the severity chart: select a severity to filter by it,
@@ -47,7 +48,7 @@ The source file is verified separately from the report. A highlighted location d
 
 ## Triage a finding
 
-For CI findings, open a finding to see its details, then set:
+For CI findings and AI suggestions, open a finding to see its details, then set:
 
 - **Status**: **Reported**, **In review** or **Resolved**,
 - **Assignee**: who is looking at it,
@@ -75,3 +76,13 @@ Hover over highlighted code to see a **Problem** and **Suggested solution** tool
 **Problem and solution** sits inside the affected-code card, directly below the excerpt. It is expanded by default; click its heading or use Enter/Space to collapse and reopen it. When an approved AI provider and source-sharing route are configured, Preflyt asks it for a short problem, likely effect and suggested fix based on the finding and redacted code from the exact assessed commit. The result is saved for that finding, commit and AI configuration, so later visits reuse it. It is labeled **AI guidance** and remains a suggestion alongside the original analyzer evidence. A reported test location may establish only which assertion failed; AI guidance should say when the application cause is not visible in the excerpt.
 
 Until AI guidance is saved, and whenever AI is unavailable or not configured, the current Preflyt rule or analyzer guidance appears. New test failures and older saved ones use the same layout. If a test report supplies no specific fix, the panel offers general troubleshooting steps and explains that the root cause has not been established. New Health reports save Preflyt guidance for its packaged rules. Imported CI SARIF reports can supply their own plain-text rule descriptions and help; this is labeled analyzer-provided advice, with the report's original verification state preserved. Text is bounded and credential-like content is omitted. HTML and Markdown are not rendered, and external help links are not fetched. Unknown rules without supplied text show an explicit unavailable explanation. Guidance does not change the saved assessment or merge result.
+
+## Read an AI suggestion
+
+AI findings appear in the default list. Choose **Source → AI review** to focus on them. AI suggestions use the same table and **Details** page as other findings. Use repository, severity, status and text filters to narrow the list. Repeated identical suggestions for the same PR commit appear once, using the newest saved review.
+
+New reviews assign **low**, **medium**, **high** or **critical** severity and explain the potential impact and its preconditions. Minor effects are low. Severity is an advisory estimate, not verified exploitability. Older reviews without a saved rating show **-**; Preflyt does not invent a historical rating.
+
+Details show the saved recommendation in **Problem and solution** and on the highlighted code line. Cited added lines use source from the exact assessed head commit. Removed lines use the retained, redacted **PR diff before the change**, clearly labelled separately. Evidence-only suggestions explain when no code location was cited. Repository permissions apply to both the suggestion and its code.
+
+Status, assignee and review notes use the existing triage controls. Resolving an AI suggestion does not change a check result or authorize merging.
