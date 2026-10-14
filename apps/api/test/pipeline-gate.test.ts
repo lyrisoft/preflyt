@@ -223,3 +223,74 @@ it('waits for every configured AI review and PR publication, while advisory find
   expect(pipelineAiResult(checks, [{ snapshot, state: 'SUCCEEDED', feedbackState: 'PUBLISHED' }]).state).toBe('PASSED');
   expect(pipelineAiResult([{ id: 'other' }], [{ snapshot, state: 'SUCCEEDED', feedbackState: 'PUBLISHED' }]).state).toBe('PENDING');
 });
+
+function gateRetryFixture() {
+  const step = { name: 'Policy checks', number: 1, status: 'completed', conclusion: 'success',
+    startedAt: '2026-10-14T20:00:00Z', completedAt: '2026-10-14T20:01:00Z' }
+  const check = { id: '10', name: 'checks', sourceSha: 'head', status: 'completed', conclusion: 'success',
+    startedAt: step.startedAt, completedAt: step.completedAt, steps: [step] }
+  const gate = { ...check, id: '20', name: 'Preflyt final gate', status: 'completed', conclusion: 'failure' }
+  const previous = [check, gate], current = [{ ...check, id: '30' }, { ...gate, id: '40', status: 'in_progress', conclusion: null }]
+  const prior = { id: 'submission', runAttempt: 1, state: 'COMPLETE', prNumber: 7, sourceSha: 'head',
+    workflowSha: 'merge-sha', policyId: 'policy', policyHash: 'hash', assessmentId: 'assessment' }
+  const metadata = { schemaVersion: 1, submissionId: prior.id, repositoryId: 'repo', sourceSha: 'head', runId: '123', runAttempt: 1,
+    workflowId: '99', policyId: 'policy', policyHash: 'hash', verificationScope: 'jobs', jobIds: ['10'] }
+  const db = {
+    gitHubRepository: { findFirst: vi.fn().mockResolvedValue({ id: 'repo', githubId: 51n, installationId: 50n,
+      fullName: 'org/repo', readinessAutomation: { enabled: true, actorId: 'actor', organizationId: 'org' } }) },
+    pipelineRunSubmission: { findFirst: vi.fn().mockImplementation(({ where }) => Promise.resolve(typeof where.runAttempt === 'number' ? null : prior)) },
+    auditEvent: { findUnique: vi.fn().mockResolvedValue({ event: 'pipeline.run.verified', metadata }) },
+    gatePolicyRevision: { findFirst: vi.fn().mockResolvedValue({ id: 'policy', definitionHash: 'hash' }) },
+    gitHubCheckPublication: { findFirst: vi.fn().mockResolvedValue({ id: 'publication', checkRunId: '9', state: 'PUBLISHED',
+      verifiedAt: new Date(), conclusion: 'success' }) },
+  }
+  const github = {
+    readPipelineVerificationRun: vi.fn().mockResolvedValue({ runAttempt: 2, sourceSha: 'head', event: 'pull_request',
+      workflowPath: '.github/workflows/ci.yml', workflowId: '99', verifiedJobs: { jobIds: ['30'], conclusion: 'success' } }),
+    readPipelineJobs: vi.fn().mockImplementation((_i, _r, _run, attempt) => Promise.resolve(attempt === 1 ? previous : current)),
+    readPullRequest: vi.fn().mockResolvedValue({ context: { state: 'open', draft: false,
+      head: { sha: 'head', repositoryId: '51' }, base: { ref: 'development', repositoryId: '51' } } }),
+    readPublishedReadinessCheck: vi.fn().mockResolvedValue({ externalId: 'publication', conclusion: 'success' }),
+  }
+  mocks.identity.mockResolvedValue({ repository_id: '51', repository: 'org/repo', run_id: '123', run_attempt: '2',
+    sha: 'merge-sha', event_name: 'pull_request', ref: 'refs/pull/7/merge',
+    workflow_ref: 'org/repo/.github/workflows/ci.yml@refs/pull/7/merge' })
+  const controller = new PipelineGateController(db as any, { requireRepository: vi.fn() } as any, github as any)
+  return { db, github, prior, metadata, previous, current, status: () => controller.status('Bearer token', '123', '2') }
+}
+it('reuses a verified earlier submission only for copied executions in the same authenticated run', async () => {
+  const f = gateRetryFixture()
+  expect(await f.status()).toMatchObject({ state: 'PASSED' })
+  expect(f.github.readPipelineJobs.mock.calls.map(c => c[3])).toEqual([1, 2])
+  expect(f.db.pipelineRunSubmission.findFirst).toHaveBeenLastCalledWith(expect.objectContaining({ where: expect.objectContaining({
+    runId: '123', runAttempt: { lt: 2 }, sourceSha: 'head', workflowSha: 'merge-sha', state: 'COMPLETE',
+  }) }))
+  expect(f.db.gitHubCheckPublication.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ assessmentId: 'assessment' }) }))
+})
+it('fails immediately when completed jobs have no compatible submission instead of waiting for an impossible submission', async () => {
+  const f = gateRetryFixture()
+  f.db.pipelineRunSubmission.findFirst.mockResolvedValue(null)
+  expect(await f.status()).toMatchObject({ state: 'FAILED', stage: 'RESULT_VERIFICATION_FAILED' })
+  expect(f.github.readPublishedReadinessCheck).not.toHaveBeenCalled()
+})
+it('rejects missing or mismatched acceptance proof, different workflow commits and newly executed prerequisite jobs', async () => {
+  for (const change of ['no-proof', 'proof-jobs', 'proof-policy', 'proof-run', 'workflow', 'new-execution', 'changed-policy', 'changed-head']) {
+    const f = gateRetryFixture()
+    if (change === 'no-proof') f.db.auditEvent.findUnique.mockResolvedValue(null)
+    if (change === 'proof-jobs') f.metadata.jobIds = ['other']
+    if (change === 'proof-policy') f.metadata.policyHash = 'other'
+    if (change === 'proof-run') f.metadata.runId = '999'
+    if (change === 'workflow') f.prior.workflowSha = 'other'
+    if (change === 'new-execution') f.current[0].completedAt = '2026-10-14T21:00:00Z'
+    if (change === 'changed-policy') f.db.gatePolicyRevision.findFirst.mockResolvedValue({ id: 'new-policy', definitionHash: 'new-hash' })
+    if (change === 'changed-head') f.github.readPullRequest.mockResolvedValue({ context: { state: 'open', draft: false,
+      head: { sha: 'new-head', repositoryId: '51' }, base: { ref: 'development', repositoryId: '51' } } })
+    expect(await f.status(), change).toMatchObject({ state: 'FAILED' })
+  }
+})
+it('never falls back to old evidence when the current attempt submitted its own failed result', async () => {
+  const f = gateRetryFixture()
+  f.db.pipelineRunSubmission.findFirst.mockResolvedValue({ ...f.prior, runAttempt: 2, state: 'FAILED' })
+  expect(await f.status()).toMatchObject({ state: 'FAILED', stage: 'RESULT_VERIFICATION_FAILED' })
+  expect(f.db.auditEvent.findUnique).not.toHaveBeenCalled()
+})

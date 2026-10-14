@@ -21,6 +21,7 @@ import {
   githubActionsWorkflowSkillRef,
 } from "../intelligence/github-actions-workflow-skill.js";
 import { digest } from "./assessment-digest.js";
+import { reviewOutputFailureMessages } from '../intelligence/review-skills.js';
 import { checkReportFormat } from "./check-report-adapters.js";
 import {
   readWorkflow,
@@ -67,6 +68,7 @@ function rewriteFailure(error: unknown) {
       INVALID_REVIEW_SCHEMA: "AI returned an invalid structured response.",
       INVALID_EVIDENCE: "AI cited unavailable evidence.",
       UNSUPPORTED_CLAIM: "AI returned an unsupported claim.",
+      ...reviewOutputFailureMessages,
     };
     return {
       code: error.code,

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { Sparkles, Play, RefreshCw } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import {
@@ -131,6 +132,7 @@ export function SkillReviewPanel({
         body
       )
       await client.invalidateQueries({ queryKey: key })
+      if (path.endsWith('/retry')) toast.success('AI review queued')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Review unavailable')
     } finally {
@@ -232,6 +234,16 @@ export function SkillReviewPanel({
             )}
             {r.failure && (
               <p className='text-sm text-muted-foreground'>{r.failure}</p>
+            )}
+            {allowed && data.enabled && r.state === 'UNAVAILABLE' && (
+              <Button
+                variant='outline'
+                size='sm'
+                disabled={busy}
+                onClick={() => void action(`/${r.id}/retry`, {})}
+              >
+                Retry AI review
+              </Button>
             )}
             {!!r.result?.findings.length && (
               <div className='overflow-hidden rounded-lg border'>

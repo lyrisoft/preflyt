@@ -307,3 +307,55 @@ it('keeps recommendations, evidence and new-review controls collapsed when resul
     .element(view.getByRole('button', { name: 'Run review' }))
     .toBeVisible()
 })
+
+it('retries only the unavailable AI review through its dedicated endpoint', async () => {
+  state.reviews = {
+    data: {
+      enabled: true,
+      reviews: [
+        {
+          ...review,
+          automatic: true,
+          state: 'UNAVAILABLE',
+          failure: 'API_KEY_OUTPUT: The model response was rejected.',
+          result: null,
+        },
+      ],
+      checks: [check],
+    },
+  }
+  const view = await render(
+    <SkillReviewPanel
+      repositoryId='123'
+      assessmentId='assessment'
+      stage='repository'
+    />
+  )
+  await view
+    .getByRole('button', { name: 'Retry AI review', exact: true })
+    .click()
+  expect(state.save).toHaveBeenCalledExactlyOnceWith(
+    '/github/repositories/123/ai-reviews/review/retry',
+    {}
+  )
+  expect(state.invalidate).toHaveBeenCalled()
+})
+it('hides AI retry from readers without review execution permission', async () => {
+  state.role = 'AUDITOR'
+  state.reviews = {
+    data: {
+      enabled: true,
+      reviews: [{ ...review, state: 'UNAVAILABLE', result: null }],
+    },
+  }
+  const view = await render(
+    <SkillReviewPanel
+      repositoryId='123'
+      assessmentId='assessment'
+      stage='repository'
+    />
+  )
+  await expect
+    .element(view.getByRole('button', { name: 'Retry AI review' }))
+    .not.toBeInTheDocument()
+})

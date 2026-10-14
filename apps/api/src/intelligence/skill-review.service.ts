@@ -37,6 +37,7 @@ import {
 } from "./ai-configuration.js";
 import {
   reviewContext,
+  reviewOutputFailureMessages,
   skillDigest,
   type ReviewContext,
 } from "./review-skills.js";
@@ -58,6 +59,12 @@ const reviewTasks = (checks: AiCheck[], skills: AiReviewSkill[]) =>
       checkTitle: check.title,
     };
   });
+const automaticReviewKey = (organizationId: string, repositoryId: string,
+  automatic: NonNullable<Snapshot['automatic']>, routeRevision: number, checks: AiCheck[]) => digest({
+  organizationId, repositoryId, number: automatic.number, context: automatic.context,
+  policyHash: automatic.policyHash, routeRevision,
+  ...(automatic.repositoryRevision !== undefined ? { repositoryRevision: automatic.repositoryRevision } : {}), checks,
+});
 export const skillReviewsEnabled = aiReviewsEnabled;
 type Snapshot = {
   reviewContractVersion?: 2;
@@ -243,6 +250,7 @@ export class SkillReviewService {
     options: {
       includeSource?: boolean;
       automatic?: Snapshot["automatic"];
+      retryUnavailable?: boolean;
     } = {},
   ) {
     if (!skillReviewsEnabled())
@@ -337,7 +345,7 @@ export class SkillReviewService {
       const existing = await this.db.aiSkillReview.findUnique({
         where: { automaticKey: options.automatic.key },
       });
-      if (existing) return publicReview(existing);
+      if (existing && (!options.retryUnavailable || existing.state !== 'UNAVAILABLE')) return publicReview(existing);
     }
     if (options.includeSource) {
       const pr = (record.request as { pullRequest?: { number?: number } })
@@ -400,8 +408,8 @@ export class SkillReviewService {
                 where: { automaticKey: options.automatic.key },
               })
             : null;
-          if (automaticDuplicate) return automaticDuplicate;
-          const existing = await tx.aiSkillReview.findUnique({
+          if (automaticDuplicate && (!options.retryUnavailable || automaticDuplicate.state !== 'UNAVAILABLE')) return automaticDuplicate;
+          const existing = automaticDuplicate ?? await tx.aiSkillReview.findUnique({
             where: {
               organizationId_actorId_fingerprint: {
                 organizationId: session.organizationId!,
@@ -410,7 +418,9 @@ export class SkillReviewService {
               },
             },
           });
-          if (existing && (existing.state !== "UNAVAILABLE" || options.automatic)) return existing;
+          if (existing && (existing.state !== "UNAVAILABLE" || (options.automatic && !options.retryUnavailable))) return existing;
+          if (existing && existing.fingerprint !== fingerprint)
+            throw new ConflictException('Review configuration changed. Reload and retry.');
           if (
             (await tx.auditEvent.count({
               where: {
@@ -463,7 +473,7 @@ export class SkillReviewService {
             where: { id: existing.id },
             data: { state: "QUEUED", failure: null, result: Prisma.JsonNull, usage: Prisma.JsonNull,
               startedAt: null, finishedAt: null, latencyMs: null, providerId: null,
-              createdAt: new Date(), feedbackState: "NOT_REQUESTED" },
+              createdAt: new Date(), feedbackState: options.automatic && (route.publishSummary || route.publishInline) ? 'PENDING' : 'NOT_REQUESTED' },
           }) : await tx.aiSkillReview.create({
             data: {
               organizationId: session.organizationId!,
@@ -509,6 +519,50 @@ export class SkillReviewService {
         );
       throw e;
     }
+  }
+  /** Explicit recovery only. Re-admit against current access, policy, source,
+   * skills and model route; periodic dispatch never retries failed inference. */
+  async retry(session: AuthenticatedSession, repoId: string, reviewId: string) {
+    if (!skillReviewsEnabled()) throw new ServiceUnavailableException('AI reviews are disabled for this deployment');
+    const repo = await this.access.requireRepository(session, repoId, 'ai.review.run');
+    const review = await this.db.aiSkillReview.findFirst({ where: {
+      id: reviewId, repositoryId: repo.id, organizationId: session.organizationId!, state: 'UNAVAILABLE',
+    } });
+    if (!review) throw new NotFoundException('Unavailable review not found');
+    if (review.automaticKey && review.actorId !== session.identityId)
+      throw new ConflictException('Retry this automatic review as its original requester');
+    const snapshot = review.snapshot as unknown as Snapshot;
+    const route = await effectiveAiRoute(this.db, session.organizationId!, review.stage);
+    if (!route?.enabled) throw new ConflictException('Choose an enabled model in Model Router');
+    let automatic = snapshot.automatic;
+    if (automatic) {
+      let key = automaticReviewKey(session.organizationId!, repo.id, automatic, route.revision, snapshot.checks);
+      if (route.id !== snapshot.route.id && route.revision === snapshot.route.revision)
+        key = digest({ automaticKey: key, routeId: route.id });
+      if (route.id === snapshot.route.id && route.revision === snapshot.route.revision) {
+        const providers = await this.db.aiProviderConnection.findMany({ where: {
+          organizationId: session.organizationId!, id: { in: [route.primaryId, route.fallbackId].filter((id): id is string => !!id) },
+        } });
+        const pins = [route.primaryId, route.fallbackId].flatMap(id => {
+          const provider = providers.find(p => p.id === id);
+          return provider && this.configuration.ready(provider)
+            ? [{ id: provider.id, revision: provider.revision, endpointDigest: endpointDigest(providerEndpoint(provider)!) }] : [];
+        });
+        // Credential/connection edits need not change the route revision. An
+        // explicit retry may adopt new provider pins without overwriting the
+        // old review or causing periodic dispatch to retry failed inference.
+        key = digest(pins) === digest(snapshot.providers) ? automatic.key : digest({ automaticKey: key, providers: pins });
+      }
+      automatic = { ...automatic, key };
+    }
+    // Automatic reviews remain owned by the currently configured actor.
+    if (automatic?.repositoryRevision !== undefined) {
+      const config = await this.db.readinessAutomation.findUnique({ where: { repositoryId: repo.id } });
+      if (config?.actorId !== session.identityId) throw new ConflictException('Retry this automatic review as the configured repository actor');
+    }
+    return this.request(session, repoId, review.assessmentId, snapshot.checks.map(c => c.id), {
+      automatic, includeSource: !!snapshot.context.source, retryUnavailable: true,
+    });
   }
   async cancel(session: AuthenticatedSession, repoId: string, id: string) {
     const repo = await this.access.requireRepository(
@@ -899,16 +953,10 @@ export class SkillReviewService {
     for (let index = 0; index < eligibleChecks.length; index += 3) {
       const selected = eligibleChecks.slice(index, index + 3);
       const automatic = {
-        key: digest({
-          organizationId,
-          repositoryId: pr.repositoryId,
-          number: pr.number,
-          context,
-          policyHash: policy.definitionHash,
-          routeRevision: route.revision,
+        key: automaticReviewKey(organizationId, pr.repositoryId, {
+          key: '', number: pr.number, context, policyId: policy.id, policyHash: policy.definitionHash,
           ...(scoped ? { repositoryRevision: config!.revision } : {}),
-          checks: selected,
-        }),
+        }, route.revision, selected),
         ...(scoped ? { repositoryRevision: config!.revision } : {}),
         policyId: policy.id,
         policyHash: policy.definitionHash,
@@ -1340,6 +1388,7 @@ export class SkillReviewService {
         TRUNCATED: "The model response was cut off. Retry the review.",
         INVALID_RESPONSE: "The model returned an unreadable response. Retry the review.",
         UNSAFE_RESPONSE: "The model response contained unsafe content and was rejected.",
+        ...reviewOutputFailureMessages,
         REFUSED: "The model declined this review.",
         INVALID_REVIEW_SCHEMA: "The model did not return the required review format. Retry the review.",
         INVALID_EVIDENCE: "The model cited evidence outside this assessment. Retry the review.",
@@ -1351,6 +1400,7 @@ export class SkillReviewService {
           state: "UNAVAILABLE",
           feedbackState: "NOT_REQUESTED",
           failure: error instanceof AiResponseError ? responseMessages[error.code] :
+            error instanceof AiTransportError ? `${error.code}: The configured model connection was unavailable.` :
             "Review unavailable: check current access, approved skills, model route and connection",
           latencyMs: Date.now() - start,
           finishedAt: new Date(),

@@ -7,14 +7,14 @@ import {
 } from "./ai-configuration.js";
 import { aiHttpRequest, AiTransportError } from "./ai-http.js";
 import type { ReviewContext } from "./review-skills.js";
-import { reviewPrompt, validateSkillOutput } from "./review-skills.js";
+import { reviewPrompt, validateSkillOutput, ReviewOutputError, type ReviewOutputFailure } from "./review-skills.js";
 // Fixed provider response bound; users do not configure token limits or prices.
 export const aiResponseTokenLimit = 8192;
 
 /** Safe response diagnostics; never retain provider bodies or credentials. */
 export class AiResponseError extends Error {
   constructor(
-    readonly code:
+    readonly code: ReviewOutputFailure
       | "MODEL_UNAVAILABLE"
       | "TRUNCATED"
       | "INVALID_RESPONSE"
@@ -51,6 +51,7 @@ export async function runSkillInference(
       try {
         return validateSkillOutput(raw, context, skills.map((s) => s.id), key, true);
       } catch (error) {
+        if (error instanceof ReviewOutputError) throw new AiResponseError(error.code);
         // Retain only a fixed diagnostic code, never model content or credentials.
         const message = error instanceof Error ? error.message : "";
         throw new AiResponseError(
@@ -236,7 +237,7 @@ export async function runPromptInference<T>(
     raw = choice.message?.content;
   }
   if (typeof raw !== "string") throw new AiResponseError("INVALID_RESPONSE");
-  if (key && raw.includes(key)) throw new AiResponseError("UNSAFE_RESPONSE");
+  if (key && raw.includes(key)) throw new AiResponseError('CREDENTIAL_ECHO');
   return validate(raw, key);
 }
 export type ProviderUsage = {

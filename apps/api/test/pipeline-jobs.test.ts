@@ -26,3 +26,28 @@ it('retains API job evidence separately from webhook events with a validated imm
   expect(validateObservation(row, delivery)).toBe(true);
   expect(validateObservation({...row, sourceSha: 'b'.repeat(40)}, delivery)).toBe(false);
 });
+
+import { reusedPipelineJobs } from '../src/assessments/pipeline-jobs.js'
+const execution = { ...check, startedAt: '2026-10-14T20:00:00Z', completedAt: '2026-10-14T20:01:00Z',
+  steps: [{ name: 'Policy checks', number: 1, status: 'completed', conclusion: 'success',
+    startedAt: '2026-10-14T20:00:00Z', completedAt: '2026-10-14T20:01:00Z' }] }
+it('recognizes GitHub job copies by execution history rather than their newly allocated IDs', () => {
+  const skipped = { ...check, id: '3', name: 'Other branch', conclusion: 'skipped', steps: [] }
+  const previous = [execution, skipped, { ...gate, status: 'completed', conclusion: 'failure' }]
+  const current = [{ ...execution, id: '11' }, { ...skipped, id: '13', startedAt: '2026-10-14T21:00:00Z' }, { ...gate, id: '12' }]
+  expect(reusedPipelineJobs(previous, current, sha)).toBe(true)
+  expect(reusedPipelineJobs([execution, skipped, { ...gate, status: 'completed', conclusion: 'cancelled' }], current, sha)).toBe(true)
+  for (const changed of [
+    { ...execution, startedAt: '2026-10-14T21:00:00Z', completedAt: '2026-10-14T21:01:00Z' },
+    { ...execution, sourceSha: 'b'.repeat(40) },
+    { ...execution, conclusion: 'failure' },
+    { ...execution, status: 'in_progress' },
+    { ...execution, completedAt: undefined },
+    { ...execution, steps: [{ ...execution.steps[0], name: 'Different command' }] },
+    { ...execution, steps: [{ ...execution.steps[0], startedAt: '2026-10-14T20:00:01Z' }] },
+    { ...execution, steps: [{ ...execution.steps[0], number: undefined }] },
+    { ...execution, steps: [{ ...execution.steps[0], conclusion: 'skipped' }] },
+  ]) expect(reusedPipelineJobs(previous, [changed, skipped, gate], sha)).toBe(false)
+  expect(reusedPipelineJobs(previous, [execution, gate], sha)).toBe(false)
+  expect(reusedPipelineJobs(previous, [execution, execution, gate], sha)).toBe(false)
+})

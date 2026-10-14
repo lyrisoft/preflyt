@@ -40,6 +40,23 @@ It publishes deterministic results, runs the configured advisory PR review and
 waits for its PR feedback publication. AI findings stay advisory; execution or
 publishing failure fails the gate. Documentation remains a separate workflow.
 
+A gate-only rerun can reuse an earlier accepted submission from the same workflow
+run. Preflyt requires the same workflow commit, PR head and current published
+policy, the original server verification receipt, and fresh GitHub API reads of
+both attempts. Successful prerequisite jobs must have identical execution and
+step timestamps, names and outcomes; GitHub may allocate new IDs to the copied
+jobs. Changed, rerun, incomplete or unverified jobs cannot reuse old results.
+Once prerequisite jobs finish, a missing compatible submission fails immediately.
+
+For an unavailable AI review, use **Retry AI review** on the saved assessment.
+This retries the review without executing CI checks. Admission rechecks access,
+source-sharing permission, approved skills, the published policy and the current
+tested model route. Changing routes creates a new review; retrying unchanged
+settings requeues only the unavailable review. Automatic polling never repeats
+failed inference. Rejected output remains unpublished. Failures retain fixed
+categories for response size, credential echo and secret patterns, without
+retaining rejected output or matched text.
+
 The old `preflyt-gate.yml` workflow is removed from development. Main is not
 changed by this rollout; any legacy gate already on main remains there until the
 owner separately promotes or removes it. New setup PRs update one workflow and

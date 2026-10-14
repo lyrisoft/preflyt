@@ -12,6 +12,8 @@ import { AuthorizationService } from "../auth/authorization.service.js";
 import { GitHubProviderService } from "../github/github-provider.service.js";
 import { pipelineIdentity } from "./pipeline-identity.js";
 import { currentStandards } from "../standards/policy-standards.js";
+import { digest } from './assessment-digest.js';
+import { completedPipelineJobs, reusedPipelineJobs } from './pipeline-jobs.js';
 const numeric = (v: unknown): v is string =>
   typeof v === "string" &&
   /^[1-9]\d{0,15}$/.test(v) &&
@@ -117,7 +119,10 @@ export class PipelineGateController {
     if (!source.verifiedJobs) return {
       state: 'PENDING', stage: 'CHECK_JOBS', message: 'Waiting for the completed check jobs in this workflow.',
     };
-    const row = await this.prisma.pipelineRunSubmission.findFirst({
+    if (source.verifiedJobs.conclusion !== 'success') return {
+      state: 'FAILED', stage: 'CHECK_JOBS_FAILED', message: 'One or more check jobs failed.',
+    };
+    let row = await this.prisma.pipelineRunSubmission.findFirst({
       where: {
         repositoryId: repo.id,
         organizationId: config.organizationId,
@@ -126,11 +131,35 @@ export class PipelineGateController {
       },
       orderBy: { createdAt: "desc" },
     });
+    if (!row && Number(attempt) > 1 && typeof claims.sha === 'string') {
+      const prior = await this.prisma.pipelineRunSubmission.findFirst({ where: {
+        repositoryId: repo.id, organizationId: config.organizationId, runId,
+        runAttempt: { lt: Number(attempt) }, state: 'COMPLETE',
+        sourceSha: source.sourceSha, workflowSha: claims.sha,
+      }, orderBy: { runAttempt: 'desc' } });
+      if (prior && prior.runAttempt < Number(attempt) && prior.state === 'COMPLETE' &&
+        prior.sourceSha === source.sourceSha && prior.workflowSha === claims.sha) {
+        const proof = await this.prisma.auditEvent.findUnique({ where: { id: `pipeline-verified:${prior.id}` } });
+        const metadata = proof?.metadata as Record<string, unknown> | undefined;
+        if (proof?.event === 'pipeline.run.verified' && metadata?.schemaVersion === 1 && metadata.verificationScope === 'jobs' &&
+          metadata.submissionId === prior.id && metadata.repositoryId === repo.id &&
+          metadata.sourceSha === prior.sourceSha && metadata.runId === runId && metadata.runAttempt === prior.runAttempt &&
+          metadata.workflowId === source.workflowId && metadata.policyId === prior.policyId && metadata.policyHash === prior.policyHash) {
+          const original = await this.github.readPipelineJobs(repo.installationId, repo.githubId, runId, prior.runAttempt);
+          const current = await this.github.readPipelineJobs(repo.installationId, repo.githubId, runId, Number(attempt));
+          const jobs = completedPipelineJobs(original, source.sourceSha, true);
+          if (Array.isArray(metadata.jobIds) && jobs?.conclusion === 'success' &&
+            digest([...metadata.jobIds].sort()) === digest(jobs.jobIds) &&
+            reusedPipelineJobs(original, current, source.sourceSha) &&
+            digest(completedPipelineJobs(current, source.sourceSha)) === digest(source.verifiedJobs)) row = prior;
+        }
+      }
+    }
     if (!row)
       return {
-        state: "PENDING",
-        stage: 'RESULT_SUBMISSION',
-        message: "Waiting for the checks workflow submission.",
+        state: "FAILED",
+        stage: 'RESULT_VERIFICATION_FAILED',
+        message: "The check jobs completed without a matching result submission. Earlier results could not be verified as reused jobs.",
       };
     const { context } = await this.github.readPullRequest(
       repo.installationId,

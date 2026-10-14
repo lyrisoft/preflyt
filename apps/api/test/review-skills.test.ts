@@ -125,3 +125,11 @@ it('requires impact-based severity for new inference but preserves unrated histo
     expect(() => validateSkillOutput(output({ findings: [{ ...finding, ...fields }] }), context, ['skill'], undefined, true)).toThrow()
   }
 })
+
+it('allows ordinary risk-assessment and task-execution words without accepting actual API key tokens', () => {
+  const summary = 'The risk-assessment task-execution path can skip validation.'
+  expect(validateSkillOutput(output({ findings: [{ ...finding, summary }] }), context, ['skill'])).toHaveLength(1)
+  const fixtureToken = ['sk', 'fixture', 'secret', 'value'].join('-')
+  for (const token of [fixtureToken, `(${fixtureToken})`, `key: ${fixtureToken}`])
+    expect(() => validateSkillOutput(output({ findings: [{ ...finding, summary: token }] }), context, ['skill'])).toThrow()
+})

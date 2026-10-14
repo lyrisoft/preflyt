@@ -723,7 +723,9 @@ export class GitHubProviderService {
       result.jobs.some(job => String(job.run_id) !== runId || !Number.isSafeInteger(job.id) || typeof job.name !== 'string' || !Array.isArray(job.steps)))
       throw new ServiceUnavailableException('Workflow jobs could not be verified')
     return result.jobs.map(job => ({ id: String(job.id), name: String(job.name), sourceSha: job.head_sha, status: job.status,
-      conclusion: job.conclusion, steps: job.steps.map((step: any) => ({ status: step.status, conclusion: step.conclusion })) }))
+      conclusion: job.conclusion, startedAt: job.started_at, completedAt: job.completed_at,
+      steps: job.steps.map((step: any) => ({ name: step.name, number: step.number, startedAt: step.started_at,
+        completedAt: step.completed_at, status: step.status, conclusion: step.conclusion })) }))
   }
 
   async readPipelineVerificationRun(installationId: bigint, repositoryId: bigint, runId: string) {
