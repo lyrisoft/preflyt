@@ -135,6 +135,8 @@ docker compose ps
 
 `api`, `worker`, `web`, `db`, `cache` and `queue` should all show `healthy`.
 
+The application Compose file does not currently include the dedicated Repository Health scanner service. You can complete setup and receive configured CI assessments, but static Health scans require that service. See [Repository health](../user-guide/repository-health.md#scanner-service) for the current setup boundary.
+
 ## 5. Sign in
 
 Open [http://localhost:8080](http://localhost:8080). On a fresh install the page says **Set up Preflyt**. Choose **Start setup** and sign in with `admin` and the password from your `.env`.

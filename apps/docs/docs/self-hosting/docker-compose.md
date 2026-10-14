@@ -24,6 +24,10 @@ For a quick look on your own machine first, use the [Quick Start](../getting-sta
 - **A release to run.** Use a published stable version (`vX.Y.Z`) or a development build (`sha-` plus the 40-character commit ID).
 - **A public HTTPS address** for Preflyt, such as `https://preflyt.example.com`, and a reverse proxy that serves it. See [Reverse proxy and TLS](reverse-proxy.md).
 
+## Repository Health scanner
+
+This Compose file starts the application services; it does not provision the dedicated static Health scanner. CI assessment intake remains available. Health assessments report a scanner-service failure until the service is running and reachable by the API and worker. See [Repository health](../user-guide/repository-health.md#scanner-service) for the local source setup and current container deployment limitation.
+
 ## 1. Sign in to the registry
 
 ```bash

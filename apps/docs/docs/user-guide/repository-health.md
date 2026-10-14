@@ -7,7 +7,20 @@ description: Read branch analysis, exact-revision findings, limits and report hi
 
 # Repository health
 
-Health assesses a selected branch without requiring CI. Explicit repository selection queues the first assessment; **Reassess** creates another revision report. The API and worker fetch the exact selected commit and coordinate work. The built-in scanner service runs applicable fixed Health analyzers in isolated containers. GitHub connection, repository selection and existing Preflyt permissions are the authorization; no additional approval, policy selection or CI workflow is required. Test coverage can prepare dependencies and run the repository's configured tests in a separate restricted environment, as described below.
+Health assesses a selected branch without requiring CI. Explicit repository selection queues the first assessment; **Reassess** creates another revision report. The API and worker fetch the exact selected commit and coordinate work. The built-in scanner service runs applicable fixed Health analyzers in isolated containers. GitHub connection, repository selection and existing Preflyt permissions are the authorization; no additional approval, policy selection or CI workflow is required. Tests run in your existing CI environment. Health displays verified test results and coverage for the assessed commit, as described below.
+
+## Scanner service
+
+The API and worker coordinate assessments; the dedicated Health scanner runs the static analyzers. The current downloadable Compose file starts the application services but does not provision this scanner. Connecting GitHub does not install it. If it is unavailable, the saved assessment shows **Assessment failed** with a scanner-service reason and retry guidance.
+
+For a local source installation, keep Docker running and start the scanner in a separate terminal from the repository root:
+
+```bash
+cd apps/api
+env -i PATH="$PATH" HOME="$HOME" node_modules/.bin/tsx src/health-scanner.ts
+```
+
+Wait for **Preflyt Health scanner is ready** before selecting or reassessing a repository. The scanner prepares its fixed container images and writes its protected local connection file for the API and worker. Do not pass application credentials into the scanner. This command is for a source installation; it is not a complete container deployment recipe.
 
 ## Read a report
 
@@ -34,21 +47,21 @@ Branch checks are cached for one minute. Open or refresh Health to check again; 
 
 | Analysis | Applicability | Current adapter and limits |
 | --- | --- | --- |
-| Secret detection | Selected repositories | Gitleaks; recorded full-rule scope can be verified. Secret values and excerpts are hidden. |
+| Secret detection | Selected repositories | Gitleaks; recorded full-rule scope can be verified. Credential values and matched secret lines are redacted; verified surrounding code can be displayed. |
 | Static security analysis | JavaScript, TypeScript or Python source paths | Semgrep CE with reviewed local rules. Coverage is partial and depends on those rules. |
 | Dependency vulnerabilities | Recognized dependency manifests or lockfiles | Trivy with a reviewed offline database. Coverage is partial; database freshness is required. |
 | Reliability | JavaScript, TypeScript or Python source paths | Reviewed local Semgrep rules for NaN comparisons and broad exception catches. Narrow rule coverage; findings require code review. |
 | Maintainability | JavaScript, TypeScript or Python source paths | Seven local Semgrep rules for debugging remnants, nested conditionals, redundant error handling, Python dynamic execution, mutable defaults and wildcard imports. Findings require code review. |
 | Duplicated code | Supported JS/TS, Python, Java, Go, Ruby, PHP, C#, CSS/SCSS, SQL and Rust paths | jscpd 4.3.0 with a fixed, reviewed scope. Unique duplicated physical lines / analyzed physical lines; overlapping blocks count once. Source ranges link to the assessed revision. |
 | Security hotspot review | JavaScript, TypeScript or Python source paths | Reviewed Semgrep rules identify MD5 use for human context review. A hotspot is not a confirmed vulnerability. |
-| Test coverage | Existing Vitest, Jest or Node test scripts and lockfiles | Runs configured tests in an isolated workspace at the assessed commit and collects measured line coverage. Missing or incomplete reports stay unavailable. |
+| Test coverage | Verified CI reports for the assessed commit | Reads signed JUnit test results and LCOV line coverage from the matching workflow attempt. Health never executes tests. Missing or incomplete evidence stays unavailable. |
 | Infrastructure configuration | Terraform or recognized Kubernetes/Helm paths | Trivy configuration analysis. Coverage is partial. |
 
 These analyzers are selected from detected files; supported rules and languages determine their recorded scope. The packaged Health scanner prepares pinned images and checks isolation automatically. No signed runtime approval is required. Binary, oversized, generated or linked files are excluded explicitly. Source or scanner failures remain visible instead of becoming clean results. General native repository-command execution has separate controls; see [Native execution](native-execution.md).
 
 **Analyses completed** counts checks with validated analyzer output; **Files inspected** counts discovered source files and is not an analysis coverage denominator.
 
-Reliability and maintainability findings are classified separately when their reviewed adapters run. The seven maintainability rules cover JavaScript/TypeScript debugger statements, nested ternaries and redundant catch/rethrow blocks, plus Python dynamic execution, mutable defaults, wildcard imports and redundant exception handlers. Readability and redundancy findings are low severity; each finding explains its impact, suggested change and limits. A zero means none of these patterns was reported in the analyzed scope, not perfect maintainability. New rules apply on reassessment; saved reports retain their original coverage. These rule packs do not provide broad language coverage or a quality grade. Duplication measurements require the reviewed jscpd adapter. Health detects supported repository test scripts and collects coverage during reassessment. Complexity still needs a qualified measured source. Overall health uses the completeness and failure rules described below, rather than averaging unrelated metrics into an arbitrary score.
+Reliability and maintainability findings are classified separately when their reviewed adapters run. The seven maintainability rules cover JavaScript/TypeScript debugger statements, nested ternaries and redundant catch/rethrow blocks, plus Python dynamic execution, mutable defaults, wildcard imports and redundant exception handlers. Readability and redundancy findings are low severity; each finding explains its impact, suggested change and limits. A zero means none of these patterns was reported in the analyzed scope, not perfect maintainability. New rules apply on reassessment; saved reports retain their original coverage. These rule packs do not provide broad language coverage or a quality grade. Duplication measurements require the reviewed jscpd adapter. Health reads verified CI test results and coverage; reassessment does not execute tests. Complexity still needs a qualified measured source. Overall health uses the completeness and failure rules described below, rather than averaging unrelated metrics into an arbitrary score.
 
 ## Findings and source
 
@@ -62,7 +75,7 @@ Filter by severity or search the report. Open a finding to navigate to a dedicat
 
 The source viewer verifies the regular Git blob at the assessed commit and saves a redacted excerpt with up to five lines before and after the reported line. It highlights the line only when it exists. Missing locations, large or binary files, symlinks, submodules, lost access and source-verification failures produce an explanation instead. Secret findings show numbered surrounding code and mask the entire reported range before storage, because scanner receipts do not retain safe value-level masking coordinates. Obvious credentials in surrounding context are also redacted. New reports queue excerpt capture in the background. Older findings capture their excerpt on first open. Later visits load the saved excerpt from Preflyt after checking current repository access.
 
-Counts exclude suppressed results and deduplicate matching findings from the same analyzer. Each analysis retains up to 5,000 supported findings from an 8 MiB report; the complete receipt has a separate 8 MiB encoded payload limit. Additional retained details may be trimmed across analyzers to fit that limit, preserving their outcomes, reported totals, measured counters and cleanup evidence. Highest-priority findings are retained first. A findings count with a **Partial scan** badge means results are incomplete; missing details never establish zero issues. Truncation or invalid locations can make the report partial. **Zero reported findings applies only to the recorded scope**, not the whole repository. These bounded details belong to Health; the existing Findings page continues to track CI assessment issues.
+Counts exclude suppressed results and deduplicate matching findings from the same analyzer. Each analysis retains up to 5,000 supported findings from an 8 MiB report; the complete receipt has a separate 8 MiB encoded payload limit. Additional retained details may be trimmed across analyzers to fit that limit, preserving their outcomes, reported totals, measured counters and cleanup evidence. Highest-priority findings are retained first. A findings count with a **Partial scan** badge means results are incomplete; missing details never establish zero issues. Truncation or invalid locations can make the report partial. **Zero reported findings applies only to the recorded scope**, not the whole repository. Retained Health findings appear alongside CI issues and advisory AI findings in the shared Findings workspace.
 
 ## Reassessment and history
 
