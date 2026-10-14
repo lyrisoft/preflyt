@@ -134,15 +134,14 @@ it('checks Pages configuration with a read-only build token before spending buil
   expect(pages).toBeLessThan(steps.findIndex((step: any) => step.name === 'Install locked dependencies'))
   expect(steps[pages].with?.enablement).not.toBe(true)
 })
-it('includes the image-owned coverage helper in a clean native image checkout', () => {
+it('does not package the removed Health test runner in the native image', () => {
   const context = 'docs/deployment/native-runner'
-  const helper = `${context}/coverage/run.mjs`
-  const tracked = spawnSync('git', ['ls-files', '--error-unmatch', helper], { cwd: root, encoding: 'utf8' })
+  const dockerfile = readFileSync(resolve(root, context, 'Dockerfile.node'), 'utf8')
+  expect(dockerfile).not.toContain('COPY coverage')
+  expect(dockerfile).toContain('source-verification.mjs')
+  const tracked = spawnSync('git', ['ls-files', `${context}/coverage/`], { cwd: root, encoding: 'utf8' })
   expect(tracked.status, tracked.stderr).toBe(0)
-  expect(readFileSync(resolve(root, context, 'Dockerfile.node'), 'utf8')).toContain('COPY coverage /opt/preflyt/coverage')
-  expect(readFileSync(resolve(root, helper), 'utf8')).toContain("isolation:'process'")
-  const ignored = spawnSync('git', ['check-ignore', '--no-index', `${context}/coverage/generated.json`], { cwd: root, encoding: 'utf8' })
-  expect(ignored.status).toBe(0)
+  expect(tracked.stdout.trim()).toBe('')
 })
 
 it('builds documentation at the custom domain root rather than the legacy project path', () => {

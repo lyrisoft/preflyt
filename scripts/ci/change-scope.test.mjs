@@ -99,3 +99,19 @@ test('real Git diffs retain deleted/renamed inputs and use the PR merge base ins
     }
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('service-backed API suites are integration tests and main retains the full suite', () => {
+  for (const name of ['github-worker', 'github-event-queue', 'redis-cache']) {
+    assert.ok(readFileSync(`apps/api/test/${name}.integration.test.ts`, 'utf8').length > 0);
+  }
+  const config = readFileSync('apps/api/vitest.config.ts', 'utf8');
+  assert.match(config, /include: \[\s*'test\/\*\*\/\*\.test\.ts'\s*\]/);
+  const full = focusedCommands('api', { paths: null, base: null })[0];
+  const related = focusedCommands('api', { paths: ['apps/api/src/main.ts'], base: 'a'.repeat(40) })[0];
+  for (const args of [full, related]) assert.equal(args[args.indexOf('--exclude') + 1], '**/*.integration.test.ts');
+  const main = readFileSync('.github/workflows/main-regression.yml', 'utf8');
+  assert.match(main, /services:/);
+  assert.match(main, /TEST_QUEUE_REDIS_URL:/);
+  assert.match(main, /API regression[\s\S]*pnpm --filter @preflyt\/api test --reporter/);
+  assert.ok(!main.includes('--exclude'));
+});
