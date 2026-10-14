@@ -15,15 +15,44 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
+          fetch-depth: 0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24.4.1
       - name: Install locked dependencies
         run: |
-          npm install --global pnpm@10.15.1
+          npm install --global pnpm@10.26.2
           pnpm install --frozen-lockfile --ignore-scripts
       - name: Release automation tests
-        run: node --test scripts/ci/create-release.test.mjs scripts/ci/publish-release.test.mjs
+        run: node --test scripts/ci/create-release.test.mjs scripts/ci/publish-release.test.mjs scripts/ci/change-scope.test.mjs
+      - name: Select focused tests
+        id: focused
+        env:
+          CI_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          CI_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: node scripts/ci/change-scope.mjs plan
+      - name: Generate API test client
+        env:
+          DATABASE_URL: postgresql://fixture:fixture@127.0.0.1:1/unused
+        run: pnpm --filter @preflyt/api prisma:generate
+      - name: Workflow and source contracts
+        if: ${{ !cancelled() }}
+        run: pnpm --filter @preflyt/api test test/development-ci.test.ts test/native-source.test.ts test/ci-command-report.test.ts test/pipeline-jobs.test.ts test/pipeline-gate.test.ts
+      - name: Related API unit tests
+        if: ${{ !cancelled() && steps.focused.outputs.api == 'true' }}
+        env:
+          CI_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          CI_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: node scripts/ci/change-scope.mjs api
+      - name: Install Chromium for related browser tests
+        if: ${{ !cancelled() && steps.focused.outputs.web == 'true' }}
+        run: pnpm --filter @preflyt/web exec playwright install --with-deps chromium
+      - name: Related browser tests
+        if: ${{ !cancelled() && steps.focused.outputs.web == 'true' }}
+        env:
+          CI_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          CI_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: node scripts/ci/change-scope.mjs web
       - name: Type checks
         if: ${{ !cancelled() && (github.event_name != 'pull_request' || github.base_ref != 'development' || github.event.pull_request.head.repo.full_name != github.repository) }}
         env:

@@ -12,6 +12,7 @@ it('checks the PR head and runs the published policy only for same-repository de
   const steps = development.jobs.checks.steps
   expect(steps[0].with.ref).toContain('github.event.pull_request.head.sha')
   expect(steps[0].with['persist-credentials']).toBe(false)
+  expect(steps[0].with['fetch-depth']).toBe(0)
   const action = steps.find((step: any) => step.name === 'Preflyt development policy')
   expect(action.if).toContain("github.base_ref == 'development'")
   expect(action.if).toContain('github.event.pull_request.head.repo.full_name == github.repository')
@@ -22,7 +23,15 @@ it('checks the PR head and runs the published policy only for same-repository de
   expect(development.jobs.checks.permissions).toEqual({ contents: 'read', 'id-token': 'write' })
   for (const name of ['Type checks', 'Lint', 'Build validation']) expect(steps.find((step: any) => step.name === name).if).toContain('!cancelled()')
   expect(development.jobs.checks.services).toBeUndefined()
-  expect(steps.some((step: any) => /regression|compose|Install Chromium/i.test(step.name ?? ''))).toBe(false)
+  expect(steps.some((step: any) => /regression|compose/i.test(step.name ?? ''))).toBe(false)
+  expect(steps.find((step: any) => step.name === 'Workflow and source contracts').run).toContain('test/development-ci.test.ts')
+  expect(steps.find((step: any) => step.name === 'Workflow and source contracts').run).toContain('test/native-source.test.ts')
+  for (const [name, target] of [['Related API unit tests', 'api'], ['Related browser tests', 'web']]) {
+    const focused = steps.find((step: any) => step.name === name)
+    expect(focused.if).toContain(`steps.focused.outputs.${target} == 'true'`)
+    expect(focused.run).toBe(`node scripts/ci/change-scope.mjs ${target}`)
+    expect(focused.env.CI_HEAD_SHA).toContain('github.event.pull_request.head.sha')
+  }
   expect(verify.jobs.development.uses).toBe('./.github/workflows/development-checks.yml')
 })
 it('builds release images only after a push, without repeating PR checks', () => {
@@ -33,7 +42,11 @@ it('builds release images only after a push, without repeating PR checks', () =>
   expect(publish.on.pull_request).toBeUndefined()
   expect(publish.on.workflow_dispatch).toBeUndefined()
   expect(publish.jobs.verify).toBeUndefined()
-  expect(publish.jobs.build.needs).toBeUndefined()
+  expect(publish.on.push.paths).toBeUndefined() // main must publish even for a test/docs-only commit
+  expect(publish.jobs.inputs.permissions?.packages).toBeUndefined()
+  expect(publish.jobs.inputs.steps[0].with['persist-credentials']).toBe(false)
+  expect(publish.jobs.build.needs).toBe('inputs')
+  expect(publish.jobs.build.if).toBe("${{ needs.inputs.outputs.publish == 'true' }}")
   expect(publish.jobs.publish.needs).toBe('build')
   expect(publish.jobs.build.strategy.matrix.group).toEqual(['api', 'web'])
   expect(publish.jobs.build.strategy.matrix.platform).toEqual([{ arch: 'amd64', runner: 'ubuntu-24.04' }, { arch: 'arm64', runner: 'ubuntu-24.04-arm' }])
