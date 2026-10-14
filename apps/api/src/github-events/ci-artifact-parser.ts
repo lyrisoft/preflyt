@@ -7,6 +7,7 @@ import { XMLParser, XMLValidator } from 'fast-xml-parser'
 import schema from './sarif-schema.js'
 
 export const MAX_ARTIFACT_BYTES = 256 * 1024
+export const MAX_COVERAGE_BYTES = 2 * 1024 * 1024
 export const PARSER_VERSION = 1
 export type ArtifactFormat = 'junit' | 'sarif' | 'lcov'
 type ObjectValue = Record<string, any>
@@ -118,7 +119,8 @@ export function parseArtifact(format: unknown, content: unknown, expectedHash: u
   if (!['junit', 'sarif', 'lcov'].includes(format as string) || typeof content !== 'string' ||
       typeof expectedHash !== 'string' || !/^[a-f0-9]{64}$/i.test(expectedHash)) throw invalid()
   const bytes = Buffer.from(content, 'utf8')
-  if (!bytes.length || bytes.length > (profile === 'health' && format === 'sarif' ? HEALTH_REPORT_BYTES : MAX_ARTIFACT_BYTES) || bytes.toString('utf8') !== content) throw invalid()
+  const limit = format === 'lcov' ? MAX_COVERAGE_BYTES : profile === 'health' && format === 'sarif' ? HEALTH_REPORT_BYTES : MAX_ARTIFACT_BYTES
+  if (!bytes.length || bytes.length > limit || bytes.toString('utf8') !== content) throw invalid()
   const sha256 = createHash('sha256').update(bytes).digest('hex')
   if (sha256 !== expectedHash.toLowerCase()) throw new BadRequestException('Artifact SHA-256 does not match the original UTF-8 bytes')
   return { bytes, sha256, format: format as ArtifactFormat, summary: format === 'junit' ? junit(content) : format === 'lcov' ? lcov(content) : sarif(content, profile === 'health') }

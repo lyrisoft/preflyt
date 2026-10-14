@@ -4,7 +4,6 @@ import { resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { parse } from 'yaml'
 import { expect, it } from 'vitest'
-import { sourceContractTests } from '../../../scripts/ci/change-scope.mjs'
 const root = resolve(process.cwd(), '../..')
 const workflow = (name: string) => parse(readFileSync(resolve(root, '.github/workflows', name), 'utf8'))
 it('checks the PR head and runs the published policy only for same-repository development PRs', () => {
@@ -18,22 +17,27 @@ it('checks the PR head and runs the published policy only for same-repository de
   expect(action.if).toContain("github.base_ref == 'development'")
   expect(action.if).toContain('github.event.pull_request.head.repo.full_name == github.repository')
   expect(action.if).toContain('!cancelled()')
-  expect(action.uses).toBe('lyrisoft/preflyt-action@c4789c3b39825f1278ebfd2be173b6bc21cbbfed')
-  expect(action.with).toEqual({ 'api-url': '${{ vars.PREFLYT_API_URL }}' })
+  expect(action.uses).toMatch(/^lyrisoft\/preflyt-action@[a-f0-9]{40}$/)
+  expect(action.with).toEqual({ 'api-url': '${{ vars.PREFLYT_API_URL }}', 'coverage-reports': '[{"path":"apps/web/coverage/lcov.info","prefix":"apps/web"}]', 'coverage-artifact': 'preflyt-coverage-api-${{ github.run_id }}-${{ github.run_attempt }}' })
+  expect(action.env.PREFLYT_COLLECT_COVERAGE).toBe('true')
   expect(verify.jobs.preflyt_gate.steps[0].uses).toBe(action.uses)
-  expect(development.jobs.checks.permissions).toEqual({ contents: 'read', 'id-token': 'write' })
+  expect(development.jobs.checks.permissions).toEqual({ contents: 'read', actions: 'read', 'id-token': 'write' })
   for (const name of ['Type checks', 'Lint', 'Build validation']) expect(allSteps.find((step: any) => step.name === name).if).toContain('!cancelled()')
   expect(development.jobs.checks.services).toBeUndefined()
   expect(steps.some((step: any) => /regression|compose/i.test(step.name ?? ''))).toBe(false)
-  expect(sourceSteps.find((step: any) => step.name === 'Workflow and source contracts').run).toContain('test/development-ci.test.ts')
-  expect(sourceSteps.find((step: any) => step.name === 'Workflow and source contracts').run).toContain('test/native-source.test.ts')
-  for (const path of sourceContractTests) expect(sourceSteps.find((step: any) => step.name === 'Workflow and source contracts').run).toContain(path)
-  for (const [name, target] of [['Related API unit tests', 'api'], ['Related browser tests', 'web']]) {
-    const focused = allSteps.find((step: any) => step.name === name)
-    expect(focused.if).toContain(`steps.focused.outputs.${target} == 'true'`)
-    expect(focused.run).toBe(`node scripts/ci/change-scope.mjs ${target}`)
-    expect(focused.env.CI_HEAD_SHA).toContain('github.event.pull_request.head.sha')
-  }
+  const api = sourceSteps.find((step: any) => step.name === 'API unit tests and coverage')
+  expect(api.if).toBe('${{ !cancelled() }}')
+  expect(api.run).toContain("vitest run --exclude '**/*.integration.test.ts'")
+  expect(api.run).not.toContain('--changed')
+  expect(api.env.PREFLYT_COLLECT_COVERAGE).toBe('true')
+  expect(sourceSteps.filter((step: any) => /vitest|test\/.*\.test\.ts/.test(step.run ?? ''))).toHaveLength(1)
+  const upload = sourceSteps.find((step: any) => step.name === 'Upload API coverage from this execution')
+  expect(upload.if).toContain('success()')
+  expect(upload.with.name).toContain('${{ github.run_attempt }}')
+  expect(upload.with['retention-days']).toBe(1)
+  const focused = steps.find((step: any) => step.name === 'Related browser tests')
+  expect(focused.if).toContain("steps.focused.outputs.web == 'true'")
+  expect(focused.run).toBe('node scripts/ci/change-scope.mjs web')
   expect(development.jobs.source.needs).toBeUndefined()
   expect(development.jobs.checks.needs).toBeUndefined()
   expect(development.jobs.source.permissions).toBeUndefined() // inherits read-only contents, no OIDC

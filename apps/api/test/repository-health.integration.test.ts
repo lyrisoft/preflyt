@@ -9,7 +9,11 @@ import request from 'supertest'
 import { AuthService } from '../src/auth/auth.service.js'
 import { SessionGuard } from '../src/auth/session.guard.js'
 import { RepositoryHealthController } from '../src/health/repository-health.controller.js'
-import { randomUUID, generateKeyPairSync } from 'node:crypto'
+import { randomUUID, generateKeyPairSync, createHash } from 'node:crypto'
+import { gzipSync } from 'node:zlib'
+import { normalizePipelineSubmission } from '../src/assessments/pipeline-submission.js'
+import { recordJobEvidence } from '../src/assessments/pipeline-job-evidence.js'
+import { CiArtifactService } from '../src/github-events/ci-artifact.service.js'
 import { beforeAll, afterAll, beforeEach, afterEach, expect, it, vi } from 'vitest'
 import { disposableDatabase } from './disposable-database.js'
 import { RepositoryHealthService } from '../src/health/repository-health.service.js'
@@ -54,6 +58,30 @@ beforeEach(async()=>{
  provider.verifyReadinessBranch.mockResolvedValue(sha);runtime.status.mockResolvedValue({executionAvailable:false,reason:'REVIEW_REQUIRED'})
  vi.stubEnv('NOTIFICATIONS_ENABLED','true');vi.stubEnv('NATIVE_TOOL_REVIEWS','[]')
  service=new RepositoryHealthService(db,new AuthorizationService(db),provider as any,runtime as any,new FindingSourceStore(db,provider as any))
+})
+it('displays compressed CI coverage through storage and Health only for its server-verified commit and attempt',async()=>{
+ const db=fixture.prisma,scan=await service.initial(owner.identityId,'51')
+ await service.process(scan.id)
+ const content='SF:apps/api/src/example.ts\n'+Array.from({length:30000},(_,i)=>`DA:${i+1},${i%2}`).join('\n')+'\nLF:30000\nLH:15000\nend_of_record\n'
+ expect(Buffer.byteLength(content)).toBeGreaterThan(256*1024)
+ const policy={id:'coverage-fixture',definitionHash:'b'.repeat(64),repositoryId:'51',sourceSha:sha,headSha:sha,checks:[{id:'tests.required',title:'Tests',required:true}]}
+ const normalized=normalizePipelineSubmission({schemaVersion:1,policyId:policy.id,policyHash:policy.definitionHash,repositoryId:'51',sourceSha:sha,headSha:sha,results:[{ruleId:'tests.required',status:'passed'}],reports:[{ruleId:'tests.coverage',format:'lcov',encoding:'gzip-base64',content:gzipSync(content).toString('base64'),sha256:createHash('sha256').update(content).digest('hex')}]},policy)
+ expect(normalized.result).toBe('passed')
+ const evidence=await recordJobEvidence(db,{submissionId:'coverage-fixture',repositoryId:51n,installationId:50n,sourceSha:sha,runId:'12',runAttempt:2,workflowId:'4',jobIds:['7'],conclusion:'success'})
+ await new CiArtifactService(db).import('51',evidence.deliveryId,normalized.reports[0],owner.identityId)
+ const get=()=>request(app.getHttpServer()).get(`/github/repositories/51/health?assessment=${scan.id}`).set('Cookie','health.sid=owner')
+ expect((await get()).body.ciCoverage.measurement).toBeUndefined()
+ const metadata={schemaVersion:1,repositoryId:repoId,sourceSha:sha,runId:'12',runAttempt:2,workflowId:'4',jobIds:['7'],verificationScope:'jobs',reports:[{ruleId:'tests.coverage',sha256:normalized.reports[0].sha256}]}
+ const receipt=await db.auditEvent.create({data:{event:'pipeline.run.verified',actorId:owner.identityId,metadata}})
+ expect((await get()).body.ciCoverage).toMatchObject({state:'VERIFIED',measurement:{analyzedFiles:1,analyzedLines:30000,coveredLines:15000}})
+ for(const patch of [{runAttempt:1},{sourceSha:'c'.repeat(40)},{jobIds:['8']},{reports:[{ruleId:'tests.coverage',sha256:'0'.repeat(64)}]}]){
+  await db.auditEvent.update({where:{id:receipt.id},data:{metadata:{...metadata,...patch}}})
+  expect((await get()).body.ciCoverage.measurement).toBeUndefined()
+ }
+ await db.auditEvent.update({where:{id:receipt.id},data:{metadata}})
+ vi.stubEnv('CI_REPORT_PROOF_MODE','organization-key')
+ expect((await get()).body.ciCoverage.measurement).toBeUndefined()
+ expect((await request(app.getHttpServer()).get(`/github/repositories/51/health?assessment=${scan.id}`).set('Cookie','health.sid=outsider')).status).toBe(403)
 })
 it('selection queues once without needing CI, standards or an immediate source read, then saves a partial report and one outbox event',async()=>{
  const rows=await Promise.all([service.initial(owner.identityId,'51'),service.initial(owner.identityId,'51')]);expect(rows[0].id).toBe(rows[1].id);expect(provider.readRepositorySnapshot).not.toHaveBeenCalled()

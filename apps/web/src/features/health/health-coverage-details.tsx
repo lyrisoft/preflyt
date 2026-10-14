@@ -102,7 +102,7 @@ export function HealthCoverageDetails({
                       ? 'Multiple reports match this run. Submit one combined report for tests and one for coverage.'
                       : ci.reason === 'CI_EVIDENCE_LIMIT'
                         ? 'This commit exceeds the CI evidence limit. Review duplicate workflow submissions.'
-                        : 'A coverage report was received, but its signature, integrity or workflow execution has not been verified. Check the report proof and CI run.'
+                        : 'A coverage report was received, but its integrity, workflow execution or required signature has not been verified. Check the report proof and CI run.'
                     : 'No verified coverage report has been received for this commit.'}
               </p>
             </div>
@@ -138,7 +138,7 @@ export function HealthCoverageDetails({
                 <h2 className='font-semibold'>Connect coverage reporting</h2>
                 <p className='mt-2 text-muted-foreground'>
                   Run your existing test and coverage command in GitHub Actions,
-                  then submit its JUnit results and signed coverage report to
+                  then submit its JUnit results and coverage report through
                   Preflyt. Reports must match this repository, commit and
                   workflow attempt.
                 </p>

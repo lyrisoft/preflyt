@@ -67,6 +67,7 @@
     "@types/pg": "^8.15.5",
     "@types/smtp-server": "3.5.13",
     "@types/supertest": "^6.0.3",
+    "@vitest/coverage-v8": "^4.1.11",
     "prisma": "7.10.0",
     "smtp-server": "3.19.18",
     "supertest": "^7.1.4",

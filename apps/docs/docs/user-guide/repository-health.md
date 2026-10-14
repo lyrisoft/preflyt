@@ -54,7 +54,7 @@ Branch checks are cached for one minute. Open or refresh Health to check again; 
 | Maintainability | JavaScript, TypeScript or Python source paths | Seven local Semgrep rules for debugging remnants, nested conditionals, redundant error handling, Python dynamic execution, mutable defaults and wildcard imports. Findings require code review. |
 | Duplicated code | Supported JS/TS, Python, Java, Go, Ruby, PHP, C#, CSS/SCSS, SQL and Rust paths | jscpd 4.3.0 with a fixed, reviewed scope. Unique duplicated physical lines / analyzed physical lines; overlapping blocks count once. Source ranges link to the assessed revision. |
 | Security hotspot review | JavaScript, TypeScript or Python source paths | Reviewed Semgrep rules identify MD5 use for human context review. A hotspot is not a confirmed vulnerability. |
-| Test coverage | Verified CI reports for the assessed commit | Reads signed JUnit test results and LCOV line coverage from the matching workflow attempt. Health never executes tests. Missing or incomplete evidence stays unavailable. |
+| Test coverage | Verified CI reports for the assessed commit | Reads verified JUnit test results and LCOV line coverage from the matching workflow attempt. Health never executes tests. Missing or incomplete evidence stays unavailable. |
 | Infrastructure configuration | Terraform or recognized Kubernetes/Helm paths | Trivy configuration analysis. Coverage is partial. |
 
 These analyzers are selected from detected files; supported rules and languages determine their recorded scope. The packaged Health scanner prepares pinned images and checks isolation automatically. No signed runtime approval is required. Binary, oversized, generated or linked files are excluded explicitly. Source or scanner failures remain visible instead of becoming clean results. General native repository-command execution has separate controls; see [Native execution](native-execution.md).
@@ -125,23 +125,25 @@ Failed assessments show their reason in the report header and history, including
 
 Repository Health never runs repository tests, installs project dependencies or provisions databases. Your existing GitHub Actions test job owns that setup. Health reads verified JUnit and LCOV evidence for the exact assessed commit and workflow attempt.
 
-Open **Test coverage** to see reported line coverage, passing/failing/skipped test counts, the received date and **View CI run and logs**. Refresh checks for newly received evidence. Missing, unsigned, invalid or mismatched reports remain unavailable; a green workflow alone does not establish coverage. Static reassessment does not rerun tests or change a saved CI verdict.
+Open **Test coverage** to see reported line coverage, available passing/failing/skipped test counts, the received date and **View CI run and logs**. Refresh checks for newly received evidence. Missing, invalid or mismatched reports remain unavailable; a green workflow alone does not establish coverage. Static reassessment does not rerun tests or change a saved CI verdict.
 
-The optional Action `coverage-report` input is a **local, unreleased change** and requires the companion API update. It collects an existing LCOV file without adding a policy requirement. Continue using the published Action until the new version is released; do not assume v2.1.1 supports this input.
+The optional Action `coverage-reports` and `coverage-artifact` inputs are available at companion Action commit `72bd67f0e75e4409a5b3d37367ffb94073e9bf11` and require the companion API update. The v2.1.1 tag does not support these inputs; pin the tested coverage commit.
 
-After release, configure your existing CI test command to emit JUnit and LCOV. Submit JUnit under `tests.required` through the published policy and pass the LCOV path to `coverage-report`. The existing `proofs` mapping must include signed bundles for both original files, created by your configured trusted signing workflow. See the deployment guide for private-repository report signatures in the deployment documentation for the signing boundary.
+Make the existing policy test command emit JUnit and LCOV in the same execution. Submit JUnit under `tests.required` through the policy, and configure existing LCOV output paths with repository-relative package prefixes:
 
 ```yaml
-# Requires the upcoming Action release; substitute its published version.
-- uses: lyrisoft/preflyt-action@RELEASE_VERSION
+# Requires the companion API update.
+- uses: lyrisoft/preflyt-action@72bd67f0e75e4409a5b3d37367ffb94073e9bf11
   with:
     api-url: ${{ vars.PREFLYT_API_URL }}
-    mode: check
-    coverage-report: coverage/lcov.info
-    proofs: '{"results/tests.xml":"results/tests.proof.json","coverage/lcov.info":"coverage/lcov.proof.json"}'
+    coverage-reports: '[{"path":"apps/web/coverage/lcov.info","prefix":"apps/web"}]'
 ```
 
-Report files must be UTF-8 and at most 256 KiB each. LCOV must include `SF`, `DA`, `LF`, `LH` and `end_of_record` records with consistent totals. Duplicate physical lines are merged rather than percentages being averaged. Coverage applies to CI-reported files, which may exclude untested or ignored source; it is not a whole-repository guarantee. Different commits, repositories, attempts and unverified execution cannot supply the displayed metric.
+The Action rejects stale files and validates all measured line counters before attaching optional `tests.coverage` evidence. It namespaces package paths and unions repeated physical lines rather than averaging percentages. For parallel test jobs, `coverage-artifact` downloads the artifact from the same workflow run and attempt with read-only `actions: read`; its manifest binds repository, head commit, attempt and original digest. Preflyt's own workflow demonstrates this in `docs/deployment/branch-ci.md`. No additional test run is started for coverage.
+
+Default `github-native` mode requires an exact server-verified GitHub execution receipt and report digest. Unsigned manual uploads cannot supply coverage. Explicit `organization-key` deployments still require valid report signatures; the automatic attachment does not replace that requirement. Invalid supplied proofs never fall back to unsigned evidence.
+
+Report files must be UTF-8. The Action transports LCOV as gzip/base64 with at most 256 KiB compressed and 2 MiB decoded; other CI reports retain their 256 KiB limit and total submission remains bounded. LCOV must include `SF`, `DA`, `LF`, `LH` and `end_of_record` with consistent totals. Coverage applies to CI-reported source scope, which may exclude files; it is not a whole-repository guarantee. Evidence applies only to the displayed exact commit, repository and workflow attempt. PR coverage is never copied onto a later merge/squash commit, and the current PR intake does not create coverage for a different push SHA.
 
 ### Saved finding guidance
 

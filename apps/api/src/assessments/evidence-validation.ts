@@ -8,6 +8,7 @@ import {
   parseArtifact,
   PARSER_VERSION,
   MAX_ARTIFACT_BYTES,
+  MAX_COVERAGE_BYTES,
 } from '../github-events/ci-artifact-parser.js'
 import { importCiEvidence } from '../github-events/ci-evidence.js'
 import type { GitHubWebhookDelivery } from '../generated/prisma/client.js'
@@ -85,7 +86,8 @@ export function validateReport(artifact: {
   }
   if (
     !artifact.content.length ||
-    artifact.content.length > MAX_ARTIFACT_BYTES
+    artifact.content.length >
+      (artifact.format === 'lcov' ? MAX_COVERAGE_BYTES : MAX_ARTIFACT_BYTES)
   ) {
     result.reasons.push('ARTIFACT_SIZE_INVALID')
     return result

@@ -34,7 +34,7 @@ it('projects signed integrity-checked reports for the exact commit and run attem
 it('withholds unsigned, corrupted, unverified and wrong-attempt coverage',async()=>{
  for(const change of ['proof','content','execution','attempt']){
   const {db,coverage,metadata}=fixture()
-  if(change==='proof')coverage.attestations=[]
+  if(change==='proof')coverage.attestations=[{valid:false}]
   if(change==='content')coverage.content=Buffer.from(lcov+'invalid')
   if(change==='execution')metadata.reports=metadata.reports.filter(r=>r.ruleId!=='tests.coverage')
   if(change==='attempt')metadata.runAttempt=1
@@ -58,4 +58,29 @@ it('never substitutes an older successful attempt after a newer failed attempt o
  observation.sourceConclusion='failure';metadata.runAttempt=1
  db.importedCiEvidence.findMany.mockResolvedValue([observation,older])
  expect((await verifiedHealthCiCoverage(db,repo,sha)).measurement).toBeUndefined()
+})
+
+it('accepts unsigned coverage only with the same server-verified GitHub execution receipt used by policy checks',async()=>{
+ const {db,coverage}=fixture();coverage.attestations=[]
+ expect(await verifiedHealthCiCoverage(db,repo,sha)).toMatchObject({state:'VERIFIED',measurement:{analyzedLines:2,coveredLines:1}})
+ db.auditEvent.findMany.mockResolvedValue([])
+ expect((await verifiedHealthCiCoverage(db,repo,sha)).measurement).toBeUndefined()
+})
+it('retains explicit organization-key proof requirements and rejects unknown proof modes',async()=>{
+ for(const mode of ['organization-key','unknown']){
+  vi.stubEnv('CI_REPORT_PROOF_MODE',mode)
+  try { const {db,coverage}=fixture();coverage.attestations=[]
+   expect((await verifiedHealthCiCoverage(db,repo,sha)).measurement).toBeUndefined()
+  } finally {vi.unstubAllEnvs()}
+ }
+})
+
+it('decodes bounded compressed LCOV without changing its original digest or policy result',async()=>{
+ const {gzipSync}=await import('node:zlib')
+ const policy={id:'p',definitionHash:'b'.repeat(64),repositoryId:'51',sourceSha:sha,headSha:sha,checks:[{id:'tests.required',title:'Tests',required:true}]}
+ const report={ruleId:'tests.coverage',format:'lcov',encoding:'gzip-base64',content:gzipSync(lcov).toString('base64'),sha256:createHash('sha256').update(lcov).digest('hex')}
+ const body={schemaVersion:1,policyId:'p',policyHash:policy.definitionHash,repositoryId:'51',sourceSha:sha,headSha:sha,results:[{ruleId:'tests.required',status:'passed'}],reports:[report]}
+ expect(normalizePipelineSubmission(body,policy)).toMatchObject({result:'passed',reports:[{format:'lcov',content:lcov,sha256:report.sha256}]})
+ for(const patch of [{sha256:'0'.repeat(64)},{encoding:'unknown'},{content:'not base64'},{content:Buffer.from('invalid gzip').toString('base64')},{content:gzipSync('x'.repeat(2*1024*1024+1)).toString('base64')},{ruleId:'tests.required',format:'junit'}])
+  expect(()=>normalizePipelineSubmission({...body,reports:[{...report,...patch}]},policy)).toThrow()
 })

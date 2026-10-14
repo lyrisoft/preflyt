@@ -27,7 +27,14 @@ export async function verifiedHealthCiCoverage(db: any, repo: {id:string;githubI
   const verified=observation.artifacts.flatMap((artifact:any)=>{
    const validation=validateReport(artifact)
    const proof=artifact.attestations.find((receipt:any)=>validatedProvenance(receipt,{artifactId:artifact.id,artifactSha256:artifact.sha256,repositoryId:repo.githubId.toString(),repositoryName:repo.fullName,sourceSha,runId:observation.sourceObjectId,runAttempt:runAttempt(observation.sourceIdentity)}))
-   return validation.integrity==='VALID'&&proof ? [{artifact,executions:githubReportExecutions(receipts,observation,artifact.sha256)}] : []
+   const executions=githubReportExecutions(receipts,observation,artifact.sha256)
+   // Match the policy gate's GitHub verification contract. The server receipt
+   // binds these exact bytes to completed jobs at this commit/run/attempt.
+   // Explicit organization-key mode and supplied-but-invalid signatures never
+   // fall back to this path; unsigned/manual uploads without a receipt cannot pass.
+   const githubVerified=(process.env.CI_REPORT_PROOF_MODE??'github-native')==='github-native'&&
+    artifact.attestations.length===0&&executions.length>0
+   return validation.integrity==='VALID'&&(proof||githubVerified) ? [{artifact,executions}] : []
   })
   // Do not attach unrelated JUnit artifacts (for example a build check) as unit test results.
   const tests=verified.filter((item:any)=>item.artifact.format==='junit'&&item.executions.some((e:any)=>e.ruleId==='tests.required'))

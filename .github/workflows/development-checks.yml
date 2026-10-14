@@ -29,15 +29,27 @@ jobs:
         env:
           DATABASE_URL: postgresql://fixture:fixture@127.0.0.1:1/unused
         run: pnpm --filter @preflyt/api prisma:generate
-      - name: Workflow and source contracts
+      - name: API unit tests and coverage
         if: ${{ !cancelled() }}
-        run: pnpm --filter @preflyt/api test test/development-ci.test.ts test/native-source.test.ts test/ci-command-report.test.ts test/pipeline-jobs.test.ts test/pipeline-gate.test.ts
-      - name: Related API unit tests
-        if: ${{ !cancelled() && steps.focused.outputs.api == 'true' }}
         env:
-          CI_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          PREFLYT_COLLECT_COVERAGE: 'true'
+        run: |
+          echo "CI_COVERAGE_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
+          pnpm --filter @preflyt/api exec vitest run --exclude '**/*.integration.test.ts'
+      - name: Prepare API coverage artifact
+        if: ${{ success() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+        env:
           CI_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: node scripts/ci/change-scope.mjs api
+        run: python3 scripts/ci/export-coverage.py apps/api/coverage/lcov.info apps/api .preflyt/coverage-api
+      - name: Upload API coverage from this execution
+        if: ${{ success() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: preflyt-coverage-api-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .preflyt/coverage-api/*
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 1
       - name: Lint
         if: ${{ !cancelled() }}
         run: pnpm --filter @preflyt/web lint
@@ -46,6 +58,7 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
+      actions: read
       id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -90,10 +103,13 @@ jobs:
       - name: Preflyt development policy
         id: policy
         if: ${{ !cancelled() && github.event_name == 'pull_request' && github.base_ref == 'development' && github.event.pull_request.head.repo.full_name == github.repository }}
-        uses: lyrisoft/preflyt-action@c4789c3b39825f1278ebfd2be173b6bc21cbbfed # v2.1.1 + safe transport diagnostics
+        uses: lyrisoft/preflyt-action@72bd67f0e75e4409a5b3d37367ffb94073e9bf11 # same-run LCOV coverage
         env:
           DATABASE_URL: postgresql://fixture:fixture@127.0.0.1:1/unused
+          PREFLYT_COLLECT_COVERAGE: 'true'
         with:
+          coverage-reports: '[{"path":"apps/web/coverage/lcov.info","prefix":"apps/web"}]'
+          coverage-artifact: preflyt-coverage-api-${{ github.run_id }}-${{ github.run_attempt }}
           api-url: ${{ vars.PREFLYT_API_URL }}
       - name: Check current policy browser coverage
         id: browser
