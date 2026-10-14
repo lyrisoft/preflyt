@@ -63,6 +63,7 @@ import {
 import { healthDimensionValues } from './health-dimensions'
 import { HealthHelp } from './health-help'
 import { HealthPolicyEvidence } from './health-policy-evidence'
+import { HealthTestSettings } from './health-test-settings'
 import { HealthTimelineChart } from './health-timeline-chart'
 
 const pageSize = 10
@@ -219,7 +220,7 @@ export function RepositoryHealth({
           value: dimensions.coverage,
           description: report?.measurements?.coverage
             ? 'Recorded line coverage'
-            : 'No matching CI line coverage',
+            : 'No completed test coverage report',
           icon: TestTubeDiagonal,
           tone: 'teal' as SurfaceTone,
         },
@@ -510,6 +511,14 @@ export function RepositoryHealth({
                 </Link>
               ))}
             </div>
+          )}
+          {data && (
+            <HealthTestSettings
+              key={`${repositoryId}:${data.testSettingsRevision ?? 0}`}
+              repositoryId={repositoryId}
+              data={data}
+              allowed={allowed}
+            />
           )}
           {report && !active && (
             <AnalysisCoverage

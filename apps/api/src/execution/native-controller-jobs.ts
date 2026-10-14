@@ -1,6 +1,7 @@
+import {cleanupHealthTests} from '../health/health-test-job.js'
 import { fileAnalysisErrors, fileAnalysisMeasurement, fileAnalysisRules, fileAnalysisFailureReason } from '../health/health-file-analysis.js'
 import {fitHealthReceipt} from '../health/health-receipt-budget.js'
-import { duplicationMeasurement, coverageMeasurement, coverageFailureReason } from '../health/health-measurements.js'
+import { healthTestResults, duplicationMeasurement, coverageMeasurement, coverageFailureReason } from '../health/health-measurements.js'
 import { validateHealthFindingLocations } from '../health/health-finding-locations.js'
 import { healthReceiptFindings } from '../health/health-findings.js'
 import { constants } from 'node:fs'
@@ -38,6 +39,7 @@ export type NativeJobRunner = (
   sourcePath: string,
   signal?: AbortSignal,
   source?: unknown,
+  plan?: unknown,
 ) => ReturnType<typeof runNativeDockerCheck>
 export type JobRecord = {
   expected: NativeReceiptExpected
@@ -317,6 +319,10 @@ export class NativeControllerJobs {
           await dockerCommand(['rm', '--force', container.Id])
         }
       }
+      if (record.expected.selectionId.startsWith('health:') && plan.testSettings && record.expected.ruleIds.includes('tests.coverage')) {
+        const step=plan.steps.find((s:any)=>s.ruleId==='tests.coverage')
+        await cleanupHealthTests(this.scope(record.expected),{ruleId:'tests.coverage',image:step.image,toolVersion:step.toolVersion,license:step.license,configHash:step.configHash,reviewDigest:step.reviewDigest,expiresAt:step.reviewExpiresAt,databaseBuiltAt:step.databaseBuiltAt},dockerCommand)
+      }
       if (!record.workspaceRoot) {
         for (const name of await readdir(this.path(id)))
           if (name.startsWith('preflyt-native-')) {
@@ -450,6 +456,7 @@ export class NativeControllerJobs {
           workspace.workspace,
           signal,
           bundle,
+          record.expected.plan,
         )
         const safe = {
           ruleId,
@@ -480,7 +487,8 @@ export class NativeControllerJobs {
         if(ruleId === 'quality.duplication' && safe.state!=='INCOMPLETE' && (!measurement || measurement.analyzedLines===0)) {safe.state='INCOMPLETE';safe.reason='DUPLICATION_SCOPE_UNAVAILABLE'}
         if(ruleId === 'tests.coverage' && (!measurement || measurement.kind!=='coverage')) {safe.state='INCOMPLETE';safe.reason=coverageFailureReason(result.report,result.reportHash)??'COVERAGE_UNAVAILABLE'}
         const scanErrors = record.expected.selectionId.startsWith('health:') && (fileAnalysisRules.includes(ruleId) || ruleId==='quality.duplication') ? fileAnalysisErrors(result.report,result.reportHash) : undefined
-        checks[i] = { ...safe, ...(scanErrors ? {scanErrors} : {}), ...(fileAnalysis ? {fileAnalysis} : {}), ...(measurement ? {measurement} : {}), ...(findings === undefined ? {} : { findings }) }
+        const testResults=ruleId==='tests.coverage'&&record.expected.selectionId.startsWith('health:')?healthTestResults(result.report,result.reportHash):undefined
+        checks[i] = { ...safe, ...(testResults?{testResults}:{}), ...(scanErrors ? {scanErrors} : {}), ...(fileAnalysis ? {fileAnalysis} : {}), ...(measurement ? {measurement} : {}), ...(findings === undefined ? {} : { findings }) }
         if (!result.cleanupConfirmed) {
           cleanup = false
           break

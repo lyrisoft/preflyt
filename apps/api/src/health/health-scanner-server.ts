@@ -1,3 +1,4 @@
+import {runHealthTests} from './health-test-job.js'
 import { createServer } from 'node:http'
 import { createServer as createSecureServer } from 'node:https'
 import { createHash, timingSafeEqual } from 'node:crypto'
@@ -13,9 +14,10 @@ export async function healthScannerServer(pkg: HealthScannerPackage, apiKey: str
     if (current !== pkg.controlsHash) throw new Error('Scanner isolation changed')
   }
   await verify()
-  const jobs = new NativeControllerJobs(directory, (scope, ruleId, path, signal) => {
+  const jobs = new NativeControllerJobs(directory, (scope, ruleId, path, signal, _source, plan) => {
     const tool = pkg.tools.find(t => t.ruleId === ruleId)
     if (!tool) throw new Error('Scanner image unavailable')
+    if(ruleId==='tests.coverage')return runHealthTests(scope,tool,path,pkg.runtime,(plan as any).testSettings,verify,command,signal).then(result=>({...result,approvalHash:pkg.controlsHash,environmentId:pkg.environmentId}))
     return runIsolatedDockerCheck(scope, ruleId, tool, path, { runtime: pkg.runtime, approvalHash: pkg.controlsHash,
       environmentId: pkg.environmentId, verify, policy: 'health' }, signal, command)
   }, undefined, 'docker', expected => admitHealthScan(pkg, expected))

@@ -56,6 +56,10 @@ else {
         if (report.length > 11184812) throw new Error('Report exceeds bounds')
       } finally { await handle.close() }
     } catch { /* Missing, symlinked, special, oversized or changing reports are incomplete. */ }
+    if (!report && process.argv[2] === 'tests.coverage') {
+      report = Buffer.from(JSON.stringify({version:'2.1.0',runs:[{tool:{driver:{name:'Preflyt test coverage'}},properties:{preflytCoverageUnavailable:timedOut?'TESTS_TIMED_OUT':'TEST_RUNNER_FAILED'},results:[]}]})).toString('base64')
+      code = 2
+    }
     if (!report && process.argv[2] === 'quality.duplication') {
       const type = timedOut ? 'Scanner timed out' : /heap out of memory|Allocation failed - JavaScript heap/i.test(stderrTail) ? 'Scanner memory limit reached' : 'Scanner did not produce a report'
       report = Buffer.from(JSON.stringify({version:'2.1.0',runs:[{tool:{driver:{name:'Preflyt duplication'}},properties:{preflytScanErrors:[{type,path:null}]},results:[]}]})).toString('base64')

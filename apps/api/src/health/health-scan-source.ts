@@ -20,7 +20,7 @@ function treeHash(entries: Array<{path:string;type:string;mode:string;sha:string
   }
 }
 
-export async function readHealthScanSource(request: <T>(path:string)=>Promise<T>, base:string, repositoryId:string, sourceSha:string, signal?:AbortSignal, readBlobs?: (entries: GitSourceEntry[]) => Promise<Map<string, unknown>>) {
+export async function readHealthScanSource(request: <T>(path:string)=>Promise<T>, base:string, repositoryId:string, sourceSha:string, signal?:AbortSignal, readBlobs?: (entries: GitSourceEntry[]) => Promise<Map<string, unknown>>, includeTestAssets=false) {
   signal?.throwIfAborted()
   if (!/^[a-f0-9]{40}$/.test(sourceSha) || !/^[1-9]\d{0,15}$/.test(repositoryId) || !/^\/repos\/[a-zA-Z0-9_.%-]+\/[a-zA-Z0-9_.%-]+$/.test(base)) throw new Error('Invalid health source scope')
   const commit=await request<{sha:string;tree:{sha:string}}>(`${base}/git/commits/${sourceSha}`)
@@ -38,7 +38,7 @@ export async function readHealthScanSource(request: <T>(path:string)=>Promise<T>
   const selected=raw.tree.filter(entry=>entry.type==='blob' && ['100644','100755'].includes(entry.mode) &&
     Number.isSafeInteger(entry.size) && entry.size!>=0 && entry.size!<=sourceLimits.fileBytes &&
     !/(?:^|\/)(?:node_modules|vendor|dist|build|coverage|\.git)\//.test(entry.path) &&
-    !/\.(?:png|jpe?g|gif|webp|ico|pdf|mp[34]|mov|woff2?|ttf|zip|gz|tgz|jar|bin|exe|so|dylib)$/i.test(entry.path)) as GitSourceEntry[]
+    (includeTestAssets || !/\.(?:png|jpe?g|gif|webp|ico|pdf|mp[34]|mov|woff2?|ttf|zip|gz|tgz|jar|bin|exe|so|dylib)$/i.test(entry.path))) as GitSourceEntry[]
   if (selected.length>sourceLimits.files || selected.reduce((n,f)=>n+(f.size??0),0)>sourceLimits.totalBytes) throw new Error('Repository scan exceeds safe source bounds')
   const files:NativeSourceFile[]=[]
   if (readBlobs) {

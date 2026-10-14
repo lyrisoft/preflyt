@@ -1,3 +1,4 @@
+import {validateHealthTestSettings,defaultHealthTestSettings} from './health-test-settings.js'
 import { findingReferenceGuidance } from './finding-guidance.js'
 import { overallHealth } from './health-overall.js'
 import { healthPolicyContext } from './health-policy-context.js'
@@ -35,8 +36,7 @@ export class RepositoryHealthService {
  async start(session: AuthenticatedSession, githubId: string, input: { branch?: string; requestKey?: string; includeCoverage?: boolean } = {}, initial = false) {
   const repo = await this.access.requireRepository(session, githubId, 'execution.run')
   if(input.includeCoverage !== undefined && typeof input.includeCoverage !== 'boolean') throw new BadRequestException('Coverage requires an explicit boolean choice')
-  if(input.includeCoverage===true) throw new BadRequestException('Test coverage comes from CI; Health does not run tests')
-  const includeCoverage=false
+  const includeCoverage=input.includeCoverage!==false
   const branch = input.branch ?? (await this.db.repositoryHealthTarget.findUnique({ where: { repositoryId: repo.id } }))?.branch ?? repo.defaultBranch
   if (!branch || !validProfileBranch(branch)) throw new BadRequestException('Choose an accessible assessment branch')
   if (!initial && !/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(input.requestKey ?? '')) throw new BadRequestException('Use a valid reassessment request key')
@@ -60,12 +60,27 @@ export class RepositoryHealthService {
     const recent = await tx.repositoryHealthAssessment.findFirst({ where: { repositoryId: repo.id, branch, createdAt: { gte: new Date(Date.now() - 60000) } } })
     if (count >= 10 || (!initial && recent)) throw new ConflictException('Wait a minute before reassessing; at most 10 assessments per repository per hour')
     const row = await tx.repositoryHealthAssessment.create({ data: { repositoryId: repo.id, organizationId: session.organizationId!, actorId: session.identityId,
-     branch, includeCoverage, targetRevision: target.revision, requestKey: key } })
+     branch, includeCoverage, testSettings: json(target.testSettings??defaultHealthTestSettings), targetRevision: target.revision, requestKey: key } })
     await tx.auditEvent.create({ data: { event: 'repository.health.requested', actorId: session.identityId, metadata: { repositoryId: githubId, branch, assessmentId: row.id } } })
     return dto(row)
    }, { isolationLevel: 'Serializable' })
   } catch (error) { if (attempt < 2 && ['P2034', 'P2002'].includes((error as any)?.code)) continue; throw error }
   throw new ConflictException('Assessment admission changed; try again')
+ }
+ async saveTestSettings(session:AuthenticatedSession,githubId:string,input:{command?:string;directory?:string;framework?:string;expectedRevision:number}) {
+  const repo=await this.access.requireRepository(session,githubId,'execution.run')
+  let settings
+  try{settings=validateHealthTestSettings({command:input.command??'',directory:input.directory??'.',framework:input.framework??'auto'})}catch(error){throw new BadRequestException((error as Error).message)}
+  return this.db.$transaction(async tx=>{
+   await tx.$executeRaw`SELECT "id" FROM "GitHubRepository" WHERE "id" = ${repo.id} FOR UPDATE`
+   await new AuthorizationService(tx as PrismaService).requireRepository(session,githubId,'execution.run')
+   const target=await tx.repositoryHealthTarget.findUnique({where:{repositoryId:repo.id}})
+   if((target?.revision??0)!==input.expectedRevision)throw new ConflictException('Test settings changed; refresh and try again')
+   if(!target)throw new BadRequestException('Select the repository before configuring tests')
+   const updated=await tx.repositoryHealthTarget.update({where:{repositoryId:repo.id},data:{testSettings:json(settings),revision:{increment:1}}})
+   await tx.auditEvent.create({data:{event:'repository.health.tests.configured',actorId:session.identityId,metadata:{repositoryId:githubId,settingsHash:digest(settings)}}})
+   return {testSettings:settings,testSettingsRevision:updated.revision}
+  })
  }
  async initial(identityId: string, githubId: string) {
   const repo = await this.db.gitHubRepository.findUniqueOrThrow({ where: { githubId: BigInt(githubId) }, include: { installation: true } })
@@ -96,7 +111,7 @@ export class RepositoryHealthService {
   const hotspotFindings=(row?.report as HealthReport|null)?.findings.filter(f=>f.category==='hotspot')??[]
   const reviews=row && hotspotFindings.length ? await this.db.repositoryHealthHotspotReview.findMany({where:{organizationId:session.organizationId!,repositoryId:repo.id,assessmentId:row.id,sourceSha:row.sourceSha!,id:{in:hotspotFindings.map(f=>hotspotDispositionId(row.id,f.fingerprint))}}}) : []
   await this.access.requireRepository(session, githubId, 'assessment.read')
-  return { hotspotReview:row?hotspotSummary(row.report as HealthReport|null,reviews,row.id):null, repository: repo.fullName, branch, assessment: row ? dto(row) : null, freshness, checkedAt, history: history.map(h => ({ ...dto(h), report: undefined })), total, page, timeline,
+  return {testSettings:target?.testSettings??defaultHealthTestSettings,testSettingsRevision:target?.revision??0, hotspotReview:row?hotspotSummary(row.report as HealthReport|null,reviews,row.id):null, repository: repo.fullName, branch, assessment: row ? dto(row) : null, freshness, checkedAt, history: history.map(h => ({ ...dto(h), report: undefined })), total, page, timeline,
    trend: row?.report ? comparableHealthTrend(row.report as HealthReport, prior?.report as HealthReport | null) : null }
  }
  /** Upstream head verification is separate from loading immutable saved reports. */
@@ -263,7 +278,7 @@ export class RepositoryHealthService {
    if (!row.sourceSha) {
     const snapshot = await this.github.readRepositorySnapshot(repo.installationId, repo.githubId, row.branch)
     await this.access.requireRepository(session, repo.githubId.toString(), 'execution.run')
-    const profile = discoverRepositoryProfile(snapshot), analyses = applicableHealthAnalyses(snapshot,false)
+    const profile = discoverRepositoryProfile(snapshot), analyses = applicableHealthAnalyses(snapshot,row.includeCoverage)
     const plan = this.scanner ? { kind:'AUTOMATIC_HEALTH', stage:'FETCHING_SOURCE', planHash:'automatic-health-v1', ruleIds:analyses.map(a=>a.id), steps:[] as Array<{ruleId:string;reason:string}> } : buildNativePlan({ organizationId: row.organizationId, repositoryId: repo.githubId.toString(), sourceSha: snapshot.sourceSha,
      selectionId: 'health:' + row.id, rules: analyses.filter(a=>a.id!=='tests.coverage'||supportsNodeCoverage(snapshot)).map(a => ({ id: a.id, title: a.title, required: false, capability: 'execution' })) })
     const { planHash, ...frozenPlan } = plan
@@ -352,11 +367,11 @@ export class RepositoryHealthService {
     // The export is bounded but can take longer than an ordinary worker lease.
     await this.db.repositoryHealthAssessment.updateMany({where:{id:row.id,leaseToken:token,cancelledAt:null},data:{leaseUntil:new Date(Date.now()+12*60000)}})
     preparingSource=true
-    source=await this.github.readHealthScanSource(repo.installationId,repo.githubId,row.sourceSha,AbortSignal.timeout(600000))
+    source=await this.github.readHealthScanSource(repo.installationId,repo.githubId,row.sourceSha,AbortSignal.timeout(600000),row.includeCoverage)
     await this.access.requireRepository(session,repo.githubId.toString(),'execution.run')
     preparingSource=false
     pkg=await this.scanner.package(row.organizationId)
-    const {planHash,...plan}=healthScannerPlan(pkg,{organizationId:row.organizationId,repositoryId:repo.githubId.toString(),sourceSha:row.sourceSha,selectionId:'health:'+row.id,ruleIds:saved.ruleIds})
+    const {planHash,...plan}=healthScannerPlan(pkg,{organizationId:row.organizationId,repositoryId:repo.githubId.toString(),sourceSha:row.sourceSha,selectionId:'health:'+row.id,ruleIds:saved.ruleIds,testSettings:validateHealthTestSettings(row.testSettings??defaultHealthTestSettings)})
     const rules=plan.steps.filter(step=>'adapterId' in step).map(step=>step.ruleId)
     if (!rules.length) throw new Error('No applicable scanner images available')
     expected={requestId:row.id,attemptId:row.id,organizationId:row.organizationId,repositoryId:repo.githubId.toString(),sourceSha:row.sourceSha,sourceHash:source.source.sourceHash,selectionId:'health:'+row.id,planHash,plan,ruleIds:rules,approvalHash:healthScannerAuthority(pkg,row.organizationId).reviewed.approvalHash}
@@ -369,14 +384,14 @@ export class RepositoryHealthService {
    if (result.state==='NOT_FOUND') {
     pkg=await this.scanner.package(row.organizationId)
     if(expected.approvalHash!==healthScannerAuthority(pkg,row.organizationId).reviewed.approvalHash){
-     const {planHash,...plan}=healthScannerPlan(pkg,{organizationId:row.organizationId,repositoryId:repo.githubId.toString(),sourceSha:row.sourceSha,selectionId:expected.selectionId,ruleIds:saved.ruleIds})
+     const {planHash,...plan}=healthScannerPlan(pkg,{organizationId:row.organizationId,repositoryId:repo.githubId.toString(),sourceSha:row.sourceSha,selectionId:expected.selectionId,ruleIds:saved.ruleIds,testSettings:validateHealthTestSettings(row.testSettings??defaultHealthTestSettings)})
      expected={...expected,planHash,plan,ruleIds:plan.steps.filter(step=>'adapterId' in step).map(step=>step.ruleId),approvalHash:healthScannerAuthority(pkg,row.organizationId).reviewed.approvalHash}
      const updated=await this.db.repositoryHealthAssessment.updateMany({where:{id:row.id,leaseToken:token,cancelledAt:null},data:{plan:json({...row.plan as any,expected,package:pkg})}})
      if(!updated.count)throw new Error('Health scope changed')
      row=await this.db.repositoryHealthAssessment.findUniqueOrThrow({where:{id:row.id}})
     }
     await this.db.repositoryHealthAssessment.updateMany({where:{id:row.id,leaseToken:token,cancelledAt:null},data:{leaseUntil:new Date(Date.now()+12*60000)}})
-    source ??= await this.github.readHealthScanSource(repo.installationId,repo.githubId,row.sourceSha,AbortSignal.timeout(600000))
+    source ??= await this.github.readHealthScanSource(repo.installationId,repo.githubId,row.sourceSha,AbortSignal.timeout(600000),row.includeCoverage)
     await this.access.requireRepository(session,repo.githubId.toString(),'execution.run')
     const live=await this.db.repositoryHealthAssessment.findUniqueOrThrow({where:{id:row.id}})
     if (live.cancelledAt || live.leaseToken!==token || source.source.sourceHash!==expected.sourceHash) throw new Error('Health scope changed')
@@ -396,7 +411,7 @@ export class RepositoryHealthService {
    }
    await this.access.requireRepository(session,repo.githubId.toString(),'execution.run')
    const initial=row.report as HealthReport, excluded=(row.plan as any).excludedFiles??0
-   const report=healthReport({...initial.inspection,complete:initial.inspection.complete&&excluded===0},initial.analyses,receipt.checks,digest({kind:'automatic-health-v1',tools:receipt.toolReviewHash,scope:initial.analyses.map(a=>a.id)}))
+   const report=healthReport({...initial.inspection,complete:initial.inspection.complete&&excluded===0},initial.analyses.map(a=>a.id==='tests.coverage'&&!expected.ruleIds.includes('tests.coverage')?{...a,state:'UNAVAILABLE' as const,reason:'TEST_ENVIRONMENT_UNAVAILABLE'}:a),receipt.checks,digest({kind:'automatic-health-v1',tools:receipt.toolReviewHash,scope:initial.analyses.map(a=>a.id)}))
    report.policyContext=initial.policyContext
    if(excluded)report.limits.push(`${excluded} binary, oversized, generated or linked files were excluded from the scanned source scope. Findings and metrics apply to retained files only.`)
    await this.finish(row,token,receipt.cancelled?'CANCELLED':receipt.checks.some(c=>!c.cleanupConfirmed)?'FAILED':'COMPLETED',report,receipt.cancelled?'EXECUTION_CANCELLED':null)

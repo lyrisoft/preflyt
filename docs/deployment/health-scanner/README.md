@@ -101,3 +101,26 @@ not prove complete analysis of this repository or production deployment.
 
 Coverage remains unavailable until test execution supplies a measured report.
 Static scans and detected test files cannot establish a coverage percentage.
+
+## Automatic repository test coverage
+
+After upgrading, apply the API migrations and restart the Health scanner while idle.
+Startup builds and inventories the package-owned `Dockerfile.coverage` image. The
+API and worker do not need Docker access or repository package-manager credentials.
+Repository Health assessments capture their test settings and request coverage by
+default. Older reports are preserved; reassess to collect a new measurement.
+
+The dedicated host needs access to the public npm registry for dependency preparation.
+That phase uses fixed package-manager commands with repository scripts and hooks
+removed. Test execution is a separate network-disabled container. Both phases run
+nonroot with read-only roots, dropped capabilities, no-new-privileges, bounded CPU,
+memory and PIDs. Their shared dependency workspace is a 2 GiB tmpfs volume, removed
+after the job. Restart recovery removes only resources whose ownership label matches
+the recorded job. No application credentials or Docker socket enter either container.
+
+Supported packages use Vitest, Jest or Node tests with npm, pnpm 10 or Yarn Classic
+lockfiles. Private registries, external test services, install-script-dependent native
+modules and browser installations need a different execution environment; they remain
+incomplete with an actionable reason. No GitHub Actions workflow is started. See the
+[Health user guide](../../../apps/docs/docs/user-guide/repository-health.md) for command
+settings and measured coverage scope.

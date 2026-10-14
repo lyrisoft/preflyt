@@ -68,6 +68,12 @@ export type HealthReport = {
     id: string
     title: string
     scope?: string
+    testResults?: Array<{
+      directory: string
+      framework: string
+      state: string
+      reason: string
+    }>
     scanErrors?: Array<{ type: string; path: string | null; line?: number }>
     fileAnalysis?: {
       version: 1
@@ -90,9 +96,10 @@ export type HealthReport = {
   limits: string[]
   measurements?: {
     coverage?: {
-      version: 1
-      formula: 'node-covered-lines-v1'
-      scope: 'node-loaded-files'
+      version: 1 | 2
+      formula: 'node-covered-lines-v1' | 'repository-lcov-lines-v1'
+      scope: 'node-loaded-files' | 'configured-test-packages'
+      packages?: { directory: string; framework: string; manager: string }[]
       analyzedLines: number
       coveredLines: number
       analyzedFiles: number
@@ -132,6 +139,12 @@ export type HealthTimelinePoint = {
   findings: number
 }
 export type HealthData = {
+  testSettings?: {
+    command: string
+    directory: string
+    framework: 'auto' | 'vitest' | 'jest' | 'node'
+  }
+  testSettingsRevision?: number
   repository?: string
   branch: string | null
   assessment: HealthAssessment | null
@@ -332,8 +345,28 @@ export const healthReasons: Record<string, string> = {
     'Tests failed. Fix the failures before requesting measured coverage.',
   TESTS_SKIPPED:
     'Tests were skipped or marked TODO. Coverage remains unavailable until a complete run succeeds.',
+  NO_TEST_SETUP:
+    'No test script was found. Add a test script to package.json, or save a command in Tests and coverage.',
+  UNSUPPORTED_TEST_COMMAND:
+    'The test command could not be identified. Set a framework and command override in Tests and coverage.',
+  LOCKFILE_REQUIRED:
+    'Commit a package-lock.json, pnpm-lock.yaml or Yarn Classic yarn.lock so dependencies can be installed reproducibly.',
+  AMBIGUOUS_LOCKFILES:
+    'More than one package manager lockfile was found. Keep the lockfile used by this package.',
+  UNSUPPORTED_PACKAGE_MANAGER:
+    'This package manager is not supported yet. Supported managers are npm, pnpm and Yarn Classic.',
+  COVERAGE_PROVIDER_UNAVAILABLE:
+    'The coverage provider matching this Vitest version could not be installed. Check that the version is available in the public npm registry.',
+  DEPENDENCY_SOURCE_UNSUPPORTED:
+    'A dependency uses a private registry, Git URL or unsupported source. Health currently installs dependencies from the public npm and Yarn registries.',
+  DEPENDENCY_INSTALL_FAILED:
+    'Dependencies could not be installed from the public npm registry. Check the lockfile and package versions. Private registries and install scripts are not available in Health.',
+  TEST_ENVIRONMENT_UNAVAILABLE:
+    'The isolated test environment could not start. Retry, or ask the deployment operator to check the Health scanner service.',
+  TESTS_TIMED_OUT:
+    'The test run exceeded its time limit. Use a bounded non-interactive test command in Tests and coverage.',
   NO_SOURCE_COVERAGE:
-    'Tests ran without measured application source coverage. Test-only files are excluded.',
+    'Tests ran without usable line coverage for the assessed source files.',
   TEST_SCOPE_LIMIT:
     'The test file scope exceeds the reviewed limit of 100 files.',
   TEST_RUNNER_FAILED: 'The reviewed test runner did not complete successfully.',

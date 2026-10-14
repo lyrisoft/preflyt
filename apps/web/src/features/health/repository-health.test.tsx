@@ -753,7 +753,7 @@ it('shows automated hotspot findings separately from optional review counts', as
     .toBeVisible()
 })
 
-it('does not offer manual test execution and requests a static reassessment', async () => {
+it('uses automatic test discovery on reassessment without asking for individual tests', async () => {
   await mount()
   await expect
     .element(page.getByRole('checkbox', { name: 'Run tests for coverage' }))
@@ -761,7 +761,7 @@ it('does not offer manual test execution and requests a static reassessment', as
   await expect
     .poll(() =>
       document.querySelector<HTMLParagraphElement>(
-        '[aria-label="Test coverage: Awaiting CI coverage"]'
+        '[aria-label="Test coverage: Unavailable"]'
       )
     )
     .not.toBeNull()
@@ -870,7 +870,7 @@ it('uses a consistent dash for all missing dimension metrics', async () => {
   await expect
     .poll(() =>
       document.querySelector<HTMLParagraphElement>(
-        '[aria-label="Test coverage: Awaiting CI coverage"]'
+        '[aria-label="Test coverage: Unavailable"]'
       )
     )
     .not.toBeNull()
@@ -959,7 +959,7 @@ it('explains why security findings can coexist with unavailable metrics', async 
     .element(page.getByText('No verified duplication measurement'))
     .toBeVisible()
   await expect
-    .element(page.getByText('No matching CI line coverage'))
+    .element(page.getByText('No completed test coverage report'))
     .toBeVisible()
 })
 
@@ -1052,4 +1052,49 @@ it('shows safe scanner failure locations in the existing evidence details', asyn
   await expect
     .element(page.getByText('src/large.ts: Timeout', { exact: true }))
     .toBeVisible()
+})
+
+it('saves a framework-specific command override without selecting individual tests', async () => {
+  await mount()
+  await page.getByLabelText('Tests and coverage', { exact: true }).click()
+  await page
+    .getByLabelText('Test framework', { exact: true })
+    .selectOptions('jest')
+  await page
+    .getByLabelText('Package directory', { exact: true })
+    .fill('apps/api')
+  await page
+    .getByLabelText('Command override (optional)', { exact: true })
+    .fill('npm run test:unit --')
+  await page.getByRole('button', { name: 'Save test settings' }).click()
+  await expect
+    .poll(() =>
+      state.fetch.mock.calls.some(
+        ([url, init]) =>
+          String(url).includes('/health/test-settings') &&
+          init?.method === 'POST'
+      )
+    )
+    .toBe(true)
+  const call = state.fetch.mock.calls.find(
+    ([url, init]) =>
+      String(url).includes('/health/test-settings') && init?.method === 'POST'
+  )!
+  expect(JSON.parse(call[1].body)).toEqual({
+    command: 'npm run test:unit --',
+    directory: 'apps/api',
+    framework: 'jest',
+    expectedRevision: 0,
+  })
+})
+it('shows test configuration read-only without execution permission', async () => {
+  state.role = 'DEVELOPER'
+  await mount()
+  await page.getByLabelText('Tests and coverage', { exact: true }).click()
+  await expect
+    .element(page.getByLabelText('Test framework', { exact: true }))
+    .toBeDisabled()
+  await expect
+    .element(page.getByRole('button', { name: 'Save test settings' }))
+    .not.toBeInTheDocument()
 })

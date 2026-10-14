@@ -41,14 +41,14 @@ Branch checks are cached for one minute. Open or refresh Health to check again; 
 | Maintainability | JavaScript, TypeScript or Python source paths | Reviewed local Semgrep rules for leftover debugger statements and dynamic execution. Narrow rule coverage; findings require code review. |
 | Duplicated code | Supported JS/TS, Python, Java, Go, Ruby, PHP, C#, CSS/SCSS, SQL and Rust paths | jscpd 4.3.0 with a fixed, reviewed scope. Unique duplicated physical lines / analyzed physical lines; overlapping blocks count once. Source ranges link to the assessed revision. |
 | Security hotspot review | JavaScript, TypeScript or Python source paths | Reviewed Semgrep rules identify MD5 use for human context review. A hotspot is not a confirmed vulnerability. |
-| Test coverage | Coverage reports produced by existing CI tests | Exact-commit CI coverage ingestion remains pending. Health does not rerun tests; missing evidence is shown as a dash. |
+| Test coverage | Existing Vitest, Jest or Node test scripts and lockfiles | Runs configured tests in an isolated workspace at the assessed commit and collects measured line coverage. Missing or incomplete reports stay unavailable. |
 | Infrastructure configuration | Terraform or recognized Kubernetes/Helm paths | Trivy configuration analysis. Coverage is partial. |
 
 These analyzers are selected from detected files; supported rules and languages determine their recorded scope. The packaged Health scanner prepares pinned images and checks isolation automatically. No signed runtime approval is required. Binary, oversized, generated or linked files are excluded explicitly. Source or scanner failures remain visible instead of becoming clean results. General native repository-command execution has separate controls; see [Native execution](native-execution.md).
 
 **Analyses completed** counts checks with validated analyzer output; **Files inspected** counts discovered source files and is not an analysis coverage denominator.
 
-Reliability and maintainability findings are classified separately when their reviewed adapters run. These initial rule packs do not provide broad language coverage or a quality grade. Duplication measurements require the reviewed jscpd adapter. Test coverage comes from existing CI runs; Health does not offer a manual test-coverage run. Complexity still needs a qualified measured source. Overall health uses the completeness and failure rules described below, rather than averaging unrelated metrics into an arbitrary score.
+Reliability and maintainability findings are classified separately when their reviewed adapters run. These initial rule packs do not provide broad language coverage or a quality grade. Duplication measurements require the reviewed jscpd adapter. Health detects supported repository test scripts and collects coverage during reassessment. Complexity still needs a qualified measured source. Overall health uses the completeness and failure rules described below, rather than averaging unrelated metrics into an arbitrary score.
 
 ## Findings and source
 
@@ -96,13 +96,19 @@ The **Security hotspots** card counts findings detected automatically at the ass
 
 The hotspot review table and audit events are separate from immutable scan results. Reviewing never alters findings, CI evidence or GitHub merge protection. **Fix required** remains a recorded decision until a later assessment supplies new evidence.
 
-### Test coverage from CI
+### Automatic test coverage
 
-Health does not rerun tests. The manual coverage checkbox has been removed, and new manual coverage requests are rejected. Your existing CI workflow owns test execution and coverage generation. Preflyt's integration must receive the actual coverage report and match its repository, workflow run and commit to the displayed assessment. Connecting a GitHub App alone does not provide a coverage percentage from a passed test check.
+Select **Reassess** to detect and run the repository’s existing test setup. No individual tests need to be selected. Preflyt reads package manifests, lockfiles and framework configuration names as data; the repository’s test runner then selects tests using its own configuration.
 
-Until matching coverage evidence is available, the card shows **—**, with Awaiting CI coverage in its accessible label. Missing reports never become 0% or 100%. Automatic CI coverage-report ingestion is the remaining implementation work; existing JUnit and SARIF imports do not establish line coverage on their own.
+The initial supported frameworks are **Vitest, Jest and Node’s built-in runner**, with **npm, pnpm 10 and Yarn Classic** lockfiles. Declared npm/Yarn or pnpm workspaces are discovered package by package. Nested independent packages need their own lockfile. Root workspace orchestration is skipped when package test scripts are run directly. Other languages, Yarn Berry, browser binaries, private registries and tests requiring external services are not supported by this execution image.
 
-Historical manual coverage measurements remain readable with their original `node-covered-lines-v1` formula and loaded-file scope. They are not relabeled as CI evidence. Static security, reliability, maintainability and duplication assessments still provide supported first-assessment value without CI.
+For a custom script, open **Repositories → Health → Tests and coverage**, choose the framework, enter its package directory and save a command such as `npm run test:unit --`. Preflyt appends coverage and result-report flags. The override replaces the detected command for that package; other detected packages still run. Clear the override to return to detection. Saving requires permission to run assessments, uses revision checks to avoid overwriting another edit and takes effect on the next assessment. Existing reports retain their captured settings.
+
+Dependencies are prepared separately with repository install scripts and package-manager hooks disabled. Tests run without network access or platform credentials in a bounded, disposable workspace. Vitest’s matching coverage provider is prepared when absent. No GitHub Actions workflow is started or modified. Native build dependencies that require install scripts may be unavailable.
+
+The report lists package outcomes. Coverage is the union of measured source lines across successful packages, not an average of package percentages. The source, settings, image and report are tied to the assessed commit. This measures what the repository’s configured tests and instrumentation report; it does not establish test quality or whole-repository coverage. Failed, skipped or zero tests, missing reports and unsupported setup remain incomplete, with a reason and next action. No missing percentage becomes 0% or 100%.
+
+Preparation is limited to five minutes; test collection is limited to 4 minutes 45 seconds overall and three minutes per package. Each phase has 1 CPU, 2 GiB RAM and a bounded 2 GiB dependency workspace. Cleanup is required before results can be accepted. Historical Node measurements retain their original loaded-file formula. Health coverage remains separate from CI policy evidence and merge decisions.
 
 ### Saved finding guidance
 
@@ -141,7 +147,7 @@ Saved policy context and evidence checksum survive report finalization and later
 
 New static-security, reliability, maintainability and hotspot scans use image-owned Semgrep file accounting. `semgrep-candidate-files-v1` records eligible JavaScript/TypeScript/Python files up to 1 MiB, the scanner's actual unique scanned paths, and candidate files not scanned. The signed report carries only bounded counters and a file-set checksum, without source fragments or path lists. The counts apply to the fixed recorded rule pack, not whole-repository security, policy compliance or test coverage.
 
-**Files discovered** is repository inventory. Per-analyzer **candidate files analyzed** is measured scanner scope. Duplication and optional test coverage retain their own measured file counts; missing accounting remains unavailable. Parse/processing errors preserve valid findings while withholding successful file coverage. Empty supported scope is incomplete. Policy evidence remains separate.
+**Files discovered** is repository inventory. Per-analyzer **candidate files analyzed** is measured scanner scope. Duplication and test coverage retain their own measured file counts; missing accounting remains unavailable. Parse/processing errors preserve valid findings while withholding successful file coverage. Empty supported scope is incomplete. Policy evidence remains separate.
 
 The strict measured Semgrep image `sha256:ab136eaf5352c9ad2d53ea454fbae762ecf0e634e50e82124bef4bd64e2e8533` passed complete, ignored-file, malformed-Python and empty-scope fixtures, plus 13 source-verified native-wrapper cases. Focused API verification passed 124 tests across six files; Health browser verification passed 18 tests. The publication workflow now checks the negative file-accounting cases before publishing a Semgrep image; it was not run remotely. Effective runtime qualification and additional analyzer accounting remain pending.
 
@@ -158,7 +164,7 @@ Valid findings retained from an incomplete analyzer still appear in dimension co
 
 ### Finding categories from Health cards
 
-Health shows five clickable cards: Security, Reliability, Maintainability, Duplication and Test coverage. Missing metrics consistently display **—**. Clicking an analysis card opens **Findings** for the same repository and saved Health report, filtered to that category. The category selector can explore other findings within that report. Opening a finding retains its original commit and source viewer; Back to findings restores the category filter. Coverage opens the coverage evidence view and explains when a matching CI report has not been received. Inspection-only reports explicitly state that analysis has not run instead of showing zero-issue metrics.
+Health shows five clickable cards: Security, Reliability, Maintainability, Duplication and Test coverage. Missing metrics consistently display **—**. Clicking an analysis card opens **Findings** for the same repository and saved Health report, filtered to that category. The category selector can explore other findings within that report. Opening a finding retains its original commit and source viewer; Back to findings restores the category filter. Coverage opens the coverage evidence view and explains why test execution or coverage collection was incomplete. Inspection-only reports explicitly state that analysis has not run instead of showing zero-issue metrics.
 
 The hotspot metric card was removed. Automatic hotspot findings and optional review records remain available in the saved report and Findings category selector; no human review is required to receive automatic analysis results.
 
@@ -174,7 +180,7 @@ The duplicate Selection status column was removed. Authorized users retain the r
 
 Overall health summarizes the latest saved assessment on the selected branch and commit. It never averages previous commits or mixes raw finding counts with coverage percentages. Critical/high retained findings or a captured required analysis failing its policy limit produce **Unhealthy** (red), even when another analysis is missing. Without a known blocking failure, missing or partial applicable analyses, invalid policy context or missing required coverage produce **Incomplete** (gray). Complete results with advisory findings produce **Needs attention** (amber). Complete clean results meeting recorded requirements produce **Healthy** (green). Queued/running assessments retain their progress state. Freshness is shown separately; a healthy historical commit does not establish the current branch is healthy.
 
-The evaluator uses captured policy `maxFailedChecks` limits for supported Health analysis IDs. The current policy contract does not configure coverage or duplication percentage targets; no percentage limits are invented. Coverage stays CI-derived, and absent coverage blocks Healthy only when recorded requirements require it. This summary does not change CI gate evidence or GitHub merge permissions.
+The evaluator uses captured policy `maxFailedChecks` limits for supported Health analysis IDs. The current policy contract does not configure coverage or duplication percentage targets; no percentage limits are invented. Coverage stays tied to the captured test run, and absent coverage blocks Healthy only when recorded requirements require it. This summary does not change CI gate evidence or GitHub merge permissions.
 
 ### Visible scan progress
 

@@ -383,11 +383,11 @@ export class GitHubProviderService {
     const base = `/repos/${encodeURIComponent(reader.metadata.owner.login)}/${encodeURIComponent(reader.metadata.name)}`
     return readPinnedNativeSource(reader.request, base, repositoryId.toString(), sourceSha, signal)
   }
-  async readHealthScanSource(installationId: bigint, repositoryId: bigint, sourceSha: string, signal?: AbortSignal) {
+  async readHealthScanSource(installationId: bigint, repositoryId: bigint, sourceSha: string, signal?: AbortSignal, includeTestAssets=false) {
     if (!/^[a-f0-9]{40}$/.test(sourceSha)) throw new BadRequestException('Use an exact commit for health scanning')
     const reader = await this.openRepository(installationId, repositoryId, 'contents', signal, 10 * 60_000)
     const base = `/repos/${encodeURIComponent(reader.metadata.owner.login)}/${encodeURIComponent(reader.metadata.name)}`
-    return readHealthScanSource(reader.request, base, repositoryId.toString(), sourceSha, signal, reader.healthBlobs)
+    return readHealthScanSource(reader.request, base, repositoryId.toString(), sourceSha, signal, reader.healthBlobs, includeTestAssets)
   }
 
   async verifyRepositoryAccess(installationId: bigint, repositoryId: bigint) {

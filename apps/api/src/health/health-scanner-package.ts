@@ -1,10 +1,11 @@
+import {validateHealthTestSettings,type HealthTestSettings,defaultHealthTestSettings} from './health-test-settings.js'
 import {HEALTH_REPORT_BYTES} from './health-report-limits.js'
 import { createPublicKey } from 'node:crypto'
 import { digest } from '../assessments/assessment-digest.js'
 import { buildNativePlan, nativeAdapters, nativeToolReviews, type NativeRuleId, type NativeToolReview } from '../execution/native-plan.js'
 import type { NativeReceiptExpected } from '../execution/native-receipt.js'
 
-export const healthScannerRules = ['secrets.scan', 'security.sast', 'security.dependencies', 'iac.policy', 'quality.reliability', 'quality.maintainability', 'quality.duplication', 'security.hotspots'] as const
+export const healthScannerRules = ['secrets.scan', 'security.sast', 'security.dependencies', 'iac.policy', 'quality.reliability', 'quality.maintainability', 'quality.duplication', 'security.hotspots', 'tests.coverage'] as const
 export type HealthScannerPackage = {
   version: 1; environmentId: string; runtime: 'runc' | 'runsc' | 'kata';
   controlsHash: string; controllerPublicKey: string; createdAt: string; tools: NativeToolReview[]
@@ -31,12 +32,12 @@ export function healthScannerAuthority(value: HealthScannerPackage, organization
   }
 }
 
-export function healthScannerPlan(pkg: HealthScannerPackage, input: { organizationId: string; repositoryId: string; sourceSha: string; selectionId: string; ruleIds: string[] }) {
+export function healthScannerPlan(pkg: HealthScannerPackage, input: { organizationId: string; repositoryId: string; sourceSha: string; selectionId: string; ruleIds: string[]; testSettings?: HealthTestSettings }) {
   if (!/^health:[a-f0-9-]{36}$/.test(input.selectionId) || input.ruleIds.some(id => !healthScannerRules.includes(id as any)))
     throw new Error('Only fixed repository health scanners are available')
   const authority = healthScannerAuthority(pkg, input.organizationId)
-  const {planHash: _nativeHash, ...nativePlan} = buildNativePlan({ ...input, rules: input.ruleIds.map(id => ({ id, title: id, required: false, capability: 'execution' })) }, authority.tools)
-  const plan = {...nativePlan, steps: nativePlan.steps.map(step => ({...step, maxReportBytes: HEALTH_REPORT_BYTES}))}
+  const {planHash: _nativeHash, ...nativePlan} = buildNativePlan({ ...input, rules: input.ruleIds.filter(id=>authority.tools.reviews.some(tool=>tool.ruleId===id)).map(id => ({ id, title: id, required: false, capability: 'execution' })) }, authority.tools)
+  const plan = {...nativePlan, ...(nativePlan.steps.some(step=>step.ruleId==='tests.coverage')?{testSettings:validateHealthTestSettings(input.testSettings??defaultHealthTestSettings)}:{}), steps: nativePlan.steps.map(step => ({...step, maxReportBytes: HEALTH_REPORT_BYTES}))}
   return {...plan, planHash: digest(plan)}
 }
 
@@ -44,10 +45,10 @@ export function admitHealthScan(pkg: HealthScannerPackage, expected: NativeRecei
   if (!expected || Object.keys(expected).sort().join(',') !== 'approvalHash,attemptId,organizationId,plan,planHash,repositoryId,requestId,ruleIds,selectionId,sourceHash,sourceSha' ||
     !/^[a-f0-9-]{36}$/.test(expected.requestId) || expected.attemptId !== expected.requestId ||
     expected.selectionId !== 'health:' + expected.requestId || !/^[a-f0-9]{64}$/.test(expected.sourceHash) ||
-    !Array.isArray(expected.ruleIds) || !expected.ruleIds.length || expected.ruleIds.length > 8 || new Set(expected.ruleIds).size !== expected.ruleIds.length)
+    !Array.isArray(expected.ruleIds) || !expected.ruleIds.length || expected.ruleIds.length > 9 || new Set(expected.ruleIds).size !== expected.ruleIds.length)
     throw new Error('Invalid health scan scope')
   const authority = healthScannerAuthority(pkg, expected.organizationId)
-  const { planHash, ...plan } = healthScannerPlan(pkg, { ...expected, ruleIds: expected.ruleIds })
+  const { planHash, ...plan } = healthScannerPlan(pkg, { ...expected, ruleIds: expected.ruleIds, testSettings:(expected.plan as any)?.testSettings })
   if (expected.approvalHash !== authority.reviewed.approvalHash || expected.planHash !== planHash || digest(expected.plan) !== digest(plan))
     throw new Error('Health scanner package or scope changed')
   const rules = expected.ruleIds as NativeRuleId[]
@@ -56,7 +57,7 @@ export function admitHealthScan(pkg: HealthScannerPackage, expected: NativeRecei
   return { ...authority, rules }
 }
 
-/** Automatically inspected baseline for fixed static scanners. General repository-code execution uses its separate strong-isolation policy. */
+/** Automatically inspected dedicated Health runner baseline. Dependency preparation and test execution enforce separate verified container profiles. */
 export function healthDockerControls(info: any, runtime: string) {
   const options = info?.SecurityOptions
   if (info?.OSType !== 'linux' || typeof info.ID !== 'string' || !info.ID || !info.ServerVersion || !info.KernelVersion ||
@@ -66,5 +67,5 @@ export function healthDockerControls(info: any, runtime: string) {
     throw new Error('Scanner isolation controls are unavailable')
   return digest({ version: 1, engine: info.ID, server: info.ServerVersion, kernel: info.KernelVersion, security: options,
     runtime, runtimeConfiguration: info.Runtimes[runtime], memory: true, pids: true,
-    profile: 'non-root-readonly-no-network-no-capabilities-fixed-static-scanners-v1' })
+    profile: 'isolated-health-scanners-and-repository-tests-v2' })
 }

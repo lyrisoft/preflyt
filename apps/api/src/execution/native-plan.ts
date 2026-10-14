@@ -217,7 +217,7 @@ export function nativeToolReviews(
         !Number.isFinite(Date.parse(item.expiresAt)) ||
         Date.parse(item.expiresAt) <= now ||
         (policy === 'native' && Date.parse(item.expiresAt) > now + 30 * 86400000) ||
-        (policy === 'health' && ['tests.required', 'tests.coverage', 'lint.required'].includes(item.ruleId)) ||
+        (policy === 'health' && ['tests.required', 'lint.required'].includes(item.ruleId)) ||
         (item.ruleId === 'security.dependencies'
           ? typeof item.databaseBuiltAt !== 'string' ||
             !item.databaseBuiltAt ||

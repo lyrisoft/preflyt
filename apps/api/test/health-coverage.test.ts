@@ -4,7 +4,7 @@ import {coverageMeasurement,validCoverageMeasurement,coverageFailureReason} from
 import {applicableHealthAnalyses,healthReport,supportsNodeCoverage} from '../src/health/health-report.js'
 const m={version:1,kind:'coverage',formula:'node-covered-lines-v1',scope:'node-loaded-files',analyzedLines:10,coveredLines:6,analyzedFiles:1,tests:2,passed:2,failed:0,skipped:0,cancelled:0,todo:0} as const
 const snapshot=(paths:string[])=>({sourceSha:'a'.repeat(40),treeSha:'b'.repeat(40),branch:'main',fullName:'org/repo',complete:true,warnings:[],files:paths.map(path=>({path,sha:'c'.repeat(40),size:10}))})
-it('never includes test execution in the default repository analysis',()=>{
+it('keeps the analysis coverage choice explicit and the legacy Node recipe bounded',()=>{
  const source=snapshot(['app.js','app.test.js'])
  expect(supportsNodeCoverage(source)).toBe(true)
  expect(applicableHealthAnalyses(source).map(a=>a.id)).not.toContain('tests.coverage')
