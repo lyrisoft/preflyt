@@ -130,7 +130,7 @@ it.each(['secrets.scan','quality.reliability','quality.maintainability','quality
  await sink.complete(native.id,signNativeReceipt(receipt,key,pub));await db.repositoryHealthAssessment.update({where:{id:first.id},data:{leaseUntil:null}});await service.process(first.id)
  const report=(await service.get(owner,'51')).assessment!;expect(report.report?.findings[0]).toMatchObject({path:'app.ts',line:1,category});expect(report.report?.completeness).toBe('PARTIAL');expect(await db.commitAssessment.count()).toBe(0);expect(await db.gitHubCheckPublication.count()).toBe(0)
  if(ruleId==='quality.duplication') expect(report.report?.measurements?.duplication).toMatchObject({analyzedLines:100,duplicatedLines:20})
- if(ruleId==='secrets.scan') { const excerpt=await service.source(owner,'51',first.id,report.report!.findings[0].fingerprint);expect(excerpt.reason).toContain('hidden');expect(provider.readHealthSource).not.toHaveBeenCalled() }
+ if(ruleId==='secrets.scan') { provider.readHealthSource.mockResolvedValue('sensitive fixture\ncontext'); const excerpt=await service.source(owner,'51',first.id,report.report!.findings[0].fingerprint);expect(excerpt.lines[0]?.text).toBe('[Potential credential redacted]');expect(provider.readHealthSource).toHaveBeenCalled() }
  expect(await db.notificationEvent.count()).toBe(1)
 })
 

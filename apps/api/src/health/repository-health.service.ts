@@ -3,7 +3,7 @@ import { overallHealth } from './health-overall.js'
 import { healthPolicyContext } from './health-policy-context.js'
 import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common'
 import { FindingSourceStore } from '../findings/finding-source-store.service.js'
-import { queueFindingSources, hiddenSource } from '../findings/finding-source-store.js'
+import { queueFindingSources } from '../findings/finding-source-store.js'
 import { randomUUID } from 'node:crypto'
 import { PrismaService } from '../prisma/prisma.service.js'
 import {hotspotDispositionId,hotspotStates,hotspotSummary} from './hotspot-review.js'
@@ -225,7 +225,6 @@ export class RepositoryHealthService {
   const finding = (row?.report as HealthReport | null)?.findings.find(f => f.fingerprint === fingerprint)
   if (!row?.sourceSha || !finding) throw new NotFoundException('Finding is unavailable')
   const base = { path: finding.path, line: finding.line, endLine: finding.endLine ?? finding.line, sourceSha: row.sourceSha, lines: [] as Array<{ number: number; text: string }>, reason: null as string | null }
-  if (hiddenSource(finding)) return { ...base, reason: 'Secret source is hidden to protect credentials' }
   if (!finding.path || !finding.line) return { ...base, reason: 'The analyzer did not provide an exact source location' }
   const excerpt = await this.sources.read(repo.id, row.sourceSha, finding, 5)
   await this.access.requireRepository(session, githubId, 'assessment.read')

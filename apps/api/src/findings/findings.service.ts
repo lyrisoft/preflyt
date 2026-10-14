@@ -409,7 +409,6 @@ export class FindingsService {
     const finding = await this.finding(session, id, assessment, origin);
     const repo = await this.access.requireRepository(session, finding.repositoryId, "assessment.read");
     const base = { path: finding.path, line: finding.line, endLine: finding.endLine ?? finding.line, sourceSha: finding.sourceSha, lines: [] as Array<{ number: number; text: string }>, reason: null as string | null, truncated: false };
-    if (hiddenSource(finding)) return { ...base, reason: 'Secret source is hidden to protect credentials.' };
     if (!finding.path) return { ...base, reason: finding.category === 'check' || finding.category === 'evidence' ? 'This is a check result, not a finding at a code location. Review its assessment evidence below.' : 'The report did not supply a file location.' };
     if (finding.origin === 'ai' && finding.codeSide === 'LEFT') {
       const review = await this.db.aiSkillReview.findUnique({ where: { id: finding.reviewId }, include: { assessment: true } });
@@ -426,6 +425,7 @@ export class FindingsService {
       const lines = [];
       for (let number = first; number <= last; number++)
         if (available.has(number)) lines.push({ number, text: redactHealthSource(available.get(number)!) });
+      if (hiddenSource(finding)) for (const line of lines) if (line.number >= finding.line && line.number <= (finding.endLine ?? finding.line)) line.text = '[Potential credential redacted]';
       await this.access.requireRepository(session, finding.repositoryId, 'assessment.read');
       return { ...base, lines, truncated: true, reason: lines.length ? null : 'The review did not retain this changed line.' };
     }
