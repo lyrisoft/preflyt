@@ -42,7 +42,7 @@ jobs:
       id-token: write
     steps:
       - name: Verify results, AI review and PR publication
-        uses: lyrisoft/preflyt-action@v2.1.1
+        uses: lyrisoft/preflyt-action@c4789c3b39825f1278ebfd2be173b6bc21cbbfed # v2.1.1 + safe transport diagnostics
         with:
           mode: gate
           api-url: ${{ vars.PREFLYT_API_URL }}

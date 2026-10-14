@@ -4,12 +4,13 @@ import { resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { parse } from 'yaml'
 import { expect, it } from 'vitest'
+import { sourceContractTests } from '../../../scripts/ci/change-scope.mjs'
 const root = resolve(process.cwd(), '../..')
 const workflow = (name: string) => parse(readFileSync(resolve(root, '.github/workflows', name), 'utf8'))
 it('checks the PR head and runs the published policy only for same-repository development PRs', () => {
   const verify = workflow('verify.yml')
   const development = workflow('development-checks.yml')
-  const steps = development.jobs.checks.steps
+  const steps = development.jobs.checks.steps, sourceSteps = development.jobs.source.steps, allSteps = [...steps, ...sourceSteps]
   expect(steps[0].with.ref).toContain('github.event.pull_request.head.sha')
   expect(steps[0].with['persist-credentials']).toBe(false)
   expect(steps[0].with['fetch-depth']).toBe(0)
@@ -17,21 +18,35 @@ it('checks the PR head and runs the published policy only for same-repository de
   expect(action.if).toContain("github.base_ref == 'development'")
   expect(action.if).toContain('github.event.pull_request.head.repo.full_name == github.repository')
   expect(action.if).toContain('!cancelled()')
-  expect(action.uses).toBe('lyrisoft/preflyt-action@v2.1.1')
+  expect(action.uses).toBe('lyrisoft/preflyt-action@c4789c3b39825f1278ebfd2be173b6bc21cbbfed')
   expect(action.with).toEqual({ 'api-url': '${{ vars.PREFLYT_API_URL }}' })
   expect(verify.jobs.preflyt_gate.steps[0].uses).toBe(action.uses)
   expect(development.jobs.checks.permissions).toEqual({ contents: 'read', 'id-token': 'write' })
-  for (const name of ['Type checks', 'Lint', 'Build validation']) expect(steps.find((step: any) => step.name === name).if).toContain('!cancelled()')
+  for (const name of ['Type checks', 'Lint', 'Build validation']) expect(allSteps.find((step: any) => step.name === name).if).toContain('!cancelled()')
   expect(development.jobs.checks.services).toBeUndefined()
   expect(steps.some((step: any) => /regression|compose/i.test(step.name ?? ''))).toBe(false)
-  expect(steps.find((step: any) => step.name === 'Workflow and source contracts').run).toContain('test/development-ci.test.ts')
-  expect(steps.find((step: any) => step.name === 'Workflow and source contracts').run).toContain('test/native-source.test.ts')
+  expect(sourceSteps.find((step: any) => step.name === 'Workflow and source contracts').run).toContain('test/development-ci.test.ts')
+  expect(sourceSteps.find((step: any) => step.name === 'Workflow and source contracts').run).toContain('test/native-source.test.ts')
+  for (const path of sourceContractTests) expect(sourceSteps.find((step: any) => step.name === 'Workflow and source contracts').run).toContain(path)
   for (const [name, target] of [['Related API unit tests', 'api'], ['Related browser tests', 'web']]) {
-    const focused = steps.find((step: any) => step.name === name)
+    const focused = allSteps.find((step: any) => step.name === name)
     expect(focused.if).toContain(`steps.focused.outputs.${target} == 'true'`)
     expect(focused.run).toBe(`node scripts/ci/change-scope.mjs ${target}`)
     expect(focused.env.CI_HEAD_SHA).toContain('github.event.pull_request.head.sha')
   }
+  expect(development.jobs.source.needs).toBeUndefined()
+  expect(development.jobs.checks.needs).toBeUndefined()
+  expect(development.jobs.source.permissions).toBeUndefined() // inherits read-only contents, no OIDC
+  const policyIndex = steps.findIndex((step: any) => step.name === 'Preflyt development policy')
+  const coverageIndex = steps.findIndex((step: any) => step.name === 'Check current policy browser coverage')
+  expect(coverageIndex).toBeGreaterThan(policyIndex)
+  expect(steps[coverageIndex].run).toBe('python3 scripts/ci/policy-browser-coverage.py')
+  for (const name of ['Install Chromium for related browser tests', 'Related browser tests']) {
+    expect(steps.find((step: any) => step.name === name).if).toContain("steps.browser.outputs.covered != 'true'")
+  }
+  const cacheSteps = steps.filter((step: any) => step.uses?.startsWith('actions/cache@'))
+  expect(cacheSteps.map((step: any) => step.with.path)).toEqual(['.turbo/cache', '~/.cache/ms-playwright'])
+  expect(cacheSteps.every((step: any) => !step.with.path.includes('.preflyt'))).toBe(true)
   expect(verify.jobs.development.uses).toBe('./.github/workflows/development-checks.yml')
 })
 it('builds release images only after a push, without repeating PR checks', () => {
@@ -133,6 +148,20 @@ it('checks Pages configuration with a read-only build token before spending buil
   expect(pages).toBeGreaterThan(0)
   expect(pages).toBeLessThan(steps.findIndex((step: any) => step.name === 'Install locked dependencies'))
   expect(steps[pages].with?.enablement).not.toBe(true)
+})
+
+it('caches complete build products and keeps TypeScript incremental state with emitted files', () => {
+  const turbo = JSON.parse(readFileSync(resolve(root, 'turbo.json'), 'utf8'))
+  const api = JSON.parse(readFileSync(resolve(root, 'apps/api/tsconfig.json'), 'utf8'))
+  expect(api.compilerOptions.tsBuildInfoFile).toBe('./dist/.tsbuildinfo')
+  expect(turbo.tasks.build.outputs).toContain('dist/**')
+  expect(turbo.tasks['@preflyt/web#build'].outputs).toContain('.prerender/**')
+  expect(turbo.tasks['@preflyt/web#build'].inputs).toContain('$TURBO_ROOT$/deploy/nginx.conf')
+  const docs = turbo.tasks['@preflyt/docs#build']
+  for (const output of ['build/**', 'static/downloads/**']) expect(docs.outputs).toContain(output)
+  for (const input of ['docs/**', 'deploy/**', 'docker-compose.yaml', '.env.example']) expect(docs.inputs).toContain('$TURBO_ROOT$/' + input)
+  expect(docs.env).toEqual(['DOCS_URL', 'DOCS_BASE_URL', 'PREFLYT_DOCS_REGISTRY'])
+  expect(turbo.tasks.test.cache).toBe(false)
 })
 it('does not package the removed Health test runner in the native image', () => {
   const context = 'docs/deployment/native-runner'

@@ -4,7 +4,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
-import { changedFiles, focusedCommands, imageRequired, runFocused, testPlan } from './change-scope.mjs';
+import { changedFiles, focusedCommands, imageRequired, runFocused, sourceContractTests, testPlan } from './change-scope.mjs';
 
 test('development does not rebuild images for test, documentation or PR-check-only changes', () => {
   assert.equal(imageRequired('development', ['apps/api/test/native-source.test.ts', 'apps/web/src/homepage.test.tsx',
@@ -41,6 +41,7 @@ test('related tests use the verified comparison, exclude DB integration only on 
   const api = focusedCommands('api', scope)[0], web = focusedCommands('web', scope)[0];
   assert.ok(api.includes(`--changed=${scope.base}`));
   assert.ok(api.includes('**/*.integration.test.ts'));
+  for (const path of sourceContractTests) assert.ok(api.includes(path));
   assert.ok(web.includes('--browser.headless'));
   assert.equal(runFocused('api', scope, () => ({ status: 7 })), 7);
   assert.equal(runFocused('api', scope, () => ({ status: null })), 1);
