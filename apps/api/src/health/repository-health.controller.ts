@@ -12,13 +12,6 @@ class HealthRequest {
  @IsOptional() @IsIn(['security','reliability','maintainability','duplication','coverage']) category?: HealthCategory
  @IsUUID('4') requestKey!: string
 }
-class TestSettingsRequest {
- @IsOptional() @IsString() @MaxLength(244) packageDirectory?:string
- @IsOptional() @IsString() @MaxLength(2000) command?:string
- @IsOptional() @IsString() @MaxLength(244) directory?:string
- @IsOptional() @IsIn(['auto','vitest','jest','node']) framework?:string
- @IsInt() @Min(0) expectedRevision!:number
-}
 class HotspotReviewRequest {
  @IsIn(['TO_REVIEW','IN_REVIEW','SAFE','FIX_REQUIRED']) state!: string
  @IsString() @MaxLength(1000) note!: string
@@ -34,10 +27,6 @@ export class RepositoryHealthController {
  get(@Req() req: SessionRequest, @Param('repositoryId') repo: string, @Query('assessment') id?: string, @Query('page') page = '1') { return this.health.get(req.preflytSession!,repo,id,Number(page)) }
  @Get('repositories/:repositoryId/health/freshness') @Header('Cache-Control','no-store')
  freshness(@Req() req: SessionRequest, @Param('repositoryId') repo: string, @Query('assessment') id = '') { return this.health.freshness(req.preflytSession!,repo,id) }
- @Get('repositories/:repositoryId/health/test-apps') @Header('Cache-Control','no-store')
- testApps(@Req() req:SessionRequest,@Param('repositoryId') repo:string,@Query('branch') branch?:string){return this.health.testApps(req.preflytSession!,repo,branch)}
- @Post('repositories/:repositoryId/health/test-settings')
- saveTestSettings(@Req() req:SessionRequest,@Param('repositoryId') repo:string,@Body(new ValidationPipe({whitelist:true,forbidNonWhitelisted:true,transform:true,expectedType:TestSettingsRequest})) input:TestSettingsRequest){this.auth.assertOrigin(req.headers.origin);return this.health.saveTestSettings(req.preflytSession!,repo,input)}
  @Post('repositories/:repositoryId/health')
  start(@Req() req: SessionRequest, @Param('repositoryId') repo: string, @Body(new ValidationPipe({whitelist: true, forbidNonWhitelisted: true, transform: true, expectedType: HealthRequest})) input: HealthRequest) { this.auth.assertOrigin(req.headers.origin); return this.health.start(req.preflytSession!,repo,input) }
  @Post('repositories/:repositoryId/health/:id/cancel')

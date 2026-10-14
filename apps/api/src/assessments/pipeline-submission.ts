@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException } from "@nestjs/common";
 import { parseArtifact } from "../github-events/ci-artifact-parser.js";
+import { ciCoverageMeasurement } from "../health/health-ci-coverage.js";
 import { checkReportFormat } from "./check-report-adapters.js";
 
 type Policy = {
@@ -53,13 +54,14 @@ export function normalizePipelineSubmission(body: unknown, policy: Policy) {
   const reports = input.reports.map((report: any) => {
     if (
       !report ||
-      !ids.has(report.ruleId) ||
+      !(ids.has(report.ruleId) || report.ruleId === "tests.coverage") ||
       reportIds.has(report.ruleId) ||
-      report.format !== checkReportFormat(report.ruleId)
+      report.format !== (report.ruleId === "tests.coverage" ? "lcov" : checkReportFormat(report.ruleId))
     )
       throw invalid();
     reportIds.add(report.ruleId);
     const parsed = parseArtifact(report.format, report.content, report.sha256);
+    if (report.ruleId === "tests.coverage" && !ciCoverageMeasurement(parsed.bytes)) throw invalid();
     if (
       report.proof !== undefined &&
       (typeof report.proof !== "string" ||

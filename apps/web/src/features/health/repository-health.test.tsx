@@ -427,6 +427,32 @@ beforeEach(() => {
         JSON.stringify({
           branch: 'development',
           assessment: row(),
+          ciCoverage: state.coverage
+            ? {
+                state: 'VERIFIED',
+                sourceSha: sha,
+                reason: 'CI_COVERAGE_VERIFIED',
+                measurement: {
+                  analyzedFiles: 1,
+                  analyzedLines: 10,
+                  coveredLines: 6,
+                },
+                tests: {
+                  tests: 2,
+                  passed: 2,
+                  failures: 0,
+                  errors: 0,
+                  skipped: 0,
+                },
+                testsState: 'PASS',
+                runUrl:
+                  'https://github.com/fixture/repo/actions/runs/12/attempts/1',
+              }
+            : {
+                state: 'MISSING',
+                sourceSha: sha,
+                reason: 'CI_COVERAGE_NOT_RECEIVED',
+              },
           ...(state.categoryResults
             ? { categoryResults: state.categoryResults }
             : {}),
@@ -863,23 +889,46 @@ it('runs tests alone and keeps the older security result linked to the same comm
     .element(page.getByRole('link', { name: 'Open test coverage details' }))
     .toHaveAttribute('href', expect.stringContaining('category=coverage'))
 })
-it('runs test coverage from its detail view, not the report cards', async () => {
+it('shows verified CI coverage and test counts without execution or settings actions', async () => {
   state.coverage = true
   await mountCoverage()
   await expect
-    .element(page.getByRole('heading', { name: 'Test coverage', level: 1 }))
+    .element(
+      page.getByRole('heading', { name: 'Tests and coverage', level: 1 })
+    )
     .toBeVisible()
   await expect.element(page.getByText('60.0%', { exact: true })).toBeVisible()
-  await page.getByRole('button', { name: 'Run test coverage' }).click()
   await expect
-    .poll(() =>
-      state.fetch.mock.calls.some(
-        ([, init]) =>
-          init?.method === 'POST' &&
-          JSON.parse(String(init.body)).category === 'coverage'
-      )
+    .element(page.getByText('2 passed · 0 failed · 0 skipped'))
+    .toBeVisible()
+  await expect
+    .element(page.getByRole('link', { name: 'View CI run and logs' }))
+    .toHaveAttribute(
+      'href',
+      expect.stringContaining('/actions/runs/12/attempts/1')
     )
-    .toBe(true)
+  await expect
+    .element(page.getByRole('button', { name: 'Run test coverage' }))
+    .not.toBeInTheDocument()
+  await expect
+    .element(page.getByRole('button', { name: 'Test coverage settings' }))
+    .not.toBeInTheDocument()
+  expect(
+    state.fetch.mock.calls.some(([, init]) => init?.method === 'POST')
+  ).toBe(false)
+})
+it('explains missing CI coverage with a setup link and no fabricated zero', async () => {
+  await mountCoverage()
+  await expect
+    .element(page.getByText('Coverage not received', { exact: true }))
+    .toBeVisible()
+  await expect
+    .element(page.getByRole('link', { name: 'CI coverage setup' }))
+    .toHaveAttribute(
+      'href',
+      'https://docs.preflytlabs.com/user-guide/repository-health'
+    )
+  await expect.element(page.getByText('—', { exact: true })).toBeVisible()
 })
 it('shows actual measured coverage with test counts and the loaded-file scope', async () => {
   state.coverage = true
@@ -999,6 +1048,23 @@ it('uses a consistent dash for all missing dimension metrics', async () => {
     .not.toBeNull()
 })
 
+it('shows retained counts with a Partial scan badge instead of a comparison symbol', async () => {
+  state.categoryResults = {
+    security: {
+      assessmentId: id,
+      finishedAt: '2026-10-14T06:00:00Z',
+      value: '≥228',
+    },
+  }
+  await mount()
+  const card = page.getByRole('link', { name: 'View security findings' })
+  await expect.element(card.getByText('228', { exact: true })).toBeVisible()
+  await expect
+    .element(card.getByText('Partial scan', { exact: true }))
+    .toBeVisible()
+  await expect.element(card).not.toHaveTextContent('≥')
+})
+
 it('links the five metric cards to their exact report and category', async () => {
   await mount()
   for (const label of [
@@ -1093,7 +1159,7 @@ it('explains why security findings can coexist with unavailable metrics', async 
     .element(page.getByText('No verified duplication measurement'))
     .toBeVisible()
   await expect
-    .element(page.getByText('No completed test coverage report'))
+    .element(page.getByText('Coverage not received from CI'))
     .toBeVisible()
 })
 
@@ -1188,59 +1254,6 @@ it('shows safe scanner failure locations in the existing evidence details', asyn
     .toBeVisible()
 })
 
-it('saves a framework-specific command override without selecting individual tests', async () => {
-  state.coverage = true
-  await mountCoverage()
-  await page.getByRole('button', { name: 'Test coverage settings' }).click()
-  await expect.element(page.getByRole('dialog')).toBeVisible()
-  await page.getByText('Advanced settings', { exact: true }).click()
-  await page
-    .getByLabelText('Test framework', { exact: true })
-    .selectOptions('jest')
-  await page
-    .getByLabelText('Package directory', { exact: true })
-    .fill('apps/api')
-  await page
-    .getByLabelText('Command override (optional)', { exact: true })
-    .fill('npm run test:unit --')
-  await page.getByRole('button', { name: 'Save test settings' }).click()
-  await expect
-    .poll(() =>
-      state.fetch.mock.calls.some(
-        ([url, init]) =>
-          String(url).includes('/health/test-settings') &&
-          init?.method === 'POST'
-      )
-    )
-    .toBe(true)
-  const call = state.fetch.mock.calls.find(
-    ([url, init]) =>
-      String(url).includes('/health/test-settings') && init?.method === 'POST'
-  )!
-  expect(JSON.parse(call[1].body)).toEqual({
-    command: 'npm run test:unit --',
-    directory: 'apps/api',
-    framework: 'jest',
-    expectedRevision: 0,
-  })
-})
-it('shows test configuration read-only without execution permission', async () => {
-  state.role = 'DEVELOPER'
-  state.coverage = true
-  await mountCoverage()
-  await expect
-    .element(page.getByRole('button', { name: 'Run test coverage' }))
-    .not.toBeInTheDocument()
-  await page.getByRole('button', { name: 'Test coverage settings' }).click()
-  await page.getByText('Advanced settings', { exact: true }).click()
-  await expect
-    .element(page.getByLabelText('Test framework', { exact: true }))
-    .toBeDisabled()
-  await expect
-    .element(page.getByRole('button', { name: 'Save test settings' }))
-    .not.toBeInTheDocument()
-})
-
 it('explains a pre-scan GitHub rate-limit failure without needing a report, including history and retry time', async () => {
   state.state = 'FAILED'
   state.noReport = true
@@ -1320,34 +1333,3 @@ it.each(['password=provider-secret', '__proto__', 'constructor'])(
       .not.toBeInTheDocument()
   }
 )
-
-it('lets users select a detected app without configuring its command', async () => {
-  state.coverage = true
-  await mountCoverage()
-  await page.getByRole('button', { name: 'Test coverage settings' }).click()
-  await page.getByLabelText('App to test', { exact: true }).selectOptions('api')
-  await expect
-    .element(page.getByLabelText('Test framework', { exact: true }))
-    .not.toBeVisible()
-  await page.getByRole('button', { name: 'Save test settings' }).click()
-  await expect
-    .poll(() =>
-      state.fetch.mock.calls.some(
-        ([url, init]) =>
-          String(url).includes('/health/test-settings') &&
-          init?.method === 'POST'
-      )
-    )
-    .toBe(true)
-  const call = state.fetch.mock.calls.find(
-    ([url, init]) =>
-      String(url).includes('/health/test-settings') && init?.method === 'POST'
-  )!
-  expect(JSON.parse(call[1].body)).toEqual({
-    packageDirectory: 'api',
-    directory: 'api',
-    framework: 'auto',
-    command: '',
-    expectedRevision: 0,
-  })
-})

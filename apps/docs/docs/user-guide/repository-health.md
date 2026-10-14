@@ -62,11 +62,11 @@ Filter by severity or search the report. Open a finding to navigate to a dedicat
 
 The source viewer verifies the regular Git blob at the assessed commit and saves a redacted excerpt with up to five lines before and after the reported line. It highlights the line only when it exists. Missing locations, large or binary files, symlinks, submodules, lost access and source-verification failures produce an explanation instead. Secret findings show numbered surrounding code and mask the entire reported range before storage, because scanner receipts do not retain safe value-level masking coordinates. Obvious credentials in surrounding context are also redacted. New reports queue excerpt capture in the background. Older findings capture their excerpt on first open. Later visits load the saved excerpt from Preflyt after checking current repository access.
 
-Counts exclude suppressed results and deduplicate matching findings from the same analyzer. Each analysis retains up to 5,000 supported findings from an 8 MiB report; the complete receipt has a separate 8 MiB encoded payload limit. Additional retained details may be trimmed across analyzers to fit that limit, preserving their outcomes, reported totals, measured counters and cleanup evidence. Highest-priority findings are retained first. A lower-bound value such as ≥132 means results are incomplete; missing details never establish zero issues. Truncation or invalid locations can make the report partial. **Zero reported findings applies only to the recorded scope**, not the whole repository. These bounded details belong to Health; the existing Findings page continues to track CI assessment issues.
+Counts exclude suppressed results and deduplicate matching findings from the same analyzer. Each analysis retains up to 5,000 supported findings from an 8 MiB report; the complete receipt has a separate 8 MiB encoded payload limit. Additional retained details may be trimmed across analyzers to fit that limit, preserving their outcomes, reported totals, measured counters and cleanup evidence. Highest-priority findings are retained first. A findings count with a **Partial scan** badge means results are incomplete; missing details never establish zero issues. Truncation or invalid locations can make the report partial. **Zero reported findings applies only to the recorded scope**, not the whole repository. These bounded details belong to Health; the existing Findings page continues to track CI assessment issues.
 
 ## Reassessment and history
 
-Owners, Admins and Security Engineers with repository access can reassess or cancel. Choose another branch and select **Reassess** to persist the new target. To rerun security, reliability, maintainability or duplication, open its **Scope and evidence** details under **Analysis coverage** and select the Run action. To rerun tests, open the **Test coverage** card's detail page and select **Run test coverage**. The five metric cards show results and dates; they do not contain run controls. A category run saves its own partial-scope report, even when its selected analyzers finish. It cannot establish whole-repository health. Reports retain their original branch, SHA, evidence and timestamps. History is paginated by branch.
+Owners, Admins and Security Engineers with repository access can reassess or cancel. Choose another branch and select **Reassess** to persist the new target. To rerun security, reliability, maintainability or duplication, open its **Scope and evidence** details under **Analysis coverage** and select the Run action. Open the **Test coverage** detail page to inspect verified CI reports and link to their workflow logs. The five metric cards show results and dates; they do not contain run controls. A category run saves its own partial-scope report, even when its selected analyzers finish. It cannot establish whole-repository health. Reports retain their original branch, SHA, evidence and timestamps. History is paginated by branch.
 
 The cards may reuse a category result from an earlier run only when it belongs to the exact same branch and commit. Each card shows its own assessment date and links to findings in that saved report. A result from another commit is never carried forward. Full-scan graph comparisons exclude category-only runs; those runs remain visible in assessment history.
 
@@ -108,19 +108,27 @@ GitHub access checks, branch inspection, repository profiles and finding excerpt
 
 Failed assessments show their reason in the report header and history, including attempts that stopped before a commit was pinned. GitHub rate-limit failures show a retry time when it was recorded. **Technical details** provides the assessment ID and a recognized failure code for support. Provider messages, credentials and raw Git stderr are never displayed. Select **Reassess** after resolving the problem; users without assessment permission ask a repository maintainer to retry.
 
-### Automatic test coverage
+### CI tests and coverage
 
-Select **Run test coverage** on the Test coverage detail page to detect and run the repository’s existing test setup on the branch's current head. A full **Reassess** also collects coverage. No individual tests need to be selected. Preflyt reads package manifests, lockfiles and framework configuration names as data; the repository’s test runner then selects tests using its own configuration.
+Repository Health never runs repository tests, installs project dependencies or provisions databases. Your existing GitHub Actions test job owns that setup. Health reads verified JUnit and LCOV evidence for the exact assessed commit and workflow attempt.
 
-The initial supported frameworks are **Vitest, Jest and Node’s built-in runner**, with **npm, pnpm 10 and Yarn Classic** lockfiles. Declared npm/Yarn or pnpm workspaces are discovered package by package. Nested independent packages need their own lockfile. Root workspace orchestration is skipped when package test scripts are run directly. Other languages, Yarn Berry, browser binaries, private registries and tests requiring external services are not supported by this execution image.
+Open **Test coverage** to see reported line coverage, passing/failing/skipped test counts, the received date and **View CI run and logs**. Refresh checks for newly received evidence. Missing, unsigned, invalid or mismatched reports remain unavailable; a green workflow alone does not establish coverage. Static reassessment does not rerun tests or change a saved CI verdict.
 
-For a custom script, open a repository's **Health → Test coverage** detail page and select the cog button. In the **Test coverage settings** modal, choose the framework, enter its package directory and save a command such as `npm run test:unit --`. Preflyt appends coverage and result-report flags. The override replaces the detected command for that package; other detected packages still run. Clear the override to return to detection. Saving requires permission to run assessments, uses revision checks to avoid overwriting another edit and takes effect on the next assessment. Existing reports retain their captured settings.
+The optional Action `coverage-report` input is a **local, unreleased change** and requires the companion API update. It collects an existing LCOV file without adding a policy requirement. Continue using the published Action until the new version is released; do not assume v2.1.1 supports this input.
 
-Dependencies are prepared separately with repository install scripts and package-manager hooks disabled. Tests run without network access or platform credentials in a bounded, disposable workspace. Vitest’s matching coverage provider is prepared when absent. No GitHub Actions workflow is started or modified. Native build dependencies that require install scripts may be unavailable.
+After release, configure your existing CI test command to emit JUnit and LCOV. Submit JUnit under `tests.required` through the published policy and pass the LCOV path to `coverage-report`. The existing `proofs` mapping must include signed bundles for both original files, created by your configured trusted signing workflow. See the deployment guide for private-repository report signatures in the deployment documentation for the signing boundary.
 
-The report lists package outcomes. Coverage is the union of measured source lines across successful packages, not an average of package percentages. The source, settings, image and report are tied to the assessed commit. This measures what the repository’s configured tests and instrumentation report; it does not establish test quality or whole-repository coverage. Failed, skipped or zero tests, missing reports and unsupported setup remain incomplete, with a reason and next action. No missing percentage becomes 0% or 100%.
+```yaml
+# Requires the upcoming Action release; substitute its published version.
+- uses: lyrisoft/preflyt-action@RELEASE_VERSION
+  with:
+    api-url: ${{ vars.PREFLYT_API_URL }}
+    mode: check
+    coverage-report: coverage/lcov.info
+    proofs: '{"results/tests.xml":"results/tests.proof.json","coverage/lcov.info":"coverage/lcov.proof.json"}'
+```
 
-Preparation is limited to five minutes; test collection is limited to 4 minutes 45 seconds overall and three minutes per package. Each phase has 1 CPU, 2 GiB RAM and a bounded 2 GiB dependency workspace. Cleanup is required before results can be accepted. Historical Node measurements retain their original loaded-file formula. Health coverage remains separate from CI policy evidence and merge decisions.
+Report files must be UTF-8 and at most 256 KiB each. LCOV must include `SF`, `DA`, `LF`, `LH` and `end_of_record` records with consistent totals. Duplicate physical lines are merged rather than percentages being averaged. Coverage applies to CI-reported files, which may exclude untested or ignored source; it is not a whole-repository guarantee. Different commits, repositories, attempts and unverified execution cannot supply the displayed metric.
 
 ### Saved finding guidance
 
@@ -171,12 +179,12 @@ New native Health findings can retain plain-text rule descriptions and help from
 Secret findings never retain scanner-provided explanations or help. They receive saved Preflyt general secret-detection guidance on secure review, revocation/rotation, removal and reassessment; this does not claim the exact detector or credential validity. Other findings without a supplied rule explanation retain the explicit unavailable state. Historical reports are unchanged.
 
 
-Valid findings retained from an incomplete analyzer still appear in dimension counts as a lower bound, for example **≥3**. Missing or excluded evidence does not become zero; an incomplete result with no retained findings shows **—**.
+Valid findings retained from an incomplete analyzer still appear in dimension counts with a plain count and **Partial scan** badge, for example **3**. Missing or excluded evidence does not become zero; an incomplete result with no retained findings shows **—**.
 
 
 ### Finding categories from Health cards
 
-Health shows five clickable cards: Security, Reliability, Maintainability, Duplication and Test coverage. Missing metrics consistently display **—**. Clicking a finding-count card opens **Findings** for the same repository and saved Health report, filtered to that category. The category selector can explore other findings within that report. Opening a finding retains its original commit and source viewer; Back to findings restores the category filter. Test coverage opens its dedicated detail view with the measured result, package outcomes, a Run action and a cog button for the settings modal. Inspection-only reports explicitly state that analysis has not run instead of showing zero-issue metrics.
+Health shows five clickable cards: Security, Reliability, Maintainability, Duplication and Test coverage. Missing metrics consistently display **—**. Clicking a finding-count card opens **Findings** for the same repository and saved Health report, filtered to that category. The category selector can explore other findings within that report. Opening a finding retains its original commit and source viewer; Back to findings restores the category filter. Test coverage opens its dedicated detail view with verified CI coverage, test counts, timestamps and workflow logs. Inspection-only reports explicitly state that analysis has not run instead of showing zero-issue metrics.
 
 The hotspot metric card was removed. Automatic hotspot findings and optional review records remain available in the saved report and Findings category selector; no human review is required to receive automatic analysis results.
 
@@ -206,8 +214,6 @@ Secret findings identify recognized credential types and show potential impact (
 
 The duplication measurement excludes dependency/build folders, generated folders, type declarations and minified JavaScript. Its denominator is the recorded analyzed scope.
 
-### Select an app for test coverage
+### Test setup belongs in CI
 
-Open **Test coverage → settings cog**. Preflyt detects apps with a `test` script on the selected branch and shows their package names, directories and frameworks. Select one app or **All detected apps** and save. Selecting an app uses its existing command automatically; manual commands are under **Advanced settings**. The saved choice applies to future assessments, including full Health scans. A partial discovery is labeled and unavailable discovery can be retried.
-
-If an independent package cannot install dependencies, other prepared packages still run. A mismatched lockfile is reported for the affected package; update and commit that package’s lockfile before retrying. Aggregate coverage remains incomplete when a selected package fails.
+Select monorepo packages and configure test services in your existing CI workflow. Repository Health has no test-command overrides or app-selection settings.

@@ -74,7 +74,7 @@ const pageSize = 10
 function findingMetricDescription(value: string) {
   if (value === 'Unavailable') return 'No verified finding count yet'
   if (value.startsWith('≥'))
-    return 'At least this many retained; analysis incomplete'
+    return 'More findings may appear when scanning completes.'
   return value === '0'
     ? 'No findings in the analyzed scope'
     : 'Retained findings in the analyzed scope'
@@ -249,12 +249,17 @@ export function RepositoryHealth({
         },
         {
           label: 'Test coverage',
-          ...metricResult('coverage', dimensions.coverage),
-          description:
-            metricResult('coverage', dimensions.coverage).value !==
-            'Unavailable'
-              ? 'Recorded line coverage'
-              : 'No completed test coverage report',
+          category: 'coverage' as const,
+          value: data?.ciCoverage?.measurement
+            ? `${((100 * data.ciCoverage.measurement.coveredLines) / data.ciCoverage.measurement.analyzedLines).toFixed(1)}%`
+            : 'Unavailable',
+          finishedAt: data?.ciCoverage?.receivedAt ?? null,
+          assessmentId: row?.id,
+          description: data?.ciCoverage?.measurement
+            ? 'Verified CI line coverage'
+            : data?.ciCoverage?.state === 'UNVERIFIED'
+              ? 'CI coverage not verified'
+              : 'Coverage not received from CI',
           icon: TestTubeDiagonal,
           tone: 'teal' as SurfaceTone,
         },
@@ -588,16 +593,21 @@ export function RepositoryHealth({
                     </CardHeader>
                     <CardContent>
                       <p
-                        aria-label={`${metric.label}: ${metric.value}`}
-                        title={metric.value}
+                        aria-label={`${metric.label}: ${metric.value.replace(/^≥/, '')}${metric.value.startsWith('≥') ? ' findings, partial scan' : ''}`}
+                        title={metric.value.replace(/^≥/, '')}
                         className='text-2xl font-semibold tracking-tight tabular-nums'
                       >
                         {['Unavailable', 'Awaiting CI coverage'].includes(
                           metric.value
                         )
                           ? '—'
-                          : metric.value}
+                          : metric.value.replace(/^≥/, '')}
                       </p>
+                      {metric.value.startsWith('≥') && (
+                        <div className='mt-2'>
+                          <StatusBadge tone='warning'>Partial scan</StatusBadge>
+                        </div>
+                      )}
                       <p className='mt-1.5 text-xs text-muted-foreground'>
                         {metric.description}
                       </p>

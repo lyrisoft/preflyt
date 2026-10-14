@@ -150,13 +150,26 @@ export type HealthData = {
       { assessmentId: string; finishedAt: string | null; value: string } | null
     >
   >
-  testSettings?: {
-    packageDirectory?: string
-    command: string
-    directory: string
-    framework: 'auto' | 'vitest' | 'jest' | 'node'
+  ciCoverage?: {
+    sourceSha: string | null
+    state: 'VERIFIED' | 'MISSING' | 'UNVERIFIED'
+    reason: string
+    runUrl?: string
+    receivedAt?: string
+    measurement?: {
+      analyzedFiles: number
+      analyzedLines: number
+      coveredLines: number
+    }
+    tests?: {
+      tests: number
+      passed: number
+      failures: number
+      errors: number
+      skipped: number
+    }
+    testsState?: 'PASS' | 'FAIL' | 'INCOMPLETE'
   }
-  testSettingsRevision?: number
   repository?: string
   branch: string | null
   assessment: HealthAssessment | null
@@ -345,6 +358,8 @@ export function useHealthFreshness(repositoryId: string, assessment?: string) {
   })
 }
 export const healthReasons: Record<string, string> = {
+  HEALTH_TEST_EXECUTION_REMOVED:
+    'Repository Health no longer runs tests. Reassess for static analysis and submit test results and coverage from your CI workflow.',
   NO_APPLICABLE_ANALYSIS:
     'No supported files or configuration were found for this category at the selected commit.',
   GIT_UNAVAILABLE:
@@ -366,13 +381,13 @@ export const healthReasons: Record<string, string> = {
   PREFLIGHT_DISABLED:
     'The operator has not enabled an approved analysis runtime.',
   TESTS_FAILED:
-    'Tests failed. Fix the failures before requesting measured coverage.',
+    'The test command or its setup failed. Coverage was not produced. Check the repository’s test setup and failing tests before retrying.',
   TESTS_SKIPPED:
     'Tests were skipped or marked TODO. Coverage remains unavailable until a complete run succeeds.',
   NO_TEST_SETUP:
-    'No test script was found. Add a test script to package.json, or save a command in Tests and coverage.',
+    'The historical Health run found no test setup. Configure tests and coverage in your CI workflow.',
   UNSUPPORTED_TEST_COMMAND:
-    'The test command could not be identified. Set a framework and command override in Tests and coverage.',
+    'The historical Health test command was unsupported. Configure tests and coverage in CI.',
   LOCKFILE_REQUIRED:
     'Commit a package-lock.json, pnpm-lock.yaml or Yarn Classic yarn.lock so dependencies can be installed reproducibly.',
   AMBIGUOUS_LOCKFILES:
@@ -392,7 +407,7 @@ export const healthReasons: Record<string, string> = {
   TEST_ENVIRONMENT_UNAVAILABLE:
     'The isolated test environment could not start. Retry, or ask the deployment operator to check the Health scanner service.',
   TESTS_TIMED_OUT:
-    'The test run exceeded its time limit. Use a bounded non-interactive test command in Tests and coverage.',
+    'The test run exceeded its time limit. Review the CI workflow logs and test job timeout.',
   NO_SOURCE_COVERAGE:
     'Tests ran without usable line coverage for the assessed source files.',
   TEST_SCOPE_LIMIT:

@@ -15,7 +15,7 @@ it('keeps the analysis coverage choice explicit and the legacy Node recipe bound
 })
 it('selects only the requested category and never turns missing categories into zero findings',()=>{
  const source=snapshot(['app.ts','api/package-lock.json'])
- expect(selectedHealthAnalyses(source,'coverage').map(a=>a.id)).toEqual(['tests.coverage'])
+ expect(selectedHealthAnalyses(source,'coverage')).toEqual([])
  expect(selectedHealthAnalyses(source,'reliability').map(a=>a.id)).toEqual(['quality.reliability'])
  expect(selectedHealthAnalyses(source,'security').map(a=>a.id)).toEqual(['secrets.scan','security.sast','security.dependencies','security.hotspots'])
  const report=healthReport({complete:true,fileCount:2,languages:['TypeScript']},[{id:'quality.reliability',title:'Reliability',state:'INCOMPLETE',reason:'SCAN_ERRORS'}])

@@ -123,6 +123,8 @@ export function validateReport(artifact: {
         : summary.failures + summary.errors > 0
           ? 'REPORTED_FAILURE'
           : 'REPORTED_SUCCESS'
+  } else if (artifact.format === 'lcov') {
+    result.reportedResult = 'UNKNOWN'
   } else {
     result.reportedResult = summary.execution
     const sarif = JSON.parse(

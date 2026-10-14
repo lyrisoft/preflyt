@@ -148,7 +148,15 @@ async function start() {
   const healthQueue = new Queue('repository-health', { ...producerConfig, connection: producer })
   const healthWorker = new Worker('repository-health', async job => {
     if (typeof job.data?.id !== 'string' || !/^[a-f0-9-]{36}$/.test(job.data.id)) throw new Error('Invalid health job')
-    await telemetryOperation('preflyt.repository.health', { 'health.assessment.id': job.data.id }, () => health.process(job.data.id))
+    console.info(JSON.stringify({event:'health.worker.processing',assessmentId:job.data.id}))
+    try {
+      await telemetryOperation('preflyt.repository.health', { 'health.assessment.id': job.data.id }, () => health.process(job.data.id))
+      const result=await prisma.repositoryHealthAssessment.findUnique({where:{id:job.data.id},select:{state:true,reason:true,plan:true}}).catch(()=>null)
+      console.info(JSON.stringify({event:'health.worker.progress',assessmentId:job.data.id,state:result?.state,stage:(result?.plan as any)?.stage,reason:result?.reason}))
+    } catch (error) {
+      console.error(JSON.stringify({event:'health.worker.failed',assessmentId:job.data.id,reason:'PROCESSING_FAILED'}))
+      throw error
+    }
   }, { ...consumerConfig, connection: consumer, concurrency: 2 })
   let healthRun: Promise<void> | undefined
   let nativeRun: Promise<void> | undefined

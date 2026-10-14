@@ -119,29 +119,8 @@ it('rejects unprotected connection files and plaintext scanner endpoints',async(
  }finally{await rm(directory,{recursive:true,force:true})}
 })
 
-it('binds a coverage override to the admitted plan and leaves missing images unavailable',()=>{
- const value=pkg();value.tools.push({...value.tools[0],ruleId:'tests.coverage',toolVersion:'24.16.0'})
- const input=expected(value),settings={command:'npm run unit --',directory:'.',framework:'jest' as const}
- const {planHash,...plan}=healthScannerPlan(value,{...input,ruleIds:['tests.coverage'],testSettings:settings})
- const scope={...input,planHash,plan,ruleIds:['tests.coverage']}
- expect(admitHealthScan(value,scope).rules).toEqual(['tests.coverage'])
- expect(()=>admitHealthScan(value,{...scope,plan:{...plan,testSettings:{...settings,command:'other'}}})).toThrow()
- const missing=healthScannerPlan(pkg(),{...input,ruleIds:['secrets.scan','tests.coverage'],testSettings:settings})
- expect(missing.steps.map(s=>s.ruleId)).toEqual(['secrets.scan'])
- expect(missing).not.toHaveProperty('testSettings')
-})
-
-it('accepts coverage bound to successful package outcomes and rejects inconsistent package evidence',()=>{
- const value=pkg();value.tools=[{...value.tools[0],ruleId:'tests.coverage',toolVersion:'24.16.0'}]
- const input=expected(value),authority=healthScannerAuthority(value,'org')
- const {planHash,...plan}=healthScannerPlan(value,{...input,ruleIds:['tests.coverage']})
- const expectedCoverage={...input,planHash,plan,ruleIds:['tests.coverage']}
- const {plan:_plan,ruleIds:_rules,...scope}=expectedCoverage
- const measurement={version:2,kind:'coverage',formula:'repository-lcov-lines-v1',scope:'configured-test-packages',analyzedLines:2,coveredLines:1,analyzedFiles:1,tests:1,passed:1,failed:0,skipped:0,cancelled:0,todo:0,packages:[{directory:'.',framework:'jest',manager:'npm'}]} as const
- const receipt:NativeReceipt={...scope,version:1,environmentId:value.environmentId,controlsHash:value.controlsHash,toolReviewHash:authority.tools.reviewHash,startedAt:new Date(Date.now()-1000).toISOString(),finishedAt:new Date().toISOString(),cancelled:false,checks:[{
- ruleId:'tests.coverage',state:'PASS',reason:'CHECKS_PASSED',reportHash:'f'.repeat(64),summary:{runs:1,results:0,suppressed:0},adapterId:nativeAdapters['tests.coverage'].id,image:value.tools[0].image,toolVersion:value.tools[0].toolVersion,configHash:value.tools[0].configHash,commandHash:digest(nativeAdapters['tests.coverage']),exitCode:0,cleanupConfirmed:true,coverage:'PARTIAL',findings:[],measurement:JSON.parse(JSON.stringify(measurement)),testResults:[{directory:'.',framework:'jest',state:'PASS',reason:'CHECKS_PASSED'}]
- }]}
- const verify=(v:NativeReceipt)=>verifyNativeReceipt(signNativeReceipt(v,privateKey,publicKey),expectedCoverage,Date.now(),authority)
- expect(verify(receipt)?.checks[0].measurement).toEqual(measurement)
- for(const testResults of [undefined,[],[{directory:'other',framework:'jest',state:'PASS',reason:'CHECKS_PASSED'}],[{directory:'.',framework:'jest',state:'INCOMPLETE',reason:'TESTS_FAILED'}]])expect(verify({...receipt,checks:[{...receipt.checks[0],testResults}]} as NativeReceipt)).toBeNull()
+it('rejects repository test execution at the scanner boundary',()=>{
+ const value=pkg(),input=expected(value)
+ expect(()=>healthScannerPlan(value,{...input,ruleIds:['tests.coverage']})).toThrow('Only fixed')
+ expect(()=>healthScannerAuthority({...value,tools:[...value.tools,{...value.tools[0],ruleId:'tests.coverage'}]},'org')).toThrow('Invalid scanner package')
 })

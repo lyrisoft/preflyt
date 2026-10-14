@@ -425,7 +425,9 @@ export class NativeControllerJobs {
     })
     this.active = { id: expected.attemptId, abort, done }
     // Errors retain the journal for restart cleanup; no false success is returned.
-    void done.catch(() => {
+    void done.catch((error) => {
+      const code = typeof error?.code === 'string' && /^[A-Z_]{2,40}$/.test(error.code) ? error.code : 'JOB_EXECUTION_FAILED'
+      console.error(JSON.stringify({ event: 'health.scanner.job_failed', assessmentId: expected.requestId, reason: code }))
       this.ready = false
     })
     return { state: 'PREPARING' }

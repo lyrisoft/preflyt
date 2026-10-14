@@ -96,7 +96,7 @@ export function healthReport(inspection: HealthReport['inspection'], analyses: H
    'Reliability and maintainability findings apply only to the recorded rules and supported languages; no overall quality grade is calculated.',
    ...(duplication ? ['Duplication uses unique-lines-v1 within the recorded analyzed scope; excluded or unsupported files are not part of its denominator.'] : ['Duplication measurements are unavailable until a qualified analyzer supplies a measured nonempty scope.']),
    'Hotspot reviews are human decisions for the retained findings at this commit, not proof of safety or a change to scan evidence. Coverage and complexity require qualified measured sources.',
-   ...(coverage?[coverage.version===2?'Coverage combines reported lines from the configured test packages after successful execution at this commit. Repository-authored tests and coverage configuration define the measured scope; this is not independent proof of test adequacy.':'Coverage uses node-covered-lines-v1 for loaded source files during the recorded successful Node tests.']:['Test coverage is unavailable. Review the test analysis result and repository test settings.']),
+   ...(coverage?[coverage.version===2?'Coverage combines reported lines from the configured test packages after successful execution at this commit. Repository-authored tests and coverage configuration define the measured scope; this is not independent proof of test adequacy.':'Coverage uses node-covered-lines-v1 for loaded source files during the recorded successful Node tests.']:['Coverage is supplied by verified CI reports for the assessed commit. Repository Health does not execute tests.']),
   ] }
 }
 function comparableFindingScope(current: HealthReport, prior: HealthReport) {

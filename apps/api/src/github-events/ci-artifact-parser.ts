@@ -1,3 +1,4 @@
+import { ciLcov } from './ci-lcov.js'
 import {HEALTH_REPORT_BYTES} from '../health/health-report-limits.js'
 import { createHash } from 'node:crypto'
 import { BadRequestException } from '@nestjs/common'
@@ -7,7 +8,7 @@ import schema from './sarif-schema.js'
 
 export const MAX_ARTIFACT_BYTES = 256 * 1024
 export const PARSER_VERSION = 1
-export type ArtifactFormat = 'junit' | 'sarif'
+export type ArtifactFormat = 'junit' | 'sarif' | 'lcov'
 type ObjectValue = Record<string, any>
 const Ajv = AjvModule.default ?? AjvModule
 const validateSarif = new Ajv({ strict: false, validateFormats: false, ownProperties: true, logger: false }).compile(schema)
@@ -109,12 +110,16 @@ function junit(content: string) {
   return { ...counts, suites, execution: 'UNKNOWN', partial: true }
 }
 
+function lcov(content: string) {
+  try {return ciLcov(content)} catch {throw invalid()}
+}
+
 export function parseArtifact(format: unknown, content: unknown, expectedHash: unknown, profile: 'ci' | 'health' = 'ci') {
-  if (!['junit', 'sarif'].includes(format as string) || typeof content !== 'string' ||
+  if (!['junit', 'sarif', 'lcov'].includes(format as string) || typeof content !== 'string' ||
       typeof expectedHash !== 'string' || !/^[a-f0-9]{64}$/i.test(expectedHash)) throw invalid()
   const bytes = Buffer.from(content, 'utf8')
   if (!bytes.length || bytes.length > (profile === 'health' && format === 'sarif' ? HEALTH_REPORT_BYTES : MAX_ARTIFACT_BYTES) || bytes.toString('utf8') !== content) throw invalid()
   const sha256 = createHash('sha256').update(bytes).digest('hex')
   if (sha256 !== expectedHash.toLowerCase()) throw new BadRequestException('Artifact SHA-256 does not match the original UTF-8 bytes')
-  return { bytes, sha256, format: format as ArtifactFormat, summary: format === 'junit' ? junit(content) : sarif(content, profile === 'health') }
+  return { bytes, sha256, format: format as ArtifactFormat, summary: format === 'junit' ? junit(content) : format === 'lcov' ? lcov(content) : sarif(content, profile === 'health') }
 }

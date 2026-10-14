@@ -6,7 +6,7 @@ export const healthCategories = ['security', 'reliability', 'maintainability', '
 export type HealthCategory = (typeof healthCategories)[number]
 
 export function selectedHealthAnalyses(snapshot: RepositorySnapshot, category?: HealthCategory) {
- const applicable = applicableHealthAnalyses(snapshot, true)
+ const applicable = applicableHealthAnalyses(snapshot, false)
  return category ? applicable.filter(analysis => analysis.category === category || (category === 'security' && analysis.category === 'hotspot')) : applicable
 }
 

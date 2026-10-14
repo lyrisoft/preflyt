@@ -33,12 +33,11 @@ function categoryForAnalysis(id: string): HealthCategory | null {
   return null
 }
 
-const categoryAction: Record<HealthCategory, string> = {
+const categoryAction: Partial<Record<HealthCategory, string>> = {
   security: 'Run security',
   reliability: 'Run reliability',
   maintainability: 'Run maintainability',
   duplication: 'Run duplication',
-  coverage: 'Run test coverage',
 }
 
 function outcomeSummary(analysis: Analysis, report: HealthReport) {
@@ -327,6 +326,7 @@ export function AnalysisCoverage({
                         </dl>
                       )}
                       {onRunCategory &&
+                        analysis.id !== 'tests.coverage' &&
                         categoryForAnalysis(analysis.id) &&
                         report.analyses.findIndex(
                           (candidate) =>

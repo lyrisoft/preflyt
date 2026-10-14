@@ -33,7 +33,7 @@ beforeAll(async()=>{
  fixture=await disposableDatabase('health')
  app=await NestFactory.create({module:class TestHealthModule{},controllers:[RepositoryHealthController],providers:[
   SessionGuard,{provide:AuthorizationService,useValue:new AuthorizationService(fixture.prisma)},
-  {provide:RepositoryHealthService,useFactory:()=>({saveTestSettings:(...args:any[])=>service.saveTestSettings(...args as [any,any,any]),hotspotReview:(...args:any[])=>service.hotspotReview(...args as [any,any,any,any]),saveHotspotReview:(...args:any[])=>service.saveHotspotReview(...args as [any,any,any,any,any]),get:(...args:any[])=>service.get(...args as [any,any,any,any]),freshness:(...args:any[])=>service.freshness(...args as [any,any,any]),start:(...args:any[])=>service.start(...args as [any,any,any]),cancel:(...args:any[])=>service.cancel(...args as [any,any,any]),source:(...args:any[])=>service.source(...args as [any,any,any,any]),portfolio:(...args:any[])=>service.portfolio(...args as [any,any,any,any,any])})},
+  {provide:RepositoryHealthService,useFactory:()=>({hotspotReview:(...args:any[])=>service.hotspotReview(...args as [any,any,any,any]),saveHotspotReview:(...args:any[])=>service.saveHotspotReview(...args as [any,any,any,any,any]),get:(...args:any[])=>service.get(...args as [any,any,any,any]),freshness:(...args:any[])=>service.freshness(...args as [any,any,any]),start:(...args:any[])=>service.start(...args as [any,any,any]),cancel:(...args:any[])=>service.cancel(...args as [any,any,any]),source:(...args:any[])=>service.source(...args as [any,any,any,any]),portfolio:(...args:any[])=>service.portfolio(...args as [any,any,any,any,any])})},
   {provide:AuthService,useValue:{sessionCookieName:'health.sid',currentSession:async(token:string)=>({owner,developer,outsider} as any)[token]??{authenticated:false},assertOrigin:(origin:string)=>{if(origin!=='http://localhost:5173')throw new ForbiddenException()}}}
  ]},{logger:false})
  app.use(cookieParser());await app.init()
@@ -63,7 +63,7 @@ it('selection queues once without needing CI, standards or an immediate source r
 })
 it('automatically scans the selected repository without standards, CI or manual runtime approval and stores verified findings',async()=>{
  const key=generateKeyPairSync('ed25519'),publicKey=key.publicKey.export({type:'spki',format:'pem'}).toString(),privateKey=key.privateKey.export({type:'pkcs8',format:'pem'}).toString()
- const ids=['secrets.scan','security.sast','quality.reliability','quality.maintainability','quality.duplication','security.hotspots','tests.coverage'] as const
+ const ids=['secrets.scan','security.sast','quality.reliability','quality.maintainability','quality.duplication','security.hotspots'] as const
  const pkg={version:1 as const,environmentId:'health-fixture',runtime:'runc' as const,controlsHash:'d'.repeat(64),controllerPublicKey:publicKey,createdAt:new Date(Date.now()-60000).toISOString(),tools:ids.map(ruleId=>({ruleId,image:'sha256:'+'b'.repeat(64),toolVersion:'fixture-1',license:nativeAdapters[ruleId].license,configHash:'c'.repeat(64),reviewDigest:'d'.repeat(64),expiresAt:'2099-01-01T00:00:00Z',databaseBuiltAt:null}))}
  let admitted=false
  const scanner={package:vi.fn(async()=>pkg),verify:new HealthScannerClient().verify,call:vi.fn(async(action:string,input:any)=>{
@@ -366,17 +366,17 @@ it('runs one Health category at a time and keeps same-commit results from earlie
  const first=await service.start(owner,'51',{requestKey:key,category:'reliability'})
  expect(first.category).toBe('reliability')
  expect((await service.start(owner,'51',{requestKey:key,category:'reliability'})).id).toBe(first.id)
- await expect(service.start(owner,'51',{requestKey:key,category:'coverage'})).rejects.toThrow('different assessment scope')
+ await expect(service.start(owner,'51',{requestKey:key,category:'maintainability'})).rejects.toThrow('different assessment scope')
  await service.process(first.id);await service.process(first.id)
  const saved=await fixture.prisma.repositoryHealthAssessment.findUniqueOrThrow({where:{id:first.id}})
  expect((saved.plan as any).steps.filter((step:any)=>step.ruleId).map((step:any)=>step.ruleId)).toEqual(['quality.reliability'])
  expect((saved.report as any).selection).toBe('reliability')
  expect((saved.report as any).analyses.map((a:any)=>a.id)).toEqual(['quality.reliability'])
  await fixture.prisma.repositoryHealthAssessment.update({where:{id:first.id},data:{report:{...(saved.report as any),mode:'EXECUTED',analyses:[{...(saved.report as any).analyses[0],state:'PASS',reason:'CHECKS_PASSED',findingsRetained:0,findingsReported:0,reportHash:'f'.repeat(64)}]}}})
- const second=await service.start(owner,'51',{requestKey:randomUUID(),category:'coverage'})
+ const second=await service.start(owner,'51',{requestKey:randomUUID(),category:'maintainability'})
  await service.process(second.id);await service.process(second.id)
  const result=await service.get(owner,'51')
- expect(result.assessment).toMatchObject({id:second.id,category:'coverage',report:{selection:'coverage',completeness:'PARTIAL',analyses:[{id:'tests.coverage'}]}})
+ expect(result.assessment).toMatchObject({id:second.id,category:'maintainability',report:{selection:'maintainability',completeness:'PARTIAL',analyses:[{id:'quality.maintainability'}]}})
  expect(result.categoryResults.reliability).toMatchObject({assessmentId:first.id,value:'0'})
  expect(result.categoryResults.coverage).toBeNull()
  expect((await service.portfolio(owner)).items[0].result).toBe('INCOMPLETE')
@@ -389,13 +389,13 @@ it('explains when a selected category has no applicable files instead of claimin
  await service.process(row.id)
  expect((await service.get(owner,'51')).assessment).toMatchObject({state:'FAILED',reason:'NO_APPLICABLE_ANALYSIS',category:'reliability',sourceSha:null})
 })
-it('includes test discovery by default and rejects malformed coverage input',async()=>{
+it('never selects Health test execution and rejects coverage execution requests',async()=>{
  const first=await service.initial(owner.identityId,'51')
- expect((await fixture.prisma.repositoryHealthAssessment.findUniqueOrThrow({where:{id:first.id}})).includeCoverage).toBe(true)
+ expect((await fixture.prisma.repositoryHealthAssessment.findUniqueOrThrow({where:{id:first.id}})).includeCoverage).toBe(false)
 
  await service.process(first.id)
- expect((await service.get(owner,'51',first.id)).assessment?.report?.analyses.map(a=>a.id)).toContain('tests.coverage')
- await request(app.getHttpServer()).post('/github/repositories/51/health').set('Cookie','health.sid=owner').set('Origin','http://localhost:5173').send({requestKey:randomUUID(),includeCoverage:true}).expect(409)
+ expect((await service.get(owner,'51',first.id)).assessment?.report?.analyses.map(a=>a.id)).not.toContain('tests.coverage')
+ await request(app.getHttpServer()).post('/github/repositories/51/health').set('Cookie','health.sid=owner').set('Origin','http://localhost:5173').send({requestKey:randomUUID(),includeCoverage:true}).expect(400)
  await request(app.getHttpServer()).post('/github/repositories/51/health').set('Cookie','health.sid=owner').set('Origin','http://localhost:5173').send({requestKey:randomUUID(),includeCoverage:'true'}).expect(400)
 })
 
@@ -451,20 +451,11 @@ it('keeps priority findings on the selected branch, including when its report is
  expect(clean.priorityFindings).toEqual([])
 })
 
-it('saves scoped test overrides with CSRF, conflict detection, audit and immutable assessment settings',async()=>{
- const first=await service.initial(owner.identityId,'51')
- const before=await service.get(owner,'51')
- const settings={command:'npm run unit --',directory:'.',framework:'jest',expectedRevision:before.testSettingsRevision}
- await expect(service.saveTestSettings(developer,'51',settings)).rejects.toThrow()
- await expect(service.saveTestSettings(outsider,'51',settings)).rejects.toThrow()
- const endpoint='/github/repositories/51/health/test-settings',server=app.getHttpServer()
- await request(server).post(endpoint).set('Cookie','health.sid=owner').set('Origin','https://untrusted.example').send(settings).expect(403)
- await request(server).post(endpoint).set('Cookie','health.sid=owner').set('Origin','http://localhost:5173').send({...settings,secret:'not-allowed'}).expect(400)
- await request(server).post(endpoint).set('Cookie','health.sid=owner').set('Origin','http://localhost:5173').send(settings).expect(201)
- await expect(service.saveTestSettings(owner,'51',settings)).rejects.toThrow('Test settings changed')
- expect((await service.get(owner,'51')).testSettings).toMatchObject({command:settings.command,framework:'jest'})
- expect((await fixture.prisma.repositoryHealthAssessment.findUniqueOrThrow({where:{id:first.id}})).testSettings).toMatchObject({command:'',framework:'auto'})
- expect(await fixture.prisma.auditEvent.count({where:{event:'repository.health.tests.configured'}})).toBe(1)
+it('removes test configuration and discovery endpoints',async()=>{
+ const server=app.getHttpServer()
+ await request(server).post('/github/repositories/51/health/test-settings').set('Cookie','health.sid=owner').send({}).expect(404)
+ await request(server).get('/github/repositories/51/health/test-apps').set('Cookie','health.sid=owner').expect(404)
+ await request(server).post('/github/repositories/51/health').set('Cookie','health.sid=owner').set('Origin','http://localhost:5173').send({requestKey:randomUUID(),category:'coverage'}).expect(400)
 })
 
 it('retains a safe GitHub retry time and exposes the reason for pre-report failures only to authorized readers', async () => {
@@ -490,12 +481,10 @@ it.each(['GIT_UNAVAILABLE','SOURCE_FETCH_FAILED','SOURCE_FETCH_TIMED_OUT','SOURC
  expect(scanner.call).not.toHaveBeenCalled()
 })
 
-it('discovers selectable test apps with repository authorization',async()=>{
- await service.initial(owner.identityId,'51');
- provider.readRepositorySnapshot.mockResolvedValue({sourceSha:sha,branch:'development',complete:true,files:[{path:'api/package.json',content:JSON.stringify({name:'API',scripts:{test:'node --test tests/*.js'}})},{path:'performance/package.json',content:JSON.stringify({name:'Performance',scripts:{test:'vitest run'}})}]});
- const found=await service.testApps(owner,'51');expect(found.apps).toEqual([{directory:'api',name:'API',framework:'node'},{directory:'performance',name:'Performance',framework:'vitest'}]);
- await expect(service.testApps(outsider,'51')).rejects.toThrow();
- const current=await service.get(owner,'51');
- await service.saveTestSettings(owner,'51',{packageDirectory:'api',expectedRevision:current.testSettingsRevision});
- expect((await service.get(owner,'51')).testSettings).toMatchObject({packageDirectory:'api',framework:'auto',command:''});
-});
+it('retires previously queued test-only plans without fetching source or executing tests',async()=>{
+ const row=await service.initial(owner.identityId,'51')
+ await fixture.prisma.repositoryHealthAssessment.update({where:{id:row.id},data:{plan:{requestedCategory:'coverage'},includeCoverage:true}})
+ await service.process(row.id)
+ expect(provider.readRepositorySnapshot).not.toHaveBeenCalled()
+ expect((await service.get(owner,'51')).assessment).toMatchObject({state:'FAILED',reason:'HEALTH_TEST_EXECUTION_REMOVED'})
+})

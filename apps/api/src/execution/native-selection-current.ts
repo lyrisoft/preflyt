@@ -5,6 +5,7 @@ import { currentStandards } from '../standards/policy-standards.js'
 /** Health plans have no policy selection and can never satisfy a policy's native evidence lookup. */
 export async function nativeSelectionCurrent(db: PrismaService | Prisma.TransactionClient, row: NativeExecutionRequest) {
  if (!row.healthAssessmentId) return (await currentStandards(db, row.repositoryId, { expectedId: row.selectionId }))?.id === row.selectionId
+ if(Array.isArray(row.ruleIds) && row.ruleIds.includes('tests.coverage'))return false
  const health = await db.repositoryHealthAssessment.findFirst({ where: {
   id: row.healthAssessmentId, nativeRequestId: row.id, repositoryId: row.repositoryId, organizationId: row.organizationId,
   sourceSha: row.sourceSha, actorId: row.actorId, state: 'RUNNING', cancelledAt: null,

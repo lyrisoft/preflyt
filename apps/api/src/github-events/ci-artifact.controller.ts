@@ -6,7 +6,7 @@ import { OwnerAdminGuard, SessionGuard, type AuthenticatedSession } from '../aut
 import { CiArtifactService } from './ci-artifact.service.js'
 
 class ArtifactDto {
-  @IsIn(['junit', 'sarif']) format!: 'junit' | 'sarif'
+  @IsIn(['junit', 'sarif', 'lcov']) format!: 'junit' | 'sarif' | 'lcov'
   @IsString() @MaxLength(262144) content!: string
   @IsString() @Matches(/^[a-f0-9]{64}$/i) sha256!: string
 }
