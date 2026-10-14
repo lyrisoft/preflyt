@@ -10,7 +10,7 @@ import { healthScannerAuthority, healthScannerPlan, healthScannerRules } from '.
 const client = new HealthScannerClient()
 const organizationId = 'deployment-smoke', repositoryId = '1', sourceSha = 'a'.repeat(40)
 // Fixed, nonfunctional fixture with enough character diversity for entropy filters.
-const fixtureToken = ['ghp', '0123456789abcdefghijklmnopqrstuvwxyz'].join('_')
+const fixtureToken = 'ghp_' + createHash('sha256').update('Preflyt generated scanner acceptance fixture; not a credential').digest('base64').replace(/[^a-zA-Z0-9]/g, '').slice(0, 36)
 // Duplication needs enough analyzed tokens/lines to establish a measurement.
 const duplicatedModule = `export function calculateInvoice(items) {
   const totals = [];

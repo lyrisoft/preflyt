@@ -58,6 +58,8 @@ approximately 5.54 GiB available Docker memory. Deployment guidance recommends
   retained redacted findings, an exact-scope signed receipt and confirmed cleanup.
   A tiny initial fixture correctly produced an unavailable duplication scope;
   the final fixture contains enough duplicated code to exercise its measurement.
+  Its fake token is deterministically generated rather than an alphabet example,
+  which was ignored in the example-token check.
 - Replayed migrations with no pending changes, ran the standalone backup script
   (nonempty file, mode 0600), and restored into a separate fixture database.
   Original and restored counts matched: one identity and 61 applied migrations.
