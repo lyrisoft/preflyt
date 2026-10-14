@@ -37,7 +37,7 @@ beforeAll(async()=>{
  fixture=await disposableDatabase('health')
  app=await NestFactory.create({module:class TestHealthModule{},controllers:[RepositoryHealthController],providers:[
   SessionGuard,{provide:AuthorizationService,useValue:new AuthorizationService(fixture.prisma)},
-  {provide:RepositoryHealthService,useFactory:()=>({hotspotReview:(...args:any[])=>service.hotspotReview(...args as [any,any,any,any]),saveHotspotReview:(...args:any[])=>service.saveHotspotReview(...args as [any,any,any,any,any]),get:(...args:any[])=>service.get(...args as [any,any,any,any]),freshness:(...args:any[])=>service.freshness(...args as [any,any,any]),start:(...args:any[])=>service.start(...args as [any,any,any]),cancel:(...args:any[])=>service.cancel(...args as [any,any,any]),source:(...args:any[])=>service.source(...args as [any,any,any,any]),portfolio:(...args:any[])=>service.portfolio(...args as [any,any,any,any,any])})},
+  {provide:RepositoryHealthService,useFactory:()=>({hotspotReview:(...args:any[])=>service.hotspotReview(...args as [any,any,any,any]),saveHotspotReview:(...args:any[])=>service.saveHotspotReview(...args as [any,any,any,any,any]),get:(...args:any[])=>service.get(...args as [any,any,any,any,any]),freshness:(...args:any[])=>service.freshness(...args as [any,any,any]),start:(...args:any[])=>service.start(...args as [any,any,any]),cancel:(...args:any[])=>service.cancel(...args as [any,any,any]),source:(...args:any[])=>service.source(...args as [any,any,any,any]),portfolio:(...args:any[])=>service.portfolio(...args as [any,any,any,any,any])})},
   {provide:AuthService,useValue:{sessionCookieName:'health.sid',currentSession:async(token:string)=>({owner,developer,outsider} as any)[token]??{authenticated:false},assertOrigin:(origin:string)=>{if(origin!=='http://localhost:5173')throw new ForbiddenException()}}}
  ]},{logger:false})
  app.use(cookieParser());await app.init()
@@ -143,6 +143,28 @@ it('changing branches preserves reports and branch advancement marks the pinned 
  expect((await service.get(owner,'51',first.id)).assessment?.branch).toBe('development');expect((await service.get(owner,'51')).assessment?.branch).toBe('release')
  await fixture.prisma.repositoryHealthTarget.update({where:{repositoryId:repoId},data:{headCheckedAt:new Date(0)}});provider.verifyReadinessBranch.mockResolvedValue('e'.repeat(40))
  expect((await service.get(owner,'51')).freshness).toBe('UNVERIFIED');expect((await service.freshness(owner,'51',second.id)).freshness).toBe('STALE');expect((await service.get(owner,'51')).freshness).toBe('STALE');expect((await fixture.prisma.repositoryHealthAssessment.findUniqueOrThrow({where:{id:first.id}})).sourceSha).toBe(sha)
+})
+it('reads the requested branch without changing the saved target or borrowing another branch report',async()=>{
+ const first=await service.initial(owner.identityId,'51');await service.process(first.id)
+ provider.readRepositorySnapshot.mockResolvedValueOnce({sourceSha:'d'.repeat(40),treeSha:'b'.repeat(40),branch:'codex/coverage',fullName:'fixture/repo',complete:true,warnings:[],files:[]})
+ const second=await service.start(owner,'51',{branch:'codex/coverage',requestKey:randomUUID()});await service.process(second.id)
+ const get=(query:string,actor='owner')=>request(app.getHttpServer()).get('/github/repositories/51/health?'+query).set('Cookie','health.sid='+actor)
+ const development=await get('branch=development')
+ expect(development.status).toBe(200)
+ expect(development.body).toMatchObject({branch:'development',assessment:{id:first.id,branch:'development',sourceSha:sha},ciCoverage:{sourceSha:sha}})
+ expect(development.body.history.every((row:any)=>row.branch==='development')).toBe(true)
+ expect(development.body.checkedAt).toBeNull()
+ provider.verifyReadinessBranch.mockClear()
+ const freshness=await request(app.getHttpServer()).get('/github/repositories/51/health/freshness?assessment='+first.id).set('Cookie','health.sid=owner')
+ expect(freshness.body).toMatchObject({branch:'development',checkedAt:null,freshness:'UNVERIFIED'})
+ expect(provider.verifyReadinessBranch).not.toHaveBeenCalled()
+ expect((await get('branch=codex%2Fcoverage')).body).toMatchObject({branch:'codex/coverage',assessment:{id:second.id,sourceSha:'d'.repeat(40)}})
+ expect((await get('branch=unassessed')).body).toMatchObject({branch:'unassessed',assessment:null,history:[],total:0,ciCoverage:{sourceSha:null,state:'MISSING'}})
+ expect((await get('assessment='+first.id)).body.branch).toBe('development')
+ expect((await get('branch=codex%2Fcoverage&assessment='+first.id)).body.assessment).toBeNull()
+ expect((await get('branch=refs%2Fmain')).status).toBe(400)
+ expect((await get('branch=development','outsider')).status).toBe(403)
+ expect((await fixture.prisma.repositoryHealthTarget.findUniqueOrThrow({where:{repositoryId:repoId}})).branch).toBe('codex/coverage')
 })
 it('cancels queued jobs, records source failures and denies retrieval after selection is revoked',async()=>{
  const row=await service.initial(owner.identityId,'51');await service.cancel(owner,'51',row.id);await service.process(row.id);expect((await service.get(owner,'51')).assessment?.state).toBe('CANCELLED');expect(provider.readRepositorySnapshot).not.toHaveBeenCalled()

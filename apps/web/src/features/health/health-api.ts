@@ -286,7 +286,8 @@ export function useHealth(
   repositoryId: string,
   assessment?: string,
   page = 1,
-  enabled = true
+  enabled = true,
+  branch?: string
 ) {
   const session = useNavigationSession()
   return useQuery({
@@ -297,11 +298,12 @@ export function useHealth(
       repositoryId,
       assessment,
       page,
+      branch,
     ],
     enabled: enabled && session.isSuccess,
     queryFn: ({ signal }) =>
       healthRequest<HealthData>(
-        `repositories/${repositoryId}/health?${new URLSearchParams({ page: String(page), ...(assessment ? { assessment } : {}) })}`,
+        `repositories/${repositoryId}/health?${new URLSearchParams({ page: String(page), ...(assessment ? { assessment } : {}), ...(branch ? { branch } : {}) })}`,
         signal
       ),
     retry: false,

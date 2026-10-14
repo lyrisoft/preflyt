@@ -85,12 +85,14 @@ export function RepositoryHealth({
   defaultBranch,
   assessmentId,
   selectedBranch,
+  onAssessmentQueued,
 }: {
   repositoryId: string
   name: string
   defaultBranch: string | null
   assessmentId?: string
   selectedBranch?: string
+  onAssessmentQueued?: (assessment: HealthAssessment) => void | Promise<unknown>
 }) {
   const session = useNavigationSession(),
     cache = useQueryClient()
@@ -103,7 +105,13 @@ export function RepositoryHealth({
     [severity, setSeverity] = useState('all')
   const [findingPage, setFindingPage] = useState(1)
   const [detailTab, setDetailTab] = useState<'findings' | 'history'>('findings')
-  const query = useHealth(repositoryId, selectedReport, page)
+  const query = useHealth(
+    repositoryId,
+    selectedReport,
+    page,
+    true,
+    selectedBranch || branch || undefined
+  )
   const loaded = query.isError ? undefined : query.data
   const freshnessQuery = useHealthFreshness(
     repositoryId,
@@ -149,9 +157,10 @@ export function RepositoryHealth({
         { ...value, requestKey: crypto.randomUUID() }
       )
     },
-    onSuccess: async () => {
-      setSelectedReport(undefined)
+    onSuccess: async (assessment) => {
+      setSelectedReport(assessment.id)
       setPage(1)
+      await onAssessmentQueued?.(assessment)
       await refresh()
     },
   })
@@ -297,7 +306,12 @@ export function RepositoryHealth({
                       query.isError ||
                       freshnessDenied
                     }
-                    onValueChange={setBranch}
+                    onValueChange={(value) => {
+                      setBranch(value)
+                      setSelectedReport(undefined)
+                      setPage(1)
+                      setFindingPage(1)
+                    }}
                   />
                 )}
                 <Button

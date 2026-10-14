@@ -502,7 +502,10 @@ beforeEach(() => {
   )
   vi.stubGlobal('fetch', state.fetch)
 })
-function mount(selectedBranch?: string) {
+function mount(
+  selectedBranch?: string,
+  onQueued?: (assessment: { id: string; branch: string }) => void
+) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   })
@@ -513,6 +516,7 @@ function mount(selectedBranch?: string) {
         name='fixture/repo'
         defaultBranch='development'
         selectedBranch={selectedBranch}
+        onAssessmentQueued={onQueued}
       />
     </QueryClientProvider>
   )
@@ -595,6 +599,91 @@ it('shows report history and permits reassessment of another branch without a CI
         .body
     ).branch
   ).toBe('main')
+})
+it('loads the chosen branch immediately and never displays the previous branch report for an unassessed branch', async () => {
+  const original = state.fetch.getMockImplementation()!
+  state.fetch.mockImplementation(
+    async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input), 'http://localhost')
+      if (
+        url.pathname.endsWith('/51/health') &&
+        url.searchParams.get('branch') === 'main' &&
+        init?.method !== 'POST'
+      ) {
+        return Response.json({
+          branch: 'main',
+          assessment: null,
+          history: [],
+          total: 0,
+          page: 1,
+          ciCoverage: { state: 'MISSING', sourceSha: null },
+          freshness: 'UNVERIFIED',
+          checkedAt: null,
+        })
+      }
+      return original(input, init)
+    }
+  )
+  await mount()
+  await expect
+    .element(
+      page.getByRole('link', { name: 'Unsafe SQL expression', exact: true })
+    )
+    .toBeVisible()
+  await page
+    .getByRole('combobox', { name: 'Assessment branch' })
+    .selectOptions('main')
+  await expect
+    .element(page.getByRole('heading', { name: 'Not assessed', exact: true }))
+    .toBeVisible()
+  await expect
+    .element(
+      page.getByRole('link', { name: 'Unsafe SQL expression', exact: true })
+    )
+    .not.toBeInTheDocument()
+  expect(
+    state.fetch.mock.calls.some(([, init]) => init?.method === 'POST')
+  ).toBe(false)
+  await page
+    .getByRole('button', { name: 'Assess repository', exact: true })
+    .click()
+  await expect
+    .poll(() =>
+      state.fetch.mock.calls.some(
+        ([, init]) =>
+          init?.method === 'POST' && JSON.parse(init.body).branch === 'main'
+      )
+    )
+    .toBe(true)
+})
+it('follows the newly queued assessment instead of reopening an older report', async () => {
+  const queuedId = '22222222-2222-4222-8222-222222222222',
+    onQueued = vi.fn()
+  const original = state.fetch.getMockImplementation()!
+  state.fetch.mockImplementation(
+    async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'POST')
+        return Response.json({ ...row(), id: queuedId, state: 'QUEUED' })
+      return original(input, init)
+    }
+  )
+  await mount(undefined, onQueued)
+  await page.getByRole('button', { name: 'Reassess', exact: true }).click()
+  await expect.poll(() => onQueued.mock.calls.length).toBe(1)
+  expect(onQueued).toHaveBeenCalledWith(
+    expect.objectContaining({ id: queuedId, branch: 'development' })
+  )
+  await expect
+    .poll(() =>
+      state.fetch.mock.calls.some(
+        ([input, init]) =>
+          init?.method !== 'POST' &&
+          new URL(String(input), 'http://localhost').searchParams.get(
+            'assessment'
+          ) === queuedId
+      )
+    )
+    .toBe(true)
 })
 it('remains usable at 320px without page overflow', async () => {
   await page.viewport(320, 900)

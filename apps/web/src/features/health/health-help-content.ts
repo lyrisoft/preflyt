@@ -9,7 +9,7 @@ export const healthHelp: HelpSection[] = [
   {
     title: 'Repository health and CI',
     content:
-      'Selecting a repository starts a background assessment of its default branch. Choose another branch in the repository header, then select Reassess if needed. Health inspects a fixed commit using approved analyzers. CI runs the existing tests and collects coverage with their normal dependencies and services. Preflyt verifies the submitted LCOV report against the exact commit and completed workflow execution. Open Test coverage details to inspect the measurement and CI run. Reports without verified execution remain unavailable. Health does not invoke AI or grant merge permission. Continuous CI checks are optional and separate.',
+      'Selecting a repository starts a background assessment of its default branch. Choose another branch in the repository header to load its saved reports. The branch stays in the page URL across reloads. A branch without a report shows Not assessed; select Assess repository or Reassess to run analysis. Health inspects a fixed commit using approved analyzers. CI runs the existing tests and collects coverage with their normal dependencies and services. Preflyt verifies the submitted LCOV report against the exact commit and completed workflow execution. Open Test coverage details to inspect the measurement and CI run. Reports without verified execution remain unavailable. Health does not invoke AI or grant merge permission. Continuous CI checks are optional and separate.',
   },
   {
     title: 'Processing and completeness',

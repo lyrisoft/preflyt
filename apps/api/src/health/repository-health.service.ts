@@ -84,14 +84,24 @@ export class RepositoryHealthService {
   const repo = await this.db.gitHubRepository.findUniqueOrThrow({ where: { githubId: BigInt(githubId) }, include: { installation: true } })
   return this.start(sessionFor({ actorId: identityId, organizationId: repo.installation.organizationId }), githubId, {}, true)
  }
- async get(session: AuthenticatedSession, githubId: string, id?: string, page = 1) {
+ async get(session: AuthenticatedSession, githubId: string, id?: string, page = 1, selectedBranch?: string) {
   const repo = await this.access.requireRepository(session, githubId, 'assessment.read')
   if (id && !/^[a-f0-9-]{36}$/.test(id)) throw new BadRequestException('Choose a valid health assessment')
   if (!Number.isInteger(page) || page < 1 || page > 1000) throw new BadRequestException('Choose a valid history page')
+  if (selectedBranch !== undefined && !validProfileBranch(selectedBranch)) throw new BadRequestException('Choose a valid assessment branch')
   const target = await this.db.repositoryHealthTarget.findUnique({ where: { repositoryId: repo.id } })
-  const branch = target?.branch ?? repo.defaultBranch
-  const row = await this.db.repositoryHealthAssessment.findFirst({ where: { repositoryId: repo.id, organizationId: session.organizationId!, ...(id ? { id } : { branch: branch ?? '' }) }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] })
-  const checkedAt = target?.headCheckedAt ?? null
+  const requestedBranch = selectedBranch ?? target?.branch ?? repo.defaultBranch
+  // Browsing another branch is a read, not a change to the shared scan target.
+  // Explicit report links retain their own branch unless a branch filter is supplied.
+  const reportScope = id
+   ? { id, ...(selectedBranch !== undefined ? { branch: selectedBranch } : {}) }
+   : { branch: requestedBranch ?? '' }
+  const row = await this.db.repositoryHealthAssessment.findFirst({
+   where: { repositoryId: repo.id, organizationId: session.organizationId!, ...reportScope },
+   orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+  })
+  const branch = selectedBranch ?? row?.branch ?? requestedBranch
+  const checkedAt = target?.branch === branch ? target.headCheckedAt : null
   const recent = checkedAt && Date.now() - checkedAt.getTime() <= 60000
   const head = recent ? target?.headSha : null
   const freshness = row && row.branch === target?.branch && head && row.sourceSha ? head === row.sourceSha ? 'CURRENT' : 'STALE' : 'UNVERIFIED'
@@ -127,6 +137,10 @@ export class RepositoryHealthService {
    this.db.repositoryHealthTarget.findUnique({ where: { repositoryId: repo.id } }),
    this.db.repositoryHealthAssessment.findFirst({ where: { id, repositoryId: repo.id, organizationId: session.organizationId! } })])
   if (!row) throw new NotFoundException('Health assessment is unavailable')
+  if (target?.branch !== row.branch) {
+   await this.access.requireRepository(session, githubId, 'assessment.read')
+   return {assessmentId:row.id,sourceSha:row.sourceSha,branch:row.branch,checkedAt:null,freshness:'UNVERIFIED'}
+  }
   let head = target?.headSha ?? null, checkedAt = target?.headCheckedAt ?? null
   if (target && (!checkedAt || Date.now() - checkedAt.getTime() > 60000)) {
    head = await this.github.verifyReadinessBranch(repo.installationId, repo.githubId, target.branch).catch(() => null)

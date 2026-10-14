@@ -235,7 +235,12 @@ function RepositoryHelp({ limitations }: { limitations: string[] }) {
 
 export function RepositoryProfilePage() {
   const { repositoryId } = route.useParams()
-  const { tab = 'health', assessment, health } = route.useSearch()
+  const {
+    tab = 'health',
+    assessment,
+    health,
+    branch: requestedHealthBranch,
+  } = route.useSearch()
   const navigate = route.useNavigate()
   const queryClient = useQueryClient()
   const [branchChoice, setBranchChoice] = useState<{
@@ -330,12 +335,19 @@ export function RepositoryProfilePage() {
     loading || profileQuery.isError || accessDenied
       ? undefined
       : profileQuery.data
-  const healthTarget = useHealth(repositoryId, health, 1, tab === 'health')
+  const healthTarget = useHealth(
+    repositoryId,
+    health,
+    1,
+    tab === 'health',
+    requestedHealthBranch
+  )
   const healthBranch = healthTarget.isSuccess
-    ? branchChoice?.repositoryId === repositoryId
-      ? branchChoice.branch
-      : (healthTarget.data.branch ?? result?.repository.defaultBranch ?? '')
-    : ''
+    ? (requestedHealthBranch ??
+      healthTarget.data.branch ??
+      result?.repository.defaultBranch ??
+      '')
+    : (requestedHealthBranch ?? '')
   const inspectionBranch =
     branchChoice?.repositoryId === repositoryId
       ? branchChoice.branch
@@ -425,9 +437,18 @@ export function RepositoryProfilePage() {
                             ? healthTarget.isPending || healthTarget.isError
                             : discovering
                         }
-                        onValueChange={(branch) =>
-                          setBranchChoice({ repositoryId, branch })
-                        }
+                        onValueChange={(branch) => {
+                          if (tab === 'health') {
+                            void navigate({
+                              search: (old) => ({
+                                ...old,
+                                branch,
+                                health: undefined,
+                              }),
+                              replace: true,
+                            })
+                          } else setBranchChoice({ repositoryId, branch })
+                        }}
                       />
                       {tab !== 'health' && (
                         <Button
@@ -565,12 +586,22 @@ export function RepositoryProfilePage() {
               </TabsList>
               <TabsContent value='health'>
                 <RepositoryHealth
-                  key={repositoryId + (health ?? '')}
+                  key={`${repositoryId}:${healthBranch}:${health ?? ''}`}
                   repositoryId={repositoryId}
                   name={result.repository.fullName}
                   defaultBranch={result.repository.defaultBranch}
                   assessmentId={health}
                   selectedBranch={healthBranch}
+                  onAssessmentQueued={(assessment) =>
+                    navigate({
+                      search: (old) => ({
+                        ...old,
+                        branch: assessment.branch,
+                        health: assessment.id,
+                      }),
+                      replace: true,
+                    })
+                  }
                 />
               </TabsContent>
               <TabsContent value='overview' className='space-y-5'>
