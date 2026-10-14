@@ -12,7 +12,7 @@ export const healthAnalyses = [
  { id: 'security.dependencies', title: 'Dependency vulnerabilities', category: 'security', scope: 'Recognized dependency manifests and lockfiles, using the approved offline vulnerability database. Unknown or unresolvable dependencies are outside the measured scope.' },
  { id: 'iac.policy', title: 'Infrastructure configuration', category: 'security', scope: 'Terraform and detected Kubernetes or Helm files, using the approved Trivy configuration checks; deployed infrastructure is not tested.' },
  { id: 'quality.reliability', title: 'Reliability', category: 'reliability', scope: 'JavaScript and TypeScript NaN comparisons and async Promise executors, and Python bare except handlers and returns in finally. These Preflyt v2 rules do not measure overall application reliability.' },
- { id: 'quality.maintainability', title: 'Maintainability', category: 'maintainability', scope: 'JavaScript and TypeScript debugger statements, and Python exec calls and mutable list or dictionary defaults. These Preflyt v2 rules do not measure complexity or overall maintainability.' },
+ { id: 'quality.maintainability', title: 'Maintainability', category: 'maintainability', scope: 'JavaScript and TypeScript debugger statements, nested ternaries and redundant catch-and-rethrow blocks; Python exec calls, mutable defaults, wildcard imports and redundant except-and-reraise blocks. These seven Preflyt v3 rules cover specific maintainability patterns, not an overall quality score.' },
  { id: 'quality.duplication', title: 'Duplicated code', category: 'duplication', scope: 'JavaScript, TypeScript, Python, Java, Go, Ruby, PHP, C#, CSS, SCSS, SQL and Rust token blocks of at least 5 lines and 50 tokens; dependencies, build output, generated folders, type declarations, minified JavaScript and oversized files are omitted.' },
  { id: 'security.hotspots', title: 'Security hotspot review', category: 'hotspot', scope: 'JavaScript and TypeScript createHash("md5") and Python hashlib.md5 calls. Other security-sensitive patterns are not covered by this Preflyt v1 pack.' },
  { id: 'tests.coverage', title: 'Test coverage', category: 'coverage', scope: 'Existing Vitest, Jest or Node test commands across configured packages. Coverage follows repository test configuration and excludes files absent from the measured reports.' },
@@ -131,15 +131,22 @@ export function redactHealthSource(text: string) {
  }).join('\n')
 }
 
-/** Only equivalent complete recorded scopes are plotted; missing evidence is not a zero. */
+/** Plot available observations; only equivalent measured scopes receive a comparison value. */
 export function healthTimeline(current: HealthReport | null, records: Array<{
  id: string; state: string; sourceSha: string | null; finishedAt: Date | null; report: HealthReport | null
 }>) {
- if (!current || current.mode !== 'EXECUTED' || (!current.findingComparison && current.completeness !== 'COMPLETE')) return []
+ if (!current) return []
  return records.filter(row => row.state === 'COMPLETED' && row.sourceSha && row.finishedAt && row.report?.mode === 'EXECUTED' &&
-  comparableHealthTrend(current, row.report) !== null)
+  (row.report.findings.length > 0 || row.report.completeness === 'COMPLETE' || row.report.analyses.some(analysis =>
+   analysis.reportHash && Number.isSafeInteger(analysis.findingsRetained) && analysis.findingsRetained! >= 0)))
   .sort((a,b) => a.finishedAt!.getTime() - b.finishedAt!.getTime() || a.id.localeCompare(b.id))
-  .map(row => ({id:row.id,sourceSha:row.sourceSha!,at:row.finishedAt!.toISOString(),findings:scopedFindings(row.report!,current.findingComparison?.checkIds ?? []).length,...(current.findingComparison ? {checkIds:current.findingComparison.checkIds} : {})}))
+  .map(row => {
+   const comparable = comparableHealthTrend(current, row.report!) !== null
+   return {id:row.id,sourceSha:row.sourceSha!,at:row.finishedAt!.toISOString(),findings:row.report!.findings.length,
+    partial:row.report!.completeness !== 'COMPLETE',
+    comparableFindings:comparable ? scopedFindings(row.report!,current.findingComparison?.checkIds ?? []).length : null,
+    ...(comparable && current.findingComparison ? {checkIds:current.findingComparison.checkIds} : {})}
+  })
 }
 
 

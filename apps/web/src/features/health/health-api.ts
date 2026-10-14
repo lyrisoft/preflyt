@@ -132,6 +132,8 @@ export type HealthAssessment = {
   finishedAt: string | null
 }
 export type HealthTimelinePoint = {
+  partial: boolean
+  comparableFindings: number | null
   checkIds?: string[]
   id: string
   sourceSha: string

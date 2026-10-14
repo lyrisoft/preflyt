@@ -228,3 +228,12 @@ it('distinguishes dark red Critical from light red High severity', async () => {
     .element(view.getByText('High', { exact: true }))
     .toHaveClass('bg-severity-high/10', 'text-severity-high-text')
 })
+
+it('labels partial analysis with the shared warning tone', async () => {
+  const view = await render(
+    <StatusBadge tone='warning'>Partial analysis</StatusBadge>
+  )
+  await expect
+    .element(view.getByText('Partial analysis'))
+    .toHaveClass('text-warning-text')
+})

@@ -61,6 +61,30 @@ const rules: Record<string, Entry> = {
   limits:'The rule detects a broad handler; it does not determine whether recovery is intentional or correct.',
   reference:'https://docs.python.org/3/library/exceptions.html',
  },
+ 'preflyt-python-redundant-reraise': {
+  check:'quality.maintainability',
+  why:'The matched exception handler only re-raises the active exception without additional handling.',
+  fix:'Remove the redundant handler while preserving other exception handlers, else clauses and finally cleanup.',
+  limits:'Review the entire try statement first. This suggestion does not establish that exceptions are handled incorrectly.'
+ },
+ 'preflyt-python-wildcard-import': {
+  check:'quality.maintainability',
+  why:'A wildcard import hides which names a module uses and can introduce unexpected name collisions.',
+  fix:'Replace the wildcard with explicit imported names. Keep intentional public API re-exports where needed.',
+  limits:'This is advisory. Package initializers may deliberately re-export a documented public API.'
+ },
+ 'preflyt-js-redundant-catch': {
+  check:'quality.maintainability',
+  why:'The matched catch block throws the same error without adding handling or context.',
+  fix:'Remove the redundant catch block, preserving any finally cleanup and the surrounding error propagation.',
+  limits:'The check targets only a direct rethrow. Review surrounding cleanup before changing control flow.'
+ },
+ 'preflyt-js-nested-ternary': {
+  check:'quality.maintainability',
+  why:'Nested ternary branches combine several decisions in one expression, making each outcome harder to follow.',
+  fix:'Extract named intermediate values or use explicit if/else branches while preserving evaluation order.',
+  limits:'This is a readability suggestion, not proof of a bug. A short, familiar conditional may be clearer as written.'
+ },
  'preflyt-no-debugger': {
   check:'quality.maintainability',
   why:'A debugger statement can pause execution when debugging is available. Leftover statements can disrupt debugging and obscure production intent.',

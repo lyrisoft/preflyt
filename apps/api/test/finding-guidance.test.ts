@@ -9,7 +9,7 @@ it('matches only exact rule segments within the expected analyzer', () => {
  expect(findingGuidance('security.sast','__proto__')).toBeUndefined()
 })
 it('provides explanation, action and limits for every packaged rule', () => {
- const rules = {'security.sast':['preflyt-js-eval','preflyt-python-dynamic-execution','preflyt-python-sql-fstring'], 'quality.reliability':['preflyt-js-nan-comparison','preflyt-python-bare-except','preflyt-js-async-promise-executor','preflyt-python-return-finally'], 'quality.maintainability':['preflyt-no-debugger','preflyt-python-exec-statement','preflyt-python-mutable-default'], 'security.hotspots':['preflyt-js-md5-review','preflyt-python-md5-review'], 'quality.duplication':['preflyt-duplicate-block-v1']}
+ const rules = {'security.sast':['preflyt-js-eval','preflyt-python-dynamic-execution','preflyt-python-sql-fstring'], 'quality.reliability':['preflyt-js-nan-comparison','preflyt-python-bare-except','preflyt-js-async-promise-executor','preflyt-python-return-finally'], 'quality.maintainability':['preflyt-no-debugger','preflyt-python-exec-statement','preflyt-python-mutable-default','preflyt-js-nested-ternary','preflyt-js-redundant-catch','preflyt-python-wildcard-import','preflyt-python-redundant-reraise'], 'security.hotspots':['preflyt-js-md5-review','preflyt-python-md5-review'], 'quality.duplication':['preflyt-duplicate-block-v1']}
  for(const [check,ids] of Object.entries(rules)) for(const id of ids) {
   const guidance=findingGuidance(check,id)!
   expect(guidance.why.length).toBeGreaterThan(30);expect(guidance.fix.length).toBeGreaterThan(30);expect(guidance.limits.length).toBeGreaterThan(30)
@@ -38,7 +38,7 @@ it('provides safe category guidance for secret findings without repeating the va
 
 
 it('uses the same curated problem/impact and remedy reference for CI and legacy reports across rule families',()=>{
- const checks={'security.sast':['preflyt-js-eval','preflyt-python-dynamic-execution','preflyt-python-sql-fstring'],'quality.reliability':['preflyt-js-nan-comparison','preflyt-python-bare-except','preflyt-js-async-promise-executor','preflyt-python-return-finally'],'quality.maintainability':['preflyt-no-debugger','preflyt-python-exec-statement','preflyt-python-mutable-default'],'security.hotspots':['preflyt-js-md5-review','preflyt-python-md5-review'],'quality.duplication':['preflyt-duplicate-block-v1']}
+ const checks={'security.sast':['preflyt-js-eval','preflyt-python-dynamic-execution','preflyt-python-sql-fstring'],'quality.reliability':['preflyt-js-nan-comparison','preflyt-python-bare-except','preflyt-js-async-promise-executor','preflyt-python-return-finally'],'quality.maintainability':['preflyt-no-debugger','preflyt-python-exec-statement','preflyt-python-mutable-default','preflyt-js-nested-ternary','preflyt-js-redundant-catch','preflyt-python-wildcard-import','preflyt-python-redundant-reraise'],'security.hotspots':['preflyt-js-md5-review','preflyt-python-md5-review'],'quality.duplication':['preflyt-duplicate-block-v1']}
  for(const [check,ids] of Object.entries(checks)) for(const id of ids) {
   const saved=findingGuidance(check,id)!, reference=findingReferenceGuidance('opt.preflyt.config.'+id)!
   expect(reference).toMatchObject({source:'PREFLYT_RULE_REFERENCE',why:saved.why,fix:saved.fix,limits:saved.limits})

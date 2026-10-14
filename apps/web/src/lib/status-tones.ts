@@ -13,6 +13,7 @@ export const statusTones: Readonly<Record<string, StatusTone>> = {
   'findings reported': 'error',
   current: 'success',
   partial: 'warning',
+  'partial analysis': 'warning',
   'not assessed': 'neutral',
   cancelled: 'neutral',
   reported: 'info',

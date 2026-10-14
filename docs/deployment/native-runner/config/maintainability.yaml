@@ -1,4 +1,4 @@
-# Preflyt maintainability rules v2. Review the matched code; findings are advisory.
+# Preflyt maintainability rules v3. Review the matched code; findings are advisory.
 rules:
   - id: preflyt-no-debugger
     languages: [javascript, typescript]
@@ -22,3 +22,31 @@ rules:
       - pattern: |
           def $FUNC(..., $ARG={}, ...):
             ...
+
+  - id: preflyt-js-nested-ternary
+    languages: [javascript, typescript]
+    severity: INFO
+    message: Nested ternary branches make conditional logic harder to follow. Use named intermediate values or explicit branches where they improve readability.
+    pattern-either:
+      - pattern: '$A ? ($B ? $C : $D) : $E'
+      - pattern: '$A ? $B : ($C ? $D : $E)'
+  - id: preflyt-js-redundant-catch
+    languages: [javascript, typescript]
+    severity: INFO
+    message: This catch block only rethrows the same error. Remove the redundant catch or add intentional handling; preserve any finally cleanup.
+    pattern: |
+      try { ... } catch ($ERR) { throw $ERR; }
+  - id: preflyt-python-wildcard-import
+    languages: [python]
+    severity: INFO
+    message: A wildcard import obscures which names this module depends on. Import the names used explicitly, unless this module intentionally re-exports a public API.
+    pattern: from $MODULE import *
+  - id: preflyt-python-redundant-reraise
+    languages: [python]
+    severity: INFO
+    message: This except block only re-raises the same exception. Remove the redundant handler while preserving other handlers and finally cleanup.
+    pattern: |
+      try:
+        ...
+      except $ERROR:
+        raise

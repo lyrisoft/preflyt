@@ -421,6 +421,8 @@ beforeEach(() => {
                   sourceSha: 'd'.repeat(40),
                   at: '2026-10-09T10:00:00Z',
                   findings: 4,
+                  partial: true,
+                  comparableFindings: 4,
                   checkIds: ['quality.reliability'],
                 },
                 {
@@ -428,6 +430,8 @@ beforeEach(() => {
                   sourceSha: sha,
                   at: '2026-10-11T10:00:00Z',
                   findings: 1,
+                  partial: false,
+                  comparableFindings: 1,
                   checkIds: ['quality.reliability'],
                 },
               ]
@@ -524,6 +528,7 @@ it('shows report history and permits reassessment of another branch without a CI
 })
 it('remains usable at 320px without page overflow', async () => {
   await page.viewport(320, 900)
+  state.timeline = true
   await mount()
   await expect
     .element(page.getByText('Repository health', { exact: true }))
@@ -543,14 +548,14 @@ it('prevents reassessment against a fallback branch while the persisted target i
     .toBeDisabled()
 })
 
-it('shows the area graph above metrics and opens its exact historical report from chart data', async () => {
+it('shows partial observations above metrics above metrics and opens its exact historical report from chart data', async () => {
   state.timeline = true
   await mount()
   const chart = page.getByRole('region', { name: 'Findings over time' })
   await expect
     .element(
       chart.getByText(
-        'Compared rule packs: Reliability. Other analyses are excluded.'
+        'Compared rule packs: Reliability. Comparison line only; bars include all retained findings.'
       )
     )
     .toBeVisible()
@@ -558,7 +563,7 @@ it('shows the area graph above metrics and opens its exact historical report fro
     .element(chart.getByRole('img'))
     .toHaveAttribute(
       'aria-label',
-      '2 comparable assessments. Finding counts in chronological order: 4, 1. Exact revisions are in View chart data.'
+      '2 assessments, 1 partial. Retained finding counts in chronological order: 4, 1. Exact revisions and coverage are in View chart data.'
     )
   const chartElement = document.querySelector(
     '[aria-label="Findings over time"]'
@@ -597,7 +602,7 @@ it('shows unavailable history without plotting incomplete analysis as zero', asy
     .element(chart.getByRole('img'))
     .toHaveAttribute(
       'aria-label',
-      'Findings over time unavailable. No comparable complete analysis is available.'
+      'Findings over time unavailable. No recorded finding counts are available.'
     )
   await expect
     .element(chart.getByText('View chart data', { exact: true }))

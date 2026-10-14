@@ -229,7 +229,7 @@ it('HTTP health portfolio admits authorized readers and keeps reports within liv
  expect(revoked.body.items).toHaveLength(0);expect(revoked.body.summary.repositories).toBe(0)
 })
 
-it('charts only matching complete reports for the displayed branch and revision, independent of history pagination', async () => {
+it('charts available branch reports while comparing only equivalent coverage and respecting the displayed revision', async () => {
  const db=fixture.prisma, first=await service.initial(owner.identityId,'51');await service.process(first.id)
  const stored=await db.repositoryHealthAssessment.findUniqueOrThrow({where:{id:first.id}})
  const complete={...(stored.report as any),mode:'EXECUTED',completeness:'COMPLETE',comparisonKey:'qualified-tools',findings:[]}
@@ -239,16 +239,17 @@ it('charts only matching complete reports for the displayed branch and revision,
  }})
  await db.repositoryHealthAssessment.update({where:{id:first.id},data:{report:complete,createdAt:new Date(Date.now()-10000),finishedAt:new Date(Date.now()-10000)}})
  await create('partial',-8000,'development',{...complete,completeness:'PARTIAL'})
- await create('different-tools',-6000,'development',{...complete,comparisonKey:'other-tools'})
+ const different=await create('different-tools',-6000,'development',{...complete,comparisonKey:'other-tools'})
  await create('other-branch',-4000,'release')
  const current=await create('current',-2000,'development',{...complete,findings:[{fingerprint:'f'.repeat(64)}]})
  const future=await create('future',0)
  const read=await service.get(owner,'51',current.id,2)
  expect(read.history).toHaveLength(0)
- expect(read.timeline.map(p=>[p.id,p.findings])).toEqual([[first.id,0],[current.id,1]])
+ expect(read.timeline.map(p=>[p.id,p.findings])).toEqual([[first.id,0],[different.id,0],[current.id,1]])
  expect(read.timeline.some(p=>p.id===future.id)).toBe(false)
+ expect(read.timeline.map(p=>p.comparableFindings)).toEqual([0,null,1])
  const partial=await db.repositoryHealthAssessment.findFirstOrThrow({where:{requestKey:'partial'}})
- expect((await service.get(owner,'51',partial.id)).timeline).toEqual([])
+ expect((await service.get(owner,'51',partial.id)).timeline).toMatchObject([{id:first.id,findings:0,comparableFindings:null}])
 })
 
 it('filters the health summary and priority findings by an authorized repository', async () => {
