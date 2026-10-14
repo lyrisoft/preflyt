@@ -2,7 +2,7 @@
 
 Application connections and feature switches are now provisioned in **Settings → Configuration** by Super Admin. Environment names below describe the legacy import contract; once stored, database values take precedence. See [deployment configuration](deployment-configuration.md). Infrastructure and execution trust controls remain deployment-managed.
 
-This packages the current Preflyt UI, authentication, GitHub onboarding and repository profiles, webhook ingestion, a queue worker, separate cache/queue services, and vendor-neutral OpenTelemetry. Reviewed native dispatch, signed result ingestion and gate integration are implemented, but the base application stack does not start a scanner or dedicated execution controller. Native execution remains disabled until its separate Docker or Kubernetes controller, tool inventory and independent isolation review are configured. See [native execution](native-execution.md). Generated fixtures do not establish connected-repository coverage or production acceptance.
+This packages the current Preflyt UI, authentication, GitHub onboarding and repository profiles, webhook ingestion, a queue worker, separate cache/queue services, and vendor-neutral OpenTelemetry. Reviewed native dispatch, signed result ingestion and gate integration are implemented. The base application stack starts the dedicated Health scanner and its separate TLS engine automatically. It does not start the general native execution controller. General native execution remains disabled until its separate Docker or Kubernetes controller, tool inventory and independent isolation review are configured. See [native execution](native-execution.md). Generated fixtures do not establish connected-repository coverage or production acceptance.
 
 For the normal GitHub Actions policy path, follow the [stable GitHub connection guide](../deployment/stable-github-connection.md) and configure managed App credentials and capabilities in Settings. The workflow uses GitHub OIDC and completed-run verification; no separate report signer is required. Optional signed-report deployments use the [GitHub governance runbook](../deployment/github-governance-production.md) and its reviewed evidence override.
 
@@ -32,17 +32,17 @@ For a source checkout, build once before startup:
 
 ```sh
 docker compose --env-file .env build
-docker compose --env-file .env up -d --wait --wait-timeout 180
+docker compose --env-file .env up -d --wait --wait-timeout 1800
 docker compose --env-file .env ps
 node --env-file=.env scripts/deploy/smoke.mjs
 ```
 
-For an available published release, set its registry/version in root `.env`, then run `docker compose pull` followed by `docker compose up -d --wait --wait-timeout 180`. With images already available, `docker compose up -d` starts every service required by the current release. No host Node.js, pnpm, PostgreSQL or Redis is required; the Node smoke utility is optional. The default root dotenv location is picked up by Compose automatically; the explicit `--env-file .env` below is equivalent.
+For an available published release, set its registry/version in root `.env`, then run `docker compose pull` followed by `docker compose up -d --wait --wait-timeout 1800`. With images already available, `docker compose up -d` starts every service required by the current release, including the Health scanner and its separate engine. First-time scanner image preparation can take up to 30 minutes; use a 1,800-second wait timeout for a fresh install. No host Node.js, pnpm, PostgreSQL or Redis is required; the Node smoke utility is optional. The default root dotenv location is picked up by Compose automatically; the explicit `--env-file .env` below is equivalent.
 
 For a local demonstration only, set `WEB_ORIGIN=http://localhost:8080`, keep OIDC fields empty and configure Super Admin credentials. Use the explicit override:
 
 ```sh
-docker compose --env-file .env -f docker-compose.yaml -f compose.local.yaml up -d --build --wait --wait-timeout 180
+docker compose --env-file .env -f docker-compose.yaml -f compose.local.yaml up -d --build --wait --wait-timeout 1800
 ```
 
 Open `http://localhost:8080/super-admin/login`. This override uses development cookie settings and still binds only to loopback; do not use it for an external deployment. Do not restart the standalone `pnpm dev:api` process for a Compose deployment.
@@ -132,3 +132,7 @@ This regression proves the exercised deployment and restore paths. Live GitHub i
 
 
 Release publication runs the shared container acceptance workflow against the published commit images. It verifies source revision labels, sign-in and protected routes, configuration persistence, migration replay, backup restore into a separate fixture database, and restart readiness. Each run uses an isolated project with generated credentials. This does not qualify production identity-provider onboarding or a rollback to a previous application version.
+
+## Bundled Health scanner
+
+The default Compose stack includes the privileged nested `health-engine`, a one-shot storage/TLS initializer, and the non-root `health-scanner`. It mounts no host engine socket or host directory. API and worker receive only the scanner connection file read-only and wait for authenticated scanner readiness. Allocate at least 4 CPUs, 8 GiB of Docker memory and 20 GiB of disk. The nested engine shares the host kernel; use a dedicated application Docker host in production. See [Automatic Health scanner](../deployment/health-scanner/README.md) for the storage and trust boundaries.

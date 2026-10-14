@@ -11,7 +11,7 @@ description: Diagnose common Preflyt installation and configuration problems.
 
 ```bash
 docker compose --env-file .env ps
-docker compose --env-file .env logs --tail=100 migrate api worker cache queue web
+docker compose --env-file .env logs --tail=100 migrate health-init health-engine health-scanner api worker cache queue web
 ```
 
 :::caution Do not share resolved configuration
@@ -25,6 +25,9 @@ docker compose --env-file .env logs --tail=100 migrate api worker cache queue we
 | `Set POSTGRES_PASSWORD in root .env` (or `DATABASE_APP_PASSWORD`, `WEB_ORIGIN`, `CONFIGURATION_ENCRYPTION_KEY`) | A required value is missing. | Set it in `.env` and run `up` again. See [Docker Compose](docker-compose.md). |
 | `migrate` exits with an error | A migration failed. The API and web will not start. | Read the `migrate` logs. Keep the volume and your backup. Do not reset the database. |
 | `api` restarts at boot | Invalid or partial OIDC configuration, failed issuer discovery, or a configuration decryption error. | Provide all OIDC fields or none. Check `CONFIGURATION_ENCRYPTION_KEY` is the original key. |
+| `health-engine` stays unhealthy | Nested Docker or its TLS engine did not start. | The host must permit the bundled privileged Docker-in-Docker container. Inspect `docker compose logs health-engine`; no host socket or manual certificates are required. |
+| `health-init` exits with an error | Scanner volume ownership or engine-client certificate initialization failed. | Inspect `docker compose logs health-init health-engine`. Keep the volumes and fix the initialization error before starting again. |
+| `health-scanner` shows `starting` | Fixed analyzer images and the vulnerability database are being prepared. | Allow up to 30 minutes on first start. Follow `docker compose logs -f health-scanner`. Registry/DNS outages need resolving before preparation can finish. |
 | `worker` stays unhealthy | It waits for the API's initial configuration import. | Fix the API first, then check the worker. |
 | Changing `.env` passwords has no effect | Credentials only initialize roles on a fresh volume. | Plan a database-role change. See [Upgrades and backups](upgrades-and-backups.md). |
 

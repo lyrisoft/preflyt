@@ -19,39 +19,57 @@ API dotenv or receive database, GitHub, AI or application secrets. Keep it runni
 alongside the API and worker. First startup downloads scanner images and a Trivy
 database; subsequent startup reuses immutable cached images.
 
-## Container installation
+## Docker Compose installation
 
-Build the new target locally (it has not been published by this change):
+The normal Docker deployment now includes `health-engine`, `health-init` and
+`health-scanner`. Download `compose.yaml`, create the documented `.env`, and run:
 
 ```sh
-docker build --target health-scanner -f deploy/api.Dockerfile -t preflyt-health-scanner:local .
+docker compose up -d --wait
+docker compose ps
 ```
 
-1. Use a dedicated Linux scanner host/engine, separate from the application host.
-   Configure the engine with mutually authenticated TLS and seccomp, memory and
-   PID enforcement. Do not expose unauthenticated engine ports or give the API or
-   worker a Docker socket. The engine and scanner must see the same source directory
-   at `/var/lib/preflyt/health-scanner`.
-2. Create `/var/lib/preflyt/health-scanner` and `/var/lib/preflyt/health-connection`,
-   owned by UID/GID 1000 with mode 0700. Copy `scanner.env.example` to `scanner.env`
-   beside `controller.compose.yaml`. Install the engine's TLS client certificate,
-   key and CA in `docker-tls`, readable only by the scanner user. These are deployment
-   credentials, not user or per-repository approvals.
-3. Set `HEALTH_SCANNER_ORIGIN` to the reachable private TLS endpoint. Its certificate
-   includes the DNS name `health-scanner`; configure that private DNS name on the
-   application network. Set `PREFLYT_SCANNER_BIND_IP` to the scanner host's private
-   interface, restrict ingress to API/worker, then start the supplied controller
-   Compose file. Bootstrap verifies isolation and creates the connection file.
-4. Transfer **only** `health-connection/connection.json` to a protected directory
-   on the application host. Keep mode 0600 and ownership matching the API/worker
-   user. Do not transfer scanner identity, signing key, TLS private key, engine
-   credentials or source journal. Set `PREFLYT_HEALTH_CONNECTION_DIRECTORY` and
-   combine `application.compose.yaml` with the root stack. The connection directory
-   is mounted read-only in API and worker. HTTPS validates the pinned certificate;
-   requests are authenticated and signatures are checked against the pinned key.
-5. Connect GitHub and select a repository in Preflyt. The initial scan queues
-   automatically; existing selected repositories can use **Reassess**. No policy
-   or approval screens are involved.
+No source checkout, scanner environment file, manual directory ownership, certificate
+creation or connection-file transfer is required. The first start builds the fixed
+scanner images and downloads the vulnerability database into the dedicated engine;
+allow up to 30 minutes and use `docker compose logs -f health-scanner` for progress.
+Subsequent starts reuse the engine image cache. API/worker startup is gated on an
+authenticated scanner readiness check.
+
+Use at least 4 CPUs, 8 GiB of Docker memory and 20 GiB of free disk. Docker Desktop
+runs the nested engine in its Linux VM; a Linux Docker host must permit privileged
+Docker-in-Docker. The nested engine is the only privileged service. It receives no
+host Docker socket or host directory, has no published ports, and has only its own
+engine storage, engine TLS certificates and a read-only view of scanner job storage.
+It is a separate daemon, not a separate machine. Use a dedicated application Docker
+host in production; this setup does not claim VM-equivalent isolation.
+
+The one-shot initializer sets scanner volume ownership to UID/GID 1000 and copies
+only the generated engine client certificates to the scanner's private TLS volume.
+Scanner signing identity and HTTPS key live in `health_state`. API and worker mount
+only `health_connection` read-only. The scanner and engine resolve job source files
+at the identical `/var/lib/preflyt/health-jobs` path. No engine credentials, signing
+keys or source directories are mounted into API or worker.
+
+The release publishes `preflyt-health-scanner` with the same version as the application.
+Existing versions without that package cannot run the new Compose file: use a release
+that includes bundled Health. For a source checkout, the usual `docker compose build`
+builds the scanner target too.
+
+An optional synthetic acceptance check runs all eight static analyzers, verifies a
+redacted generated finding and signed result, and confirms source cleanup:
+
+```sh
+docker compose exec -T api node dist/health/health-scanner-smoke.js
+```
+
+This is deployment-fixture evidence; it does not establish a real GitHub connection,
+repository assessment, CI checks, AI provider setup or production qualification.
+
+The older `controller.compose.yaml`, `scanner.env.example` and
+`application.compose.yaml` remain reference manifests for operators integrating a
+separate scanner host into a custom deployment. They are not extra steps in the
+normal Compose installation.
 
 ## Security and scope
 
@@ -63,7 +81,7 @@ gVisor or Kata when installed, otherwise the hardened runc static-scanner profil
 This is not a claim that runc offers VM-equivalent isolation. General native
 repository-command execution retains its separate strong-isolation approval.
 
-The root worker has a 1 GiB memory budget for the bounded source export and authenticated transfer.
+The application worker has a 1 GiB memory budget for the bounded source export and authenticated transfer.
 
 The source export proves the original Git commit tree and the regular-file subset
 actually mounted. Binary assets, oversized files, generated/vendor directories,
@@ -102,25 +120,9 @@ not prove complete analysis of this repository or production deployment.
 Coverage remains unavailable until test execution supplies a measured report.
 Static scans and detected test files cannot establish a coverage percentage.
 
-## Automatic repository test coverage
+## Tests and coverage
 
-After upgrading, apply the API migrations and restart the Health scanner while idle.
-Startup builds and inventories the package-owned `Dockerfile.coverage` image. The
-API and worker do not need Docker access or repository package-manager credentials.
-Repository Health assessments capture their test settings and request coverage by
-default. Older reports are preserved; reassess to collect a new measurement.
-
-The dedicated host needs access to the public npm registry for dependency preparation.
-That phase uses fixed package-manager commands with repository scripts and hooks
-removed. Test execution is a separate network-disabled container. Both phases run
-nonroot with read-only roots, dropped capabilities, no-new-privileges, bounded CPU,
-memory and PIDs. Their shared dependency workspace is a 2 GiB tmpfs volume, removed
-after the job. Restart recovery removes only resources whose ownership label matches
-the recorded job. No application credentials or Docker socket enter either container.
-
-Supported packages use Vitest, Jest or Node tests with npm, pnpm 10 or Yarn Classic
-lockfiles. Private registries, external test services, install-script-dependent native
-modules and browser installations need a different execution environment; they remain
-incomplete with an actionable reason. No GitHub Actions workflow is started. See the
-[Health user guide](../../../apps/docs/docs/user-guide/repository-health.md) for command
-settings and measured coverage scope.
+Health runs eight fixed static analyzers. Repository tests, dependency installation
+and arbitrary build commands are not admitted by the scanner. Verified test and
+coverage evidence comes from CI for the assessed commit. See the
+[Health user guide](../../../apps/docs/docs/user-guide/repository-health.md).

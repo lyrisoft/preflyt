@@ -36,10 +36,10 @@ test('stable sequence ignores release candidates, sorts numerically and reuses c
   assert.equal(releaseVersion(tags, sha).version, 'v1.2.11');
   assert.deepEqual(releaseVersion([...tags, { name: 'v1.2.11', sha }], sha), { version: 'v1.2.11', reserved: true });
 });
-test('main reuses four dual architecture manifests and creates one exact-commit release', () => {
+test('main reuses all dual architecture manifests and creates one exact-commit release', () => {
   const f = fixture(); assert.equal(createRelease(env, f.run), 'v0.1.0');
   const copies = f.calls.filter(([command, args]) => command === 'docker' && args.includes('create'));
-  assert.equal(copies.length, 4);
+  assert.equal(copies.length, Object.keys(images).length);
   assert.ok(copies.every(([, args]) => args.at(-1).endsWith(`@${digest}`)));
   assert.ok(!f.calls.some(([, args]) => args.includes('bake') || args.includes('build')));
   const reservation = f.calls.find(([, args]) => args.includes('ref=refs/tags/v0.1.0'));

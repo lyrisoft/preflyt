@@ -6,6 +6,7 @@ export const images = {
   'preflyt-api': ['deploy/api.Dockerfile', 'runtime'],
   'preflyt-api-migration': ['deploy/api.Dockerfile', 'migration'],
   'preflyt-native-controller': ['deploy/api.Dockerfile', 'native-docker-controller'],
+  'preflyt-health-scanner': ['deploy/api.Dockerfile', 'health-scanner'],
   'preflyt-web': ['deploy/web.Dockerfile', 'runtime'],
 };
 export function publishRelease(mode, env, docker = (args) => execFileSync('docker', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }), write = writeFileSync) {

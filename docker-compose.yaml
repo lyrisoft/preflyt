@@ -59,6 +59,104 @@ services:
     cpus: 1.0
     networks: [backend]
 
+  # Dedicated nested engine: no host Docker socket, host paths or published ports.
+  # Privileged mode is required by Docker-in-Docker, not granted to scanner jobs.
+  health-engine:
+    image: docker:29.8.2-dind@sha256:1e08cdb63405ca788aea94ef35b792d1e299607c667d33d7bcbcae1fd2611ced
+    privileged: true
+    restart: unless-stopped
+    environment:
+      DOCKER_TLS_CERTDIR: /certs
+      DOCKER_TLS_SAN: DNS:health-engine
+    volumes:
+      - health_engine_data:/var/lib/docker
+      - health_engine_certs:/certs
+      - health_jobs:/var/lib/preflyt/health-jobs:ro
+    healthcheck:
+      test: [CMD, docker, --host=tcp://127.0.0.1:2376, --tlsverify, --tlscacert=/certs/client/ca.pem, --tlscert=/certs/client/cert.pem, --tlskey=/certs/client/key.pem, info]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 15s
+    mem_limit: 4g
+    cpus: 2.0
+    pids_limit: 2048
+    networks: [health_engine, health_build]
+
+  health-init:
+    image: ${PREFLYT_IMAGE_REGISTRY:-preflyt-local}/preflyt-health-scanner:${PREFLYT_VERSION:-development}
+    build:
+      context: .
+      dockerfile: deploy/api.Dockerfile
+      target: health-scanner
+    user: '0:0'
+    command: [node, dist/health/health-scanner-init.js]
+    depends_on:
+      health-engine:
+        condition: service_healthy
+    restart: 'no'
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    cap_add: [CHOWN, FOWNER, DAC_OVERRIDE]
+    security_opt: [no-new-privileges:true]
+    network_mode: none
+    mem_limit: 128m
+    pids_limit: 32
+    volumes:
+      - health_engine_certs:/engine-certs:ro
+      - health_engine_client:/run/docker-tls
+      - health_state:/var/lib/preflyt/health-scanner
+      - health_jobs:/var/lib/preflyt/health-jobs
+      - health_connection:/var/lib/preflyt/health-connection
+
+  health-scanner:
+    image: ${PREFLYT_IMAGE_REGISTRY:-preflyt-local}/preflyt-health-scanner:${PREFLYT_VERSION:-development}
+    build:
+      context: .
+      dockerfile: deploy/api.Dockerfile
+      target: health-scanner
+    command: [node, dist/health-scanner.js]
+    user: '1000:1000'
+    environment:
+      DOCKER_HOST: tcp://health-engine:2376
+      DOCKER_TLS_VERIFY: '1'
+      DOCKER_CERT_PATH: /run/docker-tls
+      HOME: /tmp
+      HEALTH_SCANNER_HOST: 0.0.0.0
+      HEALTH_SCANNER_ORIGIN: https://health-scanner:3011
+      HEALTH_SCANNER_STATE_DIRECTORY: /var/lib/preflyt/health-scanner
+      HEALTH_SCANNER_JOBS_DIRECTORY: /var/lib/preflyt/health-jobs
+      HEALTH_SCANNER_CONNECTION_FILE: /var/lib/preflyt/health-connection/connection.json
+    depends_on:
+      health-init:
+        condition: service_completed_successfully
+      health-engine:
+        condition: service_healthy
+    init: true
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    mem_limit: 512m
+    cpus: 1.0
+    volumes:
+      - health_engine_client:/run/docker-tls:ro
+      - health_state:/var/lib/preflyt/health-scanner
+      - health_jobs:/var/lib/preflyt/health-jobs
+      - health_connection:/var/lib/preflyt/health-connection
+    healthcheck:
+      test: [CMD, node, dist/health/health-scanner-readiness.js]
+      interval: 15s
+      timeout: 10s
+      retries: 4
+      start_period: 30m
+    # BuildKit's credential-free client resolves public registry tokens during preparation.
+    # The actual repository scanner containers still run with --network=none.
+    networks: [health_engine, health_service, health_build]
+
   api:
     image: ${PREFLYT_IMAGE_REGISTRY:-preflyt-local}/preflyt-api:${PREFLYT_VERSION:-development}
     build:
@@ -73,6 +171,7 @@ services:
       OTEL_SERVICE_NAME: preflyt-api
       API_HOST: 0.0.0.0
       API_PORT: '3000'
+      HEALTH_SCANNER_CONNECTION_FILE: /run/preflyt-health/connection.json
       REDIS_URL: ${REDIS_URL:-redis://cache:6379/0}
       REDIS_CACHE_PREFIX: ${REDIS_CACHE_PREFIX:-preflyt:production:cache}
       QUEUE_REDIS_URL: ${QUEUE_REDIS_URL:-redis://queue:6379/0}
@@ -123,6 +222,8 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+      health-scanner:
+        condition: service_healthy
     healthcheck:
       test: [CMD, node, -e, 'fetch("http://127.0.0.1:3000/health/ready",{signal:AbortSignal.timeout(3000)}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))']
       interval: 10s
@@ -135,7 +236,9 @@ services:
     security_opt: [no-new-privileges:true]
     mem_limit: 1g
     cpus: 1.0
-    networks: [backend, egress]
+    volumes:
+      - health_connection:/run/preflyt-health:ro
+    networks: [backend, egress, health_service]
 
   worker:
     image: ${PREFLYT_IMAGE_REGISTRY:-preflyt-local}/preflyt-api:${PREFLYT_VERSION:-development}
@@ -149,6 +252,7 @@ services:
     environment:
       <<: *otel
       NODE_ENV: production
+      HEALTH_SCANNER_CONNECTION_FILE: /run/preflyt-health/connection.json
       DATABASE_URL: postgresql://preflyt_app:${DATABASE_APP_PASSWORD:?Set DATABASE_APP_PASSWORD}@db:5432/${PREFLYT_DATABASE:-preflyt}
       AI_CONFIGURATION_ENABLED: ${AI_CONFIGURATION_ENABLED:-false}
       AI_REVIEWS_ENABLED: ${AI_REVIEWS_ENABLED:-false}
@@ -191,6 +295,8 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+      health-scanner:
+        condition: service_healthy
     healthcheck:
       test: [CMD, node, -e, 'const fs=require("fs");try{process.exit(Date.now()-Number(fs.readFileSync("/tmp/preflyt-github-worker-heartbeat","utf8"))<20000?0:1)}catch{process.exit(1)}']
       interval: 10s
@@ -204,7 +310,9 @@ services:
     # Bounded Health source export can include up to 64 MiB of verified files.
     mem_limit: 1g
     cpus: 1.0
-    networks: [backend, egress]
+    volumes:
+      - health_connection:/run/preflyt-health:ro
+    networks: [backend, egress, health_service]
 
   cache:
     image: valkey/valkey:7.2-alpine@sha256:c6c2f0020be34bbf684a53a0ef716ab16ff70295186d4d9f2518435beb7afbff
@@ -290,10 +398,21 @@ services:
     networks: [backend, ingress]
 
 volumes:
+  health_engine_data:
+  health_engine_certs:
+  health_engine_client:
+  health_state:
+  health_jobs:
+  health_connection:
   postgres_data:
   queue_data:
 
 networks:
+  health_engine:
+    internal: true
+  health_service:
+    internal: true
+  health_build:
   backend:
     internal: true
   egress:

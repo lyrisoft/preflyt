@@ -58,7 +58,7 @@ process.env.NATIVE_CONTROLLER_SIGNING_KEY=identity.privateKey
 const certFile=join(directory,'scanner-cert.pem'),keyFile=join(directory,'scanner-key.pem')
 try {await readFile(certFile)} catch(error){if((error as any).code!=='ENOENT')throw error;execFileSync('openssl',['req','-x509','-newkey','ec','-pkeyopt','ec_paramgen_curve:P-256','-nodes','-keyout',keyFile,'-out',certFile,'-days','3650','-subj','/CN=preflyt-health-scanner','-addext','subjectAltName=DNS:health-scanner,DNS:localhost,IP:127.0.0.1,IP:::1'],{stdio:'ignore'});await chmod(keyFile,0o600)}
 const certificate=await readFile(certFile,'utf8')
-const {server,idle,maintain,close}=await healthScannerServer(pkg,identity.apiKey,join(directory,'jobs'),dockerCommand,{key:await readFile(keyFile,'utf8'),cert:certificate})
+const {server,idle,maintain,close}=await healthScannerServer(pkg,identity.apiKey,process.env.HEALTH_SCANNER_JOBS_DIRECTORY??join(directory,'jobs'),dockerCommand,{key:await readFile(keyFile,'utf8'),cert:certificate})
 const port=Number(process.env.HEALTH_SCANNER_PORT??'3011')
 if(!Number.isInteger(port)||port<1||port>65535)throw new Error('Invalid scanner port')
 await new Promise<void>((ready,reject)=>{server.once('error',reject);server.listen(port,process.env.HEALTH_SCANNER_HOST??'127.0.0.1',ready)})

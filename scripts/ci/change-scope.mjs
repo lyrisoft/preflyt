@@ -13,6 +13,7 @@ export function imageRequired(branch, paths) {
   return paths.some(path => shared(path) ||
     (/^apps\/(?:api|web)\//.test(path) && !testFile(path) && !/\/vitest\.config\./.test(path)) ||
     path.startsWith('deploy/') || path.startsWith('scripts/deploy/') ||
+    path.startsWith('docs/deployment/native-runner/') ||
     ['docker-compose.yaml', 'compose.local.yaml', '.env.example', '.github/workflows/publish-images.yml', '.github/workflows/compose-acceptance.yml'].includes(path) ||
     (path.startsWith('scripts/ci/') && !testFile(path)));
 }

@@ -11,7 +11,7 @@ Health assesses a selected branch without requiring CI. Explicit repository sele
 
 ## Scanner service
 
-The API and worker coordinate assessments; the dedicated Health scanner runs the static analyzers. The current downloadable Compose file starts the application services but does not provision this scanner. Connecting GitHub does not install it. If it is unavailable, the saved assessment shows **Assessment failed** with a scanner-service reason and retry guidance.
+The API and worker coordinate assessments; the dedicated Health scanner runs the static analyzers. The [Docker Compose deployment](../self-hosting/docker-compose.md) includes the scanner, its dedicated engine and automatic connection setup. The normal start command waits until the scanner is ready; there is no additional scanner installation step. If it later becomes unavailable, the saved assessment shows **Assessment failed** with a scanner-service reason and retry guidance.
 
 For a local source installation, keep Docker running and start the scanner in a separate terminal from the repository root:
 
@@ -20,7 +20,7 @@ cd apps/api
 env -i PATH="$PATH" HOME="$HOME" node_modules/.bin/tsx src/health-scanner.ts
 ```
 
-Wait for **Preflyt Health scanner is ready** before selecting or reassessing a repository. The scanner prepares its fixed container images and writes its protected local connection file for the API and worker. Do not pass application credentials into the scanner. This command is for a source installation; it is not a complete container deployment recipe.
+Wait for **Preflyt Health scanner is ready** before selecting or reassessing a repository. The scanner prepares its fixed container images and writes its protected local connection file for the API and worker. Do not pass application credentials into the scanner. This separate-terminal command is only for local source development. Docker deployments start the scanner automatically.
 
 ## Read a report
 
