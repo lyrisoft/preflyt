@@ -415,7 +415,7 @@ function FindingsWorkspace() {
                     <ArrowUpRight className='size-4' />
                   </Link>
                 ) : (
-                  <Link to='/apps'>
+                  <Link to='/repositories'>
                     View repositories
                     <ArrowUpRight className='size-4' />
                   </Link>

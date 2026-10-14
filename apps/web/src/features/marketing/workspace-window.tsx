@@ -66,7 +66,7 @@ export function WorkspaceWindow({
   }, [])
   const destinations: Record<string, View> = {
     '/overview': 'overview',
-    '/apps': 'repository',
+    '/repositories': 'repository',
     '/findings': 'findings',
     '/contributors': 'contributors',
   }

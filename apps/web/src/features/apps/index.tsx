@@ -67,7 +67,7 @@ import {
 } from '../health/inventory-health'
 import { canPerform } from '../workspace/scoped-access'
 
-const route = getRouteApi('/_authenticated/apps/')
+const route = getRouteApi('/_authenticated/repositories/')
 
 type Repository = {
   githubId: string

@@ -378,7 +378,7 @@ export function RepositoryProfilePage() {
     <>
       <AppHeader
         breadcrumbs={[
-          { label: 'Repositories', to: '/apps' },
+          { label: 'Repositories', to: '/repositories' },
           { label: result?.repository.fullName ?? 'Repository' },
         ]}
       />
@@ -390,7 +390,7 @@ export function RepositoryProfilePage() {
             size='sm'
             className='-ms-3 mb-2 sm:hidden'
           >
-            <Link to='/apps'>
+            <Link to='/repositories'>
               <ArrowLeft aria-hidden='true' />
               Repositories
             </Link>

@@ -175,7 +175,7 @@ export function FirstReport({
               </Button>
             ) : (
               <Button asChild className='shrink-0 self-end'>
-                <Link to='/apps'>
+                <Link to='/repositories'>
                   Select a repository
                   <ArrowRight aria-hidden='true' />
                 </Link>

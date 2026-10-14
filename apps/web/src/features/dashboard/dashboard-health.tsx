@@ -132,7 +132,7 @@ export function DashboardHealth({
         </CardHeader>
         <CardContent>
           <Button variant='outline' asChild>
-            <Link to='/apps'>
+            <Link to='/repositories'>
               View repositories <ArrowUpRight />
             </Link>
           </Button>
@@ -200,7 +200,7 @@ export function DashboardHealth({
             )}
             <div className='mt-auto pt-1'>
               <Button size='sm' variant='outline' asChild>
-                <Link to='/apps'>
+                <Link to='/repositories'>
                   View repositories <ArrowUpRight />
                 </Link>
               </Button>
