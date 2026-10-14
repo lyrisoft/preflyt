@@ -62,13 +62,13 @@ export function coverageFailureReason(report:string|null|undefined,hash:string|n
   const sarif=JSON.parse(bytes.toString('utf8'))
   const run=sarif.version==='2.1.0'&&sarif.runs?.length===1?sarif.runs[0]:null
   const reason=run?.tool?.driver?.name==='Preflyt test coverage'?run.properties?.preflytCoverageUnavailable:null
-  return ['DEPENDENCY_SOURCE_UNSUPPORTED','COVERAGE_PROVIDER_UNAVAILABLE','DEPENDENCY_INSTALL_FAILED','NO_TEST_SETUP','UNSUPPORTED_TEST_COMMAND','LOCKFILE_REQUIRED','AMBIGUOUS_LOCKFILES','UNSUPPORTED_PACKAGE_MANAGER','TESTS_TIMED_OUT','SUPPORTED_TESTS_REQUIRED','TESTS_FAILED','TESTS_CANCELLED','TESTS_SKIPPED','NO_TESTS_EXECUTED','NO_SOURCE_COVERAGE','TEST_SCOPE_LIMIT','TEST_RUNNER_FAILED'].includes(reason)?reason:undefined
+  return ['DEPENDENCY_SOURCE_UNSUPPORTED','COVERAGE_PROVIDER_UNAVAILABLE','DEPENDENCY_INSTALL_FAILED','LOCKFILE_OUT_OF_SYNC','DEPENDENCY_INSTALL_TIMED_OUT','NO_TEST_SETUP','UNSUPPORTED_TEST_COMMAND','LOCKFILE_REQUIRED','AMBIGUOUS_LOCKFILES','UNSUPPORTED_PACKAGE_MANAGER','TESTS_TIMED_OUT','SUPPORTED_TESTS_REQUIRED','TESTS_FAILED','TESTS_CANCELLED','TESTS_SKIPPED','NO_TESTS_EXECUTED','NO_SOURCE_COVERAGE','TEST_SCOPE_LIMIT','TEST_RUNNER_FAILED'].includes(reason)?reason:undefined
  }catch{return undefined}
 }
 
 export type HealthTestResult={directory:string;framework:'vitest'|'jest'|'node';state:'PASS'|'INCOMPLETE';reason:string}
 export function validHealthTestResults(value:unknown):value is HealthTestResult[]{
- return Array.isArray(value)&&value.length>0&&value.length<=40&&new Set(value.map(v=>v?.directory)).size===value.length&&value.every(v=>v&&Object.keys(v).sort().join(',')==='directory,framework,reason,state'&&typeof v.directory==='string'&&v.directory.length<=244&&(v.directory==='.'||/^[\w./-]+$/.test(v.directory)&&!v.directory.split('/').some((p:string)=>!p||p==='..'||p==='.'))&&['vitest','jest','node'].includes(v.framework)&&(['PASS','INCOMPLETE'].includes(v.state))&&['UNSUPPORTED_TEST_COMMAND','CHECKS_PASSED','TESTS_FAILED','TESTS_SKIPPED','TESTS_TIMED_OUT','TEST_RUNNER_FAILED','NO_TESTS_EXECUTED','NO_SOURCE_COVERAGE'].includes(v.reason)&&(v.state==='PASS')===(v.reason==='CHECKS_PASSED'))
+ return Array.isArray(value)&&value.length>0&&value.length<=40&&new Set(value.map(v=>v?.directory)).size===value.length&&value.every(v=>v&&Object.keys(v).sort().join(',')==='directory,framework,reason,state'&&typeof v.directory==='string'&&v.directory.length<=244&&(v.directory==='.'||/^[\w./-]+$/.test(v.directory)&&!v.directory.split('/').some((p:string)=>!p||p==='..'||p==='.'))&&['vitest','jest','node'].includes(v.framework)&&(['PASS','INCOMPLETE'].includes(v.state))&&['UNSUPPORTED_TEST_COMMAND','DEPENDENCY_INSTALL_FAILED','LOCKFILE_OUT_OF_SYNC','DEPENDENCY_INSTALL_TIMED_OUT','CHECKS_PASSED','TESTS_FAILED','TESTS_SKIPPED','TESTS_TIMED_OUT','TEST_RUNNER_FAILED','NO_TESTS_EXECUTED','NO_SOURCE_COVERAGE'].includes(v.reason)&&(v.state==='PASS')===(v.reason==='CHECKS_PASSED'))
 }
 export function healthTestResults(report:string|null|undefined,hash:string|null):HealthTestResult[]|undefined{
  if(!report||!hash||report.length>HEALTH_REPORT_BASE64)return undefined

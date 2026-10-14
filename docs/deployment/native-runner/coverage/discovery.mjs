@@ -6,7 +6,7 @@ export function testSettings(value = {}) {
     typeof value !== "object" ||
     Array.isArray(value) ||
     Object.keys(value).some(
-      (k) => !["command", "directory", "framework"].includes(k),
+      (k) => !["command", "directory", "framework", "packageDirectory"].includes(k),
     )
   )
     throw new Error("Invalid test settings");
@@ -14,6 +14,7 @@ export function testSettings(value = {}) {
     directory = value.directory ?? ".",
     framework = value.framework ?? "auto";
   if (
+    (value.packageDirectory !== undefined && (typeof value.packageDirectory !== "string" || value.packageDirectory.length > 244 || (value.packageDirectory !== "." && (!/^[\w./-]+$/.test(value.packageDirectory) || value.packageDirectory.split("/").some(p => !p || p === ".." || p === "."))))) ||
     typeof command !== "string" ||
     command.length > 2000 ||
     /[\x00-\x08\x0b-\x1f\x7f]/.test(command) ||
@@ -27,7 +28,7 @@ export function testSettings(value = {}) {
     throw new Error("Invalid test settings");
   if (command && framework === "auto")
     throw new Error("Choose the test framework for a command override");
-  return { command: command.trim(), directory, framework };
+  return { command: command.trim(), directory, framework, ...(value.packageDirectory !== undefined ? { packageDirectory: value.packageDirectory } : {}) };
 }
 const ignored = /(?:^|\/)(?:node_modules|vendor|dist|build|coverage|\.git)\//;
 function glob(pattern, directory) {
@@ -79,7 +80,9 @@ export function discoverTests(files, settings = {}) {
           ].some((lock) => Object.hasOwn(files, m.directory + "/" + lock))),
   );
   const packages = [];
-  for (const item of selected) {
+  const targets = settings.packageDirectory !== undefined ? manifests.filter(m => m.directory === settings.packageDirectory) : selected;
+  if (settings.packageDirectory !== undefined && !targets.length) throw new Error("Selected test package is unavailable");
+  for (const item of targets) {
     const script = item.manifest.scripts?.test;
     if (
       typeof script !== "string" ||
@@ -126,6 +129,7 @@ export function discoverTests(files, settings = {}) {
     });
   }
   if (settings.command) {
+    if (settings.packageDirectory !== undefined && settings.directory !== settings.packageDirectory) throw new Error("Override must target the selected package");
     if (!manifests.some((m) => m.directory === settings.directory))
       throw new Error("The override directory must contain package.json");
     const index = packages.findIndex((p) => p.directory === settings.directory);

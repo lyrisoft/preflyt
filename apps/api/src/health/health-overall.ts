@@ -18,6 +18,7 @@ export function overallHealth(report: HealthReport|null|undefined, state: string
  // A known failure takes precedence even when another analysis is missing.
  if(knownFailures.length) return result('UNHEALTHY',knownFailures)
  const missing:string[]=[]
+ if(report.selection && report.selection !== 'all') missing.push('Only the selected category was assessed. Repository-wide readiness is incomplete.')
  if(state!=='COMPLETED') missing.push('Assessment did not complete successfully.')
  if(report.mode!=='EXECUTED'||!report.inspection.complete||!report.analyses.length||report.completeness!=='COMPLETE') missing.push('Applicable repository analysis is incomplete.')
  if(report.policyContext?.state==='POLICY_INVALID') missing.push('Captured policy could not be verified.')

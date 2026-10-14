@@ -14,14 +14,16 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { parse as yaml } from "/opt/preflyt/test-tools/node_modules/yaml/dist/index.js";
+import { dependencyFailure } from "./install-result.mjs";
 import { discoverTests, packageManager } from "./discovery.mjs";
 import { verifyMountedNativeSource } from "../source-verification.mjs";
 const root = "/project";
 const run = (cmd, args, cwd) =>
   new Promise((resolve) => {
+    let output = "", timedOut = false;
     const child = spawn(cmd, args, {
       cwd,
-      stdio: "ignore",
+      stdio: ["ignore", "pipe", "pipe"],
       env: {
         PATH: "/usr/local/bin:/usr/bin:/bin",
         HOME: "/scratch",
@@ -38,14 +40,17 @@ const run = (cmd, args, cwd) =>
         COREPACK_ENABLE_PROJECT_SPEC: "0",
       },
     });
-    const timer = setTimeout(() => child.kill("SIGKILL"), 240000);
+    const collect = (chunk) => { output = (output + chunk.toString()).slice(-32768); };
+    child.stdout.on("data", collect);
+    child.stderr.on("data", collect);
+    const timer = setTimeout(() => { timedOut = true; child.kill("SIGKILL"); }, 240000);
     child.once("error", () => {
       clearTimeout(timer);
-      resolve(false);
+      resolve("DEPENDENCY_INSTALL_FAILED");
     });
-    child.once("exit", (code) => {
+    child.once("close", (code) => {
       clearTimeout(timer);
-      resolve(code === 0);
+      resolve(code === 0 ? null : dependencyFailure(output, timedOut));
     });
   });
 const unsafeConfig =
@@ -119,6 +124,7 @@ function publicDependencies(value, directory = ".", files = {}) {
       });
 }
 let reason = "DEPENDENCY_INSTALL_FAILED";
+let failedPackages = [];
 try {
   await verifyMountedNativeSource("/workspace", {
     repositoryId: process.env.PREFLYT_SOURCE_REPOSITORY,
@@ -256,6 +262,7 @@ try {
         JSON.stringify({ packages: files.__workspacePatterns }),
       );
     reason = "DEPENDENCY_INSTALL_FAILED";
+    failedPackages = packages.filter((pkg) => pkg.installDirectory === setup.directory).map((pkg) => ({ directory: pkg.directory, framework: pkg.framework, state: "INCOMPLETE", reason }));
     const args =
       setup.manager === "npm"
         ? ["ci", "--ignore-scripts", "--no-audit", "--no-fund"]
@@ -274,11 +281,14 @@ try {
               "--ignore-scripts",
               "--non-interactive",
             ];
-    if (!(await run(setup.manager, args, root + "/" + setup.directory)))
-      throw new Error();
+    const failure = await run(setup.manager, args, root + "/" + setup.directory);
+    if (failure) {
+      for (const pkg of packages.filter((p) => p.installDirectory === setup.directory)) pkg.installFailure = failure;
+    }
+    failedPackages = [];
   }
   // Match the coverage provider to the repository's installed Vitest version; never modify its saved manifest/lockfile.
-  for (const pkg of packages.filter((p) => p.framework === "vitest")) {
+  for (const pkg of packages.filter((p) => p.framework === "vitest" && !p.installFailure)) {
     const require = createRequire(root + "/" + pkg.directory + "/package.json");
     try {
       require.resolve("@vitest/coverage-v8");
@@ -299,7 +309,7 @@ try {
       }),
     );
     if (
-      !(await run(
+      (await run(
         "npm",
         [
           "install",
@@ -338,7 +348,7 @@ try {
 } catch {
   await writeFile(
     root + "/.preflyt-install.json",
-    JSON.stringify({ ready: false, reason }),
+    JSON.stringify({ ready: false, reason, ...(reason === "DEPENDENCY_INSTALL_FAILED" && failedPackages.length ? { testResults: failedPackages } : {}) }),
   );
   process.exitCode = 2;
 }

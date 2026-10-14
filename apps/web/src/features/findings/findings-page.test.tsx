@@ -5,6 +5,7 @@ import { page, userEvent } from 'vitest/browser'
 import { FindingsPage } from './findings-page'
 
 const state = vi.hoisted(() => ({
+  routeSearch: {} as Record<string, string>,
   query: {} as Record<string, unknown>,
   key: [] as unknown[],
   save: vi.fn(),
@@ -26,7 +27,7 @@ vi.mock('../workspace/navigation-session', () => ({
   }),
 }))
 vi.mock('@tanstack/react-router', () => ({
-  getRouteApi: () => ({ useSearch: () => ({}) }),
+  getRouteApi: () => ({ useSearch: () => state.routeSearch }),
   Link: ({
     children,
     to,
@@ -65,6 +66,7 @@ const summary = {
 }
 beforeEach(async () => {
   await page.viewport(1280, 800)
+  state.routeSearch = {}
   state.query = {
     data: {
       summary,
@@ -76,6 +78,56 @@ beforeEach(async () => {
     },
     refetch: vi.fn(),
   }
+})
+it('opens a dedicated Test coverage detail view from a Health card link', async () => {
+  state.routeSearch = {
+    origin: 'health',
+    source: 'health',
+    category: 'coverage',
+    repository: '51',
+    health: '11111111-1111-4111-8111-111111111111',
+  }
+  state.query = {
+    data: {
+      branch: 'development',
+      assessment: {
+        id: state.routeSearch.health,
+        branch: 'development',
+        state: 'COMPLETED',
+        sourceSha: 'a'.repeat(40),
+        finishedAt: '2026-10-14T07:31:00Z',
+        report: {
+          analyses: [
+            {
+              id: 'tests.coverage',
+              state: 'INCOMPLETE',
+              reason: 'DEPENDENCY_INSTALL_FAILED',
+              testResults: [
+                {
+                  directory: 'api',
+                  framework: 'node',
+                  state: 'INCOMPLETE',
+                  reason: 'DEPENDENCY_INSTALL_FAILED',
+                },
+              ],
+            },
+          ],
+          measurements: {},
+        },
+      },
+    },
+  }
+  await render(<FindingsPage />)
+  await expect
+    .element(page.getByRole('heading', { name: 'Test coverage', level: 1 }))
+    .toBeVisible()
+  await expect.element(page.getByText('api · node')).toBeVisible()
+  await expect
+    .element(page.getByRole('button', { name: 'Test coverage settings' }))
+    .toBeVisible()
+  await expect
+    .element(page.getByRole('heading', { name: 'Findings', level: 1 }))
+    .not.toBeInTheDocument()
 })
 it('shows a useful empty state without fabricated findings', async () => {
   const view = await render(<FindingsPage />)

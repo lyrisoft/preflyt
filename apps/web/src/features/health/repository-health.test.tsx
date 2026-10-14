@@ -4,6 +4,7 @@ import '@/styles/index.css'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { render } from 'vitest-browser-react'
 import { page } from 'vitest/browser'
+import { HealthCoverageDetails } from './health-coverage-details'
 import { RepositoryHealth } from './repository-health'
 
 const state = vi.hoisted(() => ({
@@ -13,6 +14,11 @@ const state = vi.hoisted(() => ({
   failureReason: null as string | null,
   noReport: false,
   unpinned: false,
+  category: null as 'coverage' | null,
+  categoryResults: null as Record<
+    string,
+    { assessmentId: string; finishedAt: string; value: string } | null
+  > | null,
   retryAt: null as string | null,
   role: 'OWNER',
   timeline: false,
@@ -104,6 +110,7 @@ const id = '11111111-1111-4111-8111-111111111111',
   sha = 'a'.repeat(40)
 const report = () => ({
   version: 1,
+  ...(state.category ? { selection: state.category } : {}),
   ...(state.duplication
     ? {
         measurements: {
@@ -284,6 +291,7 @@ const row = () => ({
   progress: state.progress,
   sourceSha: state.unpinned ? null : sha,
   report: state.noReport ? null : report(),
+  category: state.category,
   reason: state.failureReason,
   retryAt: state.retryAt,
   cancelled: false,
@@ -296,6 +304,8 @@ beforeEach(() => {
   state.failureReason = null
   state.noReport = false
   state.unpinned = false
+  state.category = null
+  state.categoryResults = null
   state.retryAt = null
   state.progress = 'SCANNING'
   state.role = 'OWNER'
@@ -317,6 +327,18 @@ beforeEach(() => {
   state.fetch.mockImplementation(
     async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
+      if (url.includes('/health/test-apps'))
+        return Response.json({
+          complete: true,
+          apps: [
+            { directory: 'api', name: 'maiguard-api', framework: 'node' },
+            {
+              directory: 'performance',
+              name: 'maiguard-tester',
+              framework: 'node',
+            },
+          ],
+        })
       if (url.includes('/native-execution/status'))
         return state.readinessFailure
           ? Response.json(
@@ -405,6 +427,9 @@ beforeEach(() => {
         JSON.stringify({
           branch: 'development',
           assessment: row(),
+          ...(state.categoryResults
+            ? { categoryResults: state.categoryResults }
+            : {}),
           freshness: 'STALE',
           checkedAt: new Date().toISOString(),
           history: history.slice((requestedPage - 1) * 10, requestedPage * 10),
@@ -463,6 +488,16 @@ function mount(selectedBranch?: string) {
         defaultBranch='development'
         selectedBranch={selectedBranch}
       />
+    </QueryClientProvider>
+  )
+}
+function mountCoverage() {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  })
+  return render(
+    <QueryClientProvider client={client}>
+      <HealthCoverageDetails repositoryId='51' assessmentId={id} />
     </QueryClientProvider>
   )
 }
@@ -793,6 +828,59 @@ it('uses automatic test discovery on reassessment without asking for individual 
   )
   expect(body).not.toHaveProperty('includeCoverage')
 })
+it('runs tests alone and keeps the older security result linked to the same commit', async () => {
+  const previous = '22222222-2222-4222-8222-222222222222'
+  state.category = 'coverage'
+  state.coverage = true
+  state.categoryResults = {
+    security: {
+      assessmentId: previous,
+      finishedAt: '2026-10-14T06:00:00Z',
+      value: '3',
+    },
+    coverage: {
+      assessmentId: id,
+      finishedAt: '2026-10-14T06:30:00Z',
+      value: 'Unavailable',
+    },
+  }
+  await mount()
+  await expect
+    .element(
+      page.getByText('This assessment ran tests and coverage only.', {
+        exact: false,
+      })
+    )
+    .toBeVisible()
+  await expect.element(page.getByLabelText('Security: 3')).toBeVisible()
+  await expect
+    .element(page.getByRole('link', { name: 'View security findings' }))
+    .toHaveAttribute('href', expect.stringContaining(previous))
+  await expect
+    .element(page.getByRole('button', { name: 'Run test coverage' }))
+    .not.toBeInTheDocument()
+  await expect
+    .element(page.getByRole('link', { name: 'Open test coverage details' }))
+    .toHaveAttribute('href', expect.stringContaining('category=coverage'))
+})
+it('runs test coverage from its detail view, not the report cards', async () => {
+  state.coverage = true
+  await mountCoverage()
+  await expect
+    .element(page.getByRole('heading', { name: 'Test coverage', level: 1 }))
+    .toBeVisible()
+  await expect.element(page.getByText('60.0%', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Run test coverage' }).click()
+  await expect
+    .poll(() =>
+      state.fetch.mock.calls.some(
+        ([, init]) =>
+          init?.method === 'POST' &&
+          JSON.parse(String(init.body)).category === 'coverage'
+      )
+    )
+    .toBe(true)
+})
 it('shows actual measured coverage with test counts and the loaded-file scope', async () => {
   state.coverage = true
   await mount()
@@ -819,6 +907,27 @@ it('shows the saved analyzer scope alongside the coverage outcome', async () => 
       )
     )
     .toBeVisible()
+})
+it('aligns analysis cards in the same row when their summaries have different lengths', async () => {
+  await page.viewport(1280, 900)
+  state.duplication = true
+  state.scanErrors = true
+  await mount()
+  await expect.element(page.getByLabelText('Analysis coverage')).toBeVisible()
+  const cards = document.querySelectorAll(
+    '[aria-label="Analysis coverage"] details.group'
+  )
+  expect(cards).toHaveLength(2)
+  expect(cards[0].getBoundingClientRect().bottom).toBeCloseTo(
+    cards[1].getBoundingClientRect().bottom,
+    0
+  )
+  const firstAction = cards[0].querySelector('summary > span:last-child')!
+  const secondAction = cards[1].querySelector('summary > span:last-child')!
+  expect(firstAction.getBoundingClientRect().top).toBeCloseTo(
+    secondAction.getBoundingClientRect().top,
+    0
+  )
 })
 
 it('shows historical policy evidence separately and links to the original CI assessment', async () => {
@@ -899,11 +1008,15 @@ it('links the five metric cards to their exact report and category', async () =>
     'duplication',
     'test coverage',
   ]) {
+    const linkName =
+      label === 'test coverage'
+        ? 'Open test coverage details'
+        : `View ${label} findings`
     await expect
-      .element(page.getByRole('link', { name: `View ${label} findings` }))
+      .element(page.getByRole('link', { name: linkName }))
       .toBeVisible()
     await expect
-      .element(page.getByRole('link', { name: `View ${label} findings` }))
+      .element(page.getByRole('link', { name: linkName }))
       .toHaveAttribute(
         'href',
         expect.stringContaining(
@@ -911,7 +1024,14 @@ it('links the five metric cards to their exact report and category', async () =>
         )
       )
     await expect
-      .element(page.getByRole('link', { name: `View ${label} findings` }))
+      .element(
+        page.getByRole('link', {
+          name:
+            label === 'test coverage'
+              ? 'Open test coverage details'
+              : `View ${label} findings`,
+        })
+      )
       .toHaveAttribute('href', expect.stringContaining(`health=${id}`))
   }
 })
@@ -1069,8 +1189,11 @@ it('shows safe scanner failure locations in the existing evidence details', asyn
 })
 
 it('saves a framework-specific command override without selecting individual tests', async () => {
-  await mount()
-  await page.getByLabelText('Tests and coverage', { exact: true }).click()
+  state.coverage = true
+  await mountCoverage()
+  await page.getByRole('button', { name: 'Test coverage settings' }).click()
+  await expect.element(page.getByRole('dialog')).toBeVisible()
+  await page.getByText('Advanced settings', { exact: true }).click()
   await page
     .getByLabelText('Test framework', { exact: true })
     .selectOptions('jest')
@@ -1103,8 +1226,13 @@ it('saves a framework-specific command override without selecting individual tes
 })
 it('shows test configuration read-only without execution permission', async () => {
   state.role = 'DEVELOPER'
-  await mount()
-  await page.getByLabelText('Tests and coverage', { exact: true }).click()
+  state.coverage = true
+  await mountCoverage()
+  await expect
+    .element(page.getByRole('button', { name: 'Run test coverage' }))
+    .not.toBeInTheDocument()
+  await page.getByRole('button', { name: 'Test coverage settings' }).click()
+  await page.getByText('Advanced settings', { exact: true }).click()
   await expect
     .element(page.getByLabelText('Test framework', { exact: true }))
     .toBeDisabled()
@@ -1192,3 +1320,34 @@ it.each(['password=provider-secret', '__proto__', 'constructor'])(
       .not.toBeInTheDocument()
   }
 )
+
+it('lets users select a detected app without configuring its command', async () => {
+  state.coverage = true
+  await mountCoverage()
+  await page.getByRole('button', { name: 'Test coverage settings' }).click()
+  await page.getByLabelText('App to test', { exact: true }).selectOptions('api')
+  await expect
+    .element(page.getByLabelText('Test framework', { exact: true }))
+    .not.toBeVisible()
+  await page.getByRole('button', { name: 'Save test settings' }).click()
+  await expect
+    .poll(() =>
+      state.fetch.mock.calls.some(
+        ([url, init]) =>
+          String(url).includes('/health/test-settings') &&
+          init?.method === 'POST'
+      )
+    )
+    .toBe(true)
+  const call = state.fetch.mock.calls.find(
+    ([url, init]) =>
+      String(url).includes('/health/test-settings') && init?.method === 'POST'
+  )!
+  expect(JSON.parse(call[1].body)).toEqual({
+    packageDirectory: 'api',
+    directory: 'api',
+    framework: 'auto',
+    command: '',
+    expectedRevision: 0,
+  })
+})

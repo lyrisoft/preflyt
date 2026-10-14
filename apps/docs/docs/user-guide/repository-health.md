@@ -7,7 +7,7 @@ description: Read branch analysis, exact-revision findings, limits and report hi
 
 # Repository health
 
-Health assesses a selected branch without requiring CI. Explicit repository selection queues the first assessment; **Reassess** creates another revision report. The API and worker fetch the exact selected commit and coordinate work. The built-in scanner service automatically runs every applicable fixed Health analyzer in isolated containers. GitHub connection, repository selection and existing Preflyt permissions are the authorization; no additional approval, policy selection or CI workflow is required. Health never installs dependencies or executes repository scripts.
+Health assesses a selected branch without requiring CI. Explicit repository selection queues the first assessment; **Reassess** creates another revision report. The API and worker fetch the exact selected commit and coordinate work. The built-in scanner service runs applicable fixed Health analyzers in isolated containers. GitHub connection, repository selection and existing Preflyt permissions are the authorization; no additional approval, policy selection or CI workflow is required. Test coverage can prepare dependencies and run the repository's configured tests in a separate restricted environment, as described below.
 
 ## Read a report
 
@@ -66,9 +66,11 @@ Counts exclude suppressed results and deduplicate matching findings from the sam
 
 ## Reassessment and history
 
-Owners, Admins and Security Engineers with repository access can reassess or cancel. Choose another branch and select **Reassess** to persist the new target. Reports retain their original branch, SHA, evidence and timestamps. History is paginated by branch.
+Owners, Admins and Security Engineers with repository access can reassess or cancel. Choose another branch and select **Reassess** to persist the new target. To rerun security, reliability, maintainability or duplication, open its **Scope and evidence** details under **Analysis coverage** and select the Run action. To rerun tests, open the **Test coverage** card's detail page and select **Run test coverage**. The five metric cards show results and dates; they do not contain run controls. A category run saves its own partial-scope report, even when its selected analyzers finish. It cannot establish whole-repository health. Reports retain their original branch, SHA, evidence and timestamps. History is paginated by branch.
 
-Requests are limited to ten per repository per hour and one per minute on the same branch. Duplicate requests and retries reuse the active job. Complete reports with compatible tools, configuration and analysis scope can show introduced and no-longer-reported counts. No-longer-reported does not independently prove a fix.
+The cards may reuse a category result from an earlier run only when it belongs to the exact same branch and commit. Each card shows its own assessment date and links to findings in that saved report. A result from another commit is never carried forward. Full-scan graph comparisons exclude category-only runs; those runs remain visible in assessment history.
+
+Requests are limited to ten per repository per hour, with one active job per repository. Full scans also have a one-minute branch cooldown; category runs can follow each other within the hourly limit. Duplicate requests and retries reuse the active job. Complete reports with compatible tools, configuration and analysis scope can show introduced and no-longer-reported counts. No-longer-reported does not independently prove a fix.
 
 ## Continue with CI
 
@@ -108,11 +110,11 @@ Failed assessments show their reason in the report header and history, including
 
 ### Automatic test coverage
 
-Select **Reassess** to detect and run the repository’s existing test setup. No individual tests need to be selected. Preflyt reads package manifests, lockfiles and framework configuration names as data; the repository’s test runner then selects tests using its own configuration.
+Select **Run test coverage** on the Test coverage detail page to detect and run the repository’s existing test setup on the branch's current head. A full **Reassess** also collects coverage. No individual tests need to be selected. Preflyt reads package manifests, lockfiles and framework configuration names as data; the repository’s test runner then selects tests using its own configuration.
 
 The initial supported frameworks are **Vitest, Jest and Node’s built-in runner**, with **npm, pnpm 10 and Yarn Classic** lockfiles. Declared npm/Yarn or pnpm workspaces are discovered package by package. Nested independent packages need their own lockfile. Root workspace orchestration is skipped when package test scripts are run directly. Other languages, Yarn Berry, browser binaries, private registries and tests requiring external services are not supported by this execution image.
 
-For a custom script, open **Repositories → Health → Tests and coverage**, choose the framework, enter its package directory and save a command such as `npm run test:unit --`. Preflyt appends coverage and result-report flags. The override replaces the detected command for that package; other detected packages still run. Clear the override to return to detection. Saving requires permission to run assessments, uses revision checks to avoid overwriting another edit and takes effect on the next assessment. Existing reports retain their captured settings.
+For a custom script, open a repository's **Health → Test coverage** detail page and select the cog button. In the **Test coverage settings** modal, choose the framework, enter its package directory and save a command such as `npm run test:unit --`. Preflyt appends coverage and result-report flags. The override replaces the detected command for that package; other detected packages still run. Clear the override to return to detection. Saving requires permission to run assessments, uses revision checks to avoid overwriting another edit and takes effect on the next assessment. Existing reports retain their captured settings.
 
 Dependencies are prepared separately with repository install scripts and package-manager hooks disabled. Tests run without network access or platform credentials in a bounded, disposable workspace. Vitest’s matching coverage provider is prepared when absent. No GitHub Actions workflow is started or modified. Native build dependencies that require install scripts may be unavailable.
 
@@ -174,7 +176,7 @@ Valid findings retained from an incomplete analyzer still appear in dimension co
 
 ### Finding categories from Health cards
 
-Health shows five clickable cards: Security, Reliability, Maintainability, Duplication and Test coverage. Missing metrics consistently display **—**. Clicking an analysis card opens **Findings** for the same repository and saved Health report, filtered to that category. The category selector can explore other findings within that report. Opening a finding retains its original commit and source viewer; Back to findings restores the category filter. Coverage opens the coverage evidence view and explains why test execution or coverage collection was incomplete. Inspection-only reports explicitly state that analysis has not run instead of showing zero-issue metrics.
+Health shows five clickable cards: Security, Reliability, Maintainability, Duplication and Test coverage. Missing metrics consistently display **—**. Clicking a finding-count card opens **Findings** for the same repository and saved Health report, filtered to that category. The category selector can explore other findings within that report. Opening a finding retains its original commit and source viewer; Back to findings restores the category filter. Test coverage opens its dedicated detail view with the measured result, package outcomes, a Run action and a cog button for the settings modal. Inspection-only reports explicitly state that analysis has not run instead of showing zero-issue metrics.
 
 The hotspot metric card was removed. Automatic hotspot findings and optional review records remain available in the saved report and Findings category selector; no human review is required to receive automatic analysis results.
 
@@ -203,3 +205,9 @@ Valid findings are retained even when another analyzer fails or a parser cannot 
 Secret findings identify recognized credential types and show potential impact (medium for generic API-key patterns; high for recognized access tokens, private keys and authorization headers). A pattern match does not prove a credential is live. Dummy test data can match too; verify the reported file and line before acting. Matching values remain hidden; numbered surrounding code shows developers where to look.
 
 The duplication measurement excludes dependency/build folders, generated folders, type declarations and minified JavaScript. Its denominator is the recorded analyzed scope.
+
+### Select an app for test coverage
+
+Open **Test coverage → settings cog**. Preflyt detects apps with a `test` script on the selected branch and shows their package names, directories and frameworks. Select one app or **All detected apps** and save. Selecting an app uses its existing command automatically; manual commands are under **Advanced settings**. The saved choice applies to future assessments, including full Health scans. A partial discovery is labeled and unavailable discovery can be retried.
+
+If an independent package cannot install dependencies, other prepared packages still run. A mismatched lockfile is reported for the affected package; update and commit that package’s lockfile before retrying. Aggregate coverage remains incomplete when a selected package fails.

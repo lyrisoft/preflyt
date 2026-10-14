@@ -36,6 +36,7 @@ export type OverallHealth = {
   reasons: string[]
 }
 export type HealthReport = {
+  selection?: 'all' | HealthCategory
   policyContext?: {
     version: 1
     state: 'NO_PUBLISHED_POLICY' | 'POLICY_INVALID' | 'CAPTURED'
@@ -117,6 +118,7 @@ export type HealthReport = {
   }
 }
 export type HealthAssessment = {
+  category?: HealthCategory | null
   retryAt?: string | null
   progress?: string | null
   overallHealth?: OverallHealth
@@ -142,7 +144,14 @@ export type HealthTimelinePoint = {
   findings: number
 }
 export type HealthData = {
+  categoryResults?: Partial<
+    Record<
+      HealthCategory,
+      { assessmentId: string; finishedAt: string | null; value: string } | null
+    >
+  >
   testSettings?: {
+    packageDirectory?: string
     command: string
     directory: string
     framework: 'auto' | 'vitest' | 'jest' | 'node'
@@ -171,6 +180,8 @@ export type HealthData = {
     checkIds?: string[]
   } | null
 }
+export type HealthCategory =
+  'security' | 'reliability' | 'maintainability' | 'duplication' | 'coverage'
 export type HealthPortfolioData = {
   statuses: {
     complete: number
@@ -334,6 +345,8 @@ export function useHealthFreshness(repositoryId: string, assessment?: string) {
   })
 }
 export const healthReasons: Record<string, string> = {
+  NO_APPLICABLE_ANALYSIS:
+    'No supported files or configuration were found for this category at the selected commit.',
   GIT_UNAVAILABLE:
     'The deployment cannot fetch repository source because Git is unavailable. Ask your administrator to update the Preflyt worker image.',
   SOURCE_FETCH_FAILED:
@@ -370,6 +383,10 @@ export const healthReasons: Record<string, string> = {
     'The coverage provider matching this Vitest version could not be installed. Check that the version is available in the public npm registry.',
   DEPENDENCY_SOURCE_UNSUPPORTED:
     'A dependency uses a private registry, Git URL or unsupported source. Health currently installs dependencies from the public npm and Yarn registries.',
+  LOCKFILE_OUT_OF_SYNC:
+    'This package’s lockfile is out of sync. Run the package manager install command in the affected package, commit the updated lockfile, and run test coverage again.',
+  DEPENDENCY_INSTALL_TIMED_OUT:
+    'Dependency installation exceeded its four-minute limit. Retry or ask the deployment operator to check registry connectivity and runner capacity.',
   DEPENDENCY_INSTALL_FAILED:
     'Dependencies could not be installed from the public npm registry. Check the lockfile and package versions. Private registries and install scripts are not available in Health.',
   TEST_ENVIRONMENT_UNAVAILABLE:
@@ -424,6 +441,8 @@ export const healthReasons: Record<string, string> = {
 /** Fixed user-facing failure descriptions; never expose provider exception text. */
 export function healthFailure(reason: string | null, canRetry = true) {
   const actions: Record<string, string> = {
+    NO_APPLICABLE_ANALYSIS:
+      'Choose a category that matches the repository files, or run a full assessment after adding the relevant files or test setup.',
     GIT_UNAVAILABLE:
       'Ask your administrator to update the Preflyt worker image to include Git, then reassess.',
     SOURCE_FETCH_LIMIT_EXCEEDED:

@@ -28,6 +28,7 @@ import { PageHelpDrawer } from '@/components/page-help-drawer'
 import { ResultTimestamp } from '@/components/result-timestamp'
 import { StatusBadge } from '@/components/status-badge'
 import { SurfaceIcon } from '@/components/surface-icon'
+import { HealthCoverageDetails } from '@/features/health/health-coverage-details'
 import { useNavigationSession } from '@/features/workspace/navigation-session'
 import { severityTone, triageLabels, type Finding } from './finding-types'
 import { FindingsOverview, type FindingsSummary } from './findings-summary'
@@ -88,7 +89,9 @@ function FindingsWorkspace() {
       q,
       page,
     ],
-    enabled: session.isSuccess,
+    enabled:
+      session.isSuccess &&
+      !(healthView && category === 'coverage' && repository !== 'all'),
     retry: false,
     gcTime: 0,
     queryFn: async ({ signal }): Promise<Results> => {
@@ -106,6 +109,11 @@ function FindingsWorkspace() {
       return response.json()
     },
   })
+  if (healthView && category === 'coverage' && repository !== 'all') {
+    return (
+      <HealthCoverageDetails repositoryId={repository} assessmentId={health!} />
+    )
+  }
   return (
     <Main className='space-y-6'>
       <PageHeader

@@ -128,3 +128,21 @@ it("validates saved overrides and measured package coverage with no test/coverag
   ])
     expect(validCoverageMeasurement({ ...measure, ...patch })).toBe(false);
 });
+
+it("reports lockfile failures without exposing package-manager output", async () => {
+  // @ts-expect-error Image-owned diagnostic classifier.
+  const { dependencyFailure } = await import("../../../docs/deployment/native-runner/coverage/install-result.mjs");
+  expect(dependencyFailure("npm error `npm ci` can only install packages when your package.json and package-lock.json are in sync. private-token=secret")).toBe("LOCKFILE_OUT_OF_SYNC");
+  expect(dependencyFailure("ERR_PNPM_OUTDATED_LOCKFILE")).toBe("LOCKFILE_OUT_OF_SYNC");
+  expect(dependencyFailure("private-token=secret")).toBe("DEPENDENCY_INSTALL_FAILED");
+  expect(dependencyFailure("", true)).toBe("DEPENDENCY_INSTALL_TIMED_OUT");
+});
+
+it("limits automatic test execution to the saved app, including a root app", () => {
+  const files={"package.json":pkg({test:"node --test"}),"api/package.json":pkg({test:"node --test"}),"api/package-lock.json":"{}","performance/package.json":pkg({test:"node --test"}),"performance/package-lock.json":"{}"};
+  expect(discoverTests(files,{packageDirectory:"api"}).map((p:any)=>p.directory)).toEqual(["api"]);
+  expect(discoverTests(files,{packageDirectory:"."}).map((p:any)=>p.directory)).toEqual(["."]);
+  expect(()=>discoverTests(files,{packageDirectory:"missing"})).toThrow();
+  expect(()=>validateHealthTestSettings({packageDirectory:"../escape"})).toThrow();
+  expect(validateHealthTestSettings({packageDirectory:"api"}).packageDirectory).toBe("api");
+});

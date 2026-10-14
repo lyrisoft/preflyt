@@ -24,20 +24,31 @@ import { nativeRequestIntegrity } from '../execution/native-request-integrity.js
 import { digest } from '../assessments/assessment-digest.js'
 import { notificationsEnabled } from '../notifications/notification-event.js'
 import type { Prisma, RepositoryHealthAssessment } from '../generated/prisma/client.js'
-import { applicableHealthAnalyses, healthReport, comparableHealthTrend, healthTimeline, type HealthReport, supportsNodeCoverage, healthAssessmentResult } from './health-report.js'
+import { healthReport, comparableHealthTrend, healthTimeline, type HealthReport, supportsNodeCoverage, healthAssessmentResult } from './health-report.js'
+import { healthCategories, healthCategoryMetric, selectedHealthAnalyses, type HealthCategory } from './health-categories.js'
 const activeStates = ['QUEUED', 'RUNNING']
 const json = (value: unknown) => value as Prisma.InputJsonValue
 const sessionFor = (row: { actorId: string; organizationId: string }): AuthenticatedSession => ({ authenticated: true, identityId: row.actorId, organizationId: row.organizationId, subject: 'repository-health', email: null, role: 'WORKER' })
 const validRetryAt = (value: unknown): string | null => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(value) && Number.isFinite(Date.parse(value)) ? new Date(value).toISOString() : null
-const dto = (row: RepositoryHealthAssessment) => ({ overallHealth:overallHealth(row.report as HealthReport|null,row.state), id: row.id, branch: row.branch, state: row.state, sourceSha: row.sourceSha, progress: row.state === 'RUNNING' ? ((row.plan as any)?.stage ?? (row.sourceSha ? 'FETCHING_SOURCE' : 'INSPECTING')) : null, includeCoverage: row.includeCoverage, report: row.report ? { ...(row.report as unknown as HealthReport), findings: (row.report as unknown as HealthReport).findings.map(f => ({...f,referenceGuidance:findingReferenceGuidance(f.ruleId)})) } : null, retryAt:validRetryAt((row.plan as any)?.failure?.retryAt), reason: row.reason, cancelled: !!row.cancelledAt, createdAt: row.createdAt, startedAt: row.startedAt, finishedAt: row.finishedAt })
+const dto = (row: RepositoryHealthAssessment) => ({ overallHealth:overallHealth(row.report as HealthReport|null,row.state), id: row.id, branch: row.branch, state: row.state, sourceSha: row.sourceSha, progress: row.state === 'RUNNING' ? ((row.plan as any)?.stage ?? (row.sourceSha ? 'FETCHING_SOURCE' : 'INSPECTING')) : null, category: (row.plan as any)?.requestedCategory ?? null, includeCoverage: row.includeCoverage, report: row.report ? { ...(row.report as unknown as HealthReport), findings: (row.report as unknown as HealthReport).findings.map(f => ({...f,referenceGuidance:findingReferenceGuidance(f.ruleId)})) } : null, retryAt:validRetryAt((row.plan as any)?.failure?.retryAt), reason: row.reason, cancelled: !!row.cancelledAt, createdAt: row.createdAt, startedAt: row.startedAt, finishedAt: row.finishedAt })
+const markSelection = (report: HealthReport, category?: HealthCategory) => {
+ if (category) {
+  report.selection = category
+  report.completeness = 'PARTIAL'
+  report.limits.push('Only the selected category ran. Other categories are not part of this assessment; repository-wide readiness remains incomplete.')
+ }
+ return report
+}
 @Injectable()
 export class RepositoryHealthService {
  constructor(@Inject(PrismaService) private db: PrismaService, @Inject(AuthorizationService) private access: AuthorizationService,
   @Inject(GitHubProviderService) private github: GitHubProviderService, @Inject(NativeStatusService) private runtime: NativeStatusService, @Inject(FindingSourceStore) private sources: FindingSourceStore,
   @Inject(HealthScannerClient) private scanner?: HealthScannerClient) {}
- async start(session: AuthenticatedSession, githubId: string, input: { branch?: string; requestKey?: string; includeCoverage?: boolean } = {}, initial = false) {
+ async start(session: AuthenticatedSession, githubId: string, input: { branch?: string; requestKey?: string; includeCoverage?: boolean; category?: HealthCategory } = {}, initial = false) {
   const repo = await this.access.requireRepository(session, githubId, 'execution.run')
   if(input.includeCoverage !== undefined && typeof input.includeCoverage !== 'boolean') throw new BadRequestException('Coverage requires an explicit boolean choice')
+  if (input.category && !healthCategories.includes(input.category)) throw new BadRequestException('Choose a supported Health category')
+  if (input.category === 'coverage' && input.includeCoverage === false) throw new BadRequestException('Test coverage cannot be excluded from a test run')
   const includeCoverage=input.includeCoverage!==false
   const branch = input.branch ?? (await this.db.repositoryHealthTarget.findUnique({ where: { repositoryId: repo.id } }))?.branch ?? repo.defaultBranch
   if (!branch || !validProfileBranch(branch)) throw new BadRequestException('Choose an accessible assessment branch')
@@ -53,26 +64,45 @@ export class RepositoryHealthService {
     const key = initial ? 'initial:' + target.revision : input.requestKey!
     const duplicate = await tx.repositoryHealthAssessment.findUnique({ where: { repositoryId_requestKey: { repositoryId: repo.id, requestKey: key } } })
     if (duplicate) {
-     if (duplicate.includeCoverage !== includeCoverage || duplicate.branch !== branch || duplicate.organizationId !== session.organizationId || (!initial && duplicate.actorId !== session.identityId)) throw new ConflictException('This request key belongs to a different branch')
+     if (duplicate.includeCoverage !== includeCoverage || ((duplicate.plan as any)?.requestedCategory ?? null) !== (input.category ?? null) || duplicate.branch !== branch || duplicate.organizationId !== session.organizationId || (!initial && duplicate.actorId !== session.identityId)) throw new ConflictException('This request key belongs to a different assessment scope')
      return dto(duplicate)
     }
     const pending = await tx.repositoryHealthAssessment.findFirst({ where: { repositoryId: repo.id, branch, state: { in: activeStates }, cancelledAt: null }, orderBy: { createdAt: 'desc' } })
-    if (pending) {if(pending.includeCoverage!==includeCoverage) throw new ConflictException('An assessment with different test execution scope is already running');return dto(pending)}
+    if (pending) {if(pending.includeCoverage!==includeCoverage || ((pending.plan as any)?.requestedCategory ?? null)!==(input.category??null)) throw new ConflictException('An assessment with a different category is already running');return dto(pending)}
     const count = await tx.repositoryHealthAssessment.count({ where: { repositoryId: repo.id, createdAt: { gte: new Date(Date.now() - 3600000) } } })
     const recent = await tx.repositoryHealthAssessment.findFirst({ where: { repositoryId: repo.id, branch, createdAt: { gte: new Date(Date.now() - 60000) } } })
-    if (count >= 10 || (!initial && recent)) throw new ConflictException('Wait a minute before reassessing; at most 10 assessments per repository per hour')
+    if (count >= 10 || (!initial && !input.category && recent)) throw new ConflictException('Wait a minute before reassessing; at most 10 assessments per repository per hour')
     const row = await tx.repositoryHealthAssessment.create({ data: { repositoryId: repo.id, organizationId: session.organizationId!, actorId: session.identityId,
-     branch, includeCoverage, testSettings: json(target.testSettings??defaultHealthTestSettings), targetRevision: target.revision, requestKey: key } })
-    await tx.auditEvent.create({ data: { event: 'repository.health.requested', actorId: session.identityId, metadata: { repositoryId: githubId, branch, assessmentId: row.id } } })
+     branch, includeCoverage, plan: input.category ? json({requestedCategory:input.category}) : undefined, testSettings: json(target.testSettings??defaultHealthTestSettings), targetRevision: target.revision, requestKey: key } })
+    await tx.auditEvent.create({ data: { event: 'repository.health.requested', actorId: session.identityId, metadata: { repositoryId: githubId, branch, category: input.category??'all', assessmentId: row.id } } })
     return dto(row)
    }, { isolationLevel: 'Serializable' })
   } catch (error) { if (attempt < 2 && ['P2034', 'P2002'].includes((error as any)?.code)) continue; throw error }
   throw new ConflictException('Assessment admission changed; try again')
  }
- async saveTestSettings(session:AuthenticatedSession,githubId:string,input:{command?:string;directory?:string;framework?:string;expectedRevision:number}) {
+ async testApps(session:AuthenticatedSession,githubId:string,branch?:string) {
+  const repo=await this.access.requireRepository(session,githubId,'assessment.read')
+  const target=await this.db.repositoryHealthTarget.findUnique({where:{repositoryId:repo.id}})
+  const selected=branch??target?.branch
+  if(!selected||selected.length>244)throw new BadRequestException('Select a repository branch first')
+  const snapshot=await this.github.readRepositorySnapshot(repo.installationId,repo.githubId,selected)
+  const apps=snapshot.files.flatMap(file=>{
+   if(!/(?:^|\/)package\.json$/.test(file.path)||!file.content||/(?:^|\/)(?:node_modules|vendor|dist|build|coverage|generated)\//.test(file.path))return []
+   try{
+    const manifest=JSON.parse(file.content), script=manifest.scripts?.test
+    if(typeof script!=='string'||!script.trim()||/no test specified/i.test(script))return []
+    const directory=file.path==='package.json'?'.':file.path.slice(0,-13)
+    const framework=/\bvitest\b/.test(script)?'vitest':/\bjest\b/.test(script)?'jest':/\bnode\s+.*--test\b/.test(script)?'node':'unsupported'
+    return [{directory,name:typeof manifest.name==='string'?manifest.name.slice(0,120):directory,framework}]
+   }catch{return []}
+  }).sort((a,b)=>a.directory.localeCompare(b.directory))
+  await this.access.requireRepository(session,githubId,'assessment.read')
+  return {apps,sourceSha:snapshot.sourceSha,branch:snapshot.branch,complete:snapshot.complete && snapshot.files.filter(file=>/(?:^|\/)package\.json$/.test(file.path)).every(file=>typeof file.content==='string')}
+ }
+ async saveTestSettings(session:AuthenticatedSession,githubId:string,input:{command?:string;directory?:string;framework?:string;packageDirectory?:string;expectedRevision:number}) {
   const repo=await this.access.requireRepository(session,githubId,'execution.run')
   let settings
-  try{settings=validateHealthTestSettings({command:input.command??'',directory:input.directory??'.',framework:input.framework??'auto'})}catch(error){throw new BadRequestException((error as Error).message)}
+  try{settings=validateHealthTestSettings({command:input.command??'',directory:input.directory??'.',framework:input.framework??'auto',...(input.packageDirectory!==undefined?{packageDirectory:input.packageDirectory}:{})})}catch(error){throw new BadRequestException((error as Error).message)}
   return this.db.$transaction(async tx=>{
    await tx.$executeRaw`SELECT "id" FROM "GitHubRepository" WHERE "id" = ${repo.id} FOR UPDATE`
    await new AuthorizationService(tx as PrismaService).requireRepository(session,githubId,'execution.run')
@@ -112,8 +142,13 @@ export class RepositoryHealthService {
   const prior = row && await this.db.repositoryHealthAssessment.findFirst({ where: { repositoryId: repo.id, branch: row.branch, state: 'COMPLETED', createdAt: { lt: row.createdAt } }, orderBy: { createdAt: 'desc' } })
   const hotspotFindings=(row?.report as HealthReport|null)?.findings.filter(f=>f.category==='hotspot')??[]
   const reviews=row && hotspotFindings.length ? await this.db.repositoryHealthHotspotReview.findMany({where:{organizationId:session.organizationId!,repositoryId:repo.id,assessmentId:row.id,sourceSha:row.sourceSha!,id:{in:hotspotFindings.map(f=>hotspotDispositionId(row.id,f.fingerprint))}}}) : []
+  const categoryRows = row?.sourceSha ? await this.db.repositoryHealthAssessment.findMany({where:{repositoryId:repo.id,organizationId:session.organizationId!,branch:row.branch,sourceSha:row.sourceSha,state:'COMPLETED'},orderBy:[{createdAt:'desc'},{id:'desc'}],take:40,select:{id:true,finishedAt:true,report:true}}) : []
+  const categoryResults = Object.fromEntries(healthCategories.map(category=>{
+   const source=categoryRows.find(candidate=>{const report=candidate.report as HealthReport|null;return report?.mode==='EXECUTED' && (!report.selection||report.selection==='all'||report.selection===category) && report.analyses.some(a=>category==='security'?['secrets.scan','security.sast','security.dependencies','iac.policy'].includes(a.id):a.id===({reliability:'quality.reliability',maintainability:'quality.maintainability',duplication:'quality.duplication',coverage:'tests.coverage'} as Record<string,string>)[category])})
+   return [category,source?{assessmentId:source.id,finishedAt:source.finishedAt,value:healthCategoryMetric(source.report as HealthReport,category)}:null]
+  }))
   await this.access.requireRepository(session, githubId, 'assessment.read')
-  return {testSettings:target?.testSettings??defaultHealthTestSettings,testSettingsRevision:target?.revision??0, hotspotReview:row?hotspotSummary(row.report as HealthReport|null,reviews,row.id):null, repository: repo.fullName, branch, assessment: row ? dto(row) : null, freshness, checkedAt, history: history.map(h => ({ ...dto(h), report: undefined })), total, page, timeline,
+  return {testSettings:target?.testSettings??defaultHealthTestSettings,testSettingsRevision:target?.revision??0, categoryResults, hotspotReview:row?hotspotSummary(row.report as HealthReport|null,reviews,row.id):null, repository: repo.fullName, branch, assessment: row ? dto(row) : null, freshness, checkedAt, history: history.map(h => ({ ...dto(h), report: undefined })), total, page, timeline,
    trend: row?.report ? comparableHealthTrend(row.report as HealthReport, prior?.report as HealthReport | null) : null }
  }
  /** Upstream head verification is separate from loading immutable saved reports. */
@@ -280,12 +315,15 @@ export class RepositoryHealthService {
    if (!row.sourceSha) {
     const snapshot = await this.github.readRepositorySnapshot(repo.installationId, repo.githubId, row.branch)
     await this.access.requireRepository(session, repo.githubId.toString(), 'execution.run')
-    const profile = discoverRepositoryProfile(snapshot), analyses = applicableHealthAnalyses(snapshot,row.includeCoverage)
-    const plan = this.scanner ? { kind:'AUTOMATIC_HEALTH', stage:'FETCHING_SOURCE', planHash:'automatic-health-v1', ruleIds:analyses.map(a=>a.id), steps:[] as Array<{ruleId:string;reason:string}> } : buildNativePlan({ organizationId: row.organizationId, repositoryId: repo.githubId.toString(), sourceSha: snapshot.sourceSha,
+    const requestedCategory=(row.plan as any)?.requestedCategory as HealthCategory|undefined
+    const profile = discoverRepositoryProfile(snapshot), analyses = selectedHealthAnalyses(snapshot,requestedCategory).filter(a=>row.includeCoverage||a.id!=='tests.coverage')
+    const plan = this.scanner ? { kind:'AUTOMATIC_HEALTH', stage:'FETCHING_SOURCE', planHash:'automatic-health-v1', requestedCategory, ruleIds:analyses.map(a=>a.id), steps:[] as Array<{ruleId:string;reason:string}> } : buildNativePlan({ organizationId: row.organizationId, repositoryId: repo.githubId.toString(), sourceSha: snapshot.sourceSha,
      selectionId: 'health:' + row.id, rules: analyses.filter(a=>a.id!=='tests.coverage'||supportsNodeCoverage(snapshot)).map(a => ({ id: a.id, title: a.title, required: false, capability: 'execution' })) })
+    if (requestedCategory && !analyses.length) throw new Error('NO_APPLICABLE_ANALYSIS')
     const { planHash, ...frozenPlan } = plan
+    if(requestedCategory) (frozenPlan as any).requestedCategory=requestedCategory
     const inspection = { complete: snapshot.complete && profile.complete, fileCount: snapshot.files.length, languages: profile.signals.find(s => s.id === 'languages')?.observations ?? [] }
-    const report = healthReport(inspection, analyses.map(a => ({ id: a.id, title: a.title, state: 'UNAVAILABLE', reason: this.scanner?'SCANNER_PENDING':a.id==='tests.coverage'&&!supportsNodeCoverage(snapshot)?'SUPPORTED_TESTS_REQUIRED':plan.steps.find(s => s.ruleId === a.id)?.reason ?? 'ADAPTER_UNAVAILABLE' })))
+    const report = markSelection(healthReport(inspection, analyses.map(a => ({ id: a.id, title: a.title, state: 'UNAVAILABLE', reason: this.scanner?'SCANNER_PENDING':a.id==='tests.coverage'&&!supportsNodeCoverage(snapshot)?'SUPPORTED_TESTS_REQUIRED':plan.steps.find(s => s.ruleId === a.id)?.reason ?? 'ADAPTER_UNAVAILABLE' }))),requestedCategory)
     report.policyContext = await healthPolicyContext(this.db, repo.id, row.organizationId, snapshot.sourceSha, row.branch)
     await this.db.$transaction(async tx => {
      const updated = await tx.repositoryHealthAssessment.updateMany({ where: { id, leaseToken: token, state: 'RUNNING', cancelledAt: null, sourceSha: null }, data: { sourceSha: snapshot.sourceSha, plan: json(frozenPlan), report: json(report) } })
@@ -314,7 +352,7 @@ export class RepositoryHealthService {
     const runnable = plan.steps.filter((s: any) => s.adapterId).map((s: any) => s.ruleId).sort()
     if (!status.executionAvailable || !runnable.length) {
      const report = row.report as HealthReport
-     const next = healthReport(report.inspection, report.analyses.map(a => ({ ...a, reason: a.reason==='SUPPORTED_TESTS_REQUIRED' ? a.reason : !status.executionAvailable ? status.reason : a.reason })))
+     const next = markSelection(healthReport(report.inspection, report.analyses.map(a => ({ ...a, reason: a.reason==='SUPPORTED_TESTS_REQUIRED' ? a.reason : !status.executionAvailable ? status.reason : a.reason }))),report.selection==='all'?undefined:report.selection)
      next.policyContext = report.policyContext
      await this.finish(row,token,'COMPLETED',next,!status.executionAvailable ? status.reason : 'TOOL_REVIEW_REQUIRED'); return
     }
@@ -335,7 +373,7 @@ export class RepositoryHealthService {
    if (['QUEUED','PREPARING','RUNNING','CANCEL_REQUESTED'].includes(native.state)) { await this.defer(id,token); return }
    const receipt = nativeRequestIntegrity(native) ? verifiedNativeEvidence(native) : null
    const initial = row.report as HealthReport
-   const report = healthReport(initial.inspection, initial.analyses, receipt?.checks ?? [], digest({ version: 1, plan: (row.plan as any)?.toolReviewHash, scope: initial.analyses.map(a => a.id) }))
+   const report = markSelection(healthReport(initial.inspection, initial.analyses, receipt?.checks ?? [], digest({ version: 1, plan: (row.plan as any)?.toolReviewHash, scope: initial.analyses.map(a => a.id) })),initial.selection==='all'?undefined:initial.selection)
    report.policyContext = initial.policyContext
    if (!receipt) report.analyses = report.analyses.map(a => ({ ...a, state: 'UNAVAILABLE', reason: a.reason==='SUPPORTED_TESTS_REQUIRED' ? a.reason : native.reason ?? 'RECEIPT_UNVERIFIED' }))
    await this.finish(row,token,receipt && !receipt.cancelled && receipt.checks.every(c => c.cleanupConfirmed && c.state !== 'INCOMPLETE') ? 'COMPLETED' : 'FAILED', report, receipt ? null : native.reason ?? 'RECEIPT_UNVERIFIED')
@@ -354,7 +392,7 @@ export class RepositoryHealthService {
     const native = await this.db.nativeExecutionRequest.findUnique({ where: { id: row.nativeRequestId } })
     if (native && ['QUEUED','PREPARING','RUNNING','CANCEL_REQUESTED'].includes(native.state)) { await this.defer(id,token); return }
    }
-   await this.finish(row,token,'FAILED',row.report as HealthReport | null, error instanceof GitHubRateLimitError ? 'GITHUB_RATE_LIMITED' : (error as any)?.status === 403 ? 'ACCESS_REVOKED' : 'SOURCE_OR_ANALYSIS_UNAVAILABLE', error instanceof GitHubRateLimitError ? validRetryAt((error.getResponse() as any)?.retryAt) : null)
+   await this.finish(row,token,'FAILED',row.report as HealthReport | null, error instanceof GitHubRateLimitError ? 'GITHUB_RATE_LIMITED' : (error as Error)?.message === 'NO_APPLICABLE_ANALYSIS' ? 'NO_APPLICABLE_ANALYSIS' : (error as any)?.status === 403 ? 'ACCESS_REVOKED' : 'SOURCE_OR_ANALYSIS_UNAVAILABLE', error instanceof GitHubRateLimitError ? validRetryAt((error.getResponse() as any)?.retryAt) : null)
   }
  }
  private async automaticScan(row: any, token: string, session: AuthenticatedSession, repo: any) {
@@ -413,7 +451,7 @@ export class RepositoryHealthService {
    }
    await this.access.requireRepository(session,repo.githubId.toString(),'execution.run')
    const initial=row.report as HealthReport, excluded=(row.plan as any).excludedFiles??0
-   const report=healthReport({...initial.inspection,complete:initial.inspection.complete&&excluded===0},initial.analyses.map(a=>a.id==='tests.coverage'&&!expected.ruleIds.includes('tests.coverage')?{...a,state:'UNAVAILABLE' as const,reason:'TEST_ENVIRONMENT_UNAVAILABLE'}:a),receipt.checks,digest({kind:'automatic-health-v1',tools:receipt.toolReviewHash,scope:initial.analyses.map(a=>a.id)}))
+   const report=markSelection(healthReport({...initial.inspection,complete:initial.inspection.complete&&excluded===0},initial.analyses.map(a=>a.id==='tests.coverage'&&!expected.ruleIds.includes('tests.coverage')?{...a,state:'UNAVAILABLE' as const,reason:'TEST_ENVIRONMENT_UNAVAILABLE'}:a),receipt.checks,digest({kind:'automatic-health-v1',tools:receipt.toolReviewHash,scope:initial.analyses.map(a=>a.id)})),initial.selection==='all'?undefined:initial.selection)
    report.policyContext=initial.policyContext
    if(excluded)report.limits.push(`${excluded} binary, oversized, generated or linked files were excluded from the scanned source scope. Findings and metrics apply to retained files only.`)
    await this.finish(row,token,receipt.cancelled?'CANCELLED':receipt.checks.some(c=>!c.cleanupConfirmed)?'FAILED':'COMPLETED',report,receipt.cancelled?'EXECUTION_CANCELLED':null)
@@ -427,7 +465,7 @@ export class RepositoryHealthService {
    const response=(error as any)?.getResponse?.()
    const reason=error instanceof HealthGitSourceError?error.code:(error as any)?.status===403?'ACCESS_REVOKED':response?.code==='GITHUB_RATE_LIMITED'?'GITHUB_RATE_LIMITED':preparingSource?'SOURCE_ACCESS_UNAVAILABLE':'SCANNER_UNAVAILABLE'
    const report=row.report as HealthReport
-   const next=healthReport(report.inspection,report.analyses.map(a=>({...a,reason})))
+   const next=markSelection(healthReport(report.inspection,report.analyses.map(a=>({...a,reason}))),report.selection==='all'?undefined:report.selection)
    next.policyContext=report.policyContext
    await this.finish(row,token,'FAILED',next,reason,reason==='GITHUB_RATE_LIMITED'?validRetryAt(response?.retryAt):null)
   }

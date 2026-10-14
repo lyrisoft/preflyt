@@ -19,6 +19,7 @@ export const healthAnalyses = [
 ] as const
 export type HealthFinding = ReportFinding & { checkId: string; evidence: 'ANALYZER_REPORTED'; guidance?: FindingGuidance; referenceGuidance?: FindingReferenceGuidance }
 export type HealthReport = {
+ selection?: 'all' | 'security' | 'reliability' | 'maintainability' | 'duplication' | 'coverage';
  findingComparison?: { version: 1; key: string; checkIds: string[] };
  policyContext?: HealthPolicyContext;
  version: 1; completeness: 'COMPLETE' | 'PARTIAL'; mode: 'INSPECTION_ONLY' | 'EXECUTED';
@@ -136,7 +137,7 @@ export function healthTimeline(current: HealthReport | null, records: Array<{
  id: string; state: string; sourceSha: string | null; finishedAt: Date | null; report: HealthReport | null
 }>) {
  if (!current) return []
- return records.filter(row => row.state === 'COMPLETED' && row.sourceSha && row.finishedAt && row.report?.mode === 'EXECUTED' &&
+ return records.filter(row => row.state === 'COMPLETED' && row.sourceSha && row.finishedAt && row.report?.mode === 'EXECUTED' && (!row.report.selection || row.report.selection === 'all') &&
   (row.report.findings.length > 0 || row.report.completeness === 'COMPLETE' || row.report.analyses.some(analysis =>
    analysis.reportHash && Number.isSafeInteger(analysis.findingsRetained) && analysis.findingsRetained! >= 0)))
   .sort((a,b) => a.finishedAt!.getTime() - b.finishedAt!.getTime() || a.id.localeCompare(b.id))
@@ -153,6 +154,7 @@ export function healthTimeline(current: HealthReport | null, records: Array<{
 /** health-assessment-result-v1: outcome within the recorded applicable scope. */
 export function healthAssessmentResult(report: HealthReport | null | undefined, state: string): 'PASS' | 'FAIL' | 'INCOMPLETE' | null {
  if(state!=='COMPLETED') return null
+ if(report?.selection && report.selection !== 'all') return 'INCOMPLETE'
  if(!report || report.mode!=='EXECUTED' || report.completeness!=='COMPLETE' || !report.inspection?.complete || !report.analyses?.length) return 'INCOMPLETE'
  if(report.analyses.some(analysis=>analysis.state==='FAIL') || report.findings.length>0) return 'FAIL'
  return report.analyses.every(analysis=>analysis.state==='PASS' && analysis.findingsRetained===0 && analysis.findingsReported===0) ? 'PASS' : 'INCOMPLETE'

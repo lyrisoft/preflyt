@@ -36,5 +36,6 @@ docs/deployment/native-runner/coverage/*
 !docs/deployment/native-runner/coverage/run.mjs
 !docs/deployment/native-runner/coverage/discovery.mjs
 !docs/deployment/native-runner/coverage/install.mjs
+!docs/deployment/native-runner/coverage/install-result.mjs
 !docs/deployment/native-runner/coverage/repository-run.mjs
 !docs/deployment/native-runner/coverage/lcov.mjs

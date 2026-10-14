@@ -62,6 +62,12 @@ try {
   const installed = JSON.parse(await bounded(root + "/.preflyt-install.json"));
   if (!installed.ready) {
     reason = installed.reason;
+    if (reason === "DEPENDENCY_INSTALL_FAILED" && Array.isArray(installed.testResults)) {
+      for (const result of installed.testResults.slice(0, 40)) {
+        if (result && (result.directory === "." || typeof result.directory === "string" && result.directory.length <= 244 && /^[\w./-]+$/.test(result.directory) && !result.directory.split("/").some((part) => !part || part === "." || part === "..")) && ["vitest", "jest", "node"].includes(result.framework) && result.state === "INCOMPLETE" && result.reason === reason)
+          testResults.push(result);
+      }
+    }
     throw new Error();
   }
   const { packages } = JSON.parse(
@@ -90,6 +96,10 @@ try {
   for (let index = 0; index < packages.length; index++) {
     const pkg = packages[index],
       out = "/scratch/coverage-" + index;
+    if (["DEPENDENCY_INSTALL_FAILED", "LOCKFILE_OUT_OF_SYNC", "DEPENDENCY_INSTALL_TIMED_OUT"].includes(pkg.installFailure)) {
+      testResults.push({ directory: pkg.directory, framework: pkg.framework, state: "INCOMPLETE", reason: pkg.installFailure });
+      continue;
+    }
     reason = "TEST_RUNNER_FAILED";
     try {
       await mkdir(out);

@@ -62,11 +62,11 @@ import {
   useHealth,
   useHealthFreshness,
   type HealthAssessment,
+  type HealthCategory,
 } from './health-api'
 import { healthDimensionValues } from './health-dimensions'
 import { HealthHelp } from './health-help'
 import { HealthPolicyEvidence } from './health-policy-evidence'
-import { HealthTestSettings } from './health-test-settings'
 import { HealthTimelineChart } from './health-timeline-chart'
 
 const pageSize = 10
@@ -139,11 +139,14 @@ export function RepositoryHealth({
     await cache.invalidateQueries({ queryKey: ['health-freshness'] })
   }
   const start = useMutation({
-    mutationFn: async (value: string) => {
+    mutationFn: async (value: {
+      branch: string
+      category?: HealthCategory
+    }) => {
       return healthRequest<HealthAssessment>(
         `repositories/${repositoryId}/health`,
         undefined,
-        { branch: value, requestKey: crypto.randomUUID() }
+        { ...value, requestKey: crypto.randomUUID() }
       )
     },
     onSuccess: async () => {
@@ -185,34 +188,60 @@ export function RepositoryHealth({
         row?.includeCoverage ?? false
       )
     : null
+  const metricResult = (category: HealthCategory, fallback: string) => {
+    const source = data?.categoryResults?.[category]
+    return {
+      category,
+      value:
+        source?.value ??
+        (report?.selection &&
+        report.selection !== 'all' &&
+        report.selection !== category
+          ? 'Unavailable'
+          : fallback),
+      assessmentId: source?.assessmentId ?? row?.id,
+      finishedAt:
+        source?.finishedAt ??
+        (report?.selection === category || !report?.selection
+          ? row?.finishedAt
+          : null),
+    }
+  }
   const metrics = dimensions
     ? [
         {
           label: 'Security',
-          value: dimensions.security,
-          description: findingMetricDescription(dimensions.security),
+          ...metricResult('security', dimensions.security),
+          description: findingMetricDescription(
+            metricResult('security', dimensions.security).value
+          ),
           icon: ShieldCheck,
           tone: 'blue' as SurfaceTone,
         },
         {
           label: 'Reliability',
-          value: dimensions.reliability,
-          description: findingMetricDescription(dimensions.reliability),
+          ...metricResult('reliability', dimensions.reliability),
+          description: findingMetricDescription(
+            metricResult('reliability', dimensions.reliability).value
+          ),
           icon: Bug,
           tone: 'blue' as SurfaceTone,
         },
         {
           label: 'Maintainability',
-          value: dimensions.maintainability,
-          description: findingMetricDescription(dimensions.maintainability),
+          ...metricResult('maintainability', dimensions.maintainability),
+          description: findingMetricDescription(
+            metricResult('maintainability', dimensions.maintainability).value
+          ),
           icon: Wrench,
           tone: 'teal' as SurfaceTone,
         },
         {
           label: 'Duplication',
-          value: dimensions.duplication,
+          ...metricResult('duplication', dimensions.duplication),
           description:
-            dimensions.duplication === 'Unavailable'
+            metricResult('duplication', dimensions.duplication).value ===
+            'Unavailable'
               ? 'No verified duplication measurement'
               : 'Duplicated analyzed lines',
           icon: Copy,
@@ -220,10 +249,12 @@ export function RepositoryHealth({
         },
         {
           label: 'Test coverage',
-          value: dimensions.coverage,
-          description: report?.measurements?.coverage
-            ? 'Recorded line coverage'
-            : 'No completed test coverage report',
+          ...metricResult('coverage', dimensions.coverage),
+          description:
+            metricResult('coverage', dimensions.coverage).value !==
+            'Unavailable'
+              ? 'Recorded line coverage'
+              : 'No completed test coverage report',
           icon: TestTubeDiagonal,
           tone: 'teal' as SurfaceTone,
         },
@@ -274,7 +305,7 @@ export function RepositoryHealth({
                     start.isPending ||
                     (active && chosenBranch === row.branch)
                   }
-                  onClick={() => start.mutate(chosenBranch)}
+                  onClick={() => start.mutate({ branch: chosenBranch })}
                 >
                   {start.isPending ? (
                     <LoaderCircle className='motion-safe:animate-spin' />
@@ -324,6 +355,15 @@ export function RepositoryHealth({
                 <span className='inline-flex items-center gap-1.5'>
                   <Clock3 className='size-3.5' />
                   Assessed <ResultTimestamp value={row.finishedAt} />
+                </span>
+              )}
+              {row.category && (
+                <span className='font-medium text-foreground'>
+                  {row.category === 'coverage'
+                    ? 'Tests and coverage'
+                    : row.category.charAt(0).toUpperCase() +
+                      row.category.slice(1)}{' '}
+                  only
                 </span>
               )}
             </div>
@@ -507,6 +547,17 @@ export function RepositoryHealth({
         </Card>
       ) : (
         <>
+          {row.category && !active && (
+            <p className='rounded-lg border bg-muted/20 px-4 py-3 text-sm text-muted-foreground'>
+              This assessment ran{' '}
+              {row.category === 'coverage'
+                ? 'tests and coverage'
+                : row.category}{' '}
+              only. Other cards show their latest saved result at the same
+              commit, with each run date shown below. Open Assessment history
+              for the complete reports.
+            </p>
+          )}
           {report && !active && (
             <div className='grid gap-4 sm:grid-cols-2 xl:grid-cols-5'>
               {metrics.map((metric) => (
@@ -515,23 +566,18 @@ export function RepositoryHealth({
                   to='/findings'
                   search={{
                     origin: 'health',
-                    health: row!.id,
+                    health: metric.assessmentId ?? row.id,
                     repository: repositoryId,
-                    category: (
-                      {
-                        Security: 'security',
-                        Reliability: 'reliability',
-                        Maintainability: 'maintainability',
-                        Duplication: 'duplication',
-                        'Test coverage': 'coverage',
-                      } as const
-                    )[metric.label as 'Security'],
-                    kind:
-                      metric.label === 'Test coverage' ? 'gaps' : 'findings',
+                    category: metric.category,
+                    kind: metric.category === 'coverage' ? 'gaps' : 'findings',
                     page: 1,
                   }}
-                  aria-label={`View ${metric.label.toLowerCase()} findings`}
-                  className='block rounded-xl outline-offset-4 focus-visible:outline-2 focus-visible:outline-ring'
+                  aria-label={
+                    metric.category === 'coverage'
+                      ? 'Open test coverage details'
+                      : `View ${metric.label.toLowerCase()} findings`
+                  }
+                  className='block h-full rounded-xl outline-offset-4 focus-visible:outline-2 focus-visible:outline-ring'
                 >
                   <Card className='h-full gap-0 transition-colors hover:border-primary/40'>
                     <CardHeader className='flex flex-row items-center justify-between gap-3 pb-4'>
@@ -555,19 +601,14 @@ export function RepositoryHealth({
                       <p className='mt-1.5 text-xs text-muted-foreground'>
                         {metric.description}
                       </p>
+                      <p className='mt-2 text-xs text-muted-foreground'>
+                        Assessed <ResultTimestamp value={metric.finishedAt} />
+                      </p>
                     </CardContent>
                   </Card>
                 </Link>
               ))}
             </div>
-          )}
-          {data && (
-            <HealthTestSettings
-              key={`${repositoryId}:${data.testSettingsRevision ?? 0}`}
-              repositoryId={repositoryId}
-              data={data}
-              allowed={allowed}
-            />
           )}
           {report && !active && (
             <AnalysisCoverage
@@ -578,6 +619,13 @@ export function RepositoryHealth({
               hotspotReview={data?.hotspotReview}
               headCheckedAt={headCheckedAt}
               finishedAt={row.finishedAt}
+              onRunCategory={
+                allowed && chosenBranch
+                  ? (category) =>
+                      start.mutate({ branch: chosenBranch, category })
+                  : undefined
+              }
+              runPending={start.isPending}
             />
           )}
           <div className='grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_350px]'>
@@ -835,6 +883,14 @@ export function RepositoryHealth({
                                     : 'Commit not pinned yet')}
                               </code>
                               <ResultTimestamp value={h.finishedAt} />
+                              {h.category && (
+                                <span>
+                                  {h.category === 'coverage'
+                                    ? 'Tests and coverage'
+                                    : h.category}{' '}
+                                  only
+                                </span>
+                              )}
                             </span>
                             {h.state === 'FAILED' && (
                               <span className='block space-y-1 text-sm'>

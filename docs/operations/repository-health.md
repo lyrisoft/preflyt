@@ -10,13 +10,13 @@ P5 adds Health to the existing API and integration worker. It does not add a ser
 4. Explicitly select a new accessible repository, or start Health on one previously selected. Upgrade does not scan historical selections automatically.
 5. Verify Queued → Running → saved report, branch/SHA, analysis limits, one completion notification and the Health deep link. No standards, policy or GitHub protection should change.
 
-The `repository-health` BullMQ queue transports only persisted assessment IDs. A five-second recovery loop reconstructs eligible jobs from PostgreSQL. A 120-second fenced lease prevents duplicate completion; active native results are polled through deferred five-second leases. Health admits at most two running assessments globally and one per organization. Manual admission allows ten assessments per repository per hour and one per minute on a branch. These are code limits for this increment, not user-facing configuration requirements.
+The `repository-health` BullMQ queue transports only persisted assessment IDs. A five-second recovery loop reconstructs eligible jobs from PostgreSQL. A 120-second fenced lease prevents duplicate completion; active native results are polled through deferred five-second leases. Health admits at most two running assessments globally and one per organization. Manual admission allows ten assessments per repository per hour and one active assessment per repository. Full reassessments also have a one-minute branch cooldown; category runs do not. These are code limits for this increment, not user-facing configuration requirements.
 
 A 35-minute Health deadline requests cancellation of admitted native work. The existing native runtime has its own execution deadlines. Processing remains active until cleanup is acknowledged; it never claims a cancelled sandbox was removed merely because cancellation was requested. Turning off new native execution leaves cleanup reconciliation active.
 
 ## Analyzer qualification
 
-Use the existing [native execution runbook](native-execution.md), independent runtime approval and tool reviews. Do not enable scanner execution because UI or generated fixture tests passed. P5 needs no AI provider and does not install dependencies or execute repository-defined commands.
+Use the existing [native execution runbook](native-execution.md), independent runtime approval and tool reviews. Do not enable scanner execution because UI or generated fixture tests passed. P5 needs no AI provider. The optional test coverage analyzer prepares public dependencies with install scripts disabled, then runs the repository's configured tests in a separate restricted environment.
 
 | Default check | Adapter / license contract | Qualification and coverage |
 | --- | --- | --- |
@@ -27,7 +27,7 @@ Use the existing [native execution runbook](native-execution.md), independent ru
 
 Applicability is inferred from bounded GitHub tree inspection. Language/path recognition is not proof of complete analyzer coverage. All image, version, configuration and review identities are recorded in the frozen native plan. Existing source export and runner resource/size constraints remain in force. Large repositories or unsupported tools produce partial results.
 
-No approved runtime produces a Completed, Partial, Inspection-only report with unavailable analysis and issue counts. It does not produce an empty successful scan. Reliability, maintainability, duplication, complexity and test coverage are not implemented metrics.
+An unavailable runtime produces a partial inspection-only report with unavailable analysis and issue counts; it does not produce an empty successful scan. Reliability, maintainability, duplication and test coverage have bounded implemented analyzers, while complexity remains unavailable. Category-only runs retain their exact branch and commit and always remain partial for repository-wide readiness. The graph excludes them from full-scan comparisons.
 
 ## Evidence and access
 
