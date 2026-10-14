@@ -18,7 +18,7 @@ import { join, resolve } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { digest } from '../assessments/assessment-digest.js'
 import { nativeAdmission } from './native-admission.js'
-import { nativeAdapters, type NativeRuleId } from './native-plan.js'
+import { nativeAdapters, type NativeRuleId, type NativeToolReview } from './native-plan.js'
 import { createNativeWorkspace } from './native-workspace.js'
 import { verifyNativeSourceBundle } from './native-source.js'
 import {
@@ -50,6 +50,13 @@ export type JobRecord = {
   cleanupPending?: boolean
   signature?: string
 }
+type NativeJobAdmission = (expected: NativeReceiptExpected) => {
+  reviewed: { backend: 'docker' | 'kubernetes'; approvalHash: string; approval: {
+    environmentId: string; controlsHash: string; controllerPublicKey: string
+  } }
+  tools: { reviews: NativeToolReview[]; reviewHash: string }
+  rules: NativeRuleId[]
+}
 const uuid = (v: string) =>
   /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(
     v,
@@ -65,13 +72,7 @@ export class NativeControllerJobs {
       runNativeDockerCheck(scope, ruleId, path, signal),
     private recover?: (expected: NativeReceiptExpected) => Promise<void>,
     private backend: 'docker' | 'kubernetes' = 'docker',
-    private admission: (expected: NativeReceiptExpected) => {
-      reviewed: { backend: 'docker' | 'kubernetes'; approvalHash: string; approval: {
-        environmentId: string; controlsHash: string; controllerPublicKey: string
-      } };
-      tools: { reviews: import('./native-plan.js').NativeToolReview[]; reviewHash: string };
-      rules: NativeRuleId[]
-    } = nativeAdmission,
+    private admission: NativeJobAdmission = nativeAdmission,
   ) {}
   get available() {
     return this.ready
