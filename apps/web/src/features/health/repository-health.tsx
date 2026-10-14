@@ -16,6 +16,7 @@ import {
   ArrowUpRight,
   GitCommitHorizontal,
   LoaderCircle,
+  AlertCircle,
 } from 'lucide-react'
 import type { SurfaceTone } from '@/lib/surface-tones'
 import { Button } from '@/components/ui/button'
@@ -56,6 +57,8 @@ import {
   HealthRequestError,
   healthTone,
   healthLabel,
+  healthFailure,
+  healthReasons,
   useHealth,
   useHealthFreshness,
   type HealthAssessment,
@@ -393,6 +396,52 @@ export function RepositoryHealth({
                   ? 'Waiting for the analysis runtime to confirm cleanup.'
                   : 'Progress updates automatically. The assessment stays pinned to one commit.'}
               </p>
+            </div>
+          </div>
+        )}
+
+        {row?.state === 'FAILED' && (
+          <div
+            role='alert'
+            aria-label='Assessment failure'
+            className='border-t bg-destructive/5 p-4'
+          >
+            <div className='flex items-start gap-3'>
+              <SurfaceIcon icon={AlertCircle} tone='amber' />
+              <div className='min-w-0 space-y-2 text-sm'>
+                <p className='font-semibold'>Assessment failed</p>
+                <p>{healthFailure(row.reason, allowed).message}</p>
+                {!row.sourceSha && (
+                  <p className='text-muted-foreground'>
+                    Stopped before the commit was pinned. No scanners or tests
+                    ran.
+                  </p>
+                )}
+                <p className='text-muted-foreground'>
+                  {healthFailure(row.reason, allowed).action}
+                </p>
+                {row.retryAt && (
+                  <p>
+                    Retry after <ResultTimestamp value={row.retryAt} />
+                  </p>
+                )}
+                <details className='text-xs text-muted-foreground'>
+                  <summary className='w-fit cursor-pointer rounded-sm focus-visible:outline-2 focus-visible:outline-ring'>
+                    Technical details
+                  </summary>
+                  <p className='mt-2 break-all'>Assessment ID: {row.id}</p>
+                  <p>
+                    Reason:{' '}
+                    {row.reason &&
+                    Object.prototype.hasOwnProperty.call(
+                      healthReasons,
+                      row.reason
+                    )
+                      ? row.reason
+                      : '-'}
+                  </p>
+                </details>
+              </div>
             </div>
           </div>
         )}
@@ -760,8 +809,8 @@ export function RepositoryHealth({
                         <CardTitle>Assessment history</CardTitle>
                       </div>
                       <CardDescription>
-                        Immutable reports for {row.branch}. Each retains its
-                        original commit and limits.
+                        Saved assessments for {row.branch}, including results
+                        and failed attempts.
                       </CardDescription>
                     </CardHeader>
                     <CardContent className='space-y-2 px-5 pb-5'>
@@ -776,12 +825,33 @@ export function RepositoryHealth({
                             setFindingPage(1)
                           }}
                         >
-                          <span className='flex flex-wrap items-center gap-3 text-xs text-muted-foreground'>
-                            <GitCommitHorizontal className='size-4' />
-                            <code className='text-foreground'>
-                              {h.sourceSha?.slice(0, 7) ?? 'Not pinned yet'}
-                            </code>
-                            <ResultTimestamp value={h.finishedAt} />
+                          <span className='min-w-0 flex-1 space-y-2'>
+                            <span className='flex flex-wrap items-center gap-3 text-xs text-muted-foreground'>
+                              <GitCommitHorizontal className='size-4' />
+                              <code className='text-foreground'>
+                                {h.sourceSha?.slice(0, 7) ??
+                                  (h.state === 'FAILED'
+                                    ? 'Stopped before scanning'
+                                    : 'Commit not pinned yet')}
+                              </code>
+                              <ResultTimestamp value={h.finishedAt} />
+                            </span>
+                            {h.state === 'FAILED' && (
+                              <span className='block space-y-1 text-sm'>
+                                <span className='block'>
+                                  {healthFailure(h.reason, allowed).message}
+                                </span>
+                                <span className='block text-xs text-muted-foreground'>
+                                  {healthFailure(h.reason, allowed).action}
+                                </span>
+                                {h.retryAt && (
+                                  <span className='block text-xs text-muted-foreground'>
+                                    Retry after{' '}
+                                    <ResultTimestamp value={h.retryAt} />
+                                  </span>
+                                )}
+                              </span>
+                            )}
                           </span>
                           <StatusBadge
                             tone={

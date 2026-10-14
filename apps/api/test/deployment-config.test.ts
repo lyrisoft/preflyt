@@ -34,6 +34,7 @@ it('provides root deployment configuration and a scoped versioned publishing wor
 
 it('ships Health scanner packaging without mounting engine authority or signing keys into the application',()=>{
  const dockerfile=readFileSync(resolve(root,'deploy/api.Dockerfile'),'utf8')
+ expect(dockerfile).toMatch(/apt-get install[^\n]+\bgit\b/)
  expect(dockerfile).toContain('AS health-scanner')
  expect(dockerfile).toContain('COPY docs/deployment/native-runner /opt/preflyt/scanner-tools')
  expect(dockerfile).toContain('docker-buildx')

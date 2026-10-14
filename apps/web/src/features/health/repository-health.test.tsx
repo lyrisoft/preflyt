@@ -10,6 +10,10 @@ const state = vi.hoisted(() => ({
   mode: 'EXECUTED',
   state: 'COMPLETED',
   progress: 'SCANNING',
+  failureReason: null as string | null,
+  noReport: false,
+  unpinned: false,
+  retryAt: null as string | null,
   role: 'OWNER',
   timeline: false,
   duplication: false,
@@ -278,9 +282,10 @@ const row = () => ({
   branch: 'development',
   state: state.state,
   progress: state.progress,
-  sourceSha: sha,
-  report: report(),
-  reason: null,
+  sourceSha: state.unpinned ? null : sha,
+  report: state.noReport ? null : report(),
+  reason: state.failureReason,
+  retryAt: state.retryAt,
   cancelled: false,
   createdAt: new Date().toISOString(),
   finishedAt: new Date().toISOString(),
@@ -288,6 +293,10 @@ const row = () => ({
 beforeEach(() => {
   state.mode = 'EXECUTED'
   state.state = 'COMPLETED'
+  state.failureReason = null
+  state.noReport = false
+  state.unpinned = false
+  state.retryAt = null
   state.progress = 'SCANNING'
   state.role = 'OWNER'
   state.timeline = false
@@ -1103,3 +1112,83 @@ it('shows test configuration read-only without execution permission', async () =
     .element(page.getByRole('button', { name: 'Save test settings' }))
     .not.toBeInTheDocument()
 })
+
+it('explains a pre-scan GitHub rate-limit failure without needing a report, including history and retry time', async () => {
+  state.state = 'FAILED'
+  state.noReport = true
+  state.unpinned = true
+  state.failureReason = 'GITHUB_RATE_LIMITED'
+  state.retryAt = '2026-10-14T07:00:00Z'
+  await page.viewport(320, 900)
+  await mount()
+  const failure = page.getByRole('alert', { name: 'Assessment failure' })
+  await expect
+    .element(
+      failure.getByText(
+        'Stopped before the commit was pinned. No scanners or tests ran.'
+      )
+    )
+    .toBeVisible()
+  await expect
+    .element(
+      failure.getByText(
+        'Wait for GitHub’s request limit to reset, then select Reassess.'
+      )
+    )
+    .toBeVisible()
+  await expect
+    .element(
+      failure.getByText('GitHub has temporarily limited repository requests.', {
+        exact: false,
+      })
+    )
+    .toBeVisible()
+  await expect
+    .element(failure.getByText('Retry after', { exact: false }))
+    .toBeVisible()
+  const history = page.getByLabelText('Assessment history', { exact: true })
+  await expect
+    .element(history.getByText('Stopped before scanning'))
+    .toBeVisible()
+  await expect
+    .element(
+      history.getByText('GitHub has temporarily limited repository requests.', {
+        exact: false,
+      })
+    )
+    .toBeVisible()
+  expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(320)
+  await failure.getByText('Technical details').click()
+  await expect.element(failure.getByText(`Assessment ID: ${id}`)).toBeVisible()
+  await page.getByRole('button', { name: 'Reassess', exact: true }).click()
+  await expect
+    .poll(() =>
+      state.fetch.mock.calls.some(([, init]) => init?.method === 'POST')
+    )
+    .toBe(true)
+  await page.viewport(1280, 800)
+})
+it.each(['password=provider-secret', '__proto__', 'constructor'])(
+  'explains unknown failure %s safely and keeps retry unavailable to readers',
+  async (reason) => {
+    state.state = 'FAILED'
+    state.noReport = true
+    state.unpinned = true
+    state.role = 'READER'
+    state.failureReason = reason
+    await mount()
+    const failure = page.getByRole('alert', { name: 'Assessment failure' })
+    await expect
+      .element(
+        failure.getByText(
+          'The assessment stopped without a usable result. A specific cause was not recorded.'
+        )
+      )
+      .toBeVisible()
+    await failure.getByText('Technical details').click()
+    expect(document.body.textContent).not.toContain('provider-secret')
+    await expect
+      .element(page.getByRole('button', { name: 'Reassess', exact: true }))
+      .not.toBeInTheDocument()
+  }
+)

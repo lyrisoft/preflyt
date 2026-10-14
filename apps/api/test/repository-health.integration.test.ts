@@ -1,3 +1,5 @@
+import { HealthGitSourceError } from '../src/health/health-git-source.js'
+import { GitHubRateLimitError } from '../src/github/github-rate-limit.js'
 import { FindingSourceStore } from '../src/findings/finding-source-store.service.js'
 import 'reflect-metadata'
 import { NestFactory } from '@nestjs/core'
@@ -427,4 +429,27 @@ it('saves scoped test overrides with CSRF, conflict detection, audit and immutab
  expect((await service.get(owner,'51')).testSettings).toMatchObject({command:settings.command,framework:'jest'})
  expect((await fixture.prisma.repositoryHealthAssessment.findUniqueOrThrow({where:{id:first.id}})).testSettings).toMatchObject({command:'',framework:'auto'})
  expect(await fixture.prisma.auditEvent.count({where:{event:'repository.health.tests.configured'}})).toBe(1)
+})
+
+it('retains a safe GitHub retry time and exposes the reason for pre-report failures only to authorized readers', async () => {
+ provider.readRepositorySnapshot.mockRejectedValueOnce(new GitHubRateLimitError(60000))
+ const queued=await service.initial(owner.identityId,'51')
+ await service.process(queued.id)
+ const read=await service.get(owner,'51')
+ expect(read.assessment).toMatchObject({state:'FAILED',sourceSha:null,report:null,reason:'GITHUB_RATE_LIMITED'})
+ expect(Date.parse(read.assessment!.retryAt!)).toBeGreaterThan(Date.now())
+ expect(read.history[0].retryAt).toBe(read.assessment!.retryAt)
+ expect(JSON.stringify(read)).not.toContain('retryAfterSeconds')
+ await expect(service.get(outsider,'51')).rejects.toThrow()
+})
+
+it.each(['GIT_UNAVAILABLE','SOURCE_FETCH_FAILED','SOURCE_FETCH_TIMED_OUT','SOURCE_FETCH_LIMIT_EXCEEDED'] as const)('records safe Git failure %s without admitting scanners',async(code)=>{
+ const scanner={package:vi.fn(async()=>({})),call:vi.fn()}
+ provider.readHealthScanSource.mockRejectedValueOnce(new HealthGitSourceError(code))
+ service=new RepositoryHealthService(fixture.prisma,new AuthorizationService(fixture.prisma),provider as any,runtime as any,new FindingSourceStore(fixture.prisma,provider as any),scanner as any)
+ const row=await service.initial(owner.identityId,'51');await service.process(row.id)
+ const result=await service.get(owner,'51')
+ expect(result.assessment).toMatchObject({state:'FAILED',reason:code,sourceSha:sha,report:{mode:'INSPECTION_ONLY'}})
+ expect(result.assessment!.report!.analyses.every(a=>a.reason===code)).toBe(true)
+ expect(scanner.call).not.toHaveBeenCalled()
 })

@@ -98,6 +98,14 @@ The **Security hotspots** card counts findings detected automatically at the ass
 
 The hotspot review table and audit events are separate from immutable scan results. Reviewing never alters findings, CI evidence or GitHub merge protection. **Fix required** remains a recorded decision until a later assessment supplies new evidence.
 
+### Fetching source and assessment failures
+
+Health downloads scan source with a shallow Git fetch of the pinned commit, using a temporary GitHub App token scoped to the selected repository. The source broker reads Git objects directly; it never checks out a worktree or runs hooks, filters, submodules or Git LFS. File/tree hashes, executable modes and existing source limits are verified before handing the credential-free bundle to scanners. The temporary object store is deleted after success or failure. The worker image includes Git.
+
+GitHub access checks, branch inspection, repository profiles and finding excerpts still use the GitHub API. Git source retrieval reduces bulk file API requests; it does not remove authentication or API rate limits. A fetch is bounded to ten minutes, monitored against a 256 MiB temporary-object budget and subject to the existing 64 MiB selected-source limit. Download-limit, timeout, unavailable Git and access failures remain failed assessments with explicit next steps.
+
+Failed assessments show their reason in the report header and history, including attempts that stopped before a commit was pinned. GitHub rate-limit failures show a retry time when it was recorded. **Technical details** provides the assessment ID and a recognized failure code for support. Provider messages, credentials and raw Git stderr are never displayed. Select **Reassess** after resolving the problem; users without assessment permission ask a repository maintainer to retry.
+
 ### Automatic test coverage
 
 Select **Reassess** to detect and run the repository’s existing test setup. No individual tests need to be selected. Preflyt reads package manifests, lockfiles and framework configuration names as data; the repository’s test runner then selects tests using its own configuration.

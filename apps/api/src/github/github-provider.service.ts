@@ -3,7 +3,7 @@ import { configurationValue } from '../configuration/runtime-configuration.js'
 import { sameReviewPr, prReviewSource } from '../intelligence/pr-review-context.js'
 import type { PullRequestContext } from '../github-events/pull-request-context.js'
 import { readPinnedNativeSource } from '../execution/native-source.js'
-import { readHealthScanSource } from '../health/health-scan-source.js'
+import { readHealthGitSource } from '../health/health-git-source.js'
 import { attributedSuite, summarizeRulesetSuites, type RulesetSuite } from './ruleset-insights.js'
 import { rulesetSummary, rulesetDetail } from './github-ruleset.js'
 import { normalizeGitHubEvent } from '../github-events/github-event.js'
@@ -386,8 +386,7 @@ export class GitHubProviderService {
   async readHealthScanSource(installationId: bigint, repositoryId: bigint, sourceSha: string, signal?: AbortSignal, includeTestAssets=false) {
     if (!/^[a-f0-9]{40}$/.test(sourceSha)) throw new BadRequestException('Use an exact commit for health scanning')
     const reader = await this.openRepository(installationId, repositoryId, 'contents', signal, 10 * 60_000)
-    const base = `/repos/${encodeURIComponent(reader.metadata.owner.login)}/${encodeURIComponent(reader.metadata.name)}`
-    return readHealthScanSource(reader.request, base, repositoryId.toString(), sourceSha, signal, reader.healthBlobs, includeTestAssets)
+    return reader.healthSource(sourceSha,includeTestAssets)
   }
 
   async verifyRepositoryAccess(installationId: bigint, repositoryId: bigint) {
@@ -1577,44 +1576,10 @@ export class GitHubProviderService {
       throw new ForbiddenException(
         'GitHub repository identity could not be verified',
       )
-    // Fixed read-only GraphQL batches avoid one REST request per source file.
-    // OIDs originate in the verified Git tree; content is still hashed by the source verifier.
-    const healthBlobs = async (entries: import('../execution/native-source.js').GitSourceEntry[]) => {
-      const blobs = new Map<string, unknown>()
-      const unique = [...new Map(entries.map(entry => [entry.sha, entry])).values()]
-      let cursor = 0
-      while (cursor < unique.length) {
-        signal.throwIfAborted()
-        const batch: typeof unique = []
-        let size = 0
-        while (cursor < unique.length && batch.length < 40 && size + (unique[cursor].size ?? 0) <= 4 * 1024 * 1024) {
-          const entry = unique[cursor++]
-          if (!/^[a-f0-9]{40}$/.test(entry.sha)) throw new Error('Invalid source object')
-          batch.push(entry); size += entry.size ?? 0
-        }
-        const fields = batch.map((entry, index) => `b${index}:object(oid:"${entry.sha}"){...on Blob{oid byteSize isTruncated text}}`).join(' ')
-        const response = await this.apiFetch(`installation:${installationId}`, 'https://api.github.com/graphql', {
-          method:'POST', headers:{...this.apiHeaders(token),'Content-Type':'application/json'}, redirect:'error', signal,
-          body:JSON.stringify({query:`query($owner:String!,$name:String!){repository(owner:$owner,name:$name){${fields}}}`,variables:{owner:metadata.owner.login,name:metadata.name}}),
-        })
-        if (!response.ok || !response.body) throw new ServiceUnavailableException('GitHub source batch is unavailable')
-        const reader = response.body.getReader(), chunks:Uint8Array[]=[]
-        let bytes=0
-        while(true){const chunk=await reader.read();if(chunk.done)break;bytes+=chunk.value.byteLength;if(bytes>32*1024*1024){await reader.cancel();throw new ServiceUnavailableException('GitHub source batch exceeded bounds')}chunks.push(chunk.value)}
-        const result=JSON.parse(Buffer.concat(chunks).toString('utf8'))
-        if(result.errors || !result.data?.repository) throw new ServiceUnavailableException('GitHub source batch could not be verified')
-        for(const [index,entry] of batch.entries()){
-          const blob=result.data.repository['b'+index]
-          if(!blob || blob.oid!==entry.sha || blob.byteSize!==entry.size) throw new ServiceUnavailableException('GitHub source identity changed')
-          if(blob.isTruncated || typeof blob.text!=='string'){
-            // Binary/truncated text uses the bounded exact-OID REST path, never a guessed URL.
-            blobs.set(entry.sha,await request(`/repos/${encodeURIComponent(metadata.owner.login)}/${encodeURIComponent(metadata.name)}/git/blobs/${entry.sha}`))
-          }else blobs.set(entry.sha,{sha:entry.sha,size:entry.size,encoding:'base64',content:Buffer.from(blob.text,'utf8').toString('base64')})
-        }
-      }
-      return blobs
-    }
-    return { metadata, request, healthBlobs }
+    const healthSource=(sourceSha:string,includeTestAssets=false)=>readHealthGitSource({
+      owner:metadata.owner.login,name:metadata.name,repositoryId:repositoryId!.toString(),sourceSha,token,includeTestAssets
+    },signal)
+    return { metadata, request, healthSource }
   }
 
   private apiHeaders(token: string) {

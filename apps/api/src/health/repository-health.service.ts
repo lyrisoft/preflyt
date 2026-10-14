@@ -1,3 +1,4 @@
+import { HealthGitSourceError } from './health-git-source.js'
 import {validateHealthTestSettings,defaultHealthTestSettings} from './health-test-settings.js'
 import { findingReferenceGuidance } from './finding-guidance.js'
 import { overallHealth } from './health-overall.js'
@@ -27,7 +28,8 @@ import { applicableHealthAnalyses, healthReport, comparableHealthTrend, healthTi
 const activeStates = ['QUEUED', 'RUNNING']
 const json = (value: unknown) => value as Prisma.InputJsonValue
 const sessionFor = (row: { actorId: string; organizationId: string }): AuthenticatedSession => ({ authenticated: true, identityId: row.actorId, organizationId: row.organizationId, subject: 'repository-health', email: null, role: 'WORKER' })
-const dto = (row: RepositoryHealthAssessment) => ({ overallHealth:overallHealth(row.report as HealthReport|null,row.state), id: row.id, branch: row.branch, state: row.state, sourceSha: row.sourceSha, progress: row.state === 'RUNNING' ? ((row.plan as any)?.stage ?? (row.sourceSha ? 'FETCHING_SOURCE' : 'INSPECTING')) : null, includeCoverage: row.includeCoverage, report: row.report ? { ...(row.report as unknown as HealthReport), findings: (row.report as unknown as HealthReport).findings.map(f => ({...f,referenceGuidance:findingReferenceGuidance(f.ruleId)})) } : null, reason: row.reason, cancelled: !!row.cancelledAt, createdAt: row.createdAt, startedAt: row.startedAt, finishedAt: row.finishedAt })
+const validRetryAt = (value: unknown): string | null => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(value) && Number.isFinite(Date.parse(value)) ? new Date(value).toISOString() : null
+const dto = (row: RepositoryHealthAssessment) => ({ overallHealth:overallHealth(row.report as HealthReport|null,row.state), id: row.id, branch: row.branch, state: row.state, sourceSha: row.sourceSha, progress: row.state === 'RUNNING' ? ((row.plan as any)?.stage ?? (row.sourceSha ? 'FETCHING_SOURCE' : 'INSPECTING')) : null, includeCoverage: row.includeCoverage, report: row.report ? { ...(row.report as unknown as HealthReport), findings: (row.report as unknown as HealthReport).findings.map(f => ({...f,referenceGuidance:findingReferenceGuidance(f.ruleId)})) } : null, retryAt:validRetryAt((row.plan as any)?.failure?.retryAt), reason: row.reason, cancelled: !!row.cancelledAt, createdAt: row.createdAt, startedAt: row.startedAt, finishedAt: row.finishedAt })
 @Injectable()
 export class RepositoryHealthService {
  constructor(@Inject(PrismaService) private db: PrismaService, @Inject(AuthorizationService) private access: AuthorizationService,
@@ -352,7 +354,7 @@ export class RepositoryHealthService {
     const native = await this.db.nativeExecutionRequest.findUnique({ where: { id: row.nativeRequestId } })
     if (native && ['QUEUED','PREPARING','RUNNING','CANCEL_REQUESTED'].includes(native.state)) { await this.defer(id,token); return }
    }
-   await this.finish(row,token,'FAILED',row.report as HealthReport | null, error instanceof GitHubRateLimitError ? 'GITHUB_RATE_LIMITED' : (error as any)?.status === 403 ? 'ACCESS_REVOKED' : 'SOURCE_OR_ANALYSIS_UNAVAILABLE')
+   await this.finish(row,token,'FAILED',row.report as HealthReport | null, error instanceof GitHubRateLimitError ? 'GITHUB_RATE_LIMITED' : (error as any)?.status === 403 ? 'ACCESS_REVOKED' : 'SOURCE_OR_ANALYSIS_UNAVAILABLE', error instanceof GitHubRateLimitError ? validRetryAt((error.getResponse() as any)?.retryAt) : null)
   }
  }
  private async automaticScan(row: any, token: string, session: AuthenticatedSession, repo: any) {
@@ -423,20 +425,20 @@ export class RepositoryHealthService {
     await this.defer(row.id,token);return
    }
    const response=(error as any)?.getResponse?.()
-   const reason=(error as any)?.status===403?'ACCESS_REVOKED':response?.code==='GITHUB_RATE_LIMITED'?'GITHUB_RATE_LIMITED':preparingSource?'SOURCE_ACCESS_UNAVAILABLE':'SCANNER_UNAVAILABLE'
+   const reason=error instanceof HealthGitSourceError?error.code:(error as any)?.status===403?'ACCESS_REVOKED':response?.code==='GITHUB_RATE_LIMITED'?'GITHUB_RATE_LIMITED':preparingSource?'SOURCE_ACCESS_UNAVAILABLE':'SCANNER_UNAVAILABLE'
    const report=row.report as HealthReport
    const next=healthReport(report.inspection,report.analyses.map(a=>({...a,reason})))
    next.policyContext=report.policyContext
-   await this.finish(row,token,'FAILED',next,reason)
+   await this.finish(row,token,'FAILED',next,reason,reason==='GITHUB_RATE_LIMITED'?validRetryAt(response?.retryAt):null)
   }
  }
  private async defer(id: string, token: string) {
   await this.db.repositoryHealthAssessment.updateMany({ where: { id, leaseToken: token }, data: { leaseToken: null, leaseUntil: new Date(Date.now()+5000) } })
  }
- private async finish(row: RepositoryHealthAssessment, token: string, state: string, report: HealthReport | null, reason: string | null) {
+ private async finish(row: RepositoryHealthAssessment, token: string, state: string, report: HealthReport | null, reason: string | null, retryAt: string | null = null) {
   await this.db.$transaction(async tx => {
    const changed = await tx.repositoryHealthAssessment.updateMany({ where: { id: row.id, state: 'RUNNING', leaseToken: token, cancelledAt: row.cancelledAt },
-    data: { state, ...(report ? { report: json(report) } : {}), reason, finishedAt: new Date(), leaseToken: null, leaseUntil: null } })
+    data: { state, ...(report ? { report: json(report) } : {}), ...(state==='FAILED'&&validRetryAt(retryAt)?{plan:json({...row.plan as any,failure:{retryAt:validRetryAt(retryAt)}})}:{}), reason, finishedAt: new Date(), leaseToken: null, leaseUntil: null } })
    if (!changed.count) {
     await tx.repositoryHealthAssessment.updateMany({ where: { id: row.id, state: 'RUNNING', leaseToken: token }, data: { leaseToken: null, leaseUntil: new Date(Date.now()+5000) } })
     return

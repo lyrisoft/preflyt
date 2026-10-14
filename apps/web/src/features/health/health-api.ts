@@ -117,6 +117,7 @@ export type HealthReport = {
   }
 }
 export type HealthAssessment = {
+  retryAt?: string | null
   progress?: string | null
   overallHealth?: OverallHealth
   id: string
@@ -333,6 +334,14 @@ export function useHealthFreshness(repositoryId: string, assessment?: string) {
   })
 }
 export const healthReasons: Record<string, string> = {
+  GIT_UNAVAILABLE:
+    'The deployment cannot fetch repository source because Git is unavailable. Ask your administrator to update the Preflyt worker image.',
+  SOURCE_FETCH_FAILED:
+    'The pinned commit could not be fetched through Git. Check GitHub App access and retry the assessment.',
+  SOURCE_FETCH_TIMED_OUT:
+    'The Git source fetch exceeded its time limit. Retry; if it continues, ask your administrator to check network connectivity.',
+  SOURCE_FETCH_LIMIT_EXCEEDED:
+    'The repository source exceeds the bounded Git download or source-size limit. Ask your administrator to review the repository size and scanner limits.',
   SOURCE_LOCATION_INVALID:
     'Some reported file locations did not match the assessed source and were excluded. Valid findings are retained.',
   ASSESSMENT_TIMED_OUT:
@@ -411,6 +420,47 @@ export const healthReasons: Record<string, string> = {
   EXECUTION_UNAVAILABLE:
     'Analysis could not be completed under the approved runtime.',
   EXECUTION_CANCELLED: 'The assessment was cancelled.',
+}
+/** Fixed user-facing failure descriptions; never expose provider exception text. */
+export function healthFailure(reason: string | null, canRetry = true) {
+  const actions: Record<string, string> = {
+    GIT_UNAVAILABLE:
+      'Ask your administrator to update the Preflyt worker image to include Git, then reassess.',
+    SOURCE_FETCH_LIMIT_EXCEEDED:
+      'Ask your administrator to review the repository size and fetch limits before retrying.',
+    SOURCE_FETCH_FAILED:
+      'Check GitHub App access and select Reassess. If it continues, ask your administrator to check the worker’s network access to github.com.',
+    SOURCE_FETCH_TIMED_OUT:
+      'Select Reassess. If it times out again, ask your administrator to check the worker’s network access to github.com.',
+    GITHUB_RATE_LIMITED:
+      'Wait for GitHub’s request limit to reset, then select Reassess.',
+    ACCESS_REVOKED:
+      'Check that the repository is selected and the GitHub App still has access, then select Reassess.',
+    SOURCE_ACCESS_UNAVAILABLE:
+      'Check the selected branch and GitHub App access, then select Reassess.',
+    SOURCE_OR_ANALYSIS_UNAVAILABLE:
+      'Select Reassess to try again. If it fails again, ask your administrator to check repository access and scanner availability.',
+    SCANNER_UNAVAILABLE:
+      'Select Reassess to retry. If it continues, ask your administrator to check the Health scanner service.',
+    ASSESSMENT_TIMED_OUT:
+      'Select Reassess. If it times out again, ask your administrator to check scanner capacity and the repository’s test command.',
+    SCANNER_RESULT_UNVERIFIED:
+      'Select Reassess. If verification keeps failing, ask your administrator to check the Health scanner service.',
+    RECEIPT_UNVERIFIED:
+      'Select Reassess. If verification keeps failing, ask your administrator to check the Health scanner service.',
+    EXECUTION_INTERRUPTED: 'Select Reassess to start a new assessment.',
+  }
+  return {
+    message:
+      reason && Object.prototype.hasOwnProperty.call(healthReasons, reason)
+        ? healthReasons[reason]
+        : 'The assessment stopped without a usable result. A specific cause was not recorded.',
+    action: !canRetry
+      ? 'Ask a repository maintainer to retry the assessment after resolving this problem.'
+      : reason && Object.prototype.hasOwnProperty.call(actions, reason)
+        ? actions[reason]
+        : 'Select Reassess to try again. If it fails again, give your administrator the assessment ID below.',
+  }
 }
 export const healthLabel = (state: string) =>
   ({
