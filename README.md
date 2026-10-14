@@ -153,4 +153,4 @@ Report suspected vulnerabilities privately to your Lyrisoft contact rather than 
 
 This repository does not publish a project-wide open-source license for the Preflyt application. Access to the repository or documentation does not grant redistribution rights. The separate [Preflyt Action](https://github.com/lyrisoft/preflyt-action) is MIT-licensed; that license applies to the Action, not the application. Third-party components retain their own licenses.
 
-The self-hosted Health scanner is installed once alongside Preflyt. See [Automatic Health scanner](docs/deployment/health-scanner/README.md) for local startup and dedicated-host container deployment. API and worker never receive Docker authority.
+The Docker Compose deployment includes the Health scanner, a separate TLS-protected scanner engine and automatic connection setup. Run the documented start command; no separate scanner installation is needed. See [Automatic Health scanner](docs/deployment/health-scanner/README.md) for the deployment boundaries and local source-development startup. API and worker never receive Docker authority.

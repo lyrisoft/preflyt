@@ -1,12 +1,12 @@
 # Repository Health operations
 
-Health uses the existing API, integration worker, PostgreSQL and queue, plus a dedicated credential-free scanner service. Static scanning needs no repository approval, standards or mandatory CI workflow. The downloadable application Compose file does not currently provision the scanner service.
+Health uses the existing API, integration worker, PostgreSQL and queue, plus a dedicated credential-free scanner service. Static scanning needs no repository approval, standards or mandatory CI workflow. The downloadable Compose deployment includes the scanner, a dedicated TLS-protected nested engine and automatic connection initialization. No extra scanner setup is required.
 
 ## Deploy and upgrade
 
 1. Back up PostgreSQL using the existing [backup procedure](../../apps/docs/docs/self-hosting/upgrades-and-backups.md) before migration.
 2. Apply additive migration `20261011220000_repository_health` with `pnpm --filter @preflyt/api prisma:migrate` (or the migration image for container deployments) and regenerate Prisma when building from source.
-3. Deploy the matching API, worker and web image versions. PostgreSQL and the existing Redis/Valkey connection are required.
+3. Deploy matching API, worker, web and Health scanner image versions. The normal Compose start waits for scanner readiness; allow up to 30 minutes for its first image preparation. PostgreSQL and the existing Redis/Valkey connection are required.
 4. Explicitly select a new accessible repository, or start Health on one previously selected. Upgrade does not scan historical selections automatically.
 5. Verify Queued → Running → saved report, branch/SHA, analysis limits, one completion notification and the Health deep link. No standards, policy or GitHub protection should change.
 

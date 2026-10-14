@@ -3,10 +3,11 @@ import assert from 'node:assert/strict';
 import { publishRelease, images } from './publish-release.mjs';
 const env = { GITHUB_SHA: 'a'.repeat(40), GITHUB_REPOSITORY_OWNER: 'lyrisoft', GITHUB_REPOSITORY: 'lyrisoft/preflyt', ARCH: 'arm64', BUILD_GROUP: 'api', RUNNER_TEMP: '/tmp' };
 const missing = () => { throw Object.assign(new Error('missing'), { stderr: 'manifest unknown' }); };
-test('three API outputs share the native build stage and use architecture-separated cache', () => {
+test('API, migration, controller and Health scanner share the native build stage and architecture-separated cache', () => {
   let config; const calls = [];
   publishRelease('build', env, args => { calls.push(args); if (args.includes('inspect')) return missing(); return ''; }, (_, contents) => { config = JSON.parse(contents); });
-  assert.equal(Object.keys(config.target).length, 3);
+  assert.equal(Object.keys(config.target).length, 4);
+  assert.equal(config.target['preflyt-health-scanner'].target, 'health-scanner');
   for (const target of Object.values(config.target)) {
     assert.equal(target.dockerfile, 'deploy/api.Dockerfile');
     assert.deepEqual(target.platforms, ['linux/arm64']);
