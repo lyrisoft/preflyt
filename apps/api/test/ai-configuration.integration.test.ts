@@ -762,6 +762,8 @@ async function reviewFixture(selectors: object = {}) {
                         checkId: data.SKILLS[0].id,
                         evidenceRefs: ["check:0"],
                         summary: "Security scan evidence is missing.",
+                        severity: "medium",
+                        impact: "Unscanned changes may contain security defects that the supplied evidence cannot identify.",
                         recommendation:
                           "Collect a verified scan for this commit.",
                       },
@@ -1326,6 +1328,8 @@ async function prFixture(
                         checkId: data.SKILLS[0].id,
                         evidenceRefs: [data.DATA.source ? "diff:0" : "check:0"],
                         summary: "Unvalidated input reaches the database query.",
+                        severity: "high",
+                        impact: "Attacker-controlled input could allow unauthorized access if the query does not enforce validation.",
                         recommendation: "Validate inputs before use.",
                       },
                     ],

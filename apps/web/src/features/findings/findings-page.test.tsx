@@ -79,7 +79,7 @@ beforeEach(async () => {
     refetch: vi.fn(),
   }
 })
-it('opens a dedicated Test coverage detail view from a Health card link', async () => {
+it('opens verified CI tests and coverage from a Health card link without execution settings', async () => {
   state.routeSearch = {
     origin: 'health',
     source: 'health',
@@ -96,35 +96,39 @@ it('opens a dedicated Test coverage detail view from a Health card link', async 
         state: 'COMPLETED',
         sourceSha: 'a'.repeat(40),
         finishedAt: '2026-10-14T07:31:00Z',
-        report: {
-          analyses: [
-            {
-              id: 'tests.coverage',
-              state: 'INCOMPLETE',
-              reason: 'DEPENDENCY_INSTALL_FAILED',
-              testResults: [
-                {
-                  directory: 'api',
-                  framework: 'node',
-                  state: 'INCOMPLETE',
-                  reason: 'DEPENDENCY_INSTALL_FAILED',
-                },
-              ],
-            },
-          ],
-          measurements: {},
-        },
+        report: { analyses: [], measurements: {} },
+      },
+      ciCoverage: {
+        sourceSha: 'a'.repeat(40),
+        state: 'VERIFIED',
+        reason: 'CI_COVERAGE_VERIFIED',
+        measurement: { analyzedLines: 100, coveredLines: 75, analyzedFiles: 3 },
+        tests: { tests: 10, passed: 9, failures: 1, errors: 0, skipped: 0 },
+        testsState: 'FAIL',
+        runUrl:
+          'https://github.com/lyrisoft/preflyt/actions/runs/123/attempts/1',
       },
     },
   }
   await render(<FindingsPage />)
   await expect
-    .element(page.getByRole('heading', { name: 'Test coverage', level: 1 }))
+    .element(
+      page.getByRole('heading', { name: 'Tests and coverage', level: 1 })
+    )
     .toBeVisible()
-  await expect.element(page.getByText('api · node')).toBeVisible()
+  await expect.element(page.getByText('75.0%')).toBeVisible()
+  await expect
+    .element(page.getByText('9 passed · 1 failed · 0 skipped'))
+    .toBeVisible()
+  await expect
+    .element(page.getByRole('link', { name: 'View CI run and logs' }))
+    .toHaveAttribute(
+      'href',
+      'https://github.com/lyrisoft/preflyt/actions/runs/123/attempts/1'
+    )
   await expect
     .element(page.getByRole('button', { name: 'Test coverage settings' }))
-    .toBeVisible()
+    .not.toBeInTheDocument()
   await expect
     .element(page.getByRole('heading', { name: 'Findings', level: 1 }))
     .not.toBeInTheDocument()
