@@ -25,6 +25,6 @@ import { OwnerAdminGuard, SessionGuard } from './session.guard.js'
     AuthorizationService,
     AuditLogService,
   ],
-  exports: [AuthService, SessionGuard, OwnerAdminGuard, AuthorizationService],
+  exports: [AuthService, SessionGuard, OwnerAdminGuard, AuthorizationService, GitHubIdentityProvider],
 })
 export class AuthModule {}

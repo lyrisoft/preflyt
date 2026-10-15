@@ -88,15 +88,13 @@ it('does not continue after authorization loss or failed inspection', async () =
   expect(fetch).toHaveBeenCalledTimes(2)
 })
 it('rejects unverified saved standard versions before assessment creation', async () => {
-  const fetch = vi
-    .fn()
-    .mockResolvedValueOnce(
-      reply({
-        ...standards,
-        selection: { id: 'old' },
-        selectionIntegrity: false,
-      })
-    )
+  const fetch = vi.fn().mockResolvedValueOnce(
+    reply({
+      ...standards,
+      selection: { id: 'old' },
+      selectionIntegrity: false,
+    })
+  )
   vi.stubGlobal('fetch', fetch)
   await expect(createFirstReport('123', () => 'key', vi.fn())).rejects.toThrow(
     'saved standard versions'

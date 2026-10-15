@@ -27,6 +27,7 @@ export function publishRelease(mode, env, docker = (args) => execFileSync('docke
       if ((image === 'preflyt-web') !== (group === 'web') || exists(tag(image, `-${arch}`))) continue;
       targets[image] = {
         context: '.', dockerfile, target: stage, platforms: [`linux/${arch}`],
+        attest: [{ type: 'sbom' }, { type: 'provenance', mode: 'max' }],
         tags: [tag(image, `-${arch}`)],
         ...(image === 'preflyt-health-scanner' ? { args: { PREFLYT_DATABASE_EPOCH: new Date().toISOString().slice(0, 10) } } : {}),
         'cache-from': [`type=registry,ref=ghcr.io/${owner}/${image}:build-cache-${arch}`],

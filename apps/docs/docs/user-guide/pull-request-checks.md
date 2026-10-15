@@ -11,6 +11,13 @@ Preflyt can check every pull request against your published [policy](policies.md
 
 Your own GitHub Actions workflow runs the tests and scanners. Preflyt then verifies that the run really happened and evaluates the result.
 
+<figure className="pf-guide-screenshot">
+  <a href="/img/guides/pull-request-checks.jpg" target="_blank" rel="noreferrer">
+    <img src="/img/guides/pull-request-checks.jpg" alt="Policies → CI jobs explains the steps for connecting GitHub Actions to a published branch policy." width="1728" height="906" loading="lazy" />
+  </a>
+  <figcaption>Policies → CI jobs explains the steps for connecting GitHub Actions to a published branch policy. Select the image to view it full size.</figcaption>
+</figure>
+
 ## How it works
 
 ```mermaid

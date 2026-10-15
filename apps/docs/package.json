@@ -2,6 +2,7 @@
   "name": "@preflyt/docs",
   "version": "0.0.0",
   "private": true,
+  "license": "Apache-2.0",
   "description": "Preflyt user and operator documentation site",
   "scripts": {
     "dev": "node scripts/generate-downloads.mjs && docusaurus start",
@@ -17,11 +18,12 @@
     "@docusaurus/theme-mermaid": "3.10.2",
     "@easyops-cn/docusaurus-search-local": "0.55.3",
     "@mdx-js/react": "^3.1.0",
-    "@mermaid-js/layout-elk": "^0.1.9",
     "clsx": "^2.1.1",
     "prism-react-renderer": "^2.4.1",
     "react": "^19.2.5",
-    "react-dom": "^19.2.5"
+    "react-dom": "^19.2.5",
+    "mermaid": "11.17.2",
+    "@mermaid-js/layout-elk": "0.1.9"
   },
   "devDependencies": {
     "@docusaurus/module-type-aliases": "3.10.2",

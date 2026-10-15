@@ -4,30 +4,42 @@ RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-cert
     && rm -rf /var/lib/apt/lists/* \
     && npm install --global pnpm@10.26.2
 WORKDIR /workspace
+COPY LICENSE NOTICE THIRD_PARTY_NOTICES.md /usr/share/licenses/preflyt/
+COPY apps/web/LICENSE /usr/share/licenses/preflyt/third-party/shadcn-admin-LICENSE
+COPY apps/web/THIRD_PARTY_NOTICES.md /usr/share/licenses/preflyt/third-party/web-NOTICES.md
+COPY apps/api/src/github-events/sarif-schema.LICENSE.md /usr/share/licenses/preflyt/third-party/sarif-schema-LICENSE.md
 
 FROM base AS build
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/api/package.json apps/api/package.json
 RUN pnpm install --filter @preflyt/api... --frozen-lockfile --ignore-scripts
 COPY apps/api apps/api
+COPY scripts/deploy/package-runtime.mjs /opt/preflyt/package-runtime.mjs
 # Generation needs a syntactically valid URL, not a live database or build secret.
 RUN DATABASE_URL=postgresql://build:build@localhost:5432/build pnpm --filter @preflyt/api build \
-    && pnpm --filter @preflyt/api deploy --legacy --prod /opt/api
+    && node /opt/preflyt/package-runtime.mjs /workspace/apps/api /opt/api api \
+    && node /opt/preflyt/package-runtime.mjs /workspace/apps/api /opt/migration migration \
+    && node /opt/preflyt/package-runtime.mjs /workspace/apps/api /opt/scanner scanner
 
-FROM base AS migration
-COPY package.json pnpm-workspace.yaml ./
-COPY --from=build /workspace/node_modules /workspace/node_modules
-COPY --from=build /workspace/apps/api/node_modules /workspace/apps/api/node_modules
-COPY apps/api/package.json apps/api/prisma.config.ts /workspace/apps/api/
-COPY apps/api/prisma /workspace/apps/api/prisma
+# Build tools and package managers stay outside the shipped runtime.
+FROM node:24.4.1-bookworm-slim@sha256:36ae19f59c91f3303c7a648f07493fe14c4bd91320ac8d898416327bacf1bbfa AS runtime-base
+RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates \
+    && rm -rf /var/lib/apt/lists/* /usr/local/lib/node_modules /opt/yarn* /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/yarn /usr/local/bin/yarnpkg
+COPY --from=base /usr/share/licenses/preflyt /usr/share/licenses/preflyt
+
+FROM runtime-base AS migration
+WORKDIR /workspace/apps/api
+COPY --from=build --chown=node:node /opt/migration/ ./
+COPY apps/api/prisma.config.ts ./
+COPY apps/api/prisma ./prisma
 USER node
-CMD ["pnpm", "--filter", "@preflyt/api", "prisma:migrate"]
+CMD ["node", "node_modules/prisma/build/index.js", "migrate", "deploy"]
 
-FROM base AS runtime
+FROM runtime-base AS runtime
+RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-COPY --from=build --chown=node:node /opt/api/node_modules ./node_modules
-COPY --from=build --chown=node:node /opt/api/dist ./dist
-COPY --from=build --chown=node:node /opt/api/package.json ./package.json
+COPY --from=build --chown=node:node /opt/api/ ./
+COPY --from=build --chown=node:node /workspace/apps/api/dist ./dist
 ENV NODE_ENV=production API_HOST=0.0.0.0 API_PORT=3000
 USER node
 EXPOSE 3000
@@ -119,10 +131,16 @@ RUN --mount=from=bundle-trivy,target=/scanner-root,ro node /opt/preflyt/package-
 RUN --mount=from=bundle-dependencies,target=/scanner-root,ro node /opt/preflyt/package-scanner.mjs /scanner-root /bundles dependencies "$TARGETARCH"
 
 # Dedicated fixed Health scanners; no application credentials or engine socket in API/worker.
-FROM native-docker-controller AS health-scanner
+FROM runtime-base AS health-scanner
+WORKDIR /app
+COPY --from=build --chown=node:node /opt/scanner/ ./
+COPY --from=build --chown=node:node /workspace/apps/api/dist ./dist
+COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
 COPY --from=docker-cli /usr/local/libexec/docker/cli-plugins/docker-buildx /usr/local/libexec/docker/cli-plugins/docker-buildx
 COPY docs/deployment/native-runner /opt/preflyt/scanner-tools
 COPY --from=scanner-bundles /bundles /opt/preflyt/scanner-bundles
 ENV HEALTH_SCANNER_TOOLS_DIRECTORY=/opt/preflyt/scanner-tools HEALTH_SCANNER_BUNDLES_DIRECTORY=/opt/preflyt/scanner-bundles
+ENV NODE_ENV=production
+USER node
 EXPOSE 3011
 CMD ["node", "dist/health-scanner.js"]

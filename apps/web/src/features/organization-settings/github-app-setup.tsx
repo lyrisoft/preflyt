@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { StatusBadge } from '@/components/status-badge'
+import { useOrganizations } from '@/features/access-control/organization-queries'
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(
@@ -40,6 +41,11 @@ export function GitHubAppSetup({
   const [setupPullRequests, setSetupPullRequests] = useState(false)
   const [managedProtection, setManagedProtection] = useState(false)
   const [review, setReview] = useState(false)
+  const organizations = useOrganizations()
+  const organizationConnection = organizations.data?.organizations?.find(
+    (item) =>
+      item.id === organizations.data?.activeOrganizationId && item.githubLogin
+  )
   const status = useQuery({
     queryKey: ['github-app-registration', revision],
     queryFn: ({ signal }) =>
@@ -94,17 +100,42 @@ export function GitHubAppSetup({
           <GitBranch className='size-4' />
           {connected ? 'One GitHub App' : 'Create your GitHub App'}
         </h4>
-        {connected && <StatusBadge tone='success'>Connected</StatusBadge>}
+        {connected && organizationConnection ? (
+          <StatusBadge tone='success'>Connected</StatusBadge>
+        ) : (
+          connected && (
+            <span className='text-xs text-muted-foreground'>
+              App credentials saved
+            </span>
+          )
+        )}
       </div>
       {connected ? (
         <>
           <p className='text-sm text-muted-foreground'>
+            {organizationConnection
+              ? `Connected to ${organizationConnection.name}. Its repositories are available on the Repositories page. GitHub access changes are synchronized automatically.`
+              : 'Install or connect this App to your organization. Repositories selected in GitHub load automatically, and your Preflyt admin session stays signed in.'}
+          </p>
+          <Button
+            type='button'
+            size='sm'
+            variant={organizationConnection ? 'outline' : 'default'}
+            asChild
+          >
+            <a href={`${API_BASE_URL}/github/connection`}>
+              {organizationConnection
+                ? 'Manage GitHub access'
+                : 'Connect GitHub organization'}
+              <ExternalLink aria-hidden='true' className='size-4' />
+            </a>
+          </Button>
+          <p className='text-sm text-muted-foreground'>
             Use this App for repository access, PR reviews and check
             publication. Add Contents and Workflows write permissions to create
-            setup PRs, or Repository Administration and Organization Administration
-            write permissions for
-            Preflyt-managed protection, then approve the updated installation in
-            GitHub.
+            setup PRs, or Repository Administration and Organization
+            Administration write permissions for Preflyt-managed protection,
+            then approve the updated installation in GitHub.
           </p>
           <p className='text-xs text-muted-foreground'>
             A separate governance App is optional. Existing policies and model
@@ -211,9 +242,10 @@ export function GitHubAppSetup({
                 </p>
               )}
               <p className='text-muted-foreground'>
-                After GitHub confirmation, install the App and select
-                repositories. Selecting repositories inspects files only; it
-                does not execute code or replace policies.
+                After GitHub confirmation, choose the organization and
+                repositories during installation. Preflyt imports them and keeps
+                your admin session. Connection does not execute repository code
+                or replace policies.
               </p>
             </div>
           )}
@@ -275,20 +307,22 @@ export function GitHubAppSetup({
           registered App before retrying. Existing settings were preserved.
         </p>
       )}
-      {status.data?.status === 'CONNECTED' && status.data.installationUrl && (
-        <div className='flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3'>
-          <p className='text-sm'>
-            App saved. Install it in your organization, then open Integrations
-            to connect and select repositories.
-          </p>
-          <Button type='button' size='sm' variant='outline' asChild>
-            <a href={status.data.installationUrl}>
-              Install App
-              <ExternalLink className='size-4' />
-            </a>
-          </Button>
-        </div>
-      )}
+      {!connected &&
+        status.data?.status === 'CONNECTED' &&
+        status.data.installationUrl && (
+          <div className='flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3'>
+            <p className='text-sm'>
+              App saved. Continue installation and choose your repositories in
+              GitHub. Preflyt imports that selection automatically.
+            </p>
+            <Button type='button' size='sm' variant='outline' asChild>
+              <a href={status.data.installationUrl}>
+                Connect GitHub organization
+                <ExternalLink className='size-4' />
+              </a>
+            </Button>
+          </div>
+        )}
     </section>
   )
 }

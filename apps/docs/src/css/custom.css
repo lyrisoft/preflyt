@@ -552,3 +552,45 @@ button[class*='collapseSidebarButton']:hover {
 /* Supplied monochrome mark remains legible on the light navigation surface. */
 html[data-theme='light'] .navbar__logo img { filter: invert(1); }
 .pf-brand-logo { width: min(100%, 320px); height: auto; border-radius: 12px; }
+
+/* Published product and Marketplace releases. */
+.pf-release-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 20px 0;
+}
+.pf-release-badges a {
+  display: inline-flex;
+  border-radius: 3px;
+}
+.pf-release-badges a:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 4px;
+}
+.pf-release-badges img {
+  display: block;
+  height: 20px;
+  width: auto;
+}
+
+.pf-guide-screenshot {
+  margin: 1.5rem 0 2rem;
+}
+.pf-guide-screenshot a {
+  display: block;
+}
+.pf-guide-screenshot img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: 10px;
+}
+.pf-guide-screenshot figcaption {
+  margin-top: 0.65rem;
+  color: var(--ifm-color-emphasis-700);
+  font-size: 0.875rem;
+  line-height: 1.6;
+}

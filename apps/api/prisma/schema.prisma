@@ -134,7 +134,25 @@ model GitHubSetupTransaction {
   @@index([expiresAt])
 }
 
+// Installation verification preserves the initiating Preflyt session and identity.
+model GitHubConnectionTransaction {
+  id             String @id @default(cuid())
+  stateHash      String @unique
+  bindingHash    String
+  sessionHash    String
+  actorId        String
+  appId          String
+  organizationId String?
+  phase          String @default("INSTALLATION")
+  installationId BigInt?
+  codeVerifier   String?
+  expiresAt      DateTime
+  createdAt      DateTime @default(now())
+  @@index([expiresAt])
+}
+
 model GitHubInstallation {
+  repositoryTracking String @default("EXPLICIT")
   organizationId String @default("preflyt-default")
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   id                  BigInt             @id

@@ -1595,3 +1595,25 @@ body:has(.marketing-site) {
     padding: 6px 10px;
   }
 }
+
+/* Published product and Marketplace releases. */
+.reference-release-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 20px 0;
+}
+.reference-release-badges a {
+  display: inline-flex;
+  border-radius: 3px;
+}
+.reference-release-badges a:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 4px;
+}
+.reference-release-badges img {
+  display: block;
+  height: 20px;
+  width: auto;
+}

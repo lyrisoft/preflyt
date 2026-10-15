@@ -14,6 +14,7 @@ test('development does not rebuild images for test, documentation or PR-check-on
 test('every deployable or qualification input triggers exact-commit development images', () => {
   for (const path of ['apps/api/src/main.ts', 'apps/api/prisma/migrations/new/migration.sql', 'apps/api/prisma.config.ts',
     'apps/web/src/style.css', 'apps/api/src/runtime.check.ts', 'apps/web/scripts/prerender.mjs', 'apps/web/public/logo.svg', 'deploy/nginx.conf',
+    'LICENSE', 'NOTICE', 'THIRD_PARTY_NOTICES.md',
     'docker-compose.yaml', 'compose.local.yaml', '.env.example', 'scripts/deploy/smoke.mjs',
     'docs/deployment/native-runner/Dockerfile.gitleaks', 'docs/deployment/native-runner/config/semgrep.yaml',
     'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', '.npmrc', '.dockerignore', 'packages/shared/index.ts',

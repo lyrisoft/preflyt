@@ -165,6 +165,31 @@ export function MarketingHomepage() {
               verify CI evidence before code reaches production. Know what
               passed, what failed and what still needs evidence.
             </p>
+            <div
+              className='reference-release-badges'
+              aria-label='Published releases'
+            >
+              <a
+                href='https://github.com/lyrisoft/preflyt/releases/tag/v0.1.1'
+                aria-label='Preflyt v0.1.1 release'
+              >
+                <img
+                  src='https://img.shields.io/badge/Preflyt-v0.1.1-2f6f60?logo=github'
+                  alt='Preflyt v0.1.1'
+                  height={20}
+                />
+              </a>
+              <a
+                href='https://github.com/marketplace/actions/preflyt-policy-check'
+                aria-label='Preflyt Action on GitHub Marketplace'
+              >
+                <img
+                  src='https://img.shields.io/github/v/release/lyrisoft/preflyt-action?label=Preflyt%20Action&logo=github'
+                  alt='Preflyt Action published release on GitHub Marketplace'
+                  height={20}
+                />
+              </a>
+            </div>
             <div className='reference-actions'>
               <a href={docs} className='button'>
                 Get started <ArrowRight size={15} aria-hidden='true' />

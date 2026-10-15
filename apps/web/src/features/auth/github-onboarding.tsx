@@ -71,7 +71,10 @@ export function GitHubOnboarding() {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ installationId: org.installationId, recoverOwner: org.state === 'recovery_available' }),
+        body: JSON.stringify({
+          installationId: org.installationId,
+          recoverOwner: org.state === 'recovery_available',
+        }),
       })
       const result = await r.json()
       if (!r.ok)
@@ -141,10 +144,10 @@ export function GitHubOnboarding() {
                       : org.state === 'recovery_available'
                         ? 'This workspace has no active Owner. A verified GitHub organization owner can recover it. Existing repositories, policies and history stay in place.'
                         : org.state === 'no_access'
-                        ? 'Ask your Preflyt administrator to give you access.'
-                        : org.state === 'new'
-                          ? 'An organization owner can connect this workspace. Your ownership will be verified.'
-                          : 'Continue with your existing Preflyt role.'}
+                          ? 'Ask your Preflyt administrator to give you access.'
+                          : org.state === 'new'
+                            ? 'An organization owner can connect this workspace. Your ownership will be verified.'
+                            : 'Continue with your existing Preflyt role.'}
               </p>
               {org.state === 'migration_required' && (
                 <div className='mt-3 flex flex-col gap-2'>
@@ -166,7 +169,12 @@ export function GitHubOnboarding() {
                   </Link>
                 </div>
               )}
-              {['new', 'existing', 'link_existing', 'recovery_available'].includes(org.state) && (
+              {[
+                'new',
+                'existing',
+                'link_existing',
+                'recovery_available',
+              ].includes(org.state) && (
                 <Button
                   onClick={() => void enter(org)}
                   disabled={busy !== null}
@@ -176,9 +184,11 @@ export function GitHubOnboarding() {
                     ? 'Verifying access…'
                     : org.state === 'link_existing'
                       ? 'Link organization and continue'
-                      : org.state === 'recovery_available' ? 'Recover workspace ownership' : org.state === 'new'
-                        ? 'Connect organization'
-                        : 'Continue'}
+                      : org.state === 'recovery_available'
+                        ? 'Recover workspace ownership'
+                        : org.state === 'new'
+                          ? 'Connect organization'
+                          : 'Continue'}
                   <ArrowRight className='size-4' />
                 </Button>
               )}

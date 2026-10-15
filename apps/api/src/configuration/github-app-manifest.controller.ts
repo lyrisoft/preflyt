@@ -32,6 +32,8 @@ export class GitHubAppManifestController {
     const cookie = this.cookie();
     try {
       await this.manifest.complete(req.preflytSession, req.cookies?.[this.auth.sessionCookieName], req.cookies?.[cookie.name] ?? '', typeof req.query.state === 'string' ? req.query.state : '', typeof req.query.code === 'string' ? req.query.code : '');
+      res.clearCookie(cookie.name, cookie.options);
+      return res.redirect(`${resolveWebOrigin()}/api/github/connection`);
     } catch { /* Status is retrieved separately; never echo provider errors or credentials. */ }
     res.clearCookie(cookie.name, cookie.options);
     res.redirect(`${resolveWebOrigin()}/organization-settings?tab=configuration`);

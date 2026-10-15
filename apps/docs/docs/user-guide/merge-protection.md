@@ -13,6 +13,13 @@ GitHub is always the one that blocks the merge. Preflyt publishes the result and
 
 Open **Merge Protection** in the sidebar and choose a repository. It has two tabs: **Branch rules** and **PR checks**.
 
+<figure className="pf-guide-screenshot">
+  <a href="/img/guides/merge-protection.jpg" target="_blank" rel="noreferrer">
+    <img src="/img/guides/merge-protection.jpg" alt="Merge Protection shows the repository scope and rulesets fetched from GitHub." width="1728" height="906" loading="lazy" />
+  </a>
+  <figcaption>Merge Protection shows the repository scope and rulesets fetched from GitHub. Select the image to view it full size.</figcaption>
+</figure>
+
 ## PR checks
 
 The **PR checks** tab lists the latest check for each pull request: its target branch, whether it was published to GitHub, the current verified Preflyt result and when it last changed. Select a row to open the report, or **View on GitHub**.

@@ -1,4 +1,5 @@
 import {type ScanError, validFileAnalysis, fileAnalysisRules, type FileAnalysis} from './health-file-analysis.js'
+import { healthAnalysisComplete } from './health-analysis-completion.js'
 import type { HealthPolicyContext } from './health-policy-context.js'
 import { findingGuidance, type FindingGuidance, type FindingReferenceGuidance } from './finding-guidance.js'
 import { validDuplicationMeasurement, validCoverageMeasurement, type HealthTestResult, type CoverageMeasurement, type DuplicationMeasurement } from './health-measurements.js'
@@ -71,8 +72,7 @@ export function healthReport(inspection: HealthReport['inspection'], analyses: H
  const executed = checks.length > 0
  const complete = inspection.complete && projected.length > 0 && projected.every(a => {
   const c = checks.find(c => c.ruleId === a.id)
-  return c && c.cleanupConfirmed && c.state !== 'INCOMPLETE' && c.coverage === 'FULL_RULE' && c.findings !== undefined &&
-   Number(c.summary?.results ?? 0) === c.findings.length
+  return c && healthAnalysisComplete(c)
  })
  // Compare complete findings within measured fixed code-rule scopes separately
  // from engineering-control completeness. Unknown scopes are never inferred.

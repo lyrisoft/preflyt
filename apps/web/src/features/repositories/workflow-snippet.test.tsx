@@ -1,8 +1,8 @@
 import '@/styles/index.css'
 import { EditorView } from '@codemirror/view'
-import { page } from 'vitest/browser'
 import { afterEach, expect, it, vi } from 'vitest'
 import { render } from 'vitest-browser-react'
+import { page } from 'vitest/browser'
 import { StandardLibraryCard } from '../workspace/organization-standards-library'
 import type { Pack } from './repository-queries'
 

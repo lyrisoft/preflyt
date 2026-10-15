@@ -933,14 +933,8 @@ export function RepositoryHealth({
                               </span>
                             )}
                           </span>
-                          <StatusBadge
-                            tone={
-                              h.state === 'COMPLETED'
-                                ? 'neutral'
-                                : healthTone(h.state)
-                            }
-                          >
-                            <span>{healthLabel(h.state)}</span>
+                          <StatusBadge tone={healthTone(h.state)}>
+                            {healthLabel(h.state)}
                           </StatusBadge>
                         </button>
                       ))}

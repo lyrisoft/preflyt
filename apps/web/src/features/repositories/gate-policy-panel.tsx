@@ -57,8 +57,8 @@ import { StatusBadge } from '@/components/status-badge'
 import { SurfaceIcon } from '@/components/surface-icon'
 import { engineeringPath, engineeringRead } from './engineering-queries'
 import { policyActions } from './policy-actions'
-import { useStandards, type Pack, type Standards } from './repository-queries'
 import { PolicyExceptions } from './policy-exceptions'
+import { useStandards, type Pack, type Standards } from './repository-queries'
 
 export type Revision = {
   id: string

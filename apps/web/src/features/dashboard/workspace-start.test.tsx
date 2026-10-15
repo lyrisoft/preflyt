@@ -23,11 +23,18 @@ it('takes the deployment admin directly to connection configuration', () => {
   expect(html).toContain('/organization-settings?tab=configuration')
   expect(html).not.toContain('Manage workspaces')
 })
-it('requires GitHub sign-in for organization ownership rather than granting admin access', () => {
+it('verifies organization ownership without replacing the deployment admin session', () => {
   state.query = { data: { github: true } }
   const html = renderToStaticMarkup(<WorkspaceStart platformAdmin />)
-  expect(html).toContain('/auth/github/login')
+  expect(html).toContain('/github/connection')
+  expect(html).not.toContain('/auth/github/login')
   expect(html).toContain('organization owner')
+})
+it('keeps ordinary GitHub sign-in available for users without deployment access', () => {
+  state.query = { data: { github: true } }
+  const html = renderToStaticMarkup(<WorkspaceStart platformAdmin={false} />)
+  expect(html).toContain('/auth/github/login')
+  expect(html).not.toContain('/github/connection')
 })
 it('keeps system configuration out of ordinary user onboarding', () => {
   const html = renderToStaticMarkup(<WorkspaceStart platformAdmin={false} />)

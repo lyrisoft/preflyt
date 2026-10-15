@@ -14,3 +14,10 @@ Use the **date**, **action** and **repository** filters, then apply them. Date f
 Credentials and raw metadata are excluded. Repository access still applies; the log is not an unrestricted view of other workspaces. Background actions may identify a system actor rather than a person.
 
 **Access Control → Activity** remains focused on recent membership and role changes. An audit event records an action, not proof that every related check passed; open its assessment or deployment for the result.
+
+<figure className="pf-guide-screenshot">
+  <a href="/img/guides/audit-log.jpg" target="_blank" rel="noreferrer">
+    <img src="/img/guides/audit-log.jpg" alt="Audit log provides repository, action and date filters, plus details for each recorded event." width="1728" height="906" loading="lazy" />
+  </a>
+  <figcaption>Audit log provides repository, action and date filters, plus details for each recorded event. Select the image to view it full size.</figcaption>
+</figure>

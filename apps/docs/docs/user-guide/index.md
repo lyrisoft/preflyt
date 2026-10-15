@@ -9,6 +9,13 @@ description: Understand repository health, investigate unified findings, and app
 
 This guide covers everything you do in Preflyt after it is installed and connected to GitHub. If you have not done that yet, start with [Getting Started](../getting-started/index.md).
 
+<figure className="pf-guide-screenshot">
+  <a href="/img/guides/overview.jpg" target="_blank" rel="noreferrer">
+    <img src="/img/guides/overview.jpg" alt="Engineering Overview with repository totals, saved assessments and activity." width="1728" height="906" loading="lazy" />
+  </a>
+  <figcaption>Engineering Overview with repository totals, saved assessments and activity. Select the image to view it full size.</figcaption>
+</figure>
+
 ## First value without CI
 
 Explicitly selecting a repository queues a [Health assessment](repository-health.md) of its default branch. Read findings, analysis limits and revision history in Health; an unavailable runtime produces a partial inspection report. This does not change policies or publish a merge check.

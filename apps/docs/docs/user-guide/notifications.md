@@ -9,6 +9,13 @@ description: Get in-app and email alerts when results change.
 
 Preflyt can tell you when something needs attention: a new report, a failed result, a published policy and similar events.
 
+<figure className="pf-guide-screenshot">
+  <a href="/img/guides/notifications.jpg" target="_blank" rel="noreferrer">
+    <img src="/img/guides/notifications.jpg" alt="Settings → Notifications controls personal assessment alerts and shared notification channels. Email delivery is disabled in this deployment." width="1728" height="906" loading="lazy" />
+  </a>
+  <figcaption>Settings → Notifications controls personal assessment alerts and shared notification channels. Email delivery is disabled in this deployment. Select the image to view it full size.</figcaption>
+</figure>
+
 ## The inbox
 
 Select the **bell** at the top of any page, or open **Notifications**.

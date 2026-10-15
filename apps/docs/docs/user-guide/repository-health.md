@@ -9,6 +9,13 @@ description: Read branch analysis, exact-revision findings, limits and report hi
 
 Health assesses a selected branch without requiring CI. Explicit repository selection queues the first assessment; **Reassess** creates another revision report. The API and worker fetch the exact selected commit and coordinate work. The built-in scanner service runs applicable fixed Health analyzers in isolated containers. GitHub connection, repository selection and existing Preflyt permissions are the authorization; no additional approval, policy selection or CI workflow is required. Tests run in your existing CI environment. Health displays verified test results and coverage for the assessed commit, as described below.
 
+<figure className="pf-guide-screenshot">
+  <a href="/img/guides/repository-health.jpg" target="_blank" rel="noreferrer">
+    <img src="/img/guides/repository-health.jpg" alt="A saved repository Health report with its branch, commit and recorded analysis scope. This capture shows a duplication-only report from v0.1.1." width="1728" height="906" loading="lazy" />
+  </a>
+  <figcaption>A saved repository Health report with its branch, commit and recorded analysis scope. This capture shows a duplication-only report from v0.1.1. Select the image to view it full size.</figcaption>
+</figure>
+
 ## Scanner service
 
 The API and worker coordinate assessments; the dedicated Health scanner runs the static analyzers. The [Docker Compose deployment](../self-hosting/docker-compose.md) includes the scanner, its dedicated engine and automatic connection setup. The normal start command waits until the scanner is ready; there is no additional scanner installation step. If it later becomes unavailable, the saved assessment shows **Assessment failed** with a scanner-service reason and retry guidance.
@@ -34,8 +41,8 @@ Wait for **Preflyt Health scanner is ready** before selecting or reassessing a r
 | Completed | A report was saved; check its completeness separately. |
 | Failed | Source access or analysis did not establish a completed result. |
 | Cancelled | Work was cancelled; admitted execution waits for cleanup. |
-| Complete | All applicable analyses have full recorded coverage, verified outputs and retained findings within limits. |
-| Partial | Inspection, analyzer coverage, valid output or retained findings are incomplete. |
+| Complete | Every applicable analyzer finished within its supported, recorded scope, with verified outputs, confirmed cleanup and retained findings within limits. This does not establish full repository-wide CI rule coverage. |
+| Partial | Inspection, execution, measured file scope, valid output or retained findings are incomplete. Limited analyzer rule coverage alone does not mean execution is incomplete. |
 | Inspection only | No analyzer ran. Finding counts and repository health are unavailable. |
 | Current | The report commit matches the selected branch head when last checked. |
 | Stale | That branch head has advanced beyond the report. |

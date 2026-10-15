@@ -9,6 +9,8 @@ description: Preflyt components, requirements and deployment options for self-ho
 
 Preflyt runs entirely as containers. The same application images run under **Docker Compose** or **Kubernetes**; only the manifests differ.
 
+See [Community Edition](community-edition.md) for included scope, licensing and current public-release preparation status.
+
 ## Components
 
 ```mermaid

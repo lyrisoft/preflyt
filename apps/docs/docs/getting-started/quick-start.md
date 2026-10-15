@@ -77,7 +77,9 @@ Create the random values with these commands and paste each result in:
 ```bash
 openssl rand -hex 24      # POSTGRES_PASSWORD, then again for DATABASE_APP_PASSWORD
 openssl rand -hex 20      # a strong SUPER_ADMIN_PASSWORD
-openssl rand -base64 32   # CONFIGURATION_ENCRYPTION_KEY, then again for GITHUB_USER_TOKEN_ENCRYPTION_KEY
+openssl rand -base64 32   # CONFIGURATION_ENCRYPTION_KEY
+openssl rand -base64 32   # GITHUB_USER_TOKEN_ENCRYPTION_KEY, use a different value
+openssl rand -base64 32   # AI_PROVIDER_ENCRYPTION_KEY, use a third different value
 ```
 
 Finally make the file private:
@@ -101,6 +103,7 @@ POSTGRES_PASSWORD=$(openssl rand -hex 24)
 DATABASE_APP_PASSWORD=$(openssl rand -hex 24)
 CONFIGURATION_ENCRYPTION_KEY=$(openssl rand -base64 32)
 GITHUB_USER_TOKEN_ENCRYPTION_KEY=$(openssl rand -base64 32)
+AI_PROVIDER_ENCRYPTION_KEY=$(openssl rand -base64 32)
 PREFLYT_NODE_ENV=development
 PREFLYT_COOKIE_SECURE=false
 EOF
@@ -115,7 +118,7 @@ Read your sign-in password with `grep SUPER_ADMIN_PASSWORD .env`.
 Set `PREFLYT_VERSION` to the release you were given.
 
 :::warning Keep this file safe
-`CONFIGURATION_ENCRYPTION_KEY` protects the credentials you save in Settings later. If you lose it, those credentials cannot be recovered. Keep a copy somewhere safe, apart from the database.
+Generate all three encryption keys before the first startup, even if you will configure AI later. `AI_PROVIDER_ENCRYPTION_KEY` protects saved AI provider credentials. Keep each key stable and back up all three apart from the database. Losing or replacing a key makes the credentials encrypted with it unreadable.
 :::
 
 :::danger Local trial only

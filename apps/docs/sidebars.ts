@@ -26,6 +26,7 @@ const sidebars: SidebarsConfig = {
   ],
   selfHosting: [
     'self-hosting/index',
+    'self-hosting/community-edition',
     'self-hosting/docker-compose',
     'self-hosting/compose-file',
     'self-hosting/configuration',

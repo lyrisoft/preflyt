@@ -606,7 +606,9 @@ export function WorkspaceModule({ module }: { module: Module }) {
                           {canManage && (
                             <Button size='sm' variant='outline' asChild>
                               {installation.active ? (
-                                <Link to='/repositories'>Manage repositories</Link>
+                                <Link to='/repositories'>
+                                  Manage repositories
+                                </Link>
                               ) : (
                                 <a href={`${API_BASE_URL}/github/install`}>
                                   Reconnect GitHub

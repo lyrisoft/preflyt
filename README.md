@@ -1,4 +1,4 @@
-# Preflyt
+# Preflyt Community Edition
 
 <p align="center">
   <img src="apps/docs/static/img/brand/logo-panel.svg" alt="PreflytLabs" width="480" />
@@ -42,6 +42,12 @@ Preflyt brings repository health, findings, standards, branch policies and devel
 6. **Optionally enforce the policy.** Require the check in GitHub, or explicitly activate Preflyt-managed merge protection. GitHub enforces whether a merge is allowed.
 
 Repository inspection identifies configuration; it does not execute tests or prove that a check passed. Saving repository standards and publishing a branch policy are separate actions. Neither automatically enables merge protection.
+
+## Community Edition
+
+Community Edition is free and self-hosted, with **unlimited repositories** subject to your infrastructure capacity. It includes Health, standards and policies, CI evidence/PR feedback, basic merge protection, findings/history, access controls, audit and optional BYOK AI. No paid model is required for the deterministic assurance workflow. Managed Cloud is planned for later.
+
+**Public Community release qualification is in progress.** The repository and packages have not been made public by this preparation. See the [release requirements](docs/planning/open-source-readiness.md) for current limits and outstanding clearance.
 
 ## What Preflyt provides
 
@@ -147,10 +153,10 @@ Use the [acceptance records](docs/acceptance) and [operator runbooks](docs/opera
 
 Use [GitHub issues](https://github.com/lyrisoft/preflyt/issues) for product feedback and reproducible defects. Include the affected version, workflow or commit, expected behavior and sanitized diagnostics. Exclude credentials, private source code and sensitive report contents.
 
-Report suspected vulnerabilities privately to your Lyrisoft contact rather than in a public issue.
+Report suspected vulnerabilities privately to **support@lyrisoft.tech** following [SECURITY.md](SECURITY.md). Read [SUPPORT.md](SUPPORT.md) for community help and [CONTRIBUTING.md](CONTRIBUTING.md) / [DCO](DCO) before contributing.
 
 ## Licensing
 
-This repository does not publish a project-wide open-source license for the Preflyt application. Access to the repository or documentation does not grant redistribution rights. The separate [Preflyt Action](https://github.com/lyrisoft/preflyt-action) is MIT-licensed; that license applies to the Action, not the application. Third-party components retain their own licenses.
+Original Preflyt Community Edition code and documentation are licensed under [Apache-2.0](LICENSE). Third-party code, assets and dependencies retain their own licenses; see [NOTICE](NOTICE) and [third-party notices](THIRD_PARTY_NOTICES.md). The separate [Preflyt Action](https://github.com/lyrisoft/preflyt-action) remains MIT-licensed. Names and logos do not imply trademark or endorsement rights. Public redistribution clearance is still tracked in the readiness plan.
 
 The Docker Compose deployment includes the Health scanner, a separate TLS-protected scanner engine and automatic connection setup. Run the documented start command; no separate scanner installation is needed. See [Automatic Health scanner](docs/deployment/health-scanner/README.md) for the deployment boundaries and local source-development startup. API and worker never receive Docker authority.

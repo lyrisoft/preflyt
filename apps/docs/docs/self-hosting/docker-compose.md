@@ -78,7 +78,9 @@ Create the random values with these commands and paste each result in:
 ```bash
 openssl rand -hex 24      # POSTGRES_PASSWORD, then again for DATABASE_APP_PASSWORD
 openssl rand -hex 20      # a strong SUPER_ADMIN_PASSWORD
-openssl rand -base64 32   # CONFIGURATION_ENCRYPTION_KEY, then again for GITHUB_USER_TOKEN_ENCRYPTION_KEY
+openssl rand -base64 32   # CONFIGURATION_ENCRYPTION_KEY
+openssl rand -base64 32   # GITHUB_USER_TOKEN_ENCRYPTION_KEY, use a different value
+openssl rand -base64 32   # AI_PROVIDER_ENCRYPTION_KEY, use a third different value
 ```
 
 Finally make the file private:
@@ -102,6 +104,7 @@ POSTGRES_PASSWORD=$(openssl rand -hex 24)
 DATABASE_APP_PASSWORD=$(openssl rand -hex 24)
 CONFIGURATION_ENCRYPTION_KEY=$(openssl rand -base64 32)
 GITHUB_USER_TOKEN_ENCRYPTION_KEY=$(openssl rand -base64 32)
+AI_PROVIDER_ENCRYPTION_KEY=$(openssl rand -base64 32)
 EOF
 chmod 600 .env
 ```
@@ -114,7 +117,7 @@ Read your sign-in password with `grep SUPER_ADMIN_PASSWORD .env`.
 Set `PREFLYT_VERSION` to the release you were given, and `WEB_ORIGIN` to your public HTTPS address with no trailing slash and no path.
 
 :::warning Back up your keys now
-`CONFIGURATION_ENCRYPTION_KEY` decrypts the credentials you save in **Settings → Configuration**. If you lose or replace it, those credentials cannot be recovered. Preflyt has no key rotation. Copy `.env` to your secret manager before you continue.
+Generate all three encryption keys before the first startup, even if you will configure AI later. `CONFIGURATION_ENCRYPTION_KEY` decrypts credentials saved in **Settings → Configuration**; `AI_PROVIDER_ENCRYPTION_KEY` decrypts AI provider credentials. Losing or replacing a key makes the credentials encrypted with it unreadable. Preflyt has no key rotation. Copy `.env` to your secret manager before you continue.
 :::
 
 :::note Passwords are set once

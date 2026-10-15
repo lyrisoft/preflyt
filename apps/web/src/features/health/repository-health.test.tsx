@@ -1311,6 +1311,13 @@ it('keeps findings and assessment history in separate tabs', async () => {
     .element(page.getByLabelText('Assessment history', { exact: true }))
     .toBeVisible()
   await expect
+    .element(
+      page
+        .getByLabelText('Assessment history', { exact: true })
+        .getByText('Completed', { exact: true })
+    )
+    .toHaveClass('text-success-text')
+  await expect
     .element(page.getByLabelText('Repository findings'))
     .not.toBeInTheDocument()
 })

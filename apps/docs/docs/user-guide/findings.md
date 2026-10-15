@@ -9,6 +9,13 @@ description: See and triage issues reported by your checks across all repositori
 
 **Findings** collects issues from **CI**, **repository Health assessments**, and **advisory PR AI reviews**, across every repository you can assess. Open it from **Workspace → Findings**.
 
+<figure className="pf-guide-screenshot">
+  <a href="/img/guides/findings.jpg" target="_blank" rel="noreferrer">
+    <img src="/img/guides/findings.jpg" alt="Findings separates reported issues from missing evidence, with source, repository and severity filters." width="1728" height="906" loading="lazy" />
+  </a>
+  <figcaption>Findings separates reported issues from missing evidence, with source, repository and severity filters. Select the image to view it full size.</figcaption>
+</figure>
+
 ## What is listed
 
 Findings come from saved reports. Each one belongs to a repository and an **exact commit**:

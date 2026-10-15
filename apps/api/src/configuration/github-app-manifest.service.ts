@@ -81,6 +81,6 @@ export class GitHubAppManifestService {
   async status(session: AuthenticatedSession, sessionToken: string) {
     this.authorize(session, sessionToken);
     const result = await this.db.gitHubAppManifestTransaction.findFirst({ where: { actorId: session.identityId, sessionHash: hash(sessionToken), expiresAt: { gt: new Date() } }, orderBy: { createdAt: 'desc' } });
-    return { status: result?.status ?? null, installationUrl: result?.status === 'CONNECTED' && result.appSlug ? `https://github.com/apps/${result.appSlug}/installations/new` : null };
+    return { status: result?.status ?? null, installationUrl: result?.status === 'CONNECTED' && result.appSlug ? `${resolveWebOrigin()}/api/github/connection` : null };
   }
 }
