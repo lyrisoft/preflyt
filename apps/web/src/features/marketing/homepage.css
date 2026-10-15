@@ -1,4 +1,9 @@
-/* Public website: reference-led composition; application UI retains its own type. */
+/* Public website stays dark without changing the workspace theme preference. */
+html:has(.marketing-site),
+body:has(.marketing-site) {
+  color-scheme: dark;
+  background: #0b0d0e;
+}
 .marketing-site {
   --website-bg: #0b0d0e;
   --website-panel: #131618;
@@ -20,16 +25,6 @@
     400 15px/1.6 'Geist',
     sans-serif;
   -webkit-font-smoothing: antialiased;
-}
-.marketing-site[data-theme='light'] {
-  --website-bg: #f7f8f6;
-  --website-panel: #edeff0;
-  --website-ink: #22282b;
-  --website-muted: #596166;
-  --website-quiet: #626a6f;
-  --website-line: #dadddf;
-  --website-accent: #315bea;
-  color-scheme: light;
 }
 .marketing-site * {
   box-sizing: border-box;
@@ -107,20 +102,8 @@
 .marketing-site .brand-light {
   transform: translateX(-5.525%);
 }
-.marketing-site .brand-dark {
-  transform: translateX(-1.519%);
-}
-.marketing-site .brand-dark {
-  display: none;
-}
 .marketing-site .brand-light {
   display: block;
-}
-.marketing-site[data-theme='light'] .brand-dark {
-  display: block;
-}
-.marketing-site[data-theme='light'] .brand-light {
-  display: none;
 }
 .marketing-site .desktop-nav {
   display: flex;
@@ -743,16 +726,6 @@
   font-size: 12px;
   color: var(--website-muted);
   margin-top: 20px;
-}
-.marketing-site .theme-toggle {
-  display: inline-flex;
-  gap: 8px;
-  align-items: center;
-  font-size: 11px !important;
-  background: none;
-  color: var(--website-muted);
-  border: 0;
-  padding: 8px 0;
 }
 .marketing-site .footer-bottom {
   display: flex;

@@ -2,6 +2,12 @@
 
 The existing web app serves the public homepage at `/`; workspace Overview is `/overview`.
 
+The public marketing pages always render in dark mode, including their generated HTML and embedded previews. The footer appearance control has been removed. Workspace theme preferences remain independent and are not overwritten when visiting the public site.
+
+Dark-only theme verification (15 October 2026): production build, TypeScript, focused lint and 23 Chromium checks passed, including responsive previews, a saved light workspace preference and generated-page hydration.
+
+Preview sidebar correction (15 October 2026): sidebar color aliases now resolve at each dark theme boundary instead of inheriting resolved light colors from the document root. The light/system preference regression reproduced the white sidebar before the fix. All 15 focused Chromium theme/responsive-preview checks, TypeScript and focused lint passed afterward; workspace theme cookies remain unchanged.
+
 `pnpm --filter @preflyt/web build` builds the client, renders the explicit public route allowlist using the same React/TanStack tree with network access disabled, and emits:
 
 - `dist/index.html` and `dist/<public-path>/index.html`: readable page content, route styles, metadata and hydration state.
