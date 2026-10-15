@@ -9,7 +9,7 @@ export async function loadScannerBundle(directory:string,name:string,command:typ
  if(!['gitleaks','semgrep','duplication','trivy','dependencies'].includes(name))throw new Error('Unknown bundled scanner')
  const index=JSON.parse(await readFile(join(directory,'bundles.json'),'utf8'))
  const entry=index?.version===1?index.images?.[name]:undefined
- if(!entry||typeof entry.image!=='string'||typeof entry.sha256!=='string'||entry.archive!==name+'.tar.gz'||!/^sha256:[a-f0-9]{64}$/.test(entry.image)||!/^[a-f0-9]{64}$/.test(entry.sha256))throw new Error('Invalid scanner bundle manifest')
+ if(!entry||typeof entry.image!=='string'||typeof entry.sha256!=='string'||entry.archive!==name+'.tar'||!/^sha256:[a-f0-9]{64}$/.test(entry.image)||!/^[a-f0-9]{64}$/.test(entry.sha256))throw new Error('Invalid scanner bundle manifest')
  // Content-addressed engine images can be reused after a service restart.
  let existing=false
  try{existing=(await command(['image','inspect',entry.image,'--format','{{.Id}}'])).toString().trim()===entry.image}catch{}

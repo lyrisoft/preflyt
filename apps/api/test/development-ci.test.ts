@@ -1,3 +1,4 @@
+import { nativeImages } from '../../../scripts/ci/local-images.mjs'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
@@ -64,6 +65,11 @@ it('builds release images only after a push, without repeating PR checks', () =>
   expect(publish.on.push.paths).toBeUndefined() // main must publish even for a test/docs-only commit
   expect(publish.jobs.inputs.permissions?.packages).toBeUndefined()
   expect(publish.jobs.inputs.steps[0].with['persist-credentials']).toBe(false)
+  const disk = publish.jobs.build.steps.findIndex((step:any)=>step.name==='Ensure API build disk headroom')
+  expect(disk).toBeGreaterThan(0)
+  expect(publish.jobs.build.steps[disk].if).toBe("matrix.group == 'api' && matrix.platform.arch == 'amd64'")
+  expect(publish.jobs.build.steps[disk].run).toBe('node scripts/ci/prepare-image-build.mjs')
+  expect(disk).toBeLessThan(publish.jobs.build.steps.findIndex((step:any)=>step.uses?.startsWith('docker/setup-buildx-action@')))
   expect(publish.jobs.build.needs).toBe('inputs')
   expect(publish.jobs.build.if).toBe("${{ needs.inputs.outputs.publish == 'true' }}")
   expect(publish.jobs.publish.needs).toBe('build')
@@ -80,6 +86,7 @@ it('builds and fixture-verifies native tools only when their inputs change', () 
   expect(native.on.push.branches).toEqual(['development', 'main'])
   for (const path of ['docs/deployment/native-runner/**', 'apps/api/scripts/native-check-fixtures.mts', 'pnpm-lock.yaml']) expect(native.on.push.paths).toContain(path)
   expect(native.on.push.paths).not.toContain('apps/web/**')
+  expect(Object.entries(nativeImages)).toEqual(native.jobs['publish-native'].strategy.matrix.include.map((item:any)=>['preflyt-native-'+item.tool,[item.dockerfile,item.target]]))
   const steps = native.jobs['publish-native'].steps
   const manager = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')).packageManager
   expect(steps.find((step:any)=>step.name==='Install locked fixture dependencies').run).toContain('npm install --global '+manager)

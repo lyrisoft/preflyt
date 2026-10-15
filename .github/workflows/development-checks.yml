@@ -17,7 +17,7 @@ jobs:
       - uses: ./.github/actions/setup-ci
       - name: Release automation tests
         run: |
-          node --test scripts/ci/create-release.test.mjs scripts/ci/publish-release.test.mjs scripts/ci/change-scope.test.mjs scripts/deploy/*.test.mjs
+          node --test scripts/ci/create-release.test.mjs scripts/ci/publish-release.test.mjs scripts/ci/change-scope.test.mjs scripts/ci/prepare-image-build.test.mjs scripts/ci/local-images.test.mjs scripts/deploy/*.test.mjs
           python3 -m unittest discover -s scripts/ci -p 'test_*.py'
       - name: Select focused tests
         id: focused
