@@ -81,6 +81,8 @@ it('builds and fixture-verifies native tools only when their inputs change', () 
   for (const path of ['docs/deployment/native-runner/**', 'apps/api/scripts/native-check-fixtures.mts', 'pnpm-lock.yaml']) expect(native.on.push.paths).toContain(path)
   expect(native.on.push.paths).not.toContain('apps/web/**')
   const steps = native.jobs['publish-native'].steps
+  const manager = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')).packageManager
+  expect(steps.find((step:any)=>step.name==='Install locked fixture dependencies').run).toContain('npm install --global '+manager)
   const test = steps.findIndex((step: any) => step.name === 'Verify the exact image with generated source')
   const push = steps.findIndex((step: any) => step.name === 'Publish only the verified image')
   expect(test).toBeGreaterThan(0)
@@ -91,13 +93,14 @@ it('builds and fixture-verifies native tools only when their inputs change', () 
 it('tests the published commit images without rebuilding and keeps docs off PRs', () => {
   const compose = workflow('compose-acceptance.yml')
   const steps = compose.jobs.compose.steps
-  const start = steps.find((step: any) => step.name === 'Build or pull and start all required services').run
+  const start = steps.find((step: any) => step.name === 'Build or pull the required images').run
   const published = start.split('else')[0]
   expect(published).toContain('pull')
   expect(published).toContain('org.opencontainers.image.revision')
   expect(published).toContain('test "$revision" = "$GITHUB_SHA"')
   expect(published).not.toContain('compose.local.yaml build')
-  expect(start).toContain('up -d --no-build --wait')
+  expect(start).not.toContain('up -d')
+  expect(steps.find((step:any)=>step.name==='Start services and wait for readiness').run).toContain('up -d --no-build --wait')
   expect(workflow('docs.yml').on.pull_request).toBeUndefined()
   expect(workflow('docs.yml').on.push.branches).toEqual(['main'])
 })

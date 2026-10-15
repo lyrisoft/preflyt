@@ -8,6 +8,7 @@ test('API, migration, controller and Health scanner share the native build stage
   publishRelease('build', env, args => { calls.push(args); if (args.includes('inspect')) return missing(); return ''; }, (_, contents) => { config = JSON.parse(contents); });
   assert.equal(Object.keys(config.target).length, 4);
   assert.equal(config.target['preflyt-health-scanner'].target, 'health-scanner');
+  assert.match(config.target['preflyt-health-scanner'].args.PREFLYT_DATABASE_EPOCH, /^\d{4}-\d{2}-\d{2}$/);
   for (const target of Object.values(config.target)) {
     assert.equal(target.dockerfile, 'deploy/api.Dockerfile');
     assert.deepEqual(target.platforms, ['linux/arm64']);

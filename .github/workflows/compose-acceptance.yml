@@ -49,7 +49,7 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build or pull and start all required services
+      - name: Build or pull the required images
         run: |
           docker compose --env-file "$PREFLYT_ENV_FILE" -f docker-compose.yaml -f compose.local.yaml config --quiet
           if [ "$PREFLYT_PUBLISHED_IMAGES" = true ]; then
@@ -61,12 +61,17 @@ jobs:
           else
             docker compose --env-file "$PREFLYT_ENV_FILE" -f docker-compose.yaml -f compose.local.yaml build
           fi
-          docker compose --env-file "$PREFLYT_ENV_FILE" -f docker-compose.yaml -f compose.local.yaml up -d --no-build --wait --wait-timeout 1800
+      - name: Start services and wait for readiness
+        run: docker compose --env-file "$PREFLYT_ENV_FILE" -f docker-compose.yaml -f compose.local.yaml up -d --no-build --wait --wait-timeout 1800
       - name: Verify login, origin checks and protected routes
         run: node --env-file="$PREFLYT_ENV_FILE" scripts/deploy/smoke.mjs
+      - name: Verify scanner readiness
+        run: docker compose --env-file "$PREFLYT_ENV_FILE" -f docker-compose.yaml -f compose.local.yaml exec -T api node dist/health/health-scanner-readiness.js
       - name: Verify all Health analyzers, signed findings and source cleanup
+        if: github.ref == 'refs/heads/main'
         run: docker compose --env-file "$PREFLYT_ENV_FILE" -f docker-compose.yaml -f compose.local.yaml exec -T api node dist/health/health-scanner-smoke.js
       - name: Verify migration replay and protected backup restore
+        if: github.ref == 'refs/heads/main'
         run: |
           dc() { docker compose --env-file "$PREFLYT_ENV_FILE" -f docker-compose.yaml -f compose.local.yaml "$@"; }
           dc run --rm migrate

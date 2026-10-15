@@ -80,3 +80,11 @@ it('ships Health scanner packaging without mounting engine authority or signing 
  expect(scanner.env_file).toBe('scanner.env')
  expect(JSON.stringify(scanner)).not.toMatch(/DATABASE_URL|GITHUB_APP_PRIVATE_KEY|docker.sock/)
 })
+
+it('keeps development deployment smoke checks and full main release qualification',()=>{
+ const workflow=parse(readFileSync(resolve(root,'.github/workflows/compose-acceptance.yml'),'utf8'))
+ const steps=workflow.jobs.compose.steps
+ for(const name of ['Verify login, origin checks and protected routes','Verify scanner readiness'])expect(steps.find((step:any)=>step.name===name).if).toBeUndefined()
+ for(const name of ['Verify all Health analyzers, signed findings and source cleanup','Verify migration replay and protected backup restore'])expect(steps.find((step:any)=>step.name===name).if).toBe("github.ref == 'refs/heads/main'")
+ expect(readFileSync(resolve(root,'deploy/api.Dockerfile'),'utf8')).toContain('HEALTH_SCANNER_BUNDLES_DIRECTORY=/opt/preflyt/scanner-bundles')
+})

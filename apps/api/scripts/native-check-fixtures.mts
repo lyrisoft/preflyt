@@ -75,13 +75,9 @@ const fixtures: Array<{
   files: Record<string, string>
   expected: string
 }> = [
-  {id:'coverage-measured',ruleId:'tests.coverage',tool:'node',files:{'app.js':'exports.choose = (flag) => {\n  if (flag) {\n    return 1;\n  }\n  return 2;\n};\n','app.test.js':'const {test}=require("node:test"); const assert=require("node:assert/strict"); const {choose}=require("./app.js"); test("actual branch",()=>assert.equal(choose(true),1));\n'},expected:'PASS'},
-  {id:'coverage-failing-tests',ruleId:'tests.coverage',tool:'node',files:{'app.test.js':'const {test}=require("node:test");test("fails",()=>{throw new Error("seeded")});\n'},expected:'INCOMPLETE'},
-  {id:'coverage-skipped-tests',ruleId:'tests.coverage',tool:'node',files:{'app.test.js':'const {test}=require("node:test");test.skip("not run",()=>{});\n'},expected:'INCOMPLETE'},
-  {id:'coverage-vitest-declared',ruleId:'tests.coverage',tool:'node',files:{'package.json':'{"devDependencies":{"vitest":"1.0.0"}}','app.test.js':'const {test}=require("node:test");test("actual",()=>{});\n'},expected:'INCOMPLETE'},
-  {id:'coverage-jest-globals',ruleId:'tests.coverage',tool:'node',files:{'app.test.js':'test("unrecognized global",()=>{});\n'},expected:'INCOMPLETE'},
-  {id:'coverage-no-tests',ruleId:'tests.coverage',tool:'node',files:{'app.js':'exports.value = 1;\n'},expected:'INCOMPLETE'},
-  {id:'coverage-no-source',ruleId:'tests.coverage',tool:'node',files:{'app.test.js':'const {test}=require("node:test");test("only test source",()=>{});\n'},expected:'INCOMPLETE'},
+  // Health coverage comes from CI. Historical coverage requests must fail closed
+  // when the image no longer contains the retired coverage test runner.
+  {id:'legacy-coverage-unavailable',ruleId:'tests.coverage',tool:'node',files:{'app.js':'exports.value = 1;\n','app.test.js':'const {test}=require("node:test");test("actual",()=>{});\n'},expected:'INCOMPLETE'},
 
   {id:'hotspot-seeded',ruleId:'security.hotspots',tool:'semgrep',files:{'app.js':'const digest = crypto.createHash("md5");\n'},expected:'FAIL'},
   {id:'hotspot-clean',ruleId:'security.hotspots',tool:'semgrep',files:{'app.js':'const digest = crypto.createHash("sha256");\n'},expected:'PASS'},
@@ -447,15 +443,11 @@ try {
         assert.ok(measurement && measurement.analyzedLines > 0, 'Measured duplication scope is required')
         assert.equal(measurement.duplicatedLines > 0, fixture.expected === 'FAIL')
       }
-      if(['coverage-vitest-declared','coverage-jest-globals'].includes(fixture.id)) {
-        assert.equal(coverageFailureReason(envelope.report, report ? createHash('sha256').update(report).digest('hex') : null), 'SUPPORTED_TESTS_REQUIRED')
-        assert.equal(coverageMeasurement(envelope.report, report ? createHash('sha256').update(report).digest('hex') : null), undefined)
-      }
-      if(fixture.ruleId === 'tests.coverage' && fixture.expected==='PASS') {
-        const measurement=coverageMeasurement(envelope.report,report?createHash('sha256').update(report).digest('hex'):null)
-        assert.ok(measurement,'Coverage requires measured actual tests')
-        assert.equal(measurement.tests,1)
-        assert.ok(measurement.coveredLines < measurement.analyzedLines, 'Untested branch must remain uncovered')
+      if (fixture.ruleId === 'tests.coverage') {
+        const digest = report ? createHash('sha256').update(report).digest('hex') : null
+        assert.equal(exit, 2, 'Retired coverage execution must fail closed')
+        assert.equal(coverageFailureReason(envelope.report, digest), 'TEST_RUNNER_FAILED')
+        assert.equal(coverageMeasurement(envelope.report, digest), undefined)
       }
       const outcome = nativeCheckOutcome(fixture.ruleId, exit, report)
       assert.equal(

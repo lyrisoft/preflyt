@@ -30,11 +30,14 @@ docker compose ps
 ```
 
 No source checkout, scanner environment file, manual directory ownership, certificate
-creation or connection-file transfer is required. The first start builds the fixed
-scanner images and downloads the vulnerability database into the dedicated engine;
-allow up to 30 minutes and use `docker compose logs -f health-scanner` for progress.
-Subsequent starts reuse the engine image cache. API/worker startup is gated on an
-authenticated scanner readiness check.
+creation or connection-file transfer is required. The published scanner image bundles
+the five built tool images and their initial vulnerability database. First startup
+checks the archive hashes and loads the pinned images into the dedicated engine;
+it does not compile tools or require another registry login. The larger scanner
+image still needs to be downloaded. Use `docker compose logs -f health-scanner`
+for progress. Subsequent starts reuse the exact engine images. API/worker startup
+is gated on an authenticated scanner readiness check. Source development outside
+Compose retains its local build path.
 
 Use at least 4 CPUs, 8 GiB of Docker memory and 20 GiB of free disk. Docker Desktop
 runs the nested engine in its Linux VM; a Linux Docker host must permit privileged
@@ -54,7 +57,9 @@ keys or source directories are mounted into API or worker.
 The release publishes `preflyt-health-scanner` with the same version as the application.
 Existing versions without that package cannot run the new Compose file: use a release
 that includes bundled Health. For a source checkout, the usual `docker compose build`
-builds the scanner target too.
+builds the scanner target and its tool archives too. Native Dockerfiles remain the
+source of truth: after editing one, run `node scripts/deploy/scanner-stages.mjs`
+and verify `node --test scripts/deploy/scanner-stages.test.mjs`.
 
 An optional synthetic acceptance check runs all eight static analyzers, verifies a
 redacted generated finding and signed result, and confirms source cleanup:

@@ -28,6 +28,7 @@ export function publishRelease(mode, env, docker = (args) => execFileSync('docke
       targets[image] = {
         context: '.', dockerfile, target: stage, platforms: [`linux/${arch}`],
         tags: [tag(image, `-${arch}`)],
+        ...(image === 'preflyt-health-scanner' ? { args: { PREFLYT_DATABASE_EPOCH: new Date().toISOString().slice(0, 10) } } : {}),
         'cache-from': [`type=registry,ref=ghcr.io/${owner}/${image}:build-cache-${arch}`],
         'cache-to': [`type=registry,mode=max,ref=ghcr.io/${owner}/${image}:build-cache-${arch}`],
         labels: { 'org.opencontainers.image.source': `https://github.com/${repository}`, 'org.opencontainers.image.revision': sha },

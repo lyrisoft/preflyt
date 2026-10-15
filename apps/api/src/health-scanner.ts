@@ -9,6 +9,7 @@ import { digest } from './assessments/assessment-digest.js'
 import { healthConnectionFile } from './health/health-scanner-client.js'
 import { healthDockerControls, type HealthScannerPackage } from './health/health-scanner-package.js'
 import { healthScannerServer } from './health/health-scanner-server.js'
+import { loadScannerBundle } from './health/health-scanner-bundles.js'
 import { execFileSync } from 'node:child_process'
 
 const forbidden=['DATABASE_URL','QUEUE_REDIS_URL','GITHUB_APP_PRIVATE_KEY','GITHUB_APP_CLIENT_SECRET','OIDC_CLIENT_SECRET','OPENAI_API_KEY','ANTHROPIC_API_KEY','AWS_SECRET_ACCESS_KEY','AWS_SESSION_TOKEN','CONFIGURATION_ENCRYPTION_KEY','AI_PROVIDER_ENCRYPTION_KEY','SMTP_PASSWORD']
@@ -35,8 +36,14 @@ async function prepareScanner(definition:typeof definitions[number], refresh=fal
  const prepared:NativeToolReview[]=[]
  const tag='preflyt-health-'+definition.name+':'+configHash.slice(0,16)+(definition.name==='dependencies'?'-'+new Date().toISOString().slice(0,10).replaceAll('-',''):'')
  console.info('Preparing Preflyt scanner: '+definition.name)
- await dockerCommand(['build','--quiet',...(refresh?['--no-cache']:[]),'-f',join(toolDirectory,definition.file),'-t',tag,...(definition.target?['--target',definition.target]:[]),toolDirectory],{timeoutMs:1200000,maxBytes:512000})
- const image=(await dockerCommand(['image','inspect',tag,'--format','{{.Id}}'])).toString().trim()
+ let image:string
+ if(process.env.HEALTH_SCANNER_BUNDLES_DIRECTORY && !refresh) {
+  image=await loadScannerBundle(process.env.HEALTH_SCANNER_BUNDLES_DIRECTORY,definition.name)
+ } else {
+  // Source development and scheduled database refresh retain the build path.
+  await dockerCommand(['build','--quiet',...(refresh?['--no-cache']:[]),'-f',join(toolDirectory,definition.file),'-t',tag,...(definition.target?['--target',definition.target]:[]),toolDirectory],{timeoutMs:1200000,maxBytes:512000})
+  image=(await dockerCommand(['image','inspect',tag,'--format','{{.Id}}'])).toString().trim()
+ }
  if(!/^sha256:[a-f0-9]{64}$/.test(image))throw new Error('Scanner image could not be pinned')
  const [executable,...args]=definition.versionCommand
  const version=(await dockerCommand(['run','--rm','--network','none','--read-only','--cap-drop','ALL','--security-opt','no-new-privileges=true','--user','65532:65532','--tmpfs','/scratch:rw,nosuid,nodev,noexec,size=134217728,mode=1777','--env','HOME=/scratch','--env','TMPDIR=/scratch','--env','SEMGREP_ENABLE_VERSION_CHECK=0','--env','SEMGREP_SEND_METRICS=off','--entrypoint',executable,image,...args],{timeoutMs:60000})).toString().match(/\d+\.\d+\.\d+(?:[-+][a-zA-Z0-9.]+)?/)?.[0]
