@@ -42,6 +42,9 @@ it.skipIf(!generated['../dist/index.html']).each([
     vi.stubGlobal('fetch', fetch)
     const html = (await generated[key]()) as string
     const markup = new DOMParser().parseFromString(html, 'text/html')
+    expect(
+      markup.querySelector('.marketing-site')?.getAttribute('data-theme')
+    ).toBe('dark')
     expect(markup.title).toBe(page.title)
     expect(
       markup.querySelector('meta[name="description"]')?.getAttribute('content')
@@ -75,7 +78,7 @@ it.skipIf(!generated['../dist/index.html']).each([
         .poll(() =>
           container.querySelector('.marketing-site')?.getAttribute('data-theme')
         )
-        .toBeTruthy()
+        .toBe('dark')
       await new Promise((resolve) => setTimeout(resolve, 200))
       expect(errors).toEqual([])
       expect(container.querySelector('h1')).toBe(heading)

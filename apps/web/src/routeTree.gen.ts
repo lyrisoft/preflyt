@@ -45,6 +45,7 @@ import { Route as AuthenticatedContributorsIndexRouteImport } from './routes/_au
 import { Route as AuthenticatedContributorsContributorIdRouteImport } from './routes/_authenticated/contributors/$contributorId'
 import { Route as AuthenticatedFindingsIndexRouteImport } from './routes/_authenticated/findings/index'
 import { Route as AuthenticatedFindingsFindingIdRouteImport } from './routes/_authenticated/findings/$findingId'
+import { Route as AuthenticatedRepositoriesIndexRouteImport } from './routes/_authenticated/repositories/index'
 import { Route as AuthenticatedRepositoriesRepositoryIdRouteImport } from './routes/_authenticated/repositories/$repositoryId'
 import { Route as AuthenticatedSettingsIndexRouteImport } from './routes/_authenticated/settings/index'
 import { Route as AuthenticatedSettingsAccountRouteImport } from './routes/_authenticated/settings/account'
@@ -244,6 +245,12 @@ const AuthenticatedFindingsFindingIdRoute =
     path: '/$findingId',
     getParentRoute: () => AuthenticatedFindingsRoute,
   } as any)
+const AuthenticatedRepositoriesIndexRoute =
+  AuthenticatedRepositoriesIndexRouteImport.update({
+    id: '/repositories/',
+    path: '/repositories/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedRepositoriesRepositoryIdRoute =
   AuthenticatedRepositoriesRepositoryIdRouteImport.update({
     id: '/repositories/$repositoryId',
@@ -322,6 +329,7 @@ export interface FileRoutesByFullPath {
   '/apps/': typeof AuthenticatedAppsIndexRoute
   '/contributors/': typeof AuthenticatedContributorsIndexRoute
   '/findings/': typeof AuthenticatedFindingsIndexRoute
+  '/repositories/': typeof AuthenticatedRepositoriesIndexRoute
   '/settings/': typeof AuthenticatedSettingsIndexRoute
 }
 export interface FileRoutesByTo {
@@ -363,6 +371,7 @@ export interface FileRoutesByTo {
   '/apps': typeof AuthenticatedAppsIndexRoute
   '/contributors': typeof AuthenticatedContributorsIndexRoute
   '/findings': typeof AuthenticatedFindingsIndexRoute
+  '/repositories': typeof AuthenticatedRepositoriesIndexRoute
   '/settings': typeof AuthenticatedSettingsIndexRoute
 }
 export interface FileRoutesById {
@@ -408,6 +417,7 @@ export interface FileRoutesById {
   '/_authenticated/apps/': typeof AuthenticatedAppsIndexRoute
   '/_authenticated/contributors/': typeof AuthenticatedContributorsIndexRoute
   '/_authenticated/findings/': typeof AuthenticatedFindingsIndexRoute
+  '/_authenticated/repositories/': typeof AuthenticatedRepositoriesIndexRoute
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
 }
 export interface FileRouteTypes {
@@ -453,6 +463,7 @@ export interface FileRouteTypes {
     | '/apps/'
     | '/contributors/'
     | '/findings/'
+    | '/repositories/'
     | '/settings/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -494,6 +505,7 @@ export interface FileRouteTypes {
     | '/apps'
     | '/contributors'
     | '/findings'
+    | '/repositories'
     | '/settings'
   id:
     | '__root__'
@@ -538,6 +550,7 @@ export interface FileRouteTypes {
     | '/_authenticated/apps/'
     | '/_authenticated/contributors/'
     | '/_authenticated/findings/'
+    | '/_authenticated/repositories/'
     | '/_authenticated/settings/'
   fileRoutesById: FileRoutesById
 }
@@ -814,6 +827,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedFindingsFindingIdRouteImport
       parentRoute: typeof AuthenticatedFindingsRoute
     }
+    '/_authenticated/repositories/': {
+      id: '/_authenticated/repositories/'
+      path: '/repositories'
+      fullPath: '/repositories/'
+      preLoaderRoute: typeof AuthenticatedRepositoriesIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/repositories/$repositoryId': {
       id: '/_authenticated/repositories/$repositoryId'
       path: '/repositories/$repositoryId'
@@ -917,6 +937,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedRepositoriesRepositoryIdRoute: typeof AuthenticatedRepositoriesRepositoryIdRoute
   AuthenticatedAppsIndexRoute: typeof AuthenticatedAppsIndexRoute
   AuthenticatedContributorsIndexRoute: typeof AuthenticatedContributorsIndexRoute
+  AuthenticatedRepositoriesIndexRoute: typeof AuthenticatedRepositoriesIndexRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
@@ -942,6 +963,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
     AuthenticatedRepositoriesRepositoryIdRoute,
   AuthenticatedAppsIndexRoute: AuthenticatedAppsIndexRoute,
   AuthenticatedContributorsIndexRoute: AuthenticatedContributorsIndexRoute,
+  AuthenticatedRepositoriesIndexRoute: AuthenticatedRepositoriesIndexRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =

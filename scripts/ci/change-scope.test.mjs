@@ -4,7 +4,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
-import { changedFiles, focusedCommands, imageRequired, runFocused, testPlan } from './change-scope.mjs';
+import { changedFiles, focusedCommands, imageRequired, runFocused, sourceContractTests, testPlan } from './change-scope.mjs';
 
 test('development does not rebuild images for test, documentation or PR-check-only changes', () => {
   assert.equal(imageRequired('development', ['apps/api/test/native-source.test.ts', 'apps/web/src/homepage.test.tsx',
@@ -15,6 +15,7 @@ test('every deployable or qualification input triggers exact-commit development 
   for (const path of ['apps/api/src/main.ts', 'apps/api/prisma/migrations/new/migration.sql', 'apps/api/prisma.config.ts',
     'apps/web/src/style.css', 'apps/api/src/runtime.check.ts', 'apps/web/scripts/prerender.mjs', 'apps/web/public/logo.svg', 'deploy/nginx.conf',
     'docker-compose.yaml', 'compose.local.yaml', '.env.example', 'scripts/deploy/smoke.mjs',
+    'docs/deployment/native-runner/Dockerfile.gitleaks', 'docs/deployment/native-runner/config/semgrep.yaml',
     'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', '.npmrc', '.dockerignore', 'packages/shared/index.ts',
     'patches/fix.patch', '.github/workflows/publish-images.yml', '.github/workflows/compose-acceptance.yml',
     'scripts/ci/change-scope.mjs']) assert.equal(imageRequired('development', [path]), true, path);
@@ -40,6 +41,7 @@ test('related tests use the verified comparison, exclude DB integration only on 
   const api = focusedCommands('api', scope)[0], web = focusedCommands('web', scope)[0];
   assert.ok(api.includes(`--changed=${scope.base}`));
   assert.ok(api.includes('**/*.integration.test.ts'));
+  for (const path of sourceContractTests) assert.ok(api.includes(path));
   assert.ok(web.includes('--browser.headless'));
   assert.equal(runFocused('api', scope, () => ({ status: 7 })), 7);
   assert.equal(runFocused('api', scope, () => ({ status: null })), 1);
@@ -98,4 +100,20 @@ test('real Git diffs retain deleted/renamed inputs and use the PR merge base ins
       if (branch === 'development') assert.match(readFileSync(summary, 'utf8'), /No new commit image tags/);
     }
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('service-backed API suites are integration tests and main retains the full suite', () => {
+  for (const name of ['github-worker', 'github-event-queue', 'redis-cache']) {
+    assert.ok(readFileSync(`apps/api/test/${name}.integration.test.ts`, 'utf8').length > 0);
+  }
+  const config = readFileSync('apps/api/vitest.config.ts', 'utf8');
+  assert.match(config, /include: \[\s*'test\/\*\*\/\*\.test\.ts'\s*\]/);
+  const full = focusedCommands('api', { paths: null, base: null })[0];
+  const related = focusedCommands('api', { paths: ['apps/api/src/main.ts'], base: 'a'.repeat(40) })[0];
+  for (const args of [full, related]) assert.equal(args[args.indexOf('--exclude') + 1], '**/*.integration.test.ts');
+  const main = readFileSync('.github/workflows/main-regression.yml', 'utf8');
+  assert.match(main, /services:/);
+  assert.match(main, /TEST_QUEUE_REDIS_URL:/);
+  assert.match(main, /API regression[\s\S]*pnpm --filter @preflyt\/api test --reporter/);
+  assert.ok(!main.includes('--exclude'));
 });

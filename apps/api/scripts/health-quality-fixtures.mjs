@@ -43,13 +43,36 @@ def collect(item, cache=None):
     return cache
 database.execute("SELECT * FROM products WHERE name = ?", (name,))
 `)
+appendFileSync(resolve(seeded, 'app.js'), `
+const label = active ? (ready ? "ready" : "waiting") : "off";
+try { work(); } catch (error) { throw error; }
+`)
+appendFileSync(resolve(seeded, 'app.py'), `
+from helpers import *
+try:
+    work()
+except ValueError:
+    raise
+`)
+appendFileSync(resolve(clean, 'app.js'), `
+const label = active ? "ready" : "off";
+try { work(); } catch (error) { log(error); throw error; }
+`)
+appendFileSync(resolve(clean, 'app.py'), `
+from helpers import work
+try:
+    work()
+except ValueError:
+    log_error()
+    raise
+`)
 const typescriptSeeded=resolve(root,'typescript-seeded'),typescriptClean=resolve(root,'typescript-clean')
 mkdirSync(typescriptSeeded);mkdirSync(typescriptClean)
 writeFileSync(resolve(typescriptSeeded,'app.ts'),'const typed: number = 1;\n'+readFileSync(resolve(seeded,'app.js'),'utf8'))
 writeFileSync(resolve(typescriptClean,'app.ts'),'const typed: number = 1;\n'+readFileSync(resolve(clean,'app.js'),'utf8'))
 try {
- for (const [kind, count] of Object.entries({semgrep:3,reliability:4,maintainability:4,hotspots:2})) {
-  for (const [directory, expected] of [[seeded, count], [clean, 0], [typescriptSeeded,{semgrep:1,reliability:2,maintainability:1,hotspots:1}[kind]], [typescriptClean,0]]) {
+ for (const [kind, count] of Object.entries({semgrep:3,reliability:4,maintainability:8,hotspots:2})) {
+  for (const [directory, expected] of [[seeded, count], [clean, 0], [typescriptSeeded,{semgrep:1,reliability:2,maintainability:3,hotspots:1}[kind]], [typescriptClean,0]]) {
    const run = spawnSync('docker', ['run', '--rm', '--network', 'none', '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '--pids-limit', '128', '--memory', '1g', '--cpus', '1', '--tmpfs', '/tmp:rw,nosuid,nodev,size=128m',
     '--env', 'SEMGREP_SETTINGS_FILE=/tmp/settings.yml', '--env', 'SEMGREP_LOG_FILE=/tmp/semgrep.log', '--env', 'GIT_CONFIG_GLOBAL=/tmp/gitconfig', '--env', 'SEMGREP_SEND_METRICS=off', '--env', 'SEMGREP_ENABLE_VERSION_CHECK=0',
     '--mount', `type=bind,source=${directory},target=/workspace,readonly`, '--workdir', '/workspace', '--entrypoint', '/usr/local/bin/semgrep', image,
@@ -60,7 +83,7 @@ try {
    const results = report.runs.flatMap(r => r.results ?? [])
    assert.equal(results.length, expected, `${kind} count`)
    if(expected) {
-    const expectedRules={semgrep:['preflyt-js-eval','preflyt-python-dynamic-execution','preflyt-python-sql-fstring'],reliability:['preflyt-js-nan-comparison','preflyt-python-bare-except','preflyt-js-async-promise-executor','preflyt-python-return-finally'],maintainability:['preflyt-no-debugger','preflyt-python-exec-statement','preflyt-python-mutable-default'],hotspots:['preflyt-js-md5-review','preflyt-python-md5-review']}[kind]
+    const expectedRules={semgrep:['preflyt-js-eval','preflyt-python-dynamic-execution','preflyt-python-sql-fstring'],reliability:['preflyt-js-nan-comparison','preflyt-python-bare-except','preflyt-js-async-promise-executor','preflyt-python-return-finally'],maintainability:['preflyt-no-debugger','preflyt-python-exec-statement','preflyt-python-mutable-default','preflyt-js-nested-ternary','preflyt-js-redundant-catch','preflyt-python-wildcard-import','preflyt-python-redundant-reraise'],hotspots:['preflyt-js-md5-review','preflyt-python-md5-review']}[kind]
     assert.deepEqual([...new Set(results.map(result=>result.ruleId.split('.').at(-1)))].sort(),expectedRules.filter(rule=>directory!==typescriptSeeded || !rule.startsWith('preflyt-python-')).sort())
    }
    for (const result of results) {

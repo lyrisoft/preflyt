@@ -1,7 +1,7 @@
-import {validFileAnalysis, fileAnalysisRules, type FileAnalysis} from './health-file-analysis.js'
+import {type ScanError, validFileAnalysis, fileAnalysisRules, type FileAnalysis} from './health-file-analysis.js'
 import type { HealthPolicyContext } from './health-policy-context.js'
 import { findingGuidance, type FindingGuidance, type FindingReferenceGuidance } from './finding-guidance.js'
-import { validDuplicationMeasurement, validCoverageMeasurement, type CoverageMeasurement, type DuplicationMeasurement } from './health-measurements.js'
+import { validDuplicationMeasurement, validCoverageMeasurement, type HealthTestResult, type CoverageMeasurement, type DuplicationMeasurement } from './health-measurements.js'
 import { digest } from '../assessments/assessment-digest.js'
 import type { RepositorySnapshot } from '../github/repository-profile.js'
 import type { NativeReceiptCheck } from '../execution/native-receipt.js'
@@ -12,21 +12,22 @@ export const healthAnalyses = [
  { id: 'security.dependencies', title: 'Dependency vulnerabilities', category: 'security', scope: 'Recognized dependency manifests and lockfiles, using the approved offline vulnerability database. Unknown or unresolvable dependencies are outside the measured scope.' },
  { id: 'iac.policy', title: 'Infrastructure configuration', category: 'security', scope: 'Terraform and detected Kubernetes or Helm files, using the approved Trivy configuration checks; deployed infrastructure is not tested.' },
  { id: 'quality.reliability', title: 'Reliability', category: 'reliability', scope: 'JavaScript and TypeScript NaN comparisons and async Promise executors, and Python bare except handlers and returns in finally. These Preflyt v2 rules do not measure overall application reliability.' },
- { id: 'quality.maintainability', title: 'Maintainability', category: 'maintainability', scope: 'JavaScript and TypeScript debugger statements, and Python exec calls and mutable list or dictionary defaults. These Preflyt v2 rules do not measure complexity or overall maintainability.' },
- { id: 'quality.duplication', title: 'Duplicated code', category: 'duplication', scope: 'JavaScript, TypeScript, Python, Java, Go, Ruby, PHP, C#, CSS, SCSS, SQL and Rust token blocks of at least 5 lines and 50 tokens; excluded folders and oversized files are omitted.' },
+ { id: 'quality.maintainability', title: 'Maintainability', category: 'maintainability', scope: 'JavaScript and TypeScript debugger statements, nested ternaries and redundant catch-and-rethrow blocks; Python exec calls, mutable defaults, wildcard imports and redundant except-and-reraise blocks. These seven Preflyt v3 rules cover specific maintainability patterns, not an overall quality score.' },
+ { id: 'quality.duplication', title: 'Duplicated code', category: 'duplication', scope: 'JavaScript, TypeScript, Python, Java, Go, Ruby, PHP, C#, CSS, SCSS, SQL and Rust token blocks of at least 5 lines and 50 tokens; dependencies, build output, generated folders, type declarations, minified JavaScript and oversized files are omitted.' },
  { id: 'security.hotspots', title: 'Security hotspot review', category: 'hotspot', scope: 'JavaScript and TypeScript createHash("md5") and Python hashlib.md5 calls. Other security-sensitive patterns are not covered by this Preflyt v1 pack.' },
- { id: 'tests.coverage', title: 'Optional test coverage', category: 'coverage', scope: 'Opt-in Node built-in JavaScript tests: loaded application files only. Vitest, Jest, pytest and files not loaded by the tests are not covered by this recipe.' },
+ { id: 'tests.coverage', title: 'Test coverage', category: 'coverage', scope: 'Existing Vitest, Jest or Node test commands across configured packages. Coverage follows repository test configuration and excludes files absent from the measured reports.' },
 ] as const
 export type HealthFinding = ReportFinding & { checkId: string; evidence: 'ANALYZER_REPORTED'; guidance?: FindingGuidance; referenceGuidance?: FindingReferenceGuidance }
 export type HealthReport = {
+ selection?: 'all' | 'security' | 'reliability' | 'maintainability' | 'duplication' | 'coverage';
  findingComparison?: { version: 1; key: string; checkIds: string[] };
  policyContext?: HealthPolicyContext;
  version: 1; completeness: 'COMPLETE' | 'PARTIAL'; mode: 'INSPECTION_ONLY' | 'EXECUTED';
  comparisonKey: string; inspection: { complete: boolean; fileCount: number; languages: string[] };
- analyses: Array<{ fileAnalysis?: FileAnalysis; id: string; title: string; scope?: string; state: string; reason: string; reportHash?: string | null; tool?: string; configHash?: string; findingsRetained?: number; findingsReported?: number; findingsSuppressed?: number }>;
+ analyses: Array<{ testResults?: HealthTestResult[]; scanErrors?: ScanError[]; fileAnalysis?: FileAnalysis; id: string; title: string; scope?: string; state: string; reason: string; reportHash?: string | null; tool?: string; configHash?: string; findingsRetained?: number; findingsReported?: number; findingsSuppressed?: number }>;
  findings: HealthFinding[]; limits: string[]; measurements?: { duplication?: DuplicationMeasurement; coverage?: CoverageMeasurement };
 }
-/** Static default only. Never runs tests, package scripts, builds, or AI. */
+/** Compatibility detection for the historical fixed Node recipe; discovery itself never executes code. */
 export const supportsNodeCoverage = (snapshot: RepositorySnapshot) => {
  const files = snapshot.files.filter(f => !/(?:^|\/)(?:node_modules|vendor|dist|build|coverage)\//.test(f.path))
  // A filename alone cannot identify Jest/Vitest tests. Do not offer this recipe
@@ -65,7 +66,7 @@ export function healthReport(inspection: HealthReport['inspection'], analyses: H
   const scope = input.scope ?? healthAnalyses.find(definition => definition.id === input.id)?.scope
   const a = {...input, ...(scope ? {scope} : {})}
   const c = checks.find(c => c.ruleId === a.id)
-  return c ? { ...a, ...(fileAnalysisRules.includes(c.ruleId) && c.cleanupConfirmed && c.state!=='INCOMPLETE' && validFileAnalysis(c.fileAnalysis) ? {fileAnalysis:c.fileAnalysis}:{}), state: c.state, reason: c.reason, reportHash: c.reportHash, tool: c.toolVersion, configHash: c.configHash, findingsRetained: c.findings?.length, findingsReported: typeof c.summary?.results === 'number' ? c.summary.results : undefined, findingsSuppressed: typeof c.summary?.suppressed === 'number' ? c.summary.suppressed : undefined } : a
+  return c ? { ...a, ...(c.testResults?{testResults:c.testResults}:{}), ...(c.scanErrors?.length?{scanErrors:c.scanErrors}:{}), ...(fileAnalysisRules.includes(c.ruleId) && c.cleanupConfirmed && c.state!=='INCOMPLETE' && validFileAnalysis(c.fileAnalysis) ? {fileAnalysis:c.fileAnalysis}:{}), state: c.state, reason: c.reason, reportHash: c.reportHash, tool: c.toolVersion, configHash: c.configHash, findingsRetained: c.findings?.length, findingsReported: typeof c.summary?.results === 'number' ? c.summary.results : undefined, findingsSuppressed: typeof c.summary?.suppressed === 'number' ? c.summary.suppressed : undefined } : a
  })
  const executed = checks.length > 0
  const complete = inspection.complete && projected.length > 0 && projected.every(a => {
@@ -95,7 +96,7 @@ export function healthReport(inspection: HealthReport['inspection'], analyses: H
    'Reliability and maintainability findings apply only to the recorded rules and supported languages; no overall quality grade is calculated.',
    ...(duplication ? ['Duplication uses unique-lines-v1 within the recorded analyzed scope; excluded or unsupported files are not part of its denominator.'] : ['Duplication measurements are unavailable until a qualified analyzer supplies a measured nonempty scope.']),
    'Hotspot reviews are human decisions for the retained findings at this commit, not proof of safety or a change to scan evidence. Coverage and complexity require qualified measured sources.',
-   ...(coverage?['Coverage uses node-covered-lines-v1 for loaded source files during the recorded successful Node tests. Unloaded files and coverage exclusions are not represented.']:['Test coverage is unavailable; it requires explicit opt-in, actual successful tests and a valid nonempty measurement.']),
+   ...(coverage?[coverage.version===2?'Coverage combines reported lines from the configured test packages after successful execution at this commit. Repository-authored tests and coverage configuration define the measured scope; this is not independent proof of test adequacy.':'Coverage uses node-covered-lines-v1 for loaded source files during the recorded successful Node tests.']:['Coverage is supplied by verified CI reports for the assessed commit. Repository Health does not execute tests.']),
   ] }
 }
 function comparableFindingScope(current: HealthReport, prior: HealthReport) {
@@ -131,21 +132,29 @@ export function redactHealthSource(text: string) {
  }).join('\n')
 }
 
-/** Only equivalent complete recorded scopes are plotted; missing evidence is not a zero. */
+/** Plot available observations; only equivalent measured scopes receive a comparison value. */
 export function healthTimeline(current: HealthReport | null, records: Array<{
  id: string; state: string; sourceSha: string | null; finishedAt: Date | null; report: HealthReport | null
 }>) {
- if (!current || current.mode !== 'EXECUTED' || (!current.findingComparison && current.completeness !== 'COMPLETE')) return []
- return records.filter(row => row.state === 'COMPLETED' && row.sourceSha && row.finishedAt && row.report?.mode === 'EXECUTED' &&
-  comparableHealthTrend(current, row.report) !== null)
+ if (!current) return []
+ return records.filter(row => row.state === 'COMPLETED' && row.sourceSha && row.finishedAt && row.report?.mode === 'EXECUTED' && (!row.report.selection || row.report.selection === 'all') &&
+  (row.report.findings.length > 0 || row.report.completeness === 'COMPLETE' || row.report.analyses.some(analysis =>
+   analysis.reportHash && Number.isSafeInteger(analysis.findingsRetained) && analysis.findingsRetained! >= 0)))
   .sort((a,b) => a.finishedAt!.getTime() - b.finishedAt!.getTime() || a.id.localeCompare(b.id))
-  .map(row => ({id:row.id,sourceSha:row.sourceSha!,at:row.finishedAt!.toISOString(),findings:scopedFindings(row.report!,current.findingComparison?.checkIds ?? []).length,...(current.findingComparison ? {checkIds:current.findingComparison.checkIds} : {})}))
+  .map(row => {
+   const comparable = comparableHealthTrend(current, row.report!) !== null
+   return {id:row.id,sourceSha:row.sourceSha!,at:row.finishedAt!.toISOString(),findings:row.report!.findings.length,
+    partial:row.report!.completeness !== 'COMPLETE',
+    comparableFindings:comparable ? scopedFindings(row.report!,current.findingComparison?.checkIds ?? []).length : null,
+    ...(comparable && current.findingComparison ? {checkIds:current.findingComparison.checkIds} : {})}
+  })
 }
 
 
 /** health-assessment-result-v1: outcome within the recorded applicable scope. */
 export function healthAssessmentResult(report: HealthReport | null | undefined, state: string): 'PASS' | 'FAIL' | 'INCOMPLETE' | null {
  if(state!=='COMPLETED') return null
+ if(report?.selection && report.selection !== 'all') return 'INCOMPLETE'
  if(!report || report.mode!=='EXECUTED' || report.completeness!=='COMPLETE' || !report.inspection?.complete || !report.analyses?.length) return 'INCOMPLETE'
  if(report.analyses.some(analysis=>analysis.state==='FAIL') || report.findings.length>0) return 'FAIL'
  return report.analyses.every(analysis=>analysis.state==='PASS' && analysis.findingsRetained===0 && analysis.findingsReported===0) ? 'PASS' : 'INCOMPLETE'

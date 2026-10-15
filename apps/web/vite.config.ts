@@ -53,8 +53,13 @@ export default defineConfig({
       instances: [{ browser: 'chromium' }],
     },
     coverage: {
-      // include: ['src/**/*.{js,jsx,ts,tsx}'], // Uncomment to expand the report to all src/**/* so untested modules appear as 0% coverage.
+      enabled: process.env.PREFLYT_COLLECT_COVERAGE === 'true',
+      provider: 'v8',
+      include: ['src/**/*.{js,jsx,ts,tsx}'],
+      reporter: ['lcovonly', 'text-summary'],
+      reportsDirectory: './coverage',
       exclude: [
+        '**/*.{test,spec}.{js,jsx,ts,tsx}',
         'src/components/ui/**',
         'src/assets/**',
         'src/routeTree.gen.ts',

@@ -12,7 +12,7 @@ Every repository-management listing still checks installation status live. Enabl
 
 Redis operations have 500 ms connection/command limits and a five-second reconnect cooldown. Missing, expired, invalid or oversized (over 2 MiB) cache entries fetch fresh metadata. Redis failure falls back to the upstream source; it does not change API authentication or readiness. Configure cache memory limits and an eviction policy on a dedicated cache instance; keep future durable BullMQ queues on separate storage with a no-eviction policy.
 
-Run the scoped tests from the repository: `pnpm --filter @preflyt/api exec vitest run test/redis-cache.test.ts test/github.integration.test.ts`. Redis tests use unique keys on the local service, delete only those keys, and require it to be reachable. Set `TEST_REDIS_URL` to override its default `redis://127.0.0.1:6379/0`.
+Run the scoped tests from the repository: `pnpm --filter @preflyt/api exec vitest run test/redis-cache.integration.test.ts test/github.integration.test.ts`. Redis tests use unique keys on the local service, delete only those keys, and require it to be reachable. Set `TEST_REDIS_URL` to override its default `redis://127.0.0.1:6379/0`.
 
 
 ## Workflow editor

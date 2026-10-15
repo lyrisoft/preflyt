@@ -11,14 +11,14 @@ export async function initializeNativeSource(root, bundle, scope) {
   if (!directory.isDirectory() || directory.isSymbolicLink() || (process.getuid && directory.uid !== process.getuid())) throw new Error('Invalid source directory')
   if (resolve(root) !== root || (await readdir(root)).length || !bundle || bundle.version !== 1 ||
       bundle.repositoryId !== scope.repositoryId || bundle.sourceSha !== scope.sourceSha || bundle.sourceHash !== scope.sourceHash ||
-      !Array.isArray(bundle.files) || bundle.files.length > 2000 || Buffer.byteLength(JSON.stringify(bundle)) > 524288) throw new Error('Invalid source initialization')
+      !Array.isArray(bundle.files) || bundle.files.length > 8000 || Buffer.byteLength(JSON.stringify(bundle)) > 524288) throw new Error('Invalid source initialization')
   const names = new Set(), directories = new Set([root]); let bytes = 0
   // Validate every path before creating anything; init and check containers never run concurrently.
   for (const file of bundle.files) {
     if (!safe(file.path) || names.has(file.path.toLowerCase()) || !['100644', '100755'].includes(file.mode) ||
         !Number.isSafeInteger(file.size) || file.size < 0 || file.size > 2097152 || typeof file.content !== 'string') throw new Error('Invalid source file')
     names.add(file.path.toLowerCase()); bytes += file.size
-    if (bytes > 20971520) throw new Error('Source exceeds bounds')
+    if (bytes > 67108864) throw new Error('Source exceeds bounds')
     const content = Buffer.from(file.content, 'base64')
     if (content.length !== file.size || content.toString('base64') !== file.content) throw new Error('Invalid source encoding')
   }

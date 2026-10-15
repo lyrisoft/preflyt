@@ -226,6 +226,9 @@ test('generated private routing handles actual deep links but not unknown public
   for (const path of [
     '/overview',
     '/overview/',
+    '/repositories',
+    '/repositories/',
+    '/apps',
     '/repositories/42',
     '/findings/example',
     '/contributors/example',

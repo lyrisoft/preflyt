@@ -1,6 +1,7 @@
-import { fileAnalysisMeasurement, fileAnalysisRules, fileAnalysisFailureReason } from '../health/health-file-analysis.js'
+import {cleanupHealthTests} from '../health/health-test-job.js'
+import { fileAnalysisErrors, fileAnalysisMeasurement, fileAnalysisRules, fileAnalysisFailureReason } from '../health/health-file-analysis.js'
 import {fitHealthReceipt} from '../health/health-receipt-budget.js'
-import { duplicationMeasurement, coverageMeasurement, coverageFailureReason } from '../health/health-measurements.js'
+import { healthTestResults, duplicationMeasurement, coverageMeasurement, coverageFailureReason } from '../health/health-measurements.js'
 import { validateHealthFindingLocations } from '../health/health-finding-locations.js'
 import { healthReceiptFindings } from '../health/health-findings.js'
 import { constants } from 'node:fs'
@@ -17,7 +18,7 @@ import { join, resolve } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { digest } from '../assessments/assessment-digest.js'
 import { nativeAdmission } from './native-admission.js'
-import { nativeAdapters, type NativeRuleId } from './native-plan.js'
+import { nativeAdapters, type NativeRuleId, type NativeToolReview } from './native-plan.js'
 import { createNativeWorkspace } from './native-workspace.js'
 import { verifyNativeSourceBundle } from './native-source.js'
 import {
@@ -38,6 +39,7 @@ export type NativeJobRunner = (
   sourcePath: string,
   signal?: AbortSignal,
   source?: unknown,
+  plan?: unknown,
 ) => ReturnType<typeof runNativeDockerCheck>
 export type JobRecord = {
   expected: NativeReceiptExpected
@@ -47,6 +49,13 @@ export type JobRecord = {
   workspaceRoot: string | null
   cleanupPending?: boolean
   signature?: string
+}
+type NativeJobAdmission = (expected: NativeReceiptExpected) => {
+  reviewed: { backend: 'docker' | 'kubernetes'; approvalHash: string; approval: {
+    environmentId: string; controlsHash: string; controllerPublicKey: string
+  } }
+  tools: { reviews: NativeToolReview[]; reviewHash: string }
+  rules: NativeRuleId[]
 }
 const uuid = (v: string) =>
   /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(
@@ -63,9 +72,22 @@ export class NativeControllerJobs {
       runNativeDockerCheck(scope, ruleId, path, signal),
     private recover?: (expected: NativeReceiptExpected) => Promise<void>,
     private backend: 'docker' | 'kubernetes' = 'docker',
+    private admission: NativeJobAdmission = nativeAdmission,
   ) {}
   get available() {
     return this.ready
+  }
+  get idle() { return this.ready && !this.active && !this.admitting }
+  /** Health receipts are already durable in the application; never prune live jobs or source. */
+  async pruneHealthJournals(now = Date.now()) {
+    if (!this.idle) return
+    for (const id of await readdir(this.directory)) {
+      if (!uuid(id)) throw new Error('Unexpected controller journal entry')
+      const record = await this.read(id)
+      if (record.expected.selectionId.startsWith('health:') && record.state === 'COMPLETE' &&
+          !record.cleanupPending && !record.workspaceRoot && now - Date.parse(record.startedAt) > 7 * 86400000)
+        await rm(this.path(id), { recursive: true })
+    }
   }
   private path(id: string) {
     if (!uuid(id)) throw new Error('Invalid attempt')
@@ -87,8 +109,9 @@ export class NativeControllerJobs {
         (process.getuid && stat.uid !== process.getuid())
       )
         throw new Error('Unsafe journal permissions')
-      if (stat.size > 65536) throw new Error('Job journal exceeds bounds')
+      if (stat.size > 8 * 1024 * 1024 + 65536) throw new Error('Job journal exceeds bounds')
       const value = JSON.parse(await handle.readFile('utf8')) as JobRecord
+      if (!value.expected?.selectionId.startsWith('health:') && stat.size > 65536) throw new Error('Job journal exceeds bounds')
       if (
         value.expected?.attemptId !== id ||
         digest(value.expected) !== value.scopeHash
@@ -143,7 +166,7 @@ export class NativeControllerJobs {
     reason: string,
     cleanupConfirmed: boolean,
   ): NativeReceiptCheck[] {
-    const { tools, rules } = nativeAdmission(expected)
+    const { tools, rules } = this.admission(expected)
     return rules.map((ruleId) => {
       const tool = tools.reviews.find((t) => t.ruleId === ruleId)!,
         adapter = nativeAdapters[ruleId]
@@ -169,7 +192,7 @@ export class NativeControllerJobs {
     checks: NativeReceiptCheck[],
     cancelled: boolean,
   ) {
-    const { reviewed, tools } = nativeAdmission(record.expected)
+    const { reviewed, tools } = this.admission(record.expected)
     const { plan, ruleIds, ...scope } = record.expected
     const value: NativeReceipt = {
       ...scope,
@@ -297,6 +320,10 @@ export class NativeControllerJobs {
           await dockerCommand(['rm', '--force', container.Id])
         }
       }
+      if (record.expected.selectionId.startsWith('health:') && plan.testSettings && record.expected.ruleIds.includes('tests.coverage')) {
+        const step=plan.steps.find((s:any)=>s.ruleId==='tests.coverage')
+        await cleanupHealthTests(this.scope(record.expected),{ruleId:'tests.coverage',image:step.image,toolVersion:step.toolVersion,license:step.license,configHash:step.configHash,reviewDigest:step.reviewDigest,expiresAt:step.reviewExpiresAt,databaseBuiltAt:step.databaseBuiltAt},dockerCommand)
+      }
       if (!record.workspaceRoot) {
         for (const name of await readdir(this.path(id)))
           if (name.startsWith('preflyt-native-')) {
@@ -340,6 +367,7 @@ export class NativeControllerJobs {
         this.active.abort.abort()
       return {
         state: record.state,
+        ...(record.expected.selectionId.startsWith('health:') ? {cleanupConfirmed: record.state === 'COMPLETE' && !record.cleanupPending && !record.workspaceRoot} : {}),
         ...(record.signature ? { signature: record.signature } : {}),
       }
     }
@@ -354,7 +382,7 @@ export class NativeControllerJobs {
   }
   private async admit(expected: NativeReceiptExpected, source: unknown) {
     const hash = digest(expected)
-    const { reviewed } = nativeAdmission(expected)
+    const { reviewed } = this.admission(expected)
     if (
       reviewed.backend !== this.backend ||
       (this.backend === 'kubernetes' && !this.recover)
@@ -398,7 +426,9 @@ export class NativeControllerJobs {
     })
     this.active = { id: expected.attemptId, abort, done }
     // Errors retain the journal for restart cleanup; no false success is returned.
-    void done.catch(() => {
+    void done.catch((error) => {
+      const code = typeof error?.code === 'string' && /^[A-Z_]{2,40}$/.test(error.code) ? error.code : 'JOB_EXECUTION_FAILED'
+      console.error(JSON.stringify({ event: 'health.scanner.job_failed', assessmentId: expected.requestId, reason: code }))
       this.ready = false
     })
     return { state: 'PREPARING' }
@@ -421,7 +451,7 @@ export class NativeControllerJobs {
     try {
       for (let i = 0; i < checks.length; i++) {
         if (signal.aborted) break
-        nativeAdmission(record.expected)
+        this.admission(record.expected)
         const ruleId = checks[i].ruleId as NativeRuleId
         const result = await this.runner(
           this.scope(record.expected),
@@ -429,6 +459,7 @@ export class NativeControllerJobs {
           workspace.workspace,
           signal,
           bundle,
+          record.expected.plan,
         )
         const safe = {
           ruleId,
@@ -456,9 +487,11 @@ export class NativeControllerJobs {
         const fileFailure = record.expected.selectionId.startsWith('health:') && fileAnalysisRules.includes(ruleId) ? fileAnalysisFailureReason(result.report,result.reportHash) : undefined
         if(fileFailure) {safe.state='INCOMPLETE';safe.reason=fileFailure}
         if(fileAnalysis && (!fileAnalysis.candidateFiles || !fileAnalysis.analyzedFiles)) {safe.state='INCOMPLETE';safe.reason='FILE_ANALYSIS_SCOPE_EMPTY'}
-        if(ruleId === 'quality.duplication' && (!measurement || measurement.analyzedLines===0)) {safe.state='INCOMPLETE';safe.reason='DUPLICATION_SCOPE_UNAVAILABLE'}
+        if(ruleId === 'quality.duplication' && safe.state!=='INCOMPLETE' && (!measurement || measurement.analyzedLines===0)) {safe.state='INCOMPLETE';safe.reason='DUPLICATION_SCOPE_UNAVAILABLE'}
         if(ruleId === 'tests.coverage' && (!measurement || measurement.kind!=='coverage')) {safe.state='INCOMPLETE';safe.reason=coverageFailureReason(result.report,result.reportHash)??'COVERAGE_UNAVAILABLE'}
-        checks[i] = { ...safe, ...(fileAnalysis ? {fileAnalysis} : {}), ...(measurement ? {measurement} : {}), ...(findings === undefined ? {} : { findings }) }
+        const scanErrors = record.expected.selectionId.startsWith('health:') && (fileAnalysisRules.includes(ruleId) || ruleId==='quality.duplication') ? fileAnalysisErrors(result.report,result.reportHash) : undefined
+        const testResults=ruleId==='tests.coverage'&&record.expected.selectionId.startsWith('health:')?healthTestResults(result.report,result.reportHash):undefined
+        checks[i] = { ...safe, ...(testResults?{testResults}:{}), ...(scanErrors ? {scanErrors} : {}), ...(fileAnalysis ? {fileAnalysis} : {}), ...(measurement ? {measurement} : {}), ...(findings === undefined ? {} : { findings }) }
         if (!result.cleanupConfirmed) {
           cleanup = false
           break

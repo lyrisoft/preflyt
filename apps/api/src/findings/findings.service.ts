@@ -20,6 +20,8 @@ import { FindingSourceStore } from "./finding-source-store.service.js";
 import { hiddenSource } from "./finding-source-store.js";
 import type { HealthReport } from "../health/health-report.js";
 import { summarizeFindings } from "./findings-summary.js";
+import { aiReviewFindingRows } from './ai-review-findings.js';
+import { redactHealthSource } from '../health/health-report.js';
 @Injectable()
 export class FindingsService {
   constructor(
@@ -46,13 +48,13 @@ export class FindingsService {
       page = Number(query.page ?? 1);
     if (
       !["all", "REPORTED", "IN_REVIEW", "RESOLVED"].includes(triage) ||
-      !["findings", "gaps"].includes(kind) ||
-      !["all", "ci", "health"].includes(source) ||
+      !["findings", "gaps", "ai"].includes(kind) ||
+      !["all", "ci", "health", "ai"].includes(source) ||
       (health !== undefined && (!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(health) || source !== "health" || repository === "all")) ||
       !["all", "critical", "high", "medium", "low", "unknown"].includes(
         severity,
       ) ||
-      !["all","security","reliability","maintainability","duplication","hotspot","coverage","tests","check"].includes(category) ||
+      !["all","security","reliability","maintainability","duplication","hotspot","coverage","tests","check","ai"].includes(category) ||
       search.length > 100 ||
       !Number.isSafeInteger(page) ||
       page < 1
@@ -73,6 +75,10 @@ export class FindingsService {
       );
     const assessment = lookupId && query.assessment !== undefined ? String(query.assessment) : undefined;
     if (assessment !== undefined && !/^[a-zA-Z0-9_-]{1,80}$/.test(assessment)) throw new BadRequestException("Choose a valid assessment");
+    if (kind === 'ai' || source === 'ai') {
+      const result = await this.aiFindings(session, selected, scope, { page, search, severity, category, triage, assessment, lookupId });
+      return kind === 'gaps' ? { ...result, rows: [], total: 0, summary: summarizeFindings([], 'gaps') } : result;
+    }
     const records = source === "health" ? [] : await this.db.commitAssessment.findMany({
       where: { repositoryId: { in: selected.map((item) => item.id) }, ...(assessment ? { id: assessment } : {}) },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -257,10 +263,14 @@ export class FindingsService {
         });
       }
     }
-    // Put both sources in one stable chronological order before deduplication/pagination.
-    rows.sort((a, b) => b.observedAt.localeCompare(a.observedAt) || a.id.localeCompare(b.id));
+    const ai = source === 'all' && kind !== 'gaps' ? await this.aiFindings(session, selected, scope,
+      { page: 1, search: '', severity: 'all', category: 'all', triage: 'all', assessment, lookupId }, true) : undefined;
+    if (ai) rows.push(...ai.rows);
+    // Put all sources in one stable chronological order before deduplication/pagination.
+    rows.sort((a, b) => (b.observedAt ?? "").localeCompare(a.observedAt ?? "") || a.id.localeCompare(b.id));
     const unique = new Map<string, any>();
-    for (const row of rows) {
+    if (rows.length > 2000) detailTruncated = true;
+    for (const row of rows.slice(0, 2000)) {
       const existing = unique.get(row.id);
       if (existing) existing.occurrences++;
       else unique.set(row.id, row);
@@ -271,19 +281,19 @@ export class FindingsService {
         (category === 'all' || row.category === category ||
           (['check','evidence'].includes(row.category) && ({security:/^(?:security\.(?!hotspots$)|secrets\.|iac\.)/,reliability:/^quality\.reliability$/,maintainability:/^quality\.maintainability$/,duplication:/^quality\.duplication$/,hotspot:/^security\.hotspots$/,coverage:/^tests\.coverage$/} as Record<string,RegExp>)[category]?.test(row.ruleId ?? ''))) &&
         (!search ||
-          `${row.title} ${row.repository} ${row.ruleId ?? ""} ${row.path ?? ""}`
+          `${row.title} ${row.recommendation ?? ""} ${row.repository} ${row.sourceSha} ${row.pullRequest ?? ""} ${row.ruleId ?? ""} ${row.path ?? ""}`
             .toLowerCase()
             .includes(search)),
     );
     const dispositions = await this.db.findingDisposition.findMany({
       where: {
         organizationId: session.organizationId!,
-        id: { in: matching.filter(row => row.origin === "ci").map((row) => row.id) },
+        id: { in: matching.filter(row => ["ci", "ai"].includes(row.origin)).map((row) => row.id) },
       },
     });
     for (const row of matching) {
       row.referenceGuidance = findingReferenceGuidance(row.ruleId);
-      const saved = row.origin === "ci" && dispositions.find(
+      const saved = ["ci", "ai"].includes(row.origin) && dispositions.find(
         (item) => item.id === row.id && item.sourceSha === row.sourceSha,
       );
       row.triage = saved
@@ -313,41 +323,112 @@ export class FindingsService {
       pageSize: 50,
       truncated:
         records.length > 200 ||
-        healthRecords.length > 200 ||
+        healthRecords.length > 200 || ai?.truncated ||
         new Set(artifactRefs).size > 100 ||
         detailTruncated,
       repositories: scope.map((repo) => ({
         githubId: String(repo.githubId),
         fullName: repo.fullName,
       })),
-      assessedRevisions: new Set([...latest.keys(), ...latestHealth.keys()]).size,
+      assessedRevisions: new Set([...latest.keys(), ...latestHealth.keys(), ...(ai?.rows.map(row => `${selected.find(repo => String(repo.githubId) === row.repositoryId)?.id}:${row.sourceSha}`) ?? [])]).size,
       incompleteHealth,
       inspectionOnly: source === "health" && latestHealth.size > 0 && [...latestHealth.values()].every(saved => (saved.report as unknown as HealthReport).mode === "INSPECTION_ONLY"),
     };
   }
 
-  private async finding(session: AuthenticatedSession, id: string, assessment?: string) {
+  private async aiFindings(session: AuthenticatedSession, selected: any[], scope: any[],
+    filters: { page: number; search: string; severity: string; category: string; triage: string; assessment?: string; lookupId?: string }, allRows = false) {
+    const records = await this.db.aiSkillReview.findMany({
+      where: { organizationId: session.organizationId!, repositoryId: { in: selected.map(r => r.id) },
+        stage: 'pull_request', state: 'SUCCEEDED', ...(filters.assessment ? { assessmentId: filters.assessment } : {}) },
+      include: { assessment: true }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 201,
+    });
+    const unique = new Map<string, any>();
+    let limited = false;
+    for (const review of records.slice(0, 200)) {
+      const repo = selected.find(r => r.id === review.repositoryId);
+      if (!repo || review.assessment.repositoryId !== repo.id) continue;
+      for (const row of aiReviewFindingRows(review, repo)) {
+        if (unique.size >= 2000) { limited = true; break; }
+        if (!unique.has(row.id)) unique.set(row.id, row);
+      }
+    }
+    const dispositions = await this.db.findingDisposition.findMany({ where: {
+      organizationId: session.organizationId!, id: { in: [...unique.keys()] },
+    } });
+    for (const row of unique.values()) {
+      const saved = dispositions.find(d => d.id === row.id && d.sourceSha === row.sourceSha);
+      row.triage = saved ? { state: saved.state, assigneeId: saved.assigneeId, note: saved.note, revision: saved.revision, updatedAt: saved.updatedAt }
+        : { state: 'REPORTED', assigneeId: null, note: '', revision: 0 };
+    }
+    const matching = [...unique.values()].filter(row =>
+      (filters.severity === 'all' || row.severity === filters.severity) && (filters.category === 'all' || filters.category === 'ai') &&
+      (filters.triage === 'all' || row.triage.state === filters.triage) &&
+      (!filters.lookupId || row.id === filters.lookupId) &&
+      (!filters.search || `${row.title} ${row.recommendation} ${row.repository} ${row.sourceSha} ${row.pullRequest} ${row.checkTitle} ${row.evidenceLocations.map((e: any) => e.path ?? e.label).join(' ')}`.toLowerCase().includes(filters.search)));
+    await this.access.requireOrganization(session, 'assessment.read');
+    const current = await this.access.repositoryScope(session.identityId, session.organizationId, 'assessment.read');
+    if (selected.some(repo => !current.some(r => r.id === repo.id)))
+      throw new ForbiddenException('Repository access changed. Refresh Findings.');
+    return {
+      canManage: !!rolePermissions[session.role]?.includes('findings.manage'), summary: summarizeFindings(matching, 'findings'),
+      aiSummary: { suggestions: matching.length, repositories: new Set(matching.map(r => r.repositoryId)).size,
+        pullRequests: new Set(matching.map(r => `${r.repositoryId}:${r.pullRequest}`)).size },
+      rows: allRows ? matching : matching.slice((filters.page - 1) * 50, filters.page * 50), total: matching.length,
+      page: filters.page, pageSize: 50, truncated: records.length > 200 || limited,
+      repositories: scope.map(repo => ({ githubId: String(repo.githubId), fullName: repo.fullName })),
+      assessedRevisions: new Set([...unique.values()].map(r => `${r.repositoryId}:${r.sourceSha}`)).size,
+    };
+  }
+
+  private async finding(session: AuthenticatedSession, id: string, assessment?: string, origin?: string) {
     if (!/^[a-f0-9]{64}$/.test(id))
       throw new BadRequestException("Choose a valid finding");
+    if (origin !== undefined && origin !== 'ai') throw new BadRequestException('Choose a valid finding source');
+    if (origin === 'ai') {
+      const ai = await this.list(session, { kind: 'ai', source: 'ai', ...(assessment ? { assessment } : {}) }, id);
+      if (ai.rows[0]) return ai.rows[0];
+      throw new NotFoundException('AI suggestion is unavailable in this assessment or repository scope');
+    }
     for (const kind of ["findings", "gaps"]) {
       const result = await this.list(session, { kind, source: "ci", ...(assessment ? { assessment } : {}) }, id);
       if (result.rows[0]) return result.rows[0];
     }
+    const ai = await this.list(session, { kind: 'ai', source: 'ai', ...(assessment ? { assessment } : {}) }, id);
+    if (ai.rows[0]) return ai.rows[0];
     throw new NotFoundException(
       "Finding is unavailable in your current scope or retained assessment window",
     );
   }
-  async detail(session: AuthenticatedSession, id: string, assessment?: string) {
-    const finding = await this.finding(session, id, assessment);
+  async detail(session: AuthenticatedSession, id: string, assessment?: string, origin?: string) {
+    const finding = await this.finding(session, id, assessment, origin);
     await this.access.requireRepository(session, finding.repositoryId, "assessment.read");
     return { finding, canManage: !!rolePermissions[session.role]?.includes("findings.manage") };
   }
-  async source(session: AuthenticatedSession, id: string, assessment?: string) {
-    const finding = await this.finding(session, id, assessment);
+  async source(session: AuthenticatedSession, id: string, assessment?: string, origin?: string) {
+    const finding = await this.finding(session, id, assessment, origin);
     const repo = await this.access.requireRepository(session, finding.repositoryId, "assessment.read");
     const base = { path: finding.path, line: finding.line, endLine: finding.endLine ?? finding.line, sourceSha: finding.sourceSha, lines: [] as Array<{ number: number; text: string }>, reason: null as string | null, truncated: false };
-    if (hiddenSource(finding)) return { ...base, reason: 'Secret source is hidden to protect credentials.' };
     if (!finding.path) return { ...base, reason: finding.category === 'check' || finding.category === 'evidence' ? 'This is a check result, not a finding at a code location. Review its assessment evidence below.' : 'The report did not supply a file location.' };
+    if (finding.origin === 'ai' && finding.codeSide === 'LEFT') {
+      const review = await this.db.aiSkillReview.findUnique({ where: { id: finding.reviewId }, include: { assessment: true } });
+      if (!review || review.organizationId !== session.organizationId || review.repositoryId !== repo.id ||
+        !aiReviewFindingRows(review, repo).some(row => row.id === finding.id))
+        throw new NotFoundException('The saved review source could not be verified.');
+      const available = new Map<number, string>();
+      for (const line of (review.snapshot as any).context.source?.lines ?? [])
+        if (line.path === finding.path && line.side === 'LEFT' && Math.abs(line.line - finding.line) <= 8)
+          available.set(line.line, line.text);
+      let first = finding.line, last = finding.line;
+      while (available.has(first - 1)) first--;
+      while (available.has(last + 1)) last++;
+      const lines = [];
+      for (let number = first; number <= last; number++)
+        if (available.has(number)) lines.push({ number, text: redactHealthSource(available.get(number)!) });
+      if (hiddenSource(finding)) for (const line of lines) if (line.number >= finding.line && line.number <= (finding.endLine ?? finding.line)) line.text = '[Potential credential redacted]';
+      await this.access.requireRepository(session, finding.repositoryId, 'assessment.read');
+      return { ...base, lines, truncated: true, reason: lines.length ? null : 'The review did not retain this changed line.' };
+    }
     const excerpt = await this.sources.read(repo.id, finding.sourceSha, finding);
     await this.access.requireRepository(session, finding.repositoryId, "assessment.read");
     return { ...base, ...excerpt };

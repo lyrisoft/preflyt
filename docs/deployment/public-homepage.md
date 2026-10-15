@@ -2,6 +2,12 @@
 
 The existing web app serves the public homepage at `/`; workspace Overview is `/overview`.
 
+The public marketing pages always render in dark mode, including their generated HTML and embedded previews. The footer appearance control has been removed. Workspace theme preferences remain independent and are not overwritten when visiting the public site.
+
+Dark-only theme verification (15 October 2026): production build, TypeScript, focused lint and 23 Chromium checks passed, including responsive previews, a saved light workspace preference and generated-page hydration.
+
+Preview sidebar correction (15 October 2026): sidebar color aliases now resolve at each dark theme boundary instead of inheriting resolved light colors from the document root. The light/system preference regression reproduced the white sidebar before the fix. All 15 focused Chromium theme/responsive-preview checks, TypeScript and focused lint passed afterward; workspace theme cookies remain unchanged.
+
 `pnpm --filter @preflyt/web build` builds the client, renders the explicit public route allowlist using the same React/TanStack tree with network access disabled, and emits:
 
 - `dist/index.html` and `dist/<public-path>/index.html`: readable page content, route styles, metadata and hydration state.
@@ -20,7 +26,7 @@ Compose passes these optional public build arguments:
 - `PUBLIC_SITE_URL`: an HTTPS origin, without path, credentials, query or fragment. Used for all public canonical URLs, sharing metadata and sitemap URLs. No canonical URL is invented when it is absent.
 - `PUBLIC_SITE_INDEXABLE`: defaults to `false`. Set `true` only for the intended public deployment; requires `PUBLIC_SITE_URL`.
 
-Rebuild the web image when changing these values. Private routes and the rendered 404 always retain noindex metadata, independently of robots.txt. The five W2 public pages are included. Public Open Graph/Twitter metadata and WebPage JSON-LD describe only the actual public page; no offers, ratings or certifications are generated. Public links currently use `https://lyrisoft.github.io/preflyt/`; an installation-specific documentation URL override is not implemented.
+Rebuild the web image when changing these values. Private routes and the rendered 404 always retain noindex metadata, independently of robots.txt. The five W2 public pages are included. Public Open Graph/Twitter metadata and WebPage JSON-LD describe only the actual public page; no offers, ratings or certifications are generated. Public links currently use `https://docs.preflytlabs.com/`; an installation-specific documentation URL override is not implemented.
 
 ## Historical W1 verification, 12 October 2026
 

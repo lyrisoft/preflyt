@@ -1,3 +1,4 @@
+import { nativeImages } from '../../../scripts/ci/local-images.mjs'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
@@ -9,7 +10,7 @@ const workflow = (name: string) => parse(readFileSync(resolve(root, '.github/wor
 it('checks the PR head and runs the published policy only for same-repository development PRs', () => {
   const verify = workflow('verify.yml')
   const development = workflow('development-checks.yml')
-  const steps = development.jobs.checks.steps
+  const steps = development.jobs.checks.steps, sourceSteps = development.jobs.source.steps, allSteps = [...steps, ...sourceSteps]
   expect(steps[0].with.ref).toContain('github.event.pull_request.head.sha')
   expect(steps[0].with['persist-credentials']).toBe(false)
   expect(steps[0].with['fetch-depth']).toBe(0)
@@ -17,21 +18,40 @@ it('checks the PR head and runs the published policy only for same-repository de
   expect(action.if).toContain("github.base_ref == 'development'")
   expect(action.if).toContain('github.event.pull_request.head.repo.full_name == github.repository')
   expect(action.if).toContain('!cancelled()')
-  expect(action.uses).toBe('lyrisoft/preflyt-action@v2.1.1')
-  expect(action.with).toEqual({ 'api-url': '${{ vars.PREFLYT_API_URL }}' })
+  expect(action.uses).toMatch(/^lyrisoft\/preflyt-action@[a-f0-9]{40}$/)
+  expect(action.with).toEqual({ 'api-url': '${{ vars.PREFLYT_API_URL }}', 'coverage-reports': '[{"path":"apps/web/coverage/lcov.info","prefix":"apps/web"}]', 'coverage-artifact': 'preflyt-coverage-api-${{ github.run_id }}-${{ github.run_attempt }}' })
+  expect(action.env.PREFLYT_COLLECT_COVERAGE).toBe('true')
   expect(verify.jobs.preflyt_gate.steps[0].uses).toBe(action.uses)
-  expect(development.jobs.checks.permissions).toEqual({ contents: 'read', 'id-token': 'write' })
-  for (const name of ['Type checks', 'Lint', 'Build validation']) expect(steps.find((step: any) => step.name === name).if).toContain('!cancelled()')
+  expect(development.jobs.checks.permissions).toEqual({ contents: 'read', actions: 'read', 'id-token': 'write' })
+  for (const name of ['Type checks', 'Lint', 'Build validation']) expect(allSteps.find((step: any) => step.name === name).if).toContain('!cancelled()')
   expect(development.jobs.checks.services).toBeUndefined()
   expect(steps.some((step: any) => /regression|compose/i.test(step.name ?? ''))).toBe(false)
-  expect(steps.find((step: any) => step.name === 'Workflow and source contracts').run).toContain('test/development-ci.test.ts')
-  expect(steps.find((step: any) => step.name === 'Workflow and source contracts').run).toContain('test/native-source.test.ts')
-  for (const [name, target] of [['Related API unit tests', 'api'], ['Related browser tests', 'web']]) {
-    const focused = steps.find((step: any) => step.name === name)
-    expect(focused.if).toContain(`steps.focused.outputs.${target} == 'true'`)
-    expect(focused.run).toBe(`node scripts/ci/change-scope.mjs ${target}`)
-    expect(focused.env.CI_HEAD_SHA).toContain('github.event.pull_request.head.sha')
+  const api = sourceSteps.find((step: any) => step.name === 'API unit tests and coverage')
+  expect(api.if).toBe('${{ !cancelled() }}')
+  expect(api.run).toContain("vitest run --exclude '**/*.integration.test.ts'")
+  expect(api.run).not.toContain('--changed')
+  expect(api.env.PREFLYT_COLLECT_COVERAGE).toBe('true')
+  expect(sourceSteps.filter((step: any) => /vitest|test\/.*\.test\.ts/.test(step.run ?? ''))).toHaveLength(1)
+  const upload = sourceSteps.find((step: any) => step.name === 'Upload API coverage from this execution')
+  expect(upload.if).toContain('success()')
+  expect(upload.with.name).toContain('${{ github.run_attempt }}')
+  expect(upload.with['retention-days']).toBe(1)
+  const focused = steps.find((step: any) => step.name === 'Related browser tests')
+  expect(focused.if).toContain("steps.focused.outputs.web == 'true'")
+  expect(focused.run).toBe('node scripts/ci/change-scope.mjs web')
+  expect(development.jobs.source.needs).toBeUndefined()
+  expect(development.jobs.checks.needs).toBeUndefined()
+  expect(development.jobs.source.permissions).toBeUndefined() // inherits read-only contents, no OIDC
+  const policyIndex = steps.findIndex((step: any) => step.name === 'Preflyt development policy')
+  const coverageIndex = steps.findIndex((step: any) => step.name === 'Check current policy browser coverage')
+  expect(coverageIndex).toBeGreaterThan(policyIndex)
+  expect(steps[coverageIndex].run).toBe('python3 scripts/ci/policy-browser-coverage.py')
+  for (const name of ['Install Chromium for related browser tests', 'Related browser tests']) {
+    expect(steps.find((step: any) => step.name === name).if).toContain("steps.browser.outputs.covered != 'true'")
   }
+  const cacheSteps = steps.filter((step: any) => step.uses?.startsWith('actions/cache@'))
+  expect(cacheSteps.map((step: any) => step.with.path)).toEqual(['.turbo/cache', '~/.cache/ms-playwright'])
+  expect(cacheSteps.every((step: any) => !step.with.path.includes('.preflyt'))).toBe(true)
   expect(verify.jobs.development.uses).toBe('./.github/workflows/development-checks.yml')
 })
 it('builds release images only after a push, without repeating PR checks', () => {
@@ -45,6 +65,11 @@ it('builds release images only after a push, without repeating PR checks', () =>
   expect(publish.on.push.paths).toBeUndefined() // main must publish even for a test/docs-only commit
   expect(publish.jobs.inputs.permissions?.packages).toBeUndefined()
   expect(publish.jobs.inputs.steps[0].with['persist-credentials']).toBe(false)
+  const disk = publish.jobs.build.steps.findIndex((step:any)=>step.name==='Ensure API build disk headroom')
+  expect(disk).toBeGreaterThan(0)
+  expect(publish.jobs.build.steps[disk].if).toBe("matrix.group == 'api' && matrix.platform.arch == 'amd64'")
+  expect(publish.jobs.build.steps[disk].run).toBe('node scripts/ci/prepare-image-build.mjs')
+  expect(disk).toBeLessThan(publish.jobs.build.steps.findIndex((step:any)=>step.uses?.startsWith('docker/setup-buildx-action@')))
   expect(publish.jobs.build.needs).toBe('inputs')
   expect(publish.jobs.build.if).toBe("${{ needs.inputs.outputs.publish == 'true' }}")
   expect(publish.jobs.publish.needs).toBe('build')
@@ -61,7 +86,10 @@ it('builds and fixture-verifies native tools only when their inputs change', () 
   expect(native.on.push.branches).toEqual(['development', 'main'])
   for (const path of ['docs/deployment/native-runner/**', 'apps/api/scripts/native-check-fixtures.mts', 'pnpm-lock.yaml']) expect(native.on.push.paths).toContain(path)
   expect(native.on.push.paths).not.toContain('apps/web/**')
+  expect(Object.entries(nativeImages)).toEqual(native.jobs['publish-native'].strategy.matrix.include.map((item:any)=>['preflyt-native-'+item.tool,[item.dockerfile,item.target]]))
   const steps = native.jobs['publish-native'].steps
+  const manager = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')).packageManager
+  expect(steps.find((step:any)=>step.name==='Install locked fixture dependencies').run).toContain('npm install --global '+manager)
   const test = steps.findIndex((step: any) => step.name === 'Verify the exact image with generated source')
   const push = steps.findIndex((step: any) => step.name === 'Publish only the verified image')
   expect(test).toBeGreaterThan(0)
@@ -72,13 +100,14 @@ it('builds and fixture-verifies native tools only when their inputs change', () 
 it('tests the published commit images without rebuilding and keeps docs off PRs', () => {
   const compose = workflow('compose-acceptance.yml')
   const steps = compose.jobs.compose.steps
-  const start = steps.find((step: any) => step.name === 'Build or pull and start all required services').run
+  const start = steps.find((step: any) => step.name === 'Build or pull the required images').run
   const published = start.split('else')[0]
   expect(published).toContain('pull')
   expect(published).toContain('org.opencontainers.image.revision')
   expect(published).toContain('test "$revision" = "$GITHUB_SHA"')
   expect(published).not.toContain('compose.local.yaml build')
-  expect(start).toContain('up -d --no-build --wait')
+  expect(start).not.toContain('up -d')
+  expect(steps.find((step:any)=>step.name==='Start services and wait for readiness').run).toContain('up -d --no-build --wait')
   expect(workflow('docs.yml').on.pull_request).toBeUndefined()
   expect(workflow('docs.yml').on.push.branches).toEqual(['main'])
 })
@@ -123,4 +152,42 @@ it('combines actual test outcomes and rejects missing or malformed current repor
     writeFileSync(web, '<!DOCTYPE x><testsuite><testcase name="x"/></testsuite>')
     expect(merge().status).toBe(1); expect(existsSync(out)).toBe(false)
   } finally { rmSync(dir, { recursive: true, force: true }) }
+})
+
+it('checks Pages configuration with a read-only build token before spending build time', () => {
+  const docs = workflow('docs.yml'), steps = docs.jobs.build.steps
+  expect(docs.jobs.build.permissions).toEqual({ contents: 'read', pages: 'read' })
+  expect(docs.jobs.deploy.permissions).toEqual({ pages: 'write', 'id-token': 'write' })
+  const pages = steps.findIndex((step: any) => step.uses?.startsWith('actions/configure-pages@'))
+  expect(pages).toBeGreaterThan(0)
+  expect(pages).toBeLessThan(steps.findIndex((step: any) => step.name === 'Install locked dependencies'))
+  expect(steps[pages].with?.enablement).not.toBe(true)
+})
+
+it('caches complete build products and keeps TypeScript incremental state with emitted files', () => {
+  const turbo = JSON.parse(readFileSync(resolve(root, 'turbo.json'), 'utf8'))
+  const api = JSON.parse(readFileSync(resolve(root, 'apps/api/tsconfig.json'), 'utf8'))
+  expect(api.compilerOptions.tsBuildInfoFile).toBe('./dist/.tsbuildinfo')
+  expect(turbo.tasks.build.outputs).toContain('dist/**')
+  expect(turbo.tasks['@preflyt/web#build'].outputs).toContain('.prerender/**')
+  expect(turbo.tasks['@preflyt/web#build'].inputs).toContain('$TURBO_ROOT$/deploy/nginx.conf')
+  const docs = turbo.tasks['@preflyt/docs#build']
+  for (const output of ['build/**', 'static/downloads/**']) expect(docs.outputs).toContain(output)
+  for (const input of ['docs/**', 'deploy/**', 'docker-compose.yaml', '.env.example']) expect(docs.inputs).toContain('$TURBO_ROOT$/' + input)
+  expect(docs.env).toEqual(['DOCS_URL', 'DOCS_BASE_URL', 'PREFLYT_DOCS_REGISTRY'])
+  expect(turbo.tasks.test.cache).toBe(false)
+})
+it('does not package the removed Health test runner in the native image', () => {
+  const context = 'docs/deployment/native-runner'
+  const dockerfile = readFileSync(resolve(root, context, 'Dockerfile.node'), 'utf8')
+  expect(dockerfile).not.toContain('COPY coverage')
+  expect(dockerfile).toContain('source-verification.mjs')
+  const tracked = spawnSync('git', ['ls-files', `${context}/coverage/`], { cwd: root, encoding: 'utf8' })
+  expect(tracked.status, tracked.stderr).toBe(0)
+  expect(tracked.stdout.trim()).toBe('')
+})
+
+it('builds documentation at the custom domain root rather than the legacy project path', () => {
+  const step = workflow('docs.yml').jobs.build.steps.find((step: any) => step.name?.startsWith('Type-check and build'))
+  expect(step.env).toEqual({ DOCS_URL: 'https://docs.preflytlabs.com', DOCS_BASE_URL: '/' })
 })

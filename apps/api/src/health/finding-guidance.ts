@@ -61,6 +61,30 @@ const rules: Record<string, Entry> = {
   limits:'The rule detects a broad handler; it does not determine whether recovery is intentional or correct.',
   reference:'https://docs.python.org/3/library/exceptions.html',
  },
+ 'preflyt-python-redundant-reraise': {
+  check:'quality.maintainability',
+  why:'The matched exception handler only re-raises the active exception without additional handling.',
+  fix:'Remove the redundant handler while preserving other exception handlers, else clauses and finally cleanup.',
+  limits:'Review the entire try statement first. This suggestion does not establish that exceptions are handled incorrectly.'
+ },
+ 'preflyt-python-wildcard-import': {
+  check:'quality.maintainability',
+  why:'A wildcard import hides which names a module uses and can introduce unexpected name collisions.',
+  fix:'Replace the wildcard with explicit imported names. Keep intentional public API re-exports where needed.',
+  limits:'This is advisory. Package initializers may deliberately re-export a documented public API.'
+ },
+ 'preflyt-js-redundant-catch': {
+  check:'quality.maintainability',
+  why:'The matched catch block throws the same error without adding handling or context.',
+  fix:'Remove the redundant catch block, preserving any finally cleanup and the surrounding error propagation.',
+  limits:'The check targets only a direct rethrow. Review surrounding cleanup before changing control flow.'
+ },
+ 'preflyt-js-nested-ternary': {
+  check:'quality.maintainability',
+  why:'Nested ternary branches combine several decisions in one expression, making each outcome harder to follow.',
+  fix:'Extract named intermediate values or use explicit if/else branches while preserving evaluation order.',
+  limits:'This is a readability suggestion, not proof of a bug. A short, familiar conditional may be clearer as written.'
+ },
  'preflyt-no-debugger': {
   check:'quality.maintainability',
   why:'A debugger statement can pause execution when debugging is available. Leftover statements can disrupt debugging and obscure production intent.',
@@ -87,9 +111,9 @@ const rules: Record<string, Entry> = {
 export function findingGuidance(check: string, ruleId: string | null): FindingGuidance | undefined {
  if (check === 'secrets.scan') return {
   version:2,source:'PREFLYT_RULE_GUIDANCE',rule:'secret-detection',
-  why:'The secret analyzer reported a pattern that may contain credentials or other sensitive material in the assessed revision. The value and surrounding source are hidden.',
-  fix:'Check the reported path securely. If it is a real credential, revoke or rotate it with its issuer, remove it from source and use the deployment secret store. Review access and repository history; deleting a line does not revoke a credential. Reassess after the change.',
-  limits:'This is general secret-detection guidance, not an explanation of the exact detector. A pattern match does not establish whether a credential is valid or has been used. Do not paste the value into review notes.',
+  why:ruleId==='generic-api-key' ? 'Gitleaks detected a credential-like value near an API key or token name. This pattern can also match dummy values in tests and examples. Review the indicated line to determine whether the value is a real credential.' : ruleId==='curl-auth-header' ? 'Gitleaks detected a credential-like value in an HTTP authorization header. Review the indicated line and whether the value is a live credential or an intentional example.' : 'The secret analyzer reported a pattern that may contain credentials or other sensitive material in the assessed revision. The credential value is redacted; the surrounding code and reported location remain available.',
+  fix:'Check the reported path securely. If it is a real credential, revoke or rotate it with its issuer, remove it from source and use the deployment secret store. Review access and repository history; deleting a line does not revoke a credential. For a dummy test value, use an unmistakable placeholder instead of a realistic token. Reassess after the change.',
+  limits:'Severity indicates potential impact: generic API key patterns are medium and recognized credential types are high. Test or example paths do not prove a value is harmless. A pattern match does not establish whether a credential is valid or has been used. Do not paste the value into review notes.',
  }
  // Semgrep can prefix rule IDs with the fixed config path. Do not use substring matches.
  const rule = ruleId?.split('.').at(-1)

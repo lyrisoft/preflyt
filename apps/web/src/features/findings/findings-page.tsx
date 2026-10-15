@@ -8,6 +8,7 @@ import {
   RefreshCw,
   Search,
   ShieldAlert,
+  Sparkles,
 } from 'lucide-react'
 import { API_BASE_URL } from '@/lib/api'
 import { Button } from '@/components/ui/button'
@@ -27,6 +28,7 @@ import { PageHelpDrawer } from '@/components/page-help-drawer'
 import { ResultTimestamp } from '@/components/result-timestamp'
 import { StatusBadge } from '@/components/status-badge'
 import { SurfaceIcon } from '@/components/surface-icon'
+import { HealthCoverageDetails } from '@/features/health/health-coverage-details'
 import { useNavigationSession } from '@/features/workspace/navigation-session'
 import { severityTone, triageLabels, type Finding } from './finding-types'
 import { FindingsOverview, type FindingsSummary } from './findings-summary'
@@ -36,6 +38,11 @@ type Results = {
   inspectionOnly?: boolean
   canManage?: boolean
   summary: FindingsSummary
+  aiSummary?: {
+    suggestions: number
+    repositories: number
+    pullRequests: number
+  }
   rows: Finding[]
   total: number
   pageSize: number
@@ -56,7 +63,10 @@ function FindingsWorkspace() {
   )
   const [health, setHealth] = useState(initial.health)
   const healthView = source === 'health' && !!health
-  const [kind, setKind] = useState<string>(initial.kind ?? 'findings')
+  const [kind, setKind] = useState<string>(
+    initial.kind === 'ai' ? 'findings' : (initial.kind ?? 'findings')
+  )
+  const aiView = source === 'ai'
   const [repository, setRepository] = useState(initial.repository ?? 'all')
   const [triageFilter, setTriageFilter] = useState<string>(
     initial.triage ?? 'all'
@@ -79,7 +89,9 @@ function FindingsWorkspace() {
       q,
       page,
     ],
-    enabled: session.isSuccess,
+    enabled:
+      session.isSuccess &&
+      !(healthView && category === 'coverage' && repository !== 'all'),
     retry: false,
     gcTime: 0,
     queryFn: async ({ signal }): Promise<Results> => {
@@ -97,11 +109,16 @@ function FindingsWorkspace() {
       return response.json()
     },
   })
+  if (healthView && category === 'coverage' && repository !== 'all') {
+    return (
+      <HealthCoverageDetails repositoryId={repository} assessmentId={health!} />
+    )
+  }
   return (
     <Main className='space-y-6'>
       <PageHeader
         title='Findings'
-        description='Findings from CI and repository health assessments.'
+        description='CI and repository health findings, plus advisory PR reviews.'
         section='Workspace'
         icon={ShieldAlert}
         tone='amber'
@@ -122,7 +139,7 @@ function FindingsWorkspace() {
                 {
                   title: 'Where findings come from',
                   content:
-                    'CI check failures and SARIF or JUnit report findings, together with retained findings from repository Health assessments. Use Source to choose CI or Repository health, and Finding type to focus on a category. Each result belongs to a repository and exact commit. Importing activity alone does not create an assessment.',
+                    'One Findings list includes CI, repository health and AI review findings. Use Source to focus on one source. AI findings retain their original assessment, commit, date and cited locations. They are advisory and never change check pass/fail results.',
                 },
                 {
                   title: 'Evidence and trust',
@@ -132,7 +149,7 @@ function FindingsWorkspace() {
                 {
                   title: 'Metrics and charts',
                   content:
-                    'Metrics use all matching entries before pagination and apply the source, finding type, repository, severity, status and applied search filters across both tabs. Reported issues include failed-check summaries and individual report findings; they are not a count of distinct vulnerabilities. Source-suppressed findings are excluded from metrics and charts, but remain in the list. Affected repositories have an issue or evidence gap. Critical/high counts only issues. Charts follow the selected tab; the check chart groups the top eight checks and combines the rest. Historical commits are included; these are not current-open or resolution metrics. AI suggestions are not counted. CI triage records assignment, review and resolution for the specific commit. Health findings retain their saved analyzer outcome; optional hotspot review is available in their details. A resolution is an audited human decision, not proof that a newer commit passes or a policy waiver.',
+                    'Metrics use all matching entries before pagination and apply the source, finding type, repository, severity, status and applied search filters across both tabs. Reported issues include failed-check summaries and individual report findings; they are not a count of distinct vulnerabilities. Source-suppressed findings are excluded from metrics and charts, but remain in the list. Affected repositories have an issue or evidence gap. Critical/high counts only issues. Charts follow the selected tab; the check chart groups the top eight checks and combines the rest. Historical commits are included; these are not current-open or resolution metrics. AI review findings are included in finding counts and severity charts; their ratings are advisory and do not change check results or readiness. CI triage records assignment, review and resolution for the specific commit. Health findings retain their saved analyzer outcome; optional hotspot review is available in their details. A resolution is an audited human decision, not proof that a newer commit passes or a policy waiver.',
                 },
                 {
                   title: 'Scope and limits',
@@ -149,6 +166,7 @@ function FindingsWorkspace() {
           value={kind}
           onValueChange={(value) => {
             setKind(value)
+            if (value === 'gaps' && source === 'ai') setSource('all')
             setPage(1)
           }}
         >
@@ -178,6 +196,12 @@ function FindingsWorkspace() {
             value={source}
             onValueChange={(value) => {
               setSource(value as typeof source)
+              if (value === 'ai') {
+                setKind('findings')
+                setCategory('all')
+                setSeverity('all')
+                setTriageFilter('all')
+              }
               setHealth(undefined)
               setPage(1)
             }}
@@ -192,10 +216,12 @@ function FindingsWorkspace() {
               <SelectItem value='all'>All sources</SelectItem>
               <SelectItem value='ci'>CI</SelectItem>
               <SelectItem value='health'>Repository health</SelectItem>
+              <SelectItem value='ai'>AI review</SelectItem>
             </SelectContent>
           </Select>
           <Select
             value={category}
+            disabled={aiView}
             onValueChange={(value) => {
               setCategory(value as typeof category)
               setPage(1)
@@ -350,27 +376,40 @@ function FindingsWorkspace() {
                 }}
               />
             )}
+          {aiView && result.data.aiSummary && (
+            <p className='text-sm text-muted-foreground'>
+              {result.data.aiSummary.suggestions} suggestions ·{' '}
+              {result.data.aiSummary.pullRequests} pull request
+              {result.data.aiSummary.pullRequests === 1 ? '' : 's'} ·{' '}
+              {result.data.aiSummary.repositories} repositor
+              {result.data.aiSummary.repositories === 1 ? 'y' : 'ies'}
+            </p>
+          )}
           {!result.data.rows.length ? (
             <div className='flex flex-col items-start gap-5 rounded-xl border bg-card p-4 sm:flex-row sm:items-center'>
               <SurfaceIcon icon={FileSearch} tone='amber' size='lg' />
               <div className='min-w-0 flex-1'>
                 <h2 className='text-base font-semibold'>
-                  {healthView && category === 'coverage'
-                    ? 'No CI coverage evidence for this commit'
-                    : result.data.inspectionOnly
-                      ? 'Analysis has not run'
-                      : result.data.assessedRevisions === 0
-                        ? 'No saved assessments yet'
-                        : 'No matching results'}
+                  {aiView
+                    ? 'No matching AI suggestions'
+                    : healthView && category === 'coverage'
+                      ? 'No CI coverage evidence for this commit'
+                      : result.data.inspectionOnly
+                        ? 'Analysis has not run'
+                        : result.data.assessedRevisions === 0
+                          ? 'No saved assessments yet'
+                          : 'No matching results'}
                 </h2>
                 <p className='mt-1 max-w-2xl text-sm leading-relaxed text-muted-foreground'>
-                  {healthView && category === 'coverage'
-                    ? 'Coverage comes from your CI test reports. Preflyt does not rerun tests to generate it.'
-                    : result.data.inspectionOnly
-                      ? 'These Health reports contain repository inspection only. Open a repository’s Health tab to review the analysis status.'
-                      : result.data.assessedRevisions === 0
-                        ? 'Create an assessment from a repository to collect check outcomes and findings from imported reports.'
-                        : 'Try another filter or open a saved assessment to review its full evidence.'}
+                  {aiView
+                    ? 'Completed PR reviews appear here when they return suggestions. Try another filter, or open Assessments to inspect review status.'
+                    : healthView && category === 'coverage'
+                      ? 'Coverage comes from your CI test reports. Preflyt does not rerun tests to generate it.'
+                      : result.data.inspectionOnly
+                        ? 'These Health reports contain repository inspection only. Open a repository’s Health tab to review the analysis status.'
+                        : result.data.assessedRevisions === 0
+                          ? 'Create an assessment from a repository to collect check outcomes and findings from imported reports.'
+                          : 'Try another filter or open a saved assessment to review its full evidence.'}
                 </p>
               </div>
               <Button size='sm' className='shrink-0' asChild>
@@ -384,7 +423,7 @@ function FindingsWorkspace() {
                     <ArrowUpRight className='size-4' />
                   </Link>
                 ) : (
-                  <Link to='/apps'>
+                  <Link to='/repositories'>
                     View repositories
                     <ArrowUpRight className='size-4' />
                   </Link>
@@ -399,7 +438,13 @@ function FindingsWorkspace() {
               <div className='flex items-center justify-between gap-3 border-b px-5 py-4'>
                 <div className='flex items-center gap-3'>
                   <SurfaceIcon
-                    icon={kind === 'gaps' ? FileSearch : ShieldAlert}
+                    icon={
+                      aiView
+                        ? Sparkles
+                        : kind === 'gaps'
+                          ? FileSearch
+                          : ShieldAlert
+                    }
                     tone={kind === 'gaps' ? 'amber' : 'blue'}
                     size='sm'
                   />
@@ -454,6 +499,9 @@ function FindingsWorkspace() {
                             }}
                             search={{
                               assessment: row.assessmentId,
+                              ...(row.origin === 'ai'
+                                ? { origin: 'ai' as const }
+                                : {}),
                               ...(row.origin === 'health'
                                 ? {
                                     origin: 'health' as const,
@@ -497,27 +545,52 @@ function FindingsWorkspace() {
                                 tests: 'Test failure',
                                 check: 'Failed check',
                                 evidence: 'Missing evidence',
+                                ai: 'PR review',
                               } as Record<string, string>
                             )[row.category ?? ''] ?? 'Other'}
                           </p>
                           <p className='mt-1 text-xs text-muted-foreground'>
-                            {row.origin === 'health'
-                              ? 'Repository health'
-                              : 'CI'}
+                            {row.origin === 'ai'
+                              ? 'AI review'
+                              : row.origin === 'health'
+                                ? 'Repository health'
+                                : 'CI'}
                           </p>
                         </td>
                         <td className='p-4'>
-                          <StatusBadge
-                            tone={severityTone[row.severity] ?? 'neutral'}
-                          >
-                            {row.severity}
-                          </StatusBadge>
+                          {row.origin === 'ai' && row.severity === 'unknown' ? (
+                            <span title='This saved review did not rate severity'>
+                              -
+                            </span>
+                          ) : (
+                            <StatusBadge
+                              tone={severityTone[row.severity] ?? 'neutral'}
+                            >
+                              {row.severity}
+                            </StatusBadge>
+                          )}
                         </td>
                         <td className='p-4 whitespace-nowrap'>
-                          <StatusBadge tone='neutral'>{row.status}</StatusBadge>
+                          <StatusBadge tone='neutral'>
+                            {row.origin === 'ai' &&
+                            row.triage?.state &&
+                            row.triage.state !== 'REPORTED'
+                              ? triageLabels[row.triage.state]
+                              : row.status}
+                          </StatusBadge>
                         </td>
                         <td className='p-4'>
                           <p>{row.repository}</p>
+                          {row.pullRequest && (
+                            <a
+                              href={row.pullRequestUrl}
+                              target='_blank'
+                              rel='noopener noreferrer'
+                              className='block text-xs underline underline-offset-4'
+                            >
+                              PR #{row.pullRequest}
+                            </a>
+                          )}
                           <code className='text-xs text-muted-foreground'>
                             {row.sourceSha.slice(0, 12)}
                           </code>
@@ -534,6 +607,9 @@ function FindingsWorkspace() {
                               }}
                               search={{
                                 assessment: row.assessmentId,
+                                ...(row.origin === 'ai'
+                                  ? { origin: 'ai' as const }
+                                  : {}),
                                 ...(row.origin === 'health'
                                   ? {
                                       origin: 'health' as const,

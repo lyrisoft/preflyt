@@ -13,13 +13,13 @@ Problems found in QA or production cost more than problems found while you desig
 2. **What evidence** exists for each of them, and can you trust it?
 3. **Is it ready** to progress, or where are the gaps?
 
-Preflyt is an **Engineering Assurance & Readiness Platform**. It connects repository health, approved requirements and verified evidence from tests and scanners. Your configured GitHub Actions integration provides continuous PR feedback; repository scanner execution depends on a qualified runtime. AI helps investigate and explain findings, while deterministic checks and approved policies own readiness evaluation. GitHub applies any explicitly configured merge restrictions.
+Preflyt is an **Engineering Assurance & Readiness Platform**. It connects repository health, approved requirements and verified evidence from tests and scanners. Your configured GitHub Actions integration provides continuous PR feedback; the built-in Health scanner runs applicable static checks in isolated containers. AI helps investigate and explain findings, while deterministic checks and approved policies own readiness evaluation. GitHub applies any explicitly configured merge restrictions.
 
 Preflyt works with your CI and scanning tools. It does not replace GitHub Actions, established testing frameworks or comprehensive scanner products. Built-in scanners have explicit coverage limits; existing tools can supply supported reports through configured policy commands.
 
 ## Health before CI
 
-Selecting a repository queues a branch Health assessment at a fixed commit. Reviewed scanners can produce located findings without a workflow or saved standards. Without an approved runtime, the report is explicitly inspection-only and partial. Health findings do not satisfy CI policy gates. See [Repository health](../user-guide/repository-health.md).
+Selecting a repository queues a branch Health assessment at a fixed commit. The built-in scanner produces located findings without a workflow, saved standards or additional approval. Source-access and scanner failures are shown with a reason and next steps. Partial analysis keeps its available findings and identifies the gaps. Health findings do not satisfy CI policy gates. See [Repository health](../user-guide/repository-health.md).
 
 ## The CI workflow
 
@@ -55,7 +55,7 @@ flowchart LR
 
 ## The three engines
 
-- **Validation**: discovers repository context, coordinates approved Health analysis and normalises CI evidence.
+- **Validation**: discovers repository context, coordinates automatic isolated Health analysis and normalises CI evidence.
 - **Governance**: holds your standards, requirements and quality gates.
 - **Intelligence**: explains findings using assessed code and supports optional PR reviews. **AI never decides a gate result.**
 
@@ -65,7 +65,7 @@ In the default install, Preflyt **reads** and **records**:
 
 - It reads repository files and metadata through a read-only GitHub App.
 - It records CI results GitHub reports for exact commits.
-- It does **not** run your tests or scanners itself. **Your own GitHub Actions workflow** runs them, and Preflyt verifies the completed run. Native execution inside Preflyt is off until you deploy its separate, reviewed controller.
+- The built-in Health scanner runs static analysis. It does **not** run your repository tests, install dependencies or provision test services. **Your own GitHub Actions workflow** owns tests and coverage; Preflyt verifies submitted evidence. Optional native command execution has separate deployment controls; see [Native execution](../user-guide/native-execution.md).
 - It does **not** block merges by default. Blocking needs three explicit steps: publish a policy, turn on PR checks, and require the **Preflyt / Engineering Readiness** check in GitHub. See [Pull request checks](../user-guide/pull-request-checks.md) and [Merge Protection](../user-guide/merge-protection.md).
 
 A **Related files found** result means a supported file or workflow reference exists at that commit. It does **not** prove the tool ran or passed.

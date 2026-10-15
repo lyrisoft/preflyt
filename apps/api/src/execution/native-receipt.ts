@@ -1,5 +1,6 @@
-import { validFileAnalysis, fileAnalysisRules, type FileAnalysis } from '../health/health-file-analysis.js'
-import { validDuplicationMeasurement, validCoverageMeasurement, type HealthMeasurement } from '../health/health-measurements.js'
+import {HEALTH_RECEIPT_PAYLOAD} from '../health/health-report-limits.js'
+import { validScanErrors, type ScanError, validFileAnalysis, fileAnalysisRules, type FileAnalysis } from '../health/health-file-analysis.js'
+import { validHealthTestResults, type HealthTestResult, validDuplicationMeasurement, validCoverageMeasurement, type HealthMeasurement } from '../health/health-measurements.js'
 import { validHealthFindings } from '../health/health-findings.js'
 import type { ReportFinding } from '../findings/normalize-report-findings.js'
 import { createPrivateKey, createPublicKey, sign, verify } from 'node:crypto'
@@ -37,6 +38,8 @@ export type NativeReceiptCheck = NativeCheckOutcome & {
   coverage: 'FULL_RULE' | 'PARTIAL'
   findings?: ReportFinding[]
   fileAnalysis?: FileAnalysis
+  scanErrors?: ScanError[]
+  testResults?: HealthTestResult[]
   measurement?: HealthMeasurement
 }
 export type NativeReceipt = NativeReceiptScope & {
@@ -100,7 +103,7 @@ export function signNativeReceipt(
     JSON.stringify({ alg: 'EdDSA', typ: receiptType }),
   ).toString('base64url')
   const payload = Buffer.from(JSON.stringify(value)).toString('base64url')
-  if (payload.length > 40000) throw new Error('Native receipt exceeds bounds')
+  if (payload.length > (value.selectionId.startsWith('health:') ? HEALTH_RECEIPT_PAYLOAD : 40000)) throw new Error('Native receipt exceeds bounds')
   const input = header + '.' + payload
   return input + '.' + sign(null, Buffer.from(input), key).toString('base64url')
 }
@@ -109,15 +112,22 @@ export function verifyNativeReceipt(
   token: unknown,
   expected: NativeReceiptExpected,
   now = Date.now(),
+  authority?: {
+    reviewed: { approvalHash: string; approval: {
+      organizationIds: string[]; controllerPublicKey: string; environmentId: string;
+      controlsHash: string; toolReviewHash?: string; approvedAt: string; expiresAt: string
+    } };
+    tools: NonNullable<ReturnType<typeof nativeToolReviews>>
+  },
 ): NativeReceipt | null {
   try {
-    const reviewed = nativeRuntimeApproval(),
-      tools = nativeToolReviews(undefined, now)
+    const reviewed = authority?.reviewed ?? nativeRuntimeApproval(),
+      tools = authority?.tools ?? nativeToolReviews(undefined, now)
     if (
       !reviewed ||
       !tools ||
       typeof token !== 'string' ||
-      token.length > 41000 ||
+      token.length > (expected.selectionId.startsWith('health:') ? HEALTH_RECEIPT_PAYLOAD + 1000 : 41000) ||
       expected.approvalHash !== reviewed.approvalHash ||
       !reviewed.approval.organizationIds.includes(expected.organizationId)
     )
@@ -239,7 +249,11 @@ export function verifyNativeReceipt(
           ...('findings' in check ? ['findings'] : []),
           ...('measurement' in check ? ['measurement'] : []),
           ...('fileAnalysis' in check ? ['fileAnalysis'] : []),
+          ...('scanErrors' in check ? ['scanErrors'] : []),
+          ...('testResults' in check ? ['testResults'] : []),
         ]) ||
+        ('testResults' in check && (!value.selectionId.startsWith('health:') || check.ruleId!=='tests.coverage' || !validHealthTestResults(check.testResults) || check.state==='PASS'&&check.testResults.some(r=>r.state!=='PASS'))) ||
+        ('scanErrors' in check && (!value.selectionId.startsWith('health:') || !(fileAnalysisRules.includes(check.ruleId) || check.ruleId === 'quality.duplication') || !validScanErrors(check.scanErrors))) ||
         ('fileAnalysis' in check && (!value.selectionId.startsWith('health:') || !fileAnalysisRules.includes(check.ruleId) || !validFileAnalysis(check.fileAnalysis))) ||
         ('measurement' in check && (!value.selectionId.startsWith('health:') || !(check.ruleId === 'quality.duplication' ? validDuplicationMeasurement(check.measurement) : check.ruleId === 'tests.coverage' ? validCoverageMeasurement(check.measurement) : false))) ||
         ('findings' in check && (!value.selectionId.startsWith('health:') || !validHealthFindings(check.findings) || check.findings.some((finding: { category: string }) => finding.category !== (check.ruleId === 'quality.reliability' ? 'reliability' : check.ruleId === 'quality.maintainability' ? 'maintainability' : check.ruleId === 'quality.duplication' ? 'duplication' : check.ruleId === 'security.hotspots' ? 'hotspot' : 'security')))) ||
@@ -286,6 +300,7 @@ export function verifyNativeReceipt(
         return null
       if (check.ruleId === 'quality.duplication' && check.state !== 'INCOMPLETE' && (!validDuplicationMeasurement(check.measurement) || check.measurement.analyzedLines === 0 || check.measurement.analyzedFiles === 0 || (check.state === 'PASS' ? check.measurement.clonePairs !== 0 : check.measurement.clonePairs === 0))) return null
       if(check.ruleId==='tests.coverage' && check.state!=='INCOMPLETE' && (check.state!=='PASS'||!validCoverageMeasurement(check.measurement))) return null
+      if(check.ruleId==='tests.coverage' && check.measurement?.kind==='coverage' && check.measurement.version===2 && (!check.testResults || check.testResults.length!==check.measurement.packages?.length || check.measurement.packages.some(p=>!check.testResults?.some(r=>r.directory===p.directory&&r.framework===p.framework&&r.state==='PASS')))) return null
       // A signed success still requires execution, complete coverage and confirmed cleanup.
       if (check.state !== 'INCOMPLETE') {
         if (

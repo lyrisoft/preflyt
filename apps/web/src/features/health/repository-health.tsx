@@ -16,6 +16,7 @@ import {
   ArrowUpRight,
   GitCommitHorizontal,
   LoaderCircle,
+  AlertCircle,
 } from 'lucide-react'
 import type { SurfaceTone } from '@/lib/surface-tones'
 import { Button } from '@/components/ui/button'
@@ -56,9 +57,12 @@ import {
   HealthRequestError,
   healthTone,
   healthLabel,
+  healthFailure,
+  healthReasons,
   useHealth,
   useHealthFreshness,
   type HealthAssessment,
+  type HealthCategory,
 } from './health-api'
 import { healthDimensionValues } from './health-dimensions'
 import { HealthHelp } from './health-help'
@@ -70,7 +74,7 @@ const pageSize = 10
 function findingMetricDescription(value: string) {
   if (value === 'Unavailable') return 'No verified finding count yet'
   if (value.startsWith('≥'))
-    return 'At least this many retained; analysis incomplete'
+    return 'More findings may appear when scanning completes.'
   return value === '0'
     ? 'No findings in the analyzed scope'
     : 'Retained findings in the analyzed scope'
@@ -81,12 +85,14 @@ export function RepositoryHealth({
   defaultBranch,
   assessmentId,
   selectedBranch,
+  onAssessmentQueued,
 }: {
   repositoryId: string
   name: string
   defaultBranch: string | null
   assessmentId?: string
   selectedBranch?: string
+  onAssessmentQueued?: (assessment: HealthAssessment) => void | Promise<unknown>
 }) {
   const session = useNavigationSession(),
     cache = useQueryClient()
@@ -99,7 +105,13 @@ export function RepositoryHealth({
     [severity, setSeverity] = useState('all')
   const [findingPage, setFindingPage] = useState(1)
   const [detailTab, setDetailTab] = useState<'findings' | 'history'>('findings')
-  const query = useHealth(repositoryId, selectedReport, page)
+  const query = useHealth(
+    repositoryId,
+    selectedReport,
+    page,
+    true,
+    selectedBranch || branch || undefined
+  )
   const loaded = query.isError ? undefined : query.data
   const freshnessQuery = useHealthFreshness(
     repositoryId,
@@ -135,15 +147,20 @@ export function RepositoryHealth({
     await cache.invalidateQueries({ queryKey: ['health-freshness'] })
   }
   const start = useMutation({
-    mutationFn: (value: string) =>
-      healthRequest<HealthAssessment>(
+    mutationFn: async (value: {
+      branch: string
+      category?: HealthCategory
+    }) => {
+      return healthRequest<HealthAssessment>(
         `repositories/${repositoryId}/health`,
         undefined,
-        { branch: value, requestKey: crypto.randomUUID() }
-      ),
-    onSuccess: async () => {
-      setSelectedReport(undefined)
+        { ...value, requestKey: crypto.randomUUID() }
+      )
+    },
+    onSuccess: async (assessment) => {
+      setSelectedReport(assessment.id)
       setPage(1)
+      await onAssessmentQueued?.(assessment)
       await refresh()
     },
   })
@@ -180,34 +197,60 @@ export function RepositoryHealth({
         row?.includeCoverage ?? false
       )
     : null
+  const metricResult = (category: HealthCategory, fallback: string) => {
+    const source = data?.categoryResults?.[category]
+    return {
+      category,
+      value:
+        source?.value ??
+        (report?.selection &&
+        report.selection !== 'all' &&
+        report.selection !== category
+          ? 'Unavailable'
+          : fallback),
+      assessmentId: source?.assessmentId ?? row?.id,
+      finishedAt:
+        source?.finishedAt ??
+        (report?.selection === category || !report?.selection
+          ? row?.finishedAt
+          : null),
+    }
+  }
   const metrics = dimensions
     ? [
         {
           label: 'Security',
-          value: dimensions.security,
-          description: findingMetricDescription(dimensions.security),
+          ...metricResult('security', dimensions.security),
+          description: findingMetricDescription(
+            metricResult('security', dimensions.security).value
+          ),
           icon: ShieldCheck,
           tone: 'blue' as SurfaceTone,
         },
         {
           label: 'Reliability',
-          value: dimensions.reliability,
-          description: findingMetricDescription(dimensions.reliability),
+          ...metricResult('reliability', dimensions.reliability),
+          description: findingMetricDescription(
+            metricResult('reliability', dimensions.reliability).value
+          ),
           icon: Bug,
           tone: 'blue' as SurfaceTone,
         },
         {
           label: 'Maintainability',
-          value: dimensions.maintainability,
-          description: findingMetricDescription(dimensions.maintainability),
+          ...metricResult('maintainability', dimensions.maintainability),
+          description: findingMetricDescription(
+            metricResult('maintainability', dimensions.maintainability).value
+          ),
           icon: Wrench,
           tone: 'teal' as SurfaceTone,
         },
         {
           label: 'Duplication',
-          value: dimensions.duplication,
+          ...metricResult('duplication', dimensions.duplication),
           description:
-            dimensions.duplication === 'Unavailable'
+            metricResult('duplication', dimensions.duplication).value ===
+            'Unavailable'
               ? 'No verified duplication measurement'
               : 'Duplicated analyzed lines',
           icon: Copy,
@@ -215,10 +258,17 @@ export function RepositoryHealth({
         },
         {
           label: 'Test coverage',
-          value: dimensions.coverage,
-          description: report?.measurements?.coverage
-            ? 'Recorded line coverage'
-            : 'No matching CI line coverage',
+          category: 'coverage' as const,
+          value: data?.ciCoverage?.measurement
+            ? `${((100 * data.ciCoverage.measurement.coveredLines) / data.ciCoverage.measurement.analyzedLines).toFixed(1)}%`
+            : 'Unavailable',
+          finishedAt: data?.ciCoverage?.receivedAt ?? null,
+          assessmentId: row?.id,
+          description: data?.ciCoverage?.measurement
+            ? 'Verified CI line coverage'
+            : data?.ciCoverage?.state === 'UNVERIFIED'
+              ? 'CI coverage not verified'
+              : 'Coverage not received from CI',
           icon: TestTubeDiagonal,
           tone: 'teal' as SurfaceTone,
         },
@@ -256,7 +306,12 @@ export function RepositoryHealth({
                       query.isError ||
                       freshnessDenied
                     }
-                    onValueChange={setBranch}
+                    onValueChange={(value) => {
+                      setBranch(value)
+                      setSelectedReport(undefined)
+                      setPage(1)
+                      setFindingPage(1)
+                    }}
                   />
                 )}
                 <Button
@@ -269,7 +324,7 @@ export function RepositoryHealth({
                     start.isPending ||
                     (active && chosenBranch === row.branch)
                   }
-                  onClick={() => start.mutate(chosenBranch)}
+                  onClick={() => start.mutate({ branch: chosenBranch })}
                 >
                   {start.isPending ? (
                     <LoaderCircle className='motion-safe:animate-spin' />
@@ -309,10 +364,25 @@ export function RepositoryHealth({
                   {row.sourceSha?.slice(0, 7) ?? 'Commit not pinned yet'}
                 </code>
               </span>
+              {active && row.startedAt && (
+                <span className='inline-flex items-center gap-1.5'>
+                  <Clock3 className='size-3.5' />
+                  Started <ResultTimestamp value={row.startedAt} />
+                </span>
+              )}
               {row.finishedAt && (
                 <span className='inline-flex items-center gap-1.5'>
                   <Clock3 className='size-3.5' />
                   Assessed <ResultTimestamp value={row.finishedAt} />
+                </span>
+              )}
+              {row.category && (
+                <span className='font-medium text-foreground'>
+                  {row.category === 'coverage'
+                    ? 'Tests and coverage'
+                    : row.category.charAt(0).toUpperCase() +
+                      row.category.slice(1)}{' '}
+                  only
                 </span>
               )}
             </div>
@@ -354,6 +424,87 @@ export function RepositoryHealth({
             </div>
           </div>
         )}
+        {active && (
+          <div
+            role='status'
+            aria-label='Assessment progress'
+            className='flex items-center gap-3 border-t bg-info/5 p-4'
+          >
+            <SurfaceIcon
+              icon={LoaderCircle}
+              tone='blue'
+              className='[&_svg]:motion-safe:animate-spin'
+            />
+            <div className='min-w-0'>
+              <p className='text-sm font-semibold'>
+                {row.cancelled
+                  ? 'Cancellation requested'
+                  : row.state === 'QUEUED'
+                    ? 'Waiting for worker capacity'
+                    : ({
+                        INSPECTING: 'Inspecting the selected commit',
+                        FETCHING_SOURCE: 'Fetching repository files',
+                        WAITING_SCANNER: 'Preparing isolated scanners',
+                        SCANNING: 'Scanning repository files',
+                        VERIFYING_RESULTS: 'Verifying scan results',
+                        RECONNECTING_SCANNER: 'Reconnecting to the scanner',
+                      }[row.progress ?? ''] ?? 'Assessment in progress')}
+              </p>
+              <p className='mt-1 text-sm leading-relaxed text-muted-foreground'>
+                {row.cancelled
+                  ? 'Waiting for the analysis runtime to confirm cleanup.'
+                  : 'Progress updates automatically. The assessment stays pinned to one commit.'}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {row?.state === 'FAILED' && (
+          <div
+            role='alert'
+            aria-label='Assessment failure'
+            className='border-t bg-destructive/5 p-4'
+          >
+            <div className='flex items-start gap-3'>
+              <SurfaceIcon icon={AlertCircle} tone='amber' />
+              <div className='min-w-0 space-y-2 text-sm'>
+                <p className='font-semibold'>Assessment failed</p>
+                <p>{healthFailure(row.reason, allowed).message}</p>
+                {!row.sourceSha && (
+                  <p className='text-muted-foreground'>
+                    Stopped before the commit was pinned. No scanners or tests
+                    ran.
+                  </p>
+                )}
+                <p className='text-muted-foreground'>
+                  {healthFailure(row.reason, allowed).action}
+                </p>
+                {row.retryAt && (
+                  <p>
+                    Retry after <ResultTimestamp value={row.retryAt} />
+                  </p>
+                )}
+                <details className='text-xs text-muted-foreground'>
+                  <summary className='w-fit cursor-pointer rounded-sm focus-visible:outline-2 focus-visible:outline-ring'>
+                    Technical details
+                  </summary>
+                  <p className='mt-2 break-all'>Assessment ID: {row.id}</p>
+                  <p>
+                    Reason:{' '}
+                    {row.reason &&
+                    Object.prototype.hasOwnProperty.call(
+                      healthReasons,
+                      row.reason
+                    )
+                      ? row.reason
+                      : '-'}
+                  </p>
+                </details>
+              </div>
+            </div>
+          </div>
+        )}
+
         {query.isPending && (
           <div
             role='status'
@@ -364,7 +515,7 @@ export function RepositoryHealth({
             <span className='sr-only'>Loading repository health…</span>
           </div>
         )}
-        {!query.isPending && !query.isError && row && (
+        {!query.isPending && !query.isError && row && !active && (
           <HealthTimelineChart
             embedded
             points={data!.timeline ?? []}
@@ -415,7 +566,18 @@ export function RepositoryHealth({
         </Card>
       ) : (
         <>
-          {report && (
+          {row.category && !active && (
+            <p className='rounded-lg border bg-muted/20 px-4 py-3 text-sm text-muted-foreground'>
+              This assessment ran{' '}
+              {row.category === 'coverage'
+                ? 'tests and coverage'
+                : row.category}{' '}
+              only. Other cards show their latest saved result at the same
+              commit, with each run date shown below. Open Assessment history
+              for the complete reports.
+            </p>
+          )}
+          {report && !active && (
             <div className='grid gap-4 sm:grid-cols-2 xl:grid-cols-5'>
               {metrics.map((metric) => (
                 <Link
@@ -423,23 +585,18 @@ export function RepositoryHealth({
                   to='/findings'
                   search={{
                     origin: 'health',
-                    health: row!.id,
+                    health: metric.assessmentId ?? row.id,
                     repository: repositoryId,
-                    category: (
-                      {
-                        Security: 'security',
-                        Reliability: 'reliability',
-                        Maintainability: 'maintainability',
-                        Duplication: 'duplication',
-                        'Test coverage': 'coverage',
-                      } as const
-                    )[metric.label as 'Security'],
-                    kind:
-                      metric.label === 'Test coverage' ? 'gaps' : 'findings',
+                    category: metric.category,
+                    kind: metric.category === 'coverage' ? 'gaps' : 'findings',
                     page: 1,
                   }}
-                  aria-label={`View ${metric.label.toLowerCase()} findings`}
-                  className='block rounded-xl outline-offset-4 focus-visible:outline-2 focus-visible:outline-ring'
+                  aria-label={
+                    metric.category === 'coverage'
+                      ? 'Open test coverage details'
+                      : `View ${metric.label.toLowerCase()} findings`
+                  }
+                  className='block h-full rounded-xl outline-offset-4 focus-visible:outline-2 focus-visible:outline-ring'
                 >
                   <Card className='h-full gap-0 transition-colors hover:border-primary/40'>
                     <CardHeader className='flex flex-row items-center justify-between gap-3 pb-4'>
@@ -450,18 +607,26 @@ export function RepositoryHealth({
                     </CardHeader>
                     <CardContent>
                       <p
-                        aria-label={`${metric.label}: ${metric.value}`}
-                        title={metric.value}
+                        aria-label={`${metric.label}: ${metric.value.replace(/^≥/, '')}${metric.value.startsWith('≥') ? ' findings, partial scan' : ''}`}
+                        title={metric.value.replace(/^≥/, '')}
                         className='text-2xl font-semibold tracking-tight tabular-nums'
                       >
                         {['Unavailable', 'Awaiting CI coverage'].includes(
                           metric.value
                         )
                           ? '—'
-                          : metric.value}
+                          : metric.value.replace(/^≥/, '')}
                       </p>
+                      {metric.value.startsWith('≥') && (
+                        <div className='mt-2'>
+                          <StatusBadge tone='warning'>Partial scan</StatusBadge>
+                        </div>
+                      )}
                       <p className='mt-1.5 text-xs text-muted-foreground'>
                         {metric.description}
+                      </p>
+                      <p className='mt-2 text-xs text-muted-foreground'>
+                        Assessed <ResultTimestamp value={metric.finishedAt} />
                       </p>
                     </CardContent>
                   </Card>
@@ -469,29 +634,7 @@ export function RepositoryHealth({
               ))}
             </div>
           )}
-          {active && (
-            <div className='flex items-start gap-3 rounded-xl border border-info/20 bg-info/5 p-4'>
-              <LoaderCircle className='mt-0.5 size-4 shrink-0 text-info-text motion-safe:animate-spin' />
-              <div className='min-w-0'>
-                <p className='text-sm font-semibold'>
-                  {row.cancelled
-                    ? 'Cancellation requested'
-                    : row.state === 'QUEUED'
-                      ? 'Waiting for worker capacity'
-                      : 'Assessment in progress'}
-                </p>
-                <p
-                  role='status'
-                  className='mt-1 text-sm leading-relaxed text-muted-foreground'
-                >
-                  {row.cancelled
-                    ? 'Waiting for the analysis runtime to confirm cleanup.'
-                    : 'Progress updates automatically. The assessment stays pinned to one commit.'}
-                </p>
-              </div>
-            </div>
-          )}
-          {report && (
+          {report && !active && (
             <AnalysisCoverage
               key={row.id}
               report={report}
@@ -500,12 +643,19 @@ export function RepositoryHealth({
               hotspotReview={data?.hotspotReview}
               headCheckedAt={headCheckedAt}
               finishedAt={row.finishedAt}
+              onRunCategory={
+                allowed && chosenBranch
+                  ? (category) =>
+                      start.mutate({ branch: chosenBranch, category })
+                  : undefined
+              }
+              runPending={start.isPending}
             />
           )}
           <div className='grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_350px]'>
             <div className='min-w-0'>
               <Tabs
-                value={report ? detailTab : 'history'}
+                value={report && !active ? detailTab : 'history'}
                 onValueChange={(value) => {
                   if (value === 'findings' || value === 'history')
                     setDetailTab(value)
@@ -513,15 +663,16 @@ export function RepositoryHealth({
                 className='gap-4'
               >
                 <TabsList aria-label='Repository health details'>
-                  <TabsTrigger value='findings' disabled={!report}>
-                    Findings {report ? `(${report.findings.length})` : ''}
+                  <TabsTrigger value='findings' disabled={!report || active}>
+                    Findings{' '}
+                    {report && !active ? `(${report.findings.length})` : ''}
                   </TabsTrigger>
                   <TabsTrigger value='history'>
                     Assessment history ({data!.total})
                   </TabsTrigger>
                 </TabsList>
                 <TabsContent value='findings' className='space-y-5'>
-                  {report && (
+                  {report && !active && (
                     <Card
                       className='gap-0 overflow-hidden py-0'
                       aria-label='Repository findings'
@@ -730,8 +881,8 @@ export function RepositoryHealth({
                         <CardTitle>Assessment history</CardTitle>
                       </div>
                       <CardDescription>
-                        Immutable reports for {row.branch}. Each retains its
-                        original commit and limits.
+                        Saved assessments for {row.branch}, including results
+                        and failed attempts.
                       </CardDescription>
                     </CardHeader>
                     <CardContent className='space-y-2 px-5 pb-5'>
@@ -746,12 +897,41 @@ export function RepositoryHealth({
                             setFindingPage(1)
                           }}
                         >
-                          <span className='flex flex-wrap items-center gap-3 text-xs text-muted-foreground'>
-                            <GitCommitHorizontal className='size-4' />
-                            <code className='text-foreground'>
-                              {h.sourceSha?.slice(0, 7) ?? 'Not pinned yet'}
-                            </code>
-                            <ResultTimestamp value={h.finishedAt} />
+                          <span className='min-w-0 flex-1 space-y-2'>
+                            <span className='flex flex-wrap items-center gap-3 text-xs text-muted-foreground'>
+                              <GitCommitHorizontal className='size-4' />
+                              <code className='text-foreground'>
+                                {h.sourceSha?.slice(0, 7) ??
+                                  (h.state === 'FAILED'
+                                    ? 'Stopped before scanning'
+                                    : 'Commit not pinned yet')}
+                              </code>
+                              <ResultTimestamp value={h.finishedAt} />
+                              {h.category && (
+                                <span>
+                                  {h.category === 'coverage'
+                                    ? 'Tests and coverage'
+                                    : h.category}{' '}
+                                  only
+                                </span>
+                              )}
+                            </span>
+                            {h.state === 'FAILED' && (
+                              <span className='block space-y-1 text-sm'>
+                                <span className='block'>
+                                  {healthFailure(h.reason, allowed).message}
+                                </span>
+                                <span className='block text-xs text-muted-foreground'>
+                                  {healthFailure(h.reason, allowed).action}
+                                </span>
+                                {h.retryAt && (
+                                  <span className='block text-xs text-muted-foreground'>
+                                    Retry after{' '}
+                                    <ResultTimestamp value={h.retryAt} />
+                                  </span>
+                                )}
+                              </span>
+                            )}
                           </span>
                           <StatusBadge
                             tone={
@@ -813,7 +993,7 @@ export function RepositoryHealth({
               </Tabs>
             </div>
             <aside className='min-w-0 space-y-5' aria-label='Analysis details'>
-              {report && (
+              {report && !active && (
                 <HealthPolicyEvidence
                   report={report}
                   repositoryId={repositoryId}

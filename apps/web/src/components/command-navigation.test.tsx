@@ -31,6 +31,9 @@ it('finds direct sidebar tools in command search and keeps restricted administra
     .toBeVisible()
   await page.getByRole('option', { name: 'Policies' }).click()
   expect(state.navigate).toHaveBeenCalledWith({ to: '/policies' })
+  await search.fill('Repositories')
+  await page.getByRole('option', { name: 'Repositories', exact: true }).click()
+  expect(state.navigate).toHaveBeenCalledWith({ to: '/repositories' })
   await search.fill('Access Control')
   await expect
     .element(page.getByRole('option', { name: 'Access Control' }))

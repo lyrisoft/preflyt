@@ -1,8 +1,9 @@
-import { useId } from 'react'
 import { Activity } from 'lucide-react'
 import {
-  Area,
-  AreaChart,
+  Bar,
+  Cell,
+  Line,
+  ComposedChart,
   CartesianGrid,
   ResponsiveContainer,
   Tooltip,
@@ -17,6 +18,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { StatusBadge } from '@/components/status-badge'
 import { SurfaceIcon } from '@/components/surface-icon'
 import type { HealthTimelinePoint } from './health-api'
 
@@ -49,19 +51,25 @@ export function HealthTimelineChart({
   branch: string
   onSelectReport: (id: string) => void
 }) {
-  const gradientId = `health-trend-${useId().replace(/:/g, '')}`
   const data = points.map((point) => ({
     ...point,
     timestamp: new Date(point.at).getTime(),
   }))
-  const scope = points[0]?.checkIds
-  const scopeNames: Record<string,string> = {
-    'security.sast':'Static security', 'quality.reliability':'Reliability',
-    'quality.maintainability':'Maintainability', 'security.hotspots':'Security hotspots',
+  const scope = points.find((point) => point.checkIds?.length)?.checkIds
+  const partialCount = points.filter((point) => point.partial).length
+  const comparisonCount = points.filter(
+    (point) => point.comparableFindings !== null
+  ).length
+  const scopeNames: Record<string, string> = {
+    'security.sast': 'Static security',
+    'quality.reliability': 'Reliability',
+    'quality.maintainability': 'Maintainability',
+    'security.hotspots': 'Security hotspots',
   }
   const span =
     data.length > 1 ? data[data.length - 1].timestamp - data[0].timestamp : 0
-  const formatTick = (value: number) => span >= 86400000 ? utcDate(value, locale) : utcTime(value, locale)
+  const formatTick = (value: number) =>
+    span >= 86400000 ? utcDate(value, locale) : utcTime(value, locale)
   const Container = embedded ? 'div' : Card
   return (
     <Container
@@ -76,50 +84,50 @@ export function HealthTimelineChart({
             <div>
               <CardTitle>Findings over time</CardTitle>
               <CardDescription className='mt-1'>
-                {branch} · comparable assessments · UTC
+                {branch} · saved assessments · UTC
               </CardDescription>
             </div>
           </div>
         </CardHeader>
       )}
       <CardContent className={compact ? 'p-0' : embedded ? 'p-4' : 'px-5 pb-5'}>
-        {scope?.length && <p className='mb-3 text-xs text-muted-foreground'>
-          Compared rule packs: {scope.map(id=>scopeNames[id] ?? id).join(', ')}. Other analyses are excluded.
-        </p>}
+        {!!partialCount && (
+          <div className='mb-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground'>
+            <StatusBadge tone='warning'>Partial analysis</StatusBadge>
+            <span>
+              {partialCount} of {points.length} scans have incomplete coverage.
+              Counts may increase when analysis completes.
+            </span>
+          </div>
+        )}
+        {scope?.length && (
+          <p className='mb-3 text-xs text-muted-foreground'>
+            Compared rule packs:{' '}
+            {scope.map((id) => scopeNames[id] ?? id).join(', ')}. Comparison
+            line only; bars include all retained findings.
+          </p>
+        )}
         {embedded && <h3 className='sr-only'>Findings over time</h3>}
         <div
-          className={`relative min-w-0 ${data.length ? compact ? 'h-36' : 'h-48 sm:h-52' : 'h-24'}`}
+          className={`relative min-w-0 ${data.length ? (compact ? 'h-36' : 'h-48 sm:h-52') : 'h-24'}`}
           role='img'
           aria-label={
             data.length
-              ? `${data.length} comparable assessments. Finding counts in chronological order: ${data.map((p) => p.findings).join(', ')}. Exact revisions are in View chart data.`
-              : 'Findings over time unavailable. No comparable complete analysis is available.'
+              ? `${data.length} assessments, ${partialCount} partial. Retained finding counts in chronological order: ${data.map((p) => p.findings).join(', ')}. Exact revisions and coverage are in View chart data.`
+              : 'Findings over time unavailable. No recorded finding counts are available.'
           }
         >
           {!!data.length && (
             <ResponsiveContainer width='100%' height='100%'>
-              <AreaChart
+              <ComposedChart
                 className='chart-motion'
                 data={data}
                 margin={{ top: 12, right: 12, left: -18, bottom: 4 }}
                 accessibilityLayer
               >
-                <defs>
-                  <linearGradient id={gradientId} x1='0' y1='0' x2='0' y2='1'>
-                    <stop
-                      offset='0%'
-                      stopColor='var(--chart-1)'
-                      stopOpacity={0.28}
-                    />
-                    <stop
-                      offset='100%'
-                      stopColor='var(--chart-1)'
-                      stopOpacity={0.035}
-                    />
-                  </linearGradient>
-                </defs>
                 <CartesianGrid vertical={false} stroke='var(--border)' />
                 <XAxis
+                  padding={{ left: 16, right: 16 }}
                   type='number'
                   scale='time'
                   dataKey='timestamp'
@@ -163,27 +171,40 @@ export function HealthTimelineChart({
                     const point = payload?.[0]?.payload as
                       HealthTimelinePoint | undefined
                     return point
-                      ? `${new Date(point.at).toLocaleString(locale, { timeZone: 'UTC' })} UTC · ${point.sourceSha.slice(0, 7)}`
+                      ? `${new Date(point.at).toLocaleString(locale, { timeZone: 'UTC' })} UTC · ${point.sourceSha.slice(0, 7)} · ${point.partial ? 'Partial analysis' : 'Complete analysis'}`
                       : ''
                   }}
                   cursor={{ stroke: 'var(--chart-1)', strokeDasharray: '4 4' }}
                 />
-                <Area
-                  type='monotone'
+                <Bar
                   dataKey='findings'
-                  name='Reported findings'
-                  stroke='var(--chart-1)'
-                  strokeWidth={2.5}
-                  fill={`url(#${gradientId})`}
-                  dot={
-                    data.length <= 7
-                      ? { r: 3, fill: 'var(--chart-1)', strokeWidth: 0 }
-                      : false
-                  }
-                  activeDot={{ r: 5, stroke: 'var(--card)', strokeWidth: 2 }}
+                  name='Retained findings'
+                  maxBarSize={28}
+                  radius={[3, 3, 0, 0]}
+                  minPointSize={2}
                   {...chartAnimation}
-                />
-              </AreaChart>
+                >
+                  {data.map((point) => (
+                    <Cell
+                      key={point.id}
+                      fill={point.partial ? 'var(--warning)' : 'var(--chart-1)'}
+                    />
+                  ))}
+                </Bar>
+                {comparisonCount > 1 && (
+                  <Line
+                    type='linear'
+                    dataKey='comparableFindings'
+                    name='Equivalent coverage'
+                    stroke='var(--chart-1)'
+                    strokeWidth={2}
+                    connectNulls={false}
+                    dot={{ r: 3 }}
+                    activeDot={{ r: 5 }}
+                    {...chartAnimation}
+                  />
+                )}
+              </ComposedChart>
             </ResponsiveContainer>
           )}
           {!data.length && (
@@ -192,25 +213,26 @@ export function HealthTimelineChart({
                 Analysis history unavailable
               </p>
               <p className='mt-2 max-w-md text-xs leading-relaxed text-muted-foreground'>
-                Complete analysis is needed to plot findings. Future comparable
-                assessments will show changes here.
+                Run an assessment to see available findings here. Partial
+                results will be shown as soon as a report is saved.
               </p>
             </div>
           )}
         </div>
         {!compact && (
-        <div className='mt-4 flex flex-wrap items-center justify-between gap-x-6 gap-y-2 text-xs text-muted-foreground'>
-          <span className='inline-flex items-center gap-2'>
-            <span
-              className='size-2 rounded-full bg-chart-1'
-              aria-hidden='true'
-            />
-            Reported findings
-          </span>
-          <span>
-            Latest 30 branch reports · incomplete finding sets and incompatible scopes are excluded
-          </span>
-        </div>
+          <div className='mt-4 flex flex-wrap items-center justify-between gap-x-6 gap-y-2 text-xs text-muted-foreground'>
+            <span className='inline-flex items-center gap-2'>
+              <span
+                className='size-2 rounded-full bg-chart-1'
+                aria-hidden='true'
+              />
+              Retained findings
+            </span>
+            <span>
+              Each bar is a saved scan. The line compares only equivalent
+              coverage.
+            </span>
+          </div>
         )}
         {!!data.length && (
           <details className='mt-3 text-xs'>
@@ -220,13 +242,17 @@ export function HealthTimelineChart({
             <div className='mt-3 max-h-44 overflow-auto rounded-lg border'>
               <table className='w-full text-left'>
                 <caption className='sr-only'>
-                  Comparable complete health assessment counts in UTC
+                  Available health assessment counts and coverage in UTC
                 </caption>
                 <thead>
                   <tr className='border-b bg-muted/30'>
                     <th className='px-3 py-2'>Assessed (UTC)</th>
                     <th className='px-3 py-2'>Commit</th>
-                    <th className='px-3 py-2 text-right'>Findings</th>
+                    <th className='px-3 py-2'>Coverage</th>
+                    <th className='px-3 py-2 text-right'>Retained findings</th>
+                    <th className='px-3 py-2 text-right'>
+                      Comparable findings
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -247,8 +273,20 @@ export function HealthTimelineChart({
                           {point.sourceSha.slice(0, 7)}
                         </button>
                       </td>
+                      <td className='px-3 py-2 whitespace-nowrap'>
+                        {point.partial ? (
+                          <StatusBadge tone='warning'>
+                            Partial analysis
+                          </StatusBadge>
+                        ) : (
+                          'Complete analysis'
+                        )}
+                      </td>
                       <td className='px-3 py-2 text-right tabular-nums'>
                         {point.findings}
+                      </td>
+                      <td className='px-3 py-2 text-right tabular-nums'>
+                        {point.comparableFindings ?? '-'}
                       </td>
                     </tr>
                   ))}

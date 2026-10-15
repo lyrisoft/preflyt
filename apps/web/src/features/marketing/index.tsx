@@ -6,7 +6,7 @@ import { ProductScene } from './product-scene'
 import { SectionIllustration } from './section-illustration'
 import { WorkspaceWindow } from './workspace-window'
 
-const docs = 'https://lyrisoft.github.io/preflyt/getting-started'
+const docs = 'https://docs.preflytlabs.com/getting-started'
 const features = [
   {
     id: 'health',
@@ -337,7 +337,7 @@ export function MarketingHomepage() {
         <section className='faq-section reference-faq container'>
           <div>
             <h2>A few useful answers.</h2>
-            <a href='https://lyrisoft.github.io/preflyt/' className='text-link'>
+            <a href='https://docs.preflytlabs.com/' className='text-link'>
               Read the docs <ArrowUpRight size={14} aria-hidden='true' />
             </a>
           </div>

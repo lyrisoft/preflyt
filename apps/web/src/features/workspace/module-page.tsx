@@ -305,7 +305,7 @@ export function WorkspaceModule({ module }: { module: Module }) {
                   </Button>
                 ) : (
                   <Button variant='outline' size='sm' asChild>
-                    <Link to='/apps'>
+                    <Link to='/repositories'>
                       <GitBranch className='size-3.5' aria-hidden='true' />
                       Manage repositories
                     </Link>
@@ -418,7 +418,7 @@ export function WorkspaceModule({ module }: { module: Module }) {
                 actions={
                   <>
                     <Button variant='outline' size='sm' asChild>
-                      <Link to='/apps'>
+                      <Link to='/repositories'>
                         <GitBranch className='size-3.5' aria-hidden='true' />
                         Manage repositories
                       </Link>
@@ -482,7 +482,7 @@ export function WorkspaceModule({ module }: { module: Module }) {
                 Connect and select a repository before assigning standards.
               </p>
               <Button size='sm' variant='outline' asChild>
-                <Link to='/apps'>Manage repositories</Link>
+                <Link to='/repositories'>Manage repositories</Link>
               </Button>
             </div>
           )
@@ -606,7 +606,7 @@ export function WorkspaceModule({ module }: { module: Module }) {
                           {canManage && (
                             <Button size='sm' variant='outline' asChild>
                               {installation.active ? (
-                                <Link to='/apps'>Manage repositories</Link>
+                                <Link to='/repositories'>Manage repositories</Link>
                               ) : (
                                 <a href={`${API_BASE_URL}/github/install`}>
                                   Reconnect GitHub
@@ -638,7 +638,7 @@ export function WorkspaceModule({ module }: { module: Module }) {
                       </div>
                     </div>
                     <Button variant='outline' size='sm' asChild>
-                      <Link to='/apps'>
+                      <Link to='/repositories'>
                         View repositories{' '}
                         <ArrowUpRight className='size-3.5' aria-hidden='true' />
                       </Link>

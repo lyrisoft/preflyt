@@ -36,9 +36,9 @@ export type FindingsSummary = {
 }
 const colors: Record<string, string> = {
   critical: 'var(--severity-critical-mark)',
-  high: 'var(--destructive)',
+  high: 'var(--severity-high-mark)',
   medium: 'var(--warning)',
-  low: 'var(--info)',
+  low: 'var(--success)',
   unknown: 'var(--muted-foreground)',
 }
 const label = (name: string) => name[0].toUpperCase() + name.slice(1)
@@ -129,7 +129,10 @@ export function FindingsOverview({
               <ChartEmpty />
             ) : (
               <div className='grid min-w-0 items-center gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(120px,1fr)]'>
-                <div aria-hidden='true' className='h-64 min-w-0'>
+                <div
+                  aria-hidden='true'
+                  className='h-64 min-w-0 overflow-hidden'
+                >
                   <ResponsiveContainer width='100%' height='100%'>
                     <PieChart>
                       <Pie
@@ -218,7 +221,10 @@ export function FindingsOverview({
               <ChartEmpty />
             ) : (
               <>
-                <div aria-hidden='true' className='h-64 min-w-0'>
+                <div
+                  aria-hidden='true'
+                  className='h-64 min-w-0 overflow-hidden'
+                >
                   <ResponsiveContainer width='100%' height='100%'>
                     <BarChart
                       data={summary.byCheck}
@@ -264,23 +270,25 @@ export function FindingsOverview({
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
-                <table className='sr-only'>
-                  <caption>{subject} by check</caption>
-                  <thead>
-                    <tr>
-                      <th>Check</th>
-                      <th>Entries</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {summary.byCheck.map((item) => (
-                      <tr key={item.name}>
-                        <th>{item.name}</th>
-                        <td>{item.count}</td>
+                <div className='sr-only'>
+                  <table>
+                    <caption>{subject} by check</caption>
+                    <thead>
+                      <tr>
+                        <th>Check</th>
+                        <th>Entries</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {summary.byCheck.map((item) => (
+                        <tr key={item.name}>
+                          <th>{item.name}</th>
+                          <td>{item.count}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </>
             )}
           </CardContent>

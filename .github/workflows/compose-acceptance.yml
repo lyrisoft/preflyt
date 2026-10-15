@@ -10,7 +10,7 @@ on:
 jobs:
   compose:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 60
     env:
       PREFLYT_PUBLISHED_IMAGES: ${{ inputs.published_images }}
     steps:
@@ -49,22 +49,29 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build or pull and start all required services
+      - name: Build or pull the required images
         run: |
           docker compose --env-file "$PREFLYT_ENV_FILE" -f docker-compose.yaml -f compose.local.yaml config --quiet
           if [ "$PREFLYT_PUBLISHED_IMAGES" = true ]; then
             docker compose --env-file "$PREFLYT_ENV_FILE" -f docker-compose.yaml -f compose.local.yaml pull
-            for image in preflyt-api preflyt-api-migration preflyt-web; do
+            for image in preflyt-api preflyt-api-migration preflyt-web preflyt-health-scanner; do
               revision=$(docker image inspect "ghcr.io/$GITHUB_REPOSITORY_OWNER/$image:sha-$GITHUB_SHA" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')
               test "$revision" = "$GITHUB_SHA"
             done
           else
             docker compose --env-file "$PREFLYT_ENV_FILE" -f docker-compose.yaml -f compose.local.yaml build
           fi
-          docker compose --env-file "$PREFLYT_ENV_FILE" -f docker-compose.yaml -f compose.local.yaml up -d --no-build --wait --wait-timeout 180
+      - name: Start services and wait for readiness
+        run: docker compose --env-file "$PREFLYT_ENV_FILE" -f docker-compose.yaml -f compose.local.yaml up -d --no-build --wait --wait-timeout 1800
       - name: Verify login, origin checks and protected routes
         run: node --env-file="$PREFLYT_ENV_FILE" scripts/deploy/smoke.mjs
+      - name: Verify scanner readiness
+        run: docker compose --env-file "$PREFLYT_ENV_FILE" -f docker-compose.yaml -f compose.local.yaml exec -T api node dist/health/health-scanner-readiness.js
+      - name: Verify all Health analyzers, signed findings and source cleanup
+        if: github.ref == 'refs/heads/main'
+        run: docker compose --env-file "$PREFLYT_ENV_FILE" -f docker-compose.yaml -f compose.local.yaml exec -T api node dist/health/health-scanner-smoke.js
       - name: Verify migration replay and protected backup restore
+        if: github.ref == 'refs/heads/main'
         run: |
           dc() { docker compose --env-file "$PREFLYT_ENV_FILE" -f docker-compose.yaml -f compose.local.yaml "$@"; }
           dc run --rm migrate
@@ -78,9 +85,10 @@ jobs:
           migrations=$(dc exec -T db psql -U preflyt_owner -d preflyt -Atc 'SELECT count(*) FROM "_prisma_migrations" WHERE "finished_at" IS NOT NULL')
           restored_migrations=$(dc exec -T db psql -U preflyt_owner -d preflyt_restore_ci -Atc 'SELECT count(*) FROM "_prisma_migrations" WHERE "finished_at" IS NOT NULL')
           test "$migrations" = "$restored_migrations"
-          dc restart api worker web
+          dc restart health-engine health-scanner api worker web
           dc up -d --no-build --wait --wait-timeout 180
           node --env-file="$PREFLYT_ENV_FILE" scripts/deploy/smoke.mjs
+          dc exec -T api node dist/health/health-scanner-readiness.js
       - name: Preserve only redacted readiness diagnostics
         if: failure()
         run: docker compose --env-file "$PREFLYT_ENV_FILE" -f docker-compose.yaml -f compose.local.yaml ps --all

@@ -3,9 +3,10 @@ export function nativeRunnerReport(
   output: Buffer,
   sourceHash: string,
   exitCode: number,
+  health = false,
 ): Buffer | null {
   if (
-    output.length > 360448 ||
+    output.length > (health ? 12 * 1024 * 1024 : 360448) ||
     !/^[a-f0-9]{64}$/.test(sourceHash) ||
     !Number.isInteger(exitCode) ||
     exitCode < 0 ||
@@ -22,8 +23,8 @@ export function nativeRunnerReport(
     !(
       envelope.report === null ||
       (typeof envelope.report === 'string' &&
-        envelope.report.length <= 349528 &&
-        /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(
+        envelope.report.length <= (health ? 11184812 : 349528) &&
+        /^[A-Za-z0-9+/]*={0,2}$/.test(
           envelope.report,
         ))
     )
@@ -33,7 +34,7 @@ export function nativeRunnerReport(
     envelope.report === null ? null : Buffer.from(envelope.report, 'base64')
   if (
     report &&
-    (report.length > 262144 || report.toString('base64') !== envelope.report)
+    (report.length > (health ? 8 * 1024 * 1024 : 262144) || report.toString('base64') !== envelope.report)
   )
     throw new Error('Invalid report encoding')
   return report

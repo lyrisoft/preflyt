@@ -37,7 +37,21 @@ describe('GitHub local web-origin fallback', () => {
       response,
     )
     expect(redirect).toHaveBeenCalledWith(
-      'http://localhost:5173/apps?github=error',
+      'http://localhost:5173/repositories?github=error',
     )
   })
+})
+
+it('returns successful GitHub connection feedback to the canonical repository URL', async () => {
+ const service={frontendOrigin:'http://localhost:5173',setupCookieName:'github.setup',secureCookie:false,
+  completeUserAuthorization:vi.fn(async()=>({accountLogin:'lyrisoft'}))} as unknown as GitHubService
+ const controller=new GitHubController(service), redirect=vi.fn()
+ const response={clearCookie:vi.fn(),redirect} as unknown as Response
+ await controller.oauthCallback({cookies:{},query:{state:'state',code:'code'}} as unknown as Request,response)
+ expect(redirect).toHaveBeenCalledWith('http://localhost:5173/repositories?github=connected&account=lyrisoft')
+})
+it('sends fresh GitHub App setup callbacks to the canonical repository URL', async () => {
+ const controller=new GitHubController({frontendOrigin:'http://localhost:5173'} as GitHubService), redirect=vi.fn()
+ await controller.setupCallback({query:{}} as Request,{redirect} as unknown as Response)
+ expect(redirect).toHaveBeenCalledWith('http://localhost:5173/repositories')
 })

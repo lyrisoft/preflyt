@@ -3,6 +3,7 @@ import { configurationValue } from '../configuration/runtime-configuration.js'
 import { sameReviewPr, prReviewSource } from '../intelligence/pr-review-context.js'
 import type { PullRequestContext } from '../github-events/pull-request-context.js'
 import { readPinnedNativeSource } from '../execution/native-source.js'
+import { readHealthGitSource } from '../health/health-git-source.js'
 import { attributedSuite, summarizeRulesetSuites, type RulesetSuite } from './ruleset-insights.js'
 import { rulesetSummary, rulesetDetail } from './github-ruleset.js'
 import { normalizeGitHubEvent } from '../github-events/github-event.js'
@@ -382,6 +383,11 @@ export class GitHubProviderService {
     const base = `/repos/${encodeURIComponent(reader.metadata.owner.login)}/${encodeURIComponent(reader.metadata.name)}`
     return readPinnedNativeSource(reader.request, base, repositoryId.toString(), sourceSha, signal)
   }
+  async readHealthScanSource(installationId: bigint, repositoryId: bigint, sourceSha: string, signal?: AbortSignal, includeTestAssets=false) {
+    if (!/^[a-f0-9]{40}$/.test(sourceSha)) throw new BadRequestException('Use an exact commit for health scanning')
+    const reader = await this.openRepository(installationId, repositoryId, 'contents', signal, 10 * 60_000)
+    return reader.healthSource(sourceSha,includeTestAssets)
+  }
 
   async verifyRepositoryAccess(installationId: bigint, repositoryId: bigint) {
     const reader = await this.openRepository(installationId, repositoryId)
@@ -643,9 +649,9 @@ export class GitHubProviderService {
       warnings.push(
         'Manifest/workflow content inspection is limited to 32 files. Unread files remain unknown.',
       )
-    let cursor = 0
+    let cursor = 0, stopped = false
     const worker = async () => {
-      while (cursor < Math.min(candidates.length, 32)) {
+      while (!stopped && cursor < Math.min(candidates.length, 32)) {
         const file = candidates[cursor++]!
         if (file.size < 0 || file.size > 262_144) {
           file.contentError = 'size_limit'
@@ -678,13 +684,14 @@ export class GitHubProviderService {
           if (
             error instanceof ForbiddenException ||
             error instanceof GitHubRateLimitError
-          )
-            throw error
+          ) { stopped = true; throw error }
           file.contentError = 'unavailable_or_invalid'
         }
       }
     }
-    await Promise.all(Array.from({ length: 4 }, () => worker()))
+    const readers = await Promise.allSettled(Array.from({ length: 4 }, () => worker()))
+    const failure = readers.find(result => result.status === 'rejected')
+    if (failure?.status === 'rejected') throw failure.reason
     return {
       sourceSha: commit.sha,
       treeSha: tree.sha,
@@ -716,7 +723,9 @@ export class GitHubProviderService {
       result.jobs.some(job => String(job.run_id) !== runId || !Number.isSafeInteger(job.id) || typeof job.name !== 'string' || !Array.isArray(job.steps)))
       throw new ServiceUnavailableException('Workflow jobs could not be verified')
     return result.jobs.map(job => ({ id: String(job.id), name: String(job.name), sourceSha: job.head_sha, status: job.status,
-      conclusion: job.conclusion, steps: job.steps.map((step: any) => ({ status: step.status, conclusion: step.conclusion })) }))
+      conclusion: job.conclusion, startedAt: job.started_at, completedAt: job.completed_at,
+      steps: job.steps.map((step: any) => ({ name: step.name, number: step.number, startedAt: step.started_at,
+        completedAt: step.completed_at, status: step.status, conclusion: step.conclusion })) }))
   }
 
   async readPipelineVerificationRun(installationId: bigint, repositoryId: bigint, runId: string) {
@@ -1569,7 +1578,10 @@ export class GitHubProviderService {
       throw new ForbiddenException(
         'GitHub repository identity could not be verified',
       )
-    return { metadata, request }
+    const healthSource=(sourceSha:string,includeTestAssets=false)=>readHealthGitSource({
+      owner:metadata.owner.login,name:metadata.name,repositoryId:repositoryId!.toString(),sourceSha,token,includeTestAssets
+    },signal)
+    return { metadata, request, healthSource }
   }
 
   private apiHeaders(token: string) {

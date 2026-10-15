@@ -40,7 +40,7 @@ export const sidebarData: SidebarData = {
         },
         {
           title: 'Repositories',
-          url: '/apps',
+          url: '/repositories',
           icon: GitBranch,
         },
         { title: 'Assessments', url: '/assessments', icon: ListChecks },

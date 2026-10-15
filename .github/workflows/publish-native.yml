@@ -99,7 +99,7 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
       - name: Install locked fixture dependencies
         run: |
-          npm install --global pnpm@10.15.1
+          npm install --global pnpm@10.26.2
           pnpm install --filter @preflyt/api... --frozen-lockfile --ignore-scripts
           DATABASE_URL=postgresql://fixture:fixture@127.0.0.1:1/unused pnpm --filter @preflyt/api prisma:generate
       - name: Verify the exact image with generated source

@@ -1,13 +1,11 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { ArrowUpRight, Menu, Sun } from 'lucide-react'
+import { ArrowUpRight, Menu } from 'lucide-react'
 import { API_BASE_URL } from '@/lib/api'
-import { useTheme } from '@/context/theme-provider'
 import { Button } from '@/components/ui/button'
 import './homepage.css'
 import { useHomepageMotion } from './use-homepage-motion'
 
 export function MarketingLayout({ children }: { children: ReactNode }) {
-  const { resolvedTheme, setTheme } = useTheme()
   const siteRef = useRef<HTMLDivElement>(null)
   useHomepageMotion(siteRef)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -37,7 +35,7 @@ export function MarketingLayout({ children }: { children: ReactNode }) {
     return () => document.removeEventListener('keydown', close)
   }, [menuOpen])
   return (
-    <div ref={siteRef} className='marketing-site' data-theme={resolvedTheme}>
+    <div ref={siteRef} className='marketing-site dark' data-theme='dark'>
       <link
         rel='stylesheet'
         href={
@@ -51,13 +49,6 @@ export function MarketingLayout({ children }: { children: ReactNode }) {
         <div className='nav-row container'>
           <a className='brand' href='/' aria-label='Preflyt home'>
             <img
-              className='brand-dark'
-              src='/images/brand/logo-color.png'
-              alt='PreflytLabs'
-              width='2172'
-              height='724'
-            />
-            <img
               className='brand-light'
               src='/images/brand/logo-white.png'
               alt='PreflytLabs'
@@ -70,7 +61,7 @@ export function MarketingLayout({ children }: { children: ReactNode }) {
             <a href='/#how-it-works'>How it works</a>
             <a href='/self-hosting'>Self-hosting</a>
             <a
-              href='https://lyrisoft.github.io/preflyt/'
+              href='https://docs.preflytlabs.com/'
               target='_blank'
               rel='noreferrer'
             >
@@ -92,7 +83,7 @@ export function MarketingLayout({ children }: { children: ReactNode }) {
             <Button asChild>
               <a
                 className='button compact'
-                href='https://lyrisoft.github.io/preflyt/getting-started'
+                href='https://docs.preflytlabs.com/getting-started'
                 target='_blank'
                 rel='noreferrer'
               >
@@ -127,7 +118,7 @@ export function MarketingLayout({ children }: { children: ReactNode }) {
           <a href='/#how-it-works'>How it works</a>
           <a href='/self-hosting'>Self-hosting</a>
           <a
-            href='https://lyrisoft.github.io/preflyt/'
+            href='https://docs.preflytlabs.com/'
             target='_blank'
             rel='noreferrer'
           >
@@ -148,13 +139,6 @@ export function MarketingLayout({ children }: { children: ReactNode }) {
         <div className='footer-top'>
           <div>
             <a className='brand' href='/' aria-label='Preflyt home'>
-              <img
-                className='brand-dark'
-                src='/images/brand/logo-color.png'
-                alt='PreflytLabs'
-                width='2172'
-                height='724'
-              />
               <img
                 className='brand-light'
                 src='/images/brand/logo-white.png'
@@ -183,7 +167,7 @@ export function MarketingLayout({ children }: { children: ReactNode }) {
           <div>
             <h3>Build</h3>
             <a
-              href='https://lyrisoft.github.io/preflyt/'
+              href='https://docs.preflytlabs.com/'
               target='_blank'
               rel='noreferrer'
             >
@@ -210,35 +194,12 @@ export function MarketingLayout({ children }: { children: ReactNode }) {
               {authenticated ? 'Open workspace' : 'Sign in'}
             </a>
             <a
-              href='https://lyrisoft.github.io/preflyt/getting-started'
+              href='https://docs.preflytlabs.com/getting-started'
               target='_blank'
               rel='noreferrer'
             >
               Get started
             </a>
-            <button
-              className='theme-toggle'
-              type='button'
-              onClick={() =>
-                setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')
-              }
-              aria-label={
-                resolvedTheme === 'dark'
-                  ? 'Switch to light theme'
-                  : 'Switch to dark theme'
-              }
-            >
-              <Sun
-                aria-hidden='true'
-                focusable='false'
-                className='icon small'
-              />
-              <span>
-                {resolvedTheme === 'dark'
-                  ? 'Light appearance'
-                  : 'Dark appearance'}
-              </span>
-            </button>
           </div>
         </div>
         <div className='footer-bottom'>

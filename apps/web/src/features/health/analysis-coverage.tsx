@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronLeft, ChevronRight, ScanLine } from 'lucide-react'
+import { ChevronLeft, ChevronRight, RefreshCw, ScanLine } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -17,12 +17,28 @@ import {
   healthReasons,
   healthTone,
   type HealthData,
+  type HealthCategory,
   type HealthReport,
 } from './health-api'
 
 const pageSize = 4
 
 type Analysis = HealthReport['analyses'][number]
+
+function categoryForAnalysis(id: string): HealthCategory | null {
+  if (id.startsWith('security.') || id === 'iac.policy') return 'security'
+  if (id === 'quality.reliability') return 'reliability'
+  if (id === 'quality.maintainability') return 'maintainability'
+  if (id === 'quality.duplication') return 'duplication'
+  return null
+}
+
+const categoryAction: Partial<Record<HealthCategory, string>> = {
+  security: 'Run security',
+  reliability: 'Run reliability',
+  maintainability: 'Run maintainability',
+  duplication: 'Run duplication',
+}
 
 function outcomeSummary(analysis: Analysis, report: HealthReport) {
   if (analysis.state === 'INCOMPLETE' || analysis.state === 'UNAVAILABLE') {
@@ -68,6 +84,8 @@ export function AnalysisCoverage({
   hotspotReview,
   headCheckedAt,
   finishedAt,
+  onRunCategory,
+  runPending = false,
 }: {
   report: HealthReport
   assessmentId: string
@@ -75,6 +93,8 @@ export function AnalysisCoverage({
   hotspotReview: HealthData['hotspotReview']
   headCheckedAt: string | null | undefined
   finishedAt?: string | null
+  onRunCategory?: (category: HealthCategory) => void
+  runPending?: boolean
 }) {
   const [pagination, setPagination] = useState({ assessmentId: '', page: 1 })
   const pages = Math.max(1, Math.ceil(report.analyses.length / pageSize))
@@ -144,9 +164,9 @@ export function AnalysisCoverage({
                 .map((analysis) => (
                   <details
                     key={analysis.id}
-                    className='group min-w-0 self-start rounded-xl border bg-muted/10'
+                    className='group flex min-w-0 flex-col self-stretch rounded-xl border bg-muted/10'
                   >
-                    <summary className='cursor-pointer list-none rounded-xl p-4 outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden'>
+                    <summary className='flex flex-1 cursor-pointer list-none flex-col rounded-xl p-4 outline-offset-2 group-open:flex-none focus-visible:outline-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden'>
                       <span className='flex flex-wrap items-start justify-between gap-2'>
                         <span className='text-sm font-medium'>
                           {analysis.title}
@@ -168,7 +188,7 @@ export function AnalysisCoverage({
                           }
                         />
                       </span>
-                      <span className='mt-3 inline-flex items-center gap-1 text-xs font-medium text-foreground'>
+                      <span className='mt-auto inline-flex items-center gap-1 pt-3 text-xs font-medium text-foreground'>
                         Scope and evidence
                         <ChevronRight
                           className='size-3.5 transition-transform group-open:rotate-90'
@@ -178,6 +198,29 @@ export function AnalysisCoverage({
                     </summary>
                     <div className='space-y-3 border-t px-4 py-3 text-xs leading-relaxed text-muted-foreground'>
                       {analysis.scope && <p>{analysis.scope}</p>}
+                      {!!analysis.scanErrors?.length && (
+                        <div>
+                          <p className='font-medium text-foreground'>
+                            Scanner diagnostics
+                          </p>
+                          <ul className='mt-1 space-y-1'>
+                            {analysis.scanErrors.map((error, index) => (
+                              <li key={index} className='break-words'>
+                                {error.path ?? 'Scanner'}
+                                {error.line ? `:${error.line}` : ''}:{' '}
+                                {error.type === 'PartialParsing'
+                                  ? 'Parser could not read part of this file'
+                                  : error.type}
+                              </li>
+                            ))}
+                          </ul>
+                          <p className='mt-2'>
+                            {analysis.id === 'quality.duplication'
+                              ? 'The duplication scanner could not finish processing its report. Other analyzer results are still available.'
+                              : 'Preflyt could not fully analyze these files. Check the listed syntax or update the scanner for parser compatibility; timeouts need more scan time. Findings from the completed work are still available.'}
+                          </p>
+                        </div>
+                      )}
                       {analysis.fileAnalysis && (
                         <p>
                           {analysis.fileAnalysis.analyzedFiles} /{' '}
@@ -282,6 +325,26 @@ export function AnalysisCoverage({
                           )}
                         </dl>
                       )}
+                      {onRunCategory &&
+                        analysis.id !== 'tests.coverage' &&
+                        categoryForAnalysis(analysis.id) &&
+                        report.analyses.findIndex(
+                          (candidate) =>
+                            categoryForAnalysis(candidate.id) ===
+                            categoryForAnalysis(analysis.id)
+                        ) === report.analyses.indexOf(analysis) && (
+                          <Button
+                            size='sm'
+                            variant='outline'
+                            disabled={runPending}
+                            onClick={() =>
+                              onRunCategory(categoryForAnalysis(analysis.id)!)
+                            }
+                          >
+                            <RefreshCw />
+                            {categoryAction[categoryForAnalysis(analysis.id)!]}
+                          </Button>
+                        )}
                     </div>
                   </details>
                 ))}

@@ -1,5 +1,11 @@
 import { BadRequestException, ConflictException } from "@nestjs/common";
-import { parseArtifact } from "../github-events/ci-artifact-parser.js";
+import {
+  parseArtifact,
+  MAX_COVERAGE_BYTES,
+  MAX_ARTIFACT_BYTES,
+} from "../github-events/ci-artifact-parser.js";
+import { gunzipSync } from "node:zlib";
+import { ciCoverageMeasurement } from "../health/health-ci-coverage.js";
 import { checkReportFormat } from "./check-report-adapters.js";
 
 type Policy = {
@@ -53,13 +59,35 @@ export function normalizePipelineSubmission(body: unknown, policy: Policy) {
   const reports = input.reports.map((report: any) => {
     if (
       !report ||
-      !ids.has(report.ruleId) ||
+      !(ids.has(report.ruleId) || report.ruleId === "tests.coverage") ||
       reportIds.has(report.ruleId) ||
-      report.format !== checkReportFormat(report.ruleId)
+      report.format !== (report.ruleId === "tests.coverage" ? "lcov" : checkReportFormat(report.ruleId))
     )
       throw invalid();
     reportIds.add(report.ruleId);
-    const parsed = parseArtifact(report.format, report.content, report.sha256);
+    let content = report.content;
+    if (report.encoding !== undefined) {
+      if (
+        report.ruleId !== "tests.coverage" ||
+        report.encoding !== "gzip-base64" ||
+        typeof content !== "string" ||
+        content.length % 4 !== 0 ||
+        !/^[A-Za-z0-9+/]*={0,2}$/.test(content)
+      ) throw invalid();
+      const compressed = Buffer.from(content, "base64");
+      if (
+        !compressed.length ||
+        compressed.length > MAX_ARTIFACT_BYTES ||
+        compressed.toString("base64") !== content
+      ) throw invalid();
+      try {
+        const bytes = gunzipSync(compressed, { maxOutputLength: MAX_COVERAGE_BYTES });
+        content = bytes.toString("utf8");
+        if (!Buffer.from(content).equals(bytes)) throw invalid();
+      } catch { throw invalid(); }
+    }
+    const parsed = parseArtifact(report.format, content, report.sha256);
+    if (report.ruleId === "tests.coverage" && !ciCoverageMeasurement(parsed.bytes)) throw invalid();
     if (
       report.proof !== undefined &&
       (typeof report.proof !== "string" ||

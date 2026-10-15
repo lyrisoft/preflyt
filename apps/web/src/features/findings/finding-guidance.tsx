@@ -39,10 +39,8 @@ export function FindingGuidance({ finding }: { finding: Finding }) {
         <h2>
           <CollapsibleTrigger className='group flex w-full items-center gap-3 p-4 text-start hover:bg-muted/30 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring'>
             <SurfaceIcon
-              icon={
-                sourceLabel === 'AI guidance' ? Sparkles : MessageSquareText
-              }
-              tone={sourceLabel === 'AI guidance' ? 'violet' : 'blue'}
+              icon={sourceLabel.startsWith('AI') ? Sparkles : MessageSquareText}
+              tone={sourceLabel.startsWith('AI') ? 'violet' : 'blue'}
               size='sm'
             />
             <span className='min-w-0 flex-1'>

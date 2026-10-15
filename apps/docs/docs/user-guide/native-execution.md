@@ -39,6 +39,10 @@ Native onboarding is an advanced operator task, not a single enable switch:
 
 The [operator runbook](https://github.com/lyrisoft/preflyt/blob/development/docs/operations/native-execution.md) and [runner deployment files](https://github.com/lyrisoft/preflyt/tree/development/docs/deployment/native-runner) contain the exact signed schemas, Docker/Kubernetes overrides and credential contracts. These source links require access to the private Preflyt repository. Arrange that access with Lyrisoft before attempting native setup; this page is not a complete standalone production installer.
 
+## Repository Health is automatic
+
+[Repository Health](repository-health.md) is a separate built-in scanner service. Connecting GitHub and selecting a repository starts its scan; no standards selection, workflow snippet, runtime approval token or Native execution switch is required. The scanner service verifies its fixed container controls automatically. The advanced command-execution prerequisites on this page do not apply to repository Health.
+
 ## Use it in Preflyt
 
 1. Select and inspect the repository, and save its standards. Native requests use the **recorded commit and selection**, not an arbitrary branch tip.

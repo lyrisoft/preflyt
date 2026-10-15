@@ -22,7 +22,9 @@
   --warning-text: oklch(0.555 0.163 48.998);
   --danger: oklch(0.577 0.245 27.325);
   --danger-text: oklch(0.505 0.213 27.518);
-  --severity-critical-mark: #a21caf;
+  --severity-critical-mark: #991b1b;
+  --severity-high-mark: #f87171;
+  --severity-high-text: #b91c1c;
   --info: oklch(0.546 0.245 262.881);
   --info-text: oklch(0.488 0.243 264.376);
   --neutral-mark: oklch(0.704 0.04 256.788);
@@ -34,15 +36,6 @@
   --chart-3: #b45309;
   --chart-4: #7c3aed;
   --chart-5: #be123c;
-
-  --sidebar: var(--background);
-  --sidebar-foreground: var(--foreground);
-  --sidebar-primary: var(--primary);
-  --sidebar-primary-foreground: var(--primary-foreground);
-  --sidebar-accent: var(--accent);
-  --sidebar-accent-foreground: var(--accent-foreground);
-  --sidebar-border: var(--border);
-  --sidebar-ring: var(--ring);
 }
 
 .dark {
@@ -67,7 +60,9 @@
   --warning-text: oklch(0.828 0.189 84.429);
   --danger: oklch(0.577 0.245 27.325);
   --danger-text: oklch(0.704 0.191 22.216);
-  --severity-critical-mark: #d946ef;
+  --severity-critical-mark: #b91c1c;
+  --severity-high-mark: #fca5a5;
+  --severity-high-text: #fca5a5;
   --info: oklch(0.546 0.245 262.881);
   --info-text: oklch(0.707 0.165 254.624);
   --neutral-mark: oklch(0.554 0.046 257.417);
@@ -79,6 +74,19 @@
   --chart-3: #fbbf24;
   --chart-4: #a78bfa;
   --chart-5: #fb7185;
+}
+
+/* Rebind aliases at nested dark boundaries instead of inheriting root colors. */
+:root,
+.dark {
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--accent-foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
 }
 
 @theme inline {
@@ -110,6 +118,9 @@
   --color-warning-text: var(--warning-text);
   --color-danger: var(--danger);
   --color-danger-text: var(--danger-text);
+  --color-severity-critical: var(--severity-critical-mark);
+  --color-severity-high: var(--severity-high-mark);
+  --color-severity-high-text: var(--severity-high-text);
   --color-info: var(--info);
   --color-info-text: var(--info-text);
   --color-neutral-mark: var(--neutral-mark);

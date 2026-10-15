@@ -19,6 +19,8 @@ const state = vi.hoisted(() => ({
   reportGuidance: false,
   testFailure: false,
   matches: false,
+  prReview: false,
+  unrated: false,
   ai: 'disabled' as 'disabled' | 'cached' | 'none' | 'failed',
   fetch: vi.fn(),
 }))
@@ -60,12 +62,21 @@ const id = 'f'.repeat(64),
 const finding = () => ({
   id,
   title: 'Unsafe query',
+  ...(state.prReview
+    ? {
+        origin: 'ai',
+        recommendation: 'Use bound parameters.',
+        impact: 'A crafted input could expose records.',
+        pullRequest: 101,
+        pullRequestUrl: 'https://github.com/org/repo/pull/101',
+      }
+    : {}),
   repositoryId: '11',
   repository: 'org/repo',
   sourceSha: sha,
   assessmentId: assessment,
   observedAt: '2026-10-12T00:00:00Z',
-  severity: 'high',
+  severity: state.unrated ? 'unknown' : 'high',
   status: 'Reported',
   path: state.noLocation ? null : 'src/db.ts',
   line: state.noLocation ? null : 7,
@@ -100,6 +111,8 @@ beforeEach(() => {
     testFailure: false,
     matches: false,
     ai: 'disabled',
+    prReview: false,
+    unrated: false,
   })
   state.fetch
     .mockReset()
@@ -247,7 +260,11 @@ function mount() {
                     }
                   : {}),
               }
-            : { assessment, back: 'kind=gaps&repository=11&q=unsafe&page=2' }
+            : {
+                assessment,
+                ...(state.prReview ? { origin: 'ai' as const } : {}),
+                back: 'kind=gaps&repository=11&q=unsafe&page=2',
+              }
         }
       />
     </QueryClientProvider>
@@ -625,5 +642,40 @@ it('gives test failures actionable steps without inventing a root cause or patch
     .toBeVisible()
   await expect
     .element(page.getByText('General test-failure guidance.', { exact: false }))
+    .toBeVisible()
+})
+it('places the saved PR impact and recommendation beside the same highlighted code, without generating another AI explanation', async () => {
+  state.prReview = true
+  await mount()
+  await expect
+    .element(page.getByRole('textbox', { name: 'Assessed source code' }))
+    .toBeVisible()
+  await expect
+    .element(page.getByText('A crafted input could expose records.'))
+    .toBeVisible()
+  await expect
+    .element(page.getByText('Use bound parameters.', { exact: true }))
+    .toBeVisible()
+  await expect
+    .element(page.getByRole('link', { name: 'PR #101' }))
+    .toBeVisible()
+  await expect
+    .element(page.getByText('Suggestions only', { exact: true }))
+    .toBeVisible()
+  expect(
+    state.fetch.mock.calls.some(([url]) =>
+      String(url).includes('/finding-guidance')
+    )
+  ).toBe(false)
+  expect(
+    state.fetch.mock.calls.some(([url]) => String(url).includes('origin=ai'))
+  ).toBe(true)
+})
+it('shows an unrated historical review without inventing low or high severity', async () => {
+  state.prReview = true
+  state.unrated = true
+  await mount()
+  await expect
+    .element(page.getByText('Severity: - (not rated in this saved review)'))
     .toBeVisible()
 })

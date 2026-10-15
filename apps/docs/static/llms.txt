@@ -21,7 +21,7 @@ Preflyt coordinates existing scanners and CI rather than replacing them. It is n
 
 ## Onboarding
 
-Deploy with private GHCR package access, configure one GitHub App as Super Admin, sign in as a verified GitHub organization owner, select repositories, create standards and publish a target-branch policy, add the generated workflow, and verify a same-repository non-draft PR. Optional AI and merge protection follow. Native execution and external report signers are not prerequisites. See /preflyt/getting-started/ and /preflyt/user-guide/native-execution.
+Deploy with private GHCR package access, configure one GitHub App as Super Admin, sign in as a verified GitHub organization owner, select repositories, create standards and publish a target-branch policy, add the generated workflow, and verify a same-repository non-draft PR. Optional AI and merge protection follow. Native execution and external report signers are not prerequisites. See https://docs.preflytlabs.com/getting-started/ and https://docs.preflytlabs.com/user-guide/native-execution.
 
 ## Not yet available
 

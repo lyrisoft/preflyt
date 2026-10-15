@@ -1,13 +1,15 @@
-import z from 'zod'
-import { createFileRoute } from '@tanstack/react-router'
-import { Apps } from '@/features/apps'
+import { createFileRoute, redirect } from '@tanstack/react-router'
+import { repositoriesSearchSchema } from '@/features/repositories/repositories-search'
 
-const appsSearchSchema = z.object({
-  github: z.enum(['connected', 'error']).optional().catch(undefined),
-  account: z.string().optional().catch(undefined),
-})
-
+/** Compatibility only; all current navigation uses /repositories. */
 export const Route = createFileRoute('/_authenticated/apps/')({
-  validateSearch: appsSearchSchema,
-  component: Apps,
+  validateSearch: repositoriesSearchSchema,
+  beforeLoad: ({ search, location }) => {
+    throw redirect({
+      to: '/repositories',
+      search,
+      hash: location.hash,
+      replace: true,
+    })
+  },
 })

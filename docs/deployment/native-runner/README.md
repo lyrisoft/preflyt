@@ -13,7 +13,7 @@ Docker and Kubernetes job dispatch, signed result ingestion and policy-gate inte
 - Source is exported from the exact Git commit, object hashes verified, and materialized into a private read-only tree. No Git hooks, archive extraction or repository-supplied host paths.
 - Commands, arguments and scanner configuration belong to the reviewed image. Repository files cannot select shell commands or environment variables.
 - Each job runs as UID/GID 65532, with a read-only root, no capabilities, no network, no application/cloud/GitHub/model credentials and no Docker socket.
-- Each job has one CPU, 2 GiB memory, 128 processes, a five-minute deadline and bounded temporary/report storage. Reports are limited to 256 KiB. These are initial limits, not capacity guarantees.
+- Each job has one CPU, 2 GiB memory, 128 processes, a five-minute deadline and bounded temporary/report storage. General native reports are limited to 256 KiB. Built-in static Health reports accept up to 8 MiB, with a separate 64 MiB temporary report mount for raw reports and measurement metadata; total container memory remains 2 GiB. Health findings share an 8 MiB signed-payload budget. These are initial limits, not capacity guarantees.
 - The image-owned wrapper returns the report before temporary mounts disappear. It does not return raw scanner logs. Secret scan reports are redacted.
 - Actual container controls are checked before startup. Cleanup targets the container ID created by this attempt, never an unrelated container with a colliding name. Unconfirmed cleanup prevents a passing result.
 - Reports alone are not trusted execution evidence. Results must also carry verified source, image, configuration, runtime and request provenance before affecting policy evaluation.

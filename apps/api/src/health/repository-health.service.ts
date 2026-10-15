@@ -1,36 +1,54 @@
+import { HealthGitSourceError } from './health-git-source.js'
+import { verifiedHealthCiCoverage } from './health-ci-coverage.js'
 import { findingReferenceGuidance } from './finding-guidance.js'
 import { overallHealth } from './health-overall.js'
 import { healthPolicyContext } from './health-policy-context.js'
 import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common'
 import { FindingSourceStore } from '../findings/finding-source-store.service.js'
-import { queueFindingSources, hiddenSource } from '../findings/finding-source-store.js'
+import { queueFindingSources } from '../findings/finding-source-store.js'
 import { randomUUID } from 'node:crypto'
 import { PrismaService } from '../prisma/prisma.service.js'
 import {hotspotDispositionId,hotspotStates,hotspotSummary} from './hotspot-review.js'
 import { AuthorizationService, rolePermissions } from '../auth/authorization.service.js'
 import type { AuthenticatedSession } from '../auth/session.guard.js'
+import { GitHubRateLimitError } from '../github/github-rate-limit.js'
 import { GitHubProviderService } from '../github/github-provider.service.js'
 import { discoverRepositoryProfile, validProfileBranch } from '../github/repository-profile.js'
 import { NativeStatusService } from '../execution/native-status.service.js'
 import { buildNativePlan } from '../execution/native-plan.js'
+import { HealthScannerClient } from './health-scanner-client.js'
+import { healthScannerAuthority, healthScannerPlan } from './health-scanner-package.js'
+import type { NativeReceiptExpected } from '../execution/native-receipt.js'
 import { verifiedNativeEvidence } from '../execution/native-evidence.js'
 import { nativeRequestIntegrity } from '../execution/native-request-integrity.js'
 import { digest } from '../assessments/assessment-digest.js'
 import { notificationsEnabled } from '../notifications/notification-event.js'
 import type { Prisma, RepositoryHealthAssessment } from '../generated/prisma/client.js'
-import { applicableHealthAnalyses, healthReport, comparableHealthTrend, healthTimeline, type HealthReport, supportsNodeCoverage, healthAssessmentResult } from './health-report.js'
+import { healthReport, comparableHealthTrend, healthTimeline, type HealthReport, healthAssessmentResult } from './health-report.js'
+import { healthCategories, healthCategoryMetric, selectedHealthAnalyses, type HealthCategory } from './health-categories.js'
 const activeStates = ['QUEUED', 'RUNNING']
 const json = (value: unknown) => value as Prisma.InputJsonValue
 const sessionFor = (row: { actorId: string; organizationId: string }): AuthenticatedSession => ({ authenticated: true, identityId: row.actorId, organizationId: row.organizationId, subject: 'repository-health', email: null, role: 'WORKER' })
-const dto = (row: RepositoryHealthAssessment) => ({ overallHealth:overallHealth(row.report as HealthReport|null,row.state), id: row.id, branch: row.branch, state: row.state, sourceSha: row.sourceSha, includeCoverage: row.includeCoverage, report: row.report ? { ...(row.report as unknown as HealthReport), findings: (row.report as unknown as HealthReport).findings.map(f => ({...f,referenceGuidance:findingReferenceGuidance(f.ruleId)})) } : null, reason: row.reason, cancelled: !!row.cancelledAt, createdAt: row.createdAt, startedAt: row.startedAt, finishedAt: row.finishedAt })
+const validRetryAt = (value: unknown): string | null => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(value) && Number.isFinite(Date.parse(value)) ? new Date(value).toISOString() : null
+const dto = (row: RepositoryHealthAssessment) => ({ overallHealth:overallHealth(row.report as HealthReport|null,row.state), id: row.id, branch: row.branch, state: row.state, sourceSha: row.sourceSha, progress: row.state === 'RUNNING' ? ((row.plan as any)?.stage ?? (row.sourceSha ? 'FETCHING_SOURCE' : 'INSPECTING')) : null, category: (row.plan as any)?.requestedCategory ?? null, includeCoverage: row.includeCoverage, report: row.report ? { ...(row.report as unknown as HealthReport), findings: (row.report as unknown as HealthReport).findings.map(f => ({...f,referenceGuidance:findingReferenceGuidance(f.ruleId)})) } : null, retryAt:validRetryAt((row.plan as any)?.failure?.retryAt), reason: row.reason, cancelled: !!row.cancelledAt, createdAt: row.createdAt, startedAt: row.startedAt, finishedAt: row.finishedAt })
+const markSelection = (report: HealthReport, category?: HealthCategory) => {
+ if (category) {
+  report.selection = category
+  report.completeness = 'PARTIAL'
+  report.limits.push('Only the selected category ran. Other categories are not part of this assessment; repository-wide readiness remains incomplete.')
+ }
+ return report
+}
 @Injectable()
 export class RepositoryHealthService {
  constructor(@Inject(PrismaService) private db: PrismaService, @Inject(AuthorizationService) private access: AuthorizationService,
-  @Inject(GitHubProviderService) private github: GitHubProviderService, @Inject(NativeStatusService) private runtime: NativeStatusService, @Inject(FindingSourceStore) private sources: FindingSourceStore) {}
- async start(session: AuthenticatedSession, githubId: string, input: { branch?: string; requestKey?: string; includeCoverage?: boolean } = {}, initial = false) {
+  @Inject(GitHubProviderService) private github: GitHubProviderService, @Inject(NativeStatusService) private runtime: NativeStatusService, @Inject(FindingSourceStore) private sources: FindingSourceStore,
+  @Inject(HealthScannerClient) private scanner?: HealthScannerClient) {}
+ async start(session: AuthenticatedSession, githubId: string, input: { branch?: string; requestKey?: string; includeCoverage?: boolean; category?: HealthCategory } = {}, initial = false) {
   const repo = await this.access.requireRepository(session, githubId, 'execution.run')
   if(input.includeCoverage !== undefined && typeof input.includeCoverage !== 'boolean') throw new BadRequestException('Coverage requires an explicit boolean choice')
-  if(input.includeCoverage===true) throw new BadRequestException('Test coverage comes from CI; Health does not run tests')
+  if (input.category && !healthCategories.includes(input.category)) throw new BadRequestException('Choose a supported Health category')
+  if (input.category === 'coverage' || input.includeCoverage === true) throw new BadRequestException('Repository Health does not run tests. Submit test results and coverage from CI.')
   const includeCoverage=false
   const branch = input.branch ?? (await this.db.repositoryHealthTarget.findUnique({ where: { repositoryId: repo.id } }))?.branch ?? repo.defaultBranch
   if (!branch || !validProfileBranch(branch)) throw new BadRequestException('Choose an accessible assessment branch')
@@ -46,17 +64,17 @@ export class RepositoryHealthService {
     const key = initial ? 'initial:' + target.revision : input.requestKey!
     const duplicate = await tx.repositoryHealthAssessment.findUnique({ where: { repositoryId_requestKey: { repositoryId: repo.id, requestKey: key } } })
     if (duplicate) {
-     if (duplicate.includeCoverage !== includeCoverage || duplicate.branch !== branch || duplicate.organizationId !== session.organizationId || (!initial && duplicate.actorId !== session.identityId)) throw new ConflictException('This request key belongs to a different branch')
+     if (duplicate.includeCoverage !== includeCoverage || ((duplicate.plan as any)?.requestedCategory ?? null) !== (input.category ?? null) || duplicate.branch !== branch || duplicate.organizationId !== session.organizationId || (!initial && duplicate.actorId !== session.identityId)) throw new ConflictException('This request key belongs to a different assessment scope')
      return dto(duplicate)
     }
     const pending = await tx.repositoryHealthAssessment.findFirst({ where: { repositoryId: repo.id, branch, state: { in: activeStates }, cancelledAt: null }, orderBy: { createdAt: 'desc' } })
-    if (pending) {if(pending.includeCoverage!==includeCoverage) throw new ConflictException('An assessment with different test execution scope is already running');return dto(pending)}
+    if (pending) {if(pending.includeCoverage!==includeCoverage || ((pending.plan as any)?.requestedCategory ?? null)!==(input.category??null)) throw new ConflictException('An assessment with a different category is already running');return dto(pending)}
     const count = await tx.repositoryHealthAssessment.count({ where: { repositoryId: repo.id, createdAt: { gte: new Date(Date.now() - 3600000) } } })
     const recent = await tx.repositoryHealthAssessment.findFirst({ where: { repositoryId: repo.id, branch, createdAt: { gte: new Date(Date.now() - 60000) } } })
-    if (count >= 10 || (!initial && recent)) throw new ConflictException('Wait a minute before reassessing; at most 10 assessments per repository per hour')
+    if (count >= 10 || (!initial && !input.category && recent)) throw new ConflictException('Wait a minute before reassessing; at most 10 assessments per repository per hour')
     const row = await tx.repositoryHealthAssessment.create({ data: { repositoryId: repo.id, organizationId: session.organizationId!, actorId: session.identityId,
-     branch, includeCoverage, targetRevision: target.revision, requestKey: key } })
-    await tx.auditEvent.create({ data: { event: 'repository.health.requested', actorId: session.identityId, metadata: { repositoryId: githubId, branch, assessmentId: row.id } } })
+     branch, includeCoverage, plan: input.category ? json({requestedCategory:input.category}) : undefined, targetRevision: target.revision, requestKey: key } })
+    await tx.auditEvent.create({ data: { event: 'repository.health.requested', actorId: session.identityId, metadata: { repositoryId: githubId, branch, category: input.category??'all', assessmentId: row.id } } })
     return dto(row)
    }, { isolationLevel: 'Serializable' })
   } catch (error) { if (attempt < 2 && ['P2034', 'P2002'].includes((error as any)?.code)) continue; throw error }
@@ -66,14 +84,24 @@ export class RepositoryHealthService {
   const repo = await this.db.gitHubRepository.findUniqueOrThrow({ where: { githubId: BigInt(githubId) }, include: { installation: true } })
   return this.start(sessionFor({ actorId: identityId, organizationId: repo.installation.organizationId }), githubId, {}, true)
  }
- async get(session: AuthenticatedSession, githubId: string, id?: string, page = 1) {
+ async get(session: AuthenticatedSession, githubId: string, id?: string, page = 1, selectedBranch?: string) {
   const repo = await this.access.requireRepository(session, githubId, 'assessment.read')
   if (id && !/^[a-f0-9-]{36}$/.test(id)) throw new BadRequestException('Choose a valid health assessment')
   if (!Number.isInteger(page) || page < 1 || page > 1000) throw new BadRequestException('Choose a valid history page')
+  if (selectedBranch !== undefined && !validProfileBranch(selectedBranch)) throw new BadRequestException('Choose a valid assessment branch')
   const target = await this.db.repositoryHealthTarget.findUnique({ where: { repositoryId: repo.id } })
-  const branch = target?.branch ?? repo.defaultBranch
-  const row = await this.db.repositoryHealthAssessment.findFirst({ where: { repositoryId: repo.id, organizationId: session.organizationId!, ...(id ? { id } : { branch: branch ?? '' }) }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] })
-  const checkedAt = target?.headCheckedAt ?? null
+  const requestedBranch = selectedBranch ?? target?.branch ?? repo.defaultBranch
+  // Browsing another branch is a read, not a change to the shared scan target.
+  // Explicit report links retain their own branch unless a branch filter is supplied.
+  const reportScope = id
+   ? { id, ...(selectedBranch !== undefined ? { branch: selectedBranch } : {}) }
+   : { branch: requestedBranch ?? '' }
+  const row = await this.db.repositoryHealthAssessment.findFirst({
+   where: { repositoryId: repo.id, organizationId: session.organizationId!, ...reportScope },
+   orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+  })
+  const branch = selectedBranch ?? row?.branch ?? requestedBranch
+  const checkedAt = target?.branch === branch ? target.headCheckedAt : null
   const recent = checkedAt && Date.now() - checkedAt.getTime() <= 60000
   const head = recent ? target?.headSha : null
   const freshness = row && row.branch === target?.branch && head && row.sourceSha ? head === row.sourceSha ? 'CURRENT' : 'STALE' : 'UNVERIFIED'
@@ -90,8 +118,15 @@ export class RepositoryHealthService {
   const prior = row && await this.db.repositoryHealthAssessment.findFirst({ where: { repositoryId: repo.id, branch: row.branch, state: 'COMPLETED', createdAt: { lt: row.createdAt } }, orderBy: { createdAt: 'desc' } })
   const hotspotFindings=(row?.report as HealthReport|null)?.findings.filter(f=>f.category==='hotspot')??[]
   const reviews=row && hotspotFindings.length ? await this.db.repositoryHealthHotspotReview.findMany({where:{organizationId:session.organizationId!,repositoryId:repo.id,assessmentId:row.id,sourceSha:row.sourceSha!,id:{in:hotspotFindings.map(f=>hotspotDispositionId(row.id,f.fingerprint))}}}) : []
+  const categoryRows = row?.sourceSha ? await this.db.repositoryHealthAssessment.findMany({where:{repositoryId:repo.id,organizationId:session.organizationId!,branch:row.branch,sourceSha:row.sourceSha,state:'COMPLETED'},orderBy:[{createdAt:'desc'},{id:'desc'}],take:40,select:{id:true,finishedAt:true,report:true}}) : []
+  const categoryResults = Object.fromEntries(healthCategories.map(category=>{
+   const source=categoryRows.find(candidate=>{const report=candidate.report as HealthReport|null;return report?.mode==='EXECUTED' && (!report.selection||report.selection==='all'||report.selection===category) && report.analyses.some(a=>category==='security'?['secrets.scan','security.sast','security.dependencies','iac.policy'].includes(a.id):a.id===({reliability:'quality.reliability',maintainability:'quality.maintainability',duplication:'quality.duplication',coverage:'tests.coverage'} as Record<string,string>)[category])})
+   return [category,source?{assessmentId:source.id,finishedAt:source.finishedAt,value:healthCategoryMetric(source.report as HealthReport,category)}:null]
+  }))
   await this.access.requireRepository(session, githubId, 'assessment.read')
-  return { hotspotReview:row?hotspotSummary(row.report as HealthReport|null,reviews,row.id):null, repository: repo.fullName, branch, assessment: row ? dto(row) : null, freshness, checkedAt, history: history.map(h => ({ ...dto(h), report: undefined })), total, page, timeline,
+  const ciCoverage=await verifiedHealthCiCoverage(this.db,repo,row?.sourceSha??null)
+  await this.access.requireRepository(session, githubId, 'assessment.read')
+  return {ciCoverage, categoryResults, hotspotReview:row?hotspotSummary(row.report as HealthReport|null,reviews,row.id):null, repository: repo.fullName, branch, assessment: row ? dto(row) : null, freshness, checkedAt, history: history.map(h => ({ ...dto(h), report: undefined })), total, page, timeline,
    trend: row?.report ? comparableHealthTrend(row.report as HealthReport, prior?.report as HealthReport | null) : null }
  }
  /** Upstream head verification is separate from loading immutable saved reports. */
@@ -102,6 +137,10 @@ export class RepositoryHealthService {
    this.db.repositoryHealthTarget.findUnique({ where: { repositoryId: repo.id } }),
    this.db.repositoryHealthAssessment.findFirst({ where: { id, repositoryId: repo.id, organizationId: session.organizationId! } })])
   if (!row) throw new NotFoundException('Health assessment is unavailable')
+  if (target?.branch !== row.branch) {
+   await this.access.requireRepository(session, githubId, 'assessment.read')
+   return {assessmentId:row.id,sourceSha:row.sourceSha,branch:row.branch,checkedAt:null,freshness:'UNVERIFIED'}
+  }
   let head = target?.headSha ?? null, checkedAt = target?.headCheckedAt ?? null
   if (target && (!checkedAt || Date.now() - checkedAt.getTime() > 60000)) {
    head = await this.github.verifyReadinessBranch(repo.installationId, repo.githubId, target.branch).catch(() => null)
@@ -220,7 +259,6 @@ export class RepositoryHealthService {
   const finding = (row?.report as HealthReport | null)?.findings.find(f => f.fingerprint === fingerprint)
   if (!row?.sourceSha || !finding) throw new NotFoundException('Finding is unavailable')
   const base = { path: finding.path, line: finding.line, endLine: finding.endLine ?? finding.line, sourceSha: row.sourceSha, lines: [] as Array<{ number: number; text: string }>, reason: null as string | null }
-  if (hiddenSource(finding)) return { ...base, reason: 'Secret source is hidden to protect credentials' }
   if (!finding.path || !finding.line) return { ...base, reason: 'The analyzer did not provide an exact source location' }
   const excerpt = await this.sources.read(repo.id, row.sourceSha, finding, 5)
   await this.access.requireRepository(session, githubId, 'assessment.read')
@@ -251,19 +289,27 @@ export class RepositoryHealthService {
   try {
    const repo = await this.access.requireRepository(session, (await this.db.gitHubRepository.findUniqueOrThrow({ where: { id: row.repositoryId } })).githubId.toString(), 'execution.run')
    if (row.cancelledAt) {
+    if ((row.plan as any)?.kind==='AUTOMATIC_HEALTH' && (row.plan as any)?.expected) { await this.automaticScan(row,token,session,repo); return }
     const native = row.nativeRequestId ? await this.db.nativeExecutionRequest.findUnique({ where: { id: row.nativeRequestId } }) : null
     if (native && ['QUEUED','PREPARING','RUNNING','CANCEL_REQUESTED'].includes(native.state)) { await this.defer(id,token); return }
     await this.finish(row,token,'CANCELLED',null,'EXECUTION_CANCELLED'); return
    }
+   const legacyPlan=row.plan as any
+   if(legacyPlan?.requestedCategory==='coverage'||legacyPlan?.ruleIds?.includes('tests.coverage')||legacyPlan?.steps?.some((step:any)=>step.ruleId==='tests.coverage')){
+    await this.finish(row,token,'FAILED',row.report as HealthReport|null,'HEALTH_TEST_EXECUTION_REMOVED');return
+   }
    if (!row.sourceSha) {
     const snapshot = await this.github.readRepositorySnapshot(repo.installationId, repo.githubId, row.branch)
     await this.access.requireRepository(session, repo.githubId.toString(), 'execution.run')
-    const profile = discoverRepositoryProfile(snapshot), analyses = applicableHealthAnalyses(snapshot,false)
-    const plan = buildNativePlan({ organizationId: row.organizationId, repositoryId: repo.githubId.toString(), sourceSha: snapshot.sourceSha,
-     selectionId: 'health:' + row.id, rules: analyses.filter(a=>a.id!=='tests.coverage'||supportsNodeCoverage(snapshot)).map(a => ({ id: a.id, title: a.title, required: false, capability: 'execution' })) })
+    const requestedCategory=(row.plan as any)?.requestedCategory as HealthCategory|undefined
+    const profile = discoverRepositoryProfile(snapshot), analyses = selectedHealthAnalyses(snapshot,requestedCategory)
+    const plan = this.scanner ? { kind:'AUTOMATIC_HEALTH', stage:'FETCHING_SOURCE', planHash:'automatic-health-v1', requestedCategory, ruleIds:analyses.map(a=>a.id), steps:[] as Array<{ruleId:string;reason:string}> } : buildNativePlan({ organizationId: row.organizationId, repositoryId: repo.githubId.toString(), sourceSha: snapshot.sourceSha,
+     selectionId: 'health:' + row.id, rules: analyses.map(a => ({ id: a.id, title: a.title, required: false, capability: 'execution' })) })
+    if (requestedCategory && !analyses.length) throw new Error('NO_APPLICABLE_ANALYSIS')
     const { planHash, ...frozenPlan } = plan
+    if(requestedCategory) (frozenPlan as any).requestedCategory=requestedCategory
     const inspection = { complete: snapshot.complete && profile.complete, fileCount: snapshot.files.length, languages: profile.signals.find(s => s.id === 'languages')?.observations ?? [] }
-    const report = healthReport(inspection, analyses.map(a => ({ id: a.id, title: a.title, state: 'UNAVAILABLE', reason: a.id==='tests.coverage'&&!supportsNodeCoverage(snapshot)?'SUPPORTED_TESTS_REQUIRED':plan.steps.find(s => s.ruleId === a.id)?.reason ?? 'ADAPTER_UNAVAILABLE' })))
+    const report = markSelection(healthReport(inspection, analyses.map(a => ({ id: a.id, title: a.title, state: 'UNAVAILABLE', reason: this.scanner?'SCANNER_PENDING':plan.steps.find(s => s.ruleId === a.id)?.reason ?? 'ADAPTER_UNAVAILABLE' }))),requestedCategory)
     report.policyContext = await healthPolicyContext(this.db, repo.id, row.organizationId, snapshot.sourceSha, row.branch)
     await this.db.$transaction(async tx => {
      const updated = await tx.repositoryHealthAssessment.updateMany({ where: { id, leaseToken: token, state: 'RUNNING', cancelledAt: null, sourceSha: null }, data: { sourceSha: snapshot.sourceSha, plan: json(frozenPlan), report: json(report) } })
@@ -273,6 +319,10 @@ export class RepositoryHealthService {
      await tx.repositoryHealthTarget.updateMany({ where: { repositoryId: repo.id, revision: row.targetRevision, branch: row.branch }, data: { headSha: snapshot.sourceSha, headCheckedAt: new Date() } })
     })
     row = await this.db.repositoryHealthAssessment.findUniqueOrThrow({ where: { id } })
+   }
+   if ((row.plan as any)?.kind === 'AUTOMATIC_HEALTH') {
+    await this.automaticScan(row, token, session, repo)
+    return
    }
    if (Date.now() - row.startedAt!.getTime() > 2100000) {
     if (row.nativeRequestId) {
@@ -288,7 +338,7 @@ export class RepositoryHealthService {
     const runnable = plan.steps.filter((s: any) => s.adapterId).map((s: any) => s.ruleId).sort()
     if (!status.executionAvailable || !runnable.length) {
      const report = row.report as HealthReport
-     const next = healthReport(report.inspection, report.analyses.map(a => ({ ...a, reason: a.reason==='SUPPORTED_TESTS_REQUIRED' ? a.reason : !status.executionAvailable ? status.reason : a.reason })))
+     const next = markSelection(healthReport(report.inspection, report.analyses.map(a => ({ ...a, reason: a.reason==='SUPPORTED_TESTS_REQUIRED' ? a.reason : !status.executionAvailable ? status.reason : a.reason }))),report.selection==='all'?undefined:report.selection)
      next.policyContext = report.policyContext
      await this.finish(row,token,'COMPLETED',next,!status.executionAvailable ? status.reason : 'TOOL_REVIEW_REQUIRED'); return
     }
@@ -309,11 +359,18 @@ export class RepositoryHealthService {
    if (['QUEUED','PREPARING','RUNNING','CANCEL_REQUESTED'].includes(native.state)) { await this.defer(id,token); return }
    const receipt = nativeRequestIntegrity(native) ? verifiedNativeEvidence(native) : null
    const initial = row.report as HealthReport
-   const report = healthReport(initial.inspection, initial.analyses, receipt?.checks ?? [], digest({ version: 1, plan: (row.plan as any)?.toolReviewHash, scope: initial.analyses.map(a => a.id) }))
+   const report = markSelection(healthReport(initial.inspection, initial.analyses, receipt?.checks ?? [], digest({ version: 1, plan: (row.plan as any)?.toolReviewHash, scope: initial.analyses.map(a => a.id) })),initial.selection==='all'?undefined:initial.selection)
    report.policyContext = initial.policyContext
    if (!receipt) report.analyses = report.analyses.map(a => ({ ...a, state: 'UNAVAILABLE', reason: a.reason==='SUPPORTED_TESTS_REQUIRED' ? a.reason : native.reason ?? 'RECEIPT_UNVERIFIED' }))
    await this.finish(row,token,receipt && !receipt.cancelled && receipt.checks.every(c => c.cleanupConfirmed && c.state !== 'INCOMPLETE') ? 'COMPLETED' : 'FAILED', report, receipt ? null : native.reason ?? 'RECEIPT_UNVERIFIED')
   } catch (error) {
+   if (this.scanner && (row.plan as any)?.kind==='AUTOMATIC_HEALTH' && (row.plan as any)?.expected) {
+    // Access revocation also stops the exact admitted job; never fetch more source.
+    try {
+     const stopped=await this.scanner.call('cancel',(row.plan as any).expected)
+     if(stopped.state!=='COMPLETE'||!stopped.cleanupConfirmed){await this.defer(id,token);return}
+    } catch {await this.defer(id,token);return}
+   }
    // No source/log/provider message is exposed. Admitted jobs remain tracked until cleanup is acknowledged.
    if (row.nativeRequestId) {
     await this.db.nativeExecutionRequest.updateMany({ where: { id: row.nativeRequestId, state: 'QUEUED' }, data: { state: 'CANCELLED', reason: 'EXECUTION_INTERRUPTED', finishedAt: new Date(), leaseUntil: null } })
@@ -321,16 +378,92 @@ export class RepositoryHealthService {
     const native = await this.db.nativeExecutionRequest.findUnique({ where: { id: row.nativeRequestId } })
     if (native && ['QUEUED','PREPARING','RUNNING','CANCEL_REQUESTED'].includes(native.state)) { await this.defer(id,token); return }
    }
-   await this.finish(row,token,'FAILED',row.report as HealthReport | null, (error as any)?.status === 403 ? 'ACCESS_REVOKED' : 'SOURCE_OR_ANALYSIS_UNAVAILABLE')
+   await this.finish(row,token,'FAILED',row.report as HealthReport | null, error instanceof GitHubRateLimitError ? 'GITHUB_RATE_LIMITED' : (error as Error)?.message === 'NO_APPLICABLE_ANALYSIS' ? 'NO_APPLICABLE_ANALYSIS' : (error as any)?.status === 403 ? 'ACCESS_REVOKED' : 'SOURCE_OR_ANALYSIS_UNAVAILABLE', error instanceof GitHubRateLimitError ? validRetryAt((error.getResponse() as any)?.retryAt) : null)
+  }
+ }
+ private async automaticScan(row: any, token: string, session: AuthenticatedSession, repo: any) {
+  if (!this.scanner) throw new Error('Scanner client unavailable')
+  const saved=row.plan as any
+  let preparingSource=false
+  try {
+   let pkg=saved.package??await this.scanner.package(row.organizationId)
+   let expected=saved.expected as NativeReceiptExpected|undefined
+   let source: Awaited<ReturnType<GitHubProviderService['readHealthScanSource']>>|undefined
+   if (!expected) {
+    // The export is bounded but can take longer than an ordinary worker lease.
+    await this.db.repositoryHealthAssessment.updateMany({where:{id:row.id,leaseToken:token,cancelledAt:null},data:{leaseUntil:new Date(Date.now()+12*60000)}})
+    preparingSource=true
+    console.info(JSON.stringify({event:'health.worker.fetching_source',assessmentId:row.id}))
+    source=await this.github.readHealthScanSource(repo.installationId,repo.githubId,row.sourceSha,AbortSignal.timeout(600000),false)
+    await this.access.requireRepository(session,repo.githubId.toString(),'execution.run')
+    preparingSource=false
+    pkg=await this.scanner.package(row.organizationId)
+    const {planHash,...plan}=healthScannerPlan(pkg,{organizationId:row.organizationId,repositoryId:repo.githubId.toString(),sourceSha:row.sourceSha,selectionId:'health:'+row.id,ruleIds:saved.ruleIds})
+    const rules=plan.steps.filter(step=>'adapterId' in step).map(step=>step.ruleId)
+    if (!rules.length) throw new Error('No applicable scanner images available')
+    expected={requestId:row.id,attemptId:row.id,organizationId:row.organizationId,repositoryId:repo.githubId.toString(),sourceSha:row.sourceSha,sourceHash:source.source.sourceHash,selectionId:'health:'+row.id,planHash,plan,ruleIds:rules,approvalHash:healthScannerAuthority(pkg,row.organizationId).reviewed.approvalHash}
+    const changed=await this.db.repositoryHealthAssessment.updateMany({where:{id:row.id,leaseToken:token,cancelledAt:null},data:{plan:json({...saved,package:pkg,expected,stage:'WAITING_SCANNER',excludedFiles:source.excludedFiles,originalTreeSha:source.originalTreeSha})}})
+    if (!changed.count) throw new Error('Health attempt changed')
+    row=await this.db.repositoryHealthAssessment.findUniqueOrThrow({where:{id:row.id}})
+   }
+   let result=await this.scanner.call('status',expected)
+   if (result.state==='NOT_FOUND' && (row.cancelledAt || Date.now()-row.startedAt.getTime()>3600000)) {await this.finish(row,token,row.cancelledAt?'CANCELLED':'FAILED',row.cancelledAt?null:row.report as HealthReport,row.cancelledAt?'EXECUTION_CANCELLED':'ASSESSMENT_TIMED_OUT');return}
+   if (result.state==='NOT_FOUND') {
+    pkg=await this.scanner.package(row.organizationId)
+    if(expected.approvalHash!==healthScannerAuthority(pkg,row.organizationId).reviewed.approvalHash){
+     const {planHash,...plan}=healthScannerPlan(pkg,{organizationId:row.organizationId,repositoryId:repo.githubId.toString(),sourceSha:row.sourceSha,selectionId:expected.selectionId,ruleIds:saved.ruleIds})
+     expected={...expected,planHash,plan,ruleIds:plan.steps.filter(step=>'adapterId' in step).map(step=>step.ruleId),approvalHash:healthScannerAuthority(pkg,row.organizationId).reviewed.approvalHash}
+     const updated=await this.db.repositoryHealthAssessment.updateMany({where:{id:row.id,leaseToken:token,cancelledAt:null},data:{plan:json({...row.plan as any,expected,package:pkg})}})
+     if(!updated.count)throw new Error('Health scope changed')
+     row=await this.db.repositoryHealthAssessment.findUniqueOrThrow({where:{id:row.id}})
+    }
+    await this.db.repositoryHealthAssessment.updateMany({where:{id:row.id,leaseToken:token,cancelledAt:null},data:{leaseUntil:new Date(Date.now()+12*60000)}})
+    source ??= await this.github.readHealthScanSource(repo.installationId,repo.githubId,row.sourceSha,AbortSignal.timeout(600000),false)
+    await this.access.requireRepository(session,repo.githubId.toString(),'execution.run')
+    const live=await this.db.repositoryHealthAssessment.findUniqueOrThrow({where:{id:row.id}})
+    if (live.cancelledAt || live.leaseToken!==token || source.source.sourceHash!==expected.sourceHash) throw new Error('Health scope changed')
+    result=await this.scanner.call('admit',expected,source.source)
+   }
+   const live=await this.db.repositoryHealthAssessment.findUniqueOrThrow({where:{id:row.id}})
+   if ((live.cancelledAt || Date.now()-row.startedAt.getTime()>3600000) && result.state!=='COMPLETE') result=await this.scanner.call('cancel',expected)
+   if (result.state!=='COMPLETE') {
+    await this.db.repositoryHealthAssessment.updateMany({where:{id:row.id,leaseToken:token},data:{plan:json({...row.plan as any,stage:result.state==='RUNNING'?'SCANNING':'WAITING_SCANNER'})}})
+    await this.defer(row.id,token);return
+   }
+   await this.db.repositoryHealthAssessment.updateMany({where:{id:row.id,leaseToken:token},data:{plan:json({...row.plan as any,stage:'VERIFYING_RESULTS'})}})
+   const receipt=this.scanner.verify((row.plan as any).package??pkg,expected,result.signature)
+   if (!receipt) {
+    if(result.cleanupConfirmed) {await this.finish(row,token,'FAILED',row.report as HealthReport,'SCANNER_RESULT_UNVERIFIED');return}
+    throw new Error('Scanner result could not be verified')
+   }
+   await this.access.requireRepository(session,repo.githubId.toString(),'execution.run')
+   const initial=row.report as HealthReport, excluded=(row.plan as any).excludedFiles??0
+   const report=markSelection(healthReport({...initial.inspection,complete:initial.inspection.complete&&excluded===0},initial.analyses.map(a=>a.id==='tests.coverage'&&!expected.ruleIds.includes('tests.coverage')?{...a,state:'UNAVAILABLE' as const,reason:'TEST_ENVIRONMENT_UNAVAILABLE'}:a),receipt.checks,digest({kind:'automatic-health-v1',tools:receipt.toolReviewHash,scope:initial.analyses.map(a=>a.id)})),initial.selection==='all'?undefined:initial.selection)
+   report.policyContext=initial.policyContext
+   if(excluded)report.limits.push(`${excluded} binary, oversized, generated or linked files were excluded from the scanned source scope. Findings and metrics apply to retained files only.`)
+   await this.finish(row,token,receipt.cancelled?'CANCELLED':receipt.checks.some(c=>!c.cleanupConfirmed)?'FAILED':'COMPLETED',report,receipt.cancelled?'EXECUTION_CANCELLED':null)
+  } catch (error) {
+   // An uncertain admit/status response cannot abandon an owned scanner job.
+   const current=await this.db.repositoryHealthAssessment.findUniqueOrThrow({where:{id:row.id}})
+   if ((current.plan as any)?.expected) {
+    await this.db.repositoryHealthAssessment.updateMany({where:{id:row.id,leaseToken:token},data:{plan:json({...current.plan as any,stage:'RECONNECTING_SCANNER'})}})
+    await this.defer(row.id,token);return
+   }
+   const response=(error as any)?.getResponse?.()
+   const reason=error instanceof HealthGitSourceError?error.code:(error as any)?.status===403?'ACCESS_REVOKED':response?.code==='GITHUB_RATE_LIMITED'?'GITHUB_RATE_LIMITED':preparingSource?'SOURCE_ACCESS_UNAVAILABLE':'SCANNER_UNAVAILABLE'
+   const report=row.report as HealthReport
+   const next=markSelection(healthReport(report.inspection,report.analyses.map(a=>({...a,reason}))),report.selection==='all'?undefined:report.selection)
+   next.policyContext=report.policyContext
+   await this.finish(row,token,'FAILED',next,reason,reason==='GITHUB_RATE_LIMITED'?validRetryAt(response?.retryAt):null)
   }
  }
  private async defer(id: string, token: string) {
   await this.db.repositoryHealthAssessment.updateMany({ where: { id, leaseToken: token }, data: { leaseToken: null, leaseUntil: new Date(Date.now()+5000) } })
  }
- private async finish(row: RepositoryHealthAssessment, token: string, state: string, report: HealthReport | null, reason: string | null) {
+ private async finish(row: RepositoryHealthAssessment, token: string, state: string, report: HealthReport | null, reason: string | null, retryAt: string | null = null) {
   await this.db.$transaction(async tx => {
    const changed = await tx.repositoryHealthAssessment.updateMany({ where: { id: row.id, state: 'RUNNING', leaseToken: token, cancelledAt: row.cancelledAt },
-    data: { state, ...(report ? { report: json(report) } : {}), reason, finishedAt: new Date(), leaseToken: null, leaseUntil: null } })
+    data: { state, ...(report ? { report: json(report) } : {}), ...(state==='FAILED'&&validRetryAt(retryAt)?{plan:json({...row.plan as any,failure:{retryAt:validRetryAt(retryAt)}})}:{}), reason, finishedAt: new Date(), leaseToken: null, leaseUntil: null } })
    if (!changed.count) {
     await tx.repositoryHealthAssessment.updateMany({ where: { id: row.id, state: 'RUNNING', leaseToken: token }, data: { leaseToken: null, leaseUntil: new Date(Date.now()+5000) } })
     return

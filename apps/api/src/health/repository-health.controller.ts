@@ -4,10 +4,12 @@ import type { Request } from 'express'
 import { SessionGuard, type AuthenticatedSession } from '../auth/session.guard.js'
 import { AuthService } from '../auth/auth.service.js'
 import { RepositoryHealthService } from './repository-health.service.js'
+import type { HealthCategory } from './health-categories.js'
 type SessionRequest = Request & { preflytSession?: AuthenticatedSession }
 class HealthRequest {
  @IsOptional() @IsString() @MaxLength(244) branch?: string
  @IsOptional() @IsBoolean() includeCoverage?: boolean
+ @IsOptional() @IsIn(['security','reliability','maintainability','duplication','coverage']) category?: HealthCategory
  @IsUUID('4') requestKey!: string
 }
 class HotspotReviewRequest {
@@ -22,7 +24,7 @@ export class RepositoryHealthController {
  @Get('health') @Header('Cache-Control','no-store')
  portfolio(@Req() req: SessionRequest, @Query('page') page = '1', @Query('q') q = '', @Query('repository') repository?: string, @Query('pageSize') pageSize = '25') { return this.health.portfolio(req.preflytSession!, Number(page), q, repository, Number(pageSize)) }
  @Get('repositories/:repositoryId/health') @Header('Cache-Control','no-store')
- get(@Req() req: SessionRequest, @Param('repositoryId') repo: string, @Query('assessment') id?: string, @Query('page') page = '1') { return this.health.get(req.preflytSession!,repo,id,Number(page)) }
+ get(@Req() req: SessionRequest, @Param('repositoryId') repo: string, @Query('assessment') id?: string, @Query('page') page = '1', @Query('branch') branch?: string) { return this.health.get(req.preflytSession!,repo,id,Number(page),branch) }
  @Get('repositories/:repositoryId/health/freshness') @Header('Cache-Control','no-store')
  freshness(@Req() req: SessionRequest, @Param('repositoryId') repo: string, @Query('assessment') id = '') { return this.health.freshness(req.preflytSession!,repo,id) }
  @Post('repositories/:repositoryId/health')

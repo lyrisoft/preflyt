@@ -96,7 +96,7 @@ it('starts with explicit repository selection for admins', () => {
     <FirstReport repositories={[]} session={admin} />
   )
   expect(html).toContain('Select a repository')
-  expect(html).toContain('href="/apps"')
+  expect(html).toContain('href="/repositories"')
 })
 it('fits a narrow screen in both themes with a long repository name', async () => {
   await page.viewport(320, 900)

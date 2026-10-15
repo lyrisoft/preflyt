@@ -568,3 +568,16 @@ it('signs bounded exact-rule analyzer guidance with Health findings',async()=>{
  const result=await wait(()=>jobs!.call('status',expected));const receipt=verifyNativeReceipt(result.signature,expected)!
  expect(receipt.checks[0].findings?.[0].reportGuidance).toEqual({version:1,source:'ANALYZER_REPORT',explanation:'Rule explanation',advice:'Remediation advice'})
 })
+
+it('reloads a large Health receipt after restart without losing retained findings',async()=>{
+ const {expected,source,runner}=await fixture('secrets.scan','docker',true)
+ const report=Buffer.from(JSON.stringify({version:'2.1.0',runs:[{tool:{driver:{name:'fixture'}},results:Array.from({length:500},(_,i)=>({ruleId:'fixture-secret-'+i,level:'error',message:{text:'Sensitive detector content'},locations:[{physicalLocation:{artifactLocation:{uri:'fixture.js'},region:{startLine:1}}}]}))}]}))
+ runner.mockImplementationOnce(async(scope:any)=>({...scope,...nativeCheckOutcome('secrets.scan',1,report,'health'),adapterId:nativeAdapters['secrets.scan'].id,image:nativeToolReviews()!.reviews[0].image,toolVersion:'1',configHash:'c'.repeat(64),exitCode:1,cleanupConfirmed:true,report:report.toString('base64'),jobId:'fixture',attemptId:randomUUID(),approvalHash:expected.approvalHash,environmentId:'fixture'}))
+ await jobs!.call('admit',expected,source)
+ const completed=await wait(()=>jobs!.call('status',expected))
+ expect(completed.signature.length).toBeGreaterThan(65536)
+ expect(verifyNativeReceipt(completed.signature,expected)?.checks[0].findings).toHaveLength(500)
+ await jobs!.close();jobs=new NativeControllerJobs(directory,runner as any);await jobs.initialize()
+ expect(await jobs.call('status',expected)).toEqual(completed)
+ expect(runner).toHaveBeenCalledOnce()
+})
