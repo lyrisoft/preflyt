@@ -1,10 +1,10 @@
 import { createHash } from 'node:crypto'
 import { digest } from '../assessments/assessment-digest.js'
 export const sourceLimits = Object.freeze({
-  entries: 10000,
-  files: 2000,
+  entries: 20000,
+  files: 8000,
   fileBytes: 2 * 1024 * 1024,
-  totalBytes: 20 * 1024 * 1024,
+  totalBytes: 64 * 1024 * 1024,
   pathBytes: 512,
   depth: 32,
 })

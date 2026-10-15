@@ -52,10 +52,10 @@ it('queues capture transactionally, deduplicates and prepares new findings befor
  await store.read(repositoryId, sha, location)
  expect(provider.readHealthSource).toHaveBeenCalledTimes(1)
 })
-it('never queues secret findings or unsafe file paths and bounds stored code', async () => {
+it('queues redacted secret excerpts, rejects unsafe paths and bounds stored code', async () => {
  const db = fixture.prisma
  await db.$transaction(tx => queueFindingSources(tx, repositoryId, sha, [{ ...location, checkId: 'secrets.scan' }, { ...location, ruleId: 'gitleaks' }, { ...location, path: '../private' }]))
- expect(await db.findingSourceExcerpt.count()).toBe(0)
+ expect(await db.findingSourceExcerpt.count()).toBe(1)
  provider.readHealthSource.mockResolvedValue(Array.from({length: 200}, () => 'x'.repeat(3000)).join('\n'))
  const result = await store.read(repositoryId, sha, { ...location, line: 10, endLine: 180 })
  expect(result.lines).toHaveLength(60)
@@ -90,4 +90,19 @@ it('does not retain source when repository access changes during capture', async
  provider.readHealthSource.mockImplementationOnce(async () => { await fixture.prisma.gitHubRepository.update({ where: { id: repositoryId }, data: { available: false } }); return 'private source' })
  await expect(store.read(repositoryId, sha, location)).rejects.toThrow('access')
  expect((await fixture.prisma.findingSourceExcerpt.findFirstOrThrow()).content).toBeNull()
+})
+
+it('separates secret excerpts from ordinary cached source and masks unknown detector ranges before storage', async () => {
+ provider.readHealthSource.mockResolvedValue('before();\nopaque-sensitive-value\nsecond-sensitive-line\nafter();')
+ const normal = await store.read(repositoryId, sha, location)
+ expect(normal.lines[1].text).toBe('opaque-sensitive-value')
+ const secret = {...location, checkId:'secrets.scan', ruleId:'unrecognized-detector'}
+ const result = await store.read(repositoryId, sha, secret)
+ expect(result.lines).toEqual([{number:1,text:'before();'},{number:2,text:'[Potential credential redacted]'},{number:3,text:'[Potential credential redacted]'},{number:4,text:'after();'}])
+ const saved = await fixture.prisma.findingSourceExcerpt.findUniqueOrThrow({where:{id:sourceLocation(repositoryId,sha,secret)!.id}})
+ expect(JSON.stringify(saved.content)).not.toContain('sensitive-value')
+ expect(JSON.stringify(saved.content)).not.toContain('second-sensitive-line')
+ provider.readHealthSource.mockRejectedValue(new Error('offline'))
+ expect(await new FindingSourceStore(fixture.prisma,provider as any).read(repositoryId,sha,secret)).toEqual(result)
+ expect(sourceLocation(repositoryId,sha,{...secret,line:null,endLine:null})).toBeNull()
 })

@@ -36,6 +36,7 @@ export type OverallHealth = {
   reasons: string[]
 }
 export type HealthReport = {
+  selection?: 'all' | HealthCategory
   policyContext?: {
     version: 1
     state: 'NO_PUBLISHED_POLICY' | 'POLICY_INVALID' | 'CAPTURED'
@@ -68,6 +69,13 @@ export type HealthReport = {
     id: string
     title: string
     scope?: string
+    testResults?: Array<{
+      directory: string
+      framework: string
+      state: string
+      reason: string
+    }>
+    scanErrors?: Array<{ type: string; path: string | null; line?: number }>
     fileAnalysis?: {
       version: 1
       formula: 'semgrep-candidate-files-v1'
@@ -89,9 +97,10 @@ export type HealthReport = {
   limits: string[]
   measurements?: {
     coverage?: {
-      version: 1
-      formula: 'node-covered-lines-v1'
-      scope: 'node-loaded-files'
+      version: 1 | 2
+      formula: 'node-covered-lines-v1' | 'repository-lcov-lines-v1'
+      scope: 'node-loaded-files' | 'configured-test-packages'
+      packages?: { directory: string; framework: string; manager: string }[]
       analyzedLines: number
       coveredLines: number
       analyzedFiles: number
@@ -109,6 +118,9 @@ export type HealthReport = {
   }
 }
 export type HealthAssessment = {
+  category?: HealthCategory | null
+  retryAt?: string | null
+  progress?: string | null
   overallHealth?: OverallHealth
   id: string
   branch: string
@@ -123,6 +135,8 @@ export type HealthAssessment = {
   finishedAt: string | null
 }
 export type HealthTimelinePoint = {
+  partial: boolean
+  comparableFindings: number | null
   checkIds?: string[]
   id: string
   sourceSha: string
@@ -130,6 +144,32 @@ export type HealthTimelinePoint = {
   findings: number
 }
 export type HealthData = {
+  categoryResults?: Partial<
+    Record<
+      HealthCategory,
+      { assessmentId: string; finishedAt: string | null; value: string } | null
+    >
+  >
+  ciCoverage?: {
+    sourceSha: string | null
+    state: 'VERIFIED' | 'MISSING' | 'UNVERIFIED'
+    reason: string
+    runUrl?: string
+    receivedAt?: string
+    measurement?: {
+      analyzedFiles: number
+      analyzedLines: number
+      coveredLines: number
+    }
+    tests?: {
+      tests: number
+      passed: number
+      failures: number
+      errors: number
+      skipped: number
+    }
+    testsState?: 'PASS' | 'FAIL' | 'INCOMPLETE'
+  }
   repository?: string
   branch: string | null
   assessment: HealthAssessment | null
@@ -153,6 +193,8 @@ export type HealthData = {
     checkIds?: string[]
   } | null
 }
+export type HealthCategory =
+  'security' | 'reliability' | 'maintainability' | 'duplication' | 'coverage'
 export type HealthPortfolioData = {
   statuses: {
     complete: number
@@ -244,7 +286,8 @@ export function useHealth(
   repositoryId: string,
   assessment?: string,
   page = 1,
-  enabled = true
+  enabled = true,
+  branch?: string
 ) {
   const session = useNavigationSession()
   return useQuery({
@@ -255,11 +298,12 @@ export function useHealth(
       repositoryId,
       assessment,
       page,
+      branch,
     ],
     enabled: enabled && session.isSuccess,
     queryFn: ({ signal }) =>
       healthRequest<HealthData>(
-        `repositories/${repositoryId}/health?${new URLSearchParams({ page: String(page), ...(assessment ? { assessment } : {}) })}`,
+        `repositories/${repositoryId}/health?${new URLSearchParams({ page: String(page), ...(assessment ? { assessment } : {}), ...(branch ? { branch } : {}) })}`,
         signal
       ),
     retry: false,
@@ -316,6 +360,18 @@ export function useHealthFreshness(repositoryId: string, assessment?: string) {
   })
 }
 export const healthReasons: Record<string, string> = {
+  HEALTH_TEST_EXECUTION_REMOVED:
+    'Repository Health no longer runs tests. Reassess for static analysis and submit test results and coverage from your CI workflow.',
+  NO_APPLICABLE_ANALYSIS:
+    'No supported files or configuration were found for this category at the selected commit.',
+  GIT_UNAVAILABLE:
+    'The deployment cannot fetch repository source because Git is unavailable. Ask your administrator to update the Preflyt worker image.',
+  SOURCE_FETCH_FAILED:
+    'The pinned commit could not be fetched through Git. Check GitHub App access and retry the assessment.',
+  SOURCE_FETCH_TIMED_OUT:
+    'The Git source fetch exceeded its time limit. Retry; if it continues, ask your administrator to check network connectivity.',
+  SOURCE_FETCH_LIMIT_EXCEEDED:
+    'The repository source exceeds the bounded Git download or source-size limit. Ask your administrator to review the repository size and scanner limits.',
   SOURCE_LOCATION_INVALID:
     'Some reported file locations did not match the assessed source and were excluded. Valid findings are retained.',
   ASSESSMENT_TIMED_OUT:
@@ -327,11 +383,35 @@ export const healthReasons: Record<string, string> = {
   PREFLIGHT_DISABLED:
     'The operator has not enabled an approved analysis runtime.',
   TESTS_FAILED:
-    'Tests failed. Fix the failures before requesting measured coverage.',
+    'The test command or its setup failed. Coverage was not produced. Check the repository’s test setup and failing tests before retrying.',
   TESTS_SKIPPED:
     'Tests were skipped or marked TODO. Coverage remains unavailable until a complete run succeeds.',
+  NO_TEST_SETUP:
+    'The historical Health run found no test setup. Configure tests and coverage in your CI workflow.',
+  UNSUPPORTED_TEST_COMMAND:
+    'The historical Health test command was unsupported. Configure tests and coverage in CI.',
+  LOCKFILE_REQUIRED:
+    'Commit a package-lock.json, pnpm-lock.yaml or Yarn Classic yarn.lock so dependencies can be installed reproducibly.',
+  AMBIGUOUS_LOCKFILES:
+    'More than one package manager lockfile was found. Keep the lockfile used by this package.',
+  UNSUPPORTED_PACKAGE_MANAGER:
+    'This package manager is not supported yet. Supported managers are npm, pnpm and Yarn Classic.',
+  COVERAGE_PROVIDER_UNAVAILABLE:
+    'The coverage provider matching this Vitest version could not be installed. Check that the version is available in the public npm registry.',
+  DEPENDENCY_SOURCE_UNSUPPORTED:
+    'A dependency uses a private registry, Git URL or unsupported source. Health currently installs dependencies from the public npm and Yarn registries.',
+  LOCKFILE_OUT_OF_SYNC:
+    'This package’s lockfile is out of sync. Run the package manager install command in the affected package, commit the updated lockfile, and run test coverage again.',
+  DEPENDENCY_INSTALL_TIMED_OUT:
+    'Dependency installation exceeded its four-minute limit. Retry or ask the deployment operator to check registry connectivity and runner capacity.',
+  DEPENDENCY_INSTALL_FAILED:
+    'Dependencies could not be installed from the public npm registry. Check the lockfile and package versions. Private registries and install scripts are not available in Health.',
+  TEST_ENVIRONMENT_UNAVAILABLE:
+    'The isolated test environment could not start. Retry, or ask the deployment operator to check the Health scanner service.',
+  TESTS_TIMED_OUT:
+    'The test run exceeded its time limit. Review the CI workflow logs and test job timeout.',
   NO_SOURCE_COVERAGE:
-    'Tests ran without measured application source coverage. Test-only files are excluded.',
+    'Tests ran without usable line coverage for the assessed source files.',
   TEST_SCOPE_LIMIT:
     'The test file scope exceeds the reviewed limit of 100 files.',
   TEST_RUNNER_FAILED: 'The reviewed test runner did not complete successfully.',
@@ -346,7 +426,16 @@ export const healthReasons: Record<string, string> = {
   COVERAGE_UNAVAILABLE:
     'Coverage was not verified. Tests must pass without skips and produce nonempty measured source coverage.',
   REVIEW_REQUIRED:
-    'An independent isolation review is required before analysis can run.',
+    'This older assessment predates automatic Health scanning. Reassess to run the current scanners.',
+  SCANNER_UNAVAILABLE:
+    'The Preflyt scanning service is temporarily unavailable. Retry the assessment. Your administrator can check the scanner service logs if it continues.',
+  SOURCE_ACCESS_UNAVAILABLE:
+    'Repository files could not be fetched and verified. Check GitHub access and retry the assessment.',
+  GITHUB_RATE_LIMITED:
+    'GitHub has temporarily limited repository requests. Wait for the GitHub request budget to reset, then reassess.',
+  SCANNER_PENDING: 'Waiting for the Preflyt scanners.',
+  SCANNER_RESULT_UNVERIFIED:
+    'The scanner result could not be verified. Retry the assessment; no passing result was recorded.',
   CONTROLLER_UNAVAILABLE:
     'The approved analysis controller could not be reached or verified.',
   DISPATCHER_REQUIRED: 'Reviewed analysis is not enabled by the operator.',
@@ -365,6 +454,49 @@ export const healthReasons: Record<string, string> = {
   EXECUTION_UNAVAILABLE:
     'Analysis could not be completed under the approved runtime.',
   EXECUTION_CANCELLED: 'The assessment was cancelled.',
+}
+/** Fixed user-facing failure descriptions; never expose provider exception text. */
+export function healthFailure(reason: string | null, canRetry = true) {
+  const actions: Record<string, string> = {
+    NO_APPLICABLE_ANALYSIS:
+      'Choose a category that matches the repository files, or run a full assessment after adding the relevant files or test setup.',
+    GIT_UNAVAILABLE:
+      'Ask your administrator to update the Preflyt worker image to include Git, then reassess.',
+    SOURCE_FETCH_LIMIT_EXCEEDED:
+      'Ask your administrator to review the repository size and fetch limits before retrying.',
+    SOURCE_FETCH_FAILED:
+      'Check GitHub App access and select Reassess. If it continues, ask your administrator to check the worker’s network access to github.com.',
+    SOURCE_FETCH_TIMED_OUT:
+      'Select Reassess. If it times out again, ask your administrator to check the worker’s network access to github.com.',
+    GITHUB_RATE_LIMITED:
+      'Wait for GitHub’s request limit to reset, then select Reassess.',
+    ACCESS_REVOKED:
+      'Check that the repository is selected and the GitHub App still has access, then select Reassess.',
+    SOURCE_ACCESS_UNAVAILABLE:
+      'Check the selected branch and GitHub App access, then select Reassess.',
+    SOURCE_OR_ANALYSIS_UNAVAILABLE:
+      'Select Reassess to try again. If it fails again, ask your administrator to check repository access and scanner availability.',
+    SCANNER_UNAVAILABLE:
+      'Select Reassess to retry. If it continues, ask your administrator to check the Health scanner service.',
+    ASSESSMENT_TIMED_OUT:
+      'Select Reassess. If it times out again, ask your administrator to check scanner capacity and the repository’s test command.',
+    SCANNER_RESULT_UNVERIFIED:
+      'Select Reassess. If verification keeps failing, ask your administrator to check the Health scanner service.',
+    RECEIPT_UNVERIFIED:
+      'Select Reassess. If verification keeps failing, ask your administrator to check the Health scanner service.',
+    EXECUTION_INTERRUPTED: 'Select Reassess to start a new assessment.',
+  }
+  return {
+    message:
+      reason && Object.prototype.hasOwnProperty.call(healthReasons, reason)
+        ? healthReasons[reason]
+        : 'The assessment stopped without a usable result. A specific cause was not recorded.',
+    action: !canRetry
+      ? 'Ask a repository maintainer to retry the assessment after resolving this problem.'
+      : reason && Object.prototype.hasOwnProperty.call(actions, reason)
+        ? actions[reason]
+        : 'Select Reassess to try again. If it fails again, give your administrator the assessment ID below.',
+  }
 }
 export const healthLabel = (state: string) =>
   ({

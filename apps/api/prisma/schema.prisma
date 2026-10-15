@@ -1224,6 +1224,7 @@ model GitHubAppManifestTransaction {
 
 // Repository health is independent of policy selections and CI gate evidence.
 model RepositoryHealthTarget {
+  testSettings Json?
   repositoryId String @id
   repository GitHubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
   organizationId String
@@ -1236,6 +1237,7 @@ model RepositoryHealthTarget {
   updatedAt DateTime @updatedAt
 }
 model RepositoryHealthAssessment {
+  testSettings Json?
   id String @id @default(uuid())
   repositoryId String
   repository GitHubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)

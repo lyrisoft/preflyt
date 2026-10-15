@@ -26,6 +26,7 @@ export function authorizedNavigation(
 /** Highlight the direct sidebar destination of a nested page. */
 export function primaryDestination(href: string) {
   const path = href.split('?')[0].replace(/\/$/, '') || '/'
-  if (path.startsWith('/repositories/')) return '/apps'
+  if (path === '/apps' || path.startsWith('/repositories/'))
+    return '/repositories'
   return path === '/' ? '/' : `/${path.split('/')[1]}`
 }

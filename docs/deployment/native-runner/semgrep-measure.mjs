@@ -4,6 +4,7 @@ import {opendir,lstat,open,writeFile} from 'node:fs/promises'
 import {constants} from 'node:fs'
 import {join} from 'node:path'
 import {createHash} from 'node:crypto'
+import {normalizeSemgrepLocations} from './semgrep-locations.mjs'
 const configs={'security.sast':'semgrep','quality.reliability':'reliability','quality.maintainability':'maintainability','security.hotspots':'hotspots'}
 const config=configs[process.argv[2]]
 const eligible=path=>/\.(?:js|jsx|ts|tsx|mjs|cjs|py)$/i.test(path)&&!/(?:^|\/)(?:node_modules|vendor|dist|build|coverage|\.git)\//.test(path)
@@ -20,36 +21,41 @@ const read=async(path,max)=>{
 let exit=2
 try {
  if(!Object.hasOwn(configs,process.argv[2])||process.argv.length!==3)throw new Error('Fixed rule required')
- const result=spawnSync('/usr/local/bin/semgrep',['scan','--config',`/opt/preflyt/config/${config}.yaml`,'--metrics','off','--disable-version-check','--no-git-ignore','--max-target-bytes','1048576','--strict','--sarif','--output','/reports/report.sarif','--json-output','/reports/semgrep-stats.json','--error','/workspace'],{cwd:'/workspace',env:process.env,stdio:'ignore',timeout:270000})
+ const result=spawnSync('/usr/local/bin/semgrep',['scan','--jobs','1','--timeout','10','--config',`/opt/preflyt/config/${config}.yaml`,'--metrics','off','--disable-version-check','--no-git-ignore','--x-ignore-semgrepignore-files','--exclude','**/node_modules/**','--exclude','**/vendor/**','--exclude','**/dist/**','--exclude','**/build/**','--exclude','**/coverage/**','--exclude','**/.git/**','--max-target-bytes','1048576','--strict','--sarif','--output','/reports/report.sarif','--json-output','/reports/semgrep-stats.json','--error','/workspace'],{cwd:'/workspace',env:process.env,stdio:'ignore',timeout:270000})
  if(result.error||!Number.isInteger(result.status))throw new Error('Scan failed')
  exit=[0,1].includes(result.status)?result.status:2
- const report=await read('/reports/report.sarif',262144)
+ const report=normalizeSemgrepLocations(await read('/reports/report.sarif',8388608))
+ let scanErrors=[]
  try {
-  const stats=await read('/reports/semgrep-stats.json',2097152)
-  if(!Array.isArray(stats.errors)||stats.errors.length||!Array.isArray(stats.paths?.scanned)||stats.paths.scanned.length>2000) {exit=2;throw new Error('Scan metadata unavailable')}
+  const stats=await read('/reports/semgrep-stats.json',16777216)
+  scanErrors=(stats.errors??[]).slice(0,30).map(error=>{
+   const line=error.spans?.[0]?.start?.line, path=typeof error.path==='string'?pathOf(error.path):null
+   return {type:String((Array.isArray(error.type)?error.type[0]:error.type)??'ScanError').replace(/[^A-Za-z0-9 _-]/g,'').slice(0,80) || 'ScanError',path,...(path!==null&&Number.isSafeInteger(line)&&line>0&&line<=1000000?{line}:{})}
+  })
+  if(!Array.isArray(stats.errors)||stats.errors.length||!Array.isArray(stats.paths?.scanned)||stats.paths.scanned.length>8000) {exit=2;throw new Error('Scan metadata unavailable')}
   const candidates=new Set()
   let count=0
   const walk=async(relative='')=>{
    if(relative.split('/').length>32)throw new Error('Unbounded source')
    for await(const entry of await opendir(join('/workspace',relative))){
     const path=pathOf(relative?relative+'/'+entry.name:entry.name),info=await lstat(join('/workspace',path))
-    if(info.isSymbolicLink()||++count>10000)throw new Error('Invalid source')
+    if(info.isSymbolicLink()||++count>20000)throw new Error('Invalid source')
     if(info.isDirectory())await walk(path)
     else if(info.isFile()&&info.size<=1048576&&eligible(path))candidates.add(path)
    }
   }
   await walk()
-  if(candidates.size>2000)throw new Error('Unbounded candidate scope')
+  if(candidates.size>8000)throw new Error('Unbounded candidate scope')
   const scanned=new Set(stats.paths.scanned.map(pathOf))
   if([...scanned].some(path=>!candidates.has(path)))throw new Error('Unexpected analyzed file')
   if(report.version!=='2.1.0'||report.runs?.length!==1)throw new Error('Invalid SARIF')
   report.runs[0].properties={...report.runs[0].properties,preflytFileAnalysis:{version:1,formula:'semgrep-candidate-files-v1',scope:'js-ts-python',candidateFiles:candidates.size,analyzedFiles:scanned.size,skippedFiles:candidates.size-scanned.size,pathsDigest:createHash('sha256').update(JSON.stringify({candidate:[...candidates].sort(),analyzed:[...scanned].sort()})).digest('hex')}}
-  const text=JSON.stringify(report);if(Buffer.byteLength(text)>262144)throw new Error('Oversized report')
+  const text=JSON.stringify(report);if(Buffer.byteLength(text)>8388608)throw new Error('Oversized report')
   await writeFile('/reports/report.sarif',text)
  }catch {
   if(exit===2 && report.runs?.length===1) {
-   report.runs[0].properties={...report.runs[0].properties,preflytFileAnalysisUnavailable:'SCAN_ERRORS'}
-   const text=JSON.stringify(report);if(Buffer.byteLength(text)<=262144)await writeFile('/reports/report.sarif',text)
+   report.runs[0].properties={...report.runs[0].properties,preflytFileAnalysisUnavailable:'SCAN_ERRORS',preflytScanErrors:scanErrors}
+   const text=JSON.stringify(report);if(Buffer.byteLength(text)<=8388608)await writeFile('/reports/report.sarif',text)
   }
   // Keep original findings, but never publish an invented file count.
  }

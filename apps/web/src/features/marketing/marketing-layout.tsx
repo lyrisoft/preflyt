@@ -70,7 +70,7 @@ export function MarketingLayout({ children }: { children: ReactNode }) {
             <a href='/#how-it-works'>How it works</a>
             <a href='/self-hosting'>Self-hosting</a>
             <a
-              href='https://lyrisoft.github.io/preflyt/'
+              href='https://docs.preflytlabs.com/'
               target='_blank'
               rel='noreferrer'
             >
@@ -92,7 +92,7 @@ export function MarketingLayout({ children }: { children: ReactNode }) {
             <Button asChild>
               <a
                 className='button compact'
-                href='https://lyrisoft.github.io/preflyt/getting-started'
+                href='https://docs.preflytlabs.com/getting-started'
                 target='_blank'
                 rel='noreferrer'
               >
@@ -127,7 +127,7 @@ export function MarketingLayout({ children }: { children: ReactNode }) {
           <a href='/#how-it-works'>How it works</a>
           <a href='/self-hosting'>Self-hosting</a>
           <a
-            href='https://lyrisoft.github.io/preflyt/'
+            href='https://docs.preflytlabs.com/'
             target='_blank'
             rel='noreferrer'
           >
@@ -183,7 +183,7 @@ export function MarketingLayout({ children }: { children: ReactNode }) {
           <div>
             <h3>Build</h3>
             <a
-              href='https://lyrisoft.github.io/preflyt/'
+              href='https://docs.preflytlabs.com/'
               target='_blank'
               rel='noreferrer'
             >
@@ -210,7 +210,7 @@ export function MarketingLayout({ children }: { children: ReactNode }) {
               {authenticated ? 'Open workspace' : 'Sign in'}
             </a>
             <a
-              href='https://lyrisoft.github.io/preflyt/getting-started'
+              href='https://docs.preflytlabs.com/getting-started'
               target='_blank'
               rel='noreferrer'
             >

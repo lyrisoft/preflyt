@@ -170,6 +170,7 @@
       "/usr/local/bin/node"
     ],
     "args": [
+      "--max-old-space-size=1536",
       "/opt/preflyt/duplication/scan.mjs"
     ]
   },

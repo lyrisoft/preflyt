@@ -18,7 +18,7 @@ import { RepositoryPreview } from './repository-preview'
 import { SectionIllustration } from './section-illustration'
 import { WorkspaceWindow } from './workspace-window'
 
-const docs = 'https://lyrisoft.github.io/preflyt/'
+const docs = 'https://docs.preflytlabs.com/'
 type Capability =
   'repository-health' | 'standards-and-evidence' | 'merge-protection'
 const capabilities: {

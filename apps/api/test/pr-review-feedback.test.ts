@@ -88,3 +88,12 @@ it("discloses bounded review coverage in the concise PR summary", () => {
   expect(summary).toContain('Partial review: 254 files and 1200 lines omitted.');
   expect(summary.length).toBeLessThan(280);
 });
+
+it("publishes advisory severity and impact without changing issue identity", () => {
+  const prior = inlineIssues(source, [issue])[0]!;
+  const rated = inlineIssues(source, [{ ...issue, severity: "high", impact: "An attacker could read private data through this query." }])[0]!;
+  expect(rated.body).toContain("Advisory AI issue · high");
+  expect(rated.body).toContain("Impact: An attacker could read private data through this query.");
+  expect(rated.fingerprint).toBe(prior.fingerprint);
+  expect(sameInlineIssue(rated, prior)).toBe(true);
+});

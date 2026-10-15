@@ -32,6 +32,21 @@ export function FindingContext({ finding }: { finding: Finding }) {
             <ResultTimestamp value={finding.observedAt} />
           </dd>
         </div>
+        {finding.pullRequest && (
+          <div>
+            <dt className='text-xs text-muted-foreground'>Pull request</dt>
+            <dd className='mt-1'>
+              <a
+                href={finding.pullRequestUrl}
+                target='_blank'
+                rel='noopener noreferrer'
+                className='underline underline-offset-4'
+              >
+                PR #{finding.pullRequest}
+              </a>
+            </dd>
+          </div>
+        )}
         <div className='min-w-0 sm:col-span-2'>
           <dt className='text-xs text-muted-foreground'>Commit</dt>
           <dd className='mt-1 rounded-md border bg-muted/30 px-3 py-2 font-mono text-xs break-all'>

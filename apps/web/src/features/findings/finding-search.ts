@@ -1,8 +1,8 @@
 import { z } from 'zod'
 
 export const findingsSearch = z.object({
-  source: z.enum(['all', 'ci', 'health']).optional().catch(undefined),
-  origin: z.enum(['health']).optional().catch(undefined),
+  source: z.enum(['all', 'ci', 'health', 'ai']).optional().catch(undefined),
+  origin: z.enum(['health', 'ai']).optional().catch(undefined),
   health: z.string().uuid().optional().catch(undefined),
   category: z
     .enum([
@@ -18,10 +18,14 @@ export const findingsSearch = z.object({
     ])
     .optional()
     .catch(undefined),
-  kind: z.enum(['findings', 'gaps']).optional().catch(undefined),
+  kind: z.enum(['findings', 'gaps', 'ai']).optional().catch(undefined),
   repository: z
-    .string()
-    .regex(/^(all|[1-9]\d{0,15})$/)
+    .union([
+      z.string(),
+      z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+    ])
+    .transform(String)
+    .pipe(z.string().regex(/^(all|[1-9]\d{0,15})$/))
     .optional()
     .catch(undefined),
   severity: z
@@ -41,7 +45,7 @@ export const findingDetailSearch = findingsSearch.extend({
     .regex(/^[a-zA-Z0-9_-]{1,80}$/)
     .optional()
     .catch(undefined),
-  origin: z.enum(['health']).optional().catch(undefined),
+  origin: z.enum(['health', 'ai']).optional().catch(undefined),
   health: z.string().uuid().optional().catch(undefined),
   back: z.string().max(800).optional().catch(undefined),
 })

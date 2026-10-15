@@ -181,6 +181,14 @@ export class SkillReviewController {
       { includeSource: body.includeSource ?? false },
     );
   }
+  @Post(':id/retry') @Header('Cache-Control', 'no-store') retry(
+    @Req() req: R,
+    @Param('repositoryId') repo: string,
+    @Param('id') id: string,
+  ) {
+    this.auth.assertOrigin(req.headers.origin);
+    return this.reviews.retry(req.preflytSession, repo, id);
+  }
   @Post(":id/cancel") @Header("Cache-Control", "no-store") cancel(
     @Req() req: R,
     @Param("repositoryId") repo: string,

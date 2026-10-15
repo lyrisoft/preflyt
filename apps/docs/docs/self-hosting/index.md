@@ -32,6 +32,9 @@ flowchart LR
 | `api` | The application API: sign-in, repositories, standards, assessments, webhooks. |
 | `worker` | Background processing: webhook events, CI evidence, reconciliation and notifications. |
 | `migrate` | A one-shot job that applies database migrations before the API starts. |
+| `health-engine` | A separate TLS-protected Docker-in-Docker engine for scanner containers; the only privileged service. |
+| `health-init` | A one-shot job that prepares protected scanner volumes and client certificates. |
+| `health-scanner` | Runs fixed static Health analyzers and returns signed results; no application credentials. |
 | `db` | PostgreSQL 16. The source of truth for all Preflyt data. |
 | `cache` | Valkey (Redis-compatible), 128 MB, evicting, no persistence. Metadata cache only. |
 | `queue` | A separate Valkey with `noeviction` and AOF persistence for the job queue. |
@@ -61,4 +64,4 @@ Preflyt runs from container images stored privately at `ghcr.io/lyrisoft`. You n
 
 ## What stays outside the containers
 
-Preflyt does not provide your TLS certificate, DNS, off-host backups or monitoring backend. It also does not run repository code or scanners in the default stack: native execution stays disabled until you deploy its separate, reviewed controller. See [Evidence and trust](../concepts/evidence-and-trust.md).
+Preflyt does not provide your TLS certificate, DNS, off-host backups or monitoring backend. The default stack includes static Health analyzers. It does not execute repository tests or arbitrary commands: general native execution stays disabled until you deploy its separate, reviewed controller. See [Evidence and trust](../concepts/evidence-and-trust.md).

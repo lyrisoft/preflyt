@@ -1,0 +1,22 @@
+# Combine with root docker-compose.yaml. Copy only connection.json from scanner host.
+services:
+  api:
+    environment:
+      HEALTH_SCANNER_CONNECTION_FILE: /run/preflyt-health/connection.json
+    volumes:
+      - type: bind
+        source: ${PREFLYT_HEALTH_CONNECTION_DIRECTORY:?Set the protected connection directory}
+        target: /run/preflyt-health
+        read_only: true
+        bind:
+          create_host_path: false
+  worker:
+    environment:
+      HEALTH_SCANNER_CONNECTION_FILE: /run/preflyt-health/connection.json
+    volumes:
+      - type: bind
+        source: ${PREFLYT_HEALTH_CONNECTION_DIRECTORY:?Set the protected connection directory}
+        target: /run/preflyt-health
+        read_only: true
+        bind:
+          create_host_path: false

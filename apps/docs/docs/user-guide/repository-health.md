@@ -7,7 +7,20 @@ description: Read branch analysis, exact-revision findings, limits and report hi
 
 # Repository health
 
-Health assesses a selected branch without requiring CI. Explicit repository selection queues the first assessment; **Reassess** creates another revision report. The API and general worker inspect GitHub metadata and coordinate work. Qualified scanners run in the separate approved runtime.
+Health assesses a selected branch without requiring CI. Explicit repository selection queues the first assessment; **Reassess** creates another revision report. The API and worker fetch the exact selected commit and coordinate work. The built-in scanner service runs applicable fixed Health analyzers in isolated containers. GitHub connection, repository selection and existing Preflyt permissions are the authorization; no additional approval, policy selection or CI workflow is required. Tests run in your existing CI environment. Health displays verified test results and coverage for the assessed commit, as described below.
+
+## Scanner service
+
+The API and worker coordinate assessments; the dedicated Health scanner runs the static analyzers. The [Docker Compose deployment](../self-hosting/docker-compose.md) includes the scanner, its dedicated engine and automatic connection setup. The normal start command waits until the scanner is ready; there is no additional scanner installation step. If it later becomes unavailable, the saved assessment shows **Assessment failed** with a scanner-service reason and retry guidance.
+
+For a local source installation, keep Docker running and start the scanner in a separate terminal from the repository root:
+
+```bash
+cd apps/api
+env -i PATH="$PATH" HOME="$HOME" node_modules/.bin/tsx src/health-scanner.ts
+```
+
+Wait for **Preflyt Health scanner is ready** before selecting or reassessing a repository. The scanner prepares its fixed container images and writes its protected local connection file for the API and worker. Do not pass application credentials into the scanner. This separate-terminal command is only for local source development. Docker deployments start the scanner automatically.
 
 ## Read a report
 
@@ -34,39 +47,43 @@ Branch checks are cached for one minute. Open or refresh Health to check again; 
 
 | Analysis | Applicability | Current adapter and limits |
 | --- | --- | --- |
-| Secret detection | Selected repositories | Gitleaks; recorded full-rule scope can be verified. Secret values and excerpts are hidden. |
-| Static security analysis | JavaScript, TypeScript, Python, Java, Go, Ruby, PHP or C# source paths | Semgrep CE with reviewed local rules. Coverage is partial and depends on those rules. |
+| Secret detection | Selected repositories | Gitleaks; recorded full-rule scope can be verified. Credential values and matched secret lines are redacted; verified surrounding code can be displayed. |
+| Static security analysis | JavaScript, TypeScript or Python source paths | Semgrep CE with reviewed local rules. Coverage is partial and depends on those rules. |
 | Dependency vulnerabilities | Recognized dependency manifests or lockfiles | Trivy with a reviewed offline database. Coverage is partial; database freshness is required. |
 | Reliability | JavaScript, TypeScript or Python source paths | Reviewed local Semgrep rules for NaN comparisons and broad exception catches. Narrow rule coverage; findings require code review. |
-| Maintainability | JavaScript, TypeScript or Python source paths | Reviewed local Semgrep rules for leftover debugger statements and dynamic execution. Narrow rule coverage; findings require code review. |
+| Maintainability | JavaScript, TypeScript or Python source paths | Seven local Semgrep rules for debugging remnants, nested conditionals, redundant error handling, Python dynamic execution, mutable defaults and wildcard imports. Findings require code review. |
 | Duplicated code | Supported JS/TS, Python, Java, Go, Ruby, PHP, C#, CSS/SCSS, SQL and Rust paths | jscpd 4.3.0 with a fixed, reviewed scope. Unique duplicated physical lines / analyzed physical lines; overlapping blocks count once. Source ranges link to the assessed revision. |
 | Security hotspot review | JavaScript, TypeScript or Python source paths | Reviewed Semgrep rules identify MD5 use for human context review. A hotspot is not a confirmed vulnerability. |
-| Test coverage | Coverage reports produced by existing CI tests | Exact-commit CI coverage ingestion remains pending. Health does not rerun tests; missing evidence is shown as a dash. |
+| Test coverage | Verified CI reports for the assessed commit | Reads verified JUnit test results and LCOV line coverage from the matching workflow attempt. Health never executes tests. Missing or incomplete evidence stays unavailable. |
 | Infrastructure configuration | Terraform or recognized Kubernetes/Helm paths | Trivy configuration analysis. Coverage is partial. |
 
-These are candidates selected from detected files, not guarantees that every language or file will be analyzed. Each tool needs a reviewed image, version, configuration and approved runtime. The base installation can produce an inspection-only report. Broad executed-analysis production acceptance is still pending; see [Native execution](native-execution.md).
+These analyzers are selected from detected files; supported rules and languages determine their recorded scope. The packaged Health scanner prepares pinned images and checks isolation automatically. No signed runtime approval is required. Binary, oversized, generated or linked files are excluded explicitly. Source or scanner failures remain visible instead of becoming clean results. General native repository-command execution has separate controls; see [Native execution](native-execution.md).
 
 **Analyses completed** counts checks with validated analyzer output; **Files inspected** counts discovered source files and is not an analysis coverage denominator.
 
-Reliability and maintainability findings are classified separately when their reviewed adapters run. These initial rule packs do not provide broad language coverage or a quality grade. Duplication measurements require the reviewed jscpd adapter. Test coverage comes from existing CI runs; Health does not offer a manual test-coverage run. Complexity still needs a qualified measured source. Overall health uses the completeness and failure rules described below, rather than averaging unrelated metrics into an arbitrary score.
+Reliability and maintainability findings are classified separately when their reviewed adapters run. The seven maintainability rules cover JavaScript/TypeScript debugger statements, nested ternaries and redundant catch/rethrow blocks, plus Python dynamic execution, mutable defaults, wildcard imports and redundant exception handlers. Readability and redundancy findings are low severity; each finding explains its impact, suggested change and limits. A zero means none of these patterns was reported in the analyzed scope, not perfect maintainability. New rules apply on reassessment; saved reports retain their original coverage. These rule packs do not provide broad language coverage or a quality grade. Duplication measurements require the reviewed jscpd adapter. Health reads verified CI test results and coverage; reassessment does not execute tests. Complexity still needs a qualified measured source. Overall health uses the completeness and failure rules described below, rather than averaging unrelated metrics into an arbitrary score.
 
 ## Findings and source
 
-**Findings over time** is the full-width area graph above the metric cards. New reports can compare fully retained results within measured static-security, reliability, maintainability and hotspot rule packs, even while overall engineering-control coverage remains partial. The graph names the compared packs; other analyses are excluded from that count. Each included pack must analyze a nonempty candidate scope without skipped files, have no incomplete outcome or truncated/suppressed findings, and match the earlier tool, configuration, plan and candidate/scanned file-set checksum. Changed file scope breaks comparison rather than implying improvement. Older reports retain their original complete-report comparison requirement.
+**Findings over time** shows available results above the metric cards. Each bar is the count of retained findings in a saved scan, including incomplete scans. Amber bars and **Partial analysis** labels identify incomplete coverage: those counts may increase when more analysis completes. Different bar heights alone do not prove improvement.
 
-The graph uses the latest 30 completed reports on the displayed branch, up to the displayed report, independently of history pagination. **View chart data** lists UTC times, counts and links to original reports. Missing or incompatible evidence is never plotted as zero. Curves connect recorded assessments and do not establish health between scans; no-longer-reported does not prove remediation.
+The comparison line connects only equivalent, fully retained measured scopes. It names the static-security, reliability, maintainability or hotspot rule packs included in that comparison; bars still include all retained findings. Each compared pack must analyze a nonempty candidate scope without skipped files, incomplete outcomes or truncated/suppressed findings, and match the earlier tool, configuration, plan and candidate/scanned file-set checksum. Changed coverage breaks the line rather than implying improvement. Older reports retain their original complete-report comparison requirement.
+
+The graph uses the latest 30 completed reports on the displayed branch, up to the displayed report, independently of history pagination. **View chart data** lists UTC times, coverage labels, retained and comparable counts, and links to original reports. Inspection-only reports and missing counts are not plotted as zero. A partial report can show zero retained findings only when an analyzer recorded a measured count; it does not mean the repository is clean. No-longer-reported does not prove remediation.
 
 Filter by severity or search the report. Open a finding to navigate to a dedicated details page for its rule, file, severity, affected code and evidence. **Back to Health report** returns to the exact saved report. Findings are **analyzer-reported potential issues**, not independently validated defects or vulnerabilities.
 
-The source viewer verifies the regular Git blob at the assessed commit and saves a redacted excerpt with up to five lines before and after the reported line. It highlights the line only when it exists. Missing locations, large or binary files, symlinks, submodules, lost access and source-verification failures produce an explanation instead. Secret findings hide source completely; obvious credentials in surrounding context are redacted before storage. New reports queue excerpt capture in the background. Older findings capture their excerpt on first open. Later visits load the saved excerpt from Preflyt after checking current repository access.
+The source viewer verifies the regular Git blob at the assessed commit and saves a redacted excerpt with up to five lines before and after the reported line. It highlights the line only when it exists. Missing locations, large or binary files, symlinks, submodules, lost access and source-verification failures produce an explanation instead. Secret findings show numbered surrounding code and mask the entire reported range before storage, because scanner receipts do not retain safe value-level masking coordinates. Obvious credentials in surrounding context are also redacted. New reports queue excerpt capture in the background. Older findings capture their excerpt on first open. Later visits load the saved excerpt from Preflyt after checking current repository access.
 
-Counts exclude suppressed results and deduplicate matching findings from the same analyzer. Each analysis retains at most 20 findings and 5 KB of signed finding data; the complete receipt has a separate 40 KB encoded payload limit. Additional retained details may be trimmed across analyzers to fit that limit, preserving their outcomes, reported totals, measured counters and cleanup evidence. Highest-priority findings are retained first. A lower-bound value such as ≥20 means results are incomplete; missing details never establish zero issues. Truncation or invalid locations can make the report partial. **Zero reported findings applies only to the recorded scope**, not the whole repository. These bounded details belong to Health; the existing Findings page continues to track CI assessment issues.
+Counts exclude suppressed results and deduplicate matching findings from the same analyzer. Each analysis retains up to 5,000 supported findings from an 8 MiB report; the complete receipt has a separate 8 MiB encoded payload limit. Additional retained details may be trimmed across analyzers to fit that limit, preserving their outcomes, reported totals, measured counters and cleanup evidence. Highest-priority findings are retained first. A findings count with a **Partial scan** badge means results are incomplete; missing details never establish zero issues. Truncation or invalid locations can make the report partial. **Zero reported findings applies only to the recorded scope**, not the whole repository. Retained Health findings appear alongside CI issues and advisory AI findings in the shared Findings workspace.
 
 ## Reassessment and history
 
-Owners, Admins and Security Engineers with repository access can reassess or cancel. Choose another branch and select **Reassess** to persist the new target. Reports retain their original branch, SHA, evidence and timestamps. History is paginated by branch.
+Owners, Admins and Security Engineers with repository access can reassess or cancel. Choose another branch and select **Reassess** to persist the new target. To rerun security, reliability, maintainability or duplication, open its **Scope and evidence** details under **Analysis coverage** and select the Run action. Open the **Test coverage** detail page to inspect verified CI reports and link to their workflow logs. The five metric cards show results and dates; they do not contain run controls. A category run saves its own partial-scope report, even when its selected analyzers finish. It cannot establish whole-repository health. Reports retain their original branch, SHA, evidence and timestamps. History is paginated by branch.
 
-Requests are limited to ten per repository per hour and one per minute on the same branch. Duplicate requests and retries reuse the active job. Complete reports with compatible tools, configuration and analysis scope can show introduced and no-longer-reported counts. No-longer-reported does not independently prove a fix.
+The cards may reuse a category result from an earlier run only when it belongs to the exact same branch and commit. Each card shows its own assessment date and links to findings in that saved report. A result from another commit is never carried forward. Full-scan graph comparisons exclude category-only runs; those runs remain visible in assessment history.
+
+Requests are limited to ten per repository per hour, with one active job per repository. Full scans also have a one-minute branch cooldown; category runs can follow each other within the hourly limit. Duplicate requests and retries reuse the active job. Complete reports with compatible tools, configuration and analysis scope can show introduced and no-longer-reported counts. No-longer-reported does not independently prove a fix.
 
 ## Continue with CI
 
@@ -80,7 +97,7 @@ Repository health summaries and reports are on Repositories. Open a repository's
 
 ## Loading reports and checking freshness
 
-Saved reports, metrics and history load from Preflyt immediately. GitHub branch-head verification runs separately in the background, so a slow upstream check does not hold up the report. **Current** requires a recent verified head match; an expired or failed head check displays **Freshness unverified**. Freshness checks are cached for one minute and refresh while the Health tab is open. The compact Repository health panel combines assessment details, actions and the findings graph, followed directly by metrics. An unavailable timeline uses a short explanation without plotting missing analysis as zero.
+The repository header branch picker loads saved reports, metrics and history for that branch immediately and preserves the choice in the page URL across reloads. Selecting another branch clears a pinned historical report. A branch without a saved assessment shows **Not assessed**; selection never displays another branch’s metrics or starts a scan. Select **Assess repository** or **Reassess** when analysis is needed. Saved reports, metrics and history load from Preflyt immediately. GitHub branch-head verification runs separately in the background, so a slow upstream check does not hold up the report. **Current** requires a recent verified head match; an expired or failed head check displays **Freshness unverified**. Freshness checks are cached for one minute and refresh while the Health tab is open. The compact Repository health panel combines assessment details, actions and the findings graph, followed directly by metrics. An unavailable timeline uses a short explanation without plotting missing analysis as zero.
 
 ### Duplication formula v1
 
@@ -96,13 +113,37 @@ The **Security hotspots** card counts findings detected automatically at the ass
 
 The hotspot review table and audit events are separate from immutable scan results. Reviewing never alters findings, CI evidence or GitHub merge protection. **Fix required** remains a recorded decision until a later assessment supplies new evidence.
 
-### Test coverage from CI
+### Fetching source and assessment failures
 
-Health does not rerun tests. The manual coverage checkbox has been removed, and new manual coverage requests are rejected. Your existing CI workflow owns test execution and coverage generation. Preflyt's integration must receive the actual coverage report and match its repository, workflow run and commit to the displayed assessment. Connecting a GitHub App alone does not provide a coverage percentage from a passed test check.
+Health downloads scan source with a shallow Git fetch of the pinned commit, using a temporary GitHub App token scoped to the selected repository. The source broker reads Git objects directly; it never checks out a worktree or runs hooks, filters, submodules or Git LFS. File/tree hashes, executable modes and existing source limits are verified before handing the credential-free bundle to scanners. The temporary object store is deleted after success or failure. The worker image includes Git.
 
-Until matching coverage evidence is available, the card shows **—**, with Awaiting CI coverage in its accessible label. Missing reports never become 0% or 100%. Automatic CI coverage-report ingestion is the remaining implementation work; existing JUnit and SARIF imports do not establish line coverage on their own.
+GitHub access checks, branch inspection, repository profiles and finding excerpts still use the GitHub API. Git source retrieval reduces bulk file API requests; it does not remove authentication or API rate limits. A fetch is bounded to ten minutes, monitored against a 256 MiB temporary-object budget and subject to the existing 64 MiB selected-source limit. Download-limit, timeout, unavailable Git and access failures remain failed assessments with explicit next steps.
 
-Historical manual coverage measurements remain readable with their original `node-covered-lines-v1` formula and loaded-file scope. They are not relabeled as CI evidence. Static security, reliability, maintainability and duplication assessments still provide supported first-assessment value without CI.
+Failed assessments show their reason in the report header and history, including attempts that stopped before a commit was pinned. GitHub rate-limit failures show a retry time when it was recorded. **Technical details** provides the assessment ID and a recognized failure code for support. Provider messages, credentials and raw Git stderr are never displayed. Select **Reassess** after resolving the problem; users without assessment permission ask a repository maintainer to retry.
+
+### CI tests and coverage
+
+Repository Health never runs repository tests, installs project dependencies or provisions databases. Your existing GitHub Actions test job owns that setup. Health reads verified JUnit and LCOV evidence for the exact assessed commit and workflow attempt.
+
+Open **Test coverage** to see reported line coverage, available passing/failing/skipped test counts, the received date and **View CI run and logs**. Refresh checks for newly received evidence. Missing, invalid or mismatched reports remain unavailable; a green workflow alone does not establish coverage. Static reassessment does not rerun tests or change a saved CI verdict.
+
+The optional Action `coverage-reports` and `coverage-artifact` inputs are available at companion Action commit `72bd67f0e75e4409a5b3d37367ffb94073e9bf11` and require the companion API update. The v2.1.1 tag does not support these inputs; pin the tested coverage commit.
+
+Make the existing policy test command emit JUnit and LCOV in the same execution. Submit JUnit under `tests.required` through the policy, and configure existing LCOV output paths with repository-relative package prefixes:
+
+```yaml
+# Requires the companion API update.
+- uses: lyrisoft/preflyt-action@72bd67f0e75e4409a5b3d37367ffb94073e9bf11
+  with:
+    api-url: ${{ vars.PREFLYT_API_URL }}
+    coverage-reports: '[{"path":"apps/web/coverage/lcov.info","prefix":"apps/web"}]'
+```
+
+The Action rejects stale files and validates all measured line counters before attaching optional `tests.coverage` evidence. It namespaces package paths and unions repeated physical lines rather than averaging percentages. For parallel test jobs, `coverage-artifact` downloads the artifact from the same workflow run and attempt with read-only `actions: read`; its manifest binds repository, head commit, attempt and original digest. Preflyt's own workflow demonstrates this in `docs/deployment/branch-ci.md`. No additional test run is started for coverage.
+
+Default `github-native` mode requires an exact server-verified GitHub execution receipt and report digest. Unsigned manual uploads cannot supply coverage. Explicit `organization-key` deployments still require valid report signatures; the automatic attachment does not replace that requirement. Invalid supplied proofs never fall back to unsigned evidence.
+
+Report files must be UTF-8. The Action transports LCOV as gzip/base64 with at most 256 KiB compressed and 2 MiB decoded; other CI reports retain their 256 KiB limit and total submission remains bounded. LCOV must include `SF`, `DA`, `LF`, `LH` and `end_of_record` with consistent totals. Coverage applies to CI-reported source scope, which may exclude files; it is not a whole-repository guarantee. Evidence applies only to the displayed exact commit, repository and workflow attempt. PR coverage is never copied onto a later merge/squash commit, and the current PR intake does not create coverage for a different push SHA.
 
 ### Saved finding guidance
 
@@ -141,24 +182,24 @@ Saved policy context and evidence checksum survive report finalization and later
 
 New static-security, reliability, maintainability and hotspot scans use image-owned Semgrep file accounting. `semgrep-candidate-files-v1` records eligible JavaScript/TypeScript/Python files up to 1 MiB, the scanner's actual unique scanned paths, and candidate files not scanned. The signed report carries only bounded counters and a file-set checksum, without source fragments or path lists. The counts apply to the fixed recorded rule pack, not whole-repository security, policy compliance or test coverage.
 
-**Files discovered** is repository inventory. Per-analyzer **candidate files analyzed** is measured scanner scope. Duplication and optional test coverage retain their own measured file counts; missing accounting remains unavailable. Parse/processing errors preserve valid findings while withholding successful file coverage. Empty supported scope is incomplete. Policy evidence remains separate.
+**Files discovered** is repository inventory. Per-analyzer **candidate files analyzed** is measured scanner scope. Duplication and test coverage retain their own measured file counts; missing accounting remains unavailable. Parse/processing errors preserve valid findings while withholding successful file coverage. Empty supported scope is incomplete. Policy evidence remains separate.
 
 The strict measured Semgrep image `sha256:ab136eaf5352c9ad2d53ea454fbae762ecf0e634e50e82124bef4bd64e2e8533` passed complete, ignored-file, malformed-Python and empty-scope fixtures, plus 13 source-verified native-wrapper cases. Focused API verification passed 124 tests across six files; Health browser verification passed 18 tests. The publication workflow now checks the negative file-accounting cases before publishing a Semgrep image; it was not run remotely. Effective runtime qualification and additional analyzer accounting remain pending.
 
 
 ### Saved analyzer explanations
 
-New native Health findings can retain plain-text rule descriptions and help from the exact uniquely matched SARIF driver rule. Each field is limited to 500 characters and remains inside the existing 5 KB per-check and 40 KB signed-receipt budgets. Ambiguous or mismatched descriptors, credential-bearing text and extra guidance fields are rejected. The detail page labels this as analyzer-provided advice from the saved report; it does not validate a defect, fetch report URLs or render HTML/Markdown. Truncated finding retention still makes the report partial.
+New native Health findings can retain plain-text rule descriptions and help from the exact uniquely matched SARIF driver rule. Each advice field is limited to 500 characters. Static Health reports accept up to 8 MiB and retain up to 5,000 supported findings per analyzer, within an 8 MiB signed-payload budget shared by the assessment. CI artifact import limits are unchanged. Ambiguous or mismatched descriptors, credential-bearing text and extra guidance fields are rejected. The detail page labels this as analyzer-provided advice from the saved report; it does not validate a defect, fetch report URLs or render HTML/Markdown. Truncated finding retention still makes the report partial.
 
 Secret findings never retain scanner-provided explanations or help. They receive saved Preflyt general secret-detection guidance on secure review, revocation/rotation, removal and reassessment; this does not claim the exact detector or credential validity. Other findings without a supplied rule explanation retain the explicit unavailable state. Historical reports are unchanged.
 
 
-Valid findings retained from an incomplete analyzer still appear in dimension counts as a lower bound, for example **≥3**. Missing or excluded evidence does not become zero; an incomplete result with no retained findings shows **—**.
+Valid findings retained from an incomplete analyzer still appear in dimension counts with a plain count and **Partial scan** badge, for example **3**. Missing or excluded evidence does not become zero; an incomplete result with no retained findings shows **—**.
 
 
 ### Finding categories from Health cards
 
-Health shows five clickable cards: Security, Reliability, Maintainability, Duplication and Test coverage. Missing metrics consistently display **—**. Clicking an analysis card opens **Findings** for the same repository and saved Health report, filtered to that category. The category selector can explore other findings within that report. Opening a finding retains its original commit and source viewer; Back to findings restores the category filter. Coverage opens the coverage evidence view and explains when a matching CI report has not been received. Inspection-only reports explicitly state that analysis has not run instead of showing zero-issue metrics.
+Health shows five clickable cards: Security, Reliability, Maintainability, Duplication and Test coverage. Missing metrics consistently display **—**. Clicking a finding-count card opens **Findings** for the same repository and saved Health report, filtered to that category. The category selector can explore other findings within that report. Opening a finding retains its original commit and source viewer; Back to findings restores the category filter. Test coverage opens its dedicated detail view with verified CI coverage, test counts, timestamps and workflow logs. Inspection-only reports explicitly state that analysis has not run instead of showing zero-issue metrics.
 
 The hotspot metric card was removed. Automatic hotspot findings and optional review records remain available in the saved report and Findings category selector; no human review is required to receive automatic analysis results.
 
@@ -174,4 +215,20 @@ The duplicate Selection status column was removed. Authorized users retain the r
 
 Overall health summarizes the latest saved assessment on the selected branch and commit. It never averages previous commits or mixes raw finding counts with coverage percentages. Critical/high retained findings or a captured required analysis failing its policy limit produce **Unhealthy** (red), even when another analysis is missing. Without a known blocking failure, missing or partial applicable analyses, invalid policy context or missing required coverage produce **Incomplete** (gray). Complete results with advisory findings produce **Needs attention** (amber). Complete clean results meeting recorded requirements produce **Healthy** (green). Queued/running assessments retain their progress state. Freshness is shown separately; a healthy historical commit does not establish the current branch is healthy.
 
-The evaluator uses captured policy `maxFailedChecks` limits for supported Health analysis IDs. The current policy contract does not configure coverage or duplication percentage targets; no percentage limits are invented. Coverage stays CI-derived, and absent coverage blocks Healthy only when recorded requirements require it. This summary does not change CI gate evidence or GitHub merge permissions.
+The evaluator uses captured policy `maxFailedChecks` limits for supported Health analysis IDs. The current policy contract does not configure coverage or duplication percentage targets; no percentage limits are invented. Coverage stays tied to the captured test run, and absent coverage blocks Healthy only when recorded requirements require it. This summary does not change CI gate evidence or GitHub merge permissions.
+
+### Visible scan progress
+
+An active assessment shows a spinner and its current stage above the report: inspecting the commit, fetching files, preparing scanners, scanning, verifying results or reconnecting. The page polls automatically. Queued work shows a waiting message; progress never invents a percentage or displays unfinished metrics as completed results.
+
+### Incomplete scanner reports
+
+Valid findings are retained even when another analyzer fails or a parser cannot read every file. **Scope and evidence** lists bounded scanner error types and affected file locations when the scanner supplies them. Parser errors remain incomplete; they never turn into a clean result. Review the listed source syntax or update the scanner for compatible parsing. These diagnostics omit raw source, scanner messages and credential values.
+
+Secret findings identify recognized credential types and show potential impact (medium for generic API-key patterns; high for recognized access tokens, private keys and authorization headers). A pattern match does not prove a credential is live. Dummy test data can match too; verify the reported file and line before acting. Matching values remain hidden; numbered surrounding code shows developers where to look.
+
+The duplication measurement excludes dependency/build folders, generated folders, type declarations and minified JavaScript. Its denominator is the recorded analyzed scope.
+
+### Test setup belongs in CI
+
+Select monorepo packages and configure test services in your existing CI workflow. Repository Health has no test-command overrides or app-selection settings.

@@ -20,6 +20,9 @@ it('keeps success, failure, pending and inactive states consistent', () => {
   expect(statusTones['model unavailable']).toBe('error')
   expect(statusTones['sync needed']).toBe('warning')
   expect(statusTones.running).toBe('info')
+  expect(statusTones['partial scan']).toBe('warning')
+  expect(statusTones['verified ci coverage']).toBe('success')
+  expect(statusTones['coverage not received']).toBe('warning')
   expect(statusTones.disabled).toBe('neutral')
   expect(statusTones['built-in']).toBe('neutral')
   expect(statusTones.enabled).toBe('success')
@@ -57,6 +60,7 @@ it('preserves evidence colors after wording changes', () => {
   expect(statusTones['multiple matching results']).toBe('error')
   expect(statusTones['not run']).toBe('neutral')
   expect(statusTones['suggestions only']).toBe('info')
+  expect(statusTones['ai suggestion']).toBe('info')
 })
 
 it('uses shared delivery colors for email notification states', () => {
@@ -203,5 +207,36 @@ it('maps finding severity labels consistently across public previews', () => {
   expect(statusTones.critical).toBe('error')
   expect(statusTones.high).toBe('error')
   expect(statusTones.medium).toBe('warning')
-  expect(statusTones.low).toBe('info')
+  expect(statusTones.low).toBe('success')
+})
+
+it('uses green for Low severity even when a caller supplies blue', async () => {
+  const view = await render(<StatusBadge tone='info'>Low</StatusBadge>)
+  await expect
+    .element(view.getByText('Low', { exact: true }))
+    .toHaveClass('text-success-text')
+})
+
+it('distinguishes dark red Critical from light red High severity', async () => {
+  const view = await render(
+    <>
+      <StatusBadge tone='error'>Critical</StatusBadge>
+      <StatusBadge tone='error'>High</StatusBadge>
+    </>
+  )
+  await expect
+    .element(view.getByText('Critical', { exact: true }))
+    .toHaveClass('bg-severity-critical', 'text-white')
+  await expect
+    .element(view.getByText('High', { exact: true }))
+    .toHaveClass('bg-severity-high/10', 'text-severity-high-text')
+})
+
+it('labels partial analysis with the shared warning tone', async () => {
+  const view = await render(
+    <StatusBadge tone='warning'>Partial analysis</StatusBadge>
+  )
+  await expect
+    .element(view.getByText('Partial analysis'))
+    .toHaveClass('text-warning-text')
 })

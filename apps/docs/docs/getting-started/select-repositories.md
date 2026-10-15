@@ -16,7 +16,7 @@ Installing the GitHub App makes repositories **available**. Selecting a reposito
 3. An Owner or Admin can select the repository using its selection control. The queue confirmation links the next step to **Health**.
 4. Open the repository to see its default-branch assessment. To use another branch, choose **Assessment branch**, then **Reassess**.
 
-Selecting queues work in the background. It does not wait for a scan in your browser. Qualified analyzers run only in the approved isolated runtime; if unavailable, the report clearly identifies inspection-only results and missing analysis.
+Selecting queues work in the background. It does not wait for a scan in your browser. The built-in scanner runs applicable static analyzers in isolated containers automatically. No additional repository or runtime approval is required. If source access or the scanner service is unavailable, Health shows a failure reason and what to do next; missing analysis is never shown as a clean scan.
 
 ## What selection changes
 

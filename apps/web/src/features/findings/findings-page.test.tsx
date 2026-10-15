@@ -5,6 +5,7 @@ import { page, userEvent } from 'vitest/browser'
 import { FindingsPage } from './findings-page'
 
 const state = vi.hoisted(() => ({
+  routeSearch: {} as Record<string, string>,
   query: {} as Record<string, unknown>,
   key: [] as unknown[],
   save: vi.fn(),
@@ -26,7 +27,7 @@ vi.mock('../workspace/navigation-session', () => ({
   }),
 }))
 vi.mock('@tanstack/react-router', () => ({
-  getRouteApi: () => ({ useSearch: () => ({}) }),
+  getRouteApi: () => ({ useSearch: () => state.routeSearch }),
   Link: ({
     children,
     to,
@@ -65,6 +66,7 @@ const summary = {
 }
 beforeEach(async () => {
   await page.viewport(1280, 800)
+  state.routeSearch = {}
   state.query = {
     data: {
       summary,
@@ -76,6 +78,60 @@ beforeEach(async () => {
     },
     refetch: vi.fn(),
   }
+})
+it('opens verified CI tests and coverage from a Health card link without execution settings', async () => {
+  state.routeSearch = {
+    origin: 'health',
+    source: 'health',
+    category: 'coverage',
+    repository: '51',
+    health: '11111111-1111-4111-8111-111111111111',
+  }
+  state.query = {
+    data: {
+      branch: 'development',
+      assessment: {
+        id: state.routeSearch.health,
+        branch: 'development',
+        state: 'COMPLETED',
+        sourceSha: 'a'.repeat(40),
+        finishedAt: '2026-10-14T07:31:00Z',
+        report: { analyses: [], measurements: {} },
+      },
+      ciCoverage: {
+        sourceSha: 'a'.repeat(40),
+        state: 'VERIFIED',
+        reason: 'CI_COVERAGE_VERIFIED',
+        measurement: { analyzedLines: 100, coveredLines: 75, analyzedFiles: 3 },
+        tests: { tests: 10, passed: 9, failures: 1, errors: 0, skipped: 0 },
+        testsState: 'FAIL',
+        runUrl:
+          'https://github.com/lyrisoft/preflyt/actions/runs/123/attempts/1',
+      },
+    },
+  }
+  await render(<FindingsPage />)
+  await expect
+    .element(
+      page.getByRole('heading', { name: 'Tests and coverage', level: 1 })
+    )
+    .toBeVisible()
+  await expect.element(page.getByText('75.0%')).toBeVisible()
+  await expect
+    .element(page.getByText('9 passed · 1 failed · 0 skipped'))
+    .toBeVisible()
+  await expect
+    .element(page.getByRole('link', { name: 'View CI run and logs' }))
+    .toHaveAttribute(
+      'href',
+      'https://github.com/lyrisoft/preflyt/actions/runs/123/attempts/1'
+    )
+  await expect
+    .element(page.getByRole('button', { name: 'Test coverage settings' }))
+    .not.toBeInTheDocument()
+  await expect
+    .element(page.getByRole('heading', { name: 'Findings', level: 1 }))
+    .not.toBeInTheDocument()
 })
 it('shows a useful empty state without fabricated findings', async () => {
   const view = await render(<FindingsPage />)
@@ -385,4 +441,92 @@ it('opens Health source details from the shared list and restores shared filters
     '2026-10-12T14:35:00.000Z'
   )
   expect(document.querySelector('time')?.textContent).toContain('2026')
+})
+it('uses the shared finding table and details route for rated PR suggestions', async () => {
+  state.query = {
+    data: {
+      summary,
+      aiSummary: { suggestions: 1, repositories: 1, pullRequests: 1 },
+      total: 1,
+      assessedRevisions: 1,
+      repositories: [],
+      pageSize: 50,
+      rows: [
+        {
+          id: 'e'.repeat(64),
+          origin: 'ai',
+          title: 'A queued review can be lost.',
+          recommendation: 'Persist the queue.',
+          impact: 'This PR can lose feedback.',
+          repositoryId: '11',
+          repository: 'org/project',
+          sourceSha: 'a'.repeat(40),
+          assessmentId: 'original',
+          observedAt: '2026-10-13T18:30:00Z',
+          pullRequest: 101,
+          pullRequestUrl: 'https://github.com/org/project/pull/101',
+          category: 'ai',
+          severity: 'medium',
+          status: 'AI suggestion',
+          path: 'src/worker.ts',
+          line: 42,
+          triage: { state: 'REPORTED' },
+        },
+      ],
+    },
+    refetch: vi.fn(),
+  }
+  const view = await render(<FindingsPage />)
+  await expect
+    .element(view.getByRole('tab', { name: 'AI suggestions' }))
+    .not.toBeInTheDocument()
+  await expect
+    .element(view.getByRole('columnheader', { name: 'Severity' }))
+    .toBeVisible()
+  await expect
+    .element(view.getByRole('cell', { name: 'medium', exact: true }))
+    .toBeVisible()
+  await expect
+    .element(view.getByRole('link', { name: 'Details', exact: true }))
+    .toHaveAttribute('href', expect.stringContaining('origin=ai'))
+  await expect.element(view.getByText('src/worker.ts:42')).toBeVisible()
+  await expect
+    .element(view.getByRole('link', { name: 'PR #101' }))
+    .toBeVisible()
+  await expect
+    .element(view.getByRole('combobox', { name: 'Severity' }))
+    .not.toBeDisabled()
+  expect(state.key).toContain('all')
+})
+
+it('contains long review titles in the accessible chart data at phone widths', async () => {
+  state.query = {
+    data: {
+      summary: {
+        ...summary,
+        chartTotal: 1,
+        byCheck: [
+          {
+            name: 'Preflyt application PR review with a long title '.repeat(8),
+            count: 1,
+          },
+        ],
+      },
+      rows: [],
+      total: 0,
+      assessedRevisions: 1,
+      repositories: [],
+      pageSize: 50,
+    },
+    refetch: vi.fn(),
+  }
+  await page.viewport(390, 844)
+  const view = await render(<FindingsPage />)
+  await expect
+    .element(view.getByRole('heading', { name: 'Issues by check' }))
+    .toBeVisible()
+  await expect
+    .poll(() => document.documentElement.scrollWidth <= window.innerWidth)
+    .toBe(true)
+  await page.viewport(1280, 800)
 })

@@ -19,8 +19,8 @@ Selecting a repository queues a **Health assessment** of its default branch. Ope
 
 Owners, Admins and Security Engineers with repository access can request Health analysis. Readers see only reports within their assigned scope. Completion, partial-analysis and failure notifications link to the report when notifications are enabled.
 
-:::info Analysis availability
-Health uses qualified analyzers in a separately approved execution runtime. Without that runtime, Preflyt saves an **Inspection only / Partial** report with detected repository context and the analyses that could not run. Finding counts are unavailable. Ask the deployment operator to complete runtime qualification; a saved report does not establish that a scanner ran.
+:::info Automatic scanning
+Health runs every applicable built-in static analyzer automatically. No additional repository approval is required. If the scanner service or source access is unavailable, the report explains the failure; it never displays missing evidence as zero findings. The scanner service is installed once as part of your self-hosted deployment.
 :::
 
 Static Health defaults do not install dependencies, run package scripts or tests, build images, invoke AI, publish standards or alter GitHub protection. They do not produce a merge readiness check. See [Repository health](../user-guide/repository-health.md) for supported analyzers, source handling and labels.

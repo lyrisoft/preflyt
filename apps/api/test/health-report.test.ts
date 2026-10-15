@@ -19,7 +19,7 @@ describe('repository health evidence', () => {
   const bytes=sarif([result()]), findings=extract(bytes)!
   expect(findings[0]).toMatchObject({path:'src/app.ts',line:4,severity:'high',title:'Unsafe expression'})
   expect(extract(sarif([result('password=really-secret-value')]),true)![0].title).not.toContain('really-secret')
-  expect(extract(sarif(Array.from({length:90},()=>result('x'.repeat(200),'src/'+'x'.repeat(490)))) )!.length).toBeLessThanOrEqual(20)
+  expect(extract(sarif(Array.from({length:90},()=>result('x'.repeat(200),'src/'+'x'.repeat(490)))) )!.length).toBe(90)
   expect(extract(Buffer.from('{}'))).toBeUndefined()
   expect(healthReceiptFindings(bytes.toString('base64'),'b'.repeat(64),false)).toBeUndefined()
  })
@@ -112,7 +112,9 @@ it('compares fully retained measured rule packs without claiming complete engine
  expect(healthTimeline(report,[{id:'previous',state:'COMPLETED',sourceSha:'a'.repeat(40),finishedAt:new Date(0),report:prior}])[0]).toMatchObject({findings:0,checkIds:['security.sast']})
  for(const patch of [{summary:{results:2}},{state:'INCOMPLETE'},{cleanupConfirmed:false},{fileAnalysis:{...check.fileAnalysis,skippedFiles:1,candidateFiles:2}},
   {fileAnalysis:undefined},{toolVersion:'2'},{configHash:'d'.repeat(64)},{fileAnalysis:{...check.fileAnalysis,pathsDigest:'d'.repeat(64)}}]) {
-  expect(comparableHealthTrend(report,make({...check,...patch}))).toBeNull()
+  const changed=make({...check,...patch})
+  expect(comparableHealthTrend(report,changed)).toBeNull()
+  expect(healthTimeline(report,[{id:'changed',state:'COMPLETED',sourceSha:'a'.repeat(40),finishedAt:new Date(0),report:changed}])[0]).toMatchObject({findings:1,partial:true,comparableFindings:null})
  }
  expect(comparableHealthTrend(report,{...prior,findingComparison:undefined})).toBeNull()
 })
@@ -136,4 +138,16 @@ it('marks only completed, fully analyzed clean passing scope as healthy',()=>{
  expect(healthAssessmentResult({...report,findings:[{fingerprint:'issue'}]},'COMPLETED')).toBe('FAIL')
  expect(healthAssessmentResult(report,'RUNNING')).toBeNull()
  expect(healthAssessmentResult(null,'COMPLETED')).toBe('INCOMPLETE')
+})
+
+it('plots retained partial observations without comparing mismatched coverage or inventing zeroes', () => {
+ const f=extract(sarif([result()]))![0]
+ const check:any={ruleId:'quality.maintainability',state:'INCOMPLETE',reason:'PARTIAL_REPORT',coverage:'PARTIAL',cleanupConfirmed:true,summary:{results:1},findings:[f],reportHash:'a'.repeat(64)}
+ const report=healthReport({complete:true,fileCount:1,languages:['JavaScript']},[{id:check.ruleId,title:'Maintainability',state:'UNAVAILABLE',reason:'READY'}],[check],'current')
+ const zero={...report,findings:[],analyses:report.analyses.map(a=>({...a,findingsRetained:0}))}
+ const missing={...zero,analyses:zero.analyses.map(a=>({...a,reportHash:undefined,findingsRetained:undefined}))}
+ const row=(id:string,value:any,state='COMPLETED')=>({id,state,sourceSha:'a'.repeat(40),finishedAt:new Date(0),report:value})
+ const points=healthTimeline(report,[row('a',report),row('b',{...report,comparisonKey:'other'}),row('c',zero),row('d',missing),row('e',{...report,mode:'INSPECTION_ONLY'}),row('f',report,'RUNNING')])
+ expect(points.map(p=>[p.id,p.findings,p.partial,p.comparableFindings])).toEqual([['a',1,true,null],['b',1,true,null],['c',0,true,null]])
+ expect(comparableHealthTrend(report,{...report,comparisonKey:'other'})).toBeNull()
 })

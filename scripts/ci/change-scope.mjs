@@ -6,6 +6,9 @@ const sha = /^[a-f0-9]{40}$/;
 const sharedInputs = new Set(['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', '.npmrc', '.dockerignore', 'turbo.json', 'turbo.jsonc']);
 const testFile = path => /^apps\/(?:api\/test|web\/(?:test|tests|src\/test-utils))\//.test(path) || /\.(?:test|spec)\.[cm]?[jt]sx?$/.test(path) || path === 'apps/web/scripts/public-build.check.mjs';
 const shared = path => sharedInputs.has(path) || path.startsWith('packages/') || path.startsWith('patches/');
+// These run unconditionally in the source job before related API tests.
+export const sourceContractTests = ['development-ci', 'native-source', 'ci-command-report', 'pipeline-jobs', 'pipeline-gate']
+  .map(name => `test/${name}.test.ts`);
 
 export function imageRequired(branch, paths) {
   if (!['development', 'main'].includes(branch)) throw new Error('Unsupported image publication branch');
@@ -13,6 +16,7 @@ export function imageRequired(branch, paths) {
   return paths.some(path => shared(path) ||
     (/^apps\/(?:api|web)\//.test(path) && !testFile(path) && !/\/vitest\.config\./.test(path)) ||
     path.startsWith('deploy/') || path.startsWith('scripts/deploy/') ||
+    path.startsWith('docs/deployment/native-runner/') ||
     ['docker-compose.yaml', 'compose.local.yaml', '.env.example', '.github/workflows/publish-images.yml', '.github/workflows/compose-acceptance.yml'].includes(path) ||
     (path.startsWith('scripts/ci/') && !testFile(path)));
 }
@@ -45,7 +49,9 @@ export function focusedCommands(target, scope) {
   const plan = testPlan(scope.paths);
   if (!plan[target]) return [];
   const full = plan[target === 'api' ? 'allApi' : 'allWeb'];
-  const options = target === 'api' ? ['--exclude', '**/*.integration.test.ts'] : ['--browser.headless'];
+  const options = target === 'api'
+    ? ['--exclude', '**/*.integration.test.ts', ...sourceContractTests.flatMap(path => ['--exclude', path])]
+    : ['--browser.headless'];
   return [['--filter', `@preflyt/${target}`, 'exec', 'vitest', 'run', ...options,
     ...(full ? [] : [`--changed=${scope.base}`, '--passWithNoTests'])]];
 }

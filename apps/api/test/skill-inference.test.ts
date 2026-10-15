@@ -41,6 +41,8 @@ const output = JSON.stringify({
       evidenceRefs: ["check:0"],
       summary: "Build evidence is missing.",
       recommendation: "Collect a verified build result.",
+      severity: "low",
+      impact: "The team cannot inspect the build outcome from this assessment.",
     },
   ],
 });
@@ -113,6 +115,7 @@ it.each(aiProviderPresets)(
       expect(body.response_format.type).toBe("json_schema");
       expect(body.response_format.json_schema).toMatchObject({ strict: true, schema: {
         properties: { findings: { items: { properties: {
+          severity: { enum: ["critical", "high", "medium", "low"] }, impact: { type: "string" },
           checkId: { enum: ["skill"] }, evidenceRefs: { items: { enum: ["check:0"] } },
         } } } },
       } });
@@ -426,3 +429,27 @@ it.each(["openai", "anthropic", "gemini"])(
     expect(validate).not.toHaveBeenCalled();
   },
 );
+
+it.each([
+  ['OUTPUT_TOO_LARGE', 'x'.repeat(20001)],
+  ['CREDENTIAL_ECHO', 'fixture-key'],
+  ['PEM_OUTPUT', '-----BEGIN PRIVATE KEY-----'],
+  ['BEARER_OUTPUT', 'Bearer fixture-secret'],
+  ['API_KEY_OUTPUT', 'sk-fixture-secret-value'],
+  ['SECRET_ASSIGNMENT_OUTPUT', 'password=fixture-secret'],
+])('returns only the safe %s rejection category without retaining response content', async (code, content) => {
+  const endpoint = { id: 'provider', name: 'Fixture', baseUrl: 'https://gateway.example.invalid/v1', locality: 'hosted' as const,
+    requiresKey: true, models: ['fixture'] }
+  const provider = { id: 'provider', organizationId: 'org', endpoint, modelId: 'fixture',
+    encryptedCredential: encryptAiCredential('org', 'provider', 'fixture-key', aiCredentialEndpointDigest(endpoint)) } as any
+  transport.mockResolvedValue(new Response(JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content } }] })))
+  try {
+    await runSkillInference(provider, skills, context, 1000, AbortSignal.timeout(1000))
+    throw new Error('Expected rejection')
+  } catch (e) {
+    expect(e).toBeInstanceOf(AiResponseError)
+    expect((e as AiResponseError).code).toBe(code)
+    expect((e as Error).message).toBe('Model response unavailable')
+    expect(JSON.stringify(e)).not.toContain(content)
+  }
+})

@@ -7,7 +7,7 @@ description: Connect repositories, read Health reports and findings, then add CI
 
 # Getting Started
 
-This section takes you from installation to a first repository report. Selection automatically queues Health analysis. Qualified scanners can report findings without CI; an unavailable runtime produces an inspection-only partial report. Tests have not run. To reach a verified PR result, continue through policy and workflow setup below.
+This section takes you from installation to a first repository report. Selection automatically queues Health analysis. Built-in isolated scanners run automatically without additional repository approval, standards or a workflow. Unavailable scanners are reported as failures, never clean scans. Tests have not run. To reach a verified PR result, continue through policy and workflow setup below.
 
 ```mermaid
 flowchart LR

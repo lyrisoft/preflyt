@@ -4,27 +4,21 @@ on:
 permissions:
   contents: read
 jobs:
-  checks:
+  source:
+    name: Source checks
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    permissions:
-      contents: read
-      id-token: write
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
           fetch-depth: 0
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 24.4.1
-      - name: Install locked dependencies
-        run: |
-          npm install --global pnpm@10.26.2
-          pnpm install --frozen-lockfile --ignore-scripts
+      - uses: ./.github/actions/setup-ci
       - name: Release automation tests
-        run: node --test scripts/ci/create-release.test.mjs scripts/ci/publish-release.test.mjs scripts/ci/change-scope.test.mjs
+        run: |
+          node --test scripts/ci/create-release.test.mjs scripts/ci/publish-release.test.mjs scripts/ci/change-scope.test.mjs
+          python3 -m unittest discover -s scripts/ci -p 'test_*.py'
       - name: Select focused tests
         id: focused
         env:
@@ -35,41 +29,100 @@ jobs:
         env:
           DATABASE_URL: postgresql://fixture:fixture@127.0.0.1:1/unused
         run: pnpm --filter @preflyt/api prisma:generate
-      - name: Workflow and source contracts
+      - name: API unit tests and coverage
         if: ${{ !cancelled() }}
-        run: pnpm --filter @preflyt/api test test/development-ci.test.ts test/native-source.test.ts test/ci-command-report.test.ts test/pipeline-jobs.test.ts test/pipeline-gate.test.ts
-      - name: Related API unit tests
-        if: ${{ !cancelled() && steps.focused.outputs.api == 'true' }}
+        env:
+          PREFLYT_COLLECT_COVERAGE: 'true'
+        run: |
+          echo "CI_COVERAGE_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
+          pnpm --filter @preflyt/api exec vitest run --exclude '**/*.integration.test.ts'
+      - name: Prepare API coverage artifact
+        if: ${{ success() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+        env:
+          CI_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: python3 scripts/ci/export-coverage.py apps/api/coverage/lcov.info apps/api .preflyt/coverage-api
+      - name: Upload API coverage from this execution
+        if: ${{ success() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: preflyt-coverage-api-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .preflyt/coverage-api/*
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 1
+      - name: Lint
+        if: ${{ !cancelled() }}
+        run: pnpm --filter @preflyt/web lint
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-ci
+      - name: Restore build cache
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ runner.arch }}-node24-v1-${{ github.event.pull_request.head.sha || github.sha }}
+          restore-keys: turbo-${{ runner.os }}-${{ runner.arch }}-node24-v1-
+      - name: Restore Chromium download
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: chromium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+      - name: Select focused tests
+        id: focused
         env:
           CI_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           CI_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: node scripts/ci/change-scope.mjs api
-      - name: Install Chromium for related browser tests
-        if: ${{ !cancelled() && steps.focused.outputs.web == 'true' }}
-        run: pnpm --filter @preflyt/web exec playwright install --with-deps chromium
-      - name: Related browser tests
-        if: ${{ !cancelled() && steps.focused.outputs.web == 'true' }}
+        run: node scripts/ci/change-scope.mjs plan
+      - name: Generate API test client
         env:
-          CI_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-          CI_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: node scripts/ci/change-scope.mjs web
+          DATABASE_URL: postgresql://fixture:fixture@127.0.0.1:1/unused
+        run: pnpm --filter @preflyt/api prisma:generate
       - name: Type checks
         if: ${{ !cancelled() && (github.event_name != 'pull_request' || github.base_ref != 'development' || github.event.pull_request.head.repo.full_name != github.repository) }}
         env:
           DATABASE_URL: postgresql://fixture:fixture@127.0.0.1:1/unused
         run: pnpm -r --filter @preflyt/api --filter @preflyt/web typecheck
-      - name: Lint
-        if: ${{ !cancelled() }}
-        run: pnpm --filter @preflyt/web lint
       - name: Build validation
         if: ${{ !cancelled() && (github.event_name != 'pull_request' || github.base_ref != 'development' || github.event.pull_request.head.repo.full_name != github.repository) }}
         env:
           DATABASE_URL: postgresql://fixture:fixture@127.0.0.1:1/unused
         run: pnpm -r --filter @preflyt/api --filter @preflyt/web build
+      - name: Mark current policy execution
+        run: echo "CI_POLICY_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
       - name: Preflyt development policy
+        id: policy
         if: ${{ !cancelled() && github.event_name == 'pull_request' && github.base_ref == 'development' && github.event.pull_request.head.repo.full_name == github.repository }}
-        uses: lyrisoft/preflyt-action@v2.1.1
+        uses: lyrisoft/preflyt-action@72bd67f0e75e4409a5b3d37367ffb94073e9bf11 # same-run LCOV coverage
         env:
           DATABASE_URL: postgresql://fixture:fixture@127.0.0.1:1/unused
+          PREFLYT_COLLECT_COVERAGE: 'true'
         with:
+          coverage-reports: '[{"path":"apps/web/coverage/lcov.info","prefix":"apps/web"}]'
+          coverage-artifact: preflyt-coverage-api-${{ github.run_id }}-${{ github.run_attempt }}
           api-url: ${{ vars.PREFLYT_API_URL }}
+      - name: Check current policy browser coverage
+        id: browser
+        if: ${{ !cancelled() && steps.focused.outputs.web == 'true' }}
+        env:
+          CI_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: python3 scripts/ci/policy-browser-coverage.py
+      - name: Install Chromium for related browser tests
+        if: ${{ !cancelled() && steps.focused.outputs.web == 'true' && steps.browser.outputs.covered != 'true' }}
+        run: pnpm --filter @preflyt/web exec playwright install --with-deps chromium
+      - name: Related browser tests
+        if: ${{ !cancelled() && steps.focused.outputs.web == 'true' && steps.browser.outputs.covered != 'true' }}
+        env:
+          CI_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          CI_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: node scripts/ci/change-scope.mjs web

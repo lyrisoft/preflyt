@@ -6,6 +6,8 @@ export type FeedbackFinding = {
   summary: string;
   recommendation: string;
   evidenceRefs: string[];
+  severity?: string;
+  impact?: string;
 };
 export const safeFeedbackText = (text: string) =>
   text
@@ -97,7 +99,7 @@ export function inlineIssues(
       fingerprint,
       anchor,
       description,
-      body: `Advisory AI issue\n\n${shorten(finding.summary, 280)}\n\n${shorten(finding.recommendation, 220)}\n\n<!-- preflyt-issue:${fingerprint};anchor:${anchor} -->`,
+      body: `Advisory AI issue${finding.severity && ['critical', 'high', 'medium', 'low'].includes(finding.severity) ? ` · ${finding.severity}` : ''}\n\n${shorten(finding.summary, 280)}${finding.impact ? `\n\nImpact: ${shorten(finding.impact, 220)}` : ''}\n\n${shorten(finding.recommendation, 220)}\n\n<!-- preflyt-issue:${fingerprint};anchor:${anchor} -->`,
     };
     if (!issues.some((other) => sameInlineIssue(issue, other)))
       issues.push(issue);

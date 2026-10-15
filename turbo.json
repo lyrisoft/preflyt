@@ -33,6 +33,36 @@
     },
     "format:check": {
       "outputs": []
+    },
+    "@preflyt/web#build": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/deploy/nginx.conf"
+      ],
+      "outputs": [
+        "dist/**",
+        ".prerender/**"
+      ]
+    },
+    "@preflyt/docs#build": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/docs/**",
+        "$TURBO_ROOT$/deploy/**",
+        "$TURBO_ROOT$/docker-compose.yaml",
+        "$TURBO_ROOT$/.env.example"
+      ],
+      "outputs": [
+        "build/**",
+        "static/downloads/**",
+        "docs/_generated/**",
+        "docs/self-hosting/compose-file.md"
+      ],
+      "env": [
+        "DOCS_URL",
+        "DOCS_BASE_URL",
+        "PREFLYT_DOCS_REGISTRY"
+      ]
     }
   }
 }

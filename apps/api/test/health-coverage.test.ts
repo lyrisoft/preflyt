@@ -1,16 +1,26 @@
 import {createHash} from 'node:crypto'
 import {expect,it} from 'vitest'
-import {coverageMeasurement,validCoverageMeasurement,coverageFailureReason} from '../src/health/health-measurements.js'
+import {coverageMeasurement,validCoverageMeasurement,coverageFailureReason,healthTestResults} from '../src/health/health-measurements.js'
 import {applicableHealthAnalyses,healthReport,supportsNodeCoverage} from '../src/health/health-report.js'
+import {healthCategoryMetric,selectedHealthAnalyses} from '../src/health/health-categories.js'
 const m={version:1,kind:'coverage',formula:'node-covered-lines-v1',scope:'node-loaded-files',analyzedLines:10,coveredLines:6,analyzedFiles:1,tests:2,passed:2,failed:0,skipped:0,cancelled:0,todo:0} as const
 const snapshot=(paths:string[])=>({sourceSha:'a'.repeat(40),treeSha:'b'.repeat(40),branch:'main',fullName:'org/repo',complete:true,warnings:[],files:paths.map(path=>({path,sha:'c'.repeat(40),size:10}))})
-it('never includes test execution in the default repository analysis',()=>{
+it('keeps the analysis coverage choice explicit and the legacy Node recipe bounded',()=>{
  const source=snapshot(['app.js','app.test.js'])
  expect(supportsNodeCoverage(source)).toBe(true)
  expect(applicableHealthAnalyses(source).map(a=>a.id)).not.toContain('tests.coverage')
  expect(applicableHealthAnalyses(source,true).map(a=>a.id)).toContain('tests.coverage')
  expect(supportsNodeCoverage(snapshot(['app.test.ts','package.json']))).toBe(false)
  expect(supportsNodeCoverage(snapshot(['node_modules/app.test.js']))).toBe(false)
+})
+it('selects only the requested category and never turns missing categories into zero findings',()=>{
+ const source=snapshot(['app.ts','api/package-lock.json'])
+ expect(selectedHealthAnalyses(source,'coverage')).toEqual([])
+ expect(selectedHealthAnalyses(source,'reliability').map(a=>a.id)).toEqual(['quality.reliability'])
+ expect(selectedHealthAnalyses(source,'security').map(a=>a.id)).toEqual(['secrets.scan','security.sast','security.dependencies','security.hotspots'])
+ const report=healthReport({complete:true,fileCount:2,languages:['TypeScript']},[{id:'quality.reliability',title:'Reliability',state:'INCOMPLETE',reason:'SCAN_ERRORS'}])
+ expect(healthCategoryMetric(report,'reliability')).toBe('Unavailable')
+ expect(healthCategoryMetric(report,'security')).toBe('Unavailable')
 })
 it('requires actual successful complete tests and a measured denominator',()=>{
  expect(validCoverageMeasurement(m)).toBe(true)
@@ -33,6 +43,14 @@ it('retains only bounded checksum-verified failure reasons, never test messages'
  const data=Buffer.from(JSON.stringify({version:'2.1.0',runs:[{tool:{driver:{name:'Preflyt test coverage'}},properties:{preflytCoverageUnavailable:'TESTS_SKIPPED'},results:[]}]})),hash=createHash('sha256').update(data).digest('hex')
  expect(coverageFailureReason(data.toString('base64'),hash)).toBe('TESTS_SKIPPED')
  expect(coverageFailureReason(data.toString('base64'),'0'.repeat(64))).toBeUndefined()
+})
+it('retains only validated package locations for dependency preparation failures',()=>{
+ const result={directory:'api',framework:'node',state:'INCOMPLETE',reason:'DEPENDENCY_INSTALL_FAILED'}
+ const raw=Buffer.from(JSON.stringify({version:'2.1.0',runs:[{tool:{driver:{name:'Preflyt test coverage'}},properties:{preflytCoverageUnavailable:'DEPENDENCY_INSTALL_FAILED',preflytTestResults:[result]},results:[]}]})),hash=createHash('sha256').update(raw).digest('hex')
+ expect(healthTestResults(raw.toString('base64'),hash)).toEqual([result])
+ expect(healthTestResults(raw.toString('base64'),'0'.repeat(64))).toBeUndefined()
+ const unsafe=Buffer.from(JSON.stringify({version:'2.1.0',runs:[{tool:{driver:{name:'Preflyt test coverage'}},properties:{preflytTestResults:[{...result,directory:'../../private'}]},results:[]}]}))
+ expect(healthTestResults(unsafe.toString('base64'),createHash('sha256').update(unsafe).digest('hex'))).toBeUndefined()
 })
 
 it('does not mistake declared Vitest or Jest projects for the built-in Node recipe',()=>{

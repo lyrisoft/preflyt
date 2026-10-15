@@ -17,3 +17,24 @@ docs
 
 # Transient CI evidence
 .preflyt/results/
+
+# Never send local scanner identities, connection credentials or jobs to the build.
+**/.preflyt
+# Packaged, credential-free scanner wrappers used only by the health-scanner target.
+!docs
+docs/*
+!docs/deployment
+docs/deployment/*
+!docs/deployment/native-runner
+!docs/deployment/native-runner/**
+
+# Keep exclusions effective after allowing the packaged scanner directory.
+**/node_modules
+**/.preflyt
+**/.env
+**/.env.*
+**/*.pem
+**/*.key
+**/*.log
+**/*.env
+**/docker-tls

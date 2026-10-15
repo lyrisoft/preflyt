@@ -5,7 +5,7 @@ import { GitHubProviderService } from '../github/github-provider.service.js'
 import { digest } from '../assessments/assessment-digest.js'
 import { redactHealthSource } from '../health/health-report.js'
 import { sourceExcerpt } from './source-excerpt.js'
-import { sourceLocation, SOURCE_EXCERPT_VERSION, type SourceLocation } from './finding-source-store.js'
+import { sourceLocation, SOURCE_EXCERPT_VERSION, SECRET_SOURCE_EXCERPT_VERSION, type SourceLocation } from './finding-source-store.js'
 
 type Excerpt = ReturnType<typeof sourceExcerpt> & { retryable?: boolean }
 const unavailable = (): Excerpt => ({ lines: [], retryable: true, reason: 'Source could not be verified at this commit. Retry source later; the file may be unavailable, exceed excerpt limits, or require GitHub App access.', truncated: false })
@@ -16,7 +16,7 @@ export class FindingSourceStore {
   constructor(@Inject(PrismaService) private readonly db: PrismaService, @Inject(GitHubProviderService) private readonly github: GitHubProviderService) {}
   private decode(row: FindingSourceExcerpt): Excerpt {
     const value = row.content as Excerpt | null
-    if (row.id !== digest([SOURCE_EXCERPT_VERSION, row.repositoryId, row.sourceSha, row.path, row.line, row.endLine, row.contextLines]) || row.version !== SOURCE_EXCERPT_VERSION || !value || digest(value) !== row.contentHash || !Array.isArray(value.lines) || value.lines.length > 60 ||
+    if (row.id !== digest([row.version, row.repositoryId, row.sourceSha, row.path, row.line, row.endLine, row.contextLines]) || ![SOURCE_EXCERPT_VERSION, SECRET_SOURCE_EXCERPT_VERSION].includes(row.version) || !value || digest(value) !== row.contentHash || !Array.isArray(value.lines) || value.lines.length > 60 ||
       !value.lines.every(l => Number.isSafeInteger(l.number) && l.number > 0 && typeof l.text === 'string' && l.text.length <= 2000) ||
       (value.reason !== null && typeof value.reason !== 'string') || typeof value.truncated !== 'boolean') throw new ConflictException('Saved source integrity check failed')
     return value
@@ -65,12 +65,18 @@ export class FindingSourceStore {
     const live = await this.activeRepository(row)
     if (live.installationId !== repo.installationId || live.githubId !== repo.githubId) throw new ForbiddenException('Repository access changed')
     const content = sourceExcerpt(text, row.line, row.endLine, row.contextLines)
+    if (row.version === SECRET_SOURCE_EXCERPT_VERSION) {
+      // Match columns/values are deliberately absent from receipts. Mask the whole
+      // reported range, including unknown detector formats; retain numbered context.
+      for (const line of content.lines) if (row.line !== null && line.number >= row.line && line.number <= (row.endLine ?? row.line))
+        line.text = '[Potential credential redacted]'
+    }
     // Only redacted, bounded excerpts are stored. The first verified snapshot wins.
     await this.db.findingSourceExcerpt.updateMany({ where: { id: row.id, contentHash: null }, data: { content: content as Prisma.InputJsonValue, contentHash: digest(content), capturedAt: new Date() } })
     return this.decode(await this.db.findingSourceExcerpt.findUniqueOrThrow({ where: { id: row.id } }))
   }
   async reconcile() {
-    const pending = await this.db.findingSourceExcerpt.findMany({ where: { version: SOURCE_EXCERPT_VERSION, contentHash: null, attempts: { lt: 3 }, retryAfter: { lte: new Date() }, repository: { selected: true, available: true, installation: { active: true } } }, orderBy: { createdAt: 'asc' }, take: 10 })
+    const pending = await this.db.findingSourceExcerpt.findMany({ where: { version: { in: [SOURCE_EXCERPT_VERSION, SECRET_SOURCE_EXCERPT_VERSION] }, contentHash: null, attempts: { lt: 3 }, retryAfter: { lte: new Date() }, repository: { selected: true, available: true, installation: { active: true } } }, orderBy: { createdAt: 'asc' }, take: 10 })
     const files = new Map<string, Promise<string>>()
     // Limit concurrent distinct files, and coalesce findings at the same file/revision.
     for (let offset = 0; offset < pending.length; offset += 2) await Promise.all(pending.slice(offset, offset + 2).map(row => this.capture(row, files)))

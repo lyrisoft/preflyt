@@ -26,6 +26,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
+      actions: read
     uses: ./.github/workflows/development-checks.yml
   main:
     needs: scope
@@ -42,7 +43,7 @@ jobs:
       id-token: write
     steps:
       - name: Verify results, AI review and PR publication
-        uses: lyrisoft/preflyt-action@v2.1.1
+        uses: lyrisoft/preflyt-action@72bd67f0e75e4409a5b3d37367ffb94073e9bf11 # same-run LCOV coverage
         with:
           mode: gate
           api-url: ${{ vars.PREFLYT_API_URL }}

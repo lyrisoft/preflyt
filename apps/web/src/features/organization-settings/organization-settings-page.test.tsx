@@ -67,7 +67,7 @@ vi.mock('@tanstack/react-router', async () => {
       children: React.ReactNode
       className?: string
     }) => (
-      <a href='/apps' className={className}>
+      <a href='/repositories' className={className}>
         {children}
       </a>
     ),

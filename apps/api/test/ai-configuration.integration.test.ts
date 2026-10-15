@@ -762,6 +762,8 @@ async function reviewFixture(selectors: object = {}) {
                         checkId: data.SKILLS[0].id,
                         evidenceRefs: ["check:0"],
                         summary: "Security scan evidence is missing.",
+                        severity: "medium",
+                        impact: "Unscanned changes may contain security defects that the supplied evidence cannot identify.",
                         recommendation:
                           "Collect a verified scan for this commit.",
                       },
@@ -1326,6 +1328,8 @@ async function prFixture(
                         checkId: data.SKILLS[0].id,
                         evidenceRefs: [data.DATA.source ? "diff:0" : "check:0"],
                         summary: "Unvalidated input reaches the database query.",
+                        severity: "high",
+                        impact: "Attacker-controlled input could allow unauthorized access if the query does not enforce validation.",
                         recommendation: "Validate inputs before use.",
                       },
                     ],
@@ -2116,4 +2120,133 @@ it("publishes only actionable findings and a short summary while retaining full 
       }),
     ),
   ).toEqual(gate);
+});
+
+it('retries unavailable automatic PR reviews explicitly without rerunning checks or automatically repeating inference', async () => {
+  vi.stubEnv('GITHUB_CHECK_PUBLICATION_ENABLED', 'true');
+  const f = await scopedPrReviewFixture();
+  await db.pipelineRunSubmission.update({ where: { id: f.run.id }, data: { state: 'COMPLETE' } });
+  await f.reviews.dispatchVerifiedPipeline(f.run.id);
+  const first = await db.aiSkillReview.findFirstOrThrow({ where: { assessmentId: f.assessment.id } });
+  await db.aiSkillReview.update({ where: { id: first.id }, data: { state: 'UNAVAILABLE', failure: 'API_KEY_OUTPUT', finishedAt: new Date() } });
+  fetchMock.mockClear();
+  await db.repositoryPullRequest.update({ where: { id: f.pr.id }, data: { aiReviewAttemptAt: null } });
+  await f.reviews.dispatchAutomatic();
+  expect(fetchMock).not.toHaveBeenCalled();
+  expect((await db.aiSkillReview.findUniqueOrThrow({ where: { id: first.id } })).state).toBe('UNAVAILABLE');
+  const retry = await f.reviews.retry(owner, f.repo.githubId.toString(), first.id);
+  expect(retry.id).toBe(first.id);
+  expect(retry.state).toBe('QUEUED');
+  expect(retry.feedbackState).toBe('PENDING');
+  expect((await db.aiSkillReview.findUniqueOrThrow({ where: { id: first.id } })).automaticKey).toBe(first.automaticKey);
+  f.infer(); await f.reviews.reconcile(); await f.reviews.publishPendingSummary();
+  const saved = await db.aiSkillReview.findUniqueOrThrow({ where: { id: first.id } });
+  expect(saved.state).toBe('SUCCEEDED'); expect(saved.feedbackState).toBe('PUBLISHED');
+  expect(f.inline).toHaveBeenCalledOnce();
+  expect((await db.pipelineRunSubmission.findUniqueOrThrow({ where: { id: f.run.id } })).runAttempt).toBe(1);
+  expect(previewGate(await db.commitAssessment.findUniqueOrThrow({ where: { id: f.assessment.id } }))).toEqual(previewGate(f.assessment));
+});
+it('adopts the current model route on explicit AI retry while preserving the old failed review', async () => {
+  const f = await scopedPrReviewFixture();
+  await db.pipelineRunSubmission.update({ where: { id: f.run.id }, data: { state: 'COMPLETE' } });
+  await f.reviews.dispatchVerifiedPipeline(f.run.id);
+  const first = await db.aiSkillReview.findFirstOrThrow({ where: { assessmentId: f.assessment.id } });
+  await db.aiSkillReview.update({ where: { id: first.id }, data: { state: 'UNAVAILABLE', failure: 'NETWORK' } });
+  const replacement = (await post(owner, '/providers', { ...input, name: 'Replacement model', modelId: 'model-b' }).expect(201)).body;
+  await post(owner, `/providers/${replacement.id}/test`, {}).expect(201);
+  await db.aiStageRoute.update({ where: { id: f.routeRow.id }, data: { primaryId: replacement.id, revision: { increment: 1 } } });
+  const retried = await f.reviews.retry(owner, f.repo.githubId.toString(), first.id);
+  expect(retried.id).not.toBe(first.id);
+  const saved = await db.aiSkillReview.findUniqueOrThrow({ where: { id: retried.id } });
+  expect((saved.snapshot as any).route.revision).toBe(f.routeRow.revision + 1);
+  expect((saved.snapshot as any).providers[0].id).toBe(replacement.id);
+  expect(saved.automaticKey).not.toBe(first.automaticKey);
+  expect((await db.aiSkillReview.findUniqueOrThrow({ where: { id: first.id } })).state).toBe('UNAVAILABLE');
+});
+it('rechecks access and source authorization before retrying an automatic review', async () => {
+  const f = await scopedPrReviewFixture();
+  await db.pipelineRunSubmission.update({ where: { id: f.run.id }, data: { state: 'COMPLETE' } });
+  await f.reviews.dispatchVerifiedPipeline(f.run.id);
+  const first = await db.aiSkillReview.findFirstOrThrow({ where: { assessmentId: f.assessment.id } });
+  await db.aiSkillReview.update({ where: { id: first.id }, data: { state: 'UNAVAILABLE' } });
+  fetchMock.mockClear();
+  await expect(f.reviews.retry(outsider, f.repo.githubId.toString(), first.id)).rejects.toThrow();
+  await db.aiStageRoute.update({ where: { id: f.routeRow.id }, data: { allowSource: false, revision: { increment: 1 } } });
+  await expect(f.reviews.retry(owner, f.repo.githubId.toString(), first.id)).rejects.toThrow();
+  expect(fetchMock).not.toHaveBeenCalled();
+  expect((await db.aiSkillReview.findUniqueOrThrow({ where: { id: first.id } })).state).toBe('UNAVAILABLE');
+});
+it('protects the explicit AI retry endpoint with origin and repository permissions', async () => {
+  const f = await reviewFixture();
+  const first = (await f.call('', { assessmentId: f.assessment.id, checkIds: [f.check.id] }).expect(201)).body;
+  await db.aiSkillReview.update({ where: { id: first.id }, data: { state: 'UNAVAILABLE' } });
+  await http(app.getHttpServer()).post(f.base + `/${first.id}/retry`).set('Cookie', `ai.sid=${owner.identityId}`)
+    .set('Origin', 'https://attacker.example.invalid').send({}).expect(403);
+  await f.call(`/${first.id}/retry`, {}, auditor).expect(403);
+  await f.call(`/${first.id}/retry`, {}, outsider).expect(403);
+  const retry = (await f.call(`/${first.id}/retry`, {}).expect(201)).body;
+  expect(retry.id).toBe(first.id); expect(retry.state).toBe('QUEUED');
+  await f.call(`/${first.id}/retry`, {}).expect(404);
+});
+it('persists a fixed rejection code while discarding unsafe output and leaving feedback unpublished', async () => {
+  const f = await reviewFixture();
+  const first = (await f.call('', { assessmentId: f.assessment.id, checkIds: [f.check.id] }).expect(201)).body;
+  const rejected = 'sk-rejected-fixture-content';
+  fetchMock.mockResolvedValue(new Response(JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content: rejected } }] })));
+  await f.reviews.reconcile();
+  const saved = await db.aiSkillReview.findUniqueOrThrow({ where: { id: first.id } });
+  expect(saved.state).toBe('UNAVAILABLE'); expect(saved.failure).toMatch(/^API_KEY_OUTPUT:/);
+  expect(saved.failure).not.toContain(rejected); expect(saved.result).toBeNull(); expect(saved.feedbackState).toBe('NOT_REQUESTED');
+});
+
+it('does not retry automatic inference after its published policy has been withdrawn', async () => {
+  const f = await scopedPrReviewFixture();
+  await db.pipelineRunSubmission.update({ where: { id: f.run.id }, data: { state: 'COMPLETE' } });
+  await f.reviews.dispatchVerifiedPipeline(f.run.id);
+  const first = await db.aiSkillReview.findFirstOrThrow({ where: { assessmentId: f.assessment.id } });
+  await db.aiSkillReview.update({ where: { id: first.id }, data: { state: 'UNAVAILABLE' } });
+  await db.gatePolicyRevision.update({ where: { id: f.policy.id }, data: { state: 'DRAFT' } });
+  fetchMock.mockClear();
+  await expect(f.reviews.retry(owner, f.repo.githubId.toString(), first.id)).rejects.toThrow();
+  expect(fetchMock).not.toHaveBeenCalled();
+  expect((await db.aiSkillReview.findUniqueOrThrow({ where: { id: first.id } })).state).toBe('UNAVAILABLE');
+});
+
+it('adopts retested provider revisions on explicit retry even when the route revision is unchanged', async () => {
+  const f = await scopedPrReviewFixture();
+  await db.pipelineRunSubmission.update({ where: { id: f.run.id }, data: { state: 'COMPLETE' } });
+  await f.reviews.dispatchVerifiedPipeline(f.run.id);
+  const first = await db.aiSkillReview.findFirstOrThrow({ where: { assessmentId: f.assessment.id } });
+  const snapshot = first.snapshot as any;
+  await db.aiSkillReview.update({ where: { id: first.id }, data: { state: 'UNAVAILABLE' } });
+  const pin = snapshot.providers[0];
+  await post(owner, `/providers/${pin.id}`, { ...input, apiKey: 'fixture-new', expectedRevision: pin.revision }).expect(201);
+  await post(owner, `/providers/${pin.id}/test`, {}).expect(201);
+  const retry = await f.reviews.retry(owner, f.repo.githubId.toString(), first.id);
+  expect(retry.id).not.toBe(first.id);
+  const saved = await db.aiSkillReview.findUniqueOrThrow({ where: { id: retry.id } });
+  expect((saved.snapshot as any).route.revision).toBe(snapshot.route.revision);
+  expect((saved.snapshot as any).providers[0].revision).toBe(pin.revision + 1);
+  await db.aiSkillReview.update({ where: { id: saved.id }, data: { state: 'UNAVAILABLE' } });
+  const repeated = await f.reviews.retry(owner, f.repo.githubId.toString(), saved.id);
+  expect(repeated.id).toBe(saved.id);
+  expect(repeated.state).toBe('QUEUED');
+});
+
+it('retries with a replacement stage route even when its revision number matches the original route', async () => {
+  const f = await scopedPrReviewFixture();
+  await db.pipelineRunSubmission.update({ where: { id: f.run.id }, data: { state: 'COMPLETE' } });
+  await f.reviews.dispatchVerifiedPipeline(f.run.id);
+  const first = await db.aiSkillReview.findFirstOrThrow({ where: { assessmentId: f.assessment.id } });
+  await db.aiSkillReview.update({ where: { id: first.id }, data: { state: 'UNAVAILABLE' } });
+  const original = await db.aiStageRoute.findUniqueOrThrow({ where: { id: f.routeRow.id } });
+  await db.aiStageRoute.delete({ where: { id: original.id } });
+  const replacement = await db.aiStageRoute.create({ data: { ...original, id: randomUUID() } });
+  const retry = await f.reviews.retry(owner, f.repo.githubId.toString(), first.id);
+  const saved = await db.aiSkillReview.findUniqueOrThrow({ where: { id: retry.id } });
+  expect(saved.id).not.toBe(first.id);
+  expect((saved.snapshot as any).route).toEqual({ id: replacement.id, revision: original.revision });
+  expect(saved.automaticKey).not.toBe(first.automaticKey);
+  await db.aiSkillReview.update({ where: { id: saved.id }, data: { state: 'UNAVAILABLE' } });
+  expect((await f.reviews.retry(owner, f.repo.githubId.toString(), saved.id)).id).toBe(saved.id);
 });

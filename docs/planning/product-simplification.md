@@ -141,5 +141,5 @@ Tests were written/updated and left unrun. No tests, builds, lint, typechecks, h
 
 - Removed the demo Tasks, Chats, Users, Help Center and error preview routes, their fixture data and template-only components.
 - Removed the template Settings forms. Existing `/settings` bookmarks redirect to the real Preflyt Settings page; notification and appearance links select their matching tabs. Active PR feedback links now use `/organization-settings?tab=pr-checks`.
-- Retained the API-backed repository inventory at `/apps`, the dashboard, real error pages, authentication routes and original sidebar groups.
+- Retained the API-backed repository inventory at `/repositories` (legacy `/apps` links redirect), the dashboard, real error pages, authentication routes and original sidebar groups.
 - Removed unused charts, table helpers, icons, form widgets and their obsolete tests. Test execution remains deferred to the user's requested full run.

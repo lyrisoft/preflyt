@@ -10,7 +10,7 @@ const report: HealthReport = {
   findings: [],
   limits: [],
 }
-it('keeps missing analysis and unrequested test execution distinct from zero findings', () => {
+it('keeps missing analysis and CI coverage distinct from zero findings', () => {
   const values = healthDimensionValues(report, null, false)
   expect(values).toEqual({
     security: 'Unavailable',
@@ -18,7 +18,7 @@ it('keeps missing analysis and unrequested test execution distinct from zero fin
     maintainability: 'Unavailable',
     duplication: 'Unavailable',
     hotspots: 'Unavailable',
-    coverage: 'Awaiting CI coverage',
+    coverage: 'Unavailable',
   })
   expect(healthDimensionValues(report, null, true).coverage).toBe('Unavailable')
 })
@@ -149,15 +149,52 @@ it('shows lower bounds for missing or truncated analyzers instead of false zero-
 
 it('keeps valid retained findings visible as a lower bound when analysis is incomplete', () => {
   const partial: HealthReport = {
-    ...report, mode: 'EXECUTED',
-    analyses: [{id:'quality.reliability',title:'Reliability',state:'INCOMPLETE',reason:'SOURCE_LOCATION_INVALID',findingsRetained:1,findingsReported:2}],
-    findings: [{fingerprint:'a'.repeat(64),category:'reliability',severity:'high',title:'Valid retained issue',ruleId:'rule',path:'app.js',line:1,checkId:'quality.reliability',evidence:'ANALYZER_REPORTED'}],
+    ...report,
+    mode: 'EXECUTED',
+    analyses: [
+      {
+        id: 'quality.reliability',
+        title: 'Reliability',
+        state: 'INCOMPLETE',
+        reason: 'SOURCE_LOCATION_INVALID',
+        findingsRetained: 1,
+        findingsReported: 2,
+      },
+    ],
+    findings: [
+      {
+        fingerprint: 'a'.repeat(64),
+        category: 'reliability',
+        severity: 'high',
+        title: 'Valid retained issue',
+        ruleId: 'rule',
+        path: 'app.js',
+        line: 1,
+        checkId: 'quality.reliability',
+        evidence: 'ANALYZER_REPORTED',
+      },
+    ],
   }
-  expect(healthDimensionValues(partial,null,false).reliability).toBe('≥1')
-  expect(healthDimensionValues({...partial,findings:[]},null,false).reliability).toBe('Unavailable')
+  expect(healthDimensionValues(partial, null, false).reliability).toBe('≥1')
+  expect(
+    healthDimensionValues({ ...partial, findings: [] }, null, false).reliability
+  ).toBe('Unavailable')
 })
 
 it('counts automatically reported hotspots, including a measured zero, independently of human review', () => {
- const analyzed: HealthReport={...report,mode:'EXECUTED',analyses:[{id:'security.hotspots',title:'Security hotspots',state:'PASS',reason:'CHECKS_PASSED',findingsRetained:0,findingsReported:0}]}
- expect(healthDimensionValues(analyzed,null,false).hotspots).toBe('0')
+  const analyzed: HealthReport = {
+    ...report,
+    mode: 'EXECUTED',
+    analyses: [
+      {
+        id: 'security.hotspots',
+        title: 'Security hotspots',
+        state: 'PASS',
+        reason: 'CHECKS_PASSED',
+        findingsRetained: 0,
+        findingsReported: 0,
+      },
+    ],
+  }
+  expect(healthDimensionValues(analyzed, null, false).hotspots).toBe('0')
 })

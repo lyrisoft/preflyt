@@ -175,4 +175,6 @@ export const demoHealthTimeline = [...demoHealthHistory]
     sourceSha: item.sha,
     at: item.at,
     findings: item.findings,
+    partial: false,
+    comparableFindings: item.findings,
   }))

@@ -25,11 +25,22 @@ it('rechecks access after source fetch and suppresses source if access changes',
  fresh.access.requireRepository.mockResolvedValueOnce({id:'repo',installationId:1n,githubId:11n}).mockRejectedValueOnce(new Error('Revoked'))
  await expect(fresh.service.source({} as any,'f'.repeat(64))).rejects.toThrow('Revoked')
 })
-it('hides secrets without fetching and explains unavailable source without leaking provider errors',async()=>{
+it('loads secret excerpts through the redacting store and explains unavailable source without provider errors',async()=>{
  const secret=fixture();secret.finding.ruleId='secrets.scan'
- expect((await secret.service.source({} as any,'f'.repeat(64))).lines).toEqual([])
- expect(secret.github.read).not.toHaveBeenCalled()
+ secret.github.read.mockResolvedValue({lines:[{number:2,text:'[Potential credential redacted]'}],reason:null,truncated:false})
+ expect((await secret.service.source({} as any,'f'.repeat(64))).lines).toEqual([{number:2,text:'[Potential credential redacted]'}])
+ expect(secret.github.read).toHaveBeenCalledWith('repo',sha,expect.objectContaining({ruleId:'secrets.scan'}))
  const failed=fixture();failed.github.read.mockResolvedValue({lines:[],reason:'Source could not be verified',truncated:false})
  const result=await failed.service.source({} as any,'f'.repeat(64))
  expect(result.lines).toEqual([]);expect(JSON.stringify(result)).not.toContain('credential-value')
+})
+
+it('uses a separate redaction cache for credential detectors, including CI findings without a check id',async()=>{
+ const {sourceLocation}=await import('../src/findings/finding-source-store.js')
+ const normal={path:'src/app.ts',line:2,endLine:3,title:'Finding',ruleId:'sql-injection'}
+ const ordinary=sourceLocation('repo',sha,normal)!
+ for(const ruleId of ['generic-api-key','curl-auth-header','github-pat','github-fine-grained-pat','aws-access-token','private-key','gitleaks']) {
+  const secret=sourceLocation('repo',sha,{...normal,ruleId})!
+  expect(secret.version).toBe(2);expect(secret.id).not.toBe(ordinary.id)
+ }
 })

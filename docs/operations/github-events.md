@@ -29,6 +29,6 @@ To recover a failed delivery, fix the dependency failure, then have an administr
 
 Rollback: disable `GITHUB_EVENTS_ENABLED`, stop the worker, and deploy the prior API/web build. Keep the additive inbox table and enum; older application versions ignore them. On re-enabling, pending accepted deliveries resume. No repository/profile records are deleted.
 
-Scoped verification: `pnpm --filter @preflyt/api exec vitest run test/github-webhooks.integration.test.ts test/github-event-queue.test.ts test/github-worker.test.ts`. Queue integration tests use an isolated prefix and obliterate only their own queue after stopping their test worker.
+Scoped verification: `pnpm --filter @preflyt/api exec vitest run test/github-webhooks.integration.test.ts test/github-event-queue.integration.test.ts test/github-worker.integration.test.ts`. Queue integration tests use an isolated prefix and obliterate only their own queue after stopping their test worker.
 
 Signature contract: [GitHub webhook validation](https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries). Queue connection/eviction contract: [BullMQ connections](https://docs.bullmq.io/guide/connections).

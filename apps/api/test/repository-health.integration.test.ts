@@ -1,3 +1,5 @@
+import { HealthGitSourceError } from '../src/health/health-git-source.js'
+import { GitHubRateLimitError } from '../src/github/github-rate-limit.js'
 import { FindingSourceStore } from '../src/findings/finding-source-store.service.js'
 import 'reflect-metadata'
 import { NestFactory } from '@nestjs/core'
@@ -7,7 +9,11 @@ import request from 'supertest'
 import { AuthService } from '../src/auth/auth.service.js'
 import { SessionGuard } from '../src/auth/session.guard.js'
 import { RepositoryHealthController } from '../src/health/repository-health.controller.js'
-import { randomUUID, generateKeyPairSync } from 'node:crypto'
+import { randomUUID, generateKeyPairSync, createHash } from 'node:crypto'
+import { gzipSync } from 'node:zlib'
+import { normalizePipelineSubmission } from '../src/assessments/pipeline-submission.js'
+import { recordJobEvidence } from '../src/assessments/pipeline-job-evidence.js'
+import { CiArtifactService } from '../src/github-events/ci-artifact.service.js'
 import { beforeAll, afterAll, beforeEach, afterEach, expect, it, vi } from 'vitest'
 import { disposableDatabase } from './disposable-database.js'
 import { RepositoryHealthService } from '../src/health/repository-health.service.js'
@@ -19,17 +25,19 @@ import { nativeRuntimeApproval } from '../src/execution/native-runtime.js'
 import { nativeToolReviews, nativeAdapters } from '../src/execution/native-plan.js'
 import { signNativeReceipt, verifyNativeReceipt } from '../src/execution/native-receipt.js'
 import { digest } from '../src/assessments/assessment-digest.js'
+import { HealthScannerClient } from '../src/health/health-scanner-client.js'
+import { healthScannerAuthority } from '../src/health/health-scanner-package.js'
 import type { AuthenticatedSession } from '../src/auth/session.guard.js'
 vi.mock('../src/execution/native-runtime.js',()=>({nativeRuntimeApproval:vi.fn()}))
 let app: INestApplication
 let fixture: Awaited<ReturnType<typeof disposableDatabase>>, service: RepositoryHealthService, owner: AuthenticatedSession, developer: AuthenticatedSession, outsider: AuthenticatedSession, repoId: string
-const provider={readRepositorySnapshot:vi.fn(),verifyReadinessBranch:vi.fn(),readHealthSource:vi.fn()}, runtime={status:vi.fn()}
+const provider={readRepositorySnapshot:vi.fn(),verifyReadinessBranch:vi.fn(),readHealthSource:vi.fn(),readHealthScanSource:vi.fn()}, runtime={status:vi.fn()}
 const sha='a'.repeat(40)
 beforeAll(async()=>{
  fixture=await disposableDatabase('health')
  app=await NestFactory.create({module:class TestHealthModule{},controllers:[RepositoryHealthController],providers:[
   SessionGuard,{provide:AuthorizationService,useValue:new AuthorizationService(fixture.prisma)},
-  {provide:RepositoryHealthService,useFactory:()=>({hotspotReview:(...args:any[])=>service.hotspotReview(...args as [any,any,any,any]),saveHotspotReview:(...args:any[])=>service.saveHotspotReview(...args as [any,any,any,any,any]),get:(...args:any[])=>service.get(...args as [any,any,any,any]),freshness:(...args:any[])=>service.freshness(...args as [any,any,any]),start:(...args:any[])=>service.start(...args as [any,any,any]),cancel:(...args:any[])=>service.cancel(...args as [any,any,any]),source:(...args:any[])=>service.source(...args as [any,any,any,any]),portfolio:(...args:any[])=>service.portfolio(...args as [any,any,any,any,any])})},
+  {provide:RepositoryHealthService,useFactory:()=>({hotspotReview:(...args:any[])=>service.hotspotReview(...args as [any,any,any,any]),saveHotspotReview:(...args:any[])=>service.saveHotspotReview(...args as [any,any,any,any,any]),get:(...args:any[])=>service.get(...args as [any,any,any,any,any]),freshness:(...args:any[])=>service.freshness(...args as [any,any,any]),start:(...args:any[])=>service.start(...args as [any,any,any]),cancel:(...args:any[])=>service.cancel(...args as [any,any,any]),source:(...args:any[])=>service.source(...args as [any,any,any,any]),portfolio:(...args:any[])=>service.portfolio(...args as [any,any,any,any,any])})},
   {provide:AuthService,useValue:{sessionCookieName:'health.sid',currentSession:async(token:string)=>({owner,developer,outsider} as any)[token]??{authenticated:false},assertOrigin:(origin:string)=>{if(origin!=='http://localhost:5173')throw new ForbiddenException()}}}
  ]},{logger:false})
  app.use(cookieParser());await app.init()
@@ -51,11 +59,76 @@ beforeEach(async()=>{
  vi.stubEnv('NOTIFICATIONS_ENABLED','true');vi.stubEnv('NATIVE_TOOL_REVIEWS','[]')
  service=new RepositoryHealthService(db,new AuthorizationService(db),provider as any,runtime as any,new FindingSourceStore(db,provider as any))
 })
+it('displays compressed CI coverage through storage and Health only for its server-verified commit and attempt',async()=>{
+ const db=fixture.prisma,scan=await service.initial(owner.identityId,'51')
+ await service.process(scan.id)
+ const content='SF:apps/api/src/example.ts\n'+Array.from({length:30000},(_,i)=>`DA:${i+1},${i%2}`).join('\n')+'\nLF:30000\nLH:15000\nend_of_record\n'
+ expect(Buffer.byteLength(content)).toBeGreaterThan(256*1024)
+ const policy={id:'coverage-fixture',definitionHash:'b'.repeat(64),repositoryId:'51',sourceSha:sha,headSha:sha,checks:[{id:'tests.required',title:'Tests',required:true}]}
+ const normalized=normalizePipelineSubmission({schemaVersion:1,policyId:policy.id,policyHash:policy.definitionHash,repositoryId:'51',sourceSha:sha,headSha:sha,results:[{ruleId:'tests.required',status:'passed'}],reports:[{ruleId:'tests.coverage',format:'lcov',encoding:'gzip-base64',content:gzipSync(content).toString('base64'),sha256:createHash('sha256').update(content).digest('hex')}]},policy)
+ expect(normalized.result).toBe('passed')
+ const evidence=await recordJobEvidence(db,{submissionId:'coverage-fixture',repositoryId:51n,installationId:50n,sourceSha:sha,runId:'12',runAttempt:2,workflowId:'4',jobIds:['7'],conclusion:'success'})
+ await new CiArtifactService(db).import('51',evidence.deliveryId,normalized.reports[0],owner.identityId)
+ const get=()=>request(app.getHttpServer()).get(`/github/repositories/51/health?assessment=${scan.id}`).set('Cookie','health.sid=owner')
+ expect((await get()).body.ciCoverage.measurement).toBeUndefined()
+ const metadata={schemaVersion:1,repositoryId:repoId,sourceSha:sha,runId:'12',runAttempt:2,workflowId:'4',jobIds:['7'],verificationScope:'jobs',reports:[{ruleId:'tests.coverage',sha256:normalized.reports[0].sha256}]}
+ const receipt=await db.auditEvent.create({data:{event:'pipeline.run.verified',actorId:owner.identityId,metadata}})
+ expect((await get()).body.ciCoverage).toMatchObject({state:'VERIFIED',measurement:{analyzedFiles:1,analyzedLines:30000,coveredLines:15000}})
+ for(const patch of [{runAttempt:1},{sourceSha:'c'.repeat(40)},{jobIds:['8']},{reports:[{ruleId:'tests.coverage',sha256:'0'.repeat(64)}]}]){
+  await db.auditEvent.update({where:{id:receipt.id},data:{metadata:{...metadata,...patch}}})
+  expect((await get()).body.ciCoverage.measurement).toBeUndefined()
+ }
+ await db.auditEvent.update({where:{id:receipt.id},data:{metadata}})
+ vi.stubEnv('CI_REPORT_PROOF_MODE','organization-key')
+ expect((await get()).body.ciCoverage.measurement).toBeUndefined()
+ expect((await request(app.getHttpServer()).get(`/github/repositories/51/health?assessment=${scan.id}`).set('Cookie','health.sid=outsider')).status).toBe(403)
+})
 it('selection queues once without needing CI, standards or an immediate source read, then saves a partial report and one outbox event',async()=>{
  const rows=await Promise.all([service.initial(owner.identityId,'51'),service.initial(owner.identityId,'51')]);expect(rows[0].id).toBe(rows[1].id);expect(provider.readRepositorySnapshot).not.toHaveBeenCalled()
  await service.process(rows[0].id);await service.process(rows[0].id)
  const report=await service.get(owner,'51');expect(report.assessment).toMatchObject({state:'COMPLETED',sourceSha:sha,report:{mode:'INSPECTION_ONLY',completeness:'PARTIAL'}})
  expect(await fixture.prisma.notificationEvent.count()).toBe(1);expect(await fixture.prisma.repositoryStandardsSelection.count()).toBe(0);expect(await fixture.prisma.gatePolicyRevision.count()).toBe(0);expect(await fixture.prisma.commitAssessment.count()).toBe(0)
+})
+it('automatically scans the selected repository without standards, CI or manual runtime approval and stores verified findings',async()=>{
+ const key=generateKeyPairSync('ed25519'),publicKey=key.publicKey.export({type:'spki',format:'pem'}).toString(),privateKey=key.privateKey.export({type:'pkcs8',format:'pem'}).toString()
+ const ids=['secrets.scan','security.sast','quality.reliability','quality.maintainability','quality.duplication','security.hotspots'] as const
+ const pkg={version:1 as const,environmentId:'health-fixture',runtime:'runc' as const,controlsHash:'d'.repeat(64),controllerPublicKey:publicKey,createdAt:new Date(Date.now()-60000).toISOString(),tools:ids.map(ruleId=>({ruleId,image:'sha256:'+'b'.repeat(64),toolVersion:'fixture-1',license:nativeAdapters[ruleId].license,configHash:'c'.repeat(64),reviewDigest:'d'.repeat(64),expiresAt:'2099-01-01T00:00:00Z',databaseBuiltAt:null}))}
+ let admitted=false
+ const scanner={package:vi.fn(async()=>pkg),verify:new HealthScannerClient().verify,call:vi.fn(async(action:string,input:any)=>{
+  if(action==='status'&&!admitted)return {state:'NOT_FOUND'}
+  if(action==='admit'){admitted=true;return {state:'PREPARING'}}
+  const {plan,ruleIds,...scope}=input,authority=healthScannerAuthority(pkg,owner.organizationId!)
+  const receipt:any={...scope,version:1,environmentId:pkg.environmentId,controlsHash:pkg.controlsHash,toolReviewHash:authority.tools.reviewHash,startedAt:new Date(Date.now()-1000).toISOString(),finishedAt:new Date().toISOString(),cancelled:false,checks:ruleIds.map((ruleId:any)=>{
+   const tool=pkg.tools.find(tool=>tool.ruleId===ruleId)!,adapter=nativeAdapters[ruleId as keyof typeof nativeAdapters]
+   return {ruleId,state:'INCOMPLETE',reason:'SCAN_ERRORS',reportHash:null,summary:null,adapterId:adapter.id,image:tool.image,toolVersion:tool.toolVersion,configHash:tool.configHash,commandHash:digest(adapter),exitCode:null,cleanupConfirmed:true,coverage:'PARTIAL',findings:[]}
+  })}
+  const sast=receipt.checks.find((check:any)=>check.ruleId==='security.sast')
+  Object.assign(sast,{state:'FAIL',reason:'FINDINGS_REPORTED',reportHash:'f'.repeat(64),summary:{runs:1,results:1,suppressed:0},exitCode:1,fileAnalysis:{version:1,formula:'semgrep-candidate-files-v1',scope:'js-ts-python',candidateFiles:1,analyzedFiles:1,skippedFiles:0,pathsDigest:'e'.repeat(64)},findings:[{category:'security',fingerprint:'f'.repeat(64),severity:'high',title:'Dynamic code execution requires review',ruleId:'preflyt-js-eval',path:'app.ts',line:1,endLine:1,suppressed:false}]})
+  return {state:'COMPLETE',signature:signNativeReceipt(receipt,privateKey,publicKey),cleanupConfirmed:true}
+ })}
+ provider.readHealthScanSource.mockResolvedValue({source:{sourceHash:'e'.repeat(64)},excludedFiles:0,originalTreeSha:'b'.repeat(40)})
+ runtime.status.mockClear()
+ service=new RepositoryHealthService(fixture.prisma,new AuthorizationService(fixture.prisma),provider as any,runtime as any,new FindingSourceStore(fixture.prisma,provider as any),scanner as any)
+ const scan=await service.initial(owner.identityId,'51')
+ await service.process(scan.id)
+ expect(scanner.call).toHaveBeenCalledWith('admit',expect.objectContaining({repositoryId:'51',sourceSha:sha,selectionId:'health:'+scan.id}),expect.anything())
+ await fixture.prisma.repositoryHealthAssessment.update({where:{id:scan.id},data:{leaseUntil:null}})
+ await service.process(scan.id)
+ const result=await service.get(owner,'51')
+ expect(result.assessment).toMatchObject({state:'COMPLETED',report:{mode:'EXECUTED',findings:[expect.objectContaining({severity:'high',path:'app.ts',line:1})]}})
+ admitted=false
+ scanner.call.mockClear()
+ const security=await service.start(owner,'51',{requestKey:randomUUID(),category:'security'})
+ await service.process(security.id)
+ expect(scanner.call).toHaveBeenCalledWith('admit',expect.objectContaining({ruleIds:['secrets.scan','security.sast','security.hotspots']}),expect.anything())
+ await fixture.prisma.repositoryHealthAssessment.update({where:{id:security.id},data:{leaseUntil:null}})
+ await service.process(security.id)
+ expect((await service.get(owner,'51')).assessment).toMatchObject({id:security.id,category:'security',report:{selection:'security',completeness:'PARTIAL'}})
+ expect(runtime.status).not.toHaveBeenCalled()
+ expect(await fixture.prisma.nativeExecutionRequest.count()).toBe(0)
+ expect(await fixture.prisma.repositoryStandardsSelection.count()).toBe(0)
+ expect(await fixture.prisma.commitAssessment.count()).toBe(0)
+ await expect(service.get(outsider,'51')).rejects.toThrow()
 })
 it('enforces organization scope, separate execution permission, invalid branch and reassessment limits',async()=>{
  await expect(service.initial(outsider.identityId,'51')).rejects.toThrow();await expect(service.start(developer,'51',{requestKey:randomUUID()})).rejects.toThrow();await expect(service.start(owner,'51',{branch:'refs/main',requestKey:randomUUID()})).rejects.toThrow()
@@ -70,6 +143,28 @@ it('changing branches preserves reports and branch advancement marks the pinned 
  expect((await service.get(owner,'51',first.id)).assessment?.branch).toBe('development');expect((await service.get(owner,'51')).assessment?.branch).toBe('release')
  await fixture.prisma.repositoryHealthTarget.update({where:{repositoryId:repoId},data:{headCheckedAt:new Date(0)}});provider.verifyReadinessBranch.mockResolvedValue('e'.repeat(40))
  expect((await service.get(owner,'51')).freshness).toBe('UNVERIFIED');expect((await service.freshness(owner,'51',second.id)).freshness).toBe('STALE');expect((await service.get(owner,'51')).freshness).toBe('STALE');expect((await fixture.prisma.repositoryHealthAssessment.findUniqueOrThrow({where:{id:first.id}})).sourceSha).toBe(sha)
+})
+it('reads the requested branch without changing the saved target or borrowing another branch report',async()=>{
+ const first=await service.initial(owner.identityId,'51');await service.process(first.id)
+ provider.readRepositorySnapshot.mockResolvedValueOnce({sourceSha:'d'.repeat(40),treeSha:'b'.repeat(40),branch:'codex/coverage',fullName:'fixture/repo',complete:true,warnings:[],files:[]})
+ const second=await service.start(owner,'51',{branch:'codex/coverage',requestKey:randomUUID()});await service.process(second.id)
+ const get=(query:string,actor='owner')=>request(app.getHttpServer()).get('/github/repositories/51/health?'+query).set('Cookie','health.sid='+actor)
+ const development=await get('branch=development')
+ expect(development.status).toBe(200)
+ expect(development.body).toMatchObject({branch:'development',assessment:{id:first.id,branch:'development',sourceSha:sha},ciCoverage:{sourceSha:sha}})
+ expect(development.body.history.every((row:any)=>row.branch==='development')).toBe(true)
+ expect(development.body.checkedAt).toBeNull()
+ provider.verifyReadinessBranch.mockClear()
+ const freshness=await request(app.getHttpServer()).get('/github/repositories/51/health/freshness?assessment='+first.id).set('Cookie','health.sid=owner')
+ expect(freshness.body).toMatchObject({branch:'development',checkedAt:null,freshness:'UNVERIFIED'})
+ expect(provider.verifyReadinessBranch).not.toHaveBeenCalled()
+ expect((await get('branch=codex%2Fcoverage')).body).toMatchObject({branch:'codex/coverage',assessment:{id:second.id,sourceSha:'d'.repeat(40)}})
+ expect((await get('branch=unassessed')).body).toMatchObject({branch:'unassessed',assessment:null,history:[],total:0,ciCoverage:{sourceSha:null,state:'MISSING'}})
+ expect((await get('assessment='+first.id)).body.branch).toBe('development')
+ expect((await get('branch=codex%2Fcoverage&assessment='+first.id)).body.assessment).toBeNull()
+ expect((await get('branch=refs%2Fmain')).status).toBe(400)
+ expect((await get('branch=development','outsider')).status).toBe(403)
+ expect((await fixture.prisma.repositoryHealthTarget.findUniqueOrThrow({where:{repositoryId:repoId}})).branch).toBe('codex/coverage')
 })
 it('cancels queued jobs, records source failures and denies retrieval after selection is revoked',async()=>{
  const row=await service.initial(owner.identityId,'51');await service.cancel(owner,'51',row.id);await service.process(row.id);expect((await service.get(owner,'51')).assessment?.state).toBe('CANCELLED');expect(provider.readRepositorySnapshot).not.toHaveBeenCalled()
@@ -95,7 +190,7 @@ it.each(['secrets.scan','quality.reliability','quality.maintainability','quality
  await sink.complete(native.id,signNativeReceipt(receipt,key,pub));await db.repositoryHealthAssessment.update({where:{id:first.id},data:{leaseUntil:null}});await service.process(first.id)
  const report=(await service.get(owner,'51')).assessment!;expect(report.report?.findings[0]).toMatchObject({path:'app.ts',line:1,category});expect(report.report?.completeness).toBe('PARTIAL');expect(await db.commitAssessment.count()).toBe(0);expect(await db.gitHubCheckPublication.count()).toBe(0)
  if(ruleId==='quality.duplication') expect(report.report?.measurements?.duplication).toMatchObject({analyzedLines:100,duplicatedLines:20})
- if(ruleId==='secrets.scan') { const excerpt=await service.source(owner,'51',first.id,report.report!.findings[0].fingerprint);expect(excerpt.reason).toContain('hidden');expect(provider.readHealthSource).not.toHaveBeenCalled() }
+ if(ruleId==='secrets.scan') { provider.readHealthSource.mockResolvedValue('sensitive fixture\ncontext'); const excerpt=await service.source(owner,'51',first.id,report.report!.findings[0].fingerprint);expect(excerpt.lines[0]?.text).toBe('[Potential credential redacted]');expect(provider.readHealthSource).toHaveBeenCalled() }
  expect(await db.notificationEvent.count()).toBe(1)
 })
 
@@ -194,7 +289,7 @@ it('HTTP health portfolio admits authorized readers and keeps reports within liv
  expect(revoked.body.items).toHaveLength(0);expect(revoked.body.summary.repositories).toBe(0)
 })
 
-it('charts only matching complete reports for the displayed branch and revision, independent of history pagination', async () => {
+it('charts available branch reports while comparing only equivalent coverage and respecting the displayed revision', async () => {
  const db=fixture.prisma, first=await service.initial(owner.identityId,'51');await service.process(first.id)
  const stored=await db.repositoryHealthAssessment.findUniqueOrThrow({where:{id:first.id}})
  const complete={...(stored.report as any),mode:'EXECUTED',completeness:'COMPLETE',comparisonKey:'qualified-tools',findings:[]}
@@ -204,16 +299,17 @@ it('charts only matching complete reports for the displayed branch and revision,
  }})
  await db.repositoryHealthAssessment.update({where:{id:first.id},data:{report:complete,createdAt:new Date(Date.now()-10000),finishedAt:new Date(Date.now()-10000)}})
  await create('partial',-8000,'development',{...complete,completeness:'PARTIAL'})
- await create('different-tools',-6000,'development',{...complete,comparisonKey:'other-tools'})
+ const different=await create('different-tools',-6000,'development',{...complete,comparisonKey:'other-tools'})
  await create('other-branch',-4000,'release')
  const current=await create('current',-2000,'development',{...complete,findings:[{fingerprint:'f'.repeat(64)}]})
  const future=await create('future',0)
  const read=await service.get(owner,'51',current.id,2)
  expect(read.history).toHaveLength(0)
- expect(read.timeline.map(p=>[p.id,p.findings])).toEqual([[first.id,0],[current.id,1]])
+ expect(read.timeline.map(p=>[p.id,p.findings])).toEqual([[first.id,0],[different.id,0],[current.id,1]])
  expect(read.timeline.some(p=>p.id===future.id)).toBe(false)
+ expect(read.timeline.map(p=>p.comparableFindings)).toEqual([0,null,1])
  const partial=await db.repositoryHealthAssessment.findFirstOrThrow({where:{requestKey:'partial'}})
- expect((await service.get(owner,'51',partial.id)).timeline).toEqual([])
+ expect((await service.get(owner,'51',partial.id)).timeline).toMatchObject([{id:first.id,findings:0,comparableFindings:null}])
 })
 
 it('filters the health summary and priority findings by an authorized repository', async () => {
@@ -315,10 +411,38 @@ it('persists revision-specific hotspot reviews with rationale, audit, conflicts 
  await expect(service.saveHotspotReview(owner,'51',row.id,fingerprint,{state:'SAFE',note:'Revoked.',expectedRevision:3})).rejects.toThrow()
 })
 
-it('keeps Health static and rejects manual coverage execution',async()=>{
+it('runs one Health category at a time and keeps same-commit results from earlier category runs available',async()=>{
+ const key=randomUUID()
+ const first=await service.start(owner,'51',{requestKey:key,category:'reliability'})
+ expect(first.category).toBe('reliability')
+ expect((await service.start(owner,'51',{requestKey:key,category:'reliability'})).id).toBe(first.id)
+ await expect(service.start(owner,'51',{requestKey:key,category:'maintainability'})).rejects.toThrow('different assessment scope')
+ await service.process(first.id);await service.process(first.id)
+ const saved=await fixture.prisma.repositoryHealthAssessment.findUniqueOrThrow({where:{id:first.id}})
+ expect((saved.plan as any).steps.filter((step:any)=>step.ruleId).map((step:any)=>step.ruleId)).toEqual(['quality.reliability'])
+ expect((saved.report as any).selection).toBe('reliability')
+ expect((saved.report as any).analyses.map((a:any)=>a.id)).toEqual(['quality.reliability'])
+ await fixture.prisma.repositoryHealthAssessment.update({where:{id:first.id},data:{report:{...(saved.report as any),mode:'EXECUTED',analyses:[{...(saved.report as any).analyses[0],state:'PASS',reason:'CHECKS_PASSED',findingsRetained:0,findingsReported:0,reportHash:'f'.repeat(64)}]}}})
+ const second=await service.start(owner,'51',{requestKey:randomUUID(),category:'maintainability'})
+ await service.process(second.id);await service.process(second.id)
+ const result=await service.get(owner,'51')
+ expect(result.assessment).toMatchObject({id:second.id,category:'maintainability',report:{selection:'maintainability',completeness:'PARTIAL',analyses:[{id:'quality.maintainability'}]}})
+ expect(result.categoryResults.reliability).toMatchObject({assessmentId:first.id,value:'0'})
+ expect(result.categoryResults.coverage).toBeNull()
+ expect((await service.portfolio(owner)).items[0].result).toBe('INCOMPLETE')
+ const server=app.getHttpServer()
+ await request(server).post('/github/repositories/51/health').set('Cookie','health.sid=owner').set('Origin','http://localhost:5173').send({requestKey:randomUUID(),category:'unknown'}).expect(400)
+})
+it('explains when a selected category has no applicable files instead of claiming a clean result',async()=>{
+ provider.readRepositorySnapshot.mockResolvedValueOnce({sourceSha:sha,treeSha:'b'.repeat(40),branch:'development',fullName:'fixture/repo',complete:true,warnings:[],files:[{path:'README.md',sha:'c'.repeat(40),size:20}]})
+ const row=await service.start(owner,'51',{requestKey:randomUUID(),category:'reliability'})
+ await service.process(row.id)
+ expect((await service.get(owner,'51')).assessment).toMatchObject({state:'FAILED',reason:'NO_APPLICABLE_ANALYSIS',category:'reliability',sourceSha:null})
+})
+it('never selects Health test execution and rejects coverage execution requests',async()=>{
  const first=await service.initial(owner.identityId,'51')
  expect((await fixture.prisma.repositoryHealthAssessment.findUniqueOrThrow({where:{id:first.id}})).includeCoverage).toBe(false)
- await expect(service.start(owner,'51',{includeCoverage:true,requestKey:randomUUID()})).rejects.toThrow('Test coverage comes from CI')
+
  await service.process(first.id)
  expect((await service.get(owner,'51',first.id)).assessment?.report?.analyses.map(a=>a.id)).not.toContain('tests.coverage')
  await request(app.getHttpServer()).post('/github/repositories/51/health').set('Cookie','health.sid=owner').set('Origin','http://localhost:5173').send({requestKey:randomUUID(),includeCoverage:true}).expect(400)
@@ -375,4 +499,42 @@ it('keeps priority findings on the selected branch, including when its report is
  expect(clean.items[0].overallHealth.status).toBe('HEALTHY')
  expect(clean.summary.high).toBe(0)
  expect(clean.priorityFindings).toEqual([])
+})
+
+it('removes test configuration and discovery endpoints',async()=>{
+ const server=app.getHttpServer()
+ await request(server).post('/github/repositories/51/health/test-settings').set('Cookie','health.sid=owner').send({}).expect(404)
+ await request(server).get('/github/repositories/51/health/test-apps').set('Cookie','health.sid=owner').expect(404)
+ await request(server).post('/github/repositories/51/health').set('Cookie','health.sid=owner').set('Origin','http://localhost:5173').send({requestKey:randomUUID(),category:'coverage'}).expect(400)
+})
+
+it('retains a safe GitHub retry time and exposes the reason for pre-report failures only to authorized readers', async () => {
+ provider.readRepositorySnapshot.mockRejectedValueOnce(new GitHubRateLimitError(60000))
+ const queued=await service.initial(owner.identityId,'51')
+ await service.process(queued.id)
+ const read=await service.get(owner,'51')
+ expect(read.assessment).toMatchObject({state:'FAILED',sourceSha:null,report:null,reason:'GITHUB_RATE_LIMITED'})
+ expect(Date.parse(read.assessment!.retryAt!)).toBeGreaterThan(Date.now())
+ expect(read.history[0].retryAt).toBe(read.assessment!.retryAt)
+ expect(JSON.stringify(read)).not.toContain('retryAfterSeconds')
+ await expect(service.get(outsider,'51')).rejects.toThrow()
+})
+
+it.each(['GIT_UNAVAILABLE','SOURCE_FETCH_FAILED','SOURCE_FETCH_TIMED_OUT','SOURCE_FETCH_LIMIT_EXCEEDED'] as const)('records safe Git failure %s without admitting scanners',async(code)=>{
+ const scanner={package:vi.fn(async()=>({})),call:vi.fn()}
+ provider.readHealthScanSource.mockRejectedValueOnce(new HealthGitSourceError(code))
+ service=new RepositoryHealthService(fixture.prisma,new AuthorizationService(fixture.prisma),provider as any,runtime as any,new FindingSourceStore(fixture.prisma,provider as any),scanner as any)
+ const row=await service.initial(owner.identityId,'51');await service.process(row.id)
+ const result=await service.get(owner,'51')
+ expect(result.assessment).toMatchObject({state:'FAILED',reason:code,sourceSha:sha,report:{mode:'INSPECTION_ONLY'}})
+ expect(result.assessment!.report!.analyses.every(a=>a.reason===code)).toBe(true)
+ expect(scanner.call).not.toHaveBeenCalled()
+})
+
+it('retires previously queued test-only plans without fetching source or executing tests',async()=>{
+ const row=await service.initial(owner.identityId,'51')
+ await fixture.prisma.repositoryHealthAssessment.update({where:{id:row.id},data:{plan:{requestedCategory:'coverage'},includeCoverage:true}})
+ await service.process(row.id)
+ expect(provider.readRepositorySnapshot).not.toHaveBeenCalled()
+ expect((await service.get(owner,'51')).assessment).toMatchObject({state:'FAILED',reason:'HEALTH_TEST_EXECUTION_REMOVED'})
 })

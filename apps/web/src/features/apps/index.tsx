@@ -67,7 +67,7 @@ import {
 } from '../health/inventory-health'
 import { canPerform } from '../workspace/scoped-access'
 
-const route = getRouteApi('/_authenticated/apps/')
+const route = getRouteApi('/_authenticated/repositories/')
 
 type Repository = {
   githubId: string
@@ -795,7 +795,7 @@ export function Apps() {
                   {hasLoaded
                     ? `${visibleRepositories.length} of ${repositories.length} repositories`
                     : 'Loading inventory'}{' '}
-                  · selection queues a health assessment without modifying code.
+                  · selecting a repository automatically starts its Health scan.
                 </p>
               </div>
               <Button

@@ -3,6 +3,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { RepositoryProfilePage } from '@/features/repositories/repository-profile-page'
 
 const repositorySearchSchema = z.object({
+  branch: z.string().min(1).max(244).optional().catch(undefined),
   health: z.string().uuid().optional().catch(undefined),
   assessment: z
     .string()

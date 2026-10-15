@@ -50,7 +50,9 @@ describe('enterprise navigation permissions and scope', () => {
   })
   it('highlights each page under its direct sidebar entry', () => {
     for (const [path, parent] of [
-      ['/repositories/123?tab=assessments', '/apps'],
+      ['/repositories/123?tab=assessments', '/repositories'],
+      ['/repositories', '/repositories'],
+      ['/apps?github=connected', '/repositories'],
       ['/contributors/person?days=30', '/contributors'],
       ['/assessments?repository=123', '/assessments'],
       ['/quality-gates?repository=123', '/quality-gates'],

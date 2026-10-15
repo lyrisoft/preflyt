@@ -153,3 +153,19 @@ it('deduplicates formatting variants and leaves a genuine description with a dis
   )
   expect(valid.solution).toBe('Use bound parameters.')
 })
+it('uses saved PR impact and severity as advisory guidance without replacing the recommendation', () => {
+  const text = findingGuidanceText({
+    ...finding,
+    origin: 'ai',
+    sourceSha: 'a'.repeat(40),
+    title: 'A queued retry can be lost.',
+    recommendation: 'Persist the retry before returning.',
+    impact: 'A worker interruption can leave this PR without a review.',
+    severity: 'medium',
+  })
+  expect(text.title).toBe('A queued retry can be lost.')
+  expect(text.explanation).toContain('worker interruption')
+  expect(text.solution).toBe('Persist the retry before returning.')
+  expect(text.impactLabel).toBe('Potential impact')
+  expect(text.attribution).toContain('Suggestions only')
+})

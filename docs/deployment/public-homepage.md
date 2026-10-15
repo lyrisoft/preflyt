@@ -20,7 +20,7 @@ Compose passes these optional public build arguments:
 - `PUBLIC_SITE_URL`: an HTTPS origin, without path, credentials, query or fragment. Used for all public canonical URLs, sharing metadata and sitemap URLs. No canonical URL is invented when it is absent.
 - `PUBLIC_SITE_INDEXABLE`: defaults to `false`. Set `true` only for the intended public deployment; requires `PUBLIC_SITE_URL`.
 
-Rebuild the web image when changing these values. Private routes and the rendered 404 always retain noindex metadata, independently of robots.txt. The five W2 public pages are included. Public Open Graph/Twitter metadata and WebPage JSON-LD describe only the actual public page; no offers, ratings or certifications are generated. Public links currently use `https://lyrisoft.github.io/preflyt/`; an installation-specific documentation URL override is not implemented.
+Rebuild the web image when changing these values. Private routes and the rendered 404 always retain noindex metadata, independently of robots.txt. The five W2 public pages are included. Public Open Graph/Twitter metadata and WebPage JSON-LD describe only the actual public page; no offers, ratings or certifications are generated. Public links currently use `https://docs.preflytlabs.com/`; an installation-specific documentation URL override is not implemented.
 
 ## Historical W1 verification, 12 October 2026
 

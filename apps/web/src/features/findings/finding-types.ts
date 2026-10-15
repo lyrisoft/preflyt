@@ -12,7 +12,19 @@ export type FindingGuidance = {
 }
 
 export type Finding = {
-  origin?: 'ci' | 'health'
+  origin?: 'ci' | 'health' | 'ai'
+  recommendation?: string
+  impact?: string | null
+  pullRequest?: number
+  pullRequestUrl?: string
+  codeSide?: 'LEFT' | 'RIGHT' | null
+  evidenceLocations?: {
+    ref: string
+    path?: string
+    line?: number
+    side?: string
+    label?: string
+  }[]
   health?: string
   healthFingerprint?: string
   relatedLocations?: { path: string; line: number; endLine: number }[]
@@ -22,7 +34,7 @@ export type Finding = {
   repository: string
   sourceSha: string
   assessmentId: string
-  observedAt: string
+  observedAt: string | null
   severity: string
   status: string
   path: string | null
@@ -56,7 +68,7 @@ export const severityTone: Record<string, StatusTone> = {
   critical: 'error',
   high: 'error',
   medium: 'warning',
-  low: 'info',
+  low: 'success',
   unknown: 'neutral',
 }
 export const triageLabels: Record<string, string> = {

@@ -2,6 +2,7 @@ import { FindingsService } from './findings/findings.service.js'
 import { FindingAiGuidanceService } from './findings/finding-ai-guidance.service.js'
 import { FindingSourceStore } from './findings/finding-source-store.service.js'
 import { RepositoryHealthService } from './health/repository-health.service.js'
+import { HealthScannerClient } from './health/health-scanner-client.js'
 import { watchConfiguration } from './configuration/configuration-store.js'
 import { TeamsService } from './teams/teams.service.js'
 import { SkillReviewService } from './intelligence/skill-review.service.js'
@@ -141,13 +142,21 @@ async function start() {
   const aiReviews = new SkillReviewService(prisma, emailAuthorization, assessments, new AiConfigurationService(prisma, emailAuthorization), githubProvider)
   let aiReviewRun: Promise<void> | undefined
   const native = new NativeDispatchService(prisma, emailAuthorization, githubProvider, new NativeStatusService(emailAuthorization), new NativeResultService(prisma, emailAuthorization, assessments))
-  const health = new RepositoryHealthService(prisma, emailAuthorization, githubProvider, new NativeStatusService(emailAuthorization), findingSources)
+  const health = new RepositoryHealthService(prisma, emailAuthorization, githubProvider, new NativeStatusService(emailAuthorization), findingSources, new HealthScannerClient())
   const findingAi = new FindingAiGuidanceService(prisma, emailAuthorization, new FindingsService(prisma, emailAuthorization, findingSources), health, findingSources, new AiConfigurationService(prisma, emailAuthorization))
   let findingAiRun: Promise<void> | undefined
   const healthQueue = new Queue('repository-health', { ...producerConfig, connection: producer })
   const healthWorker = new Worker('repository-health', async job => {
     if (typeof job.data?.id !== 'string' || !/^[a-f0-9-]{36}$/.test(job.data.id)) throw new Error('Invalid health job')
-    await telemetryOperation('preflyt.repository.health', { 'health.assessment.id': job.data.id }, () => health.process(job.data.id))
+    console.info(JSON.stringify({event:'health.worker.processing',assessmentId:job.data.id}))
+    try {
+      await telemetryOperation('preflyt.repository.health', { 'health.assessment.id': job.data.id }, () => health.process(job.data.id))
+      const result=await prisma.repositoryHealthAssessment.findUnique({where:{id:job.data.id},select:{state:true,reason:true,plan:true}}).catch(()=>null)
+      console.info(JSON.stringify({event:'health.worker.progress',assessmentId:job.data.id,state:result?.state,stage:(result?.plan as any)?.stage,reason:result?.reason}))
+    } catch (error) {
+      console.error(JSON.stringify({event:'health.worker.failed',assessmentId:job.data.id,reason:'PROCESSING_FAILED'}))
+      throw error
+    }
   }, { ...consumerConfig, connection: consumer, concurrency: 2 })
   let healthRun: Promise<void> | undefined
   let nativeRun: Promise<void> | undefined

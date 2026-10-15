@@ -56,7 +56,7 @@ export class GitHubController {
   async setupCallback(@Req() req: Request, @Res() res: Response) {
     // A fresh manifest installation has no workspace transaction. Installation alone
     // never grants access: connect it through the normal owner-verified flow.
-    if (req.query.state === undefined) return res.redirect(this.github.frontendOrigin + '/apps')
+    if (req.query.state === undefined) return res.redirect(this.github.frontendOrigin + '/repositories')
     const binding = req.cookies?.[this.github.setupCookieName] as
       string
       | undefined
@@ -74,7 +74,7 @@ export class GitHubController {
       return res.redirect(authorizationUrl)
     } catch {
       this.clearSetupCookie(res)
-      return res.redirect(this.github.frontendOrigin + '/apps?github=error')
+      return res.redirect(this.github.frontendOrigin + '/repositories?github=error')
     }
   }
 
@@ -90,13 +90,13 @@ export class GitHubController {
         typeof req.query.code === 'string' ? req.query.code : '',
       )
       this.clearSetupCookie(res)
-      const redirect = new URL('/apps', this.github.frontendOrigin)
+      const redirect = new URL('/repositories', this.github.frontendOrigin)
       redirect.searchParams.set('github', 'connected')
       redirect.searchParams.set('account', result.accountLogin)
       return res.redirect(redirect.href)
     } catch {
       this.clearSetupCookie(res)
-      return res.redirect(this.github.frontendOrigin + '/apps?github=error')
+      return res.redirect(this.github.frontendOrigin + '/repositories?github=error')
     }
   }
 

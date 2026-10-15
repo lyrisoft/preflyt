@@ -232,7 +232,7 @@ export class PipelineProcessingService {
           signerWorkflow: string;
           reports: {
             ruleId: string;
-            format: "junit" | "sarif";
+            format: "junit" | "sarif" | "lcov";
             content: string;
             sha256: string;
             proof?: string;
@@ -280,7 +280,7 @@ export class PipelineProcessingService {
             workflowId: run.workflowId,
             actorId: row.submittedById,
             submissionId: row.id,
-            ruleIds: payload.reports.map((report) => report.ruleId),
+            ruleIds: payload.reports.filter(report => report.ruleId !== "tests.coverage").map((report) => report.ruleId),
           });
         });
         let proofIncomplete = false;

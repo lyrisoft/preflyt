@@ -514,7 +514,7 @@ export function Dashboard() {
                             </div>
                           </div>
                           <Button variant='ghost' size='sm' asChild>
-                            <Link to='/apps'>
+                            <Link to='/repositories'>
                               View repositories
                               <ArrowUpRight />
                             </Link>
