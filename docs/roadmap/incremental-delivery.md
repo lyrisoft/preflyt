@@ -182,6 +182,8 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 
 - **P4.CQ:** Multi-skill contextual PR review with pinned skill versions, evidence validation, deduplication, cost/egress controls and opt-in GitHub inline feedback. See [Skill-Based Review](../product/skill-based-code-review.md).
 
+- **Cloud follow-up — remediation PRs (planned):** Investigate findings, CI failures and existing dependency PRs, propose bounded fixes, independently validate against frozen standards and create explicitly authorized draft PRs for human review. Complements Dependabot; AI never merges or waives checks. See the [Cloud remediation roadmap and implementation plan](../planning/cloud-remediation-roadmap.md). This separate private Cloud workstream preserves P0–P12 order and Community scope; architecture review and ADR-0002 execution/write qualification remain mandatory before implementation or real-repository write access.
+
 <a id="p4ri--versioned-repository-intelligence-for-ai-pr-reviews-planned-additive-follow-up"></a>
 
 #### P4.RI — Versioned Repository Intelligence for AI PR reviews (Cloud-only planned follow-up)

@@ -6,6 +6,7 @@ description: Deploy Preflyt to Kubernetes with the single-instance manifest bund
 ---
 
 import { CurlDownload } from '@site/src/components/Download'
+import {InstallationVersion} from '@site/src/components/InstallationVersion'
 
 # Kubernetes
 
@@ -21,6 +22,8 @@ The bundle (the `kubernetes` folder) uses the **same** web, API, worker and migr
 - Storage with backups, and capacity planning. Database and queue storage use retained PVCs on the default storage class.
 
 The namespace enforces restricted Pod Security. No host ports, host paths, cluster roles or application service-account tokens are installed.
+
+<InstallationVersion />
 
 ## Get the bundle
 
@@ -44,13 +47,7 @@ The folder contains `kustomization.yaml`, `resources.yaml` and `migration.yaml`.
    kubectl --context YOUR_CONTEXT create namespace preflyt
    ```
 
-2. **Set the release.** The images are tagged `:development` as a placeholder. Replace the tag with an existing stable version (`vX.Y.Z`) or development SHA tag:
-
-   ```bash
-   sed -i.bak -E 's#(ghcr\.io/lyrisoft/preflyt-[a-z-]+):development#\1:YOUR_PUBLISHED_VERSION#' resources.yaml migration.yaml
-   ```
-
-   For stronger guarantees, use the image digest instead of the tag. The API and worker must use the **same** API image.
+2. **Keep the matching images.** The downloaded bundle already pins all application images to the version shown above. For stronger guarantees, use the corresponding image digests. The API and worker must use the **same** API image.
 3. Set `WEB_ORIGIN` in the `preflyt-config` ConfigMap to your public HTTPS origin.
 4. Create the Secrets in the next table from protected files or your secret manager, not shell arguments.
 

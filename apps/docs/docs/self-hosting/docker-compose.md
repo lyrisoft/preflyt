@@ -8,6 +8,7 @@ description: Install Preflyt on a server with Docker Compose, with no source cod
 import Tabs from '@theme/Tabs'
 import TabItem from '@theme/TabItem'
 import { CurlDownload } from '@site/src/components/Download'
+import {InstallationVersion, GenerateEnvironment} from '@site/src/components/InstallationVersion'
 import ComposeYaml from '../_generated/compose-yaml.md'
 import EnvSnippet from '../_generated/env-production.md'
 
@@ -20,7 +21,7 @@ For a quick look on your own machine first, use the [Quick Start](../getting-sta
 ## What you need
 
 - A Linux server (or Docker Desktop host) with **Docker and Compose 2.23.1 or later**, at least **4 CPUs, 8 GiB of Docker memory and 20 GiB of free disk**. Check with `docker compose version`. The host must permit the bundled Docker-in-Docker engine container to run privileged.
-- **A release to run.** Use a published stable version (`vX.Y.Z`) or a development build (`sha-` plus the 40-character commit ID).
+- **The matching release images.** Use the version shown below.
 - **A public HTTPS address** for Preflyt, such as `https://preflyt.example.com`, and a reverse proxy that serves it. See [Reverse proxy and TLS](reverse-proxy.md).
 
 ## Repository Health scanner
@@ -29,7 +30,9 @@ The Compose file includes the Health scanner and a separate TLS-protected Docker
 
 The nested engine is the only privileged service. It has no host Docker socket, host directory mounts or published ports. Scanner jobs run without privileges, networking or application credentials, with read-only source and enforced CPU, memory and PID limits. This is container isolation, not a separate VM; use a dedicated Docker host for a production installation. The API and worker have HTTP access to the scanner and no engine credentials. See [Repository health](../user-guide/repository-health.md#scanner-service).
 
-Preflyt's release images are public on `ghcr.io/lyrisoft`. You do not need a GitHub account, registry token or `docker login` to pull them. Choose a stable version from [Preflyt releases](https://github.com/lyrisoft/preflyt/releases/latest); use the same version for every application image.
+Preflyt's release images are public on `ghcr.io/lyrisoft`. You do not need a GitHub account, registry token or `docker login` to pull them. Use the image tag matching the selected documentation version below.
+
+<InstallationVersion />
 
 ## 1. Add the compose file
 
@@ -86,22 +89,9 @@ chmod 600 .env
 </TabItem>
 <TabItem value="generate" label="Generate automatically">
 
-This command writes `.env` for you with freshly generated passwords and keys. Replace `REPLACE_WITH_PUBLISHED_VERSION` with your release first.
+This command writes `.env` with freshly generated passwords and keys and the matching image version.
 
-```bash
-cat > .env <<EOF
-PREFLYT_VERSION=REPLACE_WITH_PUBLISHED_VERSION
-WEB_ORIGIN=https://preflyt.example.com
-SUPER_ADMIN_USERNAME=admin
-SUPER_ADMIN_PASSWORD=$(openssl rand -hex 20)
-POSTGRES_PASSWORD=$(openssl rand -hex 24)
-DATABASE_APP_PASSWORD=$(openssl rand -hex 24)
-CONFIGURATION_ENCRYPTION_KEY=$(openssl rand -base64 32)
-GITHUB_USER_TOKEN_ENCRYPTION_KEY=$(openssl rand -base64 32)
-AI_PROVIDER_ENCRYPTION_KEY=$(openssl rand -base64 32)
-EOF
-chmod 600 .env
-```
+<GenerateEnvironment production />
 
 Read your sign-in password with `grep SUPER_ADMIN_PASSWORD .env`.
 

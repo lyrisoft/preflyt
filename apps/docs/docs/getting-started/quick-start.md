@@ -8,6 +8,7 @@ description: Run Preflyt on your machine with Docker Compose, with no source cod
 import Tabs from '@theme/Tabs'
 import TabItem from '@theme/TabItem'
 import { CurlDownload } from '@site/src/components/Download'
+import {InstallationVersion, GenerateEnvironment} from '@site/src/components/InstallationVersion'
 import ComposeYaml from '../_generated/compose-yaml.md'
 import EnvSnippet from '../_generated/env-local.md'
 
@@ -24,9 +25,11 @@ You need:
 - **Docker with Compose 2.23.1 or later.** Check with `docker compose version`.
 - **`curl` and `openssl`**, which macOS and Linux include.
 - **At least 4 CPUs, 8 GiB of Docker memory and 20 GiB of free disk** for the application and scanner images. The bundled scanner engine uses Docker-in-Docker; the host must permit its privileged engine container. No host Docker socket is mounted.
-- **The release to run.** Use a published stable version such as `vX.Y.Z`, or a development build identified by `sha-` followed by the 40-character commit ID. Choose an existing tag from [Preflyt releases](https://github.com/lyrisoft/preflyt/releases/latest).
+- **The matching release images.** Use the version shown below.
 
-Preflyt's release images are public on `ghcr.io/lyrisoft`. You do not need a GitHub account, registry token or `docker login` to pull them. Choose a stable version from [Preflyt releases](https://github.com/lyrisoft/preflyt/releases/latest); use the same version for every application image.
+Preflyt's release images are public on `ghcr.io/lyrisoft`. You do not need a GitHub account, registry token or `docker login` to pull them. Use the image tag matching the selected documentation version below.
+
+<InstallationVersion />
 
 ## 1. Add the compose file
 
@@ -83,31 +86,16 @@ chmod 600 .env
 </TabItem>
 <TabItem value="generate" label="Generate automatically">
 
-This command writes `.env` for you with freshly generated passwords and keys. Replace `REPLACE_WITH_PUBLISHED_VERSION` with your release first.
+This command writes `.env` with freshly generated passwords and keys and the matching image version.
 
-```bash
-cat > .env <<EOF
-PREFLYT_VERSION=REPLACE_WITH_PUBLISHED_VERSION
-WEB_ORIGIN=http://localhost:8080
-SUPER_ADMIN_USERNAME=admin
-SUPER_ADMIN_PASSWORD=$(openssl rand -hex 20)
-POSTGRES_PASSWORD=$(openssl rand -hex 24)
-DATABASE_APP_PASSWORD=$(openssl rand -hex 24)
-CONFIGURATION_ENCRYPTION_KEY=$(openssl rand -base64 32)
-GITHUB_USER_TOKEN_ENCRYPTION_KEY=$(openssl rand -base64 32)
-AI_PROVIDER_ENCRYPTION_KEY=$(openssl rand -base64 32)
-PREFLYT_NODE_ENV=development
-PREFLYT_COOKIE_SECURE=false
-EOF
-chmod 600 .env
-```
+<GenerateEnvironment />
 
 Read your sign-in password with `grep SUPER_ADMIN_PASSWORD .env`.
 
 </TabItem>
 </Tabs>
 
-Set `PREFLYT_VERSION` to your selected published stable release.
+Keep the generated `PREFLYT_VERSION` to match these instructions.
 
 :::warning Keep this file safe
 Generate all three encryption keys before the first startup, even if you will configure AI later. `AI_PROVIDER_ENCRYPTION_KEY` protects saved AI provider credentials. Keep each key stable and back up all three apart from the database. Losing or replacing a key makes the credentials encrypted with it unreadable.

@@ -1,7 +1,9 @@
+import {useInstallationVersion} from './InstallationVersion'
 import Link from '@docusaurus/Link'
 
 /** Landing header: what Preflyt is, and the two ways in. */
 export default function DocsHero() {
+  const {next, prefix, imageTag} = useInstallationVersion()
   return (
     <div className='pf-hero'>
       <p className='pf-eyebrow'>Engineering assurance for GitHub</p>
@@ -16,11 +18,11 @@ export default function DocsHero() {
       <div className='pf-hero__actions'>
         <Link
           className='button button--primary'
-          to='/getting-started/quick-start'
+          to={`${prefix}/getting-started/quick-start`}
         >
           Quick Start
         </Link>
-        <Link className='button button--secondary' to='/self-hosting/'>
+        <Link className='button button--secondary' to={`${prefix}/self-hosting/`}>
           Self-host Preflyt
         </Link>
       </div>
@@ -29,14 +31,14 @@ export default function DocsHero() {
           className='pf-release-badges'
           aria-label='Releases and Community license'
         >
-          {/* Update the verified Preflyt release badge when publishing a release. */}
+          {/* Documentation identity follows the selected version, not GitHub's latest release. */}
           <a
-            href='https://github.com/lyrisoft/preflyt/releases/tag/v0.1.1'
-            aria-label='Preflyt v0.1.1 release'
+            href={next ? 'https://github.com/lyrisoft/preflyt/tree/development' : `https://github.com/lyrisoft/preflyt/releases/tag/${imageTag}`}
+            aria-label={next ? 'Preflyt Next documentation' : `Preflyt ${imageTag} release`}
           >
             <img
-              src='https://img.shields.io/badge/Preflyt-v0.1.1-2f6f60?logo=github'
-              alt='Preflyt v0.1.1'
+              src={`https://img.shields.io/badge/Preflyt-${next ? 'Next' : imageTag}-2f6f60?logo=github`}
+              alt={`Preflyt ${next ? 'Next (unreleased)' : imageTag}`}
               height={20}
             />
           </a>

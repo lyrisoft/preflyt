@@ -176,3 +176,37 @@ disabled; enable it only for the intended production origin.
 The pricing page intentionally advertises only a simple Cloud coming-soon card.
 Detailed Cloud features/workflows and Cloud FAQs are excluded from the page source
 and generated HTML. Private commercial planning is not a public website feature.
+
+## AWS Amplify website hosting
+
+The root `amplify.yml` builds only `@preflyt/web` in website mode and publishes
+`apps/web/dist`. It pins Node 24.4.1 and pnpm 10.26.2, installs the locked
+dependencies without lifecycle scripts, and uses the hoisted linker inside the
+Amplify build container. It does not build the API or documentation site.
+
+For an existing Amplify app, set **`AMPLIFY_MONOREPO_APP_ROOT=apps/web`** in its
+console environment variables. This must match `appRoot` in the file. Commands
+run from the repository root through `buildPath: /`; do not change the artifact
+directory to `dist` or the package filter to `web`. See the
+[AWS monorepo build specification](https://docs.aws.amazon.com/amplify/latest/userguide/monorepo-configuration.html).
+
+`VITE_WEBSITE_MODE=true` is enforced in the build command. No API URL or secrets
+are required. Configure `PUBLIC_SITE_URL` with the intended public HTTPS origin
+and `PUBLIC_SITE_INDEXABLE=true` only for the production domain; previews remain
+non-indexable by default. Those settings are included in Turbo's build cache key.
+
+Keep Amplify's hosting rules appropriate for static prerendered pages: serve the
+generated public paths and `404.html`; do not add a blanket SPA rewrite that
+turns authentication, workspace or API paths into successful website responses.
+Hosting redirects and rewrites are Amplify service settings, not `amplify.yml`.
+
+Local build and public-output checks:
+
+```sh
+VITE_WEBSITE_MODE=true pnpm exec turbo run build --filter=@preflyt/web
+pnpm --filter @preflyt/web test:public-build
+```
+
+The website build itself rejects an application shell, authentication code and
+workspace links in its output. Amplify's post-build checks also require the
+prerendered homepage and 404 and reject `app.html` before publishing artifacts.
