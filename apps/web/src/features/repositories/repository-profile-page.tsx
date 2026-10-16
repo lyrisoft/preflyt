@@ -19,11 +19,6 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover'
 import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { AppHeader } from '@/components/layout/app-header'
@@ -37,6 +32,7 @@ import { RepositoryHealth } from '../health/repository-health'
 import { canPerform, type ScopedSession } from '../workspace/scoped-access'
 import { BranchPicker } from './branch-picker'
 import { EvidenceDialog } from './evidence-dialog'
+import { InspectionBadge } from './inspection-scope'
 import { RelativeTime } from './relative-time'
 import { RepositoryActivityPanel } from './repository-activity-panel'
 import { RepositoryAssessments } from './repository-assessments'
@@ -176,35 +172,6 @@ function RepositoryFacts({ profile }: { profile: Profile }) {
         </dl>
       </section>
     </Card>
-  )
-}
-
-function InspectionBadge({ profile }: { profile: Profile }) {
-  if (profile.complete)
-    return <StatusBadge tone='success'>Inspection complete</StatusBadge>
-  return (
-    <Popover>
-      <PopoverTrigger className='touch-target rounded-lg focus-visible:outline-2 focus-visible:outline-ring'>
-        <StatusBadge tone='warning' className='cursor-pointer'>
-          Partial inspection
-        </StatusBadge>
-      </PopoverTrigger>
-      <PopoverContent align='start' className='w-80 text-sm'>
-        <p className='flex items-center gap-2 font-medium'>
-          <AlertTriangle aria-hidden='true' className='size-4 text-warning' />
-          Inspection limits
-        </p>
-        <ul className='mt-2 list-disc space-y-1 ps-5 text-muted-foreground'>
-          {profile.report.warnings.length ? (
-            profile.report.warnings.map((warning) => (
-              <li key={warning}>{warning}</li>
-            ))
-          ) : (
-            <li>Some files could not be read within discovery limits.</li>
-          )}
-        </ul>
-      </PopoverContent>
-    </Popover>
   )
 }
 

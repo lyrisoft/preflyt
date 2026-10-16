@@ -26,6 +26,7 @@ import {
 } from '@/components/ui/select'
 import { StatusBadge } from '@/components/status-badge'
 import { AssessmentSnapshotDialog } from './assessment-context'
+import { reviewStatuses } from './assessment-result'
 import { usePullRequests, usePullRequest } from './engineering-queries'
 import { RelativeTime } from './relative-time'
 import { Legend, StackedBar, type Segment } from './status-charts'
@@ -41,8 +42,14 @@ const reasons: Record<string, string> = {
   STANDARDS_NOT_ADOPTED: 'Adopt repository standards to create assessments.',
   NO_APPLICABLE_ASSESSMENT:
     'No assessment matches the current revision and policy. A PR or CI event will create another assessment.',
-  EXECUTION_NOT_VERIFIED:
-    'Matching assessments are available. Their evidence does not establish verified execution or a passing merge review result.',
+  SAVED_ASSESSMENT_PASS:
+    'Required checks passed in the matching saved assessment. This is not current GitHub merge permission.',
+  SAVED_ASSESSMENT_BLOCK:
+    'Required checks failed in the matching saved assessment.',
+  SAVED_ASSESSMENT_WARN:
+    'Optional checks need attention in the matching saved assessment.',
+  SAVED_ASSESSMENT_INCOMPLETE:
+    'The matching saved assessment has incomplete required results.',
 }
 
 export function RepositoryPullRequests({
@@ -325,9 +332,31 @@ export function RepositoryPullRequests({
                       />
                       Merge review result
                     </p>
-                    <p className='mt-3 text-xs text-muted-foreground'>
-                      Not evaluated
-                    </p>
+                    <div className='mt-3'>
+                      <StatusBadge
+                        tone={
+                          reviewStatuses[
+                            data.readiness as keyof typeof reviewStatuses
+                          ]?.tone ?? 'warning'
+                        }
+                      >
+                        {reviewStatuses[
+                          data.readiness as keyof typeof reviewStatuses
+                        ]?.label ?? 'Not evaluated'}
+                      </StatusBadge>
+                      {data.mergeReview && (
+                        <Button
+                          variant='ghost'
+                          className='mt-2 h-7 px-0 text-xs'
+                          onClick={() =>
+                            setSnapshot(data.mergeReview!.assessmentId)
+                          }
+                        >
+                          View evaluated assessment{' '}
+                          <ArrowRight className='size-3' />
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <p

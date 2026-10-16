@@ -33,6 +33,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Table } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { AppHeader } from '@/components/layout/app-header'
 import { Main } from '@/components/layout/main'
@@ -257,8 +258,7 @@ function AiSettings({
     [activeAction, setActiveAction] = useState(''),
     [error, setError] = useState(''),
     [notice, setNotice] = useState(''),
-    [search, setSearch] = useState(''),
-    [page, setPage] = useState(1)
+    [search, setSearch] = useState('')
   const data = query.isError ? undefined : query.data
   async function action(path: string, body: unknown, done?: () => void) {
     setBusy(true)
@@ -498,7 +498,6 @@ function AiSettings({
                     value={search}
                     onChange={(e) => {
                       setSearch(e.target.value)
-                      setPage(1)
                     }}
                     className='w-full sm:w-72'
                   />
@@ -516,7 +515,7 @@ function AiSettings({
                 </Button>
               </div>
               <div className='overflow-x-auto rounded-xl border'>
-                <table className='w-full text-left text-sm'>
+                <Table className='w-full text-left text-sm'>
                   <thead className='bg-muted/40 text-muted-foreground'>
                     <tr>
                       {['Model', 'Model name', 'Status', 'Actions'].map((t) => (
@@ -527,116 +526,99 @@ function AiSettings({
                     </tr>
                   </thead>
                   <tbody>
-                    {filtered
-                      .slice(
-                        (Math.min(
-                          page,
-                          Math.max(1, Math.ceil(filtered.length / 10))
-                        ) -
-                          1) *
-                          10,
-                        Math.min(
-                          page,
-                          Math.max(1, Math.ceil(filtered.length / 10))
-                        ) * 10
-                      )
-                      .map((p) => (
-                        <tr
-                          key={p.id}
-                          className='border-t transition-colors hover:bg-muted/20'
-                        >
-                          <td className='px-4 py-4 font-medium'>
-                            <span className='flex items-center gap-2.5'>
-                              <ProviderIcon provider={p.endpoint?.preset} />
-                              {p.name}
-                            </span>
-                            <span
-                              className='mt-1 block max-w-xs truncate text-xs font-normal text-muted-foreground'
-                              title={p.endpoint?.baseUrl}
+                    {filtered.map((p) => (
+                      <tr
+                        key={p.id}
+                        className='border-t transition-colors hover:bg-muted/20'
+                      >
+                        <td className='px-4 py-4 font-medium'>
+                          <span className='flex items-center gap-2.5'>
+                            <ProviderIcon provider={p.endpoint?.preset} />
+                            {p.name}
+                          </span>
+                          <span
+                            className='mt-1 block max-w-xs truncate text-xs font-normal text-muted-foreground'
+                            title={p.endpoint?.baseUrl}
+                          >
+                            {p.endpoint?.baseUrl ?? 'Endpoint setup required'}
+                          </span>
+                        </td>
+                        <td className='px-4 py-4'>{p.modelId}</td>
+                        <td className='px-4 py-4'>
+                          <div className='flex flex-wrap gap-2'>
+                            {p.approved && (
+                              <StatusBadge tone='success'>Approved</StatusBadge>
+                            )}
+                            <StatusBadge
+                              tone={
+                                !p.enabled
+                                  ? 'neutral'
+                                  : p.testStatus === 'CONNECTED'
+                                    ? 'success'
+                                    : [
+                                          'AUTH_REJECTED',
+                                          'MODEL_UNAVAILABLE',
+                                          'UNAVAILABLE',
+                                        ].includes(p.testStatus)
+                                      ? 'error'
+                                      : 'neutral'
+                              }
                             >
-                              {p.endpoint?.baseUrl ?? 'Endpoint setup required'}
-                            </span>
-                          </td>
-                          <td className='px-4 py-4'>{p.modelId}</td>
-                          <td className='px-4 py-4'>
-                            <div className='flex flex-wrap gap-2'>
-                              {p.approved && (
-                                <StatusBadge tone='success'>
-                                  Approved
-                                </StatusBadge>
-                              )}
-                              <StatusBadge
-                                tone={
-                                  !p.enabled
-                                    ? 'neutral'
-                                    : p.testStatus === 'CONNECTED'
-                                      ? 'success'
-                                      : [
-                                            'AUTH_REJECTED',
-                                            'MODEL_UNAVAILABLE',
-                                            'UNAVAILABLE',
-                                          ].includes(p.testStatus)
-                                        ? 'error'
-                                        : 'neutral'
-                                }
-                              >
-                                {!p.enabled
-                                  ? 'Disabled'
-                                  : testName(p.testStatus)}
-                              </StatusBadge>
-                            </div>
-                          </td>
-                          <td className='px-4 py-4'>
-                            <div className='flex items-center gap-2'>
-                              <Button
-                                className='min-w-20'
-                                size='sm'
-                                variant='outline'
-                                disabled={busy}
-                                onClick={() => {
-                                  setError('')
-                                  setPreset(
-                                    data.presets?.find(
-                                      (v) => v.id === p.endpoint?.preset
-                                    )
+                              {!p.enabled ? 'Disabled' : testName(p.testStatus)}
+                            </StatusBadge>
+                          </div>
+                        </td>
+                        <td className='px-4 py-4'>
+                          <div className='flex items-center gap-2'>
+                            <Button
+                              className='min-w-20'
+                              size='sm'
+                              variant='outline'
+                              disabled={busy}
+                              onClick={() => {
+                                setError('')
+                                setPreset(
+                                  data.presets?.find(
+                                    (v) => v.id === p.endpoint?.preset
                                   )
-                                  setEdit(p)
-                                }}
-                              >
-                                <Pencil aria-hidden='true' />
-                                Edit
-                              </Button>
-                              <Button
-                                className='min-w-20'
-                                size='sm'
-                                aria-busy={
-                                  busy &&
-                                  activeAction === `/providers/${p.id}/test`
-                                }
-                                variant='outline'
-                                disabled={busy}
-                                onClick={() =>
-                                  void action(`/providers/${p.id}/test`, {})
-                                }
-                              >
-                                {busy &&
-                                activeAction === `/providers/${p.id}/test` ? (
-                                  <Loader2
-                                    aria-hidden='true'
-                                    className='size-4 animate-spin motion-reduce:animate-none'
-                                  />
-                                ) : (
-                                  <PlugZap aria-hidden='true' />
-                                )}
-                                {busy &&
+                                )
+                                setEdit(p)
+                              }}
+                            >
+                              <Pencil aria-hidden='true' />
+                              Edit
+                            </Button>
+                            <Button
+                              className='min-w-20'
+                              size='sm'
+                              aria-busy={
+                                busy &&
                                 activeAction === `/providers/${p.id}/test`
-                                  ? 'Testing…'
-                                  : 'Test'}
-                              </Button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
+                              }
+                              variant='outline'
+                              disabled={busy}
+                              onClick={() =>
+                                void action(`/providers/${p.id}/test`, {})
+                              }
+                            >
+                              {busy &&
+                              activeAction === `/providers/${p.id}/test` ? (
+                                <Loader2
+                                  aria-hidden='true'
+                                  className='size-4 animate-spin motion-reduce:animate-none'
+                                />
+                              ) : (
+                                <PlugZap aria-hidden='true' />
+                              )}
+                              {busy &&
+                              activeAction === `/providers/${p.id}/test`
+                                ? 'Testing…'
+                                : 'Test'}
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
                     {!filtered.length && (
                       <tr>
                         <td
@@ -650,35 +632,9 @@ function AiSettings({
                       </tr>
                     )}
                   </tbody>
-                </table>
+                </Table>
               </div>
-              {filtered.length > 10 && (
-                <nav
-                  aria-label='Model pages'
-                  className='flex items-center justify-end gap-3 text-sm'
-                >
-                  <span>
-                    Page {Math.min(page, Math.ceil(filtered.length / 10))} of{' '}
-                    {Math.ceil(filtered.length / 10)}
-                  </span>
-                  <Button
-                    variant='outline'
-                    size='sm'
-                    disabled={page <= 1 || busy}
-                    onClick={() => setPage(Math.max(1, page - 1))}
-                  >
-                    Previous
-                  </Button>
-                  <Button
-                    variant='outline'
-                    size='sm'
-                    disabled={page >= Math.ceil(filtered.length / 10) || busy}
-                    onClick={() => setPage(page + 1)}
-                  >
-                    Next
-                  </Button>
-                </nav>
-              )}
+
               <p className='text-xs text-muted-foreground'>
                 {filtered.length} of {data.providers.length} models · Maximum 32
                 per organization

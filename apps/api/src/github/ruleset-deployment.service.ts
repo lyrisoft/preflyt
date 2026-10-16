@@ -1,3 +1,4 @@
+import { readPageSize } from '../pagination.js'
 import { currentStandards } from '../standards/policy-standards.js';
 import { sameIdentity } from '../auth/same-identity.js';
 import { configurationValue } from '../configuration/runtime-configuration.js'
@@ -120,7 +121,8 @@ export class RulesetDeploymentService {
     );
     return repo;
   }
-  async list(session: AuthenticatedSession, id: string, page = 1) {
+  async list(session: AuthenticatedSession, id: string, page = 1, requestedSize?: unknown) {
+    const pageSize = readPageSize(requestedSize)
     if (!Number.isInteger(page) || page < 1 || page > 1000)
       throw new BadRequestException("Invalid deployment page");
     const repo = await this.access.requireRepository(
@@ -131,16 +133,16 @@ export class RulesetDeploymentService {
     const rows = await this.prisma.gitHubRulesetDeployment.findMany({
       where: { repositoryId: repo.id, organizationId: session.organizationId! },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-      skip: (page - 1) * 20,
-      take: 21,
+      skip: (page - 1) * pageSize,
+      take: pageSize + 1,
     });
     return {
       enabled: governanceEnabled(),
       canSelfApprove: await this.isSuperAdmin(session.identityId),
       page,
-      hasMore: rows.length > 20,
+      hasMore: rows.length > pageSize,
       deployments: rows
-        .slice(0, 20)
+        .slice(0, pageSize)
         .map(({ leaseToken, leaseUntil, ...row }) => row),
     };
   }

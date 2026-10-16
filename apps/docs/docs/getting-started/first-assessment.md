@@ -38,4 +38,10 @@ Health gives a report about a repository revision. [Pull request checks](../user
 3. Confirm a test PR has an assessment and a matching **Preflyt / Engineering Readiness** check at its current commit.
 4. Optionally enable [AI reviews](../user-guide/ai-reviews.md) and [merge protection](../user-guide/merge-protection.md).
 
-The **Checks** tab shows detected setup files. **Assessments** retains commit assessments of selected standards and CI evidence; **CI activity** shows GitHub results. These views remain separate from Health. The Overview's **Set up your first CI assessment** shortcut can save recommended standards after your explicit request; automatic Health assessment does not do this.
+The **Checks** tab shows detected setup files. **Assessments** retains commit assessments of selected standards and CI evidence; **CI activity** shows GitHub results. These views remain separate from Health. The Overview's **Set up your first CI assessment** guide keeps setup in order:
+
+1. **Inspect repository** finds its configuration and advances to standards.
+2. Review the recommended standards and their checks. Keep or clear each selection, then choose **Save standards and continue**.
+3. Choose **Create assessment** to save a report for the inspected commit and open its results. Missing CI evidence remains visible.
+
+The guide resumes from saved progress, including standards you already chose. Each step has its own permission checks. It does not silently choose standards when you create an assessment, enable merge blocking or change AI source sharing. Automatic Health assessment does not adopt standards.

@@ -33,8 +33,7 @@ export function attentionReason(
     return 'AWAITING_SYNC'
   if (context.head.repositoryId !== context.base.repositoryId)
     return 'FORK_HEAD_UNSUPPORTED'
-  if (!repository.standards.length) return 'STANDARDS_NOT_ADOPTED'
-  return 'EXECUTION_NOT_VERIFIED'
+  return 'ASSESSMENT_LOOKUP_REQUIRED'
 }
 
 export function profileTechnologies(report: unknown) {

@@ -421,7 +421,7 @@ it("imports 12 GitHub repository associations with empty policy scope and preser
 });
 it("paginates team lists and does not leak another organization teams", async () => {
   const list = (await get(owner, "?page=1&q=Platform").expect(200)).body;
-  expect(list.pageSize).toBe(20);
+  expect(list.pageSize).toBe(10);
   expect(list.total).toBeGreaterThan(0);
   expect((await get(outsider).expect(200)).body.total).toBe(0);
   await get(owner, "?page=0").expect(400);

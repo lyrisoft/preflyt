@@ -22,6 +22,7 @@ import { chartAnimation, chartTooltipAnimation } from '@/lib/chart-motion'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Table } from '@/components/ui/table'
 import { SurfaceIcon } from '@/components/surface-icon'
 
 export type FindingsSummary = {
@@ -271,7 +272,7 @@ export function FindingsOverview({
                   </ResponsiveContainer>
                 </div>
                 <div className='sr-only'>
-                  <table>
+                  <Table pagination={false}>
                     <caption>{subject} by check</caption>
                     <thead>
                       <tr>
@@ -287,7 +288,7 @@ export function FindingsOverview({
                         </tr>
                       ))}
                     </tbody>
-                  </table>
+                  </Table>
                 </div>
               </>
             )}

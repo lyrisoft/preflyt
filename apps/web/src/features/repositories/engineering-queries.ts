@@ -120,6 +120,11 @@ export type PrDetail = {
   reason: string
   readiness: string
   qualityGate: null
+  mergeReview?: {
+    assessmentId: string
+    sourceSha: string
+    status: string
+  } | null
   prAssessment: { id: string; assessmentHash: string } | null
   ciAssessment: { id: string; assessmentHash: string } | null
   collectionTruncated: boolean

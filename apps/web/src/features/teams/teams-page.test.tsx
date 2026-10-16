@@ -125,7 +125,9 @@ it('lists API-backed teams and requests the next page', async () => {
   await userEvent.click(view.getByRole('button', { name: 'Next', exact: true }))
   await expect
     .poll(() =>
-      api.request.mock.calls.some(([path]) => path === '/teams?page=2&q=')
+      api.request.mock.calls.some(
+        ([path]) => path === '/teams?page=2&pageSize=10&q='
+      )
     )
     .toBe(true)
 })
@@ -310,6 +312,35 @@ it('opens the organization baseline through an explicit action', async () => {
     .toBe(true)
 })
 
+it('uses one pagination control for the repository association table', async () => {
+  const request = api.request.getMockImplementation()!
+  api.request.mockImplementation(async (path: string, ...args: unknown[]) =>
+    path === '/teams/team'
+      ? {
+          ...detail,
+          repositories: Array.from({ length: 12 }, (_, index) => ({
+            ...detail.repositories[0],
+            id: String(101 + index),
+            name: `org/service-${index + 1}`,
+          })),
+        }
+      : request(path, ...args)
+  )
+  const view = await mount()
+  await view.getByRole('button', { name: 'Platform', exact: true }).click()
+  await view.getByRole('tab', { name: 'Repositories', exact: true }).click()
+  const panel = document.querySelector(
+    '[role="tabpanel"][data-state="active"]'
+  )!
+  expect(panel.querySelectorAll('tbody tr')).toHaveLength(10)
+  expect(panel.querySelectorAll('nav')).toHaveLength(1)
+  await page
+    .getByRole('tabpanel')
+    .getByRole('button', { name: 'Next', exact: true })
+    .click()
+  expect(panel.querySelectorAll('tbody tr')).toHaveLength(2)
+})
+
 it('shows separate impact rows and statuses for branches in the same repository', async () => {
   const request = api.request.getMockImplementation()!
   api.request.mockImplementation(async (path: string, ...args: unknown[]) => {
@@ -416,4 +447,26 @@ it('does not approve a failed child-scope preview', async () => {
       path.includes('/child-scope/approve')
     )
   ).toBe(false)
+})
+
+it('requires an explicit policy branch when the repository default is unknown', async () => {
+  const original = options.repositories[0].defaultBranch
+  options.repositories[0].defaultBranch = ''
+  try {
+    const view = await mount()
+    await userEvent.click(
+      view.getByRole('button', { name: 'Platform', exact: true })
+    )
+    await userEvent.click(
+      view.getByRole('tab', { name: 'Standards & policies' })
+    )
+    await expect
+      .element(view.getByPlaceholder('Enter the target branch'))
+      .toHaveValue('')
+    await expect
+      .element(view.getByRole('button', { name: 'Preview impact' }))
+      .toBeDisabled()
+  } finally {
+    options.repositories[0].defaultBranch = original
+  }
 })

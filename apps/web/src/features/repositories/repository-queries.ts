@@ -139,10 +139,16 @@ export function useCiEvidence(
     enabled = true,
     poll = false,
     page,
-  }: { enabled?: boolean; poll?: boolean; page?: number } = {}
+    pageSize = 10,
+  }: {
+    enabled?: boolean
+    poll?: boolean
+    page?: number
+    pageSize?: number
+  } = {}
 ) {
   return useQuery<CiEvidence>({
-    queryKey: ['ci-evidence', repositoryId, sha, page],
+    queryKey: ['ci-evidence', repositoryId, sha, page, pageSize],
     enabled,
     retry: false,
     refetchInterval: (query) =>
@@ -151,7 +157,7 @@ export function useCiEvidence(
       read<CiEvidence>(
         repositoryPath(
           repositoryId,
-          `/ci-evidence?${new URLSearchParams({ ...(sha ? { sha } : {}), ...(page ? { page: String(page) } : {}) })}`
+          `/ci-evidence?${new URLSearchParams({ ...(sha ? { sha } : {}), ...(page ? { page: String(page), pageSize: String(pageSize) } : {}) })}`
         ),
         signal,
         (status) =>
@@ -220,6 +226,13 @@ export type Profile = {
   complete: boolean
   report: {
     inspectedFileCount: number
+    omittedPaths?: {
+      path: string
+      kind: string
+      scope: string
+      reason: string
+      affectedChecks: string[]
+    }[]
     signals: Signal[]
     warnings: string[]
     limitations: string[]

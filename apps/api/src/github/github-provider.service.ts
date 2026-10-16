@@ -7,9 +7,11 @@ import { readHealthGitSource } from '../health/health-git-source.js'
 import { attributedSuite, summarizeRulesetSuites, type RulesetSuite } from './ruleset-insights.js'
 import { rulesetSummary, rulesetDetail } from './github-ruleset.js'
 import { normalizeGitHubEvent } from '../github-events/github-event.js'
+import { posix } from 'node:path'
 import { createHash } from 'node:crypto'
 import {
   wantsProfileContent,
+  omittedProfileChecks,
   validProfileBranch,
   type RepositorySnapshot,
   type RepositoryFile,
@@ -436,25 +438,26 @@ export class GitHubProviderService {
     repositoryId: bigint,
     page = 1,
     refresh = false,
+    pageSize = 10,
   ) {
     if (!Number.isInteger(page) || page < 1 || page > 1000)
       throw new BadRequestException('Invalid ruleset page')
     return this.readRulesets(
       installationId,
       repositoryId,
-      `list:${page}`,
+      `list:${page}:${pageSize}`,
       async ({ metadata, request }) => {
         const rows = await request<unknown>(
-          `/repos/${encodeURIComponent(metadata.owner.login)}/${encodeURIComponent(metadata.name)}/rulesets?includes_parents=true&per_page=20&page=${page}`,
+          `/repos/${encodeURIComponent(metadata.owner.login)}/${encodeURIComponent(metadata.name)}/rulesets?includes_parents=true&per_page=${pageSize}&page=${page}`,
         )
-        if (!Array.isArray(rows) || rows.length > 20)
+        if (!Array.isArray(rows) || rows.length > pageSize)
           throw new ServiceUnavailableException(
             'GitHub returned an invalid ruleset list',
           )
         return {
           rulesets: rows.map((row) => rulesetSummary(row, metadata.full_name)),
           page,
-          hasMore: rows.length === 20 && page < 1000,
+          hasMore: rows.length === pageSize && page < 1000,
           fetchedAt: new Date().toISOString(),
         }
       },
@@ -612,19 +615,42 @@ export class GitHubProviderService {
       throw new ServiceUnavailableException(
         'GitHub returned an invalid repository tree',
       )
-    const omitted = tree.tree.some(
-      (entry) => entry.type === 'commit' || entry.mode === '120000',
-    )
-    const complete = !tree.truncated && tree.tree.length <= 10_000 && !omitted
+    const complete = !tree.truncated && tree.tree.length <= 10_000
     const warnings: string[] = []
-    if (tree.truncated || tree.tree.length > 10_000)
-      warnings.push(
-        'Repository tree is partial; discovery is limited to 10,000 entries. Absence cannot be established.',
-      )
-    if (omitted)
-      warnings.push(
-        'Symlink or submodule content was omitted; absent controls remain unknown.',
-      )
+    if (!complete) warnings.push('Repository tree is partial; discovery is limited to 10,000 entries. Absence cannot be established.')
+    const omittedPaths: NonNullable<RepositorySnapshot['omittedPaths']> = []
+    const entries = tree.tree.slice(0, 10_000)
+    const byPath = new Map(entries.map((entry) => [entry.path, entry]))
+    let linkReads = 0
+    for (const entry of entries.filter((item) => item.type === 'commit' || item.mode === '120000')) {
+      if (typeof entry.path !== 'string' || entry.path.length > 4096 || !shaPattern.test(entry.sha)) throw new ServiceUnavailableException('GitHub returned invalid omitted path evidence')
+      if (entry.type === 'commit') { omittedPaths.push({ path: entry.path, kind: 'submodule', scope: 'directory', reason: 'Submodule content is not traversed.' }); continue }
+      let scope: 'file' | 'directory' | 'unknown' = 'unknown'
+      let reason = 'Symlink target could not be classified without following it.'
+      let affectedChecks: string[] | undefined
+      // Read only the link blob, never its target or external filesystem content.
+      if (linkReads++ < 32 && entry.size !== undefined && entry.size > 0 && entry.size <= 4096) {
+        try {
+          const blob = await request<{ sha: string; size: number; encoding: string; content: string }>(`${base}/git/blobs/${entry.sha}`)
+          if (blob.sha !== entry.sha || blob.encoding !== 'base64' || blob.size !== entry.size || typeof blob.content !== 'string' || blob.content.length > 6000) throw new Error('Invalid link blob')
+          const bytes = Buffer.from(blob.content, 'base64')
+          if (bytes.length !== entry.size || createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex') !== entry.sha) throw new Error('Invalid link integrity')
+          const target = bytes.toString('utf8')
+          const resolved = posix.normalize(posix.join(posix.dirname(entry.path), target))
+          if (!target || posix.isAbsolute(target) || /[\x00-\x1f\x7f]/.test(target) || resolved === '..' || resolved.startsWith('../')) throw new Error('Unresolved link target')
+          const destination = byPath.get(resolved)
+          if (destination?.type === 'blob' && ['100644','100755'].includes(destination.mode)) { scope = 'file'; reason = 'Symlink to a repository file is not followed; only its supported path hints may be affected.' }
+          else if (destination?.type === 'tree') {
+            scope = 'directory'; reason = 'Symlinked directory content is not traversed.'
+            if (complete) {
+              affectedChecks = [...new Set(entries.filter((child) => child.path.startsWith(resolved + '/') && child.type !== 'tree').flatMap((child) => omittedProfileChecks(posix.join(entry.path, child.path.slice(resolved.length + 1)), child.type === 'blob' && ['100644','100755'].includes(child.mode) ? 'file' : 'unknown')))]
+              reason = 'Symlinked directory is not followed; its supported check paths were classified from the complete repository tree.'
+            }
+          }
+        } catch (error) { if (error instanceof ForbiddenException || error instanceof GitHubRateLimitError) throw error }
+      }
+      omittedPaths.push({ path: entry.path, kind: 'symlink', scope, reason, ...(affectedChecks ? { affectedChecks } : {}) })
+    }
     const files: RepositoryFile[] = tree.tree
       .slice(0, 10_000)
       .filter(
@@ -700,6 +726,7 @@ export class GitHubProviderService {
       complete,
       files,
       warnings,
+      omittedPaths,
     }
   }
 
@@ -1208,17 +1235,18 @@ export class GitHubProviderService {
     throw new ServiceUnavailableException('Protection inventory exceeds the safe activation limit')
   }
 
-  async readRepositoryRuleSuites(installationId:bigint,repositoryId:bigint,options:{page:number;period:string;ref?:string;actor?:string}) {
+  async readRepositoryRuleSuites(installationId:bigint,repositoryId:bigint,options:{page:number;pageSize?:number;period:string;ref?:string;actor?:string}) {
     if(!Number.isInteger(options.page)||options.page<1||options.page>1000||!['hour','day','week','month'].includes(options.period))throw new BadRequestException('Invalid evaluation history page')
     const installation=await this.verifyInstallation(installationId)
     if(!['read','write'].includes(installation.permissions.administration))throw new ForbiddenException('Ruleset Insights needs repository Administration: read permission on the assessment App')
     const reader=await this.openRepository(installationId,repositoryId,'administration')
     const root=`/repos/${encodeURIComponent(reader.metadata.owner.login)}/${encodeURIComponent(reader.metadata.name)}/rulesets/rule-suites`
-    const params=new URLSearchParams({per_page:'20',page:String(options.page),time_period:options.period,rule_suite_result:'all',evaluate_status:'all'})
+    const pageSize=options.pageSize??20
+    const params=new URLSearchParams({per_page:String(pageSize),page:String(options.page),time_period:options.period,rule_suite_result:'all',evaluate_status:'all'})
     if(options.ref)params.set('ref',options.ref)
     if(options.actor)params.set('actor_name',options.actor)
     const rows=await reader.request<Record<string,any>[]>(`${root}?${params}`)
-    if(!Array.isArray(rows)||rows.length>20||new Set(rows.map(row=>row.id)).size!==rows.length)throw new ServiceUnavailableException('Invalid GitHub evaluation history')
+    if(!Array.isArray(rows)||rows.length>pageSize||new Set(rows.map(row=>row.id)).size!==rows.length)throw new ServiceUnavailableException('Invalid GitHub evaluation history')
     const details:Record<string,any>[]=[]
     for(const row of rows) {
       if(!Number.isSafeInteger(row.id)||row.id<1||String(row.repository_id)!==repositoryId.toString())throw new ServiceUnavailableException('GitHub evaluation scope changed')
@@ -1226,10 +1254,10 @@ export class GitHubProviderService {
       if(detail.id!==row.id)throw new ServiceUnavailableException('GitHub evaluation identity changed')
       details.push(detail)
     }
-    return {details,hasMore:rows.length===20&&options.page<1000,fetchedAt:new Date().toISOString(),repositoryName:reader.metadata.full_name}
+    return {details,hasMore:rows.length===pageSize&&options.page<1000,fetchedAt:new Date().toISOString(),repositoryName:reader.metadata.full_name}
   }
 
-  async readRulesetInsights(installationId:bigint,repositoryId:bigint,rulesetId:number,options:{page:number;period:string;ref?:string;actor?:string;result?:string}) {
+  async readRulesetInsights(installationId:bigint,repositoryId:bigint,rulesetId:number,options:{page:number;pageSize?:number;period:string;ref?:string;actor?:string;result?:string}) {
     const page=await this.readRepositoryRuleSuites(installationId,repositoryId,options)
     const suites:RulesetSuite[]=[]
     for(const detail of page.details) {

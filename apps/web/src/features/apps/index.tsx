@@ -720,7 +720,7 @@ export function Apps() {
                             dataKey='selected'
                             name='Selected for Preflyt'
                             stackId='inventory'
-                            fill='var(--chart-2)'
+                            fill='var(--success)'
                             {...chartAnimation}
                           />
                           <Bar

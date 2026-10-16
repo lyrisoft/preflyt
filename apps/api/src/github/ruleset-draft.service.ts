@@ -1,3 +1,4 @@
+import { readPageSize } from '../pagination.js'
 import { currentStandards, repositoryStandards } from '../standards/policy-standards.js'
 import {
   BadRequestException,
@@ -16,7 +17,8 @@ export class RulesetDraftService {
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(AuthorizationService) private readonly access: AuthorizationService,
   ) {}
-  async list(session: AuthenticatedSession, githubId: string, page = 1) {
+  async list(session: AuthenticatedSession, githubId: string, page = 1, requestedSize?: unknown) {
+    const pageSize = readPageSize(requestedSize)
     if (!Number.isInteger(page) || page < 1 || page > 1000)
       throw new BadRequestException('Invalid draft page')
     const repo = await this.access.requireRepository(
@@ -31,15 +33,15 @@ export class RulesetDraftService {
           organizationId: session.organizationId!,
         },
         orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
-        skip: (page - 1) * 20,
-        take: 21,
+        skip: (page - 1) * pageSize,
+        take: pageSize + 1,
       }),
       repositoryStandards(this.prisma, repo.id),
     ])
     await this.access.requireRepository(session, githubId, 'policy.read')
     return {
-      drafts: drafts.slice(0, 20),
-      hasMore: drafts.length > 20,
+      drafts: drafts.slice(0, pageSize),
+      hasMore: drafts.length > pageSize,
       page,
       selection: selection
         ? {

@@ -146,3 +146,25 @@ it.each(['symlink','submodule','truncated','oversized','tampered'])('rejects %s 
  if(kind==='tampered') f.blob.content=Buffer.from('tampered source text!').toString('base64')
  await expect(f.provider.readHealthSource(500n,501n,f.sha,'src/app.ts')).rejects.toThrow();f.provider.close()
 })
+
+it.each(['AGENTS.md','package.json','external','directory','directory-source','tampered'])('classifies omitted link scope safely: %s', async (kind) => {
+ const target=kind==='external'?'/etc/passwd':kind.startsWith('directory')?'docs':'real.md'
+ const bytes=Buffer.from(target), linkSha=createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex')
+ const path=['AGENTS.md','package.json'].includes(kind)?kind:'link'
+ const provider=new GitHubProviderService() as any
+ const request=vi.fn(async (url:string)=>{
+  if(url.includes('/commits/')) return {sha:'a'.repeat(40),commit:{tree:{sha:'b'.repeat(40)}}}
+  if(url.includes('/git/trees/')) return {sha:'b'.repeat(40),truncated:false,tree:[{path,mode:'120000',type:'blob',sha:linkSha,size:bytes.length},{path:'real.md',mode:'100644',type:'blob',sha:'c'.repeat(40),size:1},{path:'docs',mode:'040000',type:'tree',sha:'d'.repeat(40)}, ...(kind === 'directory-source' ? [{path:'docs/main.ts',mode:'100644',type:'blob',sha:'e'.repeat(40),size:1}] : [])]}
+  if(url.endsWith(linkSha)) return {sha:linkSha,size:bytes.length,encoding:'base64',content:kind==='tampered'?'bad':bytes.toString('base64')}
+  throw new Error('Unexpected request')
+ })
+ vi.spyOn(provider,'openRepository').mockResolvedValue({metadata:{owner:{login:'org'},name:'repo',full_name:'org/repo',default_branch:'main'},request})
+ try {
+  const snapshot=await provider.readRepositorySnapshot(1n,2n)
+  expect(snapshot.complete).toBe(true)
+  expect(snapshot.omittedPaths[0]).toMatchObject({path,scope:kind.startsWith('directory')?'directory':['external','tampered'].includes(kind)?'unknown':'file'})
+  if (kind === 'directory') expect(snapshot.omittedPaths[0].affectedChecks).toEqual([])
+  if (kind === 'directory-source') expect(snapshot.omittedPaths[0].affectedChecks).toEqual(['languages'])
+  expect(request.mock.calls.every(([url])=>url.startsWith('/repos/org/repo/'))).toBe(true)
+ } finally { provider.close() }
+})

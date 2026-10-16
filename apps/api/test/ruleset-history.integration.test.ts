@@ -215,9 +215,12 @@ it("pagination and filters count only matching rules on the returned page", asyn
   });
   const first = await read();
   expect(first.hasMore).toBe(true);
-  expect(first.summary.activeFail).toBe(20);
+  expect(first.summary.activeFail).toBe(10);
+  const large = await history.read(repo.id, 51n, 7, "fixture/repo", {page: 1, pageSize: 25, period: "week"});
+  expect(large.scannedSuites).toBe(21);
+  expect(large.hasMore).toBe(false);
   const second = await history.read(repo.id, 51n, 7, "fixture/repo", {
-    page: 2,
+    page: 3,
     period: "week",
     actor: "developer",
     ref: "refs/heads/main",
@@ -321,7 +324,7 @@ it('labels capped trends and includes more than the visible page', async () => {
   const values = Array.from({ length: 1001 }, (_, index) => suite(index + 1));
   await db.gitHubRuleSuiteSnapshot.createMany({ data: values.map(value => ({ ...snapshotDetail(value, '51'), repositoryId: repo.id, fetchedAt: new Date() })) });
   const result = await read();
-  expect(result.summary.activeFail).toBe(20);
+  expect(result.summary.activeFail).toBe(10);
   expect(result.trend).toMatchObject({ truncated: true, scannedSuites: 1000, current: { activeFail: 1000 } });
 });
 it('verifies trend evidence beyond the current page', async () => {

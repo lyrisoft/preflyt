@@ -71,11 +71,13 @@ export class RulesetDraftController {
     @Req() req: AuthRequest,
     @Param('repositoryId') id: string,
     @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
   ) {
     return this.drafts.list(
       req.preflytSession,
       id,
       page === undefined ? 1 : Number(page),
+      pageSize,
     )
   }
   @Get(':draftId')

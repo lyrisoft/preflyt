@@ -76,6 +76,8 @@ Reliability and maintainability findings are classified separately when their re
 
 The comparison line connects only equivalent, fully retained measured scopes. It names the static-security, reliability, maintainability or hotspot rule packs included in that comparison; bars still include all retained findings. Each compared pack must analyze a nonempty candidate scope without skipped files, incomplete outcomes or truncated/suppressed findings, and match the earlier tool, configuration, plan and candidate/scanned file-set checksum. Changed coverage breaks the line rather than implying improvement. Older reports retain their original complete-report comparison requirement.
 
+The graph fills the available width with regular UTC time labels before and after the saved scans. Sparse histories show at least a full day of context. Times without a saved scan stay blank, rather than implying zero findings.
+
 The graph uses the latest 30 completed reports on the displayed branch, up to the displayed report, independently of history pagination. **View chart data** lists UTC times, coverage labels, retained and comparable counts, and links to original reports. Inspection-only reports and missing counts are not plotted as zero. A partial report can show zero retained findings only when an analyzer recorded a measured count; it does not mean the repository is clean. No-longer-reported does not prove remediation.
 
 Filter by severity or search the report. Open a finding to navigate to a dedicated details page for its rule, file, severity, affected code and evidence. **Back to Health report** returns to the exact saved report. Findings are **analyzer-reported potential issues**, not independently validated defects or vulnerabilities.
@@ -98,7 +100,7 @@ Health does not publish a readiness check, satisfy a branch policy or authorize 
 
 ## Engineering Overview
 
-Engineering Overview keeps its original repository, PR and CI assessment activity summaries. Select the fourth **Health** tab to switch the four summary cards to repository health, followed by assessment status and up to five high or critical findings. Each finding links to its saved repository report. The repository filter applies to both views; the period selector is hidden on Health because it uses the latest saved reports across all time. The period selector affects CI assessment totals and the activity calendar, not the all-time repository status or recently tracked open PR list. The calendar measures assessment volume, not repository health.
+Engineering Overview keeps its original repository, PR and CI assessment activity summaries. Select the fourth **Health** tab to switch the four summary cards to repository health, followed by a repository health distribution chart and a paginated list of repositories needing attention. Select a chart segment to filter the list, then open a repository for its saved report. The repository filter applies to both views; the period selector is hidden on Health because it uses the latest saved reports across all time. The period selector affects CI assessment totals and the activity calendar, not the all-time repository status or recently tracked open PR list. The calendar measures assessment volume, not repository health.
 
 Repository health summaries and reports are on Repositories. Open a repository's first **Health** tab for its analysis outcomes, findings, exact commit and history.
 
@@ -239,3 +241,17 @@ The duplication measurement excludes dependency/build folders, generated folders
 ### Test setup belongs in CI
 
 Select monorepo packages and configure test services in your existing CI workflow. Repository Health has no test-command overrides or app-selection settings.
+
+## Workspace health overview
+
+Open **Overview → Health** for a repository-level summary. The donut groups accessible selected repositories by their latest saved overall health: Healthy, Needs attention, Unhealthy, Incomplete, Not assessed, and Queued or running. A completed assessment can still identify an unhealthy repository.
+
+Select a chart segment or its legend button to filter the repository list beside it. **Needs review** shows unhealthy repositories first, then advisory issues, incomplete analysis and repositories not yet assessed. Select the repository name to open its saved report. The list shows three repositories per page. Assessment date and branch freshness are shown separately; a saved healthy result does not establish current branch health. Individual issues remain in **Findings** and the repository report.
+
+The repository selector filters the whole summary. This view uses latest saved reports rather than the PR date range. Counts cover up to 1,000 accessible repositories; larger scopes display a limit notice. Refresh reloads saved results without starting an assessment.
+
+## Inspection omissions
+
+Repository profile completeness refers to supported configuration and source hints, not whether tests or scanners passed. A symlink or submodule does not automatically make the profile partial. Omitted file paths outside supported checks, ignored dependency/build directories and installed agent skills under `.claude/skills`, `.agents/skills` and `.codex/skills` do not reduce completeness. Installed skill instructions and helper scripts are excluded from application profile hints. For a symlink to a directory inside the same repository, the inspector uses the complete Git tree to identify which supported check paths would be omitted. It does not follow symlinks or fetch external targets. Unknown directories, unresolved links and relevant submodules remain partial when their contents could hide supported checks. Tree, file-size and content-read limits still apply.
+
+Open the **Inspection complete** or **Partial inspection** badge on the repository profile to see omitted paths, why they were omitted and which checks they affect. Inspection complete can still list unrelated omissions. Re-inspect to create a new profile with the updated rules; older saved profiles and assessments keep their original scope.

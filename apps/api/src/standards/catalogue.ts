@@ -316,7 +316,7 @@ export const legacyCatalogue = freeze(
   })),
 );
 /** New definitions enable implemented CI report adapters; published 1.0.0 stays immutable. */
-export const catalogue = freeze(
+const reportCatalogue = freeze(
   legacyCatalogue.map(({ digest: _digest, ...pack }) => {
     const updated = {
       ...pack,
@@ -344,7 +344,62 @@ export const catalogue = freeze(
     };
   }),
 );
-export const catalogueVersions = freeze([...legacyCatalogue, ...catalogue]);
+// Editorial corrections are a new pack version: saved definitions and digests stay immutable.
+const checkGuidance: Readonly<Record<string, string>> = {
+  "ci.configured":
+    "Looks for CI workflow configuration in the inspected repository at the assessed commit. Finding configuration does not prove that a workflow ran or passed.",
+  "tests.required":
+    "Run the project's required tests in CI and submit a verified JUnit report for the assessed commit. At least one test must execute without reported failures; a test script or skipped-only suite is not sufficient evidence.",
+  "secrets.scan":
+    "Scan the configured source files for exposed credentials, tokens and private keys, then submit a verified SARIF report. Coverage depends on the scanner's rules and exclusions; Git history is covered only if the workflow explicitly scans it. Rotate confirmed exposed credentials.",
+  "dependencies.locked":
+    "Looks for recognized dependency lockfiles in the inspected repository to support reproducible dependency resolution. Finding a lockfile does not verify that it matches the manifests, is current or is used by CI.",
+  "security.sast":
+    "Analyze source code for security issues with the configured static-analysis rules and submit verified SARIF results. Coverage depends on supported languages and enabled rules; this does not test the running application.",
+  "security.dependencies":
+    "Compare supported dependency versions against the scanner's vulnerability database and submit verified SARIF results. Keep the database current and review affected packages; this does not establish package integrity or detect every unknown vulnerability.",
+  "types.required":
+    "Run the project's compiler or type checker in CI and submit a verified JUnit result for the assessed commit. This checks the configured type-check command, not runtime behavior or test execution.",
+  "lint.required":
+    "Run the configured linter in CI and submit verified SARIF results for code-style and code-quality violations. The enabled lint rules determine coverage; a clean lint result does not establish functional correctness or security.",
+  "build.required":
+    "Run the project's build or compilation command in CI and submit a verified JUnit result for the assessed commit. A successful build does not prove that tests pass or that the application deploys successfully.",
+  "service.resilience":
+    "Run project-specific tests for timeout limits, bounded retries and dependency-failure handling. Configure this check's Workflow command and Result file to submit verified JUnit results; Preflyt does not supply a generic resilience test or infer resilience from configuration alone.",
+  "frontend.components":
+    "Run component-level UI tests for rendering and user interactions. Configure this check's Workflow command and Result file to submit verified JUnit results. This checks component test execution, not a line or branch coverage percentage.",
+  "iac.policy":
+    "Check supported infrastructure-as-code files against the configured security and policy rules, then submit verified SARIF results. This reviews declared infrastructure configuration, not the actual state of deployed cloud resources.",
+  "containers.scan":
+    "Set CONTAINER_IMAGE to the image produced by your build, scan its packages for known vulnerabilities and submit verified SARIF results. Findings cover the selected image; they do not assess the security of its deployed runtime.",
+  "iac.exposures":
+    "Inspect declared infrastructure for unsafe network exposure and access settings, such as overly broad ingress or public resources, and submit verified SARIF results. Coverage depends on the configured rules; this is not a live cloud exposure scan.",
+};
+export const catalogue = freeze(
+  reportCatalogue.map(({ digest: _digest, ...pack }) => {
+    const updated = {
+      ...pack,
+      version: "1.1.1",
+      changelog: [
+        "Check-specific descriptions clarify required evidence and limits. Component testing is labeled as execution, not a coverage percentage. Evaluation requirements are unchanged; saved selections retain their versions.",
+      ],
+      rules: pack.rules.map((control) => {
+        const guidance = checkGuidance[control.id];
+        if (!guidance) throw new Error("Missing built-in check description: " + control.id);
+        return {
+          ...control,
+          ...(control.id === "frontend.components" ? { title: "Component test execution" } : {}),
+          guidance,
+        };
+      }),
+    };
+    return {
+      ...updated,
+      digest: createHash("sha256").update(JSON.stringify(updated)).digest("hex"),
+    };
+  }),
+);
+export const catalogueVersions = freeze([...legacyCatalogue, ...reportCatalogue, ...catalogue]);
 export type AiCheck = {
   id: string;
   title: string;

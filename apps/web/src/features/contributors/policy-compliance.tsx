@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import {
   ShieldCheck,
@@ -9,9 +10,9 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Table } from '@/components/ui/table'
 import { SurfaceIcon } from '@/components/surface-icon'
 import { paginateCollection } from './pull-request-pagination'
-import { TabPagination } from './tab-pagination'
 
 export type Compliance = {
   eligiblePrs: number
@@ -219,7 +220,7 @@ export function PolicyComplianceSummary({
                   Compliance by standards version
                 </summary>{' '}
                 <div className='mt-3 overflow-x-auto'>
-                  <table className='w-full text-left text-xs'>
+                  <Table className='w-full text-left text-xs'>
                     <caption className='mb-2 text-left font-medium'>
                       Compliance by saved standards version
                     </caption>
@@ -265,7 +266,7 @@ export function PolicyComplianceSummary({
                         </tr>
                       ))}
                     </tbody>
-                  </table>
+                  </Table>
                 </div>
               </details>
             )}
@@ -284,6 +285,7 @@ export function PolicyComplianceEvidence({
   page?: number
   onPageChange: (page: number) => void
 }) {
+  const [pageSize, setPageSize] = useState(10)
   if (!data)
     return (
       <p className='text-sm text-muted-foreground'>
@@ -296,7 +298,7 @@ export function PolicyComplianceEvidence({
         No authored PR evidence in this period.
       </p>
     )
-  const pagination = paginateCollection(data.rows, page)
+
   return (
     <div className='space-y-3'>
       {data.rowsTruncated && (
@@ -306,7 +308,19 @@ export function PolicyComplianceEvidence({
         </p>
       )}
       <div className='overflow-x-auto'>
-        <table className='w-full text-left text-sm'>
+        <Table
+          pagination={{
+            page,
+            pageSize,
+            total: data.rows.length,
+            onPageChange,
+            onPageSizeChange: (size) => {
+              setPageSize(size)
+              onPageChange(1)
+            },
+          }}
+          className='w-full text-left text-sm'
+        >
           <thead>
             <tr className='border-b text-xs text-muted-foreground'>
               <th className='p-3'>Pull request</th>
@@ -316,7 +330,7 @@ export function PolicyComplianceEvidence({
             </tr>
           </thead>
           <tbody>
-            {pagination.items.map((row) => {
+            {paginateCollection(data.rows, page, pageSize).items.map((row) => {
               const repo = data.repositories.find(
                 (r) => r.id === row.repositoryId
               )!
@@ -375,13 +389,8 @@ export function PolicyComplianceEvidence({
               )
             })}
           </tbody>
-        </table>
+        </Table>
       </div>
-      <TabPagination
-        pagination={pagination}
-        label='PR evidence records'
-        onPageChange={onPageChange}
-      />
     </div>
   )
 }

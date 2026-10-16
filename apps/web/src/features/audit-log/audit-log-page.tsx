@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, useNavigate, useSearch } from '@tanstack/react-router'
-import { History, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react'
+import { History, RefreshCw } from 'lucide-react'
 import { API_BASE_URL } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -80,17 +80,19 @@ function AuditContent({
 }) {
   const search = useSearch({ from: '/_authenticated/audit-log' })
   const navigate = useNavigate()
+  const [pageSize, setPageSize] = useState(10)
   const [filters, setFilters] = useState(search)
   const [selected, setSelected] = useState<Entry | null>(null)
   const [validation, setValidation] = useState('')
   const query = useQuery({
-    queryKey: ['audit-log', organizationId, search],
+    queryKey: ['audit-log', organizationId, search, pageSize],
     enabled: permitted,
     retry: false,
     queryFn: async ({ signal }): Promise<AuditLog> => {
       const params = new URLSearchParams(
         Object.entries(search).map(([key, value]) => [key, String(value)])
       )
+      params.set('pageSize', String(pageSize))
       const response = await fetch(`${API_BASE_URL}/audit-log?${params}`, {
         credentials: 'include',
         cache: 'no-store',
@@ -303,7 +305,18 @@ function AuditContent({
                 aria-label='Audit events'
                 className='overflow-hidden rounded-xl border'
               >
-                <Table>
+                <Table
+                  pagination={{
+                    page: search.page,
+                    pageSize,
+                    total: data.total,
+                    onPageChange: (page) => update({ ...search, page }),
+                    onPageSizeChange: (size) => {
+                      setPageSize(size)
+                      update({ ...search, page: 1 })
+                    },
+                  }}
+                >
                   <TableHeader>
                     <TableRow>
                       <TableHead>Time</TableHead>
@@ -365,41 +378,6 @@ function AuditContent({
                         : 'No workspace activity recorded yet.'}
                   </p>
                 )}
-                <div className='flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3 text-xs text-muted-foreground'>
-                  <span>
-                    {data.total
-                      ? `${data.items.length ? (data.page - 1) * data.pageSize + 1 : 0}–${Math.min(data.page * data.pageSize, data.total)} of ${data.total} events`
-                      : '0 events'}
-                  </span>
-                  <div className='flex flex-wrap items-center gap-2'>
-                    <span>
-                      Page {data.page} of{' '}
-                      {Math.max(1, Math.ceil(data.total / data.pageSize))}
-                    </span>
-                    <Button
-                      variant='outline'
-                      size='sm'
-                      disabled={search.page <= 1 || query.isFetching}
-                      onClick={() =>
-                        update({ ...search, page: search.page - 1 })
-                      }
-                    >
-                      <ChevronLeft className='size-4' aria-hidden />
-                      Previous
-                    </Button>
-                    <Button
-                      variant='outline'
-                      size='sm'
-                      disabled={!data.hasMore || query.isFetching}
-                      onClick={() =>
-                        update({ ...search, page: search.page + 1 })
-                      }
-                    >
-                      Next
-                      <ChevronRight className='size-4' aria-hidden />
-                    </Button>
-                  </div>
-                </div>
               </section>
             )
           )}

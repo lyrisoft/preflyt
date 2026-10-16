@@ -508,7 +508,7 @@ it('keeps built-in skill cards aligned and readable in both themes and on mobile
           description:
             'Review whether changed behavior has meaningful test coverage.',
           category: 'Testing and Quality',
-          checks: ['Required test execution', 'Component test coverage'],
+          checks: ['Required test execution', 'Component test execution'],
         },
         {
           ...template,

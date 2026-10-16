@@ -290,3 +290,11 @@ it('serves branch choices only to authenticated selected-repository readers and 
     .set('Cookie', 'test.sid=OWNER')
     .expect(403)
 })
+
+it('persists omitted path explanations without making unrelated file hints partial', async () => {
+ provider.readRepositorySnapshot.mockResolvedValueOnce({ ...snapshot(), omittedPaths: [{path:'AGENTS.md',kind:'symlink',scope:'file',reason:'File link is not followed.'}] })
+ const saved = await owner('post').expect(201)
+ expect(saved.body.profile.complete).toBe(true)
+ expect(saved.body.profile.report.omittedPaths[0]).toMatchObject({path:'AGENTS.md',affectedChecks:[]})
+ expect((await owner('get').expect(200)).body.profile.report.omittedPaths).toEqual(saved.body.profile.report.omittedPaths)
+})

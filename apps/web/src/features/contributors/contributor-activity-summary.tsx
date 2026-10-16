@@ -16,6 +16,7 @@ import {
 } from 'recharts'
 import { chartAnimation, chartTooltipAnimation } from '@/lib/chart-motion'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Table } from '@/components/ui/table'
 import { SurfaceIcon } from '@/components/surface-icon'
 
 export type ContributionDay = {
@@ -138,7 +139,7 @@ export function ContributorActivitySummary({
           ))}
         </div>
         <div className='sr-only'>
-          <table className='w-full text-left text-[11px]'>
+          <Table pagination={false} className='w-full text-left text-[11px]'>
             <caption>Daily contribution activity (UTC)</caption>
             <thead>
               <tr>
@@ -158,7 +159,7 @@ export function ContributorActivitySummary({
                 </tr>
               ))}
             </tbody>
-          </table>
+          </Table>
         </div>
       </CardContent>
     </Card>

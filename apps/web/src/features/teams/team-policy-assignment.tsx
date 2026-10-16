@@ -29,7 +29,7 @@ export function TeamPolicyAssignment({
       team.repositories.some(
         (scope) => scope.id === r.id && scope.policyScopeEnabled
       )
-    )?.defaultBranch ?? 'main'
+    )?.defaultBranch ?? ''
   )
   const [profile, setProfile] = useState('RECOMMENDED')
   const [packs, setPacks] = useState<string[]>(() => {
@@ -62,6 +62,10 @@ export function TeamPolicyAssignment({
   async function run(apply = false) {
     if (apply && (!impact || impact.conflicts || !impact.repositories.length))
       return
+    if (!branch.trim() || branch.trim() === 'refs/heads/') {
+      setError('Choose the target branch before previewing policy changes.')
+      return
+    }
     const requestedRevision = inputRevision.current
     setBusy(true)
     setError('')
@@ -147,7 +151,7 @@ export function TeamPolicyAssignment({
           Branch
           <Input
             value={branch}
-            placeholder='main'
+            placeholder='Enter the target branch'
             onChange={(e) => {
               setBranch(e.target.value)
               invalidatePreview()

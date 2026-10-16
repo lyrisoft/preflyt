@@ -1,3 +1,4 @@
+import { readPageSize } from '../pagination.js'
 import { configurationValue } from '../configuration/runtime-configuration.js'
 import {
   Inject,
@@ -241,13 +242,14 @@ export class RulesetHistoryService {
     rulesetId: number,
     repositoryName: string,
     options: {
-      page: number;
+      page: number; pageSize?: number;
       period: string;
       ref?: string;
       actor?: string;
       result?: string;
     },
   ) {
+    const pageSize = readPageSize(options.pageSize);
     const days: Record<string, number> = {
         hour: 1 / 24,
         day: 1,
@@ -271,8 +273,8 @@ export class RulesetHistoryService {
       this.prisma.gitHubRuleSuiteSnapshot.findMany({
         where,
         orderBy: [{ pushedAt: "desc" }, { suiteId: "desc" }],
-        skip: (options.page - 1) * 20,
-        take: 21,
+        skip: (options.page - 1) * pageSize,
+        take: pageSize + 1,
       }),
       this.prisma.gitHubInsightsSync.findUnique({ where: { repositoryId } }),
       this.prisma.gitHubRuleSuiteSnapshot.findMany({
@@ -280,7 +282,7 @@ export class RulesetHistoryService {
         orderBy: [{ pushedAt: 'desc' }, { suiteId: 'desc' }], take: 1001,
       }),
     ]);
-    const suites = rows.slice(0, 20).flatMap(row => this.verifiedSuite(row, githubId, rulesetId, options.result));
+    const suites = rows.slice(0, pageSize).flatMap(row => this.verifiedSuite(row, githubId, rulesetId, options.result));
     const checkedTrend = trendRows.slice(0, 1000).flatMap(row => this.verifiedSuite(row, githubId, rulesetId, options.result));
     const current = checkedTrend.filter(suite => new Date(suite.pushedAt) >= cutoff);
     const previous = checkedTrend.filter(suite => new Date(suite.pushedAt) < cutoff);
@@ -305,8 +307,8 @@ export class RulesetHistoryService {
       counting: "MATCHED_RULE_OCCURRENCES",
       page: options.page,
       period: options.period,
-      hasMore: rows.length > 20,
-      scannedSuites: Math.min(rows.length, 20),
+      hasMore: rows.length > pageSize,
+      scannedSuites: Math.min(rows.length, pageSize),
       suites,
       trend,
       summary: summarizeRulesetSuites(suites),

@@ -18,6 +18,23 @@ const data = vi.hoisted(() => ({
   truncated: false,
   emptyActivity: false,
   collectionEnabled: true,
+  sync: undefined as
+    | undefined
+    | {
+        total: number
+        completed: number
+        pending: number
+        failed: number
+        partial: number
+        items: {
+          repositoryId: string
+          name: string
+          state: string
+          lastSyncedAt: string | null
+          retryAt: string | null
+          failureCode: string | null
+        }[]
+      },
   lastReceivedAt: null,
   limitations: [],
   contributors: [
@@ -144,13 +161,13 @@ it('pages Activity content and does not render later rows on page one', () => {
   const first = renderToStaticMarkup(
     <ContributorsPage contributorId='person' />
   )
-  expect(first).toContain('Page 1 of 2')
+  expect(first).toContain('1–10 of 31')
   expect(first).not.toContain('>PR #31')
-  state.page = 2
+  state.page = 4
   const second = renderToStaticMarkup(
     <ContributorsPage contributorId='person' />
   )
-  expect(second).toContain('Page 2 of 2')
+  expect(second).toContain('31–31 of 31')
   expect(second).toContain('>PR #31')
   expect(second).not.toContain('>PR #1<')
 })
@@ -159,7 +176,7 @@ it('puts Help after Refresh and keeps explanatory notes out of the dashboard', (
   state.tab = 'overview'
   state.page = 1
   const html = renderToStaticMarkup(<ContributorsPage contributorId='person' />)
-  expect(html.indexOf('Refresh local data')).toBeLessThan(
+  expect(html.indexOf('Refresh')).toBeLessThan(
     html.indexOf('Help for Contributor profile')
   )
   expect(html).not.toContain('Metric definitions · Observe mode')
@@ -173,16 +190,12 @@ it('shows GitHub import in the page header for All repositories only to reposito
   state.canImport = true
   try {
     const html = renderToStaticMarkup(<ContributorsPage />)
-    expect(html).toContain('Import GitHub activity')
-    expect(html.indexOf('Import GitHub activity')).toBeLessThan(
-      html.indexOf('Refresh local data')
-    )
+    expect(html).toContain('Sync now')
+    expect(html).not.toContain('Refresh local data')
   } finally {
     state.canImport = false
   }
-  expect(renderToStaticMarkup(<ContributorsPage />)).not.toContain(
-    'Import GitHub activity'
-  )
+  expect(renderToStaticMarkup(<ContributorsPage />)).not.toContain('Sync now')
 })
 
 it('keeps a known contributor visible with a clear empty-filter state', () => {
@@ -193,5 +206,37 @@ it('keeps a known contributor visible with a clear empty-filter state', () => {
     expect(html).toContain('developer')
   } finally {
     data.emptyActivity = false
+  }
+})
+
+it('shows automatic sync progress, latest sync and retry details without a primary import step', () => {
+  state.tab = 'overview'
+  data.sync = {
+    total: 3,
+    completed: 1,
+    pending: 2,
+    failed: 0,
+    partial: 0,
+    items: [
+      {
+        repositoryId: '11',
+        name: 'fixture/repo',
+        state: 'RETRY',
+        lastSyncedAt: '2026-10-15T08:00:00Z',
+        retryAt: '2026-10-16T09:00:00Z',
+        failureCode: 'GITHUB_RATE_LIMITED',
+      },
+    ],
+  }
+  try {
+    const html = renderToStaticMarkup(<ContributorsPage />)
+    expect(html).toContain('Syncing GitHub activity')
+    expect(html).toContain('1 of 3 repositories complete')
+    expect(html).toContain('GitHub rate limit reached; retry scheduled')
+    expect(html).toContain('Last synced')
+    expect(html).not.toContain('Import GitHub activity')
+    expect(html).not.toContain('0 identities')
+  } finally {
+    data.sync = undefined
   }
 })

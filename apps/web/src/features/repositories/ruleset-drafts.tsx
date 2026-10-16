@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
-  ChevronLeft,
   ChevronRight,
   GitBranch,
   Plus,
@@ -595,14 +594,20 @@ export function RulesetDrafts({
   actorId?: string
   canDraft: boolean
 }) {
+  const [pageSize, setPageSize] = useState(10)
   const [page, setPage] = useState(1)
   const [editing, setEditing] = useState<RulesetDraft | 'new' | null>(null)
   const [viewing, setViewing] = useState<RulesetDraft | null>(null)
   const [saved, setSaved] = useState(false)
   const query = useQuery({
-    queryKey: ['ruleset-drafts', actorId, repositoryId, page],
+    queryKey: ['ruleset-drafts', actorId, repositoryId, page, pageSize],
     queryFn: ({ signal }) =>
-      draftRequest<DraftPage>(repositoryId, `?page=${page}`, undefined, signal),
+      draftRequest<DraftPage>(
+        repositoryId,
+        `?page=${page}&pageSize=${pageSize}`,
+        undefined,
+        signal
+      ),
     retry: false,
   })
   return (
@@ -657,7 +662,18 @@ export function RulesetDrafts({
           )}
           {query.data && !query.isError && (
             <>
-              <Table>
+              <Table
+                pagination={{
+                  page,
+                  pageSize,
+                  hasNext: query.data?.hasMore,
+                  onPageChange: setPage,
+                  onPageSizeChange: (size) => {
+                    setPageSize(size)
+                    setPage(1)
+                  },
+                }}
+              >
                 <TableHeader>
                   <TableRow>
                     <TableHead>Name</TableHead>
@@ -746,33 +762,6 @@ export function RulesetDrafts({
                   </p>
                 </div>
               )}
-              <div className='flex items-center justify-between gap-3 border-t pt-4'>
-                <p className='text-xs text-muted-foreground'>
-                  Page {page} · {query.data.drafts.length} drafts
-                </p>
-                <div className='flex gap-2'>
-                  <Button
-                    size='sm'
-                    variant='outline'
-                    disabled={page === 1 || query.isFetching}
-                    onClick={() => setPage(page - 1)}
-                  >
-                    <ChevronLeft className='size-4' />
-                    Previous
-                  </Button>
-                  <Button
-                    size='sm'
-                    variant='outline'
-                    disabled={
-                      !query.data.hasMore || query.isFetching || page >= 1000
-                    }
-                    onClick={() => setPage(page + 1)}
-                  >
-                    Next
-                    <ChevronRight className='size-4' />
-                  </Button>
-                </div>
-              </div>
             </>
           )}
         </CardContent>

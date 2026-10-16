@@ -193,7 +193,10 @@ it('paginates history and hides review requests from viewers', async () => {
   await expect
     .element(view.getByRole('button', { name: 'Run review' }))
     .not.toBeInTheDocument()
-  await view.getByRole('button', { name: 'Next', exact: true }).click()
+  await view
+    .getByRole('navigation', { name: 'AI review pages' })
+    .getByRole('button', { name: 'Next', exact: true })
+    .click()
   await view.getByText('Review details', { exact: true }).click()
   await expect
     .element(view.getByText('Skill 5 · skill v1', { exact: true }))

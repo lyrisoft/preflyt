@@ -467,12 +467,15 @@ it('combines manual and automatic checks into the latest row per PR with scoped 
     updatedAt: new Date('2026-01-02T00:00:00Z'),
   })) })
   const first = (await get(viewer, `${base}/results?page=1`).expect(200)).body
-  expect(first.publications).toHaveLength(20)
+  expect(first.publications).toHaveLength(10)
   expect(first.hasMore).toBe(true)
   const second = (await get(viewer, `${base}/results?page=2`).expect(200)).body
-  expect(second.publications).toHaveLength(1)
-  expect(second.hasMore).toBe(false)
-  const rows = [...first.publications, ...second.publications]
+  expect(second.publications).toHaveLength(10)
+  expect(second.hasMore).toBe(true)
+  const third = (await get(viewer, `${base}/results?page=3`).expect(200)).body
+  expect(third.publications).toHaveLength(1)
+  expect(third.hasMore).toBe(false)
+  const rows = [...first.publications, ...second.publications, ...third.publications]
   expect(new Set(rows.map((row: any) => row.prNumber)).size).toBe(21)
   expect(rows.find((row: any) => row.prNumber === 7)).toMatchObject({ id: 'automatic-0', state: 'UNKNOWN', branchRef: 'refs/heads/development' })
   expect(JSON.stringify(rows)).not.toContain('private-')

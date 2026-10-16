@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { OptionSelect } from '@/components/ui/option-select'
+import { Table } from '@/components/ui/table'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { AppHeader } from '@/components/layout/app-header'
 import { Main } from '@/components/layout/main'
@@ -172,6 +173,7 @@ export function TeamsWorkspace({
 }) {
   const client = useQueryClient()
   const [search, setSearch] = useState('')
+  const [pageSize, setPageSize] = useState(10)
   const [page, setPage] = useState(1)
   const [id, setId] = useState<string | null>(null)
   const [editor, setEditor] = useState<Detail | 'new' | null>(null)
@@ -180,11 +182,11 @@ export function TeamsWorkspace({
   const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false)
   const query = useQuery({
-    queryKey: ['teams', scopeKey, page, search],
+    queryKey: ['teams', scopeKey, page, search, pageSize],
     retry: false,
     queryFn: ({ signal }) =>
       governanceRequest<{ teams: Team[]; total: number; pageSize: number }>(
-        `/teams?page=${page}&q=${encodeURIComponent(search)}`,
+        `/teams?page=${page}&pageSize=${pageSize}&q=${encodeURIComponent(search)}`,
         undefined,
         signal
       ),
@@ -327,7 +329,19 @@ export function TeamsWorkspace({
         </div>
       </div>
       <div className='overflow-x-auto rounded-xl border'>
-        <table className='w-full text-left text-sm'>
+        <Table
+          pagination={{
+            page,
+            pageSize,
+            total: query.data?.total ?? 0,
+            onPageChange: setPage,
+            onPageSizeChange: (size) => {
+              setPageSize(size)
+              setPage(1)
+            },
+          }}
+          className='w-full text-left text-sm'
+        >
           <thead className='bg-muted/40 text-muted-foreground'>
             <tr>
               {[
@@ -414,7 +428,7 @@ export function TeamsWorkspace({
                 </tr>
               ))}
           </tbody>
-        </table>
+        </Table>
         {query.isPending && (
           <p role='status' className='p-8 text-sm'>
             Loading teams…
@@ -433,14 +447,6 @@ export function TeamsWorkspace({
           </div>
         )}
       </div>
-      {query.data && !query.isError && (
-        <Paging
-          page={page}
-          total={query.data.total}
-          size={20}
-          onChange={setPage}
-        />
-      )}
       <Dialog
         open={!!id}
         onOpenChange={(open) => {
@@ -916,7 +922,7 @@ function TeamDetail({
           </div>
         )}
         <div className='overflow-x-auto rounded-lg border'>
-          <table className='w-full text-left text-sm'>
+          <Table className='w-full text-left text-sm'>
             <thead className='bg-muted/40'>
               <tr>
                 <th className='p-3 font-medium'>Repository</th>
@@ -925,7 +931,7 @@ function TeamDetail({
               </tr>
             </thead>
             <tbody>
-              {team.repositories.slice((page - 1) * 10, page * 10).map((r) => (
+              {team.repositories.map((r) => (
                 <tr key={r.id} className='border-t'>
                   <td className='p-3'>{r.name}</td>
                   <td className='p-3'>
@@ -953,7 +959,7 @@ function TeamDetail({
                 </tr>
               ))}
             </tbody>
-          </table>
+          </Table>
           {!team.repositories.length && (
             <p className='p-5 text-sm text-muted-foreground'>
               No authorized repository associations.
@@ -1006,7 +1012,7 @@ function TeamDetail({
       </TabsContent>
       <TabsContent value='impact' className='space-y-3'>
         <div className='overflow-x-auto rounded-lg border'>
-          <table className='w-full text-left text-sm'>
+          <Table className='w-full text-left text-sm'>
             <thead className='bg-muted/40'>
               <tr>
                 <th className='p-3 font-medium'>Repository</th>
@@ -1016,7 +1022,7 @@ function TeamDetail({
               </tr>
             </thead>
             <tbody>
-              {team.impact?.slice((page - 1) * 10, page * 10).map((row) => (
+              {team.impact?.map((row) => (
                 <tr
                   key={`${row.githubId}:${row.branchRef ?? 'unassigned'}`}
                   className='border-t'
@@ -1065,7 +1071,7 @@ function TeamDetail({
                 </tr>
               ))}
             </tbody>
-          </table>
+          </Table>
           {!team.impact?.length && (
             <p className='p-5 text-sm text-muted-foreground'>
               Approve repository policy scope to review affected repositories.
@@ -1096,7 +1102,7 @@ function TeamDetail({
           )}
         </div>
       </TabsContent>
-      {tab !== 'overview' && (
+      {!['overview', 'repositories', 'impact'].includes(tab) && (
         <Paging page={page} total={rows.length} onChange={setPage} />
       )}
     </Tabs>

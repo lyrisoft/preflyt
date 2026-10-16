@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react'
+import { RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -54,6 +54,7 @@ export function ReadinessAutomation({
   settingsOnly?: boolean
   canReview?: boolean
 }) {
+  const [pageSize, setPageSize] = useState(10)
   const [page, setPage] = useState(1),
     [busy, setBusy] = useState(false),
     [error, setError] = useState('')
@@ -65,11 +66,12 @@ export function ReadinessAutomation({
       root,
       repositoryIds?.join(','),
       page,
+      pageSize,
     ],
     queryFn: async ({ signal }): Promise<Result> => {
       if (!repositoryIds)
         return governanceRequest<Result>(
-          `${root}?page=${page}`,
+          `${root}?page=${page}&pageSize=${pageSize}`,
           undefined,
           signal
         )
@@ -290,7 +292,22 @@ export function ReadinessAutomation({
           !query.isError &&
           query.data && (
             <>
-              <Table>
+              <Table
+                pagination={
+                  repositoryIds
+                    ? undefined
+                    : {
+                        page,
+                        pageSize,
+                        hasNext: query.data?.hasMore,
+                        onPageChange: setPage,
+                        onPageSizeChange: (size) => {
+                          setPageSize(size)
+                          setPage(1)
+                        },
+                      }
+                }
+              >
                 <TableHeader>
                   <TableRow>
                     <TableHead>Pull request</TableHead>
@@ -365,33 +382,6 @@ export function ReadinessAutomation({
                   No eligible pull requests have been found yet.
                 </p>
               )}
-              <div className='flex items-center justify-between border-t pt-4'>
-                <span className='text-xs text-muted-foreground'>
-                  Page {page}
-                </span>
-                <div className='flex gap-2'>
-                  <Button
-                    size='sm'
-                    variant='outline'
-                    disabled={page === 1 || query.isFetching}
-                    onClick={() => setPage(page - 1)}
-                  >
-                    <ChevronLeft className='size-4' />
-                    Previous
-                  </Button>
-                  <Button
-                    size='sm'
-                    variant='outline'
-                    disabled={
-                      !query.data.hasMore || query.isFetching || page >= 1000
-                    }
-                    onClick={() => setPage(page + 1)}
-                  >
-                    Next
-                    <ChevronRight className='size-4' />
-                  </Button>
-                </div>
-              </div>
             </>
           )
         )}

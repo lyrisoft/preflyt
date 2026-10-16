@@ -8,6 +8,7 @@ export async function captureContributors(
   installationId: bigint,
   repositoryGithubId: bigint,
   activities: ContributorActivity[],
+  lease?: { token: string; accessRevision: number },
 ) {
   return db.$transaction(async (tx) => {
     // Lock the installed repository, so deselection/revocation and concurrent replay cannot race ingestion.
@@ -17,7 +18,7 @@ export async function captureContributors(
         installationId,
         available: true,
         selected: true,
-        installation: { active: true },
+        installation: { active: true, ...(lease ? {accessRevision:lease.accessRevision} : {}) },
       },
       data: { selected: true },
     })
@@ -26,6 +27,7 @@ export async function captureContributors(
     const repository = await tx.gitHubRepository.findUniqueOrThrow({
       where: { githubId: repositoryGithubId },
     })
+    if (lease && !(await tx.contributorSyncState.updateMany({where:{repositoryId:repository.id,leaseToken:lease.token,leaseUntil:{gt:new Date()}},data:{updatedAt:new Date()}})).count) return {accepted:false,reason:'sync_lease_changed'}
     const old = await tx.contributorDelivery.findUnique({
       where: { id: deliveryId },
     })

@@ -1,10 +1,7 @@
-import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, getRouteApi, useNavigate } from '@tanstack/react-router'
 import {
   ArrowUpRight,
-  ChevronLeft,
-  ChevronRight,
   LayoutDashboard,
   GitBranch,
   GitPullRequest,
@@ -53,8 +50,8 @@ import { StatusBadge } from '@/components/status-badge'
 import { SurfaceIcon } from '@/components/surface-icon'
 import { useHealthPortfolio } from '@/features/health/health-api'
 import { healthPortfolioHelp } from '@/features/health/health-help-content'
+import { reviewStatuses } from '@/features/repositories/assessment-result'
 import { RelativeTime } from '@/features/repositories/relative-time'
-import { TechIcon } from '@/features/repositories/tech-icon'
 import { useNavigationSession } from '@/features/workspace/navigation-session'
 import { ActivityHeatmap } from './activity-heatmap'
 import { DashboardHealth, DashboardHealthMetrics } from './dashboard-health'
@@ -69,12 +66,17 @@ const reasons: Record<string, string> = {
   AWAITING_SYNC: 'Awaiting GitHub sync',
   FORK_HEAD_UNSUPPORTED: 'Fork head unsupported',
   STANDARDS_NOT_ADOPTED: 'Standards not adopted',
-  EXECUTION_NOT_VERIFIED: 'Execution not verified',
+  SAVED_ASSESSMENT_WARN: 'Optional checks need attention',
+  SAVED_ASSESSMENT_BLOCK: 'Required checks failed',
+  SAVED_ASSESSMENT_INCOMPLETE: 'Required results incomplete',
+  NO_APPLICABLE_ASSESSMENT: 'No matching assessment',
+  RESULT_UNAVAILABLE: 'Result unavailable',
+  CURRENT_STATE_UNVERIFIED: 'Awaiting GitHub sync',
+  CONTEXT_CHANGED: 'Context changed; reload',
 }
 
 export function Dashboard() {
   const { days = '180', repository, tab = 'overview' } = route.useSearch()
-  const [repositoryPage, setRepositoryPage] = useState(1)
   const navigate = useNavigate()
   const session = useNavigationSession()
   const query = useQuery({
@@ -107,6 +109,7 @@ export function Dashboard() {
   const healthQuery = useHealthPortfolio({
     repository,
     enabled: tab === 'health',
+    pageSize: 1000,
   })
   const activeQuery = tab === 'health' ? healthQuery : query
   const data = query.data
@@ -114,17 +117,11 @@ export function Dashboard() {
     days?: '7' | '30' | '90' | '180'
     repository?: string
   }) => {
-    setRepositoryPage(1)
     void navigate({
       to: '/overview',
       search: { days, repository, tab, ...next },
     })
   }
-  const repositoryPages = Math.max(
-    1,
-    Math.ceil((data?.repositories.length ?? 0) / 10)
-  )
-  const currentRepositoryPage = Math.min(repositoryPage, repositoryPages)
   return (
     <>
       <AppHeader breadcrumbs={[{ label: 'Overview' }]} />
@@ -487,13 +484,13 @@ export function Dashboard() {
                             </Table>
                           ) : (
                             <p className='py-6 text-center text-sm text-muted-foreground'>
-                              No tracked open pull requests. Signed webhooks and
-                              the sync worker populate this view.
+                              No pull requests requiring review in the loaded
+                              results.
                             </p>
                           )}
                           {data.attentionTruncated && (
                             <p className='mt-3 text-xs text-muted-foreground'>
-                              Showing the 10 most recently updated PRs. Open
+                              Reviewing the 10 most recently updated PRs. Open
                               Assessments to review a repository's tracked PRs.
                             </p>
                           )}
@@ -508,8 +505,7 @@ export function Dashboard() {
                             <div>
                               <CardTitle>Repository status</CardTitle>
                               <CardDescription>
-                                Latest recorded profile, standards selection,
-                                and assessment
+                                Latest saved assessment and next step
                               </CardDescription>
                             </div>
                           </div>
@@ -525,161 +521,54 @@ export function Dashboard() {
                             <TableHeader>
                               <TableRow>
                                 <TableHead>Repository</TableHead>
-                                <TableHead>Language / framework</TableHead>
-                                <TableHead>Profile status</TableHead>
-                                <TableHead>Policy profile</TableHead>
-                                <TableHead>Last assessment</TableHead>
-                                <TableHead>Merge review result</TableHead>
+                                <TableHead>Latest assessment</TableHead>
+                                <TableHead>Assessment result</TableHead>
+                                <TableHead>Next action</TableHead>
                               </TableRow>
                             </TableHeader>
                             <TableBody>
-                              {data.repositories
-                                .slice(
-                                  (currentRepositoryPage - 1) * 10,
-                                  currentRepositoryPage * 10
-                                )
-                                .map((repo) => (
-                                  <TableRow key={repo.githubId}>
-                                    <TableCell>
-                                      <Link
-                                        className='font-medium underline-offset-4 hover:underline'
-                                        to='/repositories/$repositoryId'
-                                        params={{ repositoryId: repo.githubId }}
-                                      >
-                                        {repo.fullName}
-                                      </Link>
-                                      {repo.profileBranch && (
-                                        <p className='mt-1 text-xs text-muted-foreground'>
-                                          Inspected: {repo.profileBranch}
-                                        </p>
-                                      )}
-                                    </TableCell>
-                                    <TableCell className='max-w-60 whitespace-normal text-muted-foreground'>
-                                      {repo.technologies.length ? (
-                                        <div className='flex flex-wrap items-center gap-1.5'>
-                                          {[...new Set(repo.technologies)].map(
-                                            (name) => (
-                                              <TechIcon
-                                                key={name}
-                                                name={name}
-                                                compact
-                                              />
-                                            )
+                              {data.repositories.map((repo) => (
+                                <TableRow key={repo.githubId}>
+                                  <TableCell>
+                                    <Link
+                                      className='font-medium underline-offset-4 hover:underline focus-visible:underline'
+                                      to='/repositories/$repositoryId'
+                                      params={{ repositoryId: repo.githubId }}
+                                    >
+                                      {repo.fullName}
+                                    </Link>
+                                  </TableCell>
+                                  <TableCell>
+                                    {repo.latestAssessment ? (
+                                      <div className='space-y-1 text-xs text-muted-foreground'>
+                                        <ResultTimestamp
+                                          value={
+                                            repo.latestAssessment.createdAt
+                                          }
+                                        />
+                                        <code className='block'>
+                                          {repo.latestAssessment.sourceSha.slice(
+                                            0,
+                                            7
                                           )}
-                                        </div>
-                                      ) : repo.profileComplete === null ? (
-                                        'Not inspected'
-                                      ) : repo.profileComplete === false ? (
-                                        'Unknown'
-                                      ) : (
-                                        'Not detected'
-                                      )}
-                                    </TableCell>
-                                    <TableCell>
-                                      <Tooltip>
-                                        <TooltipTrigger asChild>
-                                          <span
-                                            tabIndex={0}
-                                            className='inline-flex rounded-md focus-visible:outline-2 focus-visible:outline-ring'
-                                          >
-                                            <StatusBadge
-                                              tone={
-                                                repo.profileComplete === false
-                                                  ? 'warning'
-                                                  : repo.profileComplete ===
-                                                      true
-                                                    ? 'info'
-                                                    : 'neutral'
-                                              }
-                                            >
-                                              {repo.profileComplete === false
-                                                ? 'Partially inspected'
-                                                : repo.profileComplete === true
-                                                  ? 'Inspected'
-                                                  : 'Not inspected'}
-                                            </StatusBadge>
-                                          </span>
-                                        </TooltipTrigger>
-                                        <TooltipContent className='max-w-72'>
-                                          {repo.profileComplete === false
-                                            ? 'Preflyt could not complete the repository inspection. Some configuration may be unknown.'
-                                            : repo.profileComplete === true
-                                              ? 'Preflyt completed its supported file inspection. Tests and scanners were not run.'
-                                              : 'No repository inspection has been saved yet.'}
-                                        </TooltipContent>
-                                      </Tooltip>
-                                    </TableCell>
-                                    <TableCell>
-                                      <StatusBadge
-                                        tone={repo.policy ? 'info' : 'warning'}
-                                      >
-                                        {repo.policy
-                                          ? repo.policy.charAt(0) +
-                                            repo.policy.slice(1).toLowerCase()
-                                          : 'Not adopted'}
-                                      </StatusBadge>
-                                    </TableCell>
-                                    <TableCell>
-                                      {repo.latestAssessment ? (
-                                        <Link
-                                          to='/assessments'
-                                          search={{ repository: repo.githubId }}
-                                          className='underline-offset-4 hover:underline'
-                                        >
-                                          <ResultTimestamp
-                                            value={
-                                              repo.latestAssessment.createdAt
-                                            }
-                                            stacked
-                                          />
-                                        </Link>
-                                      ) : (
-                                        <StatusBadge tone='neutral'>
-                                          Not assessed
-                                        </StatusBadge>
-                                      )}
-                                    </TableCell>
-                                    <TableCell>
-                                      <StatusBadge tone='neutral'>
-                                        Not evaluated
-                                      </StatusBadge>
-                                    </TableCell>
-                                  </TableRow>
-                                ))}
+                                        </code>
+                                      </div>
+                                    ) : (
+                                      <span className='text-xs text-muted-foreground'>
+                                        No assessment yet
+                                      </span>
+                                    )}
+                                  </TableCell>
+                                  <TableCell>
+                                    <RepositoryMergeReview repository={repo} />
+                                  </TableCell>
+                                  <TableCell>
+                                    <RepositoryNextAction repository={repo} />
+                                  </TableCell>
+                                </TableRow>
+                              ))}
                             </TableBody>
                           </Table>
-                          <div className='mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-4'>
-                            <p className='text-xs text-muted-foreground'>
-                              Page {currentRepositoryPage} of {repositoryPages}{' '}
-                              · {data.repositories.length} repositories
-                            </p>
-                            <div className='flex gap-2'>
-                              <Button
-                                size='sm'
-                                variant='outline'
-                                disabled={currentRepositoryPage === 1}
-                                onClick={() =>
-                                  setRepositoryPage(currentRepositoryPage - 1)
-                                }
-                              >
-                                <ChevronLeft className='size-4' />
-                                Previous
-                              </Button>
-                              <Button
-                                size='sm'
-                                variant='outline'
-                                disabled={
-                                  currentRepositoryPage >= repositoryPages
-                                }
-                                onClick={() =>
-                                  setRepositoryPage(currentRepositoryPage + 1)
-                                }
-                              >
-                                Next
-                                <ChevronRight className='size-4' />
-                              </Button>
-                            </div>
-                          </div>
                         </CardContent>
                       </Card>
                     </TabsContent>
@@ -715,5 +604,105 @@ export function Dashboard() {
         )}
       </Main>
     </>
+  )
+}
+
+function RepositoryMergeReview({
+  repository,
+}: {
+  repository: DashboardData['repositories'][number]
+}) {
+  const status = Object.prototype.hasOwnProperty.call(
+    reviewStatuses,
+    repository.readiness
+  )
+    ? reviewStatuses[repository.readiness as keyof typeof reviewStatuses]
+    : {
+        label:
+          repository.readiness === 'NOT_EVALUATED'
+            ? 'Not evaluated'
+            : 'Result unavailable',
+        tone: 'warning' as const,
+      }
+  if (!repository.latestAssessment)
+    return <span className='text-muted-foreground'>—</span>
+  const label =
+    (
+      {
+        PASS: 'Passed',
+        BLOCK: 'Failed',
+        WARN: 'Needs attention',
+        INCOMPLETE: 'Incomplete',
+      } as Record<string, string>
+    )[repository.readiness] ?? status.label
+  const badge = (
+    <StatusBadge compact tone={status.tone}>
+      {label}
+    </StatusBadge>
+  )
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Link
+          to='/repositories/$repositoryId'
+          params={{ repositoryId: repository.githubId }}
+          search={{
+            tab: 'assessments',
+            assessment: repository.latestAssessment.id,
+          }}
+          className='inline-flex rounded-md focus-visible:outline-2 focus-visible:outline-ring'
+        >
+          {badge}
+        </Link>
+      </TooltipTrigger>
+      <TooltipContent className='max-w-72'>
+        Saved assessment for commit{' '}
+        {repository.latestAssessment.sourceSha.slice(0, 7)}. This is not current
+        GitHub merge permission.
+      </TooltipContent>
+    </Tooltip>
+  )
+}
+
+function RepositoryNextAction({
+  repository,
+}: {
+  repository: DashboardData['repositories'][number]
+}) {
+  const setup = !repository.latestAssessment
+  const tab =
+    setup && repository.profileComplete !== true
+      ? 'overview'
+      : setup && !repository.policy
+        ? 'standards'
+        : 'assessments'
+  const label =
+    tab === 'overview'
+      ? 'Inspect repository'
+      : tab === 'standards'
+        ? 'Choose standards'
+        : !repository.latestAssessment
+          ? 'Create assessment'
+          : repository.readiness === 'INCOMPLETE'
+            ? 'Review missing results'
+            : repository.readiness === 'BLOCK'
+              ? 'Review failed checks'
+              : repository.readiness === 'WARN'
+                ? 'Review optional checks'
+                : 'View assessment'
+  return (
+    <Link
+      to='/repositories/$repositoryId'
+      params={{ repositoryId: repository.githubId }}
+      search={{
+        tab,
+        ...(repository.latestAssessment
+          ? { assessment: repository.latestAssessment.id }
+          : {}),
+      }}
+      className='inline-flex min-h-8 items-center text-xs font-medium underline-offset-4 hover:underline focus-visible:underline'
+    >
+      {label}
+    </Link>
   )
 }

@@ -149,7 +149,9 @@ it('creates a policy by selecting the branch and standards directly', async () =
 })
 it('blocks approval of a self-authored draft and keeps publication separate', async () => {
   const { view } = await mount()
-  await page.getByRole('button', { name: 'Review main version 1' }).click()
+  await page
+    .getByRole('button', { name: 'Review main version 1', exact: true })
+    .click()
   await expect
     .element(page.getByRole('button', { name: 'Approve policy' }))
     .toBeDisabled()
@@ -187,7 +189,9 @@ it('keeps a policy with its own standards current after repository defaults chan
   state.owned = true
   state.selection = 'other-selection'
   const { view } = await mount(true, 'reviewer')
-  await page.getByRole('button', { name: 'Review main version 1' }).click()
+  await page
+    .getByRole('button', { name: 'Review main version 1', exact: true })
+    .click()
   await expect
     .element(page.getByRole('button', { name: 'Approve policy' }))
     .toBeEnabled()
@@ -199,7 +203,9 @@ it('keeps a policy with its own standards current after repository defaults chan
 it('offers an explicit protection review after publication without performing activation', async () => {
   state.policyState = 'PUBLISHED'
   const { view } = await mount()
-  await page.getByRole('button', { name: 'Review main version 1' }).click()
+  await page
+    .getByRole('button', { name: 'Review main version 1', exact: true })
+    .click()
   await expect
     .element(page.getByRole('link', { name: 'Review merge protection' }))
     .toHaveAttribute(
@@ -212,18 +218,22 @@ it('offers an explicit protection review after publication without performing ac
   expect(state.fetch).not.toHaveBeenCalled()
   await view.unmount()
 })
-it('bounds policy history to five rows while preserving older revisions', async () => {
-  state.count = 8
+it('defaults policy history to ten rows while preserving older revisions', async () => {
+  state.count = 13
   const { view } = await mount()
   await expect
-    .element(page.getByRole('button', { name: 'Review main version 8' }))
+    .element(page.getByRole('button', { name: 'Review main version 13' }))
     .toBeVisible()
   await expect
-    .element(page.getByRole('button', { name: 'Review main version 1' }))
+    .element(
+      page.getByRole('button', { name: 'Review main version 1', exact: true })
+    )
     .not.toBeInTheDocument()
   await page.getByRole('button', { name: 'Next' }).click()
   await expect
-    .element(page.getByRole('button', { name: 'Review main version 1' }))
+    .element(
+      page.getByRole('button', { name: 'Review main version 1', exact: true })
+    )
     .toBeVisible()
   await view.unmount()
 })

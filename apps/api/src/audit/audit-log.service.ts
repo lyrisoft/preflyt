@@ -1,3 +1,4 @@
+import { readPageSize } from '../pagination.js'
 import { BadRequestException, ForbiddenException, Inject, Injectable } from '@nestjs/common';
 import { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -145,7 +146,7 @@ export class AuditLogService {
     if (filters.from) clauses.push(Prisma.sql`"createdAt" >= ${filters.from}`);
     if (filters.to) clauses.push(Prisma.sql`"createdAt" < ${filters.to}`);
     const where = Prisma.join(clauses, ' AND ');
-    const pageSize = 20;
+    const pageSize = readPageSize(input.pageSize);
     const [rows, counts, actions] = await this.db.$transaction(async tx => Promise.all([
       tx.$queryRaw<AuditRow[]>(Prisma.sql`${context} SELECT * FROM scoped WHERE ${where} ORDER BY "createdAt" DESC, id DESC LIMIT ${pageSize} OFFSET ${(filters.page - 1) * pageSize}`),
       tx.$queryRaw<{ total: bigint }[]>(Prisma.sql`${context} SELECT COUNT(*) AS total FROM scoped WHERE ${where}`),

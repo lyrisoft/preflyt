@@ -1,11 +1,5 @@
 import { useState } from 'react'
-import {
-  ChevronLeft,
-  ChevronRight,
-  MoreHorizontal,
-  RefreshCw,
-  ScrollText,
-} from 'lucide-react'
+import { MoreHorizontal, RefreshCw, ScrollText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -122,13 +116,14 @@ export function RepositoryCiEvidence({
   canManageEvidence: boolean
   showIntegrationLink?: boolean
 }) {
+  const [pageSize, setPageSize] = useState(10)
   const [page, setPage] = useState(1)
   const [draft, setDraft] = useState('')
   const [sha, setSha] = useState('')
   const [details, setDetails] = useState<string | null>(null)
   const valid = draft === '' || /^[a-f0-9]{40}$/i.test(draft)
   const summary = useCiEvidence(repositoryId, sha, { poll: true })
-  const query = useCiEvidence(repositoryId, sha, { poll: true, page })
+  const query = useCiEvidence(repositoryId, sha, { poll: true, page, pageSize })
   const observations = query.data?.observations ?? []
   const detailItem =
     observations.find((item) => item.deliveryId === details) ?? null
@@ -222,7 +217,22 @@ export function RepositoryCiEvidence({
             showIntegrationLink={showIntegrationLink}
           />
         ) : (
-          <Table>
+          <Table
+            pagination={{
+              page,
+              pageSize,
+              total: query.data?.pagination?.total ?? 0,
+              onPageChange: (next) => {
+                setPage(next)
+                setDetails(null)
+              },
+              onPageSizeChange: (size) => {
+                setPageSize(size)
+                setPage(1)
+                setDetails(null)
+              },
+            }}
+          >
             <TableHeader>
               <TableRow>
                 <TableHead className='ps-6'>Source</TableHead>
@@ -295,42 +305,7 @@ export function RepositoryCiEvidence({
             </TableBody>
           </Table>
         )}
-        {query.data?.pagination && !query.isError && (
-          <nav
-            aria-label='CI results pagination'
-            className='flex flex-wrap items-center justify-between gap-3 border-t px-6 pt-4'
-          >
-            <p className='text-xs text-muted-foreground'>
-              Page {page} · {query.data.pagination.total} results
-            </p>
-            <div className='flex gap-2'>
-              <Button
-                variant='outline'
-                size='sm'
-                disabled={page === 1 || query.isFetching}
-                onClick={() => {
-                  setPage(page - 1)
-                  setDetails(null)
-                }}
-              >
-                <ChevronLeft aria-hidden='true' />
-                Previous
-              </Button>
-              <Button
-                variant='outline'
-                size='sm'
-                disabled={!query.data.pagination.hasNext || query.isFetching}
-                onClick={() => {
-                  setPage(page + 1)
-                  setDetails(null)
-                }}
-              >
-                Next
-                <ChevronRight aria-hidden='true' />
-              </Button>
-            </div>
-          </nav>
-        )}
+
         <DeliveryDialog
           repositoryId={repositoryId}
           canVerify={canManageEvidence}

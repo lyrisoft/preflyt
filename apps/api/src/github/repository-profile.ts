@@ -34,6 +34,7 @@ export type RepositorySnapshot = {
   complete: boolean
   files: RepositoryFile[]
   warnings: string[]
+  omittedPaths?: { path: string; kind: 'symlink' | 'submodule'; scope: 'file' | 'directory' | 'unknown'; reason: string; affectedChecks?: string[] }[]
 }
 
 export type ProfileSignal = {
@@ -44,7 +45,7 @@ export type ProfileSignal = {
   evidence: { path: string; blobSha: string; reason: string }[]
 }
 
-const ignored = /(^|\/)(node_modules|vendor|dist|build|coverage|\.git)(\/|$)/
+const ignored = /(^|\/)(node_modules|vendor|dist|build|coverage|\.git|\.claude\/skills|\.agents\/skills|\.codex\/skills)(\/|$)/
 const manifest =
   /(^|\/)(package\.json|pyproject\.toml|requirements[^/]*\.txt|go\.mod|Cargo\.toml|pom\.xml|build\.gradle(?:\.kts)?|Gemfile|composer\.json|[^/]+\.csproj)$/
 const workflow = /^\.github\/workflows\/[^/]+\.ya?ml$/
@@ -52,7 +53,22 @@ export const wantsProfileContent = (path: string) =>
   !ignored.test(path) &&
   (/(^|\/)package\.json$/.test(path) || workflow.test(path))
 
+export function omittedProfileChecks(path: string, scope: 'file' | 'directory' | 'unknown'): string[] {
+  if (ignored.test(path)) return []
+  // Reuse the supported file-hint rules. This probe has no omissions, performs
+  // no I/O and is never persisted as repository evidence.
+  if (scope !== 'file') return ['languages','frameworks','manifests','lockfiles','ci','tests','containers','iac','migrations','ownership','semgrep','trivy','gitleaks','checkov']
+  const probe = discoverRepositoryProfile({ sourceSha: '', treeSha: '', branch: '', fullName: '', complete: true, warnings: [], files: [{ path, sha: '', size: 2, content: '{}' }] })
+  const checks = probe.signals.filter((signal) => signal.evidence.some((file) => file.path === path)).map((signal) => signal.id)
+  if (/(^|\/)package\.json$/.test(path)) checks.push('frameworks','tests')
+  if (workflow.test(path)) checks.push('semgrep','trivy','gitleaks','checkov')
+  return [...new Set(checks)]
+}
+
 export function discoverRepositoryProfile(snapshot: RepositorySnapshot) {
+  const omittedPaths = (snapshot.omittedPaths ?? []).map((item) => ({ ...item, ...(ignored.test(item.path) ? { reason: 'Path is outside supported application profile scope (dependencies, generated output or installed agent skills).' } : {}), affectedChecks: ignored.test(item.path) ? [] : item.affectedChecks ?? omittedProfileChecks(item.path, item.scope) }))
+  const affected = new Set(omittedPaths.flatMap((item) => item.affectedChecks))
+
   const files = snapshot.files.filter((file) => !ignored.test(file.path))
   const signals: ProfileSignal[] = []
   const warnings = [...snapshot.warnings]
@@ -68,7 +84,7 @@ export function discoverRepositoryProfile(snapshot: RepositorySnapshot) {
       label,
       state: matches.length
         ? 'detected'
-        : !snapshot.complete || uncertain
+        : !snapshot.complete || affected.has(id) || uncertain
           ? 'unknown'
           : 'not_detected',
       observations,
@@ -300,19 +316,23 @@ export function discoverRepositoryProfile(snapshot: RepositorySnapshot) {
   const unreadContent = files.filter(
     (file) => wantsProfileContent(file.path) && file.content === undefined,
   )
+  for (const file of unreadContent) warnings.push(`${file.path}: ${file.contentError === 'size_limit' ? 'Content exceeds the inspection size limit.' : 'Manifest or workflow content was unavailable or outside the read budget.'}`)
   if (unreadContent.length)
     warnings.push(
       `${unreadContent.length} manifest/workflow files could not be inspected within discovery limits or were unavailable. Content-dependent coverage remains incomplete.`,
     )
+  for (const item of omittedPaths) if (item.affectedChecks.length) warnings.push(`${item.path}: ${item.reason} Affected checks: ${item.affectedChecks.join(', ')}.`)
   return {
     version: 1,
     complete:
-      snapshot.complete && !unreadPackages && unreadContent.length === 0,
+      snapshot.complete && !affected.size && !unreadPackages && unreadContent.length === 0,
+    omittedPaths,
     inspectedFileCount: files.length,
     signals,
     warnings: [...new Set(warnings)],
     limitations: [
       'File and dependency hints only; no commands, builds, tests, or scanners were executed.',
+      'Installed agent skills under .claude/skills, .agents/skills and .codex/skills are outside application profile scope.',
       'Not detected means no supported hint was found in the inspected snapshot; it is not a policy failure.',
       'Framework dependency inspection currently supports Node.js manifests. Symlinks, submodules and generated/vendor directories are not traversed.',
     ],

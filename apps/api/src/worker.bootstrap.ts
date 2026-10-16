@@ -1,3 +1,4 @@
+import { ContributorSyncService } from './contributors/contributor-sync.service.js'
 import { FindingsService } from './findings/findings.service.js'
 import { FindingAiGuidanceService } from './findings/finding-ai-guidance.service.js'
 import { FindingSourceStore } from './findings/finding-source-store.service.js'
@@ -65,6 +66,8 @@ async function start() {
   const cache = new RedisCacheService()
   const githubProvider = new GitHubProviderService(cache, prisma)
   const sync = new GitHubSyncService(prisma, githubProvider)
+  const contributorSync = new ContributorSyncService(prisma, githubProvider)
+  let contributorRun: Promise<void> | undefined
   const prSync = new GitHubPrSyncService(prisma, githubProvider)
   const rulesetHistory = new RulesetHistoryService(prisma, githubProvider)
   let historyRun: Promise<void> | undefined
@@ -238,6 +241,7 @@ async function start() {
             syncRun = undefined
           })
       }
+      if (!contributorRun) contributorRun = (async () => { for (let i=0; i<3 && !closing; i++) await contributorSync.reconcile() })().catch(warn).finally(() => { contributorRun = undefined })
       if (!teamRun) teamRun = teams.reconcile().catch(warn).finally(() => { teamRun = undefined })
       if (!identityRun) identityRun = userAccess.reconcile().catch(warn).finally(() => { identityRun = undefined })
       if (!aiReviewRun) aiReviewRun = aiReviews.reconcile().catch(warn).finally(() => { aiReviewRun = undefined })
@@ -293,6 +297,7 @@ async function start() {
     consumer.disconnect()
     await findingAiRun
     await sourceRun
+    await contributorRun
     await teamRun
     await identityRun
     await aiReviewRun

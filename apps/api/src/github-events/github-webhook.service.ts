@@ -1,3 +1,4 @@
+import { readPageSize } from '../pagination.js'
 import { isPreflytFeedback } from './preflyt-feedback.js'
 import { configurationValue } from '../configuration/runtime-configuration.js'
 import { normalizeContributorEvent } from './contributor-event.js'
@@ -272,11 +273,11 @@ export class GitHubWebhookService {
     })
   }
 
-  async evidence(repositoryId: string, sha?: string, pageInput?: string) {
+  async evidence(repositoryId: string, sha?: string, pageInput?: string, requestedSize?: unknown) {
     if (pageInput !== undefined && (typeof pageInput !== 'string' || !/^[1-9][0-9]{0,5}$/.test(pageInput)))
       throw new BadRequestException('A positive page number is required')
     const page = pageInput === undefined ? undefined : Number(pageInput)
-    const pageSize = page === undefined ? 50 : 10
+    const pageSize = page === undefined ? 50 : readPageSize(requestedSize)
     if (
       sha !== undefined &&
       (typeof sha !== 'string' || !/^[a-f0-9]{40}$/i.test(sha))
@@ -336,11 +337,11 @@ export class GitHubWebhookService {
     return repository
   }
 
-  async list(repositoryId: string, pageInput?: string) {
+  async list(repositoryId: string, pageInput?: string, requestedSize?: unknown) {
     if (pageInput !== undefined && (typeof pageInput !== 'string' || !/^[1-9][0-9]{0,5}$/.test(pageInput)))
       throw new BadRequestException('A positive page number is required')
     const page = pageInput === undefined ? undefined : Number(pageInput)
-    const pageSize = page === undefined ? 50 : 10
+    const pageSize = page === undefined ? 50 : readPageSize(requestedSize)
     const repository = await this.selectedRepository(repositoryId)
     const where = { repositoryGithubId: repository.githubId, installationId: repository.installationId }
     const deliveries = await this.prisma.gitHubWebhookDelivery.findMany({

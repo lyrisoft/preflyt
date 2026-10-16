@@ -1,3 +1,4 @@
+import { readPageSize } from '../pagination.js';
 import { findingReferenceGuidance } from '../health/finding-guidance.js';
 import {
   BadRequestException,
@@ -34,6 +35,7 @@ export class FindingsService {
     query: Record<string, unknown>,
     lookupId?: string,
   ) {
+    const pageSize = readPageSize(query.pageSize);
     const triage = String(query.triage ?? "all");
     const category = String(query.category ?? "all");
     // Legacy Health card links remain exact-report filters; the default list is shared.
@@ -76,7 +78,7 @@ export class FindingsService {
     const assessment = lookupId && query.assessment !== undefined ? String(query.assessment) : undefined;
     if (assessment !== undefined && !/^[a-zA-Z0-9_-]{1,80}$/.test(assessment)) throw new BadRequestException("Choose a valid assessment");
     if (kind === 'ai' || source === 'ai') {
-      const result = await this.aiFindings(session, selected, scope, { page, search, severity, category, triage, assessment, lookupId });
+      const result = await this.aiFindings(session, selected, scope, { page, pageSize, search, severity, category, triage, assessment, lookupId });
       return kind === 'gaps' ? { ...result, rows: [], total: 0, summary: summarizeFindings([], 'gaps') } : result;
     }
     const records = source === "health" ? [] : await this.db.commitAssessment.findMany({
@@ -264,7 +266,7 @@ export class FindingsService {
       }
     }
     const ai = source === 'all' && kind !== 'gaps' ? await this.aiFindings(session, selected, scope,
-      { page: 1, search: '', severity: 'all', category: 'all', triage: 'all', assessment, lookupId }, true) : undefined;
+      { page: 1, pageSize, search: '', severity: 'all', category: 'all', triage: 'all', assessment, lookupId }, true) : undefined;
     if (ai) rows.push(...ai.rows);
     // Put all sources in one stable chronological order before deduplication/pagination.
     rows.sort((a, b) => (b.observedAt ?? "").localeCompare(a.observedAt ?? "") || a.id.localeCompare(b.id));
@@ -317,10 +319,10 @@ export class FindingsService {
     return {
       canManage: !!rolePermissions[session.role]?.includes("findings.manage"),
       summary: summarizeFindings(matching, kind),
-      rows: filtered.slice((page - 1) * 50, page * 50),
+      rows: filtered.slice((page - 1) * pageSize, page * pageSize),
       total: filtered.length,
       page,
-      pageSize: 50,
+      pageSize,
       truncated:
         records.length > 200 ||
         healthRecords.length > 200 || ai?.truncated ||
@@ -337,7 +339,7 @@ export class FindingsService {
   }
 
   private async aiFindings(session: AuthenticatedSession, selected: any[], scope: any[],
-    filters: { page: number; search: string; severity: string; category: string; triage: string; assessment?: string; lookupId?: string }, allRows = false) {
+    filters: { page: number; pageSize: number; search: string; severity: string; category: string; triage: string; assessment?: string; lookupId?: string }, allRows = false) {
     const records = await this.db.aiSkillReview.findMany({
       where: { organizationId: session.organizationId!, repositoryId: { in: selected.map(r => r.id) },
         stage: 'pull_request', state: 'SUCCEEDED', ...(filters.assessment ? { assessmentId: filters.assessment } : {}) },
@@ -374,8 +376,8 @@ export class FindingsService {
       canManage: !!rolePermissions[session.role]?.includes('findings.manage'), summary: summarizeFindings(matching, 'findings'),
       aiSummary: { suggestions: matching.length, repositories: new Set(matching.map(r => r.repositoryId)).size,
         pullRequests: new Set(matching.map(r => `${r.repositoryId}:${r.pullRequest}`)).size },
-      rows: allRows ? matching : matching.slice((filters.page - 1) * 50, filters.page * 50), total: matching.length,
-      page: filters.page, pageSize: 50, truncated: records.length > 200 || limited,
+      rows: allRows ? matching : matching.slice((filters.page - 1) * filters.pageSize, filters.page * filters.pageSize), total: matching.length,
+      page: filters.page, pageSize: filters.pageSize, truncated: records.length > 200 || limited,
       repositories: scope.map(repo => ({ githubId: String(repo.githubId), fullName: repo.fullName })),
       assessedRevisions: new Set([...unique.values()].map(r => `${r.repositoryId}:${r.sourceSha}`)).size,
     };

@@ -88,7 +88,10 @@ if (process.env.SUPER_ADMIN_USERNAME && process.env.SUPER_ADMIN_PASSWORD) {
     response = await request('/api/auth/session', {
       headers: { Cookie: cookie },
     })
-    assert.equal((await response.json()).role, 'SUPER_ADMIN')
+    const session = await response.json()
+    assert.equal(session.authenticated, true, 'Configured admin session must be authenticated')
+    // A connected admin can have an OWNER workspace role while retaining deployment authority.
+    assert.equal(session.platformAdmin, true, 'Configured admin must retain deployment authority')
     if (process.env.PREFLYT_SMOKE_CONFIGURATION === 'true') {
       response = await request('/api/configuration', { headers: { Cookie: cookie } })
       assert.equal(response.status, 200, 'Deployment configuration must be available')

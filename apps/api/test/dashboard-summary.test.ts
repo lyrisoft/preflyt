@@ -35,7 +35,7 @@ it('rejects stale, future or wrong-installation PR confirmations', () => {
     expect(attentionReason({ ...row, ...change }, repo, now)).toBe(
       'AWAITING_SYNC',
     )
-  expect(attentionReason(row, repo, now)).toBe('EXECUTION_NOT_VERIFIED')
+  expect(attentionReason(row, repo, now)).toBe('ASSESSMENT_LOOKUP_REQUIRED')
 })
 it('preserves missing, closed and unsupported fork states', () => {
   expect(attentionReason({ ...row, context: {} }, repo, now)).toBe(

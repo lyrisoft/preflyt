@@ -9,7 +9,19 @@ description: See who works on which repositories, from pull request and commit a
 
 **Contributors** shows who is working on your repositories, using activity GitHub reports to Preflyt. Open **Workspace → Contributors**.
 
-When a repository is selected, Preflyt reads a limited sample of its recent pull requests, reviews and commits from GitHub. After that, GitHub webhook events keep it current, so the App should be subscribed to **Pull request**, **Pull request review** and **Push** events. See [GitHub App](../self-hosting/github-app.md#3-subscribe-to-events). Without webhooks the page shows only that recent sample.
+When a repository is selected, Preflyt automatically queues a background sync of its recent pull requests, reviews and commits from GitHub. You do not need to click Import or keep this page open. The worker must be running; the documented Compose deployment includes it.
+
+After that, GitHub webhook events keep it current, so the App should be subscribed to **Pull request**, **Pull request review** and **Push** events. See [GitHub App](../self-hosting/github-app.md#3-subscribe-to-events). Without webhooks the page shows only that recent sample.
+
+## Sync progress
+
+The page shows how many repositories have finished syncing, the latest successful sync time, and any repositories waiting to retry. Results appear as repositories complete. Empty metrics show a dash while data is still loading or a sync has failed.
+
+GitHub rate limits and temporary failures retry automatically. Jobs survive worker restarts, and deselected or unavailable repositories are not imported. After repeated failures, an administrator can check the GitHub connection and use **Sync now** to try again.
+
+**Sync now** queues another background sync for repositories you can manage, with a five-minute cooldown. Users without repository management permission can use **Refresh** to reload saved results. Changing a filter reads saved activity; it does not import more history.
+
+Each history sync reads at most 30 recent pull requests, 30 reviews for each of the first 10 pull requests, and 30 recent commits. The page indicates when this limit was reached. This is a recent sample, not a complete historical import; webhooks record subsequent activity.
 
 <figure className="pf-guide-screenshot">
   <a href="/img/guides/contributors.jpg" target="_blank" rel="noreferrer">

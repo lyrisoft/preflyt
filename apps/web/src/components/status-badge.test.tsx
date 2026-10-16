@@ -32,7 +32,7 @@ it('keeps success, failure, pending and inactive states consistent', () => {
 })
 
 it('preserves finding trust and gap semantics', () => {
-  expect(statusTones.reported).toBe('info')
+  expect(statusTones.reported).toBe('neutral')
   expect(statusTones.suppressed).toBe('neutral')
   expect(statusTones['evidence missing']).toBe('warning')
 })
@@ -239,4 +239,35 @@ it('labels partial analysis with the shared warning tone', async () => {
   await expect
     .element(view.getByText('Partial analysis'))
     .toHaveClass('text-warning-text')
+})
+
+it('shows completed repository inspection in green and partial inspection in amber', async () => {
+  const view = await render(
+    <>
+      <StatusBadge tone='info'>Inspected</StatusBadge>
+      <StatusBadge tone='info'>Partially inspected</StatusBadge>
+    </>
+  )
+  await expect
+    .element(view.getByText('Inspected', { exact: true }))
+    .toHaveClass('text-success-text')
+  await expect
+    .element(view.getByText('Partially inspected'))
+    .toHaveClass('text-warning-text')
+})
+
+it('supports a compact badge without changing semantic colors', async () => {
+  const view = await render(
+    <StatusBadge compact tone='info'>
+      Healthy
+    </StatusBadge>
+  )
+  await expect
+    .element(view.getByText('Healthy'))
+    .toHaveClass(
+      'text-success-text',
+      'font-medium',
+      'rounded-md',
+      'border-transparent'
+    )
 })

@@ -45,7 +45,10 @@ it.each([320, 768, 1440])(
       document.querySelectorAll('.marketing-site [id]'),
       (element) => element.id
     )
-    expect(new Set(ids).size).toBe(ids.length)
+    expect(
+      new Set(ids).size,
+      `Duplicate IDs: ${ids.filter((id, index) => ids.indexOf(id) !== index).join(', ')}`
+    ).toBe(ids.length)
     const repositoryMetric = Array.from(
       document.querySelectorAll<HTMLElement>(
         '.workspace-window-interactive [data-preview="contributors"] [data-slot="card"]'

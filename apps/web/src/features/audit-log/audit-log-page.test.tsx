@@ -91,7 +91,7 @@ it('paginates, filters from page one, preserves numeric repository URLs and open
     .toBeVisible()
   await page.getByRole('button', { name: 'Close', exact: true }).click()
   await page.getByRole('button', { name: 'Next', exact: true }).click()
-  await expect.element(page.getByText('Page 2 of 2')).toBeVisible()
+  await expect.element(page.getByText('11–20 of 21')).toBeVisible()
   expect(router.state.location.search.page).toBe(2)
   await page.getByLabelText('From (UTC)').fill('2026-10-11')
   await page.getByRole('button', { name: 'Apply filters' }).click()

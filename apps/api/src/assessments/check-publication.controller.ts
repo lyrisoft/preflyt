@@ -39,11 +39,13 @@ export class CheckPublicationController {
     @Req() req: AuthRequest,
     @Param('repositoryId') id: string,
     @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
   ) {
     return this.checks.list(
       req.preflytSession,
       id,
       page === undefined ? 1 : Number(page),
+      pageSize,
     )
   }
   @Get('results')
@@ -52,8 +54,9 @@ export class CheckPublicationController {
     @Req() req: AuthRequest,
     @Param('repositoryId') id: string,
     @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
   ) {
-    return this.checks.prChecks(req.preflytSession, id, page === undefined ? 1 : Number(page))
+    return this.checks.prChecks(req.preflytSession, id, page === undefined ? 1 : Number(page), pageSize)
   }
   @Get('preview')
   @Header('Cache-Control', 'no-store')

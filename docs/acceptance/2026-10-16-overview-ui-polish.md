@@ -1,0 +1,11 @@
+# Overview status presentation — 16 October 2026
+
+The Health attention panel now shows at most three compact rows per page. Repository names link directly to the existing saved report route; repeated View health buttons were removed. Each row has one compact semantic health badge. Branch, assessment date and freshness form quiet secondary metadata. Freshness explains itself on hover or keyboard focus; only confirmed stale heads receive amber text. Needs review/All form one segmented control with selected-state indication.
+
+The repository status table now has four columns: Repository, Latest assessment, Assessment result and Next action. Removed the repeated inspection/standards badges and language icon collection from the overview. Those details remain on repository pages. Saved results show Passed/Failed/Incomplete/Needs attention with their existing semantic colors and exact assessment links; no assessment shows plain text and no result badge. The next action follows unmet setup prerequisites or the saved result. The result tooltip still distinguishes saved assessment evidence from current GitHub merge permission.
+
+Both panels reuse CompactPagination: visible range/total, quiet ghost arrow controls, accessible names and disabled boundary states. Health has three rows per page; repository results retain ten. StatusBadge has an optional compact treatment with lighter border, modest radius, medium weight and smaller dot. Existing default badges and semantic color ownership are unchanged.
+
+Verification: 38 focused Chromium/unit tests passed across dashboard, health grouping and shared badges. The 100-repository regression verifies exactly three rendered report links, range 1–3/100 and navigation to 4–6/100. Setup next actions, short result colors, exact assessment links, compact badge semantics, error handling and 320px light/dark layouts passed. Desktop screenshots were inspected. Web TypeScript, focused ESLint, whitespace checks and the web production/prerender image build passed.
+
+Local documentation Compose is updated at http://localhost:8081. API, worker and data volumes were preserved. Private build/test evidence: `/private/tmp/preflyt-overview-polish-*`. No commit, push, registry publication or GitHub Actions run.

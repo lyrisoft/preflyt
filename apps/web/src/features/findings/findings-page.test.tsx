@@ -328,6 +328,7 @@ it('applies search and tab changes without changing findings query scope', async
     'all',
     'unsafe query',
     1,
+    10,
   ])
   await view.getByRole('tab', { name: 'Missing or unverified results' }).click()
   expect(state.key).toEqual([
@@ -342,6 +343,7 @@ it('applies search and tab changes without changing findings query scope', async
     'all',
     'unsafe query',
     1,
+    10,
   ])
 })
 

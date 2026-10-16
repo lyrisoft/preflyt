@@ -1,13 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import {
-  ArrowUpRight,
-  ChevronLeft,
-  ChevronRight,
-  RefreshCw,
-  ShieldCheck,
-} from 'lucide-react'
+import { ArrowUpRight, RefreshCw, ShieldCheck } from 'lucide-react'
 import { API_BASE_URL } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -280,13 +274,14 @@ export function RepositoryRulesets({
   initialView?: 'github' | 'drafts' | 'deployments'
 }) {
   const [view, setView] = useState<string>(initialView)
+  const [pageSize, setPageSize] = useState(10)
   const [page, setPage] = useState(1)
   const queryClient = useQueryClient()
   const query = useQuery({
-    queryKey: ['github-rulesets', actorId, repositoryId, page],
+    queryKey: ['github-rulesets', actorId, repositoryId, page, pageSize],
     queryFn: ({ signal }) =>
       read<RulesetList>(
-        `/github/repositories/${repositoryId}/rulesets?page=${page}`,
+        `/github/repositories/${repositoryId}/rulesets?page=${page}&pageSize=${pageSize}`,
         signal
       ),
     enabled: canRead && view === 'github',
@@ -306,11 +301,11 @@ export function RepositoryRulesets({
   const refresh = useMutation({
     mutationFn: async () => {
       await queryClient.cancelQueries({
-        queryKey: ['github-rulesets', actorId, repositoryId, page],
+        queryKey: ['github-rulesets', actorId, repositoryId, page, pageSize],
         exact: true,
       })
       return read<RulesetList>(
-        `/github/repositories/${repositoryId}/rulesets?page=${page}&refresh=true`,
+        `/github/repositories/${repositoryId}/rulesets?page=${page}&pageSize=${pageSize}&refresh=true`,
         new AbortController().signal
       )
     },
@@ -372,7 +367,18 @@ export function RepositoryRulesets({
             )}
             {query.data && (
               <>
-                <Table>
+                <Table
+                  pagination={{
+                    page,
+                    pageSize,
+                    hasNext: query.data?.hasMore,
+                    onPageChange: setPage,
+                    onPageSizeChange: (size) => {
+                      setPageSize(size)
+                      setPage(1)
+                    },
+                  }}
+                >
                   <TableHeader>
                     <TableRow>
                       <TableHead>Name</TableHead>
@@ -437,31 +443,6 @@ export function RepositoryRulesets({
                     branch protections may still apply.
                   </p>
                 )}
-                <div className='flex items-center justify-between gap-3 border-t pt-4'>
-                  <p className='text-xs text-muted-foreground'>
-                    Page {page} · {query.data.rulesets.length} rulesets
-                  </p>
-                  <div className='flex gap-2'>
-                    <Button
-                      variant='outline'
-                      size='sm'
-                      disabled={page === 1 || query.isFetching}
-                      onClick={() => setPage(page - 1)}
-                    >
-                      <ChevronLeft className='size-4' />
-                      Previous
-                    </Button>
-                    <Button
-                      variant='outline'
-                      size='sm'
-                      disabled={!query.data.hasMore || query.isFetching}
-                      onClick={() => setPage(page + 1)}
-                    >
-                      Next
-                      <ChevronRight className='size-4' />
-                    </Button>
-                  </div>
-                </div>
               </>
             )}
           </CardContent>

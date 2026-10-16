@@ -141,7 +141,6 @@ export function GatePolicyPanel({
   const [profile, setProfile] = useState('RECOMMENDED')
   const [draftCatalogue, setDraftCatalogue] = useState<Pack[] | null>(null)
   const [loadingEdit, setLoadingEdit] = useState(false)
-  const [page, setPage] = useState(1)
   const [branch, setBranch] = useState('')
   const [required, setRequired] = useState<string[]>([])
   const client = useQueryClient(),
@@ -409,99 +408,72 @@ export function GatePolicyPanel({
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {query.data.revisions
-                        .slice((page - 1) * 5, page * 5)
-                        .map((policy) => (
-                          <TableRow key={policy.id}>
-                            <TableCell className='pl-4'>
-                              <span className='flex items-center gap-2 font-medium'>
-                                <GitBranch
-                                  className='size-4 shrink-0 text-info'
-                                  aria-hidden='true'
-                                />
-                                <span
-                                  className='max-w-64 truncate'
-                                  title={branchName(policy.branchRef)}
-                                >
-                                  {branchName(policy.branchRef)}
-                                </span>
-                              </span>
-                            </TableCell>
-                            <TableCell className='text-muted-foreground tabular-nums'>
-                              v{policy.revision}
-                            </TableCell>
-                            <TableCell>
-                              <span className='font-medium tabular-nums'>
-                                {
-                                  policy.definition.rules.filter(
-                                    (rule) => rule.required
-                                  ).length
-                                }
-                              </span>
-                              <span className='ml-1 text-xs text-muted-foreground'>
-                                required
-                              </span>
-                            </TableCell>
-                            <TableCell className='text-muted-foreground tabular-nums'>
-                              {policy.definition.packs.length}
-                            </TableCell>
-                            <TableCell>
-                              <PolicyState
-                                policy={policy}
-                                stale={
-                                  policy.definition.standardsSource !==
-                                    'POLICY' &&
-                                  policy.selectionId !==
-                                    query.data.currentSelectionId
-                                }
+                      {query.data.revisions.map((policy) => (
+                        <TableRow key={policy.id}>
+                          <TableCell className='pl-4'>
+                            <span className='flex items-center gap-2 font-medium'>
+                              <GitBranch
+                                className='size-4 shrink-0 text-info'
+                                aria-hidden='true'
                               />
-                            </TableCell>
-                            <TableCell className='pr-4 text-right'>
-                              <Button
-                                variant='ghost'
-                                size='sm'
-                                onClick={() => openReview(policy.id)}
-                                aria-label={`Review ${branchName(policy.branchRef)} version ${policy.revision}`}
+                              <span
+                                className='max-w-64 truncate'
+                                title={branchName(policy.branchRef)}
                               >
-                                Review
-                                <ArrowRight
-                                  className='size-4'
-                                  aria-hidden='true'
-                                />
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))}
+                                {branchName(policy.branchRef)}
+                              </span>
+                            </span>
+                          </TableCell>
+                          <TableCell className='text-muted-foreground tabular-nums'>
+                            v{policy.revision}
+                          </TableCell>
+                          <TableCell>
+                            <span className='font-medium tabular-nums'>
+                              {
+                                policy.definition.rules.filter(
+                                  (rule) => rule.required
+                                ).length
+                              }
+                            </span>
+                            <span className='ml-1 text-xs text-muted-foreground'>
+                              required
+                            </span>
+                          </TableCell>
+                          <TableCell className='text-muted-foreground tabular-nums'>
+                            {policy.definition.packs.length}
+                          </TableCell>
+                          <TableCell>
+                            <PolicyState
+                              policy={policy}
+                              stale={
+                                policy.definition.standardsSource !==
+                                  'POLICY' &&
+                                policy.selectionId !==
+                                  query.data.currentSelectionId
+                              }
+                            />
+                          </TableCell>
+                          <TableCell className='pr-4 text-right'>
+                            <Button
+                              variant='ghost'
+                              size='sm'
+                              onClick={() => openReview(policy.id)}
+                              aria-label={`Review ${branchName(policy.branchRef)} version ${policy.revision}`}
+                            >
+                              Review
+                              <ArrowRight
+                                className='size-4'
+                                aria-hidden='true'
+                              />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
                     </TableBody>
                   </Table>
                 </div>
               )}
-              {query.data.revisions.length > 5 && (
-                <nav
-                  aria-label='Policy revision pages'
-                  className='flex flex-wrap items-center justify-end gap-2'
-                >
-                  <Button
-                    size='sm'
-                    variant='outline'
-                    disabled={page <= 1}
-                    onClick={() => setPage(page - 1)}
-                  >
-                    Previous
-                  </Button>
-                  <span className='text-xs text-muted-foreground'>
-                    Page {page} of {Math.ceil(query.data.revisions.length / 5)}
-                  </span>
-                  <Button
-                    size='sm'
-                    variant='outline'
-                    disabled={page * 5 >= query.data.revisions.length}
-                    onClick={() => setPage(page + 1)}
-                  >
-                    Next
-                  </Button>
-                </nav>
-              )}
+
               <div className='flex items-start gap-2 text-xs text-muted-foreground'>
                 <Info
                   className='mt-0.5 size-3.5 shrink-0 text-info'

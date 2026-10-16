@@ -1,3 +1,4 @@
+import { readPageSize } from '../pagination.js'
 import {
   nestedSnapshot,
   nestedSources,
@@ -391,7 +392,8 @@ export class TeamsService {
       return { id: team.id };
     });
   }
-  async list(s: AuthenticatedSession, page?: string, q = "") {
+  async list(s: AuthenticatedSession, page?: string, q = "", requestedSize?: unknown) {
+    const pageSize = readPageSize(requestedSize);
     await this.access.requireOrganization(s, "team.read");
     if (q.length > 120) throw new BadRequestException("Search is too long");
     const current = pageNumber(page);
@@ -411,8 +413,8 @@ export class TeamsService {
       this.db.preflytTeam.findMany({
         where,
         orderBy: [{ name: "asc" }, { id: "asc" }],
-        skip: (current - 1) * 20,
-        take: 20,
+        skip: (current - 1) * pageSize,
+        take: pageSize,
         include: {
           _count: {
             select: {
@@ -430,7 +432,7 @@ export class TeamsService {
     return {
       page: current,
       total,
-      pageSize: 20,
+      pageSize,
       teams: rows.map((t) => ({
         id: t.id,
         name: t.name,

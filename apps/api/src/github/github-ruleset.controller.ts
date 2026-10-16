@@ -27,13 +27,14 @@ export class GitHubRulesetController {
     @Req() req: Request & { preflytSession?: AuthenticatedSession },
     @Param("repositoryId") repositoryId: string,
     @Query("page") page?: string,
+    @Query("pageSize") pageSize?: string,
     @Query("refresh") refresh?: string,
   ) {
     return this.rulesets.list(
       req.preflytSession!,
       repositoryId,
       page === undefined ? 1 : Number(page),
-      refresh === "true",
+      refresh === "true", pageSize,
     );
   }
   @Get(":rulesetId/insights")
@@ -43,6 +44,7 @@ export class GitHubRulesetController {
     @Param("repositoryId") repositoryId: string,
     @Param("rulesetId") id: string,
     @Query("page") page?: string,
+    @Query("pageSize") pageSize?: string,
     @Query("period") period?: string,
     @Query("ref") ref?: string,
     @Query("actor") actor?: string,
@@ -54,7 +56,7 @@ export class GitHubRulesetController {
       repositoryId,
       Number(id),
       {
-        page: page === undefined ? 1 : Number(page),
+        page: page === undefined ? 1 : Number(page), pageSize: pageSize === undefined ? 10 : Number(pageSize),
         period: period ?? "week",
         ref,
         actor,

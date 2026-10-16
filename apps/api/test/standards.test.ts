@@ -5,6 +5,7 @@ import {
   posture,
   recommend,
   resolvePacks,
+  ruleRequirementsDigest,
 } from '../src/standards/catalogue.js'
 import type { ProfileSignal } from '../src/github/repository-profile.js'
 const signal = (
@@ -119,7 +120,7 @@ describe('versioned engineering catalogue and posture', () => {
 it('publishes implemented report checks as new immutable versions while retaining old policies', () => {
   expect(currentCatalogue).toHaveLength(5)
   for (const pack of currentCatalogue) {
-    expect(pack.version).toBe('1.1.0')
+    expect(pack.version).toBe('1.1.1')
     expect(pack.rules.some((rule) => rule.capability === 'planned')).toBe(false)
     expect(Object.isFrozen(pack)).toBe(true)
     const old = resolvePacks([{ id: pack.id, version: '1.0.0' }])[0]!
@@ -149,4 +150,51 @@ it('separates checks without setup detectors from missing or inconclusive config
   expect(controls.find((control) => control.id === 'tests.required')?.configuration).toBe('MISSING')
   expect(controls.find((control) => control.id === 'dependencies.locked')?.configuration).toBe('UNKNOWN')
   expect(controls.find((control) => control.id === 'ci.configured')?.configuration).toBe('HINT_DETECTED')
+})
+
+
+it('preserves every published 1.1.0 definition when publishing editorial fixes', () => {
+  expect(Object.fromEntries(currentCatalogue.map(pack => [pack.id, resolvePacks([{ id: pack.id, version: '1.1.0' }])[0]!.digest]))).toEqual({
+  "baseline-engineering": "704ab0012f26d7daaf5d6e0f0c2224f6d1435fb4201f3bd5aa04fc2acecdedcd",
+  "application-security": "aa08d04661ea916ca09e729bc1f2d6cf280d95eb6b34893176b0ee6497f4ce34",
+  "backend-service": "971532c7e0b2bafb9491d2f3d2c59aaa963b969379d0e6a8f02e3515ff294989",
+  "frontend-application": "68c6fadf2251fc882e8dd1199560906d96e2fc203bd59358fbab94fc5c6d6ba1",
+  "infrastructure-as-code": "612c7f2a8e2165cdab85670493305e54cfc8bc1d4d1ffe6099180298568fd43c"
+})
+})
+
+it('gives every distinct built-in check specific evidence guidance without changing evaluation requirements', () => {
+  const descriptions = new Map<string, string>()
+  const expected: Record<string, string> = {
+    'ci.configured': 'CI workflow configuration',
+    'tests.required': 'At least one test must execute',
+    'secrets.scan': 'credentials, tokens and private keys',
+    'dependencies.locked': 'dependency lockfiles',
+    'security.sast': 'static-analysis rules',
+    'security.dependencies': 'vulnerability database',
+    'types.required': 'compiler or type checker',
+    'lint.required': 'configured linter',
+    'build.required': 'build or compilation command',
+    'service.resilience': 'timeout limits, bounded retries',
+    'frontend.components': 'component-level UI tests',
+    'iac.policy': 'infrastructure-as-code files',
+    'containers.scan': 'CONTAINER_IMAGE',
+    'iac.exposures': 'unsafe network exposure',
+  }
+  for (const pack of currentCatalogue) {
+    const previous = resolvePacks([{ id: pack.id, version: '1.1.0' }])[0]!
+    for (const rule of pack.rules) {
+      expect(rule.guidance.toLowerCase()).toContain(expected[rule.id].toLowerCase())
+      expect(rule.guidance).not.toMatch(/named control|revision-bound, trusted evidence/)
+      if (descriptions.has(rule.id)) expect(descriptions.get(rule.id)).toBe(rule.guidance)
+      descriptions.set(rule.id, rule.guidance)
+      const old = previous.rules.find(item => item.id === rule.id)!
+      expect(ruleRequirementsDigest(rule)).toBe(ruleRequirementsDigest(old))
+    }
+  }
+  expect(descriptions.size).toBe(14)
+  expect(new Set(descriptions.values()).size).toBe(14)
+  const components = currentCatalogue.flatMap(pack => pack.rules).find(rule => rule.id === 'frontend.components')!
+  expect(components.title).toBe('Component test execution')
+  expect(components.guidance).toContain('not a line or branch coverage percentage')
 })

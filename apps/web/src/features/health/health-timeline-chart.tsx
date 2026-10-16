@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Activity } from 'lucide-react'
 import {
   Bar,
@@ -18,6 +19,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { Table } from '@/components/ui/table'
 import { StatusBadge } from '@/components/status-badge'
 import { SurfaceIcon } from '@/components/surface-icon'
 import type { HealthTimelinePoint } from './health-api'
@@ -66,10 +68,50 @@ export function HealthTimelineChart({
     'quality.maintainability': 'Maintainability',
     'security.hotspots': 'Security hotspots',
   }
-  const span =
-    data.length > 1 ? data[data.length - 1].timestamp - data[0].timestamp : 0
+  const timestamps = data.map((point) => point.timestamp)
+  const firstTime = data.length ? Math.min(...timestamps) : 0
+  const lastTime = data.length ? Math.max(...timestamps) : 0
+  const hour = 3600000
+  const range = Math.max(24 * hour, (lastTime - firstTime) * 1.3)
+  const center = (firstTime + lastTime) / 2
+  const step =
+    [
+      hour,
+      4 * hour,
+      6 * hour,
+      12 * hour,
+      24 * hour,
+      7 * 24 * hour,
+      30 * 24 * hour,
+      90 * 24 * hour,
+      365 * 24 * hour,
+    ].find((value) => value >= range / 6) ?? Math.ceil(range / 6)
+  const startTime = Math.floor((center - range / 2) / step) * step
+  const endTime = Math.ceil((center + range / 2) / step) * step
+  const ticks = Array.from(
+    { length: Math.round((endTime - startTime) / step) + 1 },
+    (_, index) => startTime + index * step
+  )
+  const [chartWidth, setChartWidth] = useState(0)
+  const uniqueTimes = [...new Set(timestamps)].sort((a, b) => a - b)
+  const gaps = uniqueTimes
+    .slice(1)
+    .map((time, index) => time - uniqueTimes[index])
+  const barWidth =
+    gaps.length && chartWidth
+      ? Math.min(
+          28,
+          Math.max(
+            1,
+            (((chartWidth - 80) * Math.min(...gaps)) / (endTime - startTime)) *
+              0.7
+          )
+        )
+      : 28
   const formatTick = (value: number) =>
-    span >= 86400000 ? utcDate(value, locale) : utcTime(value, locale)
+    step >= 86400000
+      ? utcDate(value, locale)
+      : `${utcDate(value, locale)} ${utcTime(value, locale)}`
   const Container = embedded ? 'div' : Card
   return (
     <Container
@@ -118,7 +160,11 @@ export function HealthTimelineChart({
           }
         >
           {!!data.length && (
-            <ResponsiveContainer width='100%' height='100%'>
+            <ResponsiveContainer
+              width='100%'
+              height='100%'
+              onResize={setChartWidth}
+            >
               <ComposedChart
                 className='chart-motion'
                 data={data}
@@ -131,11 +177,8 @@ export function HealthTimelineChart({
                   type='number'
                   scale='time'
                   dataKey='timestamp'
-                  domain={
-                    data.length === 1
-                      ? [data[0].timestamp - 60000, data[0].timestamp + 60000]
-                      : ['dataMin', 'dataMax']
-                  }
+                  domain={[startTime, endTime]}
+                  ticks={ticks}
                   tickFormatter={formatTick}
                   tick={
                     data.length
@@ -179,7 +222,7 @@ export function HealthTimelineChart({
                 <Bar
                   dataKey='findings'
                   name='Retained findings'
-                  maxBarSize={28}
+                  maxBarSize={barWidth}
                   radius={[3, 3, 0, 0]}
                   minPointSize={2}
                   {...chartAnimation}
@@ -240,7 +283,7 @@ export function HealthTimelineChart({
               View chart data
             </summary>
             <div className='mt-3 max-h-44 overflow-auto rounded-lg border'>
-              <table className='w-full text-left'>
+              <Table className='w-full text-left'>
                 <caption className='sr-only'>
                   Available health assessment counts and coverage in UTC
                 </caption>
@@ -291,7 +334,7 @@ export function HealthTimelineChart({
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </Table>
             </div>
           </details>
         )}

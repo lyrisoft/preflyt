@@ -464,6 +464,7 @@ export class GitHubService {
       throw new ForbiddenException(
         'Repository access changed; reload repositories',
       )
+    if (!selected) await this.prisma.contributorSyncState.updateMany({where:{repositoryId:repository.id},data:{state:'QUEUED',attempts:0,nextAttemptAt:new Date(),leaseToken:null,leaseUntil:null,failureCode:null}})
     await this.audit('github_repository_selection_changed', identityId, {
       repositoryId: repositoryId.toString(),
       selected: String(selected),

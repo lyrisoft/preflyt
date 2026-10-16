@@ -61,9 +61,10 @@ export function ContributorHelp({
         <>
           <p>
             Preflyt shows recorded GitHub PRs, reviews and commits from
-            repositories you can access. Refresh local data reloads saved
-            records; Import recent GitHub activity requests a bounded set of
-            recent records from GitHub.
+            repositories you can access. Recent activity syncs automatically in
+            the background when repositories are selected. New signed webhooks
+            keep it updated. Sync now queues a bounded retry; Refresh reloads
+            saved records without requesting upstream history.
           </p>
           <p>
             Activity dates use UTC. The selected period and repository filters

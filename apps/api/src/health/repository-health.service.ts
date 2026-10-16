@@ -1,3 +1,4 @@
+import { readPageSize } from '../pagination.js'
 import { HealthGitSourceError } from './health-git-source.js'
 import { verifiedHealthCiCoverage } from './health-ci-coverage.js'
 import { findingReferenceGuidance } from './finding-guidance.js'
@@ -84,7 +85,8 @@ export class RepositoryHealthService {
   const repo = await this.db.gitHubRepository.findUniqueOrThrow({ where: { githubId: BigInt(githubId) }, include: { installation: true } })
   return this.start(sessionFor({ actorId: identityId, organizationId: repo.installation.organizationId }), githubId, {}, true)
  }
- async get(session: AuthenticatedSession, githubId: string, id?: string, page = 1, selectedBranch?: string) {
+ async get(session: AuthenticatedSession, githubId: string, id?: string, page = 1, selectedBranch?: string, requestedSize?: unknown) {
+  const pageSize = readPageSize(requestedSize)
   const repo = await this.access.requireRepository(session, githubId, 'assessment.read')
   if (id && !/^[a-f0-9-]{36}$/.test(id)) throw new BadRequestException('Choose a valid health assessment')
   if (!Number.isInteger(page) || page < 1 || page > 1000) throw new BadRequestException('Choose a valid history page')
@@ -106,7 +108,7 @@ export class RepositoryHealthService {
   const head = recent ? target?.headSha : null
   const freshness = row && row.branch === target?.branch && head && row.sourceSha ? head === row.sourceSha ? 'CURRENT' : 'STALE' : 'UNVERIFIED'
   const [history, total] = await Promise.all([
-   this.db.repositoryHealthAssessment.findMany({ where: { repositoryId: repo.id, organizationId: session.organizationId!, branch: row?.branch ?? branch ?? '' }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 10, skip: (page - 1) * 10 }),
+   this.db.repositoryHealthAssessment.findMany({ where: { repositoryId: repo.id, organizationId: session.organizationId!, branch: row?.branch ?? branch ?? '' }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: pageSize, skip: (page - 1) * pageSize }),
    this.db.repositoryHealthAssessment.count({ where: { repositoryId: repo.id, organizationId: session.organizationId!, branch: row?.branch ?? branch ?? '' } })])
   // Chart data is independent of the history page and bounded to the latest 30 reports at this revision.
   const timelineRows = row?.report ? await this.db.repositoryHealthAssessment.findMany({

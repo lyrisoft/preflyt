@@ -25,6 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Table } from '@/components/ui/table'
 import type { ActivityDay } from '../dashboard/activity-calendar'
 import { activityTrend } from './activity-trend-model'
 
@@ -238,7 +239,7 @@ export function ActivityTrendChart({
             View chart data
           </summary>
           <div className='mt-2 max-h-40 overflow-auto rounded-lg border'>
-            <table className='w-full text-start'>
+            <Table className='w-full text-start'>
               <caption className='sr-only'>
                 Saved assessment counts in UTC
               </caption>
@@ -261,7 +262,7 @@ export function ActivityTrendChart({
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </Table>
           </div>
         </details>
       </CardContent>

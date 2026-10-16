@@ -46,11 +46,13 @@ export class RulesetDeploymentController {
     @Req() req: AuthRequest,
     @Param('repositoryId') id: string,
     @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
   ) {
     return this.deployments.list(
       req.preflytSession,
       id,
       page === undefined ? 1 : Number(page),
+      pageSize,
     )
   }
   @Post('preview') preview(

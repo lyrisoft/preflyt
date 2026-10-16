@@ -24,7 +24,7 @@ export class RepositoryHealthController {
  @Get('health') @Header('Cache-Control','no-store')
  portfolio(@Req() req: SessionRequest, @Query('page') page = '1', @Query('q') q = '', @Query('repository') repository?: string, @Query('pageSize') pageSize = '25') { return this.health.portfolio(req.preflytSession!, Number(page), q, repository, Number(pageSize)) }
  @Get('repositories/:repositoryId/health') @Header('Cache-Control','no-store')
- get(@Req() req: SessionRequest, @Param('repositoryId') repo: string, @Query('assessment') id?: string, @Query('page') page = '1', @Query('branch') branch?: string) { return this.health.get(req.preflytSession!,repo,id,Number(page),branch) }
+ get(@Req() req: SessionRequest, @Param('repositoryId') repo: string, @Query('assessment') id?: string, @Query('page') page = '1', @Query('branch') branch?: string, @Query('pageSize') pageSize?: string) { return this.health.get(req.preflytSession!,repo,id,Number(page),branch,pageSize) }
  @Get('repositories/:repositoryId/health/freshness') @Header('Cache-Control','no-store')
  freshness(@Req() req: SessionRequest, @Param('repositoryId') repo: string, @Query('assessment') id = '') { return this.health.freshness(req.preflytSession!,repo,id) }
  @Post('repositories/:repositoryId/health')

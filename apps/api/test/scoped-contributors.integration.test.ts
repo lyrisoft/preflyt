@@ -1,3 +1,4 @@
+import { ContributorSyncService } from '../src/contributors/contributor-sync.service.js'
 import { FindingSourceStore } from '../src/findings/finding-source-store.service.js'
 import 'reflect-metadata'
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest'
@@ -539,8 +540,11 @@ it('rechecks real persisted session permissions and honors the chosen organizati
   expect(await auth.currentSession(raw)).toMatchObject({authenticated:true,organizationId:orgA,permissions:[],repositoryGrants:[]})
 })
 it('bounds administrative backfill with a durable cooldown',async()=>{
- await mutate(owner,'/contributors/repositories/11/sync',{}).expect(201)
+ const stale = await db.authThrottle.create({data:{action:'contributors-backfill',keyHash:'old-contributor-sync',windowStart:new Date(0),count:1}})
+ await mutate(owner,'/contributors/repositories/11/sync',{}).expect(202)
  await mutate(owner,'/contributors/repositories/11/sync',{}).expect(429)
+ expect(await db.authThrottle.findUnique({where:{id:stale.id}})).toBeNull()
+ expect(await db.auditEvent.findFirst({where:{event:'contributors_sync_requested'}})).toMatchObject({metadata:expect.objectContaining({organizationId:orgA,repositoryId:'11'})})
 })
 
 it('persists an authorized organization switch on the current session',async()=>{
@@ -614,13 +618,16 @@ const backfillPr = (repositoryId: number) => ({
 })
 it('persists upstream contributor activity and reports verified capture counts', async () => {
   backfillObservations = [backfillPr(11)]
-  const response = await mutate(owner, '/contributors/repositories/11/sync', {}).expect(201)
-  expect(response.body.importedRecords).toBe(1)
+  const response = await mutate(owner, '/contributors/repositories/11/sync', {}).expect(202)
+  expect(response.body.state).toBe('QUEUED')
+  await new ContributorSyncService(db, app.get(GitHubProviderService)).reconcile()
   expect(await db.contributorObservation.count({ where: { sourceObjectId: '999' } })).toBe(1)
 })
 it('does not report success when upstream activity belongs to an unselected repository', async () => {
   backfillObservations = [backfillPr(99)]
-  await mutate(owner, '/contributors/repositories/11/sync', {}).expect(403)
+  await mutate(owner, '/contributors/repositories/11/sync', {}).expect(202)
+  await new ContributorSyncService(db, app.get(GitHubProviderService)).reconcile()
+  expect((await db.contributorSyncState.findFirstOrThrow()).state).toBe('RETRY')
   expect(await db.auditEvent.count({ where: { event: 'contributors_backfilled' } })).toBe(0)
 })
 
@@ -687,7 +694,11 @@ it('aggregates findings before pagination with matching filters and repository a
   await db.commitAssessment.create({ data: { repositoryId: foreign.id, sourceSha: sha, selectionId: assessment.selectionId, requestKey: randomUUID(), inputHash: 'fixture', request: assessment.request as any, plan, report, assessmentHash } })
   const first = await actor(developer, '/findings?kind=gaps').expect(200)
   const next = await actor(developer, '/findings?kind=gaps&page=2').expect(200)
-  expect(first.body.rows).toHaveLength(50)
+  expect(first.body.rows).toHaveLength(10)
+  expect((await actor(developer, '/findings?kind=gaps&pageSize=25').expect(200)).body.rows).toHaveLength(25)
+  const final = (await actor(developer, '/findings?kind=gaps&page=3&pageSize=25').expect(200)).body
+  expect(final.rows).toHaveLength(10)
+  await actor(developer, '/findings?pageSize=1000').expect(400)
   expect(next.body.rows).toHaveLength(10)
   expect(first.body.summary).toEqual(next.body.summary)
   expect(first.body.summary).toMatchObject({ reportedIssues: 0, affectedRepositories: 1, criticalHigh: 0, evidenceGaps: 60, chartTotal: 60 })
@@ -792,8 +803,8 @@ it('keeps the latest Health report per commit and supports exact-report links an
   const first=(await actor(developer,'/findings?source=health').expect(200)).body
   const next=(await actor(developer,'/findings?source=health&page=2').expect(200)).body
   expect(first.total).toBe(62)
-  expect(first.rows).toHaveLength(50)
-  expect(next.rows).toHaveLength(12)
+  expect(first.rows).toHaveLength(10)
+  expect(next.rows).toHaveLength(10)
   expect(first.summary).toEqual(next.summary)
   expect(first.summary.reportedIssues).toBe(62)
   expect(first.assessedRevisions).toBe(2)
@@ -845,4 +856,67 @@ it('includes committer-only activity in profile counts and chart without double-
  const onlyCommitter=(await actor(developer,path+'&relationship=COMMITTER').expect(200)).body
  expect(onlyCommitter.contributors[0].commits).toBe(2)
  await actor(developer,`/contributors/${contributor.id}?repository=12`).expect(403)
+})
+
+it('automatically imports selected repositories without a browser request and exposes scoped progress', async () => {
+  backfillObservations = [backfillPr(11)]
+  const before = await actor(owner, '/contributors').expect(200)
+  expect(before.body.sync.pending).toBeGreaterThan(0)
+  await new ContributorSyncService(db, app.get(GitHubProviderService)).reconcile()
+  expect(await db.contributorObservation.count({ where: { sourceObjectId: '999' } })).toBe(1)
+  const repo = await db.gitHubRepository.findUniqueOrThrow({ where: { githubId: 11n } })
+  expect(await db.contributorSyncState.findUnique({ where: { repositoryId: repo.id } })).toMatchObject({ state: 'SYNCED', leaseToken: null })
+  const after = await actor(owner, '/contributors').expect(200)
+  expect(after.body.sync.completed).toBe(1)
+  expect(after.body.sync.items.every((item: {repositoryId: string}) => after.body.scope.some((repo: {githubId: string}) => repo.githubId === item.repositoryId))).toBe(true)
+})
+it('fences concurrent workers, retries upstream failures and avoids duplicate activity', async () => {
+  backfillObservations = [backfillPr(11)]
+  const sync = new ContributorSyncService(db, app.get(GitHubProviderService))
+  let release!: () => void
+  const blocked = new Promise<void>(resolve => { release = resolve })
+  let started!: () => void
+  const beginning = new Promise<void>(resolve => { started = resolve })
+  beforeBackfill = async () => { started(); await blocked }
+  const first = sync.reconcile()
+  await beginning
+  const held = await db.contributorSyncState.findFirstOrThrow({where:{state:'RUNNING'}})
+  // A competing tick may work on another selected repository; it cannot steal this lease.
+  const candidate = new ContributorSyncService(db, {readContributorBackfill: async () => ({observations:[],truncated:false,limits:{}})} as never)
+  await candidate.reconcile()
+  expect((await db.contributorSyncState.findUniqueOrThrow({where:{repositoryId:held.repositoryId}})).leaseToken).toBe(held.leaseToken)
+  release(); await first
+  const count=await db.contributorObservation.count({where:{sourceObjectId:'999'}})
+  await db.contributorSyncState.update({where:{repositoryId:held.repositoryId},data:{state:'QUEUED',nextAttemptAt:new Date(0)}})
+  await sync.reconcile()
+  expect(await db.contributorObservation.count({where:{sourceObjectId:'999'}})).toBe(count)
+})
+it('does not ingest when selection is revoked during an automatic import', async () => {
+  backfillObservations = [backfillPr(11)]
+  beforeBackfill = async () => { await db.gitHubRepository.updateMany({where:{githubId:11n},data:{selected:false}}) }
+  await new ContributorSyncService(db, app.get(GitHubProviderService)).reconcile()
+  expect(await db.contributorObservation.count({where:{sourceObjectId:'999'}})).toBe(0)
+  expect(await db.contributorSyncState.findFirst({where:{failureCode:'ACCESS_CHANGED'}})).toBeTruthy()
+})
+it('persists retry timing and recovers expired leases after worker interruption', async () => {
+  const github = {readContributorBackfill: async () => { throw new Error('unavailable') }}
+  const sync = new ContributorSyncService(db, github as never)
+  await sync.reconcile()
+  const job=await db.contributorSyncState.findFirstOrThrow({where:{state:'RETRY'}})
+  expect(job.nextAttemptAt.getTime()).toBeGreaterThan(Date.now())
+  await db.contributorSyncState.update({where:{repositoryId:job.repositoryId},data:{state:'RUNNING',leaseToken:'old',leaseUntil:new Date(0),nextAttemptAt:new Date(0)}})
+  await new ContributorSyncService(db,{readContributorBackfill:async()=>({observations:[],truncated:true,limits:{}})} as never).reconcile()
+  expect(await db.contributorSyncState.findUnique({where:{repositoryId:job.repositoryId}})).toMatchObject({state:'PARTIAL',truncated:true,leaseToken:null})
+})
+
+it('honors GitHub retry timing and stops repeated non-rate-limit failures', async () => {
+ const { GitHubRateLimitError }=await import('../src/github/github-rate-limit.js')
+ const limited=new ContributorSyncService(db,{readContributorBackfill:async()=>{throw new GitHubRateLimitError(120000)}} as never)
+ await limited.reconcile()
+ const job=await db.contributorSyncState.findFirstOrThrow({where:{state:'RETRY'}})
+ expect(job.failureCode).toBe('GITHUB_RATE_LIMITED')
+ expect(job.nextAttemptAt.getTime()).toBeGreaterThan(Date.now()+110000)
+ await db.contributorSyncState.update({where:{repositoryId:job.repositoryId},data:{state:'QUEUED',attempts:4,nextAttemptAt:new Date(0)}})
+ await new ContributorSyncService(db,{readContributorBackfill:async()=>{throw new Error('offline')}} as never).reconcile()
+ expect(await db.contributorSyncState.findUnique({where:{repositoryId:job.repositoryId}})).toMatchObject({state:'FAILED',attempts:5,failureCode:'IMPORT_FAILED'})
 })

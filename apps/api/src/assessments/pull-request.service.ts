@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service.js'
 import { readPullRequestContext } from '../github-events/pull-request-context.js'
+import { previewGate } from './gate-preview.js'
 import { digest } from './assessment-plan.js'
 @Injectable()
 export class PullRequestService {
@@ -80,6 +81,7 @@ export class PullRequestService {
         : 'UNVERIFIED',
       readiness: 'NOT_EVALUATED',
       qualityGate: null,
+      mergeReview: null as { assessmentId: string; sourceSha: string; status: string } | null,
       prAssessment: null as { id: string; assessmentHash: string } | null,
       ciAssessment: null as { id: string; assessmentHash: string } | null,
       reason: null as string | null,
@@ -121,6 +123,7 @@ export class PullRequestService {
       take: 101,
     })
     response.collectionTruncated = candidates.length > 100
+    let review: typeof response.mergeReview = null
     for (const candidate of candidates.slice(0, 100)) {
       const request = candidate.request as any
       if (
@@ -145,6 +148,7 @@ export class PullRequestService {
         }) !== candidate.assessmentHash
       )
         throw new ConflictException('Assessment integrity check failed')
+      if (!review) review = { assessmentId: candidate.id, sourceSha: candidate.sourceSha, status: previewGate(candidate).status }
       const link = {
         id: candidate.id,
         assessmentHash: candidate.assessmentHash,
@@ -176,10 +180,9 @@ export class PullRequestService {
       response.reason = 'CONTEXT_CHANGED'
       return response
     }
-    response.reason =
-      response.prAssessment || response.ciAssessment
-        ? 'EXECUTION_NOT_VERIFIED'
-        : 'NO_APPLICABLE_ASSESSMENT'
+    response.mergeReview = review
+    response.readiness = review?.status ?? 'NOT_EVALUATED'
+    response.reason = review ? `SAVED_ASSESSMENT_${review.status}` : 'NO_APPLICABLE_ASSESSMENT'
     return response
   }
 }
