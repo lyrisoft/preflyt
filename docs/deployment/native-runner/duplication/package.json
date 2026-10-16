@@ -4,6 +4,6 @@
   "version": "1.0.0",
   "type": "module",
   "dependencies": {
-    "jscpd": "4.3.0"
+    "jscpd": "5.4.1"
   }
 }
