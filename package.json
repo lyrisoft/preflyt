@@ -24,6 +24,6 @@
     "build:docs": "pnpm --filter @preflyt/docs build"
   },
   "devDependencies": {
-    "turbo": "2.11.7"
+    "turbo": "2.11.8"
   }
 }
