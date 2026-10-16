@@ -5,7 +5,9 @@
 
 ## Importing existing activity
 
-The Contributors page header includes **Import GitHub activity** for users with repository-management access. It works with **All repositories** and a single repository scope. Imports run sequentially for authorized repositories, report per-repository failures and preserve partial-history warnings. **Refresh local data** only reloads saved observations; it does not contact GitHub. Imports are bounded to recent PR, review and commit pages and respect the server cooldown. Contributor activity does not create assessment snapshots or populate the Engineering Overview assessment chart.
+Selected, available repositories on active installations automatically become eligible for a durable background history sync. The worker claims one repository at a time with a database lease, processes at most three repositories per reconciliation pass, and retries temporary failures with backoff or GitHub's rate-limit reset time. Expired leases recover after worker restarts. Capture and completion both verify the lease and current repository access. Completed imports are not repeated on each reconciliation pass; signed webhooks supply subsequent activity. Access revisions and reselection allow a fresh sync.
+
+The Contributors header offers a secondary **Sync now** action for users with repository-management access. It queues authorized repositories in the selected scope, respects the five-minute cooldown, and returns before the import runs. Read-only users get **Refresh**, which reloads saved observations. Reads never initiate GitHub imports. The page polls while work is pending and shows per-repository retry/failure information, completion counts and the latest successful sync time. Empty metrics remain unknown while syncing or after a failed import. Recent PR, review and commit history remains bounded; partial-history limits are visible. Contributor activity does not create assessment snapshots or populate the Engineering Overview assessment chart.
 
 ## User experience and navigation
 

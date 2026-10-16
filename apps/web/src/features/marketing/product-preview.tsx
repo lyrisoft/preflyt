@@ -351,7 +351,7 @@ export function ProductPreview() {
                 </Button>
               </CardHeader>
               <CardContent>
-                <Table>
+                <Table pagination={false}>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Repository</TableHead>
@@ -500,7 +500,7 @@ export function ProductPreview() {
               </CardHeader>
               <CardContent>
                 {attention.length ? (
-                  <Table>
+                  <Table pagination={false}>
                     <TableHeader>
                       <TableRow>
                         <TableHead>Pull request</TableHead>

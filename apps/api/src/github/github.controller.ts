@@ -8,6 +8,8 @@ import {
   Req,
   Res,
   UseGuards,
+  Optional,
+  Header,
 } from '@nestjs/common'
 import { IsBoolean } from 'class-validator'
 import type { Request, Response } from 'express'
@@ -15,6 +17,7 @@ import { OwnerAdminGuard, SessionGuard } from '../auth/session.guard.js'
 import type { AuthenticatedSession } from '../auth/session.guard.js'
 import { AuthorizationService } from '../auth/authorization.service.js'
 import { GitHubService } from './github.service.js'
+import { GitHubConnectionService } from './github-connection.service.js'
 
 class RepositorySelectionDto {
   @IsBoolean()
@@ -35,6 +38,7 @@ const cookieOptions = (secure: boolean, maxAge: number) => ({
 export class GitHubController {
   constructor(@Inject(GitHubService) private readonly github: GitHubService,
     @Inject(AuthorizationService) private readonly access: AuthorizationService,
+    @Optional() @Inject(GitHubConnectionService) private readonly connection?: GitHubConnectionService,
   ) {}
 
   @Get('install')
@@ -53,7 +57,19 @@ export class GitHubController {
   }
 
   @Get('setup/callback')
+  @Header('Cache-Control', 'no-store')
+  @Header('Referrer-Policy', 'no-referrer')
   async setupCallback(@Req() req: Request, @Res() res: Response) {
+    if (typeof req.query.state === 'string' && req.query.state.startsWith('connection_')) {
+      try {
+        if (!this.connection) throw new Error('Connection service unavailable')
+        const url = await this.connection.installed(req.query.state, req.cookies?.[this.connection.cookieName], req.cookies?.[this.connection.sessionCookieName], typeof req.query.installation_id === 'string' ? req.query.installation_id : '', typeof req.query.setup_action === 'string' ? req.query.setup_action : '')
+        return res.redirect(url)
+      } catch {
+        this.clearConnectionCookie(res)
+        return res.redirect(this.github.frontendOrigin + '/repositories?github=error')
+      }
+    }
     // A fresh manifest installation has no workspace transaction. Installation alone
     // never grants access: connect it through the normal owner-verified flow.
     if (req.query.state === undefined) return res.redirect(this.github.frontendOrigin + '/repositories')
@@ -79,7 +95,23 @@ export class GitHubController {
   }
 
   @Get('oauth/callback')
+  @Header('Cache-Control', 'no-store')
+  @Header('Referrer-Policy', 'no-referrer')
   async oauthCallback(@Req() req: Request, @Res() res: Response) {
+    if (typeof req.query.state === 'string' && req.query.state.startsWith('connection_')) {
+      try {
+        if (!this.connection) throw new Error('Connection service unavailable')
+        const result = await this.connection.complete(req.query.state, req.cookies?.[this.connection.cookieName], req.cookies?.[this.connection.sessionCookieName], typeof req.query.code === 'string' ? req.query.code : '')
+        this.clearConnectionCookie(res)
+        const url = new URL('/repositories', this.github.frontendOrigin)
+        url.searchParams.set('github', 'connected')
+        url.searchParams.set('account', result.accountLogin)
+        return res.redirect(url.href)
+      } catch {
+        this.clearConnectionCookie(res)
+        return res.redirect(this.github.frontendOrigin + '/repositories?github=error')
+      }
+    }
     const binding = req.cookies?.[this.github.setupCookieName] as
       string
       | undefined
@@ -156,5 +188,9 @@ export class GitHubController {
       this.github.setupCookieName,
       cookieOptions(this.github.secureCookie, 0),
     )
+  }
+
+  private clearConnectionCookie(response: Response) {
+    if (this.connection) response.clearCookie(this.connection.cookieName, cookieOptions(this.connection.secureCookie, 0))
   }
 }

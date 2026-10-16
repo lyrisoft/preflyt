@@ -1,3 +1,4 @@
+import { readPageSize } from '../pagination.js'
 import { currentStandards, selectionBindingWhere } from '../standards/policy-standards.js'
 import { Optional } from '@nestjs/common'
 import { PolicyExceptionService } from './policy-exception.service.js'
@@ -33,7 +34,8 @@ export class CheckPublicationService {
     @Inject(AssessmentService) private readonly assessments: AssessmentService,
     @Optional() @Inject(PolicyExceptionService) private readonly exceptions?: PolicyExceptionService,
   ) {}
-  async list(session: AuthenticatedSession, githubId: string, page = 1) {
+  async list(session: AuthenticatedSession, githubId: string, page = 1, requestedSize?: unknown) {
+    const pageSize = readPageSize(requestedSize)
     if (!Number.isInteger(page) || page < 1 || page > 1000)
       throw new BadRequestException('Invalid publication page')
     const repo = await this.access.requireRepository(
@@ -44,8 +46,8 @@ export class CheckPublicationService {
     const rows = await this.prisma.gitHubCheckPublication.findMany({
       where: { repositoryId: repo.id, organizationId: session.organizationId! },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      skip: (page - 1) * 20,
-      take: 21,
+      skip: (page - 1) * pageSize,
+      take: pageSize + 1,
     })
     await this.access.requireRepository(session, githubId, 'policy.read')
     return {
@@ -54,13 +56,14 @@ export class CheckPublicationService {
       activationAvailable:
         configurationValue('GITHUB_RULESET_ACTIVATION_ENABLED') === 'true',
       page,
-      hasMore: rows.length > 20,
+      hasMore: rows.length > pageSize,
       publications: rows
-        .slice(0, 20)
+        .slice(0, pageSize)
         .map(({ leaseToken: _lease, ...row }) => row),
     }
   }
-  async prChecks(session: AuthenticatedSession, githubId: string, page = 1) {
+  async prChecks(session: AuthenticatedSession, githubId: string, page = 1, requestedSize?: unknown) {
+    const pageSize = readPageSize(requestedSize)
     if (!Number.isInteger(page) || page < 1 || page > 1000)
       throw new BadRequestException('Invalid PR checks page')
     const repo = await this.access.requireRepository(session, githubId, 'policy.read')
@@ -84,13 +87,13 @@ export class CheckPublicationService {
         ORDER BY "prNumber", "updatedAt" DESC, "id" DESC
       )
       SELECT * FROM latest ORDER BY "updatedAt" DESC, "id" DESC
-      LIMIT 21 OFFSET ${(page - 1) * 20}
+      LIMIT ${pageSize + 1} OFFSET ${(page - 1) * pageSize}
     `
     await this.access.requireRepository(session, githubId, 'policy.read')
     return {
       enabled: configurationValue('GITHUB_CHECK_PUBLICATION_ENABLED') === 'true',
-      hasMore: rows.length > 20,
-      publications: rows.slice(0, 20),
+      hasMore: rows.length > pageSize,
+      publications: rows.slice(0, pageSize),
     }
   }
   async preview(

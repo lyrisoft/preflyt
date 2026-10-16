@@ -7,3 +7,22 @@ onlyBuiltDependencies: []
 minimumReleaseAge: 1440
 trustPolicy: no-downgrade
 blockExoticSubdeps: true
+
+# Scoped security updates for tooling whose upstream parents still request older releases.
+# Keep these exceptions explicit and remove them when upstream ranges include fixes.
+overrides:
+  'postcss-selector-parser@<7.1.6': 7.1.6
+  'css-minimizer-webpack-plugin>serialize-javascript': 7.1.2
+  '@docsearch/react': 4.7.0
+  'webpack-dev-server>webpack-dev-middleware': 7.4.5
+  'semver@<7.0.0': 7.7.3
+  '@docusaurus/core>tinypool': 2.2.0
+  'copy-webpack-plugin>serialize-javascript': 7.1.2
+  '@prisma/config>deepmerge-ts': 8.0.2
+  'prisma>mysql2': 3.24.6
+  'sockjs>uuid': 11.1.1
+  'mermaid>katex': 0.19.0
+
+# Local recursion guard until braces publishes a fix for GHSA-vfj7-8cjw-p6xm.
+patchedDependencies:
+  'braces@3.0.3': patches/braces@3.0.3.patch

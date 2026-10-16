@@ -531,6 +531,9 @@ it('signs measured duplication only for health and rejects missing or invalid me
  const result=await wait(()=>jobs!.call('status',expected))
  const receipt=verifyNativeReceipt(result.signature,expected)!
  expect(receipt.checks[0]).toMatchObject({state:'PASS',measurement:{analyzedLines:20,duplicatedLines:0,formula:'unique-lines-v1'}})
+ const {healthAnalysisComplete}=await import('../src/health/health-analysis-completion.js')
+ expect(healthAnalysisComplete(receipt.checks[0])).toBe(true)
+ expect(receipt.checks[0].coverage).toBe('PARTIAL')
  const invalid={...receipt,checks:[{...receipt.checks[0],measurement:{...receipt.checks[0].measurement!,duplicatedLines:21}}]}
  const {signNativeReceipt}=await import('../src/execution/native-receipt.js')
  expect(verifyNativeReceipt(signNativeReceipt(invalid,privateKey,publicKey),expected)).toBeNull()

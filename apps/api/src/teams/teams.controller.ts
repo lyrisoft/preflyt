@@ -91,8 +91,9 @@ export class TeamsController {
     @Req() r: R,
     @Query("page") page?: string,
     @Query("q") q?: string,
+    @Query("pageSize") pageSize?: string,
   ) {
-    return this.teams.list(r.preflytSession, page, q);
+    return this.teams.list(r.preflytSession, page, q, pageSize);
   }
   @Header("Cache-Control", "no-store") @Get("options") options(@Req() r: R) {
     return this.teams.options(r.preflytSession);

@@ -1,17 +1,90 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { ArrowUpRight, Menu } from 'lucide-react'
+import { ArrowUpRight, Menu, X } from 'lucide-react'
 import { API_BASE_URL } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import './homepage.css'
 import { useHomepageMotion } from './use-homepage-motion'
 
-export function MarketingLayout({ children }: { children: ReactNode }) {
+const footerGroups = [
+  {
+    title: 'Product',
+    links: [
+      ['Product overview', '/product'],
+      ['Pricing', '/pricing'],
+      ['Repository health', '/product/repository-health'],
+      ['Standards & evidence', '/product/standards-and-evidence'],
+      ['Merge Protection', '/product/merge-protection'],
+      ['How it works', '/#how-it-works'],
+    ],
+  },
+  {
+    title: 'Resources',
+    links: [
+      ['Documentation', 'https://docs.preflytlabs.com/'],
+      [
+        'Community install guide',
+        'https://docs.preflytlabs.com/getting-started/quick-start',
+      ],
+      ['Deployment & operations', 'https://docs.preflytlabs.com/self-hosting'],
+      ['Preflyt Action', 'https://github.com/lyrisoft/preflyt-action'],
+    ],
+  },
+  {
+    title: 'Community',
+    links: [
+      ['Community Edition', '/self-hosting'],
+      ['GitHub', 'https://github.com/lyrisoft/preflyt'],
+      [
+        'Contributing',
+        'https://github.com/lyrisoft/preflyt/blob/main/CONTRIBUTING.md',
+      ],
+      [
+        'Security policy',
+        'https://github.com/lyrisoft/preflyt/blob/main/SECURITY.md',
+      ],
+    ],
+  },
+] as const
+
+export function MarketingClosing({
+  title = 'Give every change a clearer path forward.',
+}: {
+  title?: string
+}) {
+  return (
+    <section className='closing container'>
+      <div>
+        <h2>{title}</h2>
+        <p>
+          Start with repository health. Add standards and CI when your team is
+          ready.
+        </p>
+      </div>
+      <a
+        className='button'
+        href='https://docs.preflytlabs.com/getting-started/quick-start'
+      >
+        Community install guide{' '}
+        <ArrowUpRight className='icon small' aria-hidden='true' />
+      </a>
+    </section>
+  )
+}
+
+export function MarketingLayout({
+  children,
+  activeSection,
+}: {
+  children: ReactNode
+  activeSection?: 'product' | 'community' | 'pricing'
+}) {
   const siteRef = useRef<HTMLDivElement>(null)
   useHomepageMotion(siteRef)
   const [menuOpen, setMenuOpen] = useState(false)
   const [authenticated, setAuthenticated] = useState(false)
   const menuRef = useRef<HTMLButtonElement>(null)
   useEffect(() => {
+    if (import.meta.env.VITE_WEBSITE_MODE === 'true') return
     const controller = new AbortController()
     void fetch(`${API_BASE_URL}/auth/session`, {
       credentials: 'include',
@@ -57,9 +130,25 @@ export function MarketingLayout({ children }: { children: ReactNode }) {
             />
           </a>
           <nav className='desktop-nav' aria-label='Main navigation'>
-            <a href='/product'>Product</a>
+            <a
+              href='/product'
+              aria-current={activeSection === 'product' ? 'true' : undefined}
+            >
+              Product
+            </a>
             <a href='/#how-it-works'>How it works</a>
-            <a href='/self-hosting'>Self-hosting</a>
+            <a
+              href='/self-hosting'
+              aria-current={activeSection === 'community' ? 'true' : undefined}
+            >
+              Community Edition
+            </a>
+            <a
+              href='/pricing'
+              aria-current={activeSection === 'pricing' ? 'page' : undefined}
+            >
+              Pricing
+            </a>
             <a
               href='https://docs.preflytlabs.com/'
               target='_blank'
@@ -74,20 +163,22 @@ export function MarketingLayout({ children }: { children: ReactNode }) {
             </a>
           </nav>
           <div className='nav-actions'>
-            <a
-              className='sign-in'
-              href={authenticated ? '/overview' : '/sign-in'}
-            >
-              {authenticated ? 'Open workspace' : 'Sign in'}
-            </a>
+            {import.meta.env.VITE_WEBSITE_MODE !== 'true' && (
+              <a
+                className='sign-in'
+                href={authenticated ? '/overview' : '/sign-in'}
+              >
+                {authenticated ? 'Open workspace' : 'Sign in'}
+              </a>
+            )}
             <Button asChild>
               <a
                 className='button compact'
-                href='https://docs.preflytlabs.com/getting-started'
+                href='https://docs.preflytlabs.com/getting-started/quick-start'
                 target='_blank'
                 rel='noreferrer'
               >
-                Get started{' '}
+                Install guide{' '}
                 <ArrowUpRight
                   aria-hidden='true'
                   focusable='false'
@@ -103,7 +194,11 @@ export function MarketingLayout({ children }: { children: ReactNode }) {
               ref={menuRef}
               aria-controls='mobile-nav'
             >
-              <Menu aria-hidden='true' focusable='false' className='icon' />
+              {menuOpen ? (
+                <X aria-hidden='true' className='icon' />
+              ) : (
+                <Menu aria-hidden='true' className='icon' />
+              )}
             </button>
           </div>
         </div>
@@ -114,9 +209,25 @@ export function MarketingLayout({ children }: { children: ReactNode }) {
           hidden={!menuOpen}
           onClick={() => setMenuOpen(false)}
         >
-          <a href='/product'>Product</a>
+          <a
+            href='/product'
+            aria-current={activeSection === 'product' ? 'true' : undefined}
+          >
+            Product
+          </a>
           <a href='/#how-it-works'>How it works</a>
-          <a href='/self-hosting'>Self-hosting</a>
+          <a
+            href='/self-hosting'
+            aria-current={activeSection === 'community' ? 'true' : undefined}
+          >
+            Community Edition
+          </a>
+          <a
+            href='/pricing'
+            aria-current={activeSection === 'pricing' ? 'page' : undefined}
+          >
+            Pricing
+          </a>
           <a
             href='https://docs.preflytlabs.com/'
             target='_blank'
@@ -124,87 +235,71 @@ export function MarketingLayout({ children }: { children: ReactNode }) {
           >
             Documentation
           </a>
-          <a href={authenticated ? '/overview' : '/sign-in'}>
-            {authenticated ? 'Open workspace' : 'Sign in'}{' '}
-            <ArrowUpRight
-              aria-hidden='true'
-              focusable='false'
-              className='icon'
-            />
-          </a>
+          {import.meta.env.VITE_WEBSITE_MODE !== 'true' && (
+            <a href={authenticated ? '/overview' : '/sign-in'}>
+              {authenticated ? 'Open workspace' : 'Sign in'}{' '}
+              <ArrowUpRight
+                aria-hidden='true'
+                focusable='false'
+                className='icon'
+              />
+            </a>
+          )}
         </nav>
       </header>
       {children}
-      <footer className='footer container'>
-        <div className='footer-top'>
-          <div>
-            <a className='brand' href='/' aria-label='Preflyt home'>
-              <img
-                className='brand-light'
-                src='/images/brand/logo-white.png'
-                alt='PreflytLabs'
-                width='2172'
-                height='724'
-              />
-            </a>
-            <p>
-              Engineering confidence
-              <br />
-              before production.
-            </p>
+      <footer className='footer'>
+        <div className='container'>
+          <div className='footer-top'>
+            <div className='footer-identity'>
+              <a className='brand' href='/' aria-label='Preflyt home'>
+                <img
+                  className='brand-light'
+                  src='/images/brand/logo-white.png'
+                  alt='PreflytLabs'
+                  width='2172'
+                  height='724'
+                />
+              </a>
+              <p>
+                Engineering confidence
+                <br />
+                before production.
+              </p>
+              {import.meta.env.VITE_WEBSITE_MODE !== 'true' && (
+                <a
+                  className='text-link'
+                  href={authenticated ? '/overview' : '/sign-in'}
+                >
+                  {authenticated ? 'Open workspace' : 'Sign in'}
+                  <ArrowUpRight className='icon small' aria-hidden='true' />
+                </a>
+              )}
+            </div>
+            <nav className='footer-navigation' aria-label='Footer navigation'>
+              {footerGroups.map((group) => (
+                <div key={group.title}>
+                  <h3>{group.title}</h3>
+                  <ul>
+                    {group.links.map(([label, href]) => (
+                      <li key={label}>
+                        <a href={href}>{label}</a>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </nav>
           </div>
-          <div>
-            <h3>Explore</h3>
-            <a href='/product/repository-health'>Repository health</a>
-            <a href='/product/standards-and-evidence'>
-              Standards &amp; evidence
-            </a>
-            <a href='/product/merge-protection'>Merge Protection</a>
-            <a href='/product'>Product</a>
-            <a href='/#how-it-works'>How it works</a>
-            <a href='/self-hosting'>Self-hosting</a>
+          <div className='footer-bottom'>
+            <span>© 2026 Lyrisoft Technologies</span>
+            <div className='footer-meta'>
+              <a href='https://www.apache.org/licenses/LICENSE-2.0'>
+                Apache-2.0 license
+              </a>
+              <a href='mailto:support@lyrisoft.tech'>Contact</a>
+            </div>
           </div>
-          <div>
-            <h3>Build</h3>
-            <a
-              href='https://docs.preflytlabs.com/'
-              target='_blank'
-              rel='noreferrer'
-            >
-              Documentation
-            </a>
-            <a
-              href='https://github.com/lyrisoft/preflyt'
-              target='_blank'
-              rel='noreferrer'
-            >
-              GitHub
-            </a>
-            <a
-              href='https://github.com/lyrisoft/preflyt-action'
-              target='_blank'
-              rel='noreferrer'
-            >
-              Preflyt Action
-            </a>
-          </div>
-          <div>
-            <h3>Your workspace</h3>
-            <a href={authenticated ? '/overview' : '/sign-in'}>
-              {authenticated ? 'Open workspace' : 'Sign in'}
-            </a>
-            <a
-              href='https://docs.preflytlabs.com/getting-started'
-              target='_blank'
-              rel='noreferrer'
-            >
-              Get started
-            </a>
-          </div>
-        </div>
-        <div className='footer-bottom'>
-          <span>© 2026 Lyrisoft Technologies</span>
-          <span>Built for the work before production.</span>
         </div>
       </footer>
     </div>

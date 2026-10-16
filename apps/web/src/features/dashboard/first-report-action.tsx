@@ -10,11 +10,13 @@ export function FirstReportAction({ repositoryId }: { repositoryId: string }) {
   const client = useQueryClient()
   const navigate = useNavigate()
   const [progress, setProgress] = useState('')
+  const [error, setError] = useState('')
   const pending = useRef(false)
   const keys = useRef(new Map<string, string>())
   async function start() {
     if (pending.current) return
     pending.current = true
+    setError('')
     try {
       const { assessment } = await createFirstReport(
         repositoryId,
@@ -25,7 +27,7 @@ export function FirstReportAction({ repositoryId }: { repositoryId: string }) {
         },
         setProgress
       )
-      toast.success('Your first report is ready')
+      toast.success('CI assessment saved')
       await Promise.all([
         client.invalidateQueries({ queryKey: ['engineering-dashboard'] }),
         client.invalidateQueries({
@@ -39,18 +41,19 @@ export function FirstReportAction({ repositoryId }: { repositoryId: string }) {
         search: { tab: 'assessments', assessment: assessment.id },
       })
     } catch (error) {
-      toast.error(
+      const message =
         error instanceof Error
           ? error.message
-          : 'Could not create the report. Try again.'
-      )
+          : 'Could not create the assessment. Try again.'
+      setError(message)
+      toast.error(message)
     } finally {
       pending.current = false
       setProgress('')
     }
   }
   return (
-    <div className='flex flex-col items-end gap-2'>
+    <div className='flex flex-col items-start gap-2'>
       <Button onClick={() => void start()} disabled={!!progress}>
         {progress ? (
           <LoaderCircle
@@ -60,8 +63,13 @@ export function FirstReportAction({ repositoryId }: { repositoryId: string }) {
         ) : (
           <ArrowRight aria-hidden='true' />
         )}
-        {progress ? 'Preparing report…' : 'Create first report'}
+        {progress ? 'Creating assessment…' : 'Create assessment'}
       </Button>
+      {error && (
+        <p role='alert' className='text-sm text-destructive'>
+          {error}
+        </p>
+      )}
       {progress && (
         <p role='status' className='text-xs text-muted-foreground'>
           {progress}

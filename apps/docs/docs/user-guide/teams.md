@@ -11,6 +11,13 @@ A **team** groups people and the repositories they own, so you can apply the sam
 
 Teams organize people and requirements. They **never grant access** to Preflyt or GitHub.
 
+<figure className="pf-guide-screenshot">
+  <a href="/img/guides/teams.jpg" target="_blank" rel="noreferrer">
+    <img src="/img/guides/teams.jpg" alt="The initial Teams view offers GitHub import and local team creation." width="1728" height="906" loading="lazy" />
+  </a>
+  <figcaption>The initial Teams view offers GitHub import and local team creation. Select the image to view it full size.</figcaption>
+</figure>
+
 ## Create a team
 
 You can:

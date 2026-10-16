@@ -55,10 +55,11 @@ it('wires distinct service identities, optional collector and server-only export
 it('provides root deployment configuration and a scoped versioned publishing workflow', () => {
   const env = readFileSync(resolve(root, '.env.example'), 'utf8')
   for (const name of ['POSTGRES_PASSWORD', 'DATABASE_APP_PASSWORD', 'WEB_ORIGIN', 'REDIS_URL', 'QUEUE_REDIS_URL', 'PREFLYT_IMAGE_REGISTRY', 'OTEL_EXPORTER_OTLP_ENDPOINT']) expect(env).toContain(name + '=')
-  const workflow = parse(readFileSync(resolve(root, '.github/workflows/publish-images.yml'), 'utf8'))
-
-  expect(workflow.jobs.publish.permissions.packages).toBe('write')
-  expect(workflow.on.push.branches).toEqual(['development', 'main'])
+  for (const name of ['publish-development.yml', 'publish-production.yml']) {
+    const workflow = parse(readFileSync(resolve(root, '.github/workflows', name), 'utf8'))
+    expect(workflow.jobs.publish.permissions.packages).toBe('write')
+    expect(workflow.on).toEqual({ workflow_dispatch: null })
+  }
 })
 
 it('ships Health scanner packaging without mounting engine authority or signing keys into the application',()=>{

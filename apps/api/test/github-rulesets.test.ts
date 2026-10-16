@@ -160,7 +160,7 @@ describe('ruleset GitHub reader', () => {
     ])
     expect(
       fetchMock.mock.calls.some(([url]) =>
-        url.endsWith('/rulesets?includes_parents=true&per_page=20&page=2'),
+        url.endsWith('/rulesets?includes_parents=true&per_page=10&page=2'),
       ),
     ).toBe(true)
   })
@@ -198,7 +198,7 @@ describe('ruleset GitHub reader', () => {
   })
   it('keeps pagination incomplete when a full page is returned', async () => {
     const { provider } = setupProvider(
-      Array.from({ length: 20 }, (_, i) => ({ ...summary, id: i + 1 })),
+      Array.from({ length: 10 }, (_, i) => ({ ...summary, id: i + 1 })),
     )
     expect((await provider.listRepositoryRulesets(1n, 2n)).hasMore).toBe(true)
   })

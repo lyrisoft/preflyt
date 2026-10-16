@@ -14,7 +14,13 @@ Preflyt is a self-hosted Engineering Assurance & Readiness Platform that assesse
 
 Tagline: Engineering confidence before production.
 
-Website headline: Every change. Verified against your standards.
+Website headline: Know what passed. See what needs attention.
+
+Public descriptor: Engineering assurance for GitHub. After public release clearance: Open-source engineering assurance for GitHub.
+
+Community Edition is free and self-hosted under Apache-2.0, without an artificial repository cap. Managed Cloud is planned for later. Public source/image access and release qualification are still pending; do not imply an available hosted service or anonymous installation.
+
+Planned repository-aware AI reviews (issue #97 / P4.RI), including searchable repository indexing and outside-diff code retrieval, are Cloud-only and belong in separate private Cloud code. Community retains its existing profiles, Health/source evidence and optional BYOK diff reviews.
 
 Canonical positioning: [Product positioning](docs/product/product-positioning.md).
 

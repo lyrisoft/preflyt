@@ -1,0 +1,15 @@
+Preflyt Community Edition
+Copyright 2026 Lyrisoft Technologies Limited
+
+Original Preflyt code and documentation are licensed under Apache-2.0.
+Third-party code, assets and dependencies retain their original licenses.
+This notice does not change their terms or grant trademark rights.
+
+The web application incorporates modified Shadcn Admin source:
+Copyright (c) 2024 Sat Naing. MIT license: apps/web/LICENSE.
+Inline Tabler icons retain their MIT notice in
+apps/web/THIRD_PARTY_NOTICES.md.
+
+Additional third-party notices and license locations are indexed in
+THIRD_PARTY_NOTICES.md. Redistribution clearance for a public Community
+release is tracked separately in docs/planning/open-source-readiness.md.

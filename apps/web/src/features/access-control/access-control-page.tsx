@@ -220,6 +220,7 @@ export function AccessControlPage() {
     [search, setSearch] = useState(''),
     [roleFilter, setRoleFilter] = useState('all'),
     [statusFilter, setStatusFilter] = useState('all')
+  const [githubPageSize, setGithubPageSize] = useState(10)
   const [githubSearch, setGithubSearch] = useState(''),
     [githubPage, setGithubPage] = useState(1)
   const directory = useQuery({
@@ -227,11 +228,12 @@ export function AccessControlPage() {
       'github-member-directory',
       session.data?.organizationId,
       githubSearch,
+      githubPageSize,
       githubPage,
     ],
     queryFn: ({ signal }) =>
       read<Directory>(
-        `github-directory?search=${encodeURIComponent(githubSearch)}&page=${githubPage}`,
+        `github-directory?search=${encodeURIComponent(githubSearch)}&page=${githubPage}&pageSize=${githubPageSize}`,
         signal
       ),
     enabled: canManage && !!access.data?.githubLinked && tab === 'github',
@@ -771,7 +773,18 @@ export function AccessControlPage() {
                         ? new Date(directory.data.syncedAt).toLocaleString()
                         : '—'}
                     </p>
-                    <Table>
+                    <Table
+                      pagination={{
+                        page: githubPage,
+                        pageSize: githubPageSize,
+                        total: directory.data?.total ?? 0,
+                        onPageChange: setGithubPage,
+                        onPageSizeChange: (size) => {
+                          setGithubPageSize(size)
+                          setGithubPage(1)
+                        },
+                      }}
+                    >
                       <TableHeader>
                         <TableRow>
                           <TableHead>GitHub member</TableHead>
@@ -874,24 +887,6 @@ export function AccessControlPage() {
                         No matching GitHub members.
                       </p>
                     )}
-                    <div className='mt-4 flex justify-end gap-2'>
-                      <Button
-                        size='sm'
-                        variant='outline'
-                        disabled={githubPage === 1}
-                        onClick={() => setGithubPage((p) => p - 1)}
-                      >
-                        Previous
-                      </Button>
-                      <Button
-                        size='sm'
-                        variant='outline'
-                        disabled={!directory.data?.hasMore}
-                        onClick={() => setGithubPage((p) => p + 1)}
-                      >
-                        Next
-                      </Button>
-                    </div>
                   </>
                 )}
                 {sync.isError && (

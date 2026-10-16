@@ -134,7 +134,25 @@ model GitHubSetupTransaction {
   @@index([expiresAt])
 }
 
+// Installation verification preserves the initiating Preflyt session and identity.
+model GitHubConnectionTransaction {
+  id             String @id @default(cuid())
+  stateHash      String @unique
+  bindingHash    String
+  sessionHash    String
+  actorId        String
+  appId          String
+  organizationId String?
+  phase          String @default("INSTALLATION")
+  installationId BigInt?
+  codeVerifier   String?
+  expiresAt      DateTime
+  createdAt      DateTime @default(now())
+  @@index([expiresAt])
+}
+
 model GitHubInstallation {
+  repositoryTracking String @default("EXPLICIT")
   organizationId String @default("preflyt-default")
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   id                  BigInt             @id
@@ -170,6 +188,7 @@ model GitHubRepository {
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
   repositoryGrants RepositoryGrant[]
+  contributorSync ContributorSyncState?
   contributorObservations ContributorObservation[]
   pullRequests RepositoryPullRequest[]
   ciBindings RepositoryCiBindings[]
@@ -1337,4 +1356,24 @@ model AiFindingGuidance {
   @@index([organizationId, repositoryId, assessmentId, findingId])
   @@index([state, leaseUntil, createdAt])
   @@index([organizationId, createdAt])
+}
+
+// Durable, restart-safe initial contributor history collection for selected repositories.
+model ContributorSyncState {
+ repositoryId String @id
+ repository GitHubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+ installationId String
+ accessRevision Int
+ state String @default("QUEUED")
+ attempts Int @default(0)
+ nextAttemptAt DateTime @default(now())
+ leaseToken String?
+ leaseUntil DateTime?
+ lastAttemptAt DateTime?
+ lastSyncedAt DateTime?
+ truncated Boolean @default(false)
+ failureCode String?
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@index([state, nextAttemptAt])
 }

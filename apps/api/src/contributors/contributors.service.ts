@@ -1,3 +1,5 @@
+import { readPageSize } from '../pagination.js'
+import { ContributorSyncService } from './contributor-sync.service.js'
 import { contributorDailyActivity } from './contributor-daily-activity.js'
 import { configurationValue } from '../configuration/runtime-configuration.js'
 import {
@@ -5,15 +7,11 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
-  HttpException,
 } from '@nestjs/common'
-import { createHash } from 'node:crypto'
 import { PrismaService } from '../prisma/prisma.service.js'
 import { AuthorizationService } from '../auth/authorization.service.js'
 import type { AuthenticatedSession } from '../auth/session.guard.js'
 import { GitHubProviderService } from '../github/github-provider.service.js'
-import { normalizeContributorEvent } from '../github-events/contributor-event.js'
-import { captureContributors } from './capture.js'
 import { contributorCompliance } from './policy-compliance.js'
 
 @Injectable()
@@ -29,6 +27,7 @@ export class ContributorsService {
     query: Record<string, unknown>,
     contributorId?: string,
   ) {
+    const pageSize = readPageSize(query.pageSize)
     const days = Number(query.days ?? 30),
       page = Number(query.page ?? 1),
       kind = String(query.kind ?? 'all'),
@@ -305,7 +304,12 @@ export class ContributorsService {
         },
       },
     })
+    const syncRows=await this.db.contributorSyncState.findMany({where:{repositoryId:{in:repositories.map(r=>r.id)}},select:{repositoryId:true,state:true,lastSyncedAt:true,nextAttemptAt:true,failureCode:true,installationId:true,accessRevision:true,repository:{select:{installation:{select:{accessRevision:true}}}}}})
+    const byRepository=new Map(syncRows.map(row=>[row.repositoryId,row]))
+    const syncItems=repositories.map(repo=>{const stored=byRepository.get(repo.id);const row=stored && stored.installationId===String(repo.installationId) && stored.accessRevision===stored.repository.installation.accessRevision ? stored : undefined;return {repositoryId:repo.githubId.toString(),name:repo.fullName,state:row?.state??'QUEUED',lastSyncedAt:row?.lastSyncedAt?.toISOString()??null,retryAt:row?.state==='RETRY'?row.nextAttemptAt.toISOString():null,failureCode:row?.failureCode??null}})
+    const completed=syncItems.filter(row=>['SYNCED','PARTIAL'].includes(row.state)).length
     return {
+      sync:{total:syncItems.length,completed,pending:syncItems.filter(row=>['QUEUED','RUNNING','RETRY'].includes(row.state)).length,failed:syncItems.filter(row=>row.state==='FAILED').length,partial:syncItems.filter(row=>row.state==='PARTIAL').length,items:syncItems},
       emptyActivity: !!contributorId && observations.length === 0,
       choices: scope.map((r) => ({
         githubId: r.githubId.toString(),
@@ -334,10 +338,10 @@ export class ContributorsService {
         policyEvidence: assessmentAllowed,
       },
       page,
-      pageSize: 20,
+      pageSize,
       total: data.length,
       truncated: truncated || assessments.length > 5000,
-      contributors: (contributorId ? data : data.slice((page - 1) * 20, page * 20)).map(c=>({...c,
+      contributors: (contributorId ? data : data.slice((page - 1) * pageSize, page * pageSize)).map(c=>({...c,
         dailyActivity: activityAllowed ? contributorDailyActivity(seen.get(c.id)??[],from,now) : null,
       })),
       lastReceivedAt: receipt?.receivedAt.toISOString() ?? null,
@@ -410,97 +414,6 @@ export class ContributorsService {
       id,
       'repository.manage',
     )
-    // Durable cooldown prevents reloads/repeated clicks or multiple API replicas from repeating backfill.
-    const cooldownKey = `contributors-backfill:${repo.id}`
-    const windowStart = new Date(Math.floor(Date.now() / 300000) * 300000)
-    const lease = await this.db.authThrottle.upsert({
-      where: {
-        action_keyHash_windowStart: {
-          action: 'contributors-backfill',
-          keyHash: cooldownKey,
-          windowStart,
-        },
-      },
-      create: {
-        action: 'contributors-backfill',
-        keyHash: cooldownKey,
-        windowStart,
-        count: 1,
-      },
-      update: { count: { increment: 1 } },
-    })
-    if (lease.count > 1)
-      throw new HttpException(
-        'Recent contributor import already requested; retry after five minutes',
-        429,
-      )
-    let result: Awaited<
-      ReturnType<GitHubProviderService['readContributorBackfill']>
-    >
-    try {
-      result = await this.github.readContributorBackfill(
-        repo.installationId,
-        repo.githubId,
-      )
-    } catch (error) {
-      await this.db.authThrottle.deleteMany({ where: { id: lease.id } })
-      throw error
-    }
-    await this.db.authThrottle.deleteMany({
-      where: {
-        action: 'contributors-backfill',
-        windowStart: { lt: new Date(Date.now() - 600000) },
-      },
-    })
-    // Access is checked again after upstream requests before committing an administrative sync.
-    await this.access.requireRepository(session, id, 'repository.manage')
-    let importedRecords = 0
-    let duplicateRecords = 0
-    for (const item of result.observations) {
-      const normalized = normalizeContributorEvent(item.event, item.body)
-      if (!normalized) continue
-      const payloadHash = createHash('sha256')
-        .update(
-          JSON.stringify(normalized, (_key, v) =>
-            typeof v === 'bigint' ? v.toString() : v,
-          ),
-        )
-        .digest('hex')
-      const captured = await captureContributors(
-        this.db,
-        `backfill:${payloadHash}`,
-        payloadHash,
-        normalized.installationId,
-        normalized.repositoryGithubId,
-        normalized.activities,
-      )
-      if (!captured.accepted)
-        throw new ForbiddenException(
-          'Repository access changed during contributor import; retry after reconnecting',
-        )
-      if (captured.duplicate) duplicateRecords++
-      else importedRecords += normalized.activities.length
-    }
-    await this.db.auditEvent.create({
-      data: {
-        event: 'contributors_backfilled',
-        actorId: session.identityId,
-        metadata: {
-          organizationId: session.organizationId!,
-          repositoryId: id,
-          truncated: result.truncated,
-          importedRecords,
-          duplicateRecords,
-          limits: result.limits,
-        },
-      },
-    })
-    return {
-      observations: result.observations.length,
-      importedRecords,
-      duplicateRecords,
-      truncated: result.truncated,
-      limits: result.limits,
-    }
+    return new ContributorSyncService(this.db,this.github).enqueue(repo.id,session.identityId)
   }
 }

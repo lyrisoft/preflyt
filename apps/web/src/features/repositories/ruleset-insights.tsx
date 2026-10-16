@@ -167,6 +167,7 @@ export function RulesetInsights({
   configuration: ReactNode
 }) {
   const gradientId = useId()
+  const [pageSize, setPageSize] = useState(10)
   const [page, setPage] = useState(1)
   const [filters, setFilters] = useState({
     period: 'week',
@@ -185,6 +186,7 @@ export function RulesetInsights({
       repositoryId,
       rulesetId,
       page,
+      pageSize,
       period,
       source,
       result,
@@ -192,7 +194,7 @@ export function RulesetInsights({
     ],
     queryFn: ({ signal }) =>
       governanceRequest<Insights>(
-        `/github/repositories/${repositoryId}/rulesets/${rulesetId}/insights?${new URLSearchParams({ page: String(page), ...filters })}`,
+        `/github/repositories/${repositoryId}/rulesets/${rulesetId}/insights?${new URLSearchParams({ page: String(page), pageSize: String(pageSize), ...filters })}`,
         undefined,
         signal
       ),
@@ -659,7 +661,18 @@ export function RulesetInsights({
             </p>
           </CardHeader>
           <CardContent className='space-y-3'>
-            <Table>
+            <Table
+              pagination={{
+                page,
+                pageSize,
+                hasNext: data?.hasMore,
+                onPageChange: setPage,
+                onPageSizeChange: (size) => {
+                  setPageSize(size)
+                  setPage(1)
+                },
+              }}
+            >
               <TableHeader>
                 <TableRow>
                   <TableHead>Evaluation</TableHead>
@@ -769,35 +782,16 @@ export function RulesetInsights({
                 No matching evaluations on this page.
               </p>
             )}
-            <div className='flex items-center justify-between border-t pt-4'>
-              <span className='text-xs text-muted-foreground'>Page {page}</span>
-              <div className='flex gap-2'>
-                <Button
-                  size='sm'
-                  variant='outline'
-                  disabled={page === 1 || query.isFetching}
-                  onClick={() => setPage(page - 1)}
-                >
-                  Previous
-                </Button>
-                <Button
-                  size='sm'
-                  variant='outline'
-                  disabled={!data.hasMore || page >= 1000 || query.isFetching}
-                  onClick={() => setPage(page + 1)}
-                >
-                  Next
-                </Button>
-                <Button
-                  size='sm'
-                  variant='outline'
-                  disabled={query.isFetching}
-                  onClick={() => void query.refetch()}
-                >
-                  Refresh
-                </Button>
-              </div>
-            </div>
+            <>
+              <Button
+                size='sm'
+                variant='outline'
+                disabled={query.isFetching}
+                onClick={() => void query.refetch()}
+              >
+                Refresh
+              </Button>
+            </>
           </CardContent>
         </Card>
       )}

@@ -1,0 +1,41 @@
+name: Bug report
+description: Report a reproducible, non-sensitive defect.
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Report vulnerabilities privately to support@lyrisoft.tech, not here.
+        Do not include secrets, populated environment files, backups, customer data or private source.
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Preflyt release/image digest and Action version, if relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: deployment
+    attributes:
+      label: Deployment
+      description: Docker/Compose versions, host architecture and deployment method. Omit credentials and private URLs.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Include a minimal, sanitized reproduction.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Sanitized evidence
+      description: Relevant errors or screenshots; remove sensitive information first.

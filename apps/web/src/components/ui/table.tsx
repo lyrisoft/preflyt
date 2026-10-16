@@ -1,31 +1,90 @@
 import * as React from 'react'
 import { cn } from '@/lib/utils'
+import {
+  TablePagination,
+  type TablePaginationState,
+} from '@/components/table-pagination'
 
-function Table({ className, ...props }: React.ComponentProps<'table'>) {
+function Table({
+  className,
+  children,
+  pagination,
+  ...props
+}: React.ComponentProps<'table'> & {
+  pagination?: false | TablePaginationState
+}) {
+  const [size, setSize] = React.useState(10)
+  const [requestedPage, setPage] = React.useState(1)
+  const sections = React.Children.toArray(children)
+  const body = sections.find(
+    (child) =>
+      React.isValidElement<{ children?: React.ReactNode }>(child) &&
+      (child.type === TableBody || child.type === 'tbody')
+  ) as React.ReactElement<{ children?: React.ReactNode }> | undefined
+  const rows = React.Children.toArray(body?.props.children)
+  const page = Math.min(
+    requestedPage,
+    Math.max(1, Math.ceil(rows.length / size))
+  )
+  const controls =
+    pagination === false
+      ? null
+      : (pagination ?? {
+          page,
+          pageSize: size,
+          total: rows.length,
+          onPageChange: setPage,
+          onPageSizeChange: (next: number) => {
+            setSize(next)
+            setPage(1)
+          },
+        })
+  const content =
+    pagination === undefined && body
+      ? sections.map((section) =>
+          section === body
+            ? React.cloneElement(body, {
+                children: rows.slice((page - 1) * size, page * size),
+              })
+            : section
+        )
+      : children
   const container = React.useRef<HTMLDivElement>(null)
   const [scrollable, setScrollable] = React.useState(false)
   React.useEffect(() => {
     const element = container.current
     if (!element) return
     // Keyboard users can only scroll an overflowing table if it can take focus.
-    const observer = new ResizeObserver(() =>
-      setScrollable(element.scrollWidth > element.clientWidth + 1)
-    )
+    let frame = 0
+    const observer = new ResizeObserver(() => {
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(() =>
+        setScrollable(element.scrollWidth > element.clientWidth + 1)
+      )
+    })
     observer.observe(element)
-    return () => observer.disconnect()
+    return () => {
+      observer.disconnect()
+      cancelAnimationFrame(frame)
+    }
   }, [])
   return (
-    <div
-      ref={container}
-      data-slot='table-container'
-      tabIndex={scrollable ? 0 : undefined}
-      className='relative w-full overflow-x-auto focus-visible:outline-2 focus-visible:outline-ring'
-    >
-      <table
-        data-slot='table'
-        className={cn('w-full caption-bottom text-sm', className)}
-        {...props}
-      />
+    <div className='min-w-0'>
+      <div
+        ref={container}
+        data-slot='table-container'
+        tabIndex={scrollable ? 0 : undefined}
+        className='relative w-full overflow-x-auto focus-visible:outline-2 focus-visible:outline-ring'
+      >
+        <table
+          data-slot='table'
+          className={cn('w-full caption-bottom text-sm', className)}
+          {...props}
+        >
+          {content}
+        </table>
+      </div>
+      {controls && <TablePagination {...controls} />}
     </div>
   )
 }

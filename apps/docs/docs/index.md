@@ -15,6 +15,10 @@ import DocsHero from '@site/src/components/DocsHero'
 
 Preflyt is a self-hosted **Engineering Assurance & Readiness Platform**. It assesses repository health and verifies CI evidence against approved engineering standards, giving teams a traceable readiness result for each assessed change. Repository health and CI assessments share a findings workspace, so developers can move from a reported issue to its evidence, assessed source and suggested next steps.
 
+## Community Edition
+
+[Preflyt Community Edition](self-hosting/community-edition.md) is free and self-hosted with unlimited repositories and Apache-2.0 licensing for original Preflyt code. It includes the core assurance workflow and optional BYOK AI; managed Cloud is planned for later. Public release qualification is still in progress, and published images currently require package access.
+
 ## Why teams use Preflyt
 
 Teams need to understand both the code they already own and the changes they are about to merge. Scanner reports, test failures and repository configuration often live in separate places, making it difficult to prioritize problems or tell whether a result still applies.

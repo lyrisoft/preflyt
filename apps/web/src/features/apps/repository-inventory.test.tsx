@@ -357,5 +357,5 @@ it('shows API overall health consistently even when analysis is partial', async 
   expect(
     view.getByText('Incomplete').element().closest('[data-slot="badge"]')
       ?.className
-  ).not.toContain('text-warning-text')
+  ).toContain('text-warning-text')
 })

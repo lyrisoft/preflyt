@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createRelease, releaseVersion } from './create-release.mjs';
 import { images } from './publish-release.mjs';
 const sha = 'a'.repeat(40);
-const env = { GITHUB_SHA: sha, GITHUB_REPOSITORY_OWNER: 'lyrisoft', GITHUB_REPOSITORY: 'lyrisoft/preflyt', GITHUB_REF: 'refs/heads/main', GITHUB_EVENT_NAME: 'push' };
+const env = { GITHUB_SHA: sha, GITHUB_REPOSITORY_OWNER: 'lyrisoft', GITHUB_REPOSITORY: 'lyrisoft/preflyt', GITHUB_REF: 'refs/heads/main', GITHUB_EVENT_NAME: 'workflow_dispatch' };
 const digest = `sha256:${'b'.repeat(64)}`;
 function fixture(options = {}) {
   const calls = [], registry = new Map();
@@ -52,7 +52,7 @@ test('reruns reuse existing commit tag and published release', () => {
   assert.ok(!f.calls.slice(first).some(([, args]) => args.includes('create') || args.includes('POST')));
 });
 test('development and PR events cannot create releases or touch registry', () => {
-  for (const override of [{ GITHUB_REF: 'refs/heads/development' }, { GITHUB_EVENT_NAME: 'pull_request' }]) assert.throws(() => createRelease({ ...env, ...override }, () => assert.fail()), /push to main/);
+  for (const override of [{ GITHUB_REF: 'refs/heads/development' }, { GITHUB_EVENT_NAME: 'pull_request' }, { GITHUB_EVENT_NAME: 'push' }]) assert.throws(() => createRelease({ ...env, ...override }, () => assert.fail()), /manual dispatch on main/);
 });
 test('incomplete architecture sources fail before reserving tag', () => {
   const f = fixture({ singleArch: true }); assert.throws(() => createRelease(env, f.run), /Missing release architecture/);

@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Header,
+  HttpCode,
   Inject,
   Param,
   Post,
@@ -38,7 +39,7 @@ export class ContributorsController {
   ) {
     return this.contributors.read(req.preflytSession, query, id)
   }
-  @Post('repositories/:repositoryId/sync') sync(
+  @Post('repositories/:repositoryId/sync') @HttpCode(202) sync(
     @Req() req: R,
     @Param('repositoryId') id: string,
   ) {

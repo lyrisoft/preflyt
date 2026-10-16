@@ -316,10 +316,10 @@ it('paginates drafts and rejects a draft belonging to another repository', async
     hasMore: true,
     page: 1,
   })
-  expect((await get(viewer).expect(200)).body.drafts).toHaveLength(20)
-  expect((await get(viewer, base + '?page=2').expect(200)).body).toMatchObject({
+  expect((await get(viewer).expect(200)).body.drafts).toHaveLength(10)
+  expect((await get(viewer, base + '?page=3').expect(200)).body).toMatchObject({
     hasMore: false,
-    page: 2,
+    page: 3,
     drafts: expect.any(Array),
   })
   await get(viewer, base + '?page=0').expect(400)

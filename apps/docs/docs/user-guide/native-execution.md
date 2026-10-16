@@ -9,6 +9,13 @@ description: Optional checks in a separate reviewed Preflyt runtime, prerequisit
 
 Native execution means **Preflyt schedules a check in a separate isolated runtime**, rather than your GitHub Actions runner running it. It is optional and disabled by default. Use [GitHub Actions](pull-request-checks.md) for normal onboarding; installing Preflyt does not automatically run repository code.
 
+<figure className="pf-guide-screenshot">
+  <a href="/img/guides/native-execution.jpg" target="_blank" rel="noreferrer">
+    <img src="/img/guides/native-execution.jpg" alt="Assessments → Commit assessments is the entry point for saved check evidence. Native runtime controls are unavailable in this deployment; this is not a completed native execution." width="1728" height="906" loading="lazy" />
+  </a>
+  <figcaption>Assessments → Commit assessments is the entry point for saved check evidence. Native runtime controls are unavailable in this deployment; this is not a completed native execution. Select the image to view it full size.</figcaption>
+</figure>
+
 ## Choose your execution path
 
 | Path | Who runs the code | What you set up |

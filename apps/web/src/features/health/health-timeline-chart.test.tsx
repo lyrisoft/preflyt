@@ -4,6 +4,62 @@ import { render } from 'vitest-browser-react'
 import { page } from 'vitest/browser'
 import { HealthTimelineChart } from './health-timeline-chart'
 
+it('uses full width and regular time labels around sparse scans without inventing assessments', async () => {
+  await page.viewport(1440, 900)
+  await render(
+    <HealthTimelineChart
+      branch='main'
+      onSelectReport={() => {}}
+      points={[
+        {
+          id: 'first',
+          sourceSha: 'a'.repeat(40),
+          at: '2026-10-15T23:47:00Z',
+          findings: 760,
+          partial: true,
+          comparableFindings: null,
+        },
+        {
+          id: 'last',
+          sourceSha: 'b'.repeat(40),
+          at: '2026-10-16T01:43:00Z',
+          findings: 760,
+          partial: true,
+          comparableFindings: null,
+        },
+      ]}
+    />
+  )
+  await expect
+    .poll(() => {
+      const bars = [
+        ...document.querySelectorAll('.recharts-bar-rectangle path'),
+      ].map((bar) => bar.getBoundingClientRect())
+      const chart = document
+        .querySelector('.recharts-responsive-container')
+        ?.getBoundingClientRect()
+      return (
+        !!chart &&
+        chart.width > 1200 &&
+        bars.length === 2 &&
+        bars[0].left > chart.left + 70 &&
+        bars[1].right < chart.right - 70 &&
+        bars[1].left - bars[0].right < 200
+      )
+    })
+    .toBe(true)
+  const labels = [...document.querySelectorAll('svg text')].map(
+    (label) => label.textContent
+  )
+  expect(labels.length).toBeGreaterThan(3)
+  expect(labels.some((label) => label?.includes('12:00'))).toBe(true)
+  expect(labels.some((label) => label?.includes('04:00'))).toBe(true)
+  expect(labels.some((label) => label?.includes('23:47'))).toBe(false)
+  await page.screenshot({
+    path: '__screenshots__/preflyt-health-continuous-time.png',
+  })
+})
+
 it('keeps partial observations visible and breaks comparison across an incompatible scan', async () => {
   await page.viewport(1280, 800)
   const select = vi.fn()
@@ -80,7 +136,7 @@ it('keeps partial observations visible and breaks comparison across an incompati
       return (
         bars.length === 3 &&
         bars.every((bar) => bar.right <= 320) &&
-        bars[1].right + 20 < bars[2].left
+        bars[1].right + 2 < bars[2].left
       )
     })
     .toBe(true)

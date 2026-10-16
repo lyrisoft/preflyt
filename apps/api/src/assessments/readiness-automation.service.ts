@@ -1,3 +1,4 @@
+import { readPageSize } from '../pagination.js'
 import { effectiveAiRoute } from "../intelligence/effective-ai-route.js";
 import { currentStandards } from "../standards/policy-standards.js";
 import { configurationValue } from "../configuration/runtime-configuration.js";
@@ -48,7 +49,8 @@ export class ReadinessAutomationService {
     private readonly checks: CheckPublicationService,
     @Optional() @Inject(PolicyExceptionService) private readonly exceptions?: PolicyExceptionService,
   ) {}
-  async list(session: AuthenticatedSession, githubId: string, page = 1) {
+  async list(session: AuthenticatedSession, githubId: string, page = 1, requestedSize?: unknown) {
+    const pageSize = readPageSize(requestedSize)
     if (!Number.isInteger(page) || page < 1 || page > 1000)
       throw new BadRequestException("Invalid page");
     const repo = await this.access.requireRepository(
@@ -63,17 +65,17 @@ export class ReadinessAutomationService {
       this.prisma.readinessTask.findMany({
         where: { repositoryId: repo.id },
         orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
-        skip: (page - 1) * 20,
-        take: 21,
+        skip: (page - 1) * pageSize,
+        take: pageSize + 1,
       }),
     ]);
     return {
       available: automationEnabled(),
       settings: settings ?? { enabled: false, revision: 0 },
       page,
-      hasMore: tasks.length > 20,
+      hasMore: tasks.length > pageSize,
       tasks: tasks
-        .slice(0, 20)
+        .slice(0, pageSize)
         .map(({ leaseToken, leaseUntil, ...task }) => task),
     };
   }

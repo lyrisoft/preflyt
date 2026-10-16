@@ -1,9 +1,11 @@
+import { createAppRouter } from '@/public-router'
 import {
   createRequestHandler,
   renderRouterToString,
   RouterServer,
 } from '@tanstack/react-router/ssr/server'
-import { createAppRouter } from './app'
+
+export const websiteMode = import.meta.env.VITE_WEBSITE_MODE === 'true'
 
 export { publicPages } from './features/marketing/public-pages'
 

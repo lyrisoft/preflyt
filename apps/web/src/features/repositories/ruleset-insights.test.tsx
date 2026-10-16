@@ -184,7 +184,12 @@ it('renders the real saved-history chart within a narrow viewport in both themes
   }
   const view = await renderBrowser(
     <div style={{ width: '100%', padding: 16 }}>
-      <RulesetInsights repositoryId='501' actorId='reader' rulesetId={7} configuration={null} />
+      <RulesetInsights
+        repositoryId='501'
+        actorId='reader'
+        rulesetId={7}
+        configuration={null}
+      />
     </div>
   )
   try {

@@ -7,7 +7,7 @@
   max-width: 920px;
   margin: 0 0 60px;
   color: var(--website-muted);
-  font-size: clamp(23px, 2.6vw, 32px);
+  font-size: clamp(1.5rem, 1.2rem + 1vw, 2rem);
   line-height: 1.42;
   font-weight: 400;
   letter-spacing: -0.025em;
@@ -61,9 +61,9 @@
 }
 .engineering-figure figcaption h3 {
   color: var(--website-ink);
-  font-size: 16px;
+  font-size: var(--website-heading-card);
   line-height: 1.4;
-  font-weight: 450;
+  font-weight: 600;
   letter-spacing: -0.015em;
   margin: 0 0 9px;
 }
@@ -71,7 +71,7 @@
   max-width: 34ch;
   margin: 0;
   color: var(--website-muted);
-  font-size: 12px;
+  font-size: var(--website-text-body);
   line-height: 1.65;
 }
 .engineering-layer {
@@ -143,6 +143,6 @@
   }
   .engineering-figure figcaption p {
     max-width: 42ch;
-    font-size: 13px;
+    font-size: var(--website-text-body);
   }
 }

@@ -123,3 +123,41 @@ describe('repository engineering profile', () => {
     )
   })
 })
+
+it('does not mark unrelated file links or ignored directories partial', () => {
+  const snapshot = base()
+  snapshot.omittedPaths = [
+    { path: 'AGENTS.md', kind: 'symlink', scope: 'file', reason: 'File link not followed.' },
+    { path: 'vendor/dependency', kind: 'submodule', scope: 'directory', reason: 'Submodule not traversed.' },
+  ]
+  const result = discoverRepositoryProfile(snapshot)
+  expect(result.complete).toBe(true)
+  expect(result.omittedPaths.every((item) => item.affectedChecks.length === 0)).toBe(true)
+  expect(result.signals.find((item) => item.id === 'ownership')!.state).toBe('not_detected')
+})
+it('marks only affected missing checks unknown and retains paths and reasons', () => {
+  const snapshot = base()
+  snapshot.omittedPaths = [{ path: 'package.json', kind: 'symlink', scope: 'file', reason: 'File link not followed.' }]
+  const result = discoverRepositoryProfile(snapshot)
+  expect(result.complete).toBe(false)
+  expect(result.omittedPaths[0]).toMatchObject({ path: 'package.json', reason: 'File link not followed.', affectedChecks: expect.arrayContaining(['manifests','frameworks','tests']) })
+  expect(result.signals.find((item) => item.id === 'manifests')!.state).toBe('unknown')
+  expect(result.signals.find((item) => item.id === 'ownership')!.state).toBe('not_detected')
+})
+it.each(['directory','unknown'] as const)('keeps potentially relevant omitted %s content partial', (scope) => {
+  const snapshot = base()
+  snapshot.omittedPaths = [{ path: 'packages/shared', kind: 'symlink', scope, reason: 'Target not traversed.' }]
+  expect(discoverRepositoryProfile(snapshot).complete).toBe(false)
+  expect(discoverRepositoryProfile(snapshot).omittedPaths[0].affectedChecks).toContain('frameworks')
+})
+
+it('excludes installed agent skill links and scripts from application profile checks', () => {
+ const snapshot = base()
+ snapshot.files = [{path:'.agents/skills/tool/helper.py',sha:'c'.repeat(40),size:1}]
+ snapshot.omittedPaths = [{path:'.claude/skills/impeccable',kind:'symlink',scope:'directory',reason:'Directory link.',affectedChecks:['languages']}]
+ const result = discoverRepositoryProfile(snapshot)
+ expect(result.complete).toBe(true)
+ expect(result.omittedPaths[0].affectedChecks).toEqual([])
+ expect(result.signals.find(s=>s.id==='languages')!.observations).toEqual([])
+ expect(result.omittedPaths[0].reason).toContain('outside supported application profile scope')
+})

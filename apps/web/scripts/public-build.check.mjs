@@ -106,6 +106,7 @@ test('robots advertises only public pages and their query variants', () => {
   assert.ok(robots.includes('Allow: /product/repository-health$'))
   assert.ok(robots.includes('Allow: /product?'))
   assert.ok(robots.includes('Allow: /product/$'))
+  assert.ok(robots.includes('Allow: /pricing$'))
   assert.ok(robots.includes('Allow: /assets/'))
   assert.ok(robots.includes('Allow: /images/'))
   assert.ok(robots.includes('Sitemap: https://preflyt.example/sitemap.xml'))
@@ -242,6 +243,7 @@ test('generated private routing handles actual deep links but not unknown public
     '/',
     '/product',
     '/self-hosting',
+    '/pricing',
     '/product/missing',
     '/random',
     '/images/missing.png',

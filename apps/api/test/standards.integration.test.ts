@@ -358,7 +358,7 @@ it('adopts current report adapters while keeping a saved old version intact unti
   const library = await get().expect(200)
   expect(
     library.body.catalogue.some(
-      (p: any) => p.id === 'baseline-engineering' && p.version === '1.1.0',
+      (p: any) => p.id === 'baseline-engineering' && p.version === '1.1.1',
     ),
   ).toBe(true)
   expect(
@@ -369,9 +369,9 @@ it('adopts current report adapters while keeping a saved old version intact unti
   expect(library.body.selection.id).toBe(selectionId)
   const updated = await post({
     ...body(selectionId),
-    packs: [{ id: 'baseline-engineering', version: '1.1.0' }],
+    packs: [{ id: 'baseline-engineering', version: '1.1.1' }],
   }).expect(201)
-  expect(updated.body.packs[0].version).toBe('1.1.0')
+  expect(updated.body.packs[0].version).toBe('1.1.1')
   const history = await prisma.repositoryStandardsSelection.findUniqueOrThrow({
     where: { id: selectionId },
   })

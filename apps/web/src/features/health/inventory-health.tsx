@@ -57,9 +57,7 @@ export function InventoryHealthCell({
   return (
     <div className='min-w-40 space-y-1.5'>
       <div className='flex flex-wrap items-center gap-1'>
-        <StatusBadge
-          tone={status === 'COMPLETED' ? 'neutral' : healthTone(status)}
-        >
+        <StatusBadge tone={healthTone(status)}>
           {status === 'INCOMPLETE' ? (
             <span>{healthLabel(status)}</span>
           ) : (

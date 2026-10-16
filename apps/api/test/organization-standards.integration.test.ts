@@ -485,3 +485,20 @@ it('rejects arbitrary executors and duplicate custom check definitions', async (
   await post(owner, root, { ...input, ruleIds: [id], checks: [check, check] }).expect(400)
   await post(owner, root, { ...input, ruleIds: ['shell.custom'], checks: [{ ...check, id: 'shell.custom' }] }).expect(400)
 })
+
+
+it('serves check-specific built-in guidance through the library API', async () => {
+  const response = await get().expect(200)
+  expect(response.body.builtIn).toHaveLength(5)
+  const rules = new Map<string, string>()
+  for (const pack of response.body.builtIn) {
+    expect(pack.version).toBe('1.1.1')
+    expect(new Set(pack.rules.map((rule: any) => rule.guidance)).size).toBe(pack.rules.length)
+    for (const rule of pack.rules) rules.set(rule.id, rule.guidance)
+  }
+  expect(rules.size).toBe(14)
+  expect(new Set(rules.values()).size).toBe(14)
+  expect(rules.get('tests.required')).toContain('JUnit')
+  expect(rules.get('ci.configured')).toContain('does not prove')
+  expect(rules.get('dependencies.locked')).toContain('does not verify')
+})

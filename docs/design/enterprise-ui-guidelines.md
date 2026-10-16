@@ -52,3 +52,6 @@ Keep actual results, denominators, chart axes/legends, dates, permission-denied 
 ### Global action notifications
 
 Reuse the root Sonner toaster in `apps/web/src/routes/__root.tsx`; do not mount another toaster on feature pages. Mutation failures without a local error handler use the shared global handler, preserving API and fetch error messages. Simple completed mutations can set `meta: { successMessage: 'Saved changes' }`; operations with partial outcomes must report their verified result explicitly. Keep persistent inline errors when users need details or recovery actions. Toasts are temporary feedback, not the persisted notification inbox.
+## Table pagination
+
+Workspace tables use the shared `Table` component and `TablePagination`. Default to 10 rows and offer 10, 25, 50 and 100 in a labeled Rows per page dropdown. Changing the size returns to the first page. Keep the row range and Previous/Next controls together in one responsive footer. Server-paginated tables pass the selected size to the API and include it in the query key; never paginate an already paginated response a second time. Static marketing illustrations do not expose working table controls.

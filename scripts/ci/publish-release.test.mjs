@@ -9,9 +9,12 @@ test('API, migration, controller and Health scanner share the native build stage
   assert.equal(Object.keys(config.target).length, 4);
   assert.equal(config.target['preflyt-health-scanner'].target, 'health-scanner');
   assert.match(config.target['preflyt-health-scanner'].args.PREFLYT_DATABASE_EPOCH, /^\d{4}-\d{2}-\d{2}$/);
+  assert.match(config.target['preflyt-health-scanner']['cache-to'][0], /mode=min,/);
+  assert.match(config.target['preflyt-api']['cache-to'][0], /mode=max,/);
   for (const target of Object.values(config.target)) {
     assert.equal(target.dockerfile, 'deploy/api.Dockerfile');
     assert.deepEqual(target.platforms, ['linux/arm64']);
+    assert.deepEqual(target.attest, [{ type: 'sbom' }, { type: 'provenance', mode: 'max' }]);
     assert.match(target.tags[0], /-arm64$/);
     assert.match(target['cache-to'][0], /build-cache-arm64$/);
   }
@@ -22,6 +25,7 @@ test('web builds independently and existing immutable architecture images are ne
   let config;
   publishRelease('build', { ...env, BUILD_GROUP: 'web', ARCH: 'amd64' }, args => args.includes('inspect') ? missing() : '', (_, contents) => { config = JSON.parse(contents); });
   assert.deepEqual(Object.keys(config.target), ['preflyt-web']);
+  assert.deepEqual(config.target['preflyt-web'].attest, [{ type: 'sbom' }, { type: 'provenance', mode: 'max' }]);
   publishRelease('build', env, args => { assert.ok(args.includes('inspect')); return ''; }, () => assert.fail('should not rebuild existing images'));
 });
 test('registry permission failures stop the build without overwriting images', () => {

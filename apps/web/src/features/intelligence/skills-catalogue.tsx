@@ -30,6 +30,7 @@ import {
   SheetTitle,
   SheetDescription,
 } from '@/components/ui/sheet'
+import { Table } from '@/components/ui/table'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { StatusBadge } from '@/components/status-badge'
@@ -140,8 +141,6 @@ export function SkillsCatalogue() {
       data?.skills.filter((s) =>
         `${s.name} ${s.status}`.toLowerCase().includes(filter.toLowerCase())
       ) ?? [],
-    pages = Math.max(1, Math.ceil(filtered.length / 10)),
-    current = Math.min(page, pages),
     activeLibrary =
       library ?? (data?.skills.length ? 'organization' : 'builtin'),
     builtin =
@@ -371,7 +370,7 @@ export function SkillsCatalogue() {
             ) : (
               <TabsContent value='organization'>
                 <div className='overflow-x-auto rounded-xl border'>
-                  <table className='w-full text-left text-sm'>
+                  <Table className='w-full text-left text-sm'>
                     <thead className='bg-muted/40 text-muted-foreground'>
                       <tr>
                         {['Skill', 'Version', 'Status', 'Actions'].map((t) => (
@@ -382,64 +381,62 @@ export function SkillsCatalogue() {
                       </tr>
                     </thead>
                     <tbody>
-                      {filtered
-                        .slice((current - 1) * 10, current * 10)
-                        .map((s) => (
-                          <tr
-                            key={s.id}
-                            className='border-t transition-colors hover:bg-muted/20'
-                          >
-                            <td className='px-4 py-3'>
-                              <div className='flex items-center gap-3'>
-                                <SurfaceIcon
-                                  icon={FileText}
-                                  tone='violet'
-                                  size='sm'
-                                />
-                                <div className='min-w-0'>
-                                  <p className='font-semibold'>{s.name}</p>
-                                  <p className='mt-1 max-w-sm text-xs leading-5 text-muted-foreground'>
-                                    {s.description}
-                                  </p>
-                                </div>
-                              </div>
-                            </td>
-                            <td className='px-4 py-3'>v{s.version}</td>
-
-                            <td className='px-4 py-3'>
-                              <StatusBadge
-                                tone={
-                                  s.enabled
-                                    ? 'success'
-                                    : s.status === 'DRAFT'
-                                      ? 'warning'
-                                      : 'neutral'
-                                }
-                              >
-                                {s.enabled
-                                  ? 'Enabled'
-                                  : s.status === 'DRAFT'
-                                    ? 'Draft'
-                                    : s.status === 'RETIRED'
-                                      ? 'Retired'
-                                      : 'Approved'}
-                              </StatusBadge>
-                            </td>
-                            <td className='px-4 py-3'>
-                              <Button
+                      {filtered.map((s) => (
+                        <tr
+                          key={s.id}
+                          className='border-t transition-colors hover:bg-muted/20'
+                        >
+                          <td className='px-4 py-3'>
+                            <div className='flex items-center gap-3'>
+                              <SurfaceIcon
+                                icon={FileText}
+                                tone='violet'
                                 size='sm'
-                                variant='outline'
-                                onClick={() => {
-                                  setError('')
-                                  setReviewed(false)
-                                  setSelected(s)
-                                }}
-                              >
-                                Review
-                              </Button>
-                            </td>
-                          </tr>
-                        ))}
+                              />
+                              <div className='min-w-0'>
+                                <p className='font-semibold'>{s.name}</p>
+                                <p className='mt-1 max-w-sm text-xs leading-5 text-muted-foreground'>
+                                  {s.description}
+                                </p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className='px-4 py-3'>v{s.version}</td>
+
+                          <td className='px-4 py-3'>
+                            <StatusBadge
+                              tone={
+                                s.enabled
+                                  ? 'success'
+                                  : s.status === 'DRAFT'
+                                    ? 'warning'
+                                    : 'neutral'
+                              }
+                            >
+                              {s.enabled
+                                ? 'Enabled'
+                                : s.status === 'DRAFT'
+                                  ? 'Draft'
+                                  : s.status === 'RETIRED'
+                                    ? 'Retired'
+                                    : 'Approved'}
+                            </StatusBadge>
+                          </td>
+                          <td className='px-4 py-3'>
+                            <Button
+                              size='sm'
+                              variant='outline'
+                              onClick={() => {
+                                setError('')
+                                setReviewed(false)
+                                setSelected(s)
+                              }}
+                            >
+                              Review
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
                       {!filtered.length && (
                         <tr>
                           <td
@@ -451,34 +448,8 @@ export function SkillsCatalogue() {
                         </tr>
                       )}
                     </tbody>
-                  </table>
+                  </Table>
                 </div>
-                {pages > 1 && (
-                  <nav
-                    aria-label='Skill pages'
-                    className='flex items-center justify-end gap-3 text-sm'
-                  >
-                    <span>
-                      Page {current} of {pages}
-                    </span>
-                    <Button
-                      size='sm'
-                      variant='outline'
-                      disabled={current === 1}
-                      onClick={() => setPage(current - 1)}
-                    >
-                      Previous
-                    </Button>
-                    <Button
-                      size='sm'
-                      variant='outline'
-                      disabled={current === pages}
-                      onClick={() => setPage(current + 1)}
-                    >
-                      Next
-                    </Button>
-                  </nav>
-                )}
               </TabsContent>
             )}
           </Tabs>

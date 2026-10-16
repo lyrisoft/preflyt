@@ -53,6 +53,21 @@ export function WorkspaceStart({ platformAdmin }: { platformAdmin: boolean }) {
               Try again
             </Button>
           </div>
+        ) : methods.data.github && platformAdmin ? (
+          <>
+            <p className='max-w-2xl text-sm leading-relaxed text-muted-foreground'>
+              Install the configured App in your GitHub organization and choose
+              its repositories. Confirm organization ownership in GitHub, then
+              return to Preflyt with your admin account unchanged. Your selected
+              repositories load automatically.
+            </p>
+            <Button asChild>
+              <a href={`${API_BASE_URL}/github/connection`}>
+                Connect GitHub organization
+                <ArrowRight aria-hidden='true' />
+              </a>
+            </Button>
+          </>
         ) : methods.data.github ? (
           <>
             <p className='max-w-2xl text-sm leading-relaxed text-muted-foreground'>

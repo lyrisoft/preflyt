@@ -84,6 +84,7 @@ export class GitHubSyncService {
             create: {
               githubId: repo.id,
               installationId: id,
+              selected: before.repositoryTracking === 'INSTALLATION',
               ...{
                 name: repo.name,
                 fullName: repo.fullName,

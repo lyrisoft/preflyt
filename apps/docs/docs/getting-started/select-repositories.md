@@ -7,16 +7,16 @@ description: Choose explicit repository scope and start a background Health asse
 
 # Select repositories
 
-Installing the GitHub App makes repositories **available**. Selecting a repository in Preflyt enables tracking and queues its initial **Health assessment**. Existing installations are not automatically rescanned during upgrade.
+The admin connection flow imports and enables the repositories selected during GitHub App installation. You do not need to select them again in Preflyt. Later selection controls refine that scope; older installations retain their existing explicit selections. Existing installations are not automatically rescanned during upgrade.
 
 ## Choose repositories
 
 1. Open **Repositories**. The Health summary shows reports across repositories you can access.
 2. Find the **Repository inventory** below the GitHub connection information. Search by repository, account or branch, and use the selection and visibility filters.
-3. An Owner or Admin can select the repository using its selection control. The queue confirmation links the next step to **Health**.
-4. Open the repository to see its default-branch assessment. To use another branch, choose **Assessment branch**, then **Reassess**.
+3. Repositories imported by the admin connection flow are already selected. An Owner or Admin can deselect them or enable additional available repositories later. Manually enabling a repository queues its initial Health assessment.
+4. Open a repository's Health page. If no assessment exists yet, choose **Reassess**. To use another branch, choose **Assessment branch**, then **Reassess**.
 
-Selecting queues work in the background. It does not wait for a scan in your browser. The built-in scanner runs applicable static analyzers in isolated containers automatically. No additional repository or runtime approval is required. If source access or the scanner service is unavailable, Health shows a failure reason and what to do next; missing analysis is never shown as a clean scan.
+Connection imports repository access; it does not wait for scans or run repository code. Manually selecting or reassessing queues work in the background. The built-in scanner runs applicable static analyzers in isolated containers. No additional repository or runtime approval is required. If source access or the scanner service is unavailable, Health shows a failure reason and what to do next; missing analysis is never shown as a clean scan.
 
 ## What selection changes
 

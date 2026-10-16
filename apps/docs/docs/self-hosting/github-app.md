@@ -19,8 +19,13 @@ Sign in as **Super Admin** and open **Settings → Configuration → GitHub → 
 
 1. Enter your GitHub organization and the public HTTPS API URL. With the bundled web proxy, use `<WEB_ORIGIN>/api`.
 2. Leave optional capabilities off unless you want Preflyt to **Create setup PRs** or **Manage GitHub rulesets**. The default App can read repositories and workflow results, verify organization membership, and publish checks and advisory PR reviews.
-3. Choose **Review App setup**, then **Confirm in GitHub**. GitHub registers the App with Preflyt's permissions, callbacks and webhook settings.
-4. GitHub returns you to Preflyt. Credentials are saved encrypted, without copying keys or restarting the API and worker. Install the App, then open **Integrations** to connect it and explicitly select repositories.
+3. Choose **Review App setup**, then **Confirm in GitHub**. GitHub registers the App with Preflyt's permissions, callbacks and webhook settings. Preflyt saves the generated credentials encrypted and continues to installation automatically.
+4. Choose your organization and repositories once in GitHub. Confirm GitHub organization ownership when prompted. This verifies the connection; it does not sign you into Preflyt as the GitHub user.
+5. Preflyt returns you to **Repositories**, using the same admin account and session, with the selected repositories imported. There is no second installation or required repository selection in Integrations. A new workspace is created only after ownership verification; existing workspace connections require that same admin's workspace permission.
+
+For an App whose credentials are already configured, use **Connect GitHub organization** in Settings or Overview. **App credentials saved** means configuration is ready, not that an organization is connected. A connection is tied to the original browser, session and configured App and expires after ten minutes. GitHub verification credentials are revoked after use; they do not create or link a Preflyt login identity.
+
+New connections follow GitHub's installation repository selection. Newly granted repositories are imported during synchronization. Explicit Preflyt exclusions survive reconnects and synchronization; revoked GitHub repositories become unavailable. Existing deployments retain their earlier explicit-selection behavior until an authorized admin reconnects through this flow. An installation is never transferred between workspaces automatically.
 
 The deployment needs distinct `CONFIGURATION_ENCRYPTION_KEY` and `GITHUB_USER_TOKEN_ENCRYPTION_KEY` values and a configured `QUEUE_REDIS_URL` before registration. Generate them during deployment setup; credentials are not returned to the browser. GitHub confirmation is bound to the original administrator session and expires after 30 minutes. If confirmation cannot be saved, check for the registered App in GitHub before retrying.
 

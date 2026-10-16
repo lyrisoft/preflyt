@@ -44,9 +44,9 @@ beforeAll(async () => {
 },60000);
 afterAll(async()=>{await app?.close();await fixture?.close()});
 it('paginates older records deterministically, resolves legacy resources and shows named actors without raw metadata',async()=>{
- const first=(await get().expect(200)).body, second=(await get('owner',{page:'2'}).expect(200)).body;
- expect(first.total).toBe(28);expect(first.items).toHaveLength(20);expect(second.items).toHaveLength(8);expect(second.hasMore).toBe(false);
- expect(new Set([...first.items,...second.items].map(i=>i.id)).size).toBe(28);
+ const first=(await get().expect(200)).body, second=(await get('owner',{page:'2',pageSize:'25'}).expect(200)).body;
+ expect(first.total).toBe(28);expect(first.items).toHaveLength(10);expect(second.items).toHaveLength(3);expect(second.hasMore).toBe(false);
+ const full=(await get('owner',{pageSize:'25'}).expect(200)).body;expect(full.items).toHaveLength(25);expect(new Set([...full.items,...second.items].map(i=>i.id)).size).toBe(28);
  expect(first.items[0]).toMatchObject({id:'legacy',actionLabel:'Ruleset activation verified',repository:{id:'101',name:'fixture/repo-a'},actor:{name:'Automated system'}});
  expect(first.items[1]).toMatchObject({id:'page-24',actor:{name:'Test owner'},details:[{label:'Branch',value:'refs/heads/main'}]});
  expect(JSON.stringify(first)).not.toContain('DO-NOT-EXPOSE');expect(JSON.stringify(first)).not.toContain('metadata');

@@ -1,3 +1,4 @@
+import { readPageSize } from '../pagination.js'
 import { configurationValue } from '../configuration/runtime-configuration.js'
 import { githubLoginEnabled } from './github-identity-provider.js'
 import { GitHubUserAccessService } from './github-user-access.service.js'
@@ -319,7 +320,8 @@ export class OrganizationController {
     @Req() req: R,
     @Query('search') search = '',
     @Query('page') page = '1',
-    @Query('unassigned') unassigned = 'false'
+    @Query('unassigned') unassigned = 'false',
+    @Query('pageSize') requestedSize?: string
   ) {
     if (
       search.length > 100 ||
@@ -332,7 +334,7 @@ export class OrganizationController {
       false,
       search,
       Number(page),
-      unassigned === 'true'
+      unassigned === 'true', requestedSize
     )
   }
   @Post('github-directory/sync')
@@ -358,7 +360,7 @@ export class OrganizationController {
     refresh: boolean,
     search: string,
     page: number,
-    unassigned = false
+    unassigned = false, requestedSize?: unknown
   ) {
     const actor = await this.access.requireOrganization(
       req.preflytSession,
@@ -397,7 +399,7 @@ export class OrganizationController {
         member.login.toLowerCase().includes(search.trim().toLowerCase()) &&
         (!unassigned || !byAccount.get(member.id)?.active)
     )
-    const pageSize = 50
+    const pageSize = readPageSize(requestedSize)
     return {
       syncedAt: directory.syncedAt,
       total: filtered.length,

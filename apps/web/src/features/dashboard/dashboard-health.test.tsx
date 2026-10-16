@@ -15,6 +15,7 @@ const state = vi.hoisted(() => ({
   },
   listeners: new Set<() => void>(),
   fail: false,
+  readiness: 'PASS',
   fetch: vi.fn(),
 }))
 vi.mock('@tanstack/react-router', async () => {
@@ -94,7 +95,35 @@ const health: HealthPortfolioData = {
   },
   statuses: { complete: 0, partial: 1, failed: 0, cancelled: 0 },
   priorityFindings: [],
-  items: [],
+  items: [
+    {
+      repositoryId: '51',
+      name: 'fixture/repo',
+      branch: 'development',
+      id: '11111111-1111-4111-8111-111111111111',
+      state: 'COMPLETED',
+      overallHealth: { version: 1, status: 'INCOMPLETE', reasons: [] },
+      completeness: 'PARTIAL',
+      mode: 'EXECUTED',
+      freshness: 'STALE',
+      finishedAt: '2026-10-15T20:00:00Z',
+      findings: 0,
+      severity: {},
+    },
+    ...['52', '53'].map((repositoryId) => ({
+      repositoryId,
+      name: `fixture/repo-${repositoryId}`,
+      branch: 'main',
+      id: null,
+      state: 'NOT_ASSESSED',
+      completeness: null,
+      mode: null,
+      freshness: 'UNVERIFIED',
+      finishedAt: null,
+      findings: null,
+      severity: null,
+    })),
+  ],
   page: 1,
   total: 3,
   bounded: false,
@@ -129,6 +158,8 @@ beforeEach(() => {
               sourceSha: 'a'.repeat(40),
               createdAt: '2026-10-11',
             },
+            readiness: state.readiness,
+            profileComplete: true,
             sync: { state: 'synced' },
           },
         ],
@@ -167,7 +198,7 @@ it('adds Health fourth, swaps the metrics, and restores the original Overview wi
   ).toBe(false)
   await page.getByRole('tab', { name: 'Health', exact: true }).click()
   await expect
-    .element(page.getByText('Findings are not available yet'))
+    .element(page.getByText('Repository health distribution', { exact: true }))
     .toBeVisible()
   await expect
     .element(page.getByText('PRs assessed', { exact: true }))
@@ -201,7 +232,7 @@ it('applies the repository filter to Health and refreshes results without starti
   state.search.tab = 'health'
   await mount()
   await expect
-    .element(page.getByText('Assessment status', { exact: true }))
+    .element(page.getByText('Repository health distribution', { exact: true }))
     .toBeVisible()
   await page
     .getByRole('button', { name: 'Filter repositories: All repositories' })
@@ -230,15 +261,15 @@ it('shows access errors and can retry without exposing cached results', async ()
     .element(page.getByRole('alert'))
     .toHaveTextContent('Repository access is unavailable')
   await expect
-    .element(page.getByText('Assessment status', { exact: true }))
+    .element(page.getByText('Repository health distribution', { exact: true }))
     .not.toBeInTheDocument()
   state.fail = false
   await page.getByRole('button', { name: 'Retry health summary' }).click()
   await expect
-    .element(page.getByText('Findings are not available yet'))
+    .element(page.getByText('Repository health distribution', { exact: true }))
     .toBeVisible()
 })
-it('links a priority finding to its saved report and fits 320px in both themes', async () => {
+it('links repository health to its saved report and fits 320px in both themes', async () => {
   state.search.tab = 'health'
   state.fetch.mockReset()
   state.fetch.mockImplementation(async (url: string) =>
@@ -246,19 +277,11 @@ it('links a priority finding to its saved report and fits 320px in both themes',
       ? Response.json({
           ...health,
           summary: { ...health.summary, analyzed: 1, high: 1 },
-          priorityFindings: [
-            {
-              repositoryId: '51',
-              repositoryName: 'fixture/' + 'long-name-'.repeat(12),
-              assessmentId: '11111111-1111-4111-8111-111111111111',
-              branch: 'development',
-              fingerprint: 'f'.repeat(64),
-              title: 'Unsafe SQL expression',
-              severity: 'high',
-              path: 'src/db.ts',
-              line: 7,
-            },
+          items: [
+            { ...health.items[0], name: 'fixture/' + 'long-name-'.repeat(12) },
+            ...health.items.slice(1),
           ],
+          priorityFindings: [],
         })
       : Response.json({
           generatedAt: new Date().toISOString(),
@@ -280,14 +303,140 @@ it('links a priority finding to its saved report and fits 320px in both themes',
     document.documentElement.classList.toggle('dark', dark)
     const screen = await mount()
     await expect
-      .element(page.getByRole('link', { name: /Unsafe SQL expression/ }))
+      .element(page.getByRole('link', { name: /fixture\// }).first())
       .toHaveAttribute(
         'href',
         '/repositories/51?tab=health&health=11111111-1111-4111-8111-111111111111'
       )
     expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(320)
+    page
+      .getByText('Repository health distribution', { exact: true })
+      .element()
+      .scrollIntoView({ block: 'start' })
+    await new Promise((resolve) => setTimeout(resolve, 400))
+    await page.screenshot({
+      path: `__screenshots__/health-overview-${dark ? 'dark' : 'light'}-mobile.png`,
+    })
     await screen.unmount()
   }
   document.documentElement.classList.remove('dark')
   await page.viewport(1280, 800)
+})
+
+it.each([
+  ['PASS', 'Passed', 'text-success-text'],
+  ['BLOCK', 'Failed', 'text-danger-text'],
+  ['INCOMPLETE', 'Incomplete', 'text-warning-text'],
+  ['WARN', 'Needs attention', 'text-warning-text'],
+  ['UNAVAILABLE', 'Result unavailable', 'text-warning-text'],
+])(
+  'shows the saved merge review %s and its assessment link',
+  async (result, label, color) => {
+    state.readiness = result
+    await mount()
+    await page.getByRole('tab', { name: 'Repositories', exact: true }).click()
+    await expect
+      .element(page.getByRole('columnheader', { name: 'Assessment result' }))
+      .toBeVisible()
+    await expect
+      .element(page.getByText(label, { exact: true }))
+      .toHaveClass(color)
+    if (result === 'PASS')
+      await page.screenshot({
+        path: '__screenshots__/repository-status-compact.png',
+      })
+    await expect
+      .element(page.getByRole('link', { name: label, exact: true }))
+      .toHaveAttribute(
+        'href',
+        '/repositories/51?tab=assessments&assessment=saved'
+      )
+  }
+)
+
+it('filters the repository list by actual overall health and does not repeat finding details', async () => {
+  state.search.tab = 'health'
+  await mount()
+  await page.getByRole('button', { name: 'Healthy 0', exact: true }).click()
+  await expect
+    .element(page.getByText('No repositories have this health status.'))
+    .toBeVisible()
+  await page.getByRole('button', { name: 'Incomplete 1', exact: true }).click()
+  await expect
+    .element(page.getByText('fixture/repo', { exact: true }))
+    .toBeVisible()
+  await expect
+    .element(page.getByText('fixture/repo-52', { exact: true }))
+    .not.toBeInTheDocument()
+  await expect
+    .element(page.getByText('Priority findings'))
+    .not.toBeInTheDocument()
+  await expect.element(page.getByText('Stale', { exact: true })).toBeVisible()
+  await page.screenshot({ path: '__screenshots__/health-overview-desktop.png' })
+})
+
+it('keeps a hundred repositories to three compact rows per page', async () => {
+  state.search.tab = 'health'
+  const items = Array.from({ length: 100 }, (_, i) => ({
+    ...health.items[0],
+    repositoryId: String(100 + i),
+    name: `org/repository-${String(i).padStart(3, '0')}`,
+  }))
+  const original = state.fetch.getMockImplementation()!
+  state.fetch.mockImplementation(async (url: string) =>
+    url.includes('/github/health?')
+      ? Response.json({
+          ...health,
+          items,
+          summary: { ...health.summary, repositories: 100 },
+        })
+      : original(url)
+  )
+  await mount()
+  await expect
+    .element(page.getByText('1–3 of 100', { exact: true }))
+    .toBeVisible()
+  expect(document.querySelectorAll('a[href*="tab=health"]')).toHaveLength(3)
+  await page
+    .getByRole('button', { name: 'Next health repositories', exact: true })
+    .click()
+  await expect
+    .element(page.getByText('4–6 of 100', { exact: true }))
+    .toBeVisible()
+  await expect
+    .element(page.getByRole('link', { name: 'org/repository-000' }))
+    .not.toBeInTheDocument()
+  expect(document.querySelectorAll('a[href*="tab=health"]')).toHaveLength(3)
+})
+
+it('shows only the next unmet setup step without setup badges', async () => {
+  state.search.tab = 'repositories'
+  const original = state.fetch.getMockImplementation()!
+  state.fetch.mockImplementation(async (url: string) => {
+    const response = await original(url)
+    if (!url.includes('/github/dashboard?')) return response
+    const data = await response.json()
+    const base = { ...data.repositories[0], latestAssessment: null }
+    data.repositories = [
+      { ...base, githubId: '61', profileComplete: false, policy: null },
+      { ...base, githubId: '62', profileComplete: true, policy: null },
+      { ...base, githubId: '63', profileComplete: true, policy: 'RECOMMENDED' },
+    ]
+    return Response.json(data)
+  })
+  await mount()
+  for (const [name, href] of [
+    ['Inspect repository', '/repositories/61?tab=overview'],
+    ['Choose standards', '/repositories/62?tab=standards'],
+    ['Create assessment', '/repositories/63?tab=assessments'],
+  ])
+    await expect
+      .element(page.getByRole('link', { name, exact: true }))
+      .toHaveAttribute('href', href)
+  await expect
+    .element(page.getByText('Partially inspected'))
+    .not.toBeInTheDocument()
+  await expect
+    .element(page.getByRole('columnheader', { name: 'Language / framework' }))
+    .not.toBeInTheDocument()
 })

@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest'
-import type { HealthReport } from './health-api'
+import { healthTone, type HealthReport } from './health-api'
 import { healthDimensionValues } from './health-dimensions'
 
 const report: HealthReport = {
@@ -10,6 +10,11 @@ const report: HealthReport = {
   findings: [],
   limits: [],
 }
+it('uses green for completed scans and amber for incomplete analysis', () => {
+  expect(healthTone('COMPLETED')).toBe('success')
+  expect(healthTone('INCOMPLETE')).toBe('warning')
+  expect(healthTone('FAILED')).toBe('error')
+})
 it('keeps missing analysis and CI coverage distinct from zero findings', () => {
   const values = healthDimensionValues(report, null, false)
   expect(values).toEqual({

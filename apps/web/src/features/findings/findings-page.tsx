@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Table } from '@/components/ui/table'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Main } from '@/components/layout/main'
 import { PageHeader } from '@/components/page-header'
@@ -74,6 +75,7 @@ function FindingsWorkspace() {
   const [severity, setSeverity] = useState<string>(initial.severity ?? 'all')
   const [search, setSearch] = useState(initial.q ?? '')
   const [q, setQ] = useState(initial.q ?? '')
+  const [pageSize, setPageSize] = useState(10)
   const [page, setPage] = useState(initial.page ?? 1)
   const result = useQuery({
     queryKey: [
@@ -88,6 +90,7 @@ function FindingsWorkspace() {
       triageFilter,
       q,
       page,
+      pageSize,
     ],
     enabled:
       session.isSuccess &&
@@ -96,7 +99,7 @@ function FindingsWorkspace() {
     gcTime: 0,
     queryFn: async ({ signal }): Promise<Results> => {
       const response = await fetch(
-        `${API_BASE_URL}/findings?${new URLSearchParams({ category, source, ...(source === 'health' && health ? { health } : {}), kind, repository, severity, triage: triageFilter, q, page: String(page) })}`,
+        `${API_BASE_URL}/findings?${new URLSearchParams({ category, source, ...(source === 'health' && health ? { health } : {}), kind, repository, severity, triage: triageFilter, q, page: String(page), pageSize: String(pageSize) })}`,
         { credentials: 'include', cache: 'no-store', signal }
       )
       if (!response.ok) {
@@ -459,7 +462,19 @@ function FindingsWorkspace() {
                 </p>
               </div>
               <div className='overflow-x-auto'>
-                <table className='w-full text-left text-sm'>
+                <Table
+                  pagination={{
+                    page,
+                    pageSize,
+                    total: result.data.total,
+                    onPageChange: setPage,
+                    onPageSizeChange: (size) => {
+                      setPageSize(size)
+                      setPage(1)
+                    },
+                  }}
+                  className='w-full text-left text-sm'
+                >
                   <thead className='bg-muted/50 text-muted-foreground'>
                     <tr>
                       <th scope='col' className='p-4'>
@@ -637,7 +652,7 @@ function FindingsWorkspace() {
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </Table>
               </div>
             </section>
           )}
@@ -649,28 +664,6 @@ function FindingsWorkspace() {
                 : ''}{' '}
               · {result.data.assessedRevisions} assessed commits
             </p>
-            <div className='flex items-center gap-2'>
-              <Button
-                size='sm'
-                variant='outline'
-                disabled={page === 1 || result.isFetching}
-                onClick={() => setPage(page - 1)}
-              >
-                Previous
-              </Button>
-              <span>Page {page}</span>
-              <Button
-                size='sm'
-                variant='outline'
-                disabled={
-                  page * result.data.pageSize >= result.data.total ||
-                  result.isFetching
-                }
-                onClick={() => setPage(page + 1)}
-              >
-                Next
-              </Button>
-            </div>
           </div>
         </>
       )}

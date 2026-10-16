@@ -15,17 +15,20 @@ import { GitHubProviderModule } from './github-provider.module.js'
 import { RepositoryProfileController } from './repository-profile.controller.js'
 import { RepositoryProfileService } from './repository-profile.service.js'
 import { GitHubService } from './github.service.js'
+import { GitHubConnectionController } from './github-connection.controller.js'
+import { GitHubConnectionService } from './github-connection.service.js'
 
 @Module({
   imports: [HealthModule, AuthModule, PrismaModule, CacheModule, GitHubProviderModule],
   controllers: [
     GitHubController,
+    GitHubConnectionController,
     GitHubRulesetController,
     RulesetDraftController,
     RepositoryProfileController,
     DashboardController,
   ],
   exports: [GitHubProviderModule],
-  providers: [RulesetHistoryService, RulesetDraftService, GitHubRulesetService, GitHubService, RepositoryProfileService, DashboardService],
+  providers: [GitHubConnectionService, RulesetHistoryService, RulesetDraftService, GitHubRulesetService, GitHubService, RepositoryProfileService, DashboardService],
 })
 export class GitHubModule {}

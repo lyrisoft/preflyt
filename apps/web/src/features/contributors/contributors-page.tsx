@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   getRouteApi,
@@ -37,12 +38,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { OptionSelect } from '@/components/ui/option-select'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Table } from '@/components/ui/table'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { AppHeader } from '@/components/layout/app-header'
 import { Main } from '@/components/layout/main'
 import { PageHeader } from '@/components/page-header'
 import { RepositoryPicker } from '@/components/repository-picker'
+import { ResultTimestamp } from '@/components/result-timestamp'
 import { SurfaceIcon } from '@/components/surface-icon'
+import type { TablePaginationState } from '@/components/table-pagination'
 import { useNavigationSession } from '../workspace/navigation-session'
 import { canPerform } from '../workspace/scoped-access'
 import { ContributorActivitySparkline } from './contributor-activity-sparkline'
@@ -122,6 +126,21 @@ type Result = {
   contributors: Contributor[]
   lastReceivedAt: string | null
   collectionEnabled: boolean
+  sync?: {
+    total: number
+    completed: number
+    pending: number
+    failed: number
+    partial: number
+    items: {
+      repositoryId: string
+      name: string
+      state: string
+      lastSyncedAt: string | null
+      retryAt: string | null
+      failureCode: string | null
+    }[]
+  }
   limitations: string[]
   policyCompliance?: Compliance | null
   observations?: Observation[]
@@ -148,13 +167,15 @@ async function contributorRead(
 function SourceRows({
   rows,
   policy = false,
+  pagination,
 }: {
   rows: Observation[]
   policy?: boolean
+  pagination?: TablePaginationState
 }) {
   return rows.length ? (
     <div className='overflow-x-auto'>
-      <table className='w-full text-left text-sm'>
+      <Table pagination={pagination} className='w-full text-left text-sm'>
         <thead>
           <tr className='border-b text-xs text-muted-foreground'>
             <th className='p-3'>Source</th>
@@ -237,7 +258,7 @@ function SourceRows({
             </tr>
           ))}
         </tbody>
-      </table>
+      </Table>
     </div>
   ) : (
     <p className='p-6 text-sm text-muted-foreground'>
@@ -282,12 +303,14 @@ export function ContributorsPage({
     patch({ tab: tab as ContributorSearch['tab'], page: 1 })
   const session = useNavigationSession(),
     client = useQueryClient()
+  const [pageSize, setPageSize] = useState(10)
   const params = new URLSearchParams({
     days,
     kind,
     relationship,
     q,
     page: String(page),
+    pageSize: String(pageSize),
   })
   if (repository !== 'all') params.set('repository', repository)
   const query = useQuery({
@@ -305,6 +328,8 @@ export function ContributorsPage({
       ),
     retry: false,
     gcTime: 0,
+    refetchInterval: (query) =>
+      query.state.data?.sync?.pending ? 3000 : false,
     enabled: session.isSuccess,
   })
   const importScope = (query.data?.scope ?? []).filter((repo) =>
@@ -318,14 +343,14 @@ export function ContributorsPage({
     }),
     onSuccess: (result) => {
       if (result.failures.length)
-        toast.error('Some repository imports failed', {
+        toast.error('Some contributor sync requests failed', {
           description: result.failures
             .map((failure) => `${failure.repository}: ${failure.message}`)
             .join(' · '),
         })
       else
         toast.success(
-          `Imported activity from ${result.imported.length} repositories`
+          `Contributor sync queued for ${result.imported.length} repositories`
         )
       void client.invalidateQueries({ queryKey: ['contributors'] })
     },
@@ -334,15 +359,11 @@ export function ContributorsPage({
   const data = query.data,
     c = data?.contributors[0],
     rows = data?.observations ?? []
-  const pullRequests = paginatePullRequests(rows, page)
-  const tabRows =
+  const tabRowsAll =
     tab === 'pull-requests'
-      ? pullRequests
-      : paginateCollection(
-          rows.filter((row) =>
-            tab === 'reviews' ? row.relationship === 'REVIEWER' : true
-          ),
-          page
+      ? paginatePullRequests(rows, 1, Math.max(10, rows.length)).items
+      : rows.filter((row) =>
+          tab === 'reviews' ? row.relationship === 'REVIEWER' : true
         )
   const repositoryRows = paginateCollection(
     (data?.scope ?? []).filter((repo) =>
@@ -427,23 +448,26 @@ export function ContributorsPage({
             <>
               {importScope.length > 0 && (
                 <Button
+                  variant='outline'
                   size='sm'
                   disabled={sync.isPending || query.isFetching}
                   onClick={() => sync.mutate()}
                 >
                   <RefreshCw className='size-4' />
-                  {sync.isPending ? 'Importing…' : 'Import GitHub activity'}
+                  {sync.isPending ? 'Queuing…' : 'Sync now'}
                 </Button>
               )}
-              <Button
-                variant='outline'
-                size='sm'
-                onClick={() => void query.refetch()}
-                disabled={query.isFetching}
-              >
-                <RefreshCw className='size-4' />
-                Refresh local data
-              </Button>
+              {importScope.length === 0 && (
+                <Button
+                  variant='outline'
+                  size='sm'
+                  onClick={() => void query.refetch()}
+                  disabled={query.isFetching}
+                >
+                  <RefreshCw className='size-4' />
+                  Refresh
+                </Button>
+              )}
               <ContributorHelp
                 profile={!!contributorId}
                 limitations={data?.limitations}
@@ -581,8 +605,7 @@ export function ContributorsPage({
                   className='rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground'
                 >
                   No recorded activity for this contributor in the selected
-                  repository, period and filters. Import GitHub activity or
-                  widen the filters.
+                  repository, period and filters. Sync now or widen the filters.
                 </p>
               )}
               {contributorId && c && tab === 'overview' ? (
@@ -615,13 +638,71 @@ export function ContributorsPage({
                           />
                         </div>
                         <p className='mt-3 text-2xl font-semibold tabular-nums'>
-                          {value(m.n)}
+                          {(data.sync?.pending || data.sync?.failed) &&
+                          m.n === 0
+                            ? '—'
+                            : value(m.n)}
                         </p>
                       </CardContent>
                     </Card>
                   ))}
                 </div>
               ) : null}
+              {data.sync && data.sync.total > 0 && (
+                <div
+                  className='space-y-2 text-xs text-muted-foreground'
+                  aria-live='polite'
+                >
+                  {data.sync.pending > 0 ? (
+                    <p role='status'>
+                      Syncing GitHub activity · {data.sync.completed} of{' '}
+                      {data.sync.total} repositories complete. Results update
+                      automatically.
+                    </p>
+                  ) : (
+                    <p>
+                      Activity synced for {data.sync.completed} of{' '}
+                      {data.sync.total} repositories.
+                      {data.sync.partial > 0
+                        ? ' Recent history is limited; new events continue through webhooks.'
+                        : ''}
+                    </p>
+                  )}
+                  {data.sync.items.some((item) => item.lastSyncedAt) && (
+                    <p>
+                      Last synced{' '}
+                      <ResultTimestamp
+                        value={
+                          data.sync.items
+                            .map((item) => item.lastSyncedAt)
+                            .filter((time): time is string => !!time)
+                            .sort()
+                            .slice(-1)[0]
+                        }
+                      />
+                    </p>
+                  )}
+                  {data.sync.items
+                    .filter((item) => ['RETRY', 'FAILED'].includes(item.state))
+                    .map((item) => (
+                      <p key={item.repositoryId} className='text-warning-text'>
+                        {item.name}:{' '}
+                        {item.state === 'FAILED'
+                          ? 'Sync failed. An administrator can retry with Sync now.'
+                          : item.failureCode === 'GITHUB_RATE_LIMITED'
+                            ? 'GitHub rate limit reached; retry scheduled.'
+                            : 'Sync interrupted; retry scheduled.'}
+                        {item.retryAt && (
+                          <>
+                            {' '}
+                            Retry after <ResultTimestamp value={item.retryAt} />
+                            .
+                          </>
+                        )}
+                      </p>
+                    ))}
+                </div>
+              )}
               {importResult && (
                 <div
                   role={importResult.failures.length ? 'alert' : 'status'}
@@ -634,10 +715,10 @@ export function ContributorsPage({
                         : 'text-muted-foreground'
                     }
                   >
-                    Imported activity from {importResult.imported.length} of{' '}
+                    Sync queued for {importResult.imported.length} of{' '}
                     {importScope.length} repositories.
                     {importResult.truncated &&
-                      ' Historical coverage is partial because the import limit was reached.'}
+                      ' Recent history is limited to the supported collection window.'}
                   </p>
                   {importResult.failures.map((failure) => (
                     <p key={failure.repository} className='text-danger-text'>
@@ -720,7 +801,11 @@ export function ContributorsPage({
                       ) : (
                         <p className='py-16 text-center text-sm text-muted-foreground'>
                           {data.permissions.activity
-                            ? 'No recorded activity in this period.'
+                            ? data.sync?.pending
+                              ? 'Syncing activity from GitHub…'
+                              : data.sync?.failed
+                                ? 'Activity is unavailable for repositories whose sync failed.'
+                                : 'No recorded activity in this period.'
                             : 'Activity permission is required to view this chart.'}
                         </p>
                       )}
@@ -755,7 +840,7 @@ export function ContributorsPage({
                               <Bar
                                 {...chartAnimation}
                                 dataKey='count'
-                                fill='var(--chart-2)'
+                                fill='var(--success)'
                                 radius={[0, 4, 4, 0]}
                               />
                             </BarChart>
@@ -779,7 +864,7 @@ export function ContributorsPage({
                       View chart data
                     </summary>
                     <div className='mt-3 grid gap-4 sm:grid-cols-2'>
-                      <table className='text-left'>
+                      <Table className='text-left'>
                         <caption className='mb-2 text-left font-medium'>
                           Daily source observations (UTC)
                         </caption>
@@ -797,9 +882,9 @@ export function ContributorsPage({
                             </tr>
                           ))}
                         </tbody>
-                      </table>
+                      </Table>
                       {data.permissions.policyEvidence && (
-                        <table className='self-start text-left'>
+                        <Table className='self-start text-left'>
                           <caption className='mb-2 text-left font-medium'>
                             PR assessment matches
                           </caption>
@@ -817,7 +902,7 @@ export function ContributorsPage({
                               </tr>
                             ))}
                           </tbody>
-                        </table>
+                        </Table>
                       )}
                     </div>
                   </details>
@@ -830,13 +915,28 @@ export function ContributorsPage({
                       Contributor directory
                     </CardTitle>
                     <p className='text-xs text-muted-foreground'>
-                      {data.total} identities · filtered period and scope
+                      {data.sync?.pending
+                        ? 'Sync in progress'
+                        : `${data.total} identities`}{' '}
+                      · filtered period and scope
                     </p>
                   </CardHeader>
                   <CardContent>
                     {data.contributors.length ? (
                       <div className='overflow-x-auto'>
-                        <table className='w-full text-left text-sm'>
+                        <Table
+                          pagination={{
+                            page,
+                            pageSize,
+                            total: data.total,
+                            onPageChange: (next) => setPage(() => next),
+                            onPageSizeChange: (size) => {
+                              setPageSize(size)
+                              setPage(() => 1)
+                            },
+                          }}
+                          className='w-full text-left text-sm'
+                        >
                           <thead>
                             <tr className='border-b text-xs text-muted-foreground'>
                               <th className='p-3'>Contributor</th>
@@ -910,42 +1010,25 @@ export function ContributorsPage({
                               </tr>
                             ))}
                           </tbody>
-                        </table>
+                        </Table>
                       </div>
                     ) : (
                       <div className='py-12 text-center'>
                         <UsersRound className='mx-auto mb-3 size-8 text-muted-foreground' />
                         <h2 className='font-semibold'>
-                          No contributors match this scope
+                          {data.sync?.pending
+                            ? 'Loading contributors'
+                            : data.sync?.failed
+                              ? 'Some contributor activity could not be loaded'
+                              : 'No contributors match this scope'}
                         </h2>
                         <p className='mt-2 text-sm text-muted-foreground'>
-                          Use Import GitHub activity to load recent
-                          contributors, or receive signed PR, review and push
-                          events.
+                          {data.sync?.pending
+                            ? 'Recent contributors are loading automatically from GitHub.'
+                            : 'No activity was recorded in this scope. New signed GitHub events update it automatically.'}
                         </p>
                       </div>
                     )}
-                    <div className='mt-4 flex items-center justify-between text-xs text-muted-foreground'>
-                      <span>Page {page} · 20 per page</span>
-                      <div className='flex gap-2'>
-                        <Button
-                          size='sm'
-                          variant='outline'
-                          disabled={page === 1}
-                          onClick={() => setPage((p) => p - 1)}
-                        >
-                          Previous
-                        </Button>
-                        <Button
-                          size='sm'
-                          variant='outline'
-                          disabled={page * 20 >= data.total}
-                          onClick={() => setPage((p) => p + 1)}
-                        >
-                          Next
-                        </Button>
-                      </div>
-                    </div>
                   </CardContent>
                 </Card>
               )}
@@ -1005,17 +1088,21 @@ export function ContributorsPage({
                         </p>
                       ) : (
                         <>
-                          <SourceRows rows={tabRows.items} />
-                          <TabPagination
-                            pagination={tabRows}
-                            label={
-                              tab === 'pull-requests'
-                                ? 'pull requests'
-                                : tab === 'reviews'
-                                  ? 'reviews'
-                                  : 'activity records'
-                            }
-                            onPageChange={(next) => setPage(() => next)}
+                          <SourceRows
+                            rows={tabRowsAll.slice(
+                              (page - 1) * pageSize,
+                              page * pageSize
+                            )}
+                            pagination={{
+                              page,
+                              pageSize,
+                              total: tabRowsAll.length,
+                              onPageChange: (next) => setPage(() => next),
+                              onPageSizeChange: (size) => {
+                                setPageSize(size)
+                                setPage(() => 1)
+                              },
+                            }}
                           />
                         </>
                       )}

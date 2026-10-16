@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Private security or conduct report
+    url: mailto:support@lyrisoft.tech
+    about: Report sensitive concerns privately. Do not post vulnerabilities or personal reports in issues.
+  - name: Documentation
+    url: https://docs.preflytlabs.com/
+    about: Installation, configuration and user guides.

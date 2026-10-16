@@ -12,6 +12,9 @@ import { RedisCacheService } from '../src/cache/redis-cache.service.js'
 import { AuthService } from '../src/auth/auth.service.js'
 import { SessionGuard } from '../src/auth/session.guard.js'
 import { DashboardController } from '../src/dashboard/dashboard.controller.js'
+import { digest } from '../src/assessments/assessment-digest.js'
+import { PullRequestService } from '../src/assessments/pull-request.service.js'
+import { previewGate } from '../src/assessments/gate-preview.js'
 import { DashboardService } from '../src/dashboard/dashboard.service.js'
 
 let prisma: PrismaService
@@ -148,9 +151,6 @@ it('requires a session and permits read-only viewers without invoking GitHub', a
     repositories: 1,
     snapshots: 0,
     prsAssessed: 0,
-    blockedPrs: null,
-    openFindings: null,
-    verifiedPolicyCoverage: null,
   })
   expect(response.body.repositories[0].readiness).toBe('NOT_EVALUATED')
 })
@@ -186,7 +186,7 @@ it('counts distinct PRs and snapshots in the period, including same-number PRs i
     ),
   ).toBe(4)
   expect(response.body.period.timezone).toBe('UTC')
-  expect(response.body.metrics.blockedPrs).toBeNull()
+  expect(response.body.metrics).not.toHaveProperty('blockedPrs')
 })
 it('defaults to 180 UTC days and keeps the 90-day and 180-day aggregate caches separate', async () => {
   vi.useFakeTimers({ toFake: ['Date'] })
@@ -354,8 +354,17 @@ it('shows missing prerequisites without converting provider state into gate outc
   })
   entries.clear()
   const adopted = await get().expect(200)
-  expect(adopted.body.attention[0].reason).toBe('EXECUTION_NOT_VERIFIED')
+  expect(adopted.body.attention[0].reason).toBe('NO_APPLICABLE_ASSESSMENT')
   expect(adopted.body.metrics.standardsAdopted).toBe(1)
+  const evaluate = vi.spyOn(PullRequestService.prototype, 'get').mockResolvedValue({ readiness: 'PASS', reason: 'SAVED_ASSESSMENT_PASS' } as never)
+  try {
+    entries.clear()
+    expect((await get().expect(200)).body.attention.some((pr: {number: number}) => pr.number === 1)).toBe(false)
+    evaluate.mockResolvedValue({ readiness: 'BLOCK', reason: 'SAVED_ASSESSMENT_BLOCK' } as never)
+    entries.clear()
+    expect((await get().expect(200)).body.attention[0]).toMatchObject({ readiness: 'BLOCK', reason: 'SAVED_ASSESSMENT_BLOCK' })
+  } finally { evaluate.mockRestore() }
+
 })
 it.each([
   '?days=181',
@@ -431,4 +440,26 @@ it('returns the inspected branch alongside detected technologies in the reposito
   expect((await get().expect(200)).body.repositories[0].profileBranch).toBe(
     'development',
   )
+})
+
+it('evaluates the same latest saved assessment, checks integrity and does not trust report qualityGate', async () => {
+  const old = await snapshot(undefined, new Date(Date.now() - 86400000 * 120))
+  const sourceSha = old.sourceSha
+  const request = { sourceSha, profileSnapshot: { sourceSha, complete: true } }
+  const plan = { version: 1, sourceSha, mode: 'INGEST_ONLY', stage: 'ci', enforcement: 'observe', checks: [{ id: 'ci.configured', required: true, operator: 'configuration_hint_present', capability: 'available' }] }
+  const report = { version: 1, sourceSha, collectionTruncated: false, validationCollectionTruncated: false, checks: [{ ruleId: 'ci.configured', required: true, coverage: 'CONFIGURATION_OBSERVED', configurationEvidence: [{ path: '.github/workflows/ci.yml', blobSha: 'c'.repeat(40) }] }] }
+  const saved = await prisma.commitAssessment.update({ where: { id: old.id }, data: { request, plan, report, assessmentHash: digest({ request, plan, report }) } })
+  const response = await get('?days=7').expect(200)
+  expect(response.body.repositories[0]).toMatchObject({ readiness: previewGate(saved).status, latestAssessment: { id: old.id } })
+  expect(response.body.repositories[0].readiness).toBe('PASS')
+  const incompleteReport = { ...report, qualityGate: 'PASS', checks: [{ ...report.checks[0], coverage: 'MISSING' }] }
+  await prisma.commitAssessment.update({ where: { id: old.id }, data: { report: incompleteReport, assessmentHash: digest({ request, plan, report: incompleteReport }) } })
+  entries.clear()
+  expect((await get().expect(200)).body.repositories[0].readiness).toBe('INCOMPLETE')
+  await prisma.commitAssessment.update({ where: { id: old.id }, data: { report: { qualityGate: 'PASS' } } })
+  entries.clear()
+  expect((await get().expect(200)).body.repositories[0].readiness).toBe('UNAVAILABLE')
+  await snapshot()
+  entries.clear()
+  expect((await get().expect(200)).body.repositories[0].readiness).toBe('UNAVAILABLE')
 })

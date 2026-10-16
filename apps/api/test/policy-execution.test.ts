@@ -71,7 +71,7 @@ it.skipIf(!process.env.PREFLYT_ACTION_CHECKOUT)('runs the actual exported API ma
     f.db.gatePolicyRevision.findFirst.mockResolvedValue({ ...f.policy, definition, definitionHash: digest(definition) } as any);
     const exported = await f.controller.policy('Bearer fixture');
     await writeFile(join(root, 'policy.json'), JSON.stringify(exported));
-    execFileSync('python3', [join(process.env.PREFLYT_ACTION_CHECKOUT!, 'run.py')], { cwd: root, env: { ...process.env,
+    execFileSync('python3', [join(process.env.PREFLYT_ACTION_CHECKOUT!, 'run.py')], { cwd: root, encoding: 'utf8', env: { ...process.env,
       GITHUB_WORKSPACE: root, GITHUB_SHA: merge, GITHUB_REPOSITORY_ID: '51', GITHUB_RUN_ID: '100', GITHUB_RUN_ATTEMPT: '1',
       GITHUB_WORKFLOW_REF: 'org/repo/.github/workflows/ci.yml@refs/pull/7/merge', RUNNER_TEMP: root,
       PREFLYT_POLICY_PATH: join(root, 'policy.json'), GITHUB_OUTPUT: join(root, 'outputs'), GITHUB_STEP_SUMMARY: join(root, 'summary') } });

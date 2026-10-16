@@ -165,7 +165,7 @@ DATABASE_APP_PASSWORD=REPLACE_WITH_A_DIFFERENT_RANDOM_HEX
 # Create each with: openssl rand -base64 32
 CONFIGURATION_ENCRYPTION_KEY=REPLACE_WITH_RANDOM_BASE64
 GITHUB_USER_TOKEN_ENCRYPTION_KEY=REPLACE_WITH_A_DIFFERENT_RANDOM_BASE64
-# Optional AI reviews: add AI_PROVIDER_ENCRYPTION_KEY with a third separate key.
+AI_PROVIDER_ENCRYPTION_KEY=REPLACE_WITH_A_THIRD_RANDOM_BASE64
 ${local ? `
 # LOCAL TRIAL ONLY. Lets Preflyt run over plain http://localhost.
 # Never set these on a deployment other people can reach.

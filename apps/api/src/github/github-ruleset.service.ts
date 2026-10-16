@@ -1,3 +1,4 @@
+import { readPageSize } from '../pagination.js'
 import { BadRequestException, Inject, Injectable } from "@nestjs/common";
 import { AuthorizationService } from "../auth/authorization.service.js";
 import type { AuthenticatedSession } from "../auth/session.guard.js";
@@ -18,7 +19,9 @@ export class GitHubRulesetService {
     repositoryId: string,
     page: number,
     refresh = false,
+    requestedSize?: unknown,
   ) {
+    const pageSize = readPageSize(requestedSize);
     if (!Number.isInteger(page) || page < 1 || page > 1000)
       throw new BadRequestException("Invalid ruleset page");
     const repository = await this.access.requireRepository(
@@ -30,7 +33,7 @@ export class GitHubRulesetService {
       repository.installationId,
       repository.githubId,
       page,
-      refresh,
+      refresh, pageSize,
     );
     await this.access.requireRepository(session, repositoryId, "policy.read");
     return result;
@@ -40,7 +43,7 @@ export class GitHubRulesetService {
     repositoryId: string,
     id: number,
     options: {
-      page: number;
+      page: number; pageSize?: number;
       period: string;
       ref?: string;
       actor?: string;
@@ -48,6 +51,7 @@ export class GitHubRulesetService {
       source?: string;
     },
   ) {
+    options.pageSize = readPageSize(options.pageSize);
     if (
       !Number.isSafeInteger(id) ||
       id < 1 ||

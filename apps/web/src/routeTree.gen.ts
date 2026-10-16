@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as GithubOnboardingRouteImport } from './routes/github-onboarding'
+import { Route as PricingRouteImport } from './routes/pricing'
 import { Route as SelfHostingRouteImport } from './routes/self-hosting'
 import { Route as SetupRouteImport } from './routes/setup'
 import { Route as authSignInRouteImport } from './routes/(auth)/sign-in'
@@ -65,6 +66,11 @@ const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
 const GithubOnboardingRoute = GithubOnboardingRouteImport.update({
   id: '/github-onboarding',
   path: '/github-onboarding',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PricingRoute = PricingRouteImport.update({
+  id: '/pricing',
+  path: '/pricing',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SelfHostingRoute = SelfHostingRouteImport.update({
@@ -291,6 +297,7 @@ const AuthenticatedSettingsNotificationsRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/github-onboarding': typeof GithubOnboardingRoute
+  '/pricing': typeof PricingRoute
   '/self-hosting': typeof SelfHostingRoute
   '/setup': typeof SetupRoute
   '/settings': typeof AuthenticatedSettingsRouteRouteWithChildren
@@ -335,6 +342,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/github-onboarding': typeof GithubOnboardingRoute
+  '/pricing': typeof PricingRoute
   '/self-hosting': typeof SelfHostingRoute
   '/setup': typeof SetupRoute
   '/sign-in': typeof authSignInRoute
@@ -379,6 +387,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/github-onboarding': typeof GithubOnboardingRoute
+  '/pricing': typeof PricingRoute
   '/self-hosting': typeof SelfHostingRoute
   '/setup': typeof SetupRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRouteRouteWithChildren
@@ -425,6 +434,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/github-onboarding'
+    | '/pricing'
     | '/self-hosting'
     | '/setup'
     | '/settings'
@@ -469,6 +479,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/github-onboarding'
+    | '/pricing'
     | '/self-hosting'
     | '/setup'
     | '/sign-in'
@@ -512,6 +523,7 @@ export interface FileRouteTypes {
     | '/'
     | '/_authenticated'
     | '/github-onboarding'
+    | '/pricing'
     | '/self-hosting'
     | '/setup'
     | '/_authenticated/settings'
@@ -558,6 +570,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   GithubOnboardingRoute: typeof GithubOnboardingRoute
+  PricingRoute: typeof PricingRoute
   SelfHostingRoute: typeof SelfHostingRoute
   SetupRoute: typeof SetupRoute
   authSignInRoute: typeof authSignInRoute
@@ -594,6 +607,13 @@ declare module '@tanstack/react-router' {
       path: '/github-onboarding'
       fullPath: '/github-onboarding'
       preLoaderRoute: typeof GithubOnboardingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/pricing': {
+      id: '/pricing'
+      path: '/pricing'
+      fullPath: '/pricing'
+      preLoaderRoute: typeof PricingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/self-hosting': {
@@ -973,6 +993,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   GithubOnboardingRoute: GithubOnboardingRoute,
+  PricingRoute: PricingRoute,
   SelfHostingRoute: SelfHostingRoute,
   SetupRoute: SetupRoute,
   authSignInRoute: authSignInRoute,

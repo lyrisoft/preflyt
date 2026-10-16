@@ -169,6 +169,6 @@ Native execution is disabled by default and needs its own reviewed controller. S
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `AI_PROVIDER_ENCRYPTION_KEY` | | Base64 of 32 random bytes. Separate from every other key. |
+| `AI_PROVIDER_ENCRYPTION_KEY` | | Base64 of 32 random bytes. Generate before first startup, separately from every other key. API and worker use the same value. |
 
 Models and endpoints are created by organization admins under **AI Intelligence**, not in the environment.

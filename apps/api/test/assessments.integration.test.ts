@@ -1443,9 +1443,9 @@ describe('current PR state and exact-head CI links', () => {
     expect(linked.ciAssessment.id).toBeTruthy()
     expect(linked.prAssessment.id).toBe(pr.prAssessment.id)
     expect(linked).toMatchObject({
-      reason: 'EXECUTION_NOT_VERIFIED',
+      reason: 'SAVED_ASSESSMENT_INCOMPLETE',
       qualityGate: null,
-      readiness: 'NOT_EVALUATED',
+      readiness: 'INCOMPLETE',
     })
     await verifyPr(prContext('d'.repeat(40)))
     expect((await currentPr()).body).toMatchObject({

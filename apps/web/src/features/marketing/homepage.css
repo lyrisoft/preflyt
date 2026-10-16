@@ -16,13 +16,22 @@ body:has(.marketing-site) {
   --website-on-primary: #fafbfd;
   --website-content-width: 1280px;
   --website-gutter: 32px;
+  --website-section-space: clamp(3.5rem, 2rem + 4vw, 6rem);
+  --website-control-radius: 0.5rem;
+  --website-text-caption: 0.75rem;
+  --website-text-label: 0.875rem;
+  --website-text-body: 1rem;
+  --website-text-lead: 1.125rem;
+  --website-heading-card: 1.25rem;
+  --website-heading-section: clamp(1.75rem, 1.4rem + 1vw, 2.25rem);
+  --website-heading-display: clamp(2.25rem, 1.5rem + 3vw, 4rem);
   --website-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   color-scheme: dark;
   background: var(--website-bg);
   color: var(--website-ink);
   min-height: 100vh;
   font:
-    400 15px/1.6 'Geist',
+    400 var(--website-text-body)/1.6 'Geist',
     sans-serif;
   -webkit-font-smoothing: antialiased;
 }
@@ -42,8 +51,8 @@ body:has(.marketing-site) {
 }
 .marketing-site :is(h1, h2, h3, h4):where(:not(.product-preview *)) {
   font-family: 'Geist', sans-serif;
-  font-weight: 350;
-  letter-spacing: -0.035em;
+  font-weight: 600;
+  letter-spacing: -0.025em;
   line-height: 1.16;
 }
 .marketing-site :is(a, button, summary):where(:not(.product-preview *)) {
@@ -86,8 +95,9 @@ body:has(.marketing-site) {
 .marketing-site .nav-row {
   display: flex;
   align-items: center;
-  gap: 38px;
-  height: 64px;
+  gap: 24px;
+  min-height: 64px;
+  padding-block: 8px;
 }
 .marketing-site .brand {
   display: block;
@@ -108,8 +118,8 @@ body:has(.marketing-site) {
 .marketing-site .desktop-nav {
   display: flex;
   align-items: center;
-  gap: 22px;
-  font-size: 12px;
+  gap: 18px;
+  font-size: var(--website-text-label);
 }
 .marketing-site .desktop-nav a {
   display: flex;
@@ -124,7 +134,7 @@ body:has(.marketing-site) {
   gap: 20px;
 }
 .marketing-site .sign-in {
-  font-size: 12px;
+  font-size: var(--website-text-label);
   white-space: nowrap;
 }
 .marketing-site .icon {
@@ -142,22 +152,22 @@ body:has(.marketing-site) {
   justify-content: center;
   gap: 14px;
   min-height: 40px;
-  padding: 0 19px;
+  padding: 0.625rem 1.1875rem;
   border: 0;
-  border-radius: 24px;
+  border-radius: var(--website-control-radius);
   color: var(--website-on-primary);
   background: var(--website-primary);
-  font-size: 12px;
-  font-weight: 550;
-  white-space: nowrap;
+  font-size: var(--website-text-label);
+  font-weight: 600;
+  text-align: center;
   transition:
     transform 150ms var(--website-ease-out),
     background-color 180ms ease;
 }
 .marketing-site .button.compact {
   min-height: 34px;
-  padding: 0 16px;
-  font-size: 11px;
+  padding: 0.5rem 1rem;
+  font-size: var(--website-text-label);
 }
 .marketing-site .button:active {
   transform: scale(0.97);
@@ -166,7 +176,7 @@ body:has(.marketing-site) {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
+  font-size: var(--website-text-label);
   font-weight: 500;
   min-height: 36px;
 }
@@ -183,7 +193,7 @@ body:has(.marketing-site) {
   color: var(--website-ink);
   background: none;
   border: 1px solid var(--website-line);
-  border-radius: 24px;
+  border-radius: var(--website-control-radius);
 }
 .marketing-site .mobile-nav[hidden] {
   display: none;
@@ -196,10 +206,10 @@ body:has(.marketing-site) {
   justify-content: space-between;
   padding: 13px 0;
   border-bottom: 1px solid var(--website-line);
-  font-size: 13px;
+  font-size: var(--website-text-label);
 }
 .marketing-site .reference-hero {
-  padding-top: 132px;
+  padding-top: var(--website-section-space);
   padding-bottom: 96px;
 }
 .marketing-site .reference-hero .hero-copy {
@@ -208,19 +218,21 @@ body:has(.marketing-site) {
 }
 .marketing-site .reference-hero .reference-actions {
   justify-content: flex-start;
+  gap: 1rem 2rem;
+  margin-top: 2.25rem;
 }
 .marketing-site .reference-hero h1 {
-  font-size: clamp(44px, 4.7vw, 68px);
-  font-weight: 450;
+  font-size: var(--website-heading-display);
+  font-weight: 600;
   line-height: 1.08;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.035em;
   margin-bottom: 26px;
 }
 .marketing-site .reference-hero .hero-copy > p {
-  font-size: 15px;
+  font-size: var(--website-text-lead);
   line-height: 1.65;
   color: var(--website-muted);
-  max-width: 760px;
+  max-width: 65ch;
   margin: 0 0 24px;
 }
 .marketing-site .reference-actions {
@@ -239,38 +251,38 @@ body:has(.marketing-site) {
   flex-wrap: wrap;
   gap: 18px;
   align-items: center;
-  font-size: 12px;
+  font-size: var(--website-text-label);
 }
 .marketing-site .reference-foundation span {
   color: var(--website-quiet);
-  font-size: 10px;
+  font-size: var(--website-text-caption);
 }
 .marketing-site .reference-foundation strong {
-  font-weight: 450;
+  font-weight: 500;
   color: var(--website-muted);
 }
 .marketing-site .reference-platform {
   padding-top: 25px;
 }
 .marketing-site .reference-feature {
-  padding-block: 100px 80px;
+  padding-block: var(--website-section-space);
   border-bottom: 1px solid var(--website-line);
 }
 .marketing-site .reference-feature-heading {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 80px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: clamp(2rem, 5vw, 5rem);
   align-items: start;
   margin-bottom: 50px;
 }
 .marketing-site .reference-label {
-  font-size: 11px;
+  font-size: var(--website-text-caption);
   margin-bottom: 16px;
   color: var(--website-accent);
 }
 .marketing-site .reference-feature h2 {
-  max-width: 390px;
-  font-size: 38px;
+  max-width: 20ch;
+  font-size: var(--website-heading-section);
   line-height: 1.15;
   margin-bottom: 0;
 }
@@ -279,7 +291,7 @@ body:has(.marketing-site) {
   padding-top: 25px;
 }
 .marketing-site .reference-feature-copy > p {
-  font-size: 16px;
+  font-size: var(--website-text-body);
   line-height: 1.65;
   color: var(--website-muted);
   margin-bottom: 24px;
@@ -288,7 +300,7 @@ body:has(.marketing-site) {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  font-size: var(--website-text-label);
   color: var(--website-quiet);
 }
 .marketing-site .reference-more:hover {
@@ -301,7 +313,7 @@ body:has(.marketing-site) {
   padding-top: 22px;
 }
 .marketing-site .reference-feature-index > span {
-  font-size: 11px;
+  font-size: var(--website-text-caption);
   color: var(--website-quiet);
 }
 .marketing-site .reference-feature-index-links {
@@ -313,11 +325,11 @@ body:has(.marketing-site) {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  font-size: var(--website-text-label);
   line-height: 1.5;
 }
 .marketing-site .reference-feature-index p {
-  font-size: 11px;
+  font-size: var(--website-text-body);
   line-height: 1.6;
   color: var(--website-quiet);
   margin: 8px 0 0;
@@ -555,7 +567,7 @@ body:has(.marketing-site) {
   margin: 7px 0 0;
 }
 .marketing-site .reference-tour {
-  padding-block: 55px 105px;
+  padding-block: var(--website-section-space);
 }
 .marketing-site .reference-tour-heading {
   text-align: center;
@@ -563,11 +575,11 @@ body:has(.marketing-site) {
   margin: 0 auto 34px;
 }
 .marketing-site .reference-tour-heading h2 {
-  font-size: 36px;
+  font-size: var(--website-heading-section);
   margin-bottom: 18px;
 }
 .marketing-site .reference-tour-heading p {
-  font-size: 13px;
+  font-size: var(--website-text-body);
   color: var(--website-muted);
 }
 .marketing-site .reference-tour > div[dir] {
@@ -580,12 +592,12 @@ body:has(.marketing-site) {
   margin: 0 auto 22px;
   gap: 6px;
   background: var(--website-panel);
-  border-radius: 24px;
+  border-radius: 0.75rem;
   padding: 6px;
 }
 .marketing-site .reference-tour-tabs button {
-  font-size: 12px;
-  border-radius: 20px;
+  font-size: var(--website-text-label);
+  border-radius: var(--website-control-radius);
 }
 .marketing-site .reference-tour > div > [role='tabpanel'] {
   width: 100%;
@@ -597,13 +609,13 @@ body:has(.marketing-site) {
 }
 .marketing-site .reference-process {
   border-top: 1px solid var(--website-line);
-  padding-block: 85px;
+  padding-block: var(--website-section-space);
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 90px;
+  gap: clamp(2rem, 5vw, 5rem);
 }
 .marketing-site .reference-process h2 {
-  font-size: 36px;
+  font-size: var(--website-heading-section);
   max-width: 310px;
 }
 .marketing-site .reference-process ol {
@@ -617,23 +629,23 @@ body:has(.marketing-site) {
   padding-bottom: 26px;
 }
 .marketing-site .reference-process li > span {
-  font-size: 11px;
+  font-size: var(--website-text-caption);
   color: var(--website-quiet);
   padding-top: 4px;
 }
 .marketing-site .reference-process h3 {
-  font-size: 16px;
-  font-weight: 450;
+  font-size: var(--website-heading-card);
+  font-weight: 600;
   margin-bottom: 6px;
 }
 .marketing-site .reference-process li p {
   color: var(--website-muted);
-  font-size: 12px;
+  font-size: var(--website-text-body);
   margin: 0;
 }
 .marketing-site .reference-hosting {
   border-block: 1px solid var(--website-line);
-  padding-block: 65px;
+  padding-block: var(--website-section-space);
   display: flex;
   gap: 35px;
   align-items: flex-start;
@@ -644,22 +656,22 @@ body:has(.marketing-site) {
   flex-shrink: 0;
 }
 .marketing-site .reference-hosting h2 {
-  font-size: 35px;
+  font-size: var(--website-heading-section);
   margin-bottom: 24px;
 }
 .marketing-site .reference-hosting p:not(.reference-label) {
   color: var(--website-muted);
-  font-size: 13px;
+  font-size: var(--website-text-body);
   max-width: 620px;
 }
 .marketing-site .faq-section {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 90px;
-  padding-block: 90px;
+  gap: clamp(2rem, 5vw, 5rem);
+  padding-block: var(--website-section-space);
 }
 .marketing-site .faq-section h2 {
-  font-size: 32px;
+  font-size: var(--website-heading-section);
   margin-bottom: 25px;
 }
 .marketing-site .faq-list details {
@@ -673,7 +685,7 @@ body:has(.marketing-site) {
   cursor: pointer;
   list-style: none;
   padding: 20px 0;
-  font-size: 13px;
+  font-size: var(--website-text-body);
 }
 .marketing-site .faq-list summary::-webkit-details-marker {
   display: none;
@@ -687,56 +699,95 @@ body:has(.marketing-site) {
 }
 .marketing-site .faq-list details > p {
   color: var(--website-muted);
-  font-size: 12px;
+  font-size: var(--website-text-body);
   margin: 0 0 22px;
 }
 .marketing-site .closing {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 30px;
-  padding-block: 55px 90px;
+  gap: 2rem;
+  padding-block: var(--website-section-space);
+}
+.marketing-site .closing > div {
+  max-width: 40rem;
+  min-width: 0;
 }
 .marketing-site .closing h2 {
-  font-size: 35px;
+  font-size: var(--website-heading-section);
   margin: 0;
-  max-width: 530px;
+  max-width: 24ch;
+}
+.marketing-site .closing p {
+  color: var(--website-muted);
+  margin: 1rem 0 0;
+  max-width: 52ch;
+}
+.marketing-site .closing > .button {
+  flex-shrink: 0;
 }
 .marketing-site .footer {
   border-top: 1px solid var(--website-line);
-  padding-block: 54px 25px;
+  background: var(--website-panel);
+  padding-block: 3.5rem 1.5rem;
 }
 .marketing-site .footer-top {
   display: grid;
-  grid-template-columns: 1.3fr 1fr 1fr 1fr;
-  gap: 38px;
+  grid-template-columns: minmax(12rem, 1fr) minmax(0, 3fr);
+  gap: 3rem;
 }
-.marketing-site .footer-top h3 {
-  font-size: 12px;
-  font-weight: 550;
-  margin-bottom: 20px;
-}
-.marketing-site .footer-top > div > a:not(.brand) {
-  display: block;
-  margin-bottom: 11px;
-  font-size: 11px;
+.marketing-site .footer-identity p {
+  font-size: var(--website-text-label);
   color: var(--website-muted);
+  margin: 1rem 0;
 }
-.marketing-site .footer-top p {
-  font-size: 12px;
+.marketing-site .footer-navigation {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2rem;
+}
+.marketing-site .footer-navigation h3 {
+  font-size: var(--website-text-label);
+  font-weight: 600;
+  letter-spacing: 0;
+  margin: 0 0 1rem;
+  line-height: 1.6;
+}
+.marketing-site .footer-navigation ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.marketing-site .footer-navigation a {
+  display: inline-flex;
+  padding-block: 0.375rem;
+  font-size: var(--website-text-label);
   color: var(--website-muted);
-  margin-top: 20px;
+  line-height: 1.5;
 }
 .marketing-site .footer-bottom {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 1rem 2rem;
   border-top: 1px solid var(--website-line);
-  margin-top: 35px;
-  padding-top: 22px;
-  font-size: 10px;
-  color: var(--website-quiet);
+  margin-top: 3rem;
+  padding-top: 1.5rem;
+  font-size: var(--website-text-label);
+  color: var(--website-muted);
+}
+.marketing-site .footer-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 1.5rem;
+}
+.marketing-site :is(.desktop-nav, .mobile-nav) a[aria-current] {
+  color: var(--website-accent);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 0.5em;
+  text-decoration-thickness: 2px;
 }
 /* Complete workspace demo and the five capability pages. */
 .marketing-site .section-intro,
@@ -744,18 +795,18 @@ body:has(.marketing-site) {
   margin-bottom: 36px;
 }
 .marketing-site .section-intro h2 {
-  font-size: 30px;
+  font-size: var(--website-heading-section);
 }
 .marketing-site .section-intro p,
 .marketing-site .section-heading p {
   color: var(--website-muted);
-  font-size: 14px;
+  font-size: var(--website-text-body);
   max-width: 640px;
 }
 .marketing-site .section-label,
 .marketing-site .eyebrow {
   color: var(--website-accent);
-  font-size: 11px;
+  font-size: var(--website-text-caption);
   margin-bottom: 20px;
 }
 .marketing-site .hero {
@@ -766,7 +817,7 @@ body:has(.marketing-site) {
   padding-block: 74px 100px;
 }
 .marketing-site .hero h1 {
-  font-size: clamp(40px, 3.8vw, 54px);
+  font-size: clamp(2rem, 1.25rem + 2.5vw, 3.25rem);
   line-height: 1.17;
   margin-bottom: 25px;
 }
@@ -775,7 +826,7 @@ body:has(.marketing-site) {
   color: var(--website-accent);
 }
 .marketing-site .hero-description {
-  font-size: 14px;
+  font-size: var(--website-text-body);
   color: var(--website-muted);
   max-width: 440px;
   margin-bottom: 25px;
@@ -787,7 +838,7 @@ body:has(.marketing-site) {
   gap: 20px;
 }
 .marketing-site .hero-note {
-  font-size: 10px;
+  font-size: var(--website-text-caption);
   color: var(--website-quiet);
   margin-top: 20px;
 }
@@ -820,12 +871,12 @@ body:has(.marketing-site) {
   min-width: 0;
 }
 .marketing-site .capability-flow strong {
-  font-size: 13px;
-  font-weight: 450;
+  font-size: var(--website-text-body);
+  font-weight: 500;
 }
 .marketing-site .capability-flow p {
   color: var(--website-muted);
-  font-size: 11px;
+  font-size: var(--website-text-body);
   margin: 4px 0 0;
 }
 .marketing-site .capability-nav {
@@ -834,7 +885,7 @@ body:has(.marketing-site) {
   gap: 15px 30px;
   border-block: 1px solid var(--website-line);
   padding-block: 16px;
-  font-size: 11px;
+  font-size: var(--website-text-label);
 }
 .marketing-site .capability-nav a {
   min-height: 30px;
@@ -863,11 +914,11 @@ body:has(.marketing-site) {
 }
 .marketing-site .capability-card h2,
 .marketing-site .capability-card h3 {
-  font-size: 26px;
+  font-size: var(--website-heading-card);
   margin-bottom: 18px;
 }
 .marketing-site .capability-card p {
-  font-size: 12px;
+  font-size: var(--website-text-body);
   line-height: 1.7;
   color: var(--website-muted);
   margin-bottom: 24px;
@@ -883,7 +934,7 @@ body:has(.marketing-site) {
     .operations-links
   )
   h2 {
-  font-size: 35px;
+  font-size: var(--website-heading-section);
 }
 .marketing-site .capability-boundary {
   display: flex;
@@ -897,18 +948,18 @@ body:has(.marketing-site) {
 }
 .marketing-site .capability-boundary p {
   max-width: 640px;
-  font-size: 14px;
+  font-size: var(--website-text-body);
   color: var(--website-muted);
 }
 .marketing-site .workflow-section {
-  padding-block: 65px 85px;
+  padding-block: var(--website-section-space);
 }
 .marketing-site .workflow-heading {
   max-width: 550px;
   margin-bottom: 35px;
 }
 .marketing-site .workflow-heading h2 {
-  font-size: 36px;
+  font-size: var(--website-heading-section);
 }
 .marketing-site .workflow-steps {
   padding: 0;
@@ -919,18 +970,18 @@ body:has(.marketing-site) {
 }
 .marketing-site .workflow-index {
   display: block;
-  font-size: 11px;
+  font-size: var(--website-text-caption);
   margin-bottom: 20px;
   color: var(--website-quiet);
 }
 .marketing-site .workflow-steps h3 {
-  font-size: 17px;
-  font-weight: 450;
+  font-size: var(--website-heading-card);
+  font-weight: 600;
 }
 .marketing-site .workflow-steps p,
 .marketing-site .workflow-note {
   color: var(--website-muted);
-  font-size: 12px;
+  font-size: var(--website-text-body);
 }
 .marketing-site .capability-limits {
   display: grid;
@@ -946,7 +997,7 @@ body:has(.marketing-site) {
   margin: 0;
   padding-left: 20px;
   color: var(--website-muted);
-  font-size: 13px;
+  font-size: var(--website-text-body);
 }
 .marketing-site .capability-limits li {
   padding-block: 12px;
@@ -979,7 +1030,7 @@ body:has(.marketing-site) {
   padding: 18px;
   border-radius: 7px;
   background: var(--website-bg);
-  font-size: 10px;
+  font-size: 0.875rem;
 }
 .marketing-site .story-code span {
   display: block;
@@ -1001,21 +1052,21 @@ body:has(.marketing-site) {
   gap: 12px;
   border-top: 1px solid var(--website-line);
   padding-block: 17px;
-  font-size: 11px;
+  font-size: var(--website-text-label);
 }
 .marketing-site .public-not-found {
   padding-block: 130px 160px;
 }
 .marketing-site .public-not-found h1 {
-  font-size: clamp(40px, 5vw, 66px);
+  font-size: var(--website-heading-display);
 }
 .marketing-site .public-not-found > p:not(.reference-label) {
   max-width: 460px;
   color: var(--website-muted);
-  font-size: 14px;
+  font-size: var(--website-text-body);
   margin-bottom: 30px;
 }
-@media (min-width: 851px) {
+@media (min-width: 1051px) {
   .marketing-site .mobile-nav {
     display: none;
   }
@@ -1025,7 +1076,7 @@ body:has(.marketing-site) {
     gap: 45px;
   }
 }
-@media (max-width: 850px) {
+@media (max-width: 1050px) {
   .marketing-site .desktop-nav {
     display: none;
   }
@@ -1037,7 +1088,7 @@ body:has(.marketing-site) {
     padding-bottom: 75px;
   }
   .marketing-site .reference-hero h1 {
-    font-size: 50px;
+    font-size: var(--website-heading-display);
   }
   .marketing-site .reference-process,
   .marketing-site .faq-section {
@@ -1054,10 +1105,15 @@ body:has(.marketing-site) {
     grid-template-columns: 1fr 1fr;
   }
   .marketing-site .footer-top {
-    gap: 25px;
+    grid-template-columns: 1fr;
+    gap: 2.5rem;
   }
 }
 @media (max-width: 850px) {
+  .marketing-site .closing {
+    flex-direction: column;
+    align-items: flex-start;
+  }
   .marketing-site .reference-feature {
     padding-block: 70px 60px;
   }
@@ -1065,10 +1121,10 @@ body:has(.marketing-site) {
     gap: 35px;
   }
   .marketing-site .reference-feature h2 {
-    font-size: 32px;
+    font-size: var(--website-heading-section);
   }
   .marketing-site .reference-feature-copy > p {
-    font-size: 14px;
+    font-size: var(--website-text-body);
   }
   .marketing-site .reference-feature-index {
     grid-template-columns: 100px 1fr;
@@ -1128,11 +1184,11 @@ body:has(.marketing-site) {
     width: calc(100% - 36px);
   }
   .marketing-site .nav-row {
-    gap: 15px;
-    height: 66px;
+    gap: 8px;
+    min-height: 66px;
   }
   .marketing-site .brand {
-    width: 108px;
+    width: 96px;
   }
   .marketing-site .nav-actions {
     gap: 10px;
@@ -1141,19 +1197,19 @@ body:has(.marketing-site) {
     display: none;
   }
   .marketing-site .button.compact {
-    min-height: 33px;
-    padding-inline: 13px;
+    min-height: 36px;
+    padding-inline: 10px;
   }
   .marketing-site .reference-hero {
     padding-top: 42px;
     padding-bottom: 64px;
   }
   .marketing-site .reference-hero h1 {
-    font-size: clamp(34px, 7.8vw, 48px);
+    font-size: var(--website-heading-display);
     line-height: 1.12;
   }
   .marketing-site .reference-hero .hero-copy > p {
-    font-size: 14px;
+    font-size: var(--website-text-lead);
     max-width: 350px;
   }
   .marketing-site .reference-foundation > div {
@@ -1179,10 +1235,10 @@ body:has(.marketing-site) {
     padding-block: 45px 65px;
   }
   .marketing-site .reference-tour-heading h2 {
-    font-size: 29px;
+    font-size: var(--website-heading-section);
   }
   .marketing-site .reference-tour-tabs button {
-    font-size: 10px;
+    font-size: var(--website-text-label);
   }
   .marketing-site .reference-process,
   .marketing-site .faq-section {
@@ -1192,7 +1248,7 @@ body:has(.marketing-site) {
   }
   .marketing-site .reference-process h2,
   .marketing-site .reference-hosting h2 {
-    font-size: 30px;
+    font-size: var(--website-heading-section);
   }
   .marketing-site .reference-hosting {
     gap: 22px;
@@ -1207,11 +1263,17 @@ body:has(.marketing-site) {
     padding-block: 35px 60px;
   }
   .marketing-site .closing h2 {
-    font-size: 31px;
+    font-size: var(--website-heading-section);
   }
-  .marketing-site .footer-top {
-    grid-template-columns: 1fr 1fr;
-    gap: 38px 28px;
+  .marketing-site .footer-navigation {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 2rem 1.5rem;
+  }
+  .marketing-site .footer-navigation > div:last-child {
+    grid-column: 1 / -1;
+  }
+  .marketing-site .footer {
+    padding-top: 2.5rem;
   }
   .marketing-site .capability-grid,
   .marketing-site .deployment-grid,
@@ -1594,4 +1656,56 @@ body:has(.marketing-site) {
     font-size: 10px;
     padding: 6px 10px;
   }
+}
+
+/* Published product and Marketplace releases. */
+.reference-release-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0;
+}
+.reference-release-badges a {
+  display: inline-flex;
+  border-radius: 3px;
+}
+.reference-release-badges a:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 4px;
+}
+.reference-release-badges img {
+  display: block;
+  height: 20px;
+  width: auto;
+}
+
+/* Release metadata is secondary to the hero actions. */
+.marketing-site .hero-release-info {
+  display: grid;
+  gap: 1rem;
+  margin-top: 2.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--website-line);
+  max-width: 65ch;
+}
+.marketing-site .hero-release-info .community-release-note {
+  font-size: var(--website-text-label);
+  line-height: 1.6;
+  color: var(--website-muted);
+  margin: 0;
+}
+.marketing-site .reference-community {
+  padding-block: var(--website-section-space);
+  border-bottom: 1px solid var(--website-line);
+}
+.marketing-site .reference-community h2 {
+  font-size: var(--website-heading-section);
+  max-width: 30ch;
+}
+.marketing-site .reference-community p {
+  max-width: 68ch;
+  color: var(--website-muted);
+  font-size: var(--website-text-body);
+  line-height: 1.7;
 }

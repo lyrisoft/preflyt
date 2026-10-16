@@ -52,6 +52,6 @@ it('explains directory snapshot coverage and the difference between refresh and 
   expect(html).toContain(
     'saved assessment is not necessarily verified or passing'
   )
-  expect(html).toContain('Refresh local data reloads saved records')
+  expect(html).toContain('Recent activity syncs automatically')
   expect(html).toContain('No contributor records received yet')
 })

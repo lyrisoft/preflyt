@@ -1,12 +1,5 @@
 import { useState } from 'react'
-import {
-  ArrowUpRight,
-  ChevronLeft,
-  ChevronRight,
-  ExternalLink,
-  FileText,
-  ShieldCheck,
-} from 'lucide-react'
+import { ArrowUpRight, ExternalLink, FileText, ShieldCheck } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -48,7 +41,6 @@ const filters: { value: ControlFilter; label: string }[] = [
   { value: 'found', label: 'Files found' },
   { value: 'ci', label: 'CI checks' },
 ]
-const pageSize = 8
 const githubPath = (value: string) =>
   value.split('/').map(encodeURIComponent).join('/')
 
@@ -178,8 +170,6 @@ export function RepositoryControls({
   const query = useStandards(repositoryId)
   const data = query.data
   const [details, setDetails] = useState<string | null>(null)
-  const [pagination, setPagination] = useState({ scope: '', index: 0 })
-  const scope = `${repositoryId}:${filter}`
   const controls = [...(data?.controls ?? [])].sort(
     (a, b) =>
       (configurationOrder[a.configuration] ?? 1) -
@@ -203,13 +193,7 @@ export function RepositoryControls({
           ? control.configuration === 'NOT_INSPECTED'
           : ['MISSING', 'UNKNOWN'].includes(control.configuration)
   )
-  const pages = Math.max(1, Math.ceil(visible.length / pageSize))
-  const page = Math.min(
-    pagination.scope === scope ? pagination.index : 0,
-    pages - 1
-  )
-  const start = page * pageSize
-  const pageControls = visible.slice(start, start + pageSize)
+  const pageControls = visible
   return (
     <Card className='gap-4'>
       <CardHeader>
@@ -262,10 +246,6 @@ export function RepositoryControls({
                     type='button'
                     aria-pressed={filter === item.value}
                     onClick={() => {
-                      setPagination({
-                        scope: `${repositoryId}:${item.value}`,
-                        index: 0,
-                      })
                       onFilter(item.value)
                     }}
                     className={cn(
@@ -295,7 +275,7 @@ export function RepositoryControls({
                 </Button>
               )}
             </div>
-            <Table>
+            <Table key={`${repositoryId}:${filter}`}>
               <TableHeader>
                 <TableRow>
                   <TableHead className='ps-6'>Check</TableHead>
@@ -394,38 +374,6 @@ export function RepositoryControls({
                 )}
               </TableBody>
             </Table>
-            <div className='flex flex-wrap items-center justify-between gap-3 border-t px-6 pt-3 text-xs text-muted-foreground'>
-              <span>
-                {visible.length
-                  ? `${start + 1}–${Math.min(start + pageSize, visible.length)} of ${visible.length} checks`
-                  : '0 checks'}
-              </span>
-              <div className='flex items-center gap-2'>
-                <span className='me-1 tabular-nums'>
-                  Page {page + 1} of {pages}
-                </span>
-                <Button
-                  size='icon'
-                  variant='outline'
-                  className='size-7'
-                  aria-label='Previous checks page'
-                  disabled={page === 0}
-                  onClick={() => setPagination({ scope, index: page - 1 })}
-                >
-                  <ChevronLeft className='size-3.5' />
-                </Button>
-                <Button
-                  size='icon'
-                  variant='outline'
-                  className='size-7'
-                  aria-label='Next checks page'
-                  disabled={page + 1 >= pages}
-                  onClick={() => setPagination({ scope, index: page + 1 })}
-                >
-                  <ChevronRight className='size-3.5' />
-                </Button>
-              </div>
-            </div>
           </>
         )}
         <ControlDetails

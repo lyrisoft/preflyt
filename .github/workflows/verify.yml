@@ -1,8 +1,7 @@
 name: Verify implementation
 on:
+  workflow_dispatch:
   workflow_call:
-  pull_request:
-    branches: [development, main]
 permissions:
   contents: read
 concurrency:
@@ -22,28 +21,33 @@ jobs:
           esac
   development:
     needs: scope
-    if: ${{ (github.base_ref || github.ref_name) == 'development' }}
+    if: ${{ (github.base_ref || github.ref_name) == 'development' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     permissions:
       contents: read
-      id-token: write
-      actions: read
     uses: ./.github/workflows/development-checks.yml
+  fork_development:
+    needs: scope
+    if: ${{ github.event_name == 'pull_request' && github.base_ref == 'development' && github.event.pull_request.head.repo.full_name != github.repository }}
+    permissions:
+      contents: read
+    uses: ./.github/workflows/main-regression.yml
   main:
     needs: scope
     if: ${{ (github.base_ref || github.ref_name) == 'main' }}
     uses: ./.github/workflows/main-regression.yml
-  preflyt_gate:
-    name: Preflyt final gate
-    needs: [scope, development, main]
-    if: ${{ always() && !cancelled() && github.event_name == 'pull_request' && github.base_ref == 'development' && github.event.pull_request.head.repo.full_name == github.repository }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - name: Verify results, AI review and PR publication
-        uses: lyrisoft/preflyt-action@72bd67f0e75e4409a5b3d37367ffb94073e9bf11 # same-run LCOV coverage
-        with:
-          mode: gate
-          api-url: ${{ vars.PREFLYT_API_URL }}
+  # Preflyt Action paused to conserve hosted build minutes.
+  # preflyt_gate:
+  #   name: Preflyt final gate
+  #   needs: [scope, development, main]
+  #   if: ${{ always() && !cancelled() && github.event_name == 'pull_request' && github.base_ref == 'development' && github.event.pull_request.head.repo.full_name == github.repository }}
+  #   runs-on: ubuntu-latest
+  #   timeout-minutes: 20
+  #   permissions:
+  #     contents: read
+  #     id-token: write
+  #   steps:
+  #     - name: Verify results, AI review and PR publication
+  #       uses: lyrisoft/preflyt-action@72bd67f0e75e4409a5b3d37367ffb94073e9bf11 # same-run LCOV coverage
+  #       with:
+  #         mode: gate
+  #         api-url: ${{ vars.PREFLYT_API_URL }}

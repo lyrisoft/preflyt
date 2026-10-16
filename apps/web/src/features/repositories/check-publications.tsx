@@ -1,13 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import {
-  ArrowUpRight,
-  ChevronLeft,
-  ChevronRight,
-  RefreshCw,
-  ShieldCheck,
-} from 'lucide-react'
+import { ArrowUpRight, RefreshCw, ShieldCheck } from 'lucide-react'
 import { API_BASE_URL } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -80,12 +74,17 @@ export function CheckPublications({
   canRead: boolean
   canPublish: boolean
 }) {
+  const [pageSize, setPageSize] = useState(10)
   const [page, setPage] = useState(1)
   const root = `/github/repositories/${repositoryId}/check-publications`
   const history = useQuery({
-    queryKey: ['check-publications', actorId, root, page],
+    queryKey: ['check-publications', actorId, root, page, pageSize],
     queryFn: ({ signal }) =>
-      request<Page>(`${root}/results?page=${page}`, undefined, signal),
+      request<Page>(
+        `${root}/results?page=${page}&pageSize=${pageSize}`,
+        undefined,
+        signal
+      ),
     enabled: canRead,
     retry: false,
   })
@@ -162,7 +161,18 @@ export function CheckPublications({
                 )}
                 {history.data.publications.length ? (
                   <>
-                    <Table>
+                    <Table
+                      pagination={{
+                        page,
+                        pageSize,
+                        hasNext: history.data?.hasMore,
+                        onPageChange: setPage,
+                        onPageSizeChange: (size) => {
+                          setPageSize(size)
+                          setPage(1)
+                        },
+                      }}
+                    >
                       <TableHeader>
                         <TableRow>
                           <TableHead>Pull request</TableHead>
@@ -265,37 +275,6 @@ export function CheckPublications({
                         ))}
                       </TableBody>
                     </Table>
-                    {(page > 1 || history.data.hasMore) && (
-                      <div className='flex items-center justify-between border-t pt-3'>
-                        <span className='text-xs text-muted-foreground'>
-                          Page {page}
-                        </span>
-                        <div className='flex gap-2'>
-                          <Button
-                            size='sm'
-                            variant='outline'
-                            disabled={page === 1 || history.isFetching}
-                            onClick={() => setPage(page - 1)}
-                          >
-                            <ChevronLeft className='size-4' />
-                            Previous
-                          </Button>
-                          <Button
-                            size='sm'
-                            variant='outline'
-                            disabled={
-                              !history.data.hasMore ||
-                              history.isFetching ||
-                              page >= 1000
-                            }
-                            onClick={() => setPage(page + 1)}
-                          >
-                            Next
-                            <ChevronRight className='size-4' />
-                          </Button>
-                        </div>
-                      </div>
-                    )}
                   </>
                 ) : (
                   history.data.enabled && (

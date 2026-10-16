@@ -1,21 +1,5 @@
 name: Publish native tools
 on:
-  push:
-    branches: [development, main]
-    paths:
-      - 'docs/deployment/native-runner/**'
-      - 'apps/api/scripts/native-check-fixtures.mts'
-      - 'apps/api/scripts/health-file-analysis-fixtures.mjs'
-      - 'apps/api/src/health/health-file-analysis.ts'
-      - 'apps/api/src/execution/**'
-      - 'apps/api/src/assessments/assessment-digest.ts'
-      - 'apps/api/package.json'
-      - 'apps/api/prisma/**'
-      - 'apps/api/prisma.config.ts'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
-      - 'pnpm-workspace.yaml'
-      - '.github/workflows/publish-native.yml'
   workflow_dispatch:
 permissions:
   contents: read
@@ -58,6 +42,8 @@ jobs:
       FIXTURE_IMAGE: preflyt-native-${{ matrix.tool }}:fixture
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24.4.1
@@ -88,7 +74,7 @@ jobs:
           target: ${{ matrix.target }}
           no-cache-filters: ${{ matrix.tool == 'trivy-offline' && 'database' || '' }}
           cache-from: type=gha,scope=native-${{ matrix.tool }}
-          cache-to: type=gha,mode=max,scope=native-${{ matrix.tool }}
+          cache-to: type=gha,mode=${{ matrix.tool == 'semgrep' && 'min' || 'max' }},scope=native-${{ matrix.tool }}
           platforms: linux/amd64
           load: true
           tags: |

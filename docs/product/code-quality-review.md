@@ -10,7 +10,7 @@ Automatically assess pull requests for code correctness, maintainability, reliab
 ## Review workflow
 
 1. Receive a verified GitHub PR opened/synchronize/reopened event; bind assessment to repository, PR, base and exact head SHA.
-2. Load changed paths, diff, bounded related context, language/framework and effective versioned engineering policies.
+2. Load verified changed paths/diff, language/framework and effective versioned engineering policies. Planned P4.RI indexed related-code retrieval outside the diff is Cloud-only; it is not an existing Community capability.
 3. Ingest CI-produced lint, typecheck, coverage, static-analysis and test evidence; use approved hardened execution for any Preflyt-run tools.
 4. Select applicable deterministic rules and permitted read-only AI review skills. Apply organization model routing, budgets and data-egress policy.
 5. Normalize findings with source, file/range, rule/skill version, severity, confidence, evidence and observed-versus-inferred classification.

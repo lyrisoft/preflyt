@@ -53,7 +53,13 @@ vi.mock('../repositories/repository-standards', () => ({
 vi.mock('../repositories/gate-policy-panel', () => ({
   GatePolicyPanel: () => <h2>Branch policies</h2>,
 }))
-vi.mock('../repositories/engineering-queries', () => ({ engineeringRead: async () => ({ revisions: [], currentSelectionId: null, truncated: false }) }))
+vi.mock('../repositories/engineering-queries', () => ({
+  engineeringRead: async () => ({
+    revisions: [],
+    currentSelectionId: null,
+    truncated: false,
+  }),
+}))
 vi.mock('../repositories/repository-bindings', () => ({
   RepositoryBindings: () => null,
 }))
@@ -295,10 +301,20 @@ it('keeps team assignment usable at 320px in both themes', async () => {
 
 it('keeps Branch policies and CI jobs in separate tabs without repository standards setup', async () => {
   const { view } = await mount()
-  await expect.element(page.getByRole('tab', { name: 'Branch policies' })).toHaveAttribute('data-state', 'active')
-  await expect.element(page.getByRole('button', { name: 'Choose standards' })).not.toBeInTheDocument()
+  await expect
+    .element(page.getByRole('tab', { name: 'Branch policies' }))
+    .toHaveAttribute('data-state', 'active')
+  await expect
+    .element(page.getByRole('button', { name: 'Choose standards' }))
+    .not.toBeInTheDocument()
   await page.getByRole('tab', { name: 'CI jobs' }).click()
-  await expect.element(page.getByRole('button', { name: 'Choose branch policy', exact: true })).toBeVisible()
-  await expect.element(page.getByRole('heading', { name: 'Branch policies' })).not.toBeInTheDocument()
+  await expect
+    .element(
+      page.getByRole('button', { name: 'Choose branch policy', exact: true })
+    )
+    .toBeVisible()
+  await expect
+    .element(page.getByRole('heading', { name: 'Branch policies' }))
+    .not.toBeInTheDocument()
   await view.unmount()
 })

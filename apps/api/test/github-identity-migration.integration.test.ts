@@ -93,7 +93,12 @@ it('preserves existing identity, sessions, recovery, grants, installations and a
     repositoryId: 'repository',
   })
   expect(
-    await db!.gitHubInstallation.findUnique({ where: { id: 41n } }),
+    await db!.gitHubInstallation.findUnique({
+      where: { id: 41n },
+      // This fixture deliberately stops at the identity-link migration. Do not
+      // select columns introduced by later migrations with the current client.
+      select: { organizationId: true, connectedById: true },
+    }),
   ).toMatchObject({
     organizationId: 'preflyt-default',
     connectedById: 'legacy',
@@ -168,7 +173,12 @@ it('links existing organization IDs explicitly and prevents duplicate or conflic
     }),
   ).rejects.toMatchObject({ code: 'P2002' })
   expect(
-    await db!.gitHubInstallation.findUnique({ where: { id: 41n } }),
+    await db!.gitHubInstallation.findUnique({
+      where: { id: 41n },
+      // This fixture deliberately stops at the identity-link migration. Do not
+      // select columns introduced by later migrations with the current client.
+      select: { organizationId: true, connectedById: true },
+    }),
   ).toMatchObject({ organizationId: 'preflyt-default' })
 })
 it('rejects invalid provider keys at the database boundary', async () => {

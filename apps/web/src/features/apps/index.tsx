@@ -542,7 +542,7 @@ export function Apps() {
               <>
                 {canManage && (
                   <Button asChild>
-                    <a href={`${API_BASE_URL}/github/install`}>
+                    <a href={`${API_BASE_URL}/github/connection`}>
                       <Plug aria-hidden='true' /> Connect GitHub App
                     </a>
                   </Button>
@@ -720,7 +720,7 @@ export function Apps() {
                             dataKey='selected'
                             name='Selected for Preflyt'
                             stackId='inventory'
-                            fill='var(--chart-2)'
+                            fill='var(--success)'
                             {...chartAnimation}
                           />
                           <Bar

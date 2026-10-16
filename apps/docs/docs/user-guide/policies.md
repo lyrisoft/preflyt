@@ -11,6 +11,13 @@ A **policy** says which standards a branch must meet. Once published, Preflyt ev
 
 Open **Policies** in the sidebar.
 
+<figure className="pf-guide-screenshot">
+  <a href="/img/guides/policies.jpg" target="_blank" rel="noreferrer">
+    <img src="/img/guides/policies.jpg" alt="Branch policies begin with a repository scope; create a draft before reviewing and publishing." width="1728" height="906" loading="lazy" />
+  </a>
+  <figcaption>Branch policies begin with a repository scope; create a draft before reviewing and publishing. Select the image to view it full size.</figcaption>
+</figure>
+
 ## Choose a scope
 
 At the top of the page, **Policy scope** sets what you are working on:

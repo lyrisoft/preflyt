@@ -78,7 +78,7 @@ it('binds confirmation to both the original session and browser, and rejects exp
 });
 it('stores generated credentials encrypted and atomically records completion without enabling protection', async () => {
   const value = await prepared(); const result = await complete(value.state, value.cookie);
-  expect(result.status).toBe(302); expect(result.headers.location).toBe('http://localhost:5173/organization-settings?tab=configuration');
+  expect(result.status).toBe(302); expect(result.headers.location).toBe('http://localhost:5173/api/github/connection');
   const row = (await fixture.prisma.deploymentConfiguration.findUnique({ where: { id: 'primary' } }))!;
   expect(row.revision).toBe(2); expect(row.encryptedSecrets).not.toContain('test-client-secret');
   expect(decryptConfigurationSecrets(row.encryptedSecrets)).toMatchObject({ GITHUB_APP_CLIENT_SECRET: 'test-client-secret', GITHUB_APP_PRIVATE_KEY: pem });

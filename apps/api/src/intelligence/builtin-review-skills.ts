@@ -48,7 +48,7 @@ export const builtinReviewSkills: BuiltinReviewSkill[] = [
     id: "test-coverage",
     category: "Testing and Quality",
     checkIds: ["tests.required", "frontend.components"],
-    checks: ["Required test execution", "Component test coverage"],
+    checks: ["Required test execution", "Component test execution"],
     name: "Changed-code test review",
     description: "Identify behavior changes that need meaningful tests.",
     instructions:

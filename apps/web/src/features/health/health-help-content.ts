@@ -41,14 +41,14 @@ export const healthHelp: HelpSection[] = [
 /** Shared page-header help for the organization health summary and reports. */
 export const healthPortfolioHelp: HelpSection[] = [
   {
-    title: 'Repository health metrics',
+    title: 'Repository health overview',
     content:
-      'Repositories assessed counts accessible selected repositories with a completed report, including partial reports. Queued or running counts active requests. High and critical findings counts retained, unsuppressed analyzer findings from the latest report on each selected branch; it is unavailable when no validated analysis exists and does not imply unassessed repositories have zero issues. Incomplete or failed counts partial reports and failed requests. These health metrics cover the latest saved reports across all time, independently of the PR and CI date filter.',
+      'Healthy repositories counts saved reports whose applicable requirements are complete and clean. Need attention combines Unhealthy and Needs attention. Incomplete or not assessed shows gaps in analysis or missing assessments; queued and running requests are counted separately. A completed assessment can still report an unhealthy repository. These counts use overall health from the latest saved report on each selected branch, across all time and independently of the PR date filter. Missing overall-health evidence is never treated as Healthy.',
   },
   {
-    title: 'Health tab and priority findings',
+    title: 'Explore repository health',
     content:
-      'On Engineering Overview, Health replaces the activity metrics with health metrics. The repository selector filters every health count and finding. The date selector is hidden because this view uses latest saved reports. Assessment status separates complete and partial reports, active requests, failures, cancellations and repositories not yet assessed. Priority findings shows at most five retained high or critical findings, with critical first; each opens the exact saved report. Refresh reloads saved data without starting an assessment.',
+      'The donut shows repository counts by overall health, not individual findings. Select a segment or its keyboard-accessible legend button to filter the repository list beside it. Needs review shows unhealthy repositories, advisory issues, incomplete analysis and repositories not assessed, with known unhealthy results first. The repository name opens the saved report. The list shows three repositories per page, with quiet pagination controls. Freshness appears as secondary text with an explanation on focus or hover. Assessment timestamps and freshness are separate from health; a saved Healthy result is not proof that the current branch is healthy. The repository selector applies to all health counts. Counts are limited to 1,000 accessible repositories and that limit is shown. Refresh reloads saved data without starting assessments. Individual findings remain in Findings and repository Health reports.',
   },
   ...healthHelp,
 ]

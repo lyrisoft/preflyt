@@ -4,6 +4,7 @@ COPY duplication/package.json duplication/package-lock.json ./
 RUN npm ci --ignore-scripts --no-audit --no-fund
 COPY duplication/scan.mjs duplication/compact-store.mjs ./
 COPY runner.mjs semgrep-locations.mjs source-verification.mjs source-initializer.mjs adapters.json /opt/preflyt/
+COPY licenses /usr/share/licenses/preflyt-scanners
 USER 65532:65532
 WORKDIR /workspace
 ENTRYPOINT ["/usr/local/bin/node", "/opt/preflyt/runner.mjs"]

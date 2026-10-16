@@ -99,8 +99,20 @@ it('preselects baseline checks and saves through the real form contract', async 
         description: '',
         ruleIds: ['ci.configured', 'tests.required'],
         checks: [
-          { id: 'ci.configured', title: 'CI configuration', guidance: 'Configure CI.', reportPath: undefined, workflowCommand: undefined },
-          { id: 'tests.required', title: 'Required tests', guidance: 'Collect test results.', reportPath: undefined, workflowCommand: undefined },
+          {
+            id: 'ci.configured',
+            title: 'CI configuration',
+            guidance: 'Configure CI.',
+            reportPath: undefined,
+            workflowCommand: undefined,
+          },
+          {
+            id: 'tests.required',
+            title: 'Required tests',
+            guidance: 'Collect test results.',
+            reportPath: undefined,
+            workflowCommand: undefined,
+          },
         ],
         expectedVersionId: null,
       },

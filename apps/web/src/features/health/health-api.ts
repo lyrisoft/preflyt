@@ -522,27 +522,19 @@ export const healthLabel = (state: string) =>
   })[state] ?? state
 
 export const healthTone = (value: string): StatusTone =>
-  value === 'INCOMPLETE'
-    ? 'neutral'
-    : ['UNHEALTHY', 'FAILED', 'FINDINGS_REPORTED', 'critical', 'high'].includes(
+  ['UNHEALTHY', 'FAILED', 'FINDINGS_REPORTED', 'critical', 'high'].includes(
+    value
+  )
+    ? 'error'
+    : ['NEEDS_ATTENTION', 'PARTIAL', 'INCOMPLETE', 'STALE', 'medium'].includes(
           value
         )
-      ? 'error'
-      : [
-            'NEEDS_ATTENTION',
-            'PARTIAL',
-            'INCOMPLETE',
-            'STALE',
-            'medium',
-          ].includes(value)
-        ? 'warning'
-        : ['HEALTHY', 'COMPLETE', 'CURRENT', 'PASS', 'COMPLETED'].includes(
-              value
-            )
-          ? 'success'
-          : value === 'RUNNING'
-            ? 'info'
-            : 'neutral'
+      ? 'warning'
+      : ['HEALTHY', 'COMPLETE', 'CURRENT', 'PASS', 'COMPLETED'].includes(value)
+        ? 'success'
+        : value === 'RUNNING'
+          ? 'info'
+          : 'neutral'
 
 export function useHealthPortfolio({
   page = 1,

@@ -11,6 +11,13 @@ description: Invite people to your workspace and choose what each person can do.
 
 It has four tabs: **People**, **GitHub members**, **Roles & permissions** and **Activity**. Only an **Owner or Admin** can manage people. Everyone else can read the roles.
 
+<figure className="pf-guide-screenshot">
+  <a href="/img/guides/access-control.jpg" target="_blank" rel="noreferrer">
+    <img src="/img/guides/access-control.jpg" alt="Access Control → Roles & permissions lists the built-in roles and their included permissions." width="1728" height="906" loading="lazy" />
+  </a>
+  <figcaption>Access Control → Roles & permissions lists the built-in roles and their included permissions. Select the image to view it full size.</figcaption>
+</figure>
+
 ## Roles
 
 | Role | What they can do |

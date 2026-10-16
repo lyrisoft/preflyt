@@ -1256,16 +1256,12 @@ it('shows no more than ten findings per page and paginates the recorded list', a
   state.manyFindings = true
   await mount()
   const findings = page.getByLabelText('Repository findings')
-  await expect
-    .element(findings.getByText('1–10 of 12 findings · page 1 of 2'))
-    .toBeVisible()
+  await expect.element(findings.getByText('1–10 of 12')).toBeVisible()
   await expect
     .element(findings.getByText('Additional finding 11'))
     .not.toBeInTheDocument()
-  await findings.getByRole('button', { name: 'Next findings page' }).click()
-  await expect
-    .element(findings.getByText('11–12 of 12 findings · page 2 of 2'))
-    .toBeVisible()
+  await findings.getByRole('button', { name: 'Next', exact: true }).click()
+  await expect.element(findings.getByText('11–12 of 12')).toBeVisible()
   await expect
     .element(findings.getByText('Additional finding 11'))
     .toBeVisible()
@@ -1310,6 +1306,13 @@ it('keeps findings and assessment history in separate tabs', async () => {
   await expect
     .element(page.getByLabelText('Assessment history', { exact: true }))
     .toBeVisible()
+  await expect
+    .element(
+      page
+        .getByLabelText('Assessment history', { exact: true })
+        .getByText('Completed', { exact: true })
+    )
+    .toHaveClass('text-success-text')
   await expect
     .element(page.getByLabelText('Repository findings'))
     .not.toBeInTheDocument()

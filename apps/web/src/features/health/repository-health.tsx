@@ -2,8 +2,6 @@ import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import {
-  ChevronLeft,
-  ChevronRight,
   GitBranch,
   RefreshCw,
   ShieldCheck,
@@ -103,7 +101,6 @@ export function RepositoryHealth({
   const [branch, setBranch] = useState(''),
     [search, setSearch] = useState(''),
     [severity, setSeverity] = useState('all')
-  const [findingPage, setFindingPage] = useState(1)
   const [detailTab, setDetailTab] = useState<'findings' | 'history'>('findings')
   const query = useHealth(
     repositoryId,
@@ -184,8 +181,6 @@ export function RepositoryHealth({
           .toLowerCase()
           .includes(search.toLowerCase())
     ) ?? []
-  const findingPages = Math.max(1, Math.ceil(rows.length / pageSize))
-  const currentFindingPage = Math.min(findingPage, findingPages)
   const historyPages = Math.max(1, Math.ceil((data?.total ?? 0) / pageSize))
   const findingsAvailable =
     report?.mode === 'EXECUTED' &&
@@ -310,7 +305,6 @@ export function RepositoryHealth({
                       setBranch(value)
                       setSelectedReport(undefined)
                       setPage(1)
-                      setFindingPage(1)
                     }}
                   />
                 )}
@@ -706,14 +700,12 @@ export function RepositoryHealth({
                               aria-label='Search health findings'
                               onChange={(e) => {
                                 setSearch(e.target.value)
-                                setFindingPage(1)
                               }}
                             />
                             <Select
                               value={severity}
                               onValueChange={(value) => {
                                 setSeverity(value)
-                                setFindingPage(1)
                               }}
                             >
                               <SelectTrigger
@@ -755,51 +747,44 @@ export function RepositoryHealth({
                               </TableRow>
                             </TableHeader>
                             <TableBody>
-                              {rows
-                                .slice(
-                                  (currentFindingPage - 1) * pageSize,
-                                  currentFindingPage * pageSize
-                                )
-                                .map((f) => (
-                                  <TableRow key={f.fingerprint}>
-                                    <TableCell className='max-w-lg py-4 pl-5 whitespace-normal'>
-                                      <Link
-                                        to='/findings/$findingId'
-                                        params={{ findingId: f.fingerprint }}
-                                        search={{
-                                          origin: 'health',
-                                          repository: repositoryId,
-                                          health: row.id,
-                                        }}
-                                        className='text-left text-sm font-medium hover:text-primary hover:underline focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-ring'
-                                      >
-                                        {f.title}
-                                      </Link>
-                                      <p className='mt-1.5 font-mono text-xs break-all text-muted-foreground'>
-                                        {f.path ?? 'No file supplied'}
-                                        {f.line
-                                          ? `:${f.line}${f.endLine && f.endLine > f.line ? `–${f.endLine}` : ''}`
-                                          : ''}
-                                      </p>
-                                      <p className='mt-1 text-xs text-muted-foreground'>
-                                        {f.ruleId ?? f.checkId}
-                                      </p>
-                                    </TableCell>
-                                    <TableCell className='pt-4 pr-5 align-top'>
-                                      <StatusBadge
-                                        tone={healthTone(f.severity)}
-                                      >
-                                        {f.severity}
-                                      </StatusBadge>
-                                    </TableCell>
-                                    <TableCell className='pt-4 align-top text-xs'>
-                                      <ResultTimestamp
-                                        value={row.finishedAt}
-                                        stacked
-                                      />
-                                    </TableCell>
-                                  </TableRow>
-                                ))}
+                              {rows.map((f) => (
+                                <TableRow key={f.fingerprint}>
+                                  <TableCell className='max-w-lg py-4 pl-5 whitespace-normal'>
+                                    <Link
+                                      to='/findings/$findingId'
+                                      params={{ findingId: f.fingerprint }}
+                                      search={{
+                                        origin: 'health',
+                                        repository: repositoryId,
+                                        health: row.id,
+                                      }}
+                                      className='text-left text-sm font-medium hover:text-primary hover:underline focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-ring'
+                                    >
+                                      {f.title}
+                                    </Link>
+                                    <p className='mt-1.5 font-mono text-xs break-all text-muted-foreground'>
+                                      {f.path ?? 'No file supplied'}
+                                      {f.line
+                                        ? `:${f.line}${f.endLine && f.endLine > f.line ? `–${f.endLine}` : ''}`
+                                        : ''}
+                                    </p>
+                                    <p className='mt-1 text-xs text-muted-foreground'>
+                                      {f.ruleId ?? f.checkId}
+                                    </p>
+                                  </TableCell>
+                                  <TableCell className='pt-4 pr-5 align-top'>
+                                    <StatusBadge tone={healthTone(f.severity)}>
+                                      {f.severity}
+                                    </StatusBadge>
+                                  </TableCell>
+                                  <TableCell className='pt-4 align-top text-xs'>
+                                    <ResultTimestamp
+                                      value={row.finishedAt}
+                                      stacked
+                                    />
+                                  </TableCell>
+                                </TableRow>
+                              ))}
                             </TableBody>
                           </Table>
                         </div>
@@ -821,43 +806,6 @@ export function RepositoryHealth({
                               ? 'Repository inspection is saved. Review the analysis status for what needs to be enabled.'
                               : 'Results apply to the recorded analyzers, revision and scope.'}
                           </p>
-                        </div>
-                      )}
-                      {rows.length > 0 && (
-                        <div className='flex flex-wrap items-center justify-between gap-2 border-t p-3 text-xs'>
-                          <span>
-                            {(currentFindingPage - 1) * pageSize + 1}–
-                            {Math.min(
-                              currentFindingPage * pageSize,
-                              rows.length
-                            )}{' '}
-                            of {rows.length} findings · page{' '}
-                            {currentFindingPage} of {findingPages}
-                          </span>
-                          <div className='flex gap-1'>
-                            <Button
-                              aria-label='Previous findings page'
-                              size='icon'
-                              variant='outline'
-                              disabled={currentFindingPage === 1}
-                              onClick={() =>
-                                setFindingPage(currentFindingPage - 1)
-                              }
-                            >
-                              <ChevronLeft />
-                            </Button>
-                            <Button
-                              aria-label='Next findings page'
-                              size='icon'
-                              variant='outline'
-                              disabled={currentFindingPage === findingPages}
-                              onClick={() =>
-                                setFindingPage(currentFindingPage + 1)
-                              }
-                            >
-                              <ChevronRight />
-                            </Button>
-                          </div>
                         </div>
                       )}
                     </Card>
@@ -894,7 +842,6 @@ export function RepositoryHealth({
                           onClick={() => {
                             setSelectedReport(h.id)
                             setPage(1)
-                            setFindingPage(1)
                           }}
                         >
                           <span className='min-w-0 flex-1 space-y-2'>
@@ -933,14 +880,8 @@ export function RepositoryHealth({
                               </span>
                             )}
                           </span>
-                          <StatusBadge
-                            tone={
-                              h.state === 'COMPLETED'
-                                ? 'neutral'
-                                : healthTone(h.state)
-                            }
-                          >
-                            <span>{healthLabel(h.state)}</span>
+                          <StatusBadge tone={healthTone(h.state)}>
+                            {healthLabel(h.state)}
                           </StatusBadge>
                         </button>
                       ))}

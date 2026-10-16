@@ -63,6 +63,7 @@ async function request<T>(options: RequestInit = {}): Promise<T> {
 export function ConfigurationPanel() {
   const client = useQueryClient()
   const [group, setGroup] = useState('GitHub')
+  const [advancedOpen, setAdvancedOpen] = useState(false)
   const [draft, setDraft] = useState<{
     revision: number
     values: Record<string, string>
@@ -235,7 +236,12 @@ export function ConfigurationPanel() {
               />
             </div>
           )}
-          <details open={group !== 'GitHub'}>
+          <details
+            open={group !== 'GitHub' || advancedOpen}
+            onToggle={(event) => {
+              if (group === 'GitHub') setAdvancedOpen(event.currentTarget.open)
+            }}
+          >
             {group === 'GitHub' && (
               <summary className='cursor-pointer px-4 py-3 text-sm font-medium'>
                 Connect an existing App or edit advanced settings

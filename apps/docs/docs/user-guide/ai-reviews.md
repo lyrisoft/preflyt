@@ -11,6 +11,13 @@ AI reviews are **optional and advisory**. An AI review can explain a failure or 
 
 You control three things: the **model** that is used, the **skills** (instructions) it follows, and whether your **code is sent** to it.
 
+<figure className="pf-guide-screenshot">
+  <a href="/img/guides/ai-reviews.jpg" target="_blank" rel="noreferrer">
+    <img src="/img/guides/ai-reviews.jpg" alt="AI Intelligence before deployment-level AI settings are enabled. Enable AI before adding models or routing reviews." width="1728" height="906" loading="lazy" />
+  </a>
+  <figcaption>AI Intelligence before deployment-level AI settings are enabled. Enable AI before adding models or routing reviews. Select the image to view it full size.</figcaption>
+</figure>
+
 ## Before you start
 
 - A deployment administrator must enable **AI model configuration** and **Advisory AI reviews** in **Settings → Configuration → Intelligence**, and set the `AI_PROVIDER_ENCRYPTION_KEY` key when installing. See [Configuration](../self-hosting/configuration.md#the-three-encryption-keys). Until then the AI Intelligence page says **AI is disabled for this deployment**.

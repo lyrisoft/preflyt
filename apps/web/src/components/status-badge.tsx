@@ -8,10 +8,12 @@ export type { StatusTone } from '@/lib/status-tones'
 export function StatusBadge({
   tone,
   className,
+  compact = false,
   children,
 }: {
   tone: StatusTone
   className?: string
+  compact?: boolean
   children: React.ReactNode
 }) {
   return (
@@ -27,7 +29,9 @@ export function StatusBadge({
           : tone
       }
       className={cn(
-        'min-h-6',
+        compact
+          ? 'min-h-5 rounded-md border-transparent px-1.5 py-0.5 text-[11px] font-medium'
+          : 'min-h-6',
         typeof children === 'string' &&
           children.trim().toLowerCase() === 'critical' &&
           'border-severity-critical/30 bg-severity-critical text-white',
@@ -39,7 +43,10 @@ export function StatusBadge({
     >
       <span
         aria-hidden='true'
-        className='size-1.5 shrink-0 rounded-full bg-current'
+        className={cn(
+          'shrink-0 rounded-full bg-current',
+          compact ? 'size-1' : 'size-1.5'
+        )}
       />
       {children}
     </Badge>

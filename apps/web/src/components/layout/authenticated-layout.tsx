@@ -6,6 +6,7 @@ import { SearchProvider } from '@/context/search-provider'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/layout/app-sidebar'
 import { SkipToMain } from '@/components/skip-to-main'
+import { OrganizationBoundary } from '@/features/workspace/organization-boundary'
 
 type AuthenticatedLayoutProps = {
   children?: React.ReactNode
@@ -33,7 +34,9 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
               'peer-data-[variant=inset]:has-data-[layout=fixed]:h-[calc(100svh-(var(--spacing)*4))]'
             )}
           >
-            {children ?? <Outlet />}
+            <OrganizationBoundary>
+              {children ?? <Outlet />}
+            </OrganizationBoundary>
           </SidebarInset>
         </SidebarProvider>
       </LayoutProvider>

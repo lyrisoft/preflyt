@@ -11,11 +11,18 @@ A **standard** is a versioned set of checks that your code should meet, for exam
 
 Open **Standards** in the sidebar.
 
+<figure className="pf-guide-screenshot">
+  <a href="/img/guides/standards.jpg" target="_blank" rel="noreferrer">
+    <img src="/img/guides/standards.jpg" alt="Built-in standards show their versions, supported checks and customization action." width="1728" height="906" loading="lazy" />
+  </a>
+  <figcaption>Built-in standards show their versions, supported checks and customization action. Select the image to view it full size.</figcaption>
+</figure>
+
 ## Built-in standards
 
 The five built-in standards are **Baseline Engineering**, **Application Security**, **Backend Services**, **Frontend Applications** and **Infrastructure as Code**. Each has a version, and a version never changes once published.
 
-Select **Built-in standards** to browse them. Open one to see its checks and which are required at each requirement level.
+Select **Built-in standards** to browse them. Open one to see its checks and which are required at each requirement level. Each check explains its purpose, accepted evidence and limits. Catalogue version **1.1.1** clarifies all 14 built-in checks, including that component test execution is not a coverage percentage. Previously saved versions remain unchanged until you explicitly select a newer version.
 
 ## Create your own
 
