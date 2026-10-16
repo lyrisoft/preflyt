@@ -24,7 +24,7 @@ const faqs = [
   {
     question: 'Can I install Community Edition today?',
     answer:
-      'Yes, with access to the release images. Follow the Community install guide to run Preflyt locally or on your infrastructure. Public source and image access is still in preparation; contact us if you need release access.',
+      'Yes. Public container images are available without registry sign-in. Follow the Community install guide to run Preflyt locally or on your infrastructure. Public source release is in preparation.',
   },
   {
     question: 'Is there a repository limit?',
@@ -116,10 +116,10 @@ export function PricingPage() {
           </article>
         </section>
         <p className='pricing-access-note container'>
-          Community Edition source and release images currently require access
-          while public release preparation is completed.{' '}
-          <a href='mailto:support@lyrisoft.tech?subject=Preflyt%20Community%20release%20access'>
-            Ask about release access
+          Community Edition container images are public. Public source release
+          is in preparation.{' '}
+          <a href={installGuide}>
+            View installation guide
             <ArrowUpRight className='icon small' aria-hidden='true' />
           </a>
         </p>

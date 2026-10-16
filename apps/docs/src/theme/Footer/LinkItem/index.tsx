@@ -1,7 +1,7 @@
 import OriginalLinkItem from '@theme-original/Footer/LinkItem'
 import type {Props} from '@theme/Footer/LinkItem'
 import {useActiveDocContext} from '@docusaurus/plugin-content-docs/client'
-import release from '../../../../release-config.json'
+import release from '../../../../../../release.json'
 
 /** Keep documentation footer navigation in the version the reader selected. */
 export default function FooterLinkItem({item}: Props) {

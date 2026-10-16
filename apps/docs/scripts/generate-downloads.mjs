@@ -19,7 +19,7 @@ import { Scalar, isMap, isScalar, isSeq, parseDocument } from 'yaml'
 
 const docs = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const repo = resolve(docs, '../..')
-const release = JSON.parse(readFileSync(resolve(docs, 'release-config.json'), 'utf8'))
+const release = JSON.parse(readFileSync(resolve(repo, 'release.json'), 'utf8'))
 const version = process.argv.find(arg => arg.startsWith('--version='))?.split('=')[1] ?? 'next'
 if (version !== 'next' && !/^\d+\.\d+\.\d+$/.test(version)) throw new Error('Invalid documentation version')
 const sourceRef = process.argv.find(arg => arg.startsWith('--source-ref='))?.split('=')[1]

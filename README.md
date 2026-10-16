@@ -109,40 +109,6 @@ Preflyt is a TypeScript monorepo managed with pnpm and Turborepo.
 
 PostgreSQL stores application data. Valkey/Redis supports background queues and caching. The API and worker share the application codebase; execution controllers are separate, optional deployment components.
 
-## Local development
-
-Use **Node.js 24.4.1** and **pnpm 10.26.2**. Install locked dependencies from the repository root:
-
-```sh
-pnpm install --frozen-lockfile --ignore-scripts
-```
-
-Configure the API using [`apps/api/.env.example`](apps/api/.env.example), provide PostgreSQL and the required queue/configuration settings, and apply migrations before starting services. Follow the [configuration guide](https://docs.preflytlabs.com/self-hosting/configuration) for encryption keys and authentication setup. Never commit populated environment files or credentials.
-
-After configuration, prepare the database and generated client:
-
-```sh
-pnpm --filter @preflyt/api prisma:migrate
-pnpm db:generate
-```
-
-Run the components in separate terminals:
-
-```sh
-pnpm dev:api
-pnpm dev:worker
-pnpm dev
-```
-
-To work on documentation:
-
-```sh
-pnpm dev:docs
-pnpm build:docs
-```
-
-For browser tests, install the test browser with `pnpm test:browser:install`. Workspace verification commands include `pnpm typecheck`, `pnpm lint`, `pnpm test` and `pnpm build`; API integration tests require their documented test infrastructure. See [`docs/operations`](docs/operations) for operational details and [`AGENTS.md`](AGENTS.md) for repository implementation conventions.
-
 ## Project status
 
 Preflyt is under active development. The GitHub workflow integration, standards, assessments, access control and guided App onboarding have focused test coverage and recorded live acceptance runs. That does not establish production qualification for every deployment or optional execution path.
