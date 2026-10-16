@@ -14,11 +14,13 @@ export function FindingSourceViewer({
   source,
   aiState,
   onRetryAi,
+  showGuidance = true,
 }: {
   finding: Finding
   source: UseQueryResult<FindingSource, Error>
   aiState?: string
   onRetryAi?: () => void
+  showGuidance?: boolean
 }) {
   const data = source.isError ? undefined : source.data
   const valid =
@@ -61,7 +63,7 @@ export function FindingSourceViewer({
                 : 'Related locations'}
             </h3>
             <p className='text-xs text-muted-foreground'>
-              Reported locations at this commit · up to 3 retained links.
+              Reported locations at this commit.
             </p>
             <ul className='space-y-1 text-sm'>
               {finding.relatedLocations.map((location) => (
@@ -195,7 +197,7 @@ export function FindingSourceViewer({
           </Button>
         </div>
       )}
-      <FindingGuidance finding={finding} />
+      {showGuidance && <FindingGuidance finding={finding} />}
     </Card>
   )
 }

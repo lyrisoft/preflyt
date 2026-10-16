@@ -13,6 +13,7 @@ import { StatusBadge } from '@/components/status-badge'
 import type { HealthData } from '@/features/health/health-api'
 import { HotspotReview } from '@/features/health/hotspot-review'
 import { useNavigationSession } from '@/features/workspace/navigation-session'
+import { DuplicateCodeComparison } from './duplicate-code-comparison'
 import { useFindingAiGuidance } from './finding-ai-api'
 import { findingRequest, useFindingSource } from './finding-api'
 import {
@@ -153,7 +154,11 @@ export function FindingDetailsPage({
           </Button>
         </div>
         <PageHeader
-          title={finding?.title ?? 'Finding details'}
+          title={
+            finding?.category === 'duplication'
+              ? 'Duplicate code block'
+              : (finding?.title ?? 'Finding details')
+          }
           section='Workspace'
           description={
             finding
@@ -240,24 +245,48 @@ export function FindingDetailsPage({
           finding && (
             <div className='grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_320px]'>
               <div className='min-w-0 space-y-5'>
-                <FindingSourceViewer
-                  key={sourcePath}
-                  finding={displayedFinding!}
-                  source={source}
-                  aiState={
-                    ai.generationFailed
-                      ? 'FAILED'
-                      : ai.data?.available
-                        ? ai.data.state
+                {finding.category === 'duplication' &&
+                finding.path &&
+                finding.line ? (
+                  <DuplicateCodeComparison
+                    key={sourcePath}
+                    finding={displayedFinding!}
+                    source={source}
+                    sourcePath={sourcePath}
+                    aiState={
+                      ai.generationFailed
+                        ? 'FAILED'
+                        : ai.data?.available
+                          ? ai.data.state
+                          : undefined
+                    }
+                    onRetryAi={
+                      ai.data?.canGenerate &&
+                      (ai.data.state === 'FAILED' || ai.generationFailed)
+                        ? ai.retryGeneration
                         : undefined
-                  }
-                  onRetryAi={
-                    ai.data?.canGenerate &&
-                    (ai.data.state === 'FAILED' || ai.generationFailed)
-                      ? ai.retryGeneration
-                      : undefined
-                  }
-                />
+                    }
+                  />
+                ) : (
+                  <FindingSourceViewer
+                    key={sourcePath}
+                    finding={displayedFinding!}
+                    source={source}
+                    aiState={
+                      ai.generationFailed
+                        ? 'FAILED'
+                        : ai.data?.available
+                          ? ai.data.state
+                          : undefined
+                    }
+                    onRetryAi={
+                      ai.data?.canGenerate &&
+                      (ai.data.state === 'FAILED' || ai.generationFailed)
+                        ? ai.retryGeneration
+                        : undefined
+                    }
+                  />
+                )}
                 <Card>
                   <CardHeader>
                     <CardTitle>Finding evidence</CardTitle>

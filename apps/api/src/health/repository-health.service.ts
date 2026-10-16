@@ -1,3 +1,4 @@
+import { reportedLocation } from '../findings/reported-location.js'
 import { readPageSize } from '../pagination.js'
 import { HealthGitSourceError } from './health-git-source.js'
 import { verifiedHealthCiCoverage } from './health-ci-coverage.js'
@@ -254,12 +255,13 @@ export class RepositoryHealthService {
    return {state:saved.state,note:saved.note,revision:saved.revision,updatedAt:saved.updatedAt,updatedById:saved.updatedById,canReview:true}
   })
  }
- async source(session: AuthenticatedSession, githubId: string, id: string, fingerprint: string) {
+ async source(session: AuthenticatedSession, githubId: string, id: string, fingerprint: string, location?: string) {
   const repo = await this.access.requireRepository(session, githubId, 'assessment.read')
   if (!/^[a-f0-9-]{36}$/.test(id) || !/^[a-f0-9]{64}$/.test(fingerprint)) throw new BadRequestException('Choose a valid finding')
   const row = await this.db.repositoryHealthAssessment.findFirst({ where: { id, repositoryId: repo.id, organizationId: session.organizationId! } })
-  const finding = (row?.report as HealthReport | null)?.findings.find(f => f.fingerprint === fingerprint)
-  if (!row?.sourceSha || !finding) throw new NotFoundException('Finding is unavailable')
+  const savedFinding = (row?.report as HealthReport | null)?.findings.find(f => f.fingerprint === fingerprint)
+  if (!row?.sourceSha || !savedFinding) throw new NotFoundException('Finding is unavailable')
+  const finding = reportedLocation(savedFinding, location)
   const base = { path: finding.path, line: finding.line, endLine: finding.endLine ?? finding.line, sourceSha: row.sourceSha, lines: [] as Array<{ number: number; text: string }>, reason: null as string | null }
   if (!finding.path || !finding.line) return { ...base, reason: 'The analyzer did not provide an exact source location' }
   const excerpt = await this.sources.read(repo.id, row.sourceSha, finding, 5)

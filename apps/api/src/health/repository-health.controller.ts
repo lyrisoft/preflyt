@@ -36,5 +36,5 @@ export class RepositoryHealthController {
  @Post('repositories/:repositoryId/health/:id/hotspots/:fingerprint/review') @Header('Cache-Control','no-store')
  saveHotspotReview(@Req() req:SessionRequest,@Param('repositoryId') repo:string,@Param('id') id:string,@Param('fingerprint') fingerprint:string,@Body(new ValidationPipe({whitelist:true,forbidNonWhitelisted:true,transform:true,expectedType:HotspotReviewRequest})) input:HotspotReviewRequest) {this.auth.assertOrigin(req.headers.origin);return this.health.saveHotspotReview(req.preflytSession!,repo,id,fingerprint,input)}
  @Get('repositories/:repositoryId/health/:id/findings/:fingerprint/source') @Header('Cache-Control','no-store')
- source(@Req() req: SessionRequest, @Param('repositoryId') repo: string, @Param('id') id: string, @Param('fingerprint') fingerprint: string) { return this.health.source(req.preflytSession!,repo,id,fingerprint) }
+ source(@Req() req: SessionRequest, @Param('repositoryId') repo: string, @Param('id') id: string, @Param('fingerprint') fingerprint: string, @Query('location') location?: string) { return this.health.source(req.preflytSession!,repo,id,fingerprint,location) }
 }

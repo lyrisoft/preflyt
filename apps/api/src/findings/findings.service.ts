@@ -1,3 +1,4 @@
+import { reportedLocation } from './reported-location.js';
 import { readPageSize } from '../pagination.js';
 import { findingReferenceGuidance } from '../health/finding-guidance.js';
 import {
@@ -407,8 +408,10 @@ export class FindingsService {
     await this.access.requireRepository(session, finding.repositoryId, "assessment.read");
     return { finding, canManage: !!rolePermissions[session.role]?.includes("findings.manage") };
   }
-  async source(session: AuthenticatedSession, id: string, assessment?: string, origin?: string) {
-    const finding = await this.finding(session, id, assessment, origin);
+  async source(session: AuthenticatedSession, id: string, assessment?: string, origin?: string, location?: string) {
+    const savedFinding = await this.finding(session, id, assessment, origin);
+    if (savedFinding.origin === 'ai' && location !== undefined && location !== '0') throw new BadRequestException('Choose the reviewed source location');
+    const finding = reportedLocation(savedFinding, location);
     const repo = await this.access.requireRepository(session, finding.repositoryId, "assessment.read");
     const base = { path: finding.path, line: finding.line, endLine: finding.endLine ?? finding.line, sourceSha: finding.sourceSha, lines: [] as Array<{ number: number; text: string }>, reason: null as string | null, truncated: false };
     if (!finding.path) return { ...base, reason: finding.category === 'check' || finding.category === 'evidence' ? 'This is a check result, not a finding at a code location. Review its assessment evidence below.' : 'The report did not supply a file location.' };
