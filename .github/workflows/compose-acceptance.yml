@@ -1,5 +1,12 @@
 name: Verify container deployment
 on:
+  workflow_dispatch:
+    inputs:
+      published_images:
+        description: Pull and verify published commit images instead of building locally
+        required: false
+        type: boolean
+        default: false
   workflow_call:
     inputs:
       published_images:

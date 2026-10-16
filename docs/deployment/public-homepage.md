@@ -1,5 +1,51 @@
 # Public homepage delivery
 
+## Cloud differentiation refinement — 16 October 2026
+
+The Community Edition plan now uses the requested **Open source** label. Cloud remains coming soon, with planned one-click Slack/Teams/email notifications, Jira/Linear issue sync, agentic investigation and draft fix PRs, assignment/reminders/escalation, cross-repository campaigns, portfolio evidence reports and managed operations. An expanded workflow section and FAQs explain the distinction without removing existing Community features or advertising planned integrations as available.
+
+Production build, focused lint and 13 Chromium pricing/hydration checks passed. Responsive checks cover 320px, 768px and 1440px, with manual desktop and phone review of the added workflow section. The local web image is rebuilt as `cloud-pricing-20261016-arm64` and uses the existing Compose alias.
+
+## Community and Cloud pricing — 16 October 2026
+
+The public `/pricing` page presents Community Edition as free under Apache-2.0 and Cloud as a planned paid managed service. Community Edition links to the installation guide and retains the current source/image access notice. Cloud's planned scope includes agentic AI assistance with human approval, AI usage/spending controls, managed hosting and scanner capacity, upgrades, monitoring, backups and support. Cloud links to a real support enquiry; pricing, launch timing, limits and service terms are not invented. The page explains infrastructure, CI and optional AI costs, includes accessible FAQ disclosures, and is linked from desktop/mobile navigation and the footer.
+
+Pricing is included in generated HTML, metadata, canonical routing and the public sitemap allowlist. Production build, focused lint, 54 Chromium checks and 14 public-build checks passed. Responsive coverage includes 320px, 768px and 1440px; generated HTML hydration covers all seven public pages. The local Compose web image uses the `pricing-20261016-arm64` build, aliased to the existing local image name. The recreated web service is healthy on port 8081; six HTTP smoke checks verified pricing content, canonical redirects, the unknown-path 404 and the private Overview shell.
+
+## Product and self-hosting hero diagrams — 16 October 2026
+
+The Product hero now branches from repository/branch/commit context into two distinct paths: Repository Health produces a Health report, while standards and verified CI evidence produce the merge review result. The caption retains GitHub's enforcement role. The Self-hosting hero shows external GitHub/CI connections, HTTPS, the customer's infrastructure boundary, reverse proxy, Web/API/Worker services, bundled Health scanner, PostgreSQL and Valkey. Optional AI remains an external provider choice. These diagrams describe relationships, not live status or invented assessment results.
+
+Both visuals use responsive HTML with decorative SVG icons and connectors, keeping labels readable at 320px. The existing left-hand copy and actions remain intact. Production build, focused lint, 16 responsive/theme browser checks and 14 public-build checks passed. The local Compose web image is tagged `hero-systems-20261016-arm64` and aliased to the existing local image name.
+
+## Public layout and footer refinement — 16 October 2026
+
+Website pages now share balanced section spacing, smaller capability headings, modest button corners, active navigation and one closing installation call to action. The full-width footer groups Product, Resources and Community links, with license and contact information below. The mobile menu has an explicit close icon and returns keyboard focus after Escape.
+
+The docs landing page puts setup actions before release metadata and removes the repeated logo panel. Its navigation is simpler, and its footer groups Start, Operate, Understand and Community resources. Both themes and 320px layouts were reviewed; long footer links wrap without horizontal overflow.
+
+Validation: web and docs production builds, docs typecheck, focused web lint, 24 Chromium checks and 14 public-build checks passed. The local Compose web image was rebuilt as `enterprise-layout-20261016-arm64` and retagged to its existing local image name. The web service is healthy on port 8081. Docs remain on the development server at port 3333. No commit, push or publication was performed.
+
+## Hero spacing refinement — 16 October 2026
+
+The homepage actions now follow the subtitle with a 36px gap. Release badges and the access notice form a separate group below the actions, separated by 40px and a subtle divider with 24px inset spacing. Badges wrap with a 12px gap; mobile preserves the same reading order. No links or release claims changed. Production build and 21 responsive/public hydration browser checks passed; manual review covered desktop and 320px mobile. The local Compose web image was rebuilt for this refinement.
+
+## Public typography update — 16 October 2026
+
+Website and docs typography now uses 16px body copy, 18px lead text, 14px navigation/actions and 12px short metadata at default browser sizing. Website section titles scale from 28–36px and display titles from 36–64px; docs use 32/28/20px headings. Existing Geist, Inter and JetBrains Mono families are retained. Rem units, readable line lengths and growing controls support text resizing. Workspace and embedded preview typography remain unchanged.
+
+Validation: both production builds, 25 focused Chromium checks and 14 public-build checks passed. Responsive browser tests cover 320/768/1440px homepage and phone capability pages. Manual review covered the homepage, docs landing and user guide in light/dark themes. The local Compose web service uses the new arm64 image tagged `typography-20261016-arm64` (also retagged to the existing local Compose image name). Docs changes are available through the existing development server on port 3333; docs are not bundled in the application web image.
+
+## Community positioning update — 16 October 2026
+
+The homepage and docs landing now lead with “Know what passed. See what needs attention.” They display a linked Apache-2.0 badge alongside the Preflyt and Action releases. The website prioritizes Community installation guidance and GitHub, explains the included scanner and one-time repository selection, and marks managed Cloud as planned. Public source/image access caveats remain until release clearance. The README, product positioning and Community readiness plan record the same scope and launch sequence.
+
+Validation: web and docs production builds, docs typecheck, focused web lint, 14 public-build checks and 25 Chromium checks passed. Browser coverage includes 320/768/1440px homepage layouts, capability pages on phones, dark theme, public HTML hydration and the health timeline. Manual local review confirmed both landing-page badges render. The docs build reported a non-blocking update-check permission warning.
+
+The public prerender guard now checks for a heading and main content instead of the old “Get started” wording. The existing duplicate-ID assertion also exposed report IDs being forwarded to repeated chart SVG marks; chart data now keeps a separate reportId, while report selection still uses the original ID. No graph spacing or evidence semantics changed.
+
+The local Compose web image was rebuilt and recreated on port 8081. Its health check passed. No Git commits, pushes, publication or visibility settings were changed in this update.
+
 The existing web app serves the public homepage at `/`; workspace Overview is `/overview`.
 
 The public marketing pages always render in dark mode, including their generated HTML and embedded previews. The footer appearance control has been removed. Workspace theme preferences remain independent and are not overwritten when visiting the public site.
@@ -14,7 +60,7 @@ Preview sidebar correction (15 October 2026): sidebar color aliases now resolve 
 - `dist/app.html`: empty private SPA shell with `noindex, nofollow`.
 - `dist/404.html`: rendered public not-found page with `noindex, nofollow`.
 - `dist/robots.txt`: indexing disabled by default; an indexable build permits the public allowlist, its canonical redirects and public static assets.
-- `dist/sitemap.xml`: six public canonical URLs, emitted only when indexing is enabled.
+- `dist/sitemap.xml`: seven public canonical URLs, emitted only when indexing is enabled.
 - `dist/images/social/preflyt.png`: branded 1200×630 sharing image.
 
 The existing web Dockerfile runs this build. Nginx serves explicit public routes from their generated HTML and known application routes from `app.html`. Unknown paths return the rendered 404 with HTTP 404; trailing-slash and `index.html` public aliases redirect to the canonical path. The build checks the Nginx private-route allowlist against `routeTree.gen.ts`, so a new application route requires updating both. API proxying and asset serving retain their existing behavior. Only allowlisted public routes are prerendered; product previews contain synthetic Northstar data without fetching private repository APIs. The browser may check `/auth/session` to show Open workspace; content does not depend on that response.
@@ -81,4 +127,52 @@ pnpm --filter @preflyt/web test src/features/auth/sign-in-flow.test.tsx src/feat
 pnpm --filter @preflyt/web test:homepage
 ```
 
-`test:homepage` builds first and then checks real generated HTML for all six public pages and the rendered 404. Test fixtures use disposable local databases; generated public output contains only approved synthetic Northstar data.
+`test:homepage` builds first and then checks real generated HTML for all seven public pages and the rendered 404. Test fixtures use disposable local databases; generated public output contains only approved synthetic Northstar data.
+
+## Standalone public website mode
+
+Set **`VITE_WEBSITE_MODE=true` at build time** to publish only the public website.
+This is a Vite build setting, not a container runtime switch. The default is
+`false`, preserving the full Community application and its sign-in/workspace.
+Do not enable website mode for a normal Community Compose application deployment.
+
+Website mode uses a public-only browser/server router. It omits sign-in links
+from desktop/mobile/footer DOM, skips session/API requests, does not emit the
+private `app.html` shell or authentication route code, and returns 404 for
+application/authentication paths. Nginx serves the static website without an API
+upstream. It requires no API, database, queue, authentication provider or app keys.
+
+For local website development, put `VITE_WEBSITE_MODE=true` in
+`apps/web/.env.local` (ignored by Git), then start the existing web dev command.
+Use `VITE_WEBSITE_MODE=false` to explicitly run the full application instead.
+
+Build the standalone image:
+
+```sh
+docker build -f deploy/web.Dockerfile \
+  --build-arg VITE_WEBSITE_MODE=true \
+  --build-arg PUBLIC_SITE_URL=https://preflytlabs.com \
+  --build-arg PUBLIC_SITE_INDEXABLE=true \
+  -t preflyt-local/preflyt-web:website .
+```
+
+Run it independently, with a free local port:
+
+```sh
+docker run -d --name preflyt-website-local \
+  -p 127.0.0.1:8082:8080 \
+  --read-only --tmpfs /tmp --cap-drop ALL \
+  --security-opt no-new-privileges \
+  preflyt-local/preflyt-web:website
+```
+
+Visit `http://localhost:8082`. `/pricing` and the other public pages work; paths
+such as `/sign-in`, `/overview`, `/setup`, `/app.html` and `/api/auth/session`
+return 404. Passing `-e VITE_WEBSITE_MODE=true` to an already built full-app image
+will not convert it. Rebuild with the build argument to select both the website
+bundle and standalone Nginx configuration. For previews, keep public indexing
+disabled; enable it only for the intended production origin.
+
+The pricing page intentionally advertises only a simple Cloud coming-soon card.
+Detailed Cloud features/workflows and Cloud FAQs are excluded from the page source
+and generated HTML. Private commercial planning is not a public website feature.

@@ -1,21 +1,5 @@
 name: Publish native tools
 on:
-  push:
-    branches: [development, main]
-    paths:
-      - 'docs/deployment/native-runner/**'
-      - 'apps/api/scripts/native-check-fixtures.mts'
-      - 'apps/api/scripts/health-file-analysis-fixtures.mjs'
-      - 'apps/api/src/health/health-file-analysis.ts'
-      - 'apps/api/src/execution/**'
-      - 'apps/api/src/assessments/assessment-digest.ts'
-      - 'apps/api/package.json'
-      - 'apps/api/prisma/**'
-      - 'apps/api/prisma.config.ts'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
-      - 'pnpm-workspace.yaml'
-      - '.github/workflows/publish-native.yml'
   workflow_dispatch:
 permissions:
   contents: read
@@ -90,7 +74,7 @@ jobs:
           target: ${{ matrix.target }}
           no-cache-filters: ${{ matrix.tool == 'trivy-offline' && 'database' || '' }}
           cache-from: type=gha,scope=native-${{ matrix.tool }}
-          cache-to: type=gha,mode=max,scope=native-${{ matrix.tool }}
+          cache-to: type=gha,mode=${{ matrix.tool == 'semgrep' && 'min' || 'max' }},scope=native-${{ matrix.tool }}
           platforms: linux/amd64
           load: true
           tags: |

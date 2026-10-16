@@ -19,17 +19,16 @@ def commit(message='Subject\n\nSigned-off-by: Contributor <contributor@example.c
 
 class DcoWorkflowTests(unittest.TestCase):
     def run_job(self, commits, count=None, head=None):
-        env = {'GH_TOKEN': 'fixture-only', 'PR_NUMBER': '1', 'PR_COMMIT_COUNT': str(len(commits) if count is None else count),
-               'PR_HEAD_SHA': head or commits[-1]['sha'], 'GITHUB_REPOSITORY': 'fixture/repo', 'GITHUB_API_URL': 'https://api.github.com'}
+        env = {'GH_TOKEN': 'fixture-only', 'PR_NUMBER': '1', 'GITHUB_REPOSITORY': 'fixture/repo', 'GITHUB_API_URL': 'https://api.github.com'}
         pages = [commits[i:i + 100] for i in range(0, len(commits), 100)]
-        responses = [io.BytesIO(json.dumps(page).encode()) for page in pages]
+        responses = [io.BytesIO(json.dumps({'commits': len(commits) if count is None else count, 'head': {'sha': head or commits[-1]['sha']}}).encode())] + [io.BytesIO(json.dumps(page).encode()) for page in pages]
         with patch.dict(os.environ, env, clear=True), patch('urllib.request.urlopen', side_effect=responses) as api, contextlib.redirect_stdout(io.StringIO()):
             exec(compile(CODE, 'dco-workflow', 'exec'), {})
         return api
 
     def test_matching_author_trailer_passes_without_checkout(self):
         api = self.run_job([commit()])
-        self.assertEqual(api.call_count, 1)
+        self.assertEqual(api.call_count, 2)
         self.assertNotIn('actions/checkout', WORKFLOW)
         self.assertNotIn('pull_request_target', WORKFLOW)
 
@@ -47,7 +46,7 @@ class DcoWorkflowTests(unittest.TestCase):
 
     def test_all_pages_and_all_authors_are_checked(self):
         commits = [commit(sha=f'{i:040x}') for i in range(101)]
-        self.assertEqual(self.run_job(commits).call_count, 2)
+        self.assertEqual(self.run_job(commits).call_count, 3)
         commits[0] = commit('Unsigned', sha='0' * 40)
         with self.assertRaises(SystemExit): self.run_job(commits)
 
@@ -55,7 +54,7 @@ class DcoWorkflowTests(unittest.TestCase):
         with self.assertRaises(SystemExit): self.run_job([commit()], head='b' * 40)
         with self.assertRaises(SystemExit): self.run_job([commit()], count=2)
 
-    def test_unverifiable_large_pr_fails_before_api(self):
+    def test_unverifiable_large_pr_fails_before_commit_pagination(self):
         with self.assertRaises(SystemExit): self.run_job([commit()], count=251)
 
 

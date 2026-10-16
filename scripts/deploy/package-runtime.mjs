@@ -4,6 +4,7 @@ import { builtinModules, createRequire } from 'node:module'
 import { cp, mkdir, readFile, realpath, symlink, writeFile } from 'node:fs/promises'
 import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { writeLicenseBundle } from './license-bundle.mjs'
 
 async function installedPackage(from, name) {
   for (let directory = from; ; directory = dirname(directory)) {
@@ -49,6 +50,7 @@ export async function exportDependencies(source, output, roots) {
   }
   for (const [name, child] of rootLinks) await link(join(output, 'node_modules'), name, child)
   await writeFile(join(output, 'runtime-dependencies.json'), JSON.stringify([...packages.values()].map(({ pkg }) => ({ name: pkg.name, version: pkg.version })), null, 2) + '\n')
+  await writeLicenseBundle([...packages.keys()], join(output, 'licenses'), 'Installed Node.js runtime dependencies')
 }
 
 export async function entryDependencies(source, entries) {

@@ -1,0 +1,183 @@
+.marketing-site .pricing-intro {
+  padding-block: var(--website-section-space) 48px;
+  text-align: center;
+}
+.marketing-site .pricing-intro h1 {
+  font-size: var(--website-heading-display);
+  line-height: 1.12;
+  margin-bottom: 24px;
+}
+.marketing-site .pricing-intro > p:last-child {
+  max-width: 36rem;
+  margin: 0 auto;
+  color: var(--website-muted);
+  font-size: var(--website-text-lead);
+}
+.marketing-site .pricing-plans {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  max-width: 1056px;
+  gap: 24px;
+}
+.marketing-site .pricing-plan {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: clamp(24px, 3vw, 40px);
+  border: 1px solid var(--website-line);
+  border-radius: 12px;
+  background: var(--website-panel);
+}
+.marketing-site .pricing-community {
+  border-color: color-mix(
+    in oklch,
+    var(--website-accent) 50%,
+    var(--website-line)
+  );
+}
+.marketing-site .pricing-cloud {
+  background: var(--website-bg);
+}
+.marketing-site .pricing-plan-heading {
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  align-items: center;
+  gap: 12px;
+}
+.marketing-site .pricing-plan-heading > [data-slot='badge'] {
+  grid-column: 2;
+  justify-self: start;
+}
+.marketing-site .pricing-plan-heading > svg {
+  color: var(--website-accent);
+}
+.marketing-site .pricing-plan-heading h2 {
+  margin: 0 auto 0 0;
+  font-size: 1.5rem;
+}
+.marketing-site .pricing-plan-description {
+  margin: 20px 0 32px;
+  color: var(--website-muted);
+  min-height: 3.2em;
+}
+.marketing-site .pricing-price {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 28px;
+}
+.marketing-site .pricing-price strong {
+  font-size: clamp(1.75rem, 2.6vw, 2.5rem);
+  font-weight: 500;
+  letter-spacing: -0.04em;
+  line-height: 1.2;
+}
+.marketing-site .pricing-price span,
+.marketing-site .pricing-plan-caption,
+.marketing-site .pricing-plan-footnote {
+  color: var(--website-muted);
+  font-size: var(--website-text-label);
+}
+.marketing-site .pricing-plan-action {
+  width: 100%;
+  min-height: 44px;
+}
+.marketing-site .pricing-secondary {
+  border: 1px solid var(--website-line);
+  background: var(--website-panel);
+  color: var(--website-ink);
+}
+.marketing-site .pricing-secondary:hover {
+  border-color: var(--website-muted);
+}
+.marketing-site .pricing-plan-caption {
+  margin: 12px 0 32px;
+  text-align: center;
+}
+.marketing-site .pricing-features {
+  border-top: 1px solid var(--website-line);
+  padding-top: 28px;
+  flex: 1;
+}
+.marketing-site .pricing-features h3 {
+  margin-bottom: 24px;
+  font-size: var(--website-text-body);
+  font-weight: 500;
+}
+.marketing-site .pricing-features ul {
+  display: grid;
+  gap: 16px;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  font-size: var(--website-text-label);
+}
+.marketing-site .pricing-features li {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.marketing-site .pricing-features li > svg {
+  width: 16px;
+  height: 20px;
+  flex-shrink: 0;
+  color: var(--website-accent);
+}
+.marketing-site .pricing-plan-footnote {
+  margin: 32px 0 0;
+}
+.marketing-site .pricing-access-note {
+  max-width: 1056px;
+  margin-block: 24px 0;
+  color: var(--website-muted);
+  font-size: var(--website-text-label);
+}
+.marketing-site .pricing-access-note a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--website-accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.marketing-site .pricing-costs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: clamp(32px, 6vw, 96px);
+  padding-block: var(--website-section-space);
+  margin-top: 32px;
+}
+.marketing-site .pricing-costs h2 {
+  font-size: var(--website-heading-section);
+  margin-bottom: 28px;
+}
+.marketing-site .pricing-costs dl {
+  margin: 0;
+}
+.marketing-site .pricing-costs dl > div {
+  padding-block: 24px;
+  border-top: 1px solid var(--website-line);
+}
+.marketing-site .pricing-costs dt {
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+.marketing-site .pricing-costs dd {
+  margin: 0;
+  color: var(--website-muted);
+}
+@media (max-width: 760px) {
+  .marketing-site .pricing-plans,
+  .marketing-site .pricing-costs {
+    grid-template-columns: 1fr;
+  }
+  .marketing-site .pricing-intro {
+    text-align: left;
+  }
+  .marketing-site .pricing-intro > p:last-child {
+    margin-inline: 0;
+  }
+  .marketing-site .pricing-plan-heading h2 {
+    font-size: 1.25rem;
+  }
+}

@@ -17,7 +17,7 @@ The bundle (the `kubernetes` folder) uses the **same** web, API, worker and migr
 
 - A cluster and an explicitly selected `kubectl` context. Never rely on your current context.
 - An Ingress and TLS controller for the `web` Service on port 8080. The API and databases stay internal.
-- Registry access to the private images, and a release to run.
+- Network access to GHCR and a published Preflyt release to run. Public release images do not require an image-pull secret.
 - Storage with backups, and capacity planning. Database and queue storage use retained PVCs on the default storage class.
 
 The namespace enforces restricted Pod Security. No host ports, host paths, cluster roles or application service-account tokens are installed.
@@ -38,14 +38,10 @@ The folder contains `kustomization.yaml`, `resources.yaml` and `migration.yaml`.
 
 ## Configure
 
-1. **Create the namespace** `preflyt`, and a pull secret so the cluster can read the private images. Use a token with `read:packages` from an account that can read the Preflyt packages:
+1. **Create the namespace** `preflyt`. The release images are public, so no GHCR credentials or image-pull secret are needed:
 
    ```bash
    kubectl --context YOUR_CONTEXT create namespace preflyt
-   kubectl --context YOUR_CONTEXT -n preflyt create secret docker-registry ghcr-pull \
-     --docker-server=ghcr.io --docker-username=YOUR_GITHUB_USERNAME --docker-password=YOUR_TOKEN
-   kubectl --context YOUR_CONTEXT -n preflyt patch serviceaccount default \
-     -p '{"imagePullSecrets":[{"name":"ghcr-pull"}]}'
    ```
 
 2. **Set the release.** The images are tagged `:development` as a placeholder. Replace the tag with an existing stable version (`vX.Y.Z`) or development SHA tag:

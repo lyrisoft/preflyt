@@ -13,6 +13,22 @@ it('enforces shared semantic colors even when a caller supplies the wrong tone',
     .not.toHaveClass('text-info-text')
 })
 
+it('distinguishes available plans from future offerings', async () => {
+  const view = await render(
+    <>
+      <StatusBadge tone='info'>Available now</StatusBadge>
+      <StatusBadge tone='success'>Coming soon</StatusBadge>
+    </>
+  )
+  await expect
+    .element(view.getByText('Available now'))
+    .toHaveClass('text-success-text')
+  await expect
+    .element(view.getByText('Coming soon'))
+    .not.toHaveClass('text-success-text')
+  expect(statusTones['coming soon']).toBe('neutral')
+})
+
 it('keeps success, failure, pending and inactive states consistent', () => {
   expect(statusTones.synced).toBe('success')
   expect(statusTones['inspection complete']).toBe('success')

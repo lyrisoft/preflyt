@@ -77,6 +77,8 @@ export const statusTones: Readonly<Record<string, StatusTone>> = {
   inactive: 'neutral',
   disabled: 'neutral',
   planned: 'neutral',
+  'available now': 'success',
+  'coming soon': 'neutral',
   'local team': 'neutral',
   'organization baseline': 'neutral',
   'built-in': 'neutral',

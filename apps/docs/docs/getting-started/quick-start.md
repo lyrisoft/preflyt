@@ -24,19 +24,11 @@ You need:
 - **Docker with Compose 2.23.1 or later.** Check with `docker compose version`.
 - **`curl` and `openssl`**, which macOS and Linux include.
 - **At least 4 CPUs, 8 GiB of Docker memory and 20 GiB of free disk** for the application and scanner images. The bundled scanner engine uses Docker-in-Docker; the host must permit its privileged engine container. No host Docker socket is mounted.
-- **Access to the Preflyt images.** They are stored privately at `ghcr.io/lyrisoft`. You need a GitHub account that has been given read access to those packages, and a personal access token (classic) with the `read:packages` permission. If you do not have access, ask Lyrisoft.
-- **The release to run.** Use a published stable version such as `vX.Y.Z`, or a development build identified by `sha-` followed by the 40-character commit ID. Choose an existing tag from the release you were given.
+- **The release to run.** Use a published stable version such as `vX.Y.Z`, or a development build identified by `sha-` followed by the 40-character commit ID. Choose an existing tag from [Preflyt releases](https://github.com/lyrisoft/preflyt/releases/latest).
 
-## 1. Sign in to the image registry
+Preflyt's release images are public on `ghcr.io/lyrisoft`. You do not need a GitHub account, registry token or `docker login` to pull them. Choose a stable version from [Preflyt releases](https://github.com/lyrisoft/preflyt/releases/latest); use the same version for every application image.
 
-```bash
-docker login ghcr.io -u YOUR_GITHUB_USERNAME
-# Paste your read:packages token at the Password prompt.
-```
-
-You should see `Login Succeeded`.
-
-## 2. Add the compose file
+## 1. Add the compose file
 
 Create a folder for Preflyt and open it:
 
@@ -63,7 +55,7 @@ Create a file named `compose.yaml` in that folder and paste the whole block belo
 
 This is the only file Preflyt needs besides your settings. Do not edit it: put your changes in `.env`.
 
-## 3. Create your settings
+## 2. Create your settings
 
 <Tabs groupId="env-source">
 <TabItem value="copy" label="Copy and paste" default>
@@ -115,7 +107,7 @@ Read your sign-in password with `grep SUPER_ADMIN_PASSWORD .env`.
 </TabItem>
 </Tabs>
 
-Set `PREFLYT_VERSION` to the release you were given.
+Set `PREFLYT_VERSION` to your selected published stable release.
 
 :::warning Keep this file safe
 Generate all three encryption keys before the first startup, even if you will configure AI later. `AI_PROVIDER_ENCRYPTION_KEY` protects saved AI provider credentials. Keep each key stable and back up all three apart from the database. Losing or replacing a key makes the credentials encrypted with it unreadable.
@@ -125,7 +117,7 @@ Generate all three encryption keys before the first startup, even if you will co
 `PREFLYT_NODE_ENV=development` and `PREFLYT_COOKIE_SECURE=false` let Preflyt run over plain `http://localhost`. Never use them on a deployment other people can reach.
 :::
 
-## 4. Start Preflyt
+## 3. Start Preflyt
 
 ```bash
 docker compose up -d --wait
@@ -141,7 +133,7 @@ docker compose ps
 
 The Health scanner is included. After you connect GitHub and select a repository, Health can run its applicable static analyzers automatically. Repository tests and coverage still come from CI. See [Repository health](../user-guide/repository-health.md#scanner-service).
 
-## 5. Sign in
+## 4. Sign in
 
 Open [http://localhost:8080/sign-in](http://localhost:8080/sign-in). On a fresh install the page says **Set up Preflyt**. Choose **Start setup** and sign in with `admin` and the password from your `.env`.
 
@@ -168,7 +160,7 @@ Your data lives in Docker volumes and survives all of the above. **Do not** run 
 | What you see | What to do |
 | --- | --- |
 | `required variable PREFLYT_VERSION is missing a value` | Set `PREFLYT_VERSION` in `.env` to an existing stable version (`vX.Y.Z`) or development SHA tag. |
-| `error from registry: unauthorized` while pulling | You are not signed in, or the account cannot read the Preflyt packages. Repeat step 1 with a token that has `read:packages`. Docker shows this message for a wrong release ID too, so check both. |
+| `error from registry: unauthorized` while pulling | Confirm `PREFLYT_VERSION` matches a published release and `PREFLYT_IMAGE_REGISTRY` is `ghcr.io/lyrisoft`. Public images do not need a token. If stale GHCR credentials are configured, use `docker logout ghcr.io`, then retry. |
 | An error that mentions `configs` or `content` | Your Docker Compose is older than 2.23.1. Update Docker. |
 | A service is `unhealthy` | Run `docker compose logs migrate health-init health-engine health-scanner api worker` and see [Troubleshooting](../self-hosting/troubleshooting.md). |
 

@@ -4,13 +4,13 @@
   <img src="apps/docs/static/img/brand/logo-panel.svg" alt="PreflytLabs" width="480" />
 </p>
 
-**Engineering confidence before production.**
+**Know what passed. See what needs attention.**
 
-**Engineering Assurance & Readiness Platform**
+Open-source engineering assurance for GitHub. Self-host Community Edition under **Apache-2.0**.
 
-Preflyt is a self-hosted engineering assurance platform that assesses repository health and verifies CI evidence against approved engineering standards, giving teams a traceable readiness result for each assessed change. It connects supported security and quality findings, versioned policies, verified execution evidence and advisory AI guidance in one workspace.
+Preflyt brings repository health, engineering standards and verified CI results into one self-hosted workspace. Understand the evidence behind every assessment, investigate findings at the assessed commit and see which required results are still missing.
 
-Identify engineering risks early, verify that changes satisfy approved requirements, and give engineering leaders evidence they can review across repositories. A readiness result can pass, fail or remain incomplete; missing evidence never becomes a pass. Continuous PR feedback requires the configured CI integration, and repository scanner execution requires a qualified runtime.
+Identify engineering risks early, verify that changes satisfy approved requirements, and give engineering leaders evidence they can review across repositories. A readiness result can pass, fail or remain incomplete; missing evidence never becomes a pass. The documented Compose installation includes the Health scanner. Continuous PR feedback requires the configured CI integration.
 
 Developed by **Lyrisoft Technologies**.
 
@@ -34,7 +34,7 @@ Preflyt brings repository health, findings, standards, branch policies and devel
 
 ## How it works
 
-1. **Connect GitHub.** Create or connect a GitHub App, install it on the intended repositories, and explicitly select repositories in Preflyt.
+1. **Connect GitHub.** Create or connect a GitHub App and select repositories during installation in GitHub. Preflyt imports those repositories automatically and preserves your original admin session; you do not select them again in Integrations.
 2. **Read repository health.** Selection queues an assessment of the default branch. Review supported scanner findings, exact-revision source locations and report limits without setting up CI. The dedicated built-in scanner runs every applicable Health analyzer automatically; no extra repository approval is required.
 3. **Define requirements.** Adopt versioned standards and publish a policy for the target branch. Development and main can have different requirements.
 4. **Run checks in CI.** Install the Preflyt Action once in your GitHub Actions workflow. The published branch policy selects the configured commands and supported scanners. Preflyt receives their reports and verifies execution evidence for the exact commit and workflow attempt.
@@ -47,7 +47,7 @@ Repository inspection identifies configuration; it does not execute tests or pro
 
 Community Edition is free and self-hosted, with **unlimited repositories** subject to your infrastructure capacity. It includes Health, standards and policies, CI evidence/PR feedback, basic merge protection, findings/history, access controls, audit and optional BYOK AI. No paid model is required for the deterministic assurance workflow. Managed Cloud is planned for later.
 
-**Public Community release qualification is in progress.** The repository and packages have not been made public by this preparation. See the [release requirements](docs/planning/open-source-readiness.md) for current limits and outstanding clearance.
+Install using the [Quick Start](https://docs.preflytlabs.com/getting-started/quick-start) with public GHCR container images. No subscription, license key or registry token is required.
 
 ## What Preflyt provides
 
@@ -82,7 +82,7 @@ Native execution is optional. It is not required for GitHub Actions integration.
 
 The normal onboarding path is:
 
-**Run Preflyt → create/connect an App → select repositories → read Health.**
+**Run Preflyt → connect an App and choose repositories in GitHub → repositories load → read Health.**
 
 For continuous feedback: **review standards and workflow setup → merge the setup PR → receive PR results.**
 
@@ -153,10 +153,16 @@ Use the [acceptance records](docs/acceptance) and [operator runbooks](docs/opera
 
 Use [GitHub issues](https://github.com/lyrisoft/preflyt/issues) for product feedback and reproducible defects. Include the affected version, workflow or commit, expected behavior and sanitized diagnostics. Exclude credentials, private source code and sensitive report contents.
 
+Contribute a standards/check improvement, supported CI report integration, scanner reproduction fixture or documentation correction. For an initial contribution, read [CONTRIBUTING.md](CONTRIBUTING.md), discuss the intended change in an issue and sign off each commit under the [DCO](DCO). Contributors retain ownership. Public contribution access opens with the Community release; current collaborators can participate now.
+
 Report suspected vulnerabilities privately to **support@lyrisoft.tech** following [SECURITY.md](SECURITY.md). Read [SUPPORT.md](SUPPORT.md) for community help and [CONTRIBUTING.md](CONTRIBUTING.md) / [DCO](DCO) before contributing.
 
 ## Licensing
 
-Original Preflyt Community Edition code and documentation are licensed under [Apache-2.0](LICENSE). Third-party code, assets and dependencies retain their own licenses; see [NOTICE](NOTICE) and [third-party notices](THIRD_PARTY_NOTICES.md). The separate [Preflyt Action](https://github.com/lyrisoft/preflyt-action) remains MIT-licensed. Names and logos do not imply trademark or endorsement rights. Public redistribution clearance is still tracked in the readiness plan.
+Original Preflyt Community Edition code and documentation are licensed under [Apache-2.0](LICENSE). Third-party code, assets and dependencies retain their own licenses; see [NOTICE](NOTICE) and [third-party notices](THIRD_PARTY_NOTICES.md). The separate [Preflyt Action](https://github.com/lyrisoft/preflyt-action) remains MIT-licensed. Names and logos do not imply trademark or endorsement rights.
 
 The Docker Compose deployment includes the Health scanner, a separate TLS-protected scanner engine and automatic connection setup. Run the documented start command; no separate scanner installation is needed. See [Automatic Health scanner](docs/deployment/health-scanner/README.md) for the deployment boundaries and local source-development startup. API and worker never receive Docker authority.
+
+Scanner licensing and release preparation are documented in [Scanner licensing](docs/operations/scanner-licensing.md), [dependency security patches](docs/operations/dependency-security-patches.md) and [repository launch preparation](docs/operations/community-repository-launch.md). Preflyt's Apache-2.0 license does not replace upstream licenses or grant rights to proprietary scanner components.
+
+Planned repository-aware AI review with searchable code indexing and related-code retrieval outside the PR diff (issue #97 / P4.RI) is **Cloud-only**. Community Edition retains its existing profiles, Health/source evidence and optional BYOK diff-based reviews.

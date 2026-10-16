@@ -1,5 +1,6 @@
 name: Development checks
 on:
+  workflow_dispatch:
   workflow_call:
 permissions:
   contents: read
@@ -17,7 +18,7 @@ jobs:
       - uses: ./.github/actions/setup-ci
       - name: Release automation tests
         run: |
-          node --test scripts/ci/create-release.test.mjs scripts/ci/publish-release.test.mjs scripts/ci/change-scope.test.mjs scripts/ci/prepare-image-build.test.mjs scripts/ci/local-images.test.mjs scripts/deploy/*.test.mjs
+          node --test scripts/ci/create-release.test.mjs scripts/ci/publish-release.test.mjs scripts/ci/change-scope.test.mjs scripts/ci/prepare-image-build.test.mjs scripts/ci/local-images.test.mjs scripts/ci/braces-depth.test.mjs scripts/deploy/*.test.mjs
           python3 -m unittest discover -s scripts/ci -p 'test_*.py'
       - name: Select focused tests
         id: focused
@@ -58,8 +59,6 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
-      actions: read
-      id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -98,30 +97,31 @@ jobs:
         env:
           DATABASE_URL: postgresql://fixture:fixture@127.0.0.1:1/unused
         run: pnpm -r --filter @preflyt/api --filter @preflyt/web build
-      - name: Mark current policy execution
-        run: echo "CI_POLICY_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
-      - name: Preflyt development policy
-        id: policy
-        if: ${{ !cancelled() && github.event_name == 'pull_request' && github.base_ref == 'development' && github.event.pull_request.head.repo.full_name == github.repository }}
-        uses: lyrisoft/preflyt-action@72bd67f0e75e4409a5b3d37367ffb94073e9bf11 # same-run LCOV coverage
-        env:
-          DATABASE_URL: postgresql://fixture:fixture@127.0.0.1:1/unused
-          PREFLYT_COLLECT_COVERAGE: 'true'
-        with:
-          coverage-reports: '[{"path":"apps/web/coverage/lcov.info","prefix":"apps/web"}]'
-          coverage-artifact: preflyt-coverage-api-${{ github.run_id }}-${{ github.run_attempt }}
-          api-url: ${{ vars.PREFLYT_API_URL }}
-      - name: Check current policy browser coverage
-        id: browser
-        if: ${{ !cancelled() && steps.focused.outputs.web == 'true' }}
-        env:
-          CI_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: python3 scripts/ci/policy-browser-coverage.py
+      # Preflyt Action paused; manual checks run directly below.
+      # - name: Mark current policy execution
+      #   run: echo "CI_POLICY_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
+      # - name: Preflyt development policy
+      #   id: policy
+      #   if: ${{ !cancelled() && github.event_name == 'pull_request' && github.base_ref == 'development' && github.event.pull_request.head.repo.full_name == github.repository }}
+      #   uses: lyrisoft/preflyt-action@72bd67f0e75e4409a5b3d37367ffb94073e9bf11 # same-run LCOV coverage
+      #   env:
+      #     DATABASE_URL: postgresql://fixture:fixture@127.0.0.1:1/unused
+      #     PREFLYT_COLLECT_COVERAGE: 'true'
+      #   with:
+      #     coverage-reports: '[{"path":"apps/web/coverage/lcov.info","prefix":"apps/web"}]'
+      #     coverage-artifact: preflyt-coverage-api-${{ github.run_id }}-${{ github.run_attempt }}
+      #     api-url: ${{ vars.PREFLYT_API_URL }}
+      # - name: Check current policy browser coverage
+      #   id: browser
+      #   if: ${{ !cancelled() && steps.focused.outputs.web == 'true' }}
+      #   env:
+      #     CI_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      #   run: python3 scripts/ci/policy-browser-coverage.py
       - name: Install Chromium for related browser tests
-        if: ${{ !cancelled() && steps.focused.outputs.web == 'true' && steps.browser.outputs.covered != 'true' }}
+        if: ${{ !cancelled() && steps.focused.outputs.web == 'true' }}
         run: pnpm --filter @preflyt/web exec playwright install --with-deps chromium
       - name: Related browser tests
-        if: ${{ !cancelled() && steps.focused.outputs.web == 'true' && steps.browser.outputs.covered != 'true' }}
+        if: ${{ !cancelled() && steps.focused.outputs.web == 'true' }}
         env:
           CI_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           CI_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}

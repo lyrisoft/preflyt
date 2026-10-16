@@ -12,6 +12,14 @@ Use semantic variables from `apps/web/src/styles/theme.css`. Primary is `#29465b
 
 Use the existing Inter/Manrope stack. Compact 13px button labels, readable body text and distinct title/section/metadata levels. Avoid oversized controls and repeated headings.
 
+### Public website and documentation
+
+Keep Geist on the public website and Inter with JetBrains Mono in the docs. Use rem-based sizes that respect browser text preferences: 16px body, 18px lead, 14px navigation/actions, and 12px short metadata at the default browser size. Use 400 for body, 500 for emphasis and 600 for headings/actions.
+
+Website headings use a 20px card level, fluid 28–36px section level and fluid 36–64px display level. Docs use 20px H3, 28px H2 and 32px H1, with a 32–40px landing title. Body line height is 1.6–1.65 and reading lines are capped around 65–72 characters. Do not shrink body copy on mobile. Allow controls to grow with text and collapse navigation before it becomes crowded. Public typography stays scoped away from workspace components and embedded application previews.
+
+Public layouts use a shared responsive content column and consistent section spacing. Keep primary actions before release metadata, use 8px button corners, and indicate the active navigation section. Capability headings scale from 32–52px to fit their split layout. The website footer groups Product, Resources and Community links, with license/contact details below; the docs footer groups Start, Operate, Understand and Community. Footer links wrap on phones. Avoid repeated logo panels and competing calls to action.
+
 ## Layout and Components
 
 Use an 8px spacing rhythm, modest radius, subtle borders and restrained shadows. Workspace headers follow the shared Integrations-style PageHeader; cards reuse SurfaceIcon and shared action conventions. Forms have explicit labels, stable actions, useful loading/error/retry states and no horizontal overflow at 320px.

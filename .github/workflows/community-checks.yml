@@ -1,0 +1,32 @@
+name: Community readiness
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: community-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  community:
+    name: Community checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24.4.1
+      - name: Install locked dependencies without lifecycle scripts
+        run: |
+          npm install --global pnpm@10.26.2
+          pnpm install --frozen-lockfile --ignore-scripts
+      - name: Verify community files and dependency security patch
+        run: |
+          node scripts/ci/community-readiness.mjs
+          node --test scripts/ci/braces-depth.test.mjs scripts/deploy/license-bundle.test.mjs
+      - name: Verify user and operator documentation
+        run: |
+          pnpm --filter @preflyt/docs typecheck
+          pnpm --filter @preflyt/docs build

@@ -17,7 +17,7 @@ Perform a redacted current-tree and full reachable-history secret/confidentialit
 
 Review workflow OIDC trust, caches/artifact provenance, local/reusable actions, permissions, protected environments and fork behavior. The DCO workflow reads GitHub commit metadata without checking out PR code; it is not a security or ownership audit. Project verification still runs untrusted source and requires separate review. Checkout credentials are disabled in checked-in workflows, but live tokens/environment permissions and branch rules must be verified independently.
 
-Confirm @iampeters has write access and required code-owner review works. Enable the `DCO sign-off` check as a required check when separately authorized. Existing commits are not automatically signed off, rewritten or exempted. Confirm a backup maintainer and security triage owner, and exercise delivery to support@lyrisoft.tech without transmitting real vulnerabilities.
+Confirm @iampeters has write access and required code-owner review works. Enable the `DCO sign-off` check as a required check when separately authorized. Existing commits are not automatically signed off, rewritten or exempted. The owner confirmed @iampeters is the sole maintainer with no backup and that support@lyrisoft.tech receives reports. Record this operating limitation; do not fabricate independent review. A later backup appointment should update governance/security policies.
 
 ## 3. Private candidate qualification
 
@@ -52,3 +52,9 @@ After explicitly authorized publication/visibility changes:
 Collect owner, legal/IP, security and release-maintainer approval against the candidate evidence. Publish supported security versions, backup contact, known limits and community support expectations. Confirm contribution templates, CODEOWNERS/DCO and security reporting are effective remotely. Community has unlimited repositories and optional BYOK AI; Cloud remains planned.
 
 Only after explicit public-launch authorization should maintainers make the repository/packages public, publish release communication or update a deployed site. Do not mark the readiness checklist complete from the existence of these files or an old successful run.
+
+## Prepared launch ownership and publication boundary
+
+Follow [repository launch preparation](community-repository-launch.md) for the canonical repository decision and exact transfer dependencies. The current remote remains `lyrisoft/preflyt`; the recommended branded target is `preflytlabs/preflyt` once the owner controls that organization. Retain the current working URLs until a transfer is approved and verified.
+
+The readiness plan's [publication list](../planning/open-source-readiness.md#still-needing-publication-after-approval) identifies what still needs a push, registry/release publication, website/docs deployment and live required-check enforcement. Keep that list separate from unresolved license/source and final acceptance work. No publication is implied by successful local tests/builds.

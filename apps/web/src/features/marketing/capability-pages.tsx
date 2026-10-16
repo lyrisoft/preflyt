@@ -1,4 +1,3 @@
-import { useEffect } from 'react'
 import {
   ArrowRight,
   ArrowUpRight,
@@ -12,8 +11,9 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { StatusBadge } from '@/components/status-badge'
-import { MarketingLayout } from './marketing-layout'
-import { publicPages } from './public-pages'
+import { HostingHeroSystem, ProductHeroSystem } from './hero-systems'
+import { MarketingLayout, MarketingClosing } from './marketing-layout'
+import { PageMetadata } from './public-page-metadata'
 import { RepositoryPreview } from './repository-preview'
 import { SectionIllustration } from './section-illustration'
 import { WorkspaceWindow } from './workspace-window'
@@ -53,16 +53,6 @@ const capabilities: {
     icon: ShieldCheck,
   },
 ]
-function PageMetadata({ path }: { path: string }) {
-  useEffect(() => {
-    const page = publicPages.find((page) => page.path === path)!
-    document.title = page.title
-    document
-      .querySelector('meta[name="description"]')
-      ?.setAttribute('content', page.description)
-  }, [path])
-  return null
-}
 function DocLink({
   path,
   children,
@@ -100,27 +90,6 @@ function CapabilityNav({ active }: { active?: Capability }) {
     </nav>
   )
 }
-function Closing({
-  title = 'Give every change a clearer path forward.',
-}: {
-  title?: string
-}) {
-  return (
-    <section className='closing container'>
-      <span className='closing-rule' />
-      <h2>{title}</h2>
-      <a
-        className='button'
-        href={`${docs}getting-started`}
-        target='_blank'
-        rel='noreferrer'
-      >
-        Get started with Preflyt
-        <ArrowUpRight className='icon small' aria-hidden='true' />
-      </a>
-    </section>
-  )
-}
 function Steps({ items }: { items: { title: string; text: string }[] }) {
   return (
     <ol className='workflow-steps'>
@@ -138,7 +107,7 @@ function Steps({ items }: { items: { title: string; text: string }[] }) {
 }
 export function ProductPage() {
   return (
-    <MarketingLayout>
+    <MarketingLayout activeSection='product'>
       <PageMetadata path='/product' />
       <main id='main'>
         <section className='hero capability-hero container'>
@@ -151,10 +120,9 @@ export function ProductPage() {
               Backed by <em>evidence.</em>
             </h1>
             <p className='hero-description'>
-              Connect repository health, approved standards and verified CI
-              evidence in one self-hosted platform. Give developers and
-              engineering leaders a traceable readiness result for each assessed
-              change.
+              Bring repository health, engineering standards and verified CI
+              results into one workspace. See what passed, investigate what
+              needs attention and trace each result to the assessed commit.
             </p>
             <div className='hero-actions'>
               <a className='button' href='#capabilities'>
@@ -167,7 +135,7 @@ export function ProductPage() {
               Engineering confidence before production.
             </p>
           </div>
-          <EvidenceFlow />
+          <ProductHeroSystem />
         </section>
         <CapabilityNav />
         <section className='capability-grid container' id='capabilities'>
@@ -246,53 +214,9 @@ export function ProductPage() {
             </a>
           </div>
         </section>
-        <Closing />
+        <MarketingClosing />
       </main>
     </MarketingLayout>
-  )
-}
-function EvidenceFlow() {
-  return (
-    <div
-      className='evidence-scene capability-flow'
-      aria-label='Repository context, standards and CI reports connect to a commit-bound merge review'
-    >
-      <div className='scene-grid' />
-      <p className='section-label'>The evidence behind the change</p>
-      {[
-        {
-          icon: GitBranch,
-          label: 'Repository',
-          text: 'Source at the assessed commit',
-        },
-        {
-          icon: BookOpen,
-          label: 'Standards',
-          text: 'Reviewed requirements and versions',
-        },
-        {
-          icon: GitPullRequest,
-          label: 'CI evidence',
-          text: 'Verified reports for the current change',
-        },
-      ].map((item) => (
-        <div className='flow-stage' key={item.label}>
-          <item.icon className='icon' aria-hidden='true' />
-          <div>
-            <strong>{item.label}</strong>
-            <p>{item.text}</p>
-          </div>
-          <ArrowRight className='icon small' aria-hidden='true' />
-        </div>
-      ))}
-      <div className='flow-result'>
-        <ShieldCheck className='icon' aria-hidden='true' />
-        <div>
-          <strong>Merge review result</strong>
-          <p>GitHub applies the configured rules.</p>
-        </div>
-      </div>
-    </div>
   )
 }
 const content = {
@@ -330,7 +254,7 @@ const content = {
       },
       {
         title: 'Review the first report',
-        text: 'Repository selection queues Health assessment. Executed scans require a separately qualified runtime.',
+        text: 'Imported repositories queue Health assessments. The documented Compose installation includes the scanner for supported checks.',
       },
       {
         title: 'Investigate a finding',
@@ -342,16 +266,16 @@ const content = {
       },
     ],
     limits: [
-      'The base installation can produce an inspection-only report. Scanner coverage depends on reviewed tools, rules and a qualified execution runtime.',
+      'The Compose installation includes the Health scanner. Coverage depends on supported languages, rules and recorded file scope; failed or omitted analysis remains visible.',
       'Current measured quality rule packs have narrow, explicit scope. Hotspots are candidates for human review, not confirmed vulnerabilities.',
-      'Health does not rerun tests. Automatic exact-commit CI coverage ingestion remains pending; missing coverage evidence is unavailable.',
+      'Health does not run tests. Test results and line coverage come from verified CI reports for the assessed commit and matching workflow attempt; missing evidence remains unavailable.',
       'Health findings do not satisfy a branch policy, publish a readiness check or authorize a merge.',
     ],
     doc: 'user-guide',
     faqs: [
       {
         q: 'Do I need CI to investigate repository health?',
-        a: 'No. Supported static analysis works independently of CI when the execution runtime is qualified. CI is needed for evidence such as test reports; Health itself does not run tests.',
+        a: 'No. The bundled Health scanner runs supported static checks independently of CI. CI supplies test reports and coverage; Health itself does not run tests.',
       },
       {
         q: 'Does a lower finding count prove that issues were fixed?',
@@ -490,7 +414,7 @@ export function CapabilityPage({ capability }: { capability: Capability }) {
   const item = capabilities.find((item) => item.id === capability)!
   const page = content[capability]
   return (
-    <MarketingLayout>
+    <MarketingLayout activeSection='product'>
       <PageMetadata path={`/product/${capability}`} />
       <main id='main'>
         <section className='hero capability-hero container'>
@@ -590,7 +514,7 @@ export function CapabilityPage({ capability }: { capability: Capability }) {
             ))}
           </div>
         </section>
-        <Closing />
+        <MarketingClosing />
       </main>
     </MarketingLayout>
   )
@@ -693,31 +617,31 @@ function ProtectionStory() {
 }
 export function SelfHostingPage() {
   return (
-    <MarketingLayout>
+    <MarketingLayout activeSection='community'>
       <PageMetadata path='/self-hosting' />
       <main id='main'>
         <section className='hero capability-hero container'>
           <SectionIllustration variant='hosting' />
           <div className='hero-copy'>
-            <p className='eyebrow'>Self-hosted by design</p>
+            <p className='eyebrow'>Community Edition · Apache-2.0</p>
             <h1>
               Your infrastructure.
               <br />
               Your engineering <em>standards.</em>
             </h1>
             <p className='hero-description'>
-              Run your engineering assurance platform on a single host or in
-              your Kubernetes cluster. Keep deployment, repository access and
-              optional AI connections under your control.
+              Free to self-host, with no repository cap. Keep repository health,
+              standards, verified CI results, access controls and audit history
+              on your infrastructure. AI is optional and uses your own provider.
             </p>
             <div className='hero-actions'>
               <a
                 className='button'
-                href={`${docs}self-hosting`}
+                href={`${docs}getting-started/quick-start`}
                 target='_blank'
                 rel='noreferrer'
               >
-                Read deployment docs
+                Community install guide
                 <ArrowUpRight className='icon small' aria-hidden='true' />
               </a>
               <a className='text-link' href='#deployment-options'>
@@ -726,31 +650,7 @@ export function SelfHostingPage() {
               </a>
             </div>
           </div>
-          <div className='evidence-scene capability-flow'>
-            <div className='scene-grid' />
-            <p className='section-label'>Your infrastructure</p>
-            <div className='flow-stage'>
-              <LockKeyhole className='icon' aria-hidden='true' />
-              <div>
-                <strong>Your HTTPS reverse proxy</strong>
-                <p>One public application origin</p>
-              </div>
-            </div>
-            <div className='flow-stage'>
-              <Server className='icon' aria-hidden='true' />
-              <div>
-                <strong>Preflyt web · API · worker</strong>
-                <p>GitHub integration and background processing</p>
-              </div>
-            </div>
-            <div className='flow-result'>
-              <Layers className='icon' aria-hidden='true' />
-              <div>
-                <strong>PostgreSQL · Valkey</strong>
-                <p>Persistent data and a separate job queue</p>
-              </div>
-            </div>
-          </div>
+          <HostingHeroSystem />
         </section>
         <section
           className='capability-details container'
@@ -770,8 +670,8 @@ export function SelfHostingPage() {
               <h3>Docker Compose</h3>
               <p>
                 The recommended starting point for a single host. Application
-                services, database, cache and queue are coordinated through the
-                existing Compose stack.
+                services, Health scanner, database, cache and queue are
+                coordinated through the documented Compose stack.
               </p>
               <DocLink path='self-hosting/docker-compose'>
                 Deploy with Compose
@@ -812,11 +712,11 @@ export function SelfHostingPage() {
               },
               {
                 title: 'Connect GitHub',
-                text: 'Create and install the GitHub App with the required permissions. Configure sign-in and repository access.',
+                text: 'Create or connect your GitHub App. Choose repositories during installation in GitHub; Preflyt imports them and preserves your admin session.',
               },
               {
                 title: 'Review a first report',
-                text: 'Select a repository, review its inspection and configure a qualified runtime for supported scans. Connect CI for PR evidence.',
+                text: 'Open the imported repository’s Health report from the bundled scanner. Review findings and analysis limits, then connect standards and CI when ready.',
               },
             ]}
           />
@@ -846,9 +746,9 @@ export function SelfHostingPage() {
               keys.
             </li>
             <li>
-              Native execution is disabled in the default stack. Scanners need a
-              separate reviewed controller and qualified runtime; the
-              application must not receive a Docker socket.
+              Compose includes a dedicated Health scanner and isolated engine.
+              General native command execution is separate and disabled by
+              default; the API and worker do not receive a Docker socket.
             </li>
             <li>
               AI providers and OpenTelemetry collection are optional. Kubernetes
@@ -896,12 +796,13 @@ export function SelfHostingPage() {
             </details>
             <details>
               <summary>
-                Does the default stack run repository code?
+                Does the default stack run my tests?
                 <ArrowRight className='icon small' aria-hidden='true' />
               </summary>
               <p>
-                No. Native scans stay disabled until a separate reviewed
-                execution controller and qualified runtime are configured.
+                No. The bundled Health scanner performs supported static checks.
+                Tests run in your CI. Optional native command execution requires
+                a separately reviewed runtime and is disabled by default.
               </p>
             </details>
             <details>
@@ -917,7 +818,26 @@ export function SelfHostingPage() {
             </details>
           </div>
         </section>
-        <Closing title='Bring a clearer review to your infrastructure.' />
+        <section className='capability-limits container'>
+          <h2>Community first. Managed Cloud later.</h2>
+          <p>
+            Original Community Edition code and documentation use Apache-2.0.
+            Third-party components retain their own licenses. There is no
+            subscription or license key for the core self-hosted workflow;
+            capacity depends on your infrastructure.
+          </p>
+          <p>
+            Public release preparation is in progress. The source repository and
+            application images currently require access. Managed Cloud is
+            planned as a paid service for hosting, upgrades, backups and
+            support; signup is not available yet.
+          </p>
+          <a className='text-link' href='https://github.com/lyrisoft/preflyt'>
+            View on GitHub{' '}
+            <ArrowUpRight className='icon small' aria-hidden='true' />
+          </a>
+        </section>
+        <MarketingClosing title='Bring a clearer review to your infrastructure.' />
       </main>
     </MarketingLayout>
   )

@@ -14,7 +14,9 @@ Contributions require the [DCO](DCO) sign-off described in [CONTRIBUTING.md](CON
 
 ## Maintainers and releases
 
-The project owner selected **@iampeters** as the default CODEOWNERS reviewer on 15 October 2026. Private security and conduct reports go to **support@lyrisoft.tech**. Before public launch, verify the reviewer has the necessary repository access, configure required-review/branch rules, and assign security triage and a backup maintainer/contact. CODEOWNERS names a reviewer; it does not grant GitHub permissions or enforce review by itself.
+**@iampeters** is the sole maintainer, default CODEOWNERS reviewer and security/conduct triage contact. The owner confirmed on 16 October 2026 that there is no backup maintainer and that **support@lyrisoft.tech** receives reports. GitHub administrator access for @iampeters was verified that day. Community support and security response are best effort and may be delayed when the maintainer is unavailable.
+
+Require DCO and automated checks for contributions and prevent force pushes to release branches. A sole maintainer cannot approve their own PR, so do not claim independent review or configure an impossible self-approval requirement. Contributor PRs should receive maintainer review; maintainer-authored changes must still pass the checks and record their rationale. Add independent required review when another maintainer joins. CODEOWNERS does not grant permissions or enforce review by itself. Required-check enforcement must be verified in the launch repository after the workflows are published.
 
 Release maintainers qualify a specific source revision and image digests, retain verification and license evidence, publish release notes/known limitations, and obtain the [release go/no-go](docs/planning/open-source-readiness.md#7-release-decision-checklist). Public visibility and publication require separate explicit authorization. Security patches and supported-version policy belong in [SECURITY.md](SECURITY.md).
 

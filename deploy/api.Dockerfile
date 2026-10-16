@@ -11,10 +11,11 @@ COPY apps/api/src/github-events/sarif-schema.LICENSE.md /usr/share/licenses/pref
 
 FROM base AS build
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY patches ./patches
 COPY apps/api/package.json apps/api/package.json
 RUN pnpm install --filter @preflyt/api... --frozen-lockfile --ignore-scripts
 COPY apps/api apps/api
-COPY scripts/deploy/package-runtime.mjs /opt/preflyt/package-runtime.mjs
+COPY scripts/deploy/package-runtime.mjs scripts/deploy/license-bundle.mjs /opt/preflyt/
 # Generation needs a syntactically valid URL, not a live database or build secret.
 RUN DATABASE_URL=postgresql://build:build@localhost:5432/build pnpm --filter @preflyt/api build \
     && node /opt/preflyt/package-runtime.mjs /workspace/apps/api /opt/api api \
@@ -59,12 +60,17 @@ FROM node@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c
 COPY --from=bundle-gitleaks-tool /usr/bin/gitleaks /usr/local/bin/gitleaks
 COPY docs/deployment/native-runner/runner.mjs docs/deployment/native-runner/semgrep-locations.mjs docs/deployment/native-runner/source-verification.mjs docs/deployment/native-runner/source-initializer.mjs docs/deployment/native-runner/adapters.json /opt/preflyt/
 COPY docs/deployment/native-runner/config /opt/preflyt/config
+COPY docs/deployment/native-runner/licenses /usr/share/licenses/preflyt-scanners
 USER 65532:65532
 WORKDIR /workspace
 ENTRYPOINT ["/usr/local/bin/node", "/opt/preflyt/runner.mjs"]
 
 FROM node@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS bundle-semgrep-node
-FROM semgrep/semgrep@sha256:93963d9295a366f59e4850127b1550400ee7b388f04fe144e4a1f6325d96e01b AS bundle-semgrep
+FROM semgrep/semgrep@sha256:93963d9295a366f59e4850127b1550400ee7b388f04fe144e4a1f6325d96e01b AS bundle-semgrep-ce-rootfs
+# The vendor image also includes Semgrep Code. Preflyt uses only CE.
+RUN rm /usr/lib/python3.12/site-packages/semgrep/bin/semgrep-core-proprietary \
+    && test -x /usr/lib/python3.12/site-packages/semgrep/bin/semgrep-core
+COPY docs/deployment/native-runner/licenses /usr/share/licenses/preflyt-scanners
 COPY --from=bundle-semgrep-node /usr/local/bin/node /usr/local/bin/node
 COPY --from=bundle-semgrep-node /usr/lib/libstdc++.so.6 /usr/lib/libstdc++.so.6
 COPY --from=bundle-semgrep-node /usr/lib/libgcc_s.so.1 /usr/lib/libgcc_s.so.1
@@ -73,6 +79,12 @@ COPY docs/deployment/native-runner/config /opt/preflyt/config
 COPY docs/deployment/native-runner/semgrep-measure.mjs /opt/preflyt/semgrep-measure.mjs
 COPY docs/deployment/native-runner/semgrep-locations.mjs /opt/preflyt/semgrep-locations.mjs
 RUN ln -s /usr/bin/semgrep /usr/local/bin/semgrep
+# Flatten the sanitized filesystem so the proprietary binary is absent from every
+# shipped layer, including the standalone scanner image.
+FROM scratch AS bundle-semgrep
+COPY --from=bundle-semgrep-ce-rootfs / /
+ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+    SEMGREP_IN_DOCKER=1 SEMGREP_USER_AGENT_APPEND=Docker PYTHONIOENCODING=utf8 PYTHONUNBUFFERED=1
 USER 65532:65532
 WORKDIR /workspace
 ENTRYPOINT ["/usr/local/bin/node", "/opt/preflyt/runner.mjs"]
@@ -83,6 +95,7 @@ COPY docs/deployment/native-runner/duplication/package.json docs/deployment/nati
 RUN npm ci --ignore-scripts --no-audit --no-fund
 COPY docs/deployment/native-runner/duplication/scan.mjs docs/deployment/native-runner/duplication/compact-store.mjs ./
 COPY docs/deployment/native-runner/runner.mjs docs/deployment/native-runner/semgrep-locations.mjs docs/deployment/native-runner/source-verification.mjs docs/deployment/native-runner/source-initializer.mjs docs/deployment/native-runner/adapters.json /opt/preflyt/
+COPY docs/deployment/native-runner/licenses /usr/share/licenses/preflyt-scanners
 USER 65532:65532
 WORKDIR /workspace
 ENTRYPOINT ["/usr/local/bin/node", "/opt/preflyt/runner.mjs"]
@@ -95,6 +108,7 @@ FROM node@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c
 COPY --from=bundle-trivy-tool /usr/local/bin/trivy /usr/local/bin/trivy
 COPY docs/deployment/native-runner/runner.mjs docs/deployment/native-runner/semgrep-locations.mjs docs/deployment/native-runner/offline-database.mjs docs/deployment/native-runner/source-verification.mjs docs/deployment/native-runner/source-initializer.mjs docs/deployment/native-runner/adapters.json /opt/preflyt/
 COPY docs/deployment/native-runner/config /opt/preflyt/config
+COPY docs/deployment/native-runner/licenses /usr/share/licenses/preflyt-scanners
 USER 65532:65532
 WORKDIR /workspace
 ENTRYPOINT ["/usr/local/bin/node", "/opt/preflyt/runner.mjs"]
@@ -112,6 +126,7 @@ FROM node@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c
 COPY --from=bundle-dependencies-tool /usr/local/bin/trivy /usr/local/bin/trivy
 COPY docs/deployment/native-runner/runner.mjs docs/deployment/native-runner/semgrep-locations.mjs docs/deployment/native-runner/offline-database.mjs docs/deployment/native-runner/source-verification.mjs docs/deployment/native-runner/source-initializer.mjs docs/deployment/native-runner/adapters.json /opt/preflyt/
 COPY docs/deployment/native-runner/config /opt/preflyt/config
+COPY docs/deployment/native-runner/licenses /usr/share/licenses/preflyt-scanners
 USER 65532:65532
 WORKDIR /workspace
 ENTRYPOINT ["/usr/local/bin/node", "/opt/preflyt/runner.mjs"]

@@ -51,13 +51,14 @@
   --ifm-heading-font-family: var(--ifm-font-family-base);
   --ifm-font-family-monospace:
     'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
-  --ifm-font-size-base: 15px;
+  --ifm-font-size-base: 100%;
   --ifm-line-height-base: 1.65;
-  --ifm-heading-font-weight: 650;
+  --ifm-heading-font-weight: 600;
   --ifm-h1-font-size: 2rem;
-  --ifm-h2-font-size: 1.4rem;
-  --ifm-h3-font-size: 1.1rem;
-  --ifm-code-font-size: 88%;
+  --ifm-h2-font-size: 1.75rem;
+  --ifm-h3-font-size: 1.25rem;
+  --ifm-code-font-size: 87.5%;
+  --ifm-heading-line-height: 1.25;
   --ifm-code-border-radius: 6px;
   --ifm-code-background: var(--pf-muted);
 
@@ -67,7 +68,7 @@
   --ifm-global-shadow-md: 0 1px 2px rgb(15 23 42 / 6%);
   --ifm-navbar-height: 3.5rem;
   --ifm-navbar-shadow: none;
-  --ifm-navbar-background-color: color-mix(in oklch, var(--pf-background) 85%, transparent);
+  --ifm-navbar-background-color: var(--pf-background);
   --ifm-menu-color: var(--pf-muted-foreground);
   --ifm-menu-color-active: var(--pf-accent-foreground);
   --ifm-menu-color-background-active: var(--pf-accent);
@@ -118,7 +119,7 @@ html[data-theme='dark'] {
   --ifm-hr-border-color: var(--pf-border);
   --ifm-table-border-color: var(--pf-border);
   --ifm-table-head-background: var(--pf-muted);
-  --ifm-navbar-background-color: color-mix(in oklch, var(--pf-background) 85%, transparent);
+  --ifm-navbar-background-color: var(--pf-background);
   --ifm-menu-color: var(--pf-muted-foreground);
   --ifm-menu-color-active: var(--pf-accent-foreground);
   --ifm-menu-color-background-active: var(--pf-accent);
@@ -143,7 +144,22 @@ h3 {
   letter-spacing: -0.015em;
 }
 
+.markdown > p,
+.markdown > ul,
+.markdown > ol {
+  max-width: 72ch;
+}
+
+.markdown h1:not(.pf-hero__title) {
+  --ifm-h1-font-size: 2rem;
+}
+
+.markdown h3 {
+  --ifm-h3-font-size: 1.25rem;
+}
+
 .markdown h2 {
+  --ifm-h2-font-size: 1.75rem;
   margin-top: 2.25rem;
   padding-top: 1.5rem;
   border-top: 1px solid var(--pf-border);
@@ -151,7 +167,7 @@ h3 {
 
 .markdown h1:first-child + p,
 .markdown > header + p {
-  font-size: 1.05rem;
+  font-size: 1.125rem;
   color: var(--pf-muted-foreground);
 }
 
@@ -164,8 +180,7 @@ h3 {
 
 .navbar {
   border-bottom: 1px solid var(--pf-border);
-  backdrop-filter: saturate(140%) blur(10px);
-  -webkit-backdrop-filter: saturate(140%) blur(10px);
+  padding-inline: clamp(1rem, 2vw, 2rem);
 }
 
 .navbar__logo {
@@ -246,13 +261,13 @@ button[class*='collapseSidebarButton']:hover {
 }
 
 .breadcrumbs__link {
-  font-size: 0.8rem;
+  font-size: 0.875rem;
   border-radius: 6px;
   background: var(--pf-muted);
 }
 
 .table-of-contents__link {
-  font-size: 0.8rem;
+  font-size: 0.875rem;
 }
 
 .table-of-contents__link--active {
@@ -270,7 +285,7 @@ button[class*='collapseSidebarButton']:hover {
 }
 
 .theme-edit-this-page {
-  font-size: 0.85rem;
+  font-size: 0.875rem;
   color: var(--pf-muted-foreground);
 }
 
@@ -284,7 +299,7 @@ button[class*='collapseSidebarButton']:hover {
   border: 1px solid var(--pf-border);
   border-radius: var(--pf-radius);
   overflow: hidden;
-  font-size: 0.9rem;
+  font-size: 0.875rem;
 }
 
 .markdown table thead tr {
@@ -293,7 +308,7 @@ button[class*='collapseSidebarButton']:hover {
 
 .markdown table th {
   background: var(--pf-muted);
-  font-size: 0.8rem;
+  font-size: 0.875rem;
   font-weight: 600;
   text-align: left;
   color: var(--pf-foreground);
@@ -354,13 +369,13 @@ button[class*='collapseSidebarButton']:hover {
   background: var(--pf-tone-bg);
   color: var(--pf-foreground);
   box-shadow: none;
-  font-size: 0.925rem;
+  font-size: 1rem;
 }
 
 .theme-admonition [class*='admonitionHeading'] {
   color: var(--pf-tone-text);
   text-transform: none;
-  font-size: 0.85rem;
+  font-size: 0.875rem;
   letter-spacing: 0;
 }
 
@@ -451,15 +466,13 @@ button[class*='collapseSidebarButton']:hover {
 
 .pf-hero {
   margin: 0.5rem 0 2rem;
-  padding: 2rem;
-  border: 1px solid var(--pf-border);
-  border-radius: calc(var(--pf-radius) + 6px);
-  background: color-mix(in oklch, var(--pf-primary) 4%, var(--pf-background));
+  padding: 1.5rem 0 2rem;
+  border-bottom: 1px solid var(--pf-border);
 }
 
 .pf-eyebrow {
   margin: 0 0 0.5rem;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -467,28 +480,44 @@ button[class*='collapseSidebarButton']:hover {
 }
 
 .pf-hero__title {
-  margin: 0 0 0.75rem;
-  font-size: clamp(1.6rem, 1.2rem + 1.6vw, 2.25rem);
+  margin: 0 0 1.25rem;
+  max-width: 26ch;
+  font-size: clamp(2rem, 1.5rem + 1.6vw, 2.5rem);
   line-height: 1.15;
 }
 
 .pf-hero__lead {
   max-width: 62ch;
   margin-bottom: 1.25rem;
-  font-size: 1.05rem;
+  font-size: 1.125rem;
   color: var(--pf-muted-foreground);
 }
 
 .pf-hero__actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.6rem;
+  gap: 0.75rem;
+  margin-top: 2rem;
 }
 
 @media (max-width: 600px) {
   .pf-hero {
-    padding: 1.25rem;
+    padding: 1rem 0 1.5rem;
   }
+}
+
+.pf-hero__release {
+  display: grid;
+  gap: 1rem;
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--pf-border);
+}
+.pf-hero__release p {
+  margin: 0;
+  max-width: 72ch;
+  font-size: 0.875rem;
+  color: var(--pf-muted-foreground);
 }
 
 /* ===== Status badges, matching the app's StatusBadge ===== */
@@ -532,11 +561,29 @@ button[class*='collapseSidebarButton']:hover {
 
 .footer {
   border-top: 1px solid var(--pf-border);
-  padding: 2.5rem 1rem;
+  padding: 3rem 1rem 1.5rem;
 }
 
+.footer__links {
+  row-gap: 2rem;
+  margin-bottom: 2.5rem;
+}
+.footer__title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+}
+.footer__link-item {
+  display: inline-block;
+  padding-block: 0.25rem;
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
 .footer__copyright {
-  font-size: 0.8rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--pf-border);
+  text-align: left;
+  font-size: 0.875rem;
   color: var(--pf-muted-foreground);
 }
 
@@ -551,15 +598,14 @@ button[class*='collapseSidebarButton']:hover {
 
 /* Supplied monochrome mark remains legible on the light navigation surface. */
 html[data-theme='light'] .navbar__logo img { filter: invert(1); }
-.pf-brand-logo { width: min(100%, 320px); height: auto; border-radius: 12px; }
 
 /* Published product and Marketplace releases. */
 .pf-release-badges {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
-  margin: 20px 0;
+  gap: 0.75rem;
+  margin: 0;
 }
 .pf-release-badges a {
   display: inline-flex;
@@ -573,6 +619,8 @@ html[data-theme='light'] .navbar__logo img { filter: invert(1); }
   display: block;
   height: 20px;
   width: auto;
+  border: 0;
+  border-radius: 0;
 }
 
 .pf-guide-screenshot {
@@ -593,4 +641,17 @@ html[data-theme='light'] .navbar__logo img { filter: invert(1); }
   color: var(--ifm-color-emphasis-700);
   font-size: 0.875rem;
   line-height: 1.6;
+}
+
+@media (max-width: 996px) {
+  .footer__links {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 2rem 1rem;
+  }
+  .footer__col {
+    margin: 0;
+    padding-inline: 0;
+    min-width: 0;
+  }
 }

@@ -2,14 +2,14 @@
 id: community-edition
 title: Community Edition
 sidebar_label: Community Edition
-description: Community scope, licensing, contribution rights and current release preparation status.
+description: Open-source, self-hosted engineering assurance with Apache-2.0 licensing and unlimited repositories.
 ---
 
 # Preflyt Community Edition
 
 Preflyt Community Edition is free and self-hosted, with **unlimited repositories** subject to your infrastructure capacity. Original Preflyt code and documentation use Apache-2.0; third-party components retain their own licenses and notices. The separate Preflyt Action is MIT-licensed. The license does not grant product trademark or endorsement rights.
 
-**Public release preparation is in progress.** These source changes have not made the repository or container packages public. Current installation instructions still describe the access needed for the published private images. Do not assume a badge or a license file establishes public package availability or release qualification.
+Install Community Edition with the [Quick Start](../getting-started/quick-start.md) or follow the [production Docker Compose guide](docker-compose.md). Container images are distributed through GHCR; no subscription, license key or registry sign-in is required.
 
 ## Included scope
 
@@ -26,12 +26,18 @@ Community is not limited to one repository and has no subscription/license-key r
 
 Optional [native execution](../user-guide/native-execution.md) requires a separately reviewed runtime and is not production-qualified by a successful Health scan. Missing required evidence remains incomplete; AI cannot override checks or authorize merging.
 
-## Cloud later
+## Cloud
 
-Managed Cloud is planned for later. It would provide managed infrastructure, upgrades, backups, monitoring and support. There is no available Cloud plan, price or SLA promised by this page. Future enterprise modules require a separate scope decision; core security and a useful assurance workflow remain in Community.
+Preflyt Cloud is coming soon. Community Edition remains available for self-hosting.
 
-## Contributing and support
+## Contributing
 
-Contributions use DCO 1.1 sign-off; contributors retain ownership. Read [CONTRIBUTING.md](https://github.com/lyrisoft/preflyt/blob/development/CONTRIBUTING.md), [LICENSE](https://github.com/lyrisoft/preflyt/blob/development/LICENSE), [NOTICE](https://github.com/lyrisoft/preflyt/blob/development/NOTICE) and the [readiness tracker](https://github.com/lyrisoft/preflyt/blob/development/docs/planning/open-source-readiness.md) in the source repository. These links require repository access until public launch and will reflect the files only after these local changes are published.
+Contributions use DCO 1.1 sign-off; contributors retain ownership. See the project's [contributing guide](https://github.com/lyrisoft/preflyt/blob/main/CONTRIBUTING.md), [Code of Conduct](https://github.com/lyrisoft/preflyt/blob/main/CODE_OF_CONDUCT.md), [Apache-2.0 license](https://github.com/lyrisoft/preflyt/blob/main/LICENSE) and [third-party notices](https://github.com/lyrisoft/preflyt/blob/main/THIRD_PARTY_NOTICES.md).
 
-Community support is best effort. Send private vulnerabilities or conduct reports to **support@lyrisoft.tech**; do not disclose sensitive details in public issues. Supported release ranges and maintainer assignments must be confirmed before launch. No public release/security clearance or contractual support commitment is implied by this preparation.
+Report bugs and propose improvements in [GitHub Issues](https://github.com/lyrisoft/preflyt/issues). Include the Preflyt version, deployment method and steps to reproduce; remove secrets and personal information from logs or screenshots.
+
+## Support and security
+
+Community support is best effort. Security fixes target the latest stable Community release; older releases have no promised backports. See [SECURITY.md](https://github.com/lyrisoft/preflyt/blob/main/SECURITY.md) for the supported-version policy and private reporting process.
+
+Send security vulnerabilities and Code of Conduct reports privately to **support@lyrisoft.tech**. Do not publish sensitive details in issues. Operators remain responsible for infrastructure, upgrades, backups and access controls.

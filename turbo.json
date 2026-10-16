@@ -37,11 +37,19 @@
     "@preflyt/web#build": {
       "inputs": [
         "$TURBO_DEFAULT$",
-        "$TURBO_ROOT$/deploy/nginx.conf"
+        "$TURBO_ROOT$/deploy/nginx.conf",
+        "$TURBO_ROOT$/deploy/nginx.website.conf",
+        ".env*"
       ],
       "outputs": [
         "dist/**",
         ".prerender/**"
+      ],
+      "env": [
+        "VITE_WEBSITE_MODE",
+        "VITE_API_BASE_URL",
+        "PUBLIC_SITE_URL",
+        "PUBLIC_SITE_INDEXABLE"
       ]
     },
     "@preflyt/docs#build": {

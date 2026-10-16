@@ -53,8 +53,11 @@ export function HealthTimelineChart({
   branch: string
   onSelectReport: (id: string) => void
 }) {
-  const data = points.map((point) => ({
+  // Recharts forwards `id` from data onto SVG marks. Reports can appear in
+  // multiple charts on a page, so keep their identifiers out of DOM IDs.
+  const data = points.map(({ id, ...point }) => ({
     ...point,
+    reportId: id,
     timestamp: new Date(point.at).getTime(),
   }))
   const scope = points.find((point) => point.checkIds?.length)?.checkIds
@@ -212,7 +215,7 @@ export function HealthTimelineChart({
                   }}
                   labelFormatter={(_, payload) => {
                     const point = payload?.[0]?.payload as
-                      HealthTimelinePoint | undefined
+                      (typeof data)[number] | undefined
                     return point
                       ? `${new Date(point.at).toLocaleString(locale, { timeZone: 'UTC' })} UTC · ${point.sourceSha.slice(0, 7)} · ${point.partial ? 'Partial analysis' : 'Complete analysis'}`
                       : ''
@@ -229,7 +232,7 @@ export function HealthTimelineChart({
                 >
                   {data.map((point) => (
                     <Cell
-                      key={point.id}
+                      key={point.reportId}
                       fill={point.partial ? 'var(--warning)' : 'var(--chart-1)'}
                     />
                   ))}

@@ -20,7 +20,7 @@ export function releaseVersion(tags, sha) {
 const missing = error => /HTTP 404|manifest unknown|not found/i.test(String(error.stderr ?? ''));
 export function createRelease(env, run = (command, args) => execFileSync(command, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })) {
   const { GITHUB_SHA: sha, GITHUB_REPOSITORY: repository, GITHUB_REPOSITORY_OWNER: owner, GITHUB_REF: ref, GITHUB_EVENT_NAME: event } = env;
-  if (ref !== 'refs/heads/main' || event !== 'push') throw new Error('Releases require a push to main');
+  if (ref !== 'refs/heads/main' || event !== 'workflow_dispatch') throw new Error('Releases require a manual dispatch on main');
   if (!/^[a-f0-9]{40}$/.test(sha ?? '') || !/^[a-zA-Z0-9-]+$/.test(owner ?? '') || repository !== `${owner}/preflyt`) throw new Error('Invalid release identity');
   const api = (endpoint, ...args) => run('gh', ['api', `repos/${repository}/${endpoint}`, ...args]);
   const tags = api('tags', '--paginate', '--jq', '.[] | {name, sha: .commit.sha}').trim().split('\n').filter(Boolean).map(line => JSON.parse(line));

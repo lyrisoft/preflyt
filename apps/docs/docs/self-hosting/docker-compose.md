@@ -20,7 +20,6 @@ For a quick look on your own machine first, use the [Quick Start](../getting-sta
 ## What you need
 
 - A Linux server (or Docker Desktop host) with **Docker and Compose 2.23.1 or later**, at least **4 CPUs, 8 GiB of Docker memory and 20 GiB of free disk**. Check with `docker compose version`. The host must permit the bundled Docker-in-Docker engine container to run privileged.
-- **Access to the Preflyt images** at `ghcr.io/lyrisoft`. They are private. You need a GitHub account that has been given read access to those packages and a personal access token (classic) with `read:packages`. Ask Lyrisoft if you do not have access.
 - **A release to run.** Use a published stable version (`vX.Y.Z`) or a development build (`sha-` plus the 40-character commit ID).
 - **A public HTTPS address** for Preflyt, such as `https://preflyt.example.com`, and a reverse proxy that serves it. See [Reverse proxy and TLS](reverse-proxy.md).
 
@@ -30,14 +29,9 @@ The Compose file includes the Health scanner and a separate TLS-protected Docker
 
 The nested engine is the only privileged service. It has no host Docker socket, host directory mounts or published ports. Scanner jobs run without privileges, networking or application credentials, with read-only source and enforced CPU, memory and PID limits. This is container isolation, not a separate VM; use a dedicated Docker host for a production installation. The API and worker have HTTP access to the scanner and no engine credentials. See [Repository health](../user-guide/repository-health.md#scanner-service).
 
-## 1. Sign in to the registry
+Preflyt's release images are public on `ghcr.io/lyrisoft`. You do not need a GitHub account, registry token or `docker login` to pull them. Choose a stable version from [Preflyt releases](https://github.com/lyrisoft/preflyt/releases/latest); use the same version for every application image.
 
-```bash
-docker login ghcr.io -u YOUR_GITHUB_USERNAME
-# Paste your read:packages token at the Password prompt.
-```
-
-## 2. Add the compose file
+## 1. Add the compose file
 
 Choose a permanent folder and run every `docker compose` command from it. The compose file names the installation `preflyt`, so its volumes are called `preflyt_postgres_data` and `preflyt_queue_data` wherever the folder is.
 
@@ -64,7 +58,7 @@ Create a file named `compose.yaml` in that folder and paste the whole block belo
 
 This is the only file Preflyt needs besides your settings. Do not edit it: put your changes in `.env`.
 
-## 3. Create your settings
+## 2. Create your settings
 
 <Tabs groupId="env-source">
 <TabItem value="copy" label="Copy and paste" default>
@@ -114,7 +108,7 @@ Read your sign-in password with `grep SUPER_ADMIN_PASSWORD .env`.
 </TabItem>
 </Tabs>
 
-Set `PREFLYT_VERSION` to the release you were given, and `WEB_ORIGIN` to your public HTTPS address with no trailing slash and no path.
+Set `PREFLYT_VERSION` to your selected published stable release, and `WEB_ORIGIN` to your public HTTPS address with no trailing slash and no path.
 
 :::warning Back up your keys now
 Generate all three encryption keys before the first startup, even if you will configure AI later. `CONFIGURATION_ENCRYPTION_KEY` decrypts credentials saved in **Settings → Configuration**; `AI_PROVIDER_ENCRYPTION_KEY` decrypts AI provider credentials. Losing or replacing a key makes the credentials encrypted with it unreadable. Preflyt has no key rotation. Copy `.env` to your secret manager before you continue.
@@ -124,7 +118,7 @@ Generate all three encryption keys before the first startup, even if you will co
 `POSTGRES_PASSWORD` and `DATABASE_APP_PASSWORD` only take effect when the database is first created. Changing them later does not change the existing database's passwords.
 :::
 
-## 4. Start Preflyt
+## 3. Start Preflyt
 
 ```bash
 docker compose up -d --wait
@@ -143,11 +137,11 @@ Startup follows health checks:
 
 A migration failure stops the API and web from starting. Read `docker compose logs migrate`.
 
-## 5. Put HTTPS in front of it
+## 4. Put HTTPS in front of it
 
 Preflyt listens only on `127.0.0.1:8080` of the server. Set up your reverse proxy so your public address forwards to it. See [Reverse proxy and TLS](reverse-proxy.md).
 
-## 6. Check it works
+## 5. Check it works
 
 1. Open `<WEB_ORIGIN>/sign-in` in a browser. You should see **Set up Preflyt**. The root URL serves the public product page.
 2. Choose **Start setup** and sign in with `admin` and your `SUPER_ADMIN_PASSWORD`.

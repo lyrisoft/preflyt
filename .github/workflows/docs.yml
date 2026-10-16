@@ -1,8 +1,5 @@
 name: Documentation
 on:
-  push:
-    branches: [main]
-    paths: ['apps/docs/**', '.env.example', 'docker-compose.yaml', 'deploy/postgres/**', 'deploy/otel-collector.yaml', 'deploy/kubernetes/**', '.github/workflows/docs.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -28,7 +25,7 @@ jobs:
           node-version: 24.4.1
       - name: Install locked dependencies
         run: |
-          npm install --global pnpm@10.15.1
+          npm install --global pnpm@10.26.2
           pnpm install --frozen-lockfile --ignore-scripts --filter @preflyt/docs...
       - name: Type-check and build (fails on broken links and undocumented variables)
         env:

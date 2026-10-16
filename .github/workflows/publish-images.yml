@@ -1,7 +1,6 @@
 name: Publish and verify release images
 on:
-  push:
-    branches: [development, main]
+  workflow_dispatch:
 permissions:
   contents: read
 concurrency:
@@ -103,7 +102,7 @@ jobs:
 
   release:
     name: Create versioned main release
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     needs: [publish, accept-published]
     runs-on: ubuntu-24.04
     timeout-minutes: 10

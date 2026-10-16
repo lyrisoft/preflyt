@@ -1,12 +1,12 @@
 import { ArrowRight, ArrowUpRight, Layers } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { EngineeringFigures } from './engineering-figures'
-import { MarketingLayout } from './marketing-layout'
+import { MarketingLayout, MarketingClosing } from './marketing-layout'
 import { ProductScene } from './product-scene'
 import { SectionIllustration } from './section-illustration'
 import { WorkspaceWindow } from './workspace-window'
 
-const docs = 'https://docs.preflytlabs.com/getting-started'
+const docs = 'https://docs.preflytlabs.com/getting-started/quick-start'
 const features = [
   {
     id: 'health',
@@ -153,50 +153,70 @@ export function MarketingHomepage() {
         <section className='reference-hero container'>
           <div className='hero-copy'>
             <span className='reference-label'>
-              Engineering Assurance &amp; Readiness Platform
+              Engineering assurance for GitHub
             </span>
             <h1>
-              Every change.
+              Know what passed.
               <br />
-              Verified against your standards.
+              See what needs attention.
             </h1>
             <p>
-              Assess repository health, apply approved engineering standards and
-              verify CI evidence before code reaches production. Know what
-              passed, what failed and what still needs evidence.
+              Bring repository health, engineering standards and verified CI
+              results into one workspace. Understand the evidence behind every
+              assessment.
             </p>
-            <div
-              className='reference-release-badges'
-              aria-label='Published releases'
-            >
-              <a
-                href='https://github.com/lyrisoft/preflyt/releases/tag/v0.1.1'
-                aria-label='Preflyt v0.1.1 release'
-              >
-                <img
-                  src='https://img.shields.io/badge/Preflyt-v0.1.1-2f6f60?logo=github'
-                  alt='Preflyt v0.1.1'
-                  height={20}
-                />
-              </a>
-              <a
-                href='https://github.com/marketplace/actions/preflyt-policy-check'
-                aria-label='Preflyt Action on GitHub Marketplace'
-              >
-                <img
-                  src='https://img.shields.io/github/v/release/lyrisoft/preflyt-action?label=Preflyt%20Action&logo=github'
-                  alt='Preflyt Action published release on GitHub Marketplace'
-                  height={20}
-                />
-              </a>
-            </div>
             <div className='reference-actions'>
               <a href={docs} className='button'>
-                Get started <ArrowRight size={15} aria-hidden='true' />
+                Community install guide{' '}
+                <ArrowRight size={15} aria-hidden='true' />
               </a>
-              <a href='#platform' className='text-link'>
-                Explore Preflyt <ArrowRight size={14} aria-hidden='true' />
+              <a
+                href='https://github.com/lyrisoft/preflyt'
+                className='text-link'
+              >
+                View on GitHub <ArrowRight size={14} aria-hidden='true' />
               </a>
+            </div>
+            <div className='hero-release-info'>
+              <div
+                className='reference-release-badges'
+                aria-label='Releases and Community license'
+              >
+                <a
+                  href='https://github.com/lyrisoft/preflyt/releases/tag/v0.1.1'
+                  aria-label='Preflyt v0.1.1 release'
+                >
+                  <img
+                    src='https://img.shields.io/badge/Preflyt-v0.1.1-2f6f60?logo=github'
+                    alt='Preflyt v0.1.1'
+                    height={20}
+                  />
+                </a>
+                <a
+                  href='https://github.com/marketplace/actions/preflyt-policy-check'
+                  aria-label='Preflyt Action on GitHub Marketplace'
+                >
+                  <img
+                    src='https://img.shields.io/github/v/release/lyrisoft/preflyt-action?label=Preflyt%20Action&logo=github'
+                    alt='Preflyt Action published release on GitHub Marketplace'
+                    height={20}
+                  />
+                </a>
+                <a
+                  href='https://www.apache.org/licenses/LICENSE-2.0'
+                  aria-label='Preflyt Community Edition license: Apache-2.0'
+                >
+                  <img
+                    src='https://img.shields.io/badge/license-Apache--2.0-blue'
+                    alt='Preflyt Community Edition: Apache-2.0 license'
+                    height={20}
+                  />
+                </a>
+              </div>
+              <p className='community-release-note'>
+                Community Edition · Apache-2.0. Public release is in
+                preparation; source and images currently require access.
+              </p>
             </div>
           </div>
           <HeroArtwork />
@@ -259,7 +279,7 @@ export function MarketingHomepage() {
               in one workspace.
             </p>
           </div>
-          <Tabs defaultValue='contributors'>
+          <Tabs defaultValue='findings'>
             <TabsList
               aria-label='Focused workspace previews'
               className='reference-tour-tabs'
@@ -305,35 +325,39 @@ export function MarketingHomepage() {
             <li>
               <span>01</span>
               <div>
-                <h3>Connect GitHub</h3>
-                <p>Select the repositories your team wants to track.</p>
+                <h3>Install Community Edition</h3>
+                <p>
+                  Start the Docker Compose stack and create your admin account.
+                </p>
               </div>
             </li>
             <li>
               <span>02</span>
               <div>
-                <h3>Explore the report</h3>
+                <h3>Connect your GitHub App</h3>
                 <p>
-                  Investigate supported findings, source context and analysis
-                  limits.
+                  Choose repositories during installation in GitHub. They load
+                  into Preflyt while you stay signed in as your admin.
                 </p>
               </div>
             </li>
             <li>
               <span>03</span>
               <div>
-                <h3>Define the requirements</h3>
+                <h3>Read your first Health report</h3>
                 <p>
-                  Adopt standards, publish a policy and connect CI evidence.
+                  Review findings, affected code and analysis limits. The
+                  bundled scanner runs supported checks without CI setup.
                 </p>
               </div>
             </li>
             <li>
               <span>04</span>
               <div>
-                <h3>Review each change</h3>
+                <h3>Add standards and PR feedback</h3>
                 <p>
-                  Follow the current result into your pull request workflow.
+                  When you are ready, choose standards, publish a branch policy
+                  and connect your CI results with the Preflyt Action.
                 </p>
               </div>
             </li>
@@ -343,19 +367,58 @@ export function MarketingHomepage() {
           <SectionIllustration variant='hosting' />
           <Layers size={26} aria-hidden='true' />
           <div>
-            <p className='reference-label'>Self-hosted by design</p>
+            <p className='reference-label'>Community Edition · Apache-2.0</p>
             <h2>
-              Your infrastructure.
+              Your repositories.
               <br />
-              Your engineering standards.
+              Your infrastructure.
             </h2>
             <p>
-              Deploy with Docker Compose or the Kubernetes application bundle.
-              Native scans require a separate qualified runtime; your CI remains
-              responsible for tests.
+              Free to self-host, with no repository cap. Run Health checks,
+              investigate findings and verify CI results against your standards.
+              Access controls and audit history are included. Capacity depends
+              on your infrastructure.
+            </p>
+            <p>
+              Start with Docker Compose and the bundled Health scanner. AI
+              reviews are optional: connect your own provider when you need
+              suggestions. Core checks work without a paid model.
+            </p>
+            <p>
+              <strong>Managed Cloud is planned.</strong> A future paid service
+              will focus on hosting, upgrades, backups and support. It is not
+              available for signup yet.
             </p>
             <a href='/self-hosting' className='reference-more'>
               Explore self-hosting <ArrowRight size={13} aria-hidden='true' />
+            </a>
+          </div>
+        </section>
+        <section className='reference-community container' id='community'>
+          <div>
+            <h2>Help shape the checks your team needs.</h2>
+            <p>
+              Improve a standard, contribute a report integration, reproduce a
+              scanner issue or make a guide clearer. Community contributions use
+              DCO sign-off; you retain ownership of your work.
+            </p>
+            <p>
+              Public contribution access opens with the Community release.
+              Existing collaborators can use the repository links now.
+            </p>
+          </div>
+          <div className='reference-actions'>
+            <a
+              className='text-link'
+              href='https://github.com/lyrisoft/preflyt/blob/main/CONTRIBUTING.md'
+            >
+              Contribution guide <ArrowUpRight size={14} aria-hidden='true' />
+            </a>
+            <a
+              className='text-link'
+              href='https://github.com/lyrisoft/preflyt/issues'
+            >
+              Report an issue <ArrowUpRight size={14} aria-hidden='true' />
             </a>
           </div>
         </section>
@@ -373,9 +436,10 @@ export function MarketingHomepage() {
                 <ArrowRight size={15} aria-hidden='true' />
               </summary>
               <p>
-                Supported static analysis works independently of CI when its
-                execution runtime is qualified. The base installation can
-                provide inspection-only reports.
+                No. The documented Docker Compose installation includes the
+                Health scanner. Connected repositories receive supported static
+                checks; each report shows its scope and any missing analysis.
+                Test execution still belongs in your CI workflow.
               </p>
             </details>
             <details>
@@ -401,12 +465,7 @@ export function MarketingHomepage() {
             </details>
           </div>
         </section>
-        <section className='closing reference-closing container'>
-          <h2>Bring clarity to the next change.</h2>
-          <a href={docs} className='button'>
-            Get started with Preflyt <ArrowRight size={15} aria-hidden='true' />
-          </a>
-        </section>
+        <MarketingClosing title='Bring clarity to the next change.' />
       </main>
     </MarketingLayout>
   )

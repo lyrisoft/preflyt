@@ -1,7 +1,7 @@
 import '@/styles/index.css'
 import { afterEach, expect, it, vi } from 'vitest'
 import { render } from 'vitest-browser-react'
-import { page } from 'vitest/browser'
+import { page, userEvent } from 'vitest/browser'
 import {
   ProductPage,
   CapabilityPage,
@@ -27,10 +27,11 @@ it.each([320, 768, 1440])(
     const view = await render(<MarketingHomepage />)
     await expect
       .element(view.getByRole('heading', { level: 1 }))
-      .toHaveTextContent(/Every change\.\s*Verified against your standards\./)
+      .toHaveTextContent(/Know what passed\.\s*See what needs attention\./)
     await expect
       .poll(() => document.documentElement.scrollWidth)
       .toBeLessThanOrEqual(window.innerWidth)
+    await view.getByRole('tab', { name: 'Contributors', exact: true }).click()
     await expect
       .element(
         view
@@ -148,6 +149,10 @@ it('keeps the complete framed demo interactive, including repository history', a
 
 it('shows complete Findings and Contributors pages in the homepage tour', async () => {
   const view = await render(<MarketingHomepage />)
+  await expect
+    .element(view.getByRole('tabpanel', { name: 'Findings', exact: true }))
+    .toBeVisible()
+  await view.getByRole('tab', { name: 'Contributors', exact: true }).click()
   const contributors = view.getByRole('tabpanel', {
     name: 'Contributors',
     exact: true,
@@ -286,4 +291,37 @@ it('filters populated overview activity locally by period and repository', async
     .element(view.getByText('northstar/web', { exact: true }))
     .not.toBeInTheDocument()
   expect(fetch).not.toHaveBeenCalled()
+})
+
+it('keeps section navigation and the footer usable on a phone', async () => {
+  await page.viewport(320, 900)
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => new Response('{}'))
+  )
+  const view = await render(<SelfHostingPage />)
+  const menu = view.getByRole('button', { name: 'Open menu' })
+  await menu.click()
+  const navigation = view.getByRole('navigation', { name: 'Mobile navigation' })
+  await expect.element(navigation).toBeVisible()
+  const navigationElement = navigation.element()
+  await expect
+    .element(navigation.getByRole('link', { name: 'Community Edition' }))
+    .toHaveAttribute('aria-current', 'true')
+  await expect
+    .element(navigation.getByRole('link', { name: 'Product', exact: true }))
+    .not.toHaveAttribute('aria-current')
+  await userEvent.keyboard('{Escape}')
+  await expect.element(navigationElement).not.toBeVisible()
+  await expect.element(menu).toHaveFocus()
+  const footer = view.getByRole('navigation', { name: 'Footer navigation' })
+  await expect
+    .element(footer.getByRole('link', { name: 'Security policy' }))
+    .toHaveAttribute(
+      'href',
+      'https://github.com/lyrisoft/preflyt/blob/main/SECURITY.md'
+    )
+  await expect
+    .poll(() => document.documentElement.scrollWidth)
+    .toBeLessThanOrEqual(320)
 })

@@ -1,5 +1,5 @@
 import { nativeImages } from '../../../scripts/ci/local-images.mjs'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync, readdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -7,133 +7,67 @@ import { parse } from 'yaml'
 import { expect, it } from 'vitest'
 const root = resolve(process.cwd(), '../..')
 const workflow = (name: string) => parse(readFileSync(resolve(root, '.github/workflows', name), 'utf8'))
-it('checks the PR head and runs the published policy only for same-repository development PRs', () => {
-  const verify = workflow('verify.yml')
-  const development = workflow('development-checks.yml')
-  const steps = development.jobs.checks.steps, sourceSteps = development.jobs.source.steps, allSteps = [...steps, ...sourceSteps]
-  expect(steps[0].with.ref).toContain('github.event.pull_request.head.sha')
-  expect(steps[0].with['persist-credentials']).toBe(false)
-  expect(steps[0].with['fetch-depth']).toBe(0)
-  const action = steps.find((step: any) => step.name === 'Preflyt development policy')
-  expect(action.if).toContain("github.base_ref == 'development'")
-  expect(action.if).toContain('github.event.pull_request.head.repo.full_name == github.repository')
-  expect(action.if).toContain('!cancelled()')
-  expect(action.uses).toMatch(/^lyrisoft\/preflyt-action@[a-f0-9]{40}$/)
-  expect(action.with).toEqual({ 'api-url': '${{ vars.PREFLYT_API_URL }}', 'coverage-reports': '[{"path":"apps/web/coverage/lcov.info","prefix":"apps/web"}]', 'coverage-artifact': 'preflyt-coverage-api-${{ github.run_id }}-${{ github.run_attempt }}' })
-  expect(action.env.PREFLYT_COLLECT_COVERAGE).toBe('true')
-  expect(verify.jobs.preflyt_gate.steps[0].uses).toBe(action.uses)
-  expect(development.jobs.checks.permissions).toEqual({ contents: 'read', actions: 'read', 'id-token': 'write' })
-  for (const name of ['Type checks', 'Lint', 'Build validation']) expect(allSteps.find((step: any) => step.name === name).if).toContain('!cancelled()')
-  expect(development.jobs.checks.services).toBeUndefined()
-  expect(steps.some((step: any) => /regression|compose/i.test(step.name ?? ''))).toBe(false)
-  const api = sourceSteps.find((step: any) => step.name === 'API unit tests and coverage')
-  expect(api.if).toBe('${{ !cancelled() }}')
-  expect(api.run).toContain("vitest run --exclude '**/*.integration.test.ts'")
-  expect(api.run).not.toContain('--changed')
-  expect(api.env.PREFLYT_COLLECT_COVERAGE).toBe('true')
-  expect(sourceSteps.filter((step: any) => /vitest|test\/.*\.test\.ts/.test(step.run ?? ''))).toHaveLength(1)
-  const upload = sourceSteps.find((step: any) => step.name === 'Upload API coverage from this execution')
-  expect(upload.if).toContain('success()')
-  expect(upload.with.name).toContain('${{ github.run_attempt }}')
-  expect(upload.with['retention-days']).toBe(1)
-  const focused = steps.find((step: any) => step.name === 'Related browser tests')
-  expect(focused.if).toContain("steps.focused.outputs.web == 'true'")
-  expect(focused.run).toBe('node scripts/ci/change-scope.mjs web')
-  expect(development.jobs.source.needs).toBeUndefined()
-  expect(development.jobs.checks.needs).toBeUndefined()
-  expect(development.jobs.source.permissions).toBeUndefined() // inherits read-only contents, no OIDC
-  const policyIndex = steps.findIndex((step: any) => step.name === 'Preflyt development policy')
-  const coverageIndex = steps.findIndex((step: any) => step.name === 'Check current policy browser coverage')
-  expect(coverageIndex).toBeGreaterThan(policyIndex)
-  expect(steps[coverageIndex].run).toBe('python3 scripts/ci/policy-browser-coverage.py')
-  for (const name of ['Install Chromium for related browser tests', 'Related browser tests']) {
-    expect(steps.find((step: any) => step.name === name).if).toContain("steps.browser.outputs.covered != 'true'")
+it('requires explicit dispatch for every hosted workflow and disables Preflyt Action', () => {
+  for (const file of readdirSync(resolve(root, '.github/workflows')).filter(name => /\.ya?ml$/.test(name))) {
+    const config = workflow(file)
+    expect(Object.keys(config.on), file).toContain('workflow_dispatch')
+    expect(Object.keys(config.on).every(event => ['workflow_dispatch', 'workflow_call'].includes(event)), file).toBe(true)
+    for (const job of Object.values(config.jobs) as any[]) {
+      for (const step of job.steps ?? []) expect(step.uses ?? '', file).not.toContain('preflyt-action@')
+    }
   }
-  const cacheSteps = steps.filter((step: any) => step.uses?.startsWith('actions/cache@'))
-  expect(cacheSteps.map((step: any) => step.with.path)).toEqual(['.turbo/cache', '~/.cache/ms-playwright'])
-  expect(cacheSteps.every((step: any) => !step.with.path.includes('.preflyt'))).toBe(true)
-  expect(verify.jobs.development.uses).toBe('./.github/workflows/development-checks.yml')
+  expect(workflow('verify.yml').jobs.preflyt_gate).toBeUndefined()
+  expect(workflow('development-checks.yml').jobs.checks.permissions).toEqual({ contents: 'read' })
 })
-it('builds release images only after a push, without repeating PR checks', () => {
-  const verify = workflow('verify.yml'), publish = workflow('publish-images.yml')
-  expect(verify.jobs.images).toBeUndefined()
-  expect(verify.permissions.packages).toBeUndefined()
-  expect(publish.on.push.branches).toEqual(['development', 'main'])
-  expect(publish.on.pull_request).toBeUndefined()
-  expect(publish.on.workflow_dispatch).toBeUndefined()
-  expect(publish.jobs.verify).toBeUndefined()
-  expect(publish.on.push.paths).toBeUndefined() // main must publish even for a test/docs-only commit
-  expect(publish.jobs.inputs.permissions?.packages).toBeUndefined()
-  expect(publish.jobs.inputs.steps[0].with['persist-credentials']).toBe(false)
-  const disk = publish.jobs.build.steps.findIndex((step:any)=>step.name==='Ensure API build disk headroom')
-  expect(disk).toBeGreaterThan(0)
-  expect(publish.jobs.build.steps[disk].if).toBe("matrix.group == 'api' && matrix.platform.arch == 'amd64'")
-  expect(publish.jobs.build.steps[disk].run).toBe('node scripts/ci/prepare-image-build.mjs')
-  expect(disk).toBeLessThan(publish.jobs.build.steps.findIndex((step:any)=>step.uses?.startsWith('docker/setup-buildx-action@')))
-  expect(publish.jobs.build.needs).toBe('inputs')
-  expect(publish.jobs.build.if).toBe("${{ needs.inputs.outputs.publish == 'true' }}")
-  expect(publish.jobs.publish.needs).toBe('build')
+it.each([['development', 'development'], ['production', 'main']])('publishes %s only manually from its own branch without invoking hosted tests', (environment, branch) => {
+  const publish = workflow(`publish-${environment}.yml`)
+  expect(publish.on).toEqual({ workflow_dispatch: null })
+  expect(publish.permissions).toEqual({ contents: 'read' })
+  expect(publish.concurrency['cancel-in-progress']).toBe(false)
+  expect(publish.jobs.branch.steps[0].env.PUBLICATION_REF).toBe('${{ github.ref }}')
+  expect(publish.jobs.branch.steps[0].run).toBe(`test "$PUBLICATION_REF" = refs/heads/${branch}`)
+  expect(publish.jobs.build.needs).toBe('branch')
   expect(publish.jobs.build.strategy.matrix.group).toEqual(['api', 'web'])
   expect(publish.jobs.build.strategy.matrix.platform).toEqual([{ arch: 'amd64', runner: 'ubuntu-24.04' }, { arch: 'arm64', runner: 'ubuntu-24.04-arm' }])
-  expect(publish.jobs.build.steps.some((step: any) => step.uses?.startsWith('docker/setup-qemu'))).toBe(false)
-  expect(publish.jobs['accept-published'].needs).toBe('publish')
-  expect(publish.jobs['accept-published'].if).toBeUndefined()
-  expect(publish.jobs['accept-published'].with.published_images).toBe(true)
+  expect(publish.jobs.publish.needs).toBe('build')
+  for (const job of Object.values(publish.jobs) as any[]) {
+    expect(job.uses).toBeUndefined() // no transitive regression/Compose calls
+    for (const step of job.steps ?? []) {
+      expect(step.run ?? '').not.toMatch(/--test|vitest|playwright|compose|pnpm.*test/)
+      if (step.uses?.startsWith('actions/checkout@')) {
+        expect(step.with.ref).toBe('${{ github.sha }}')
+        expect(step.with['persist-credentials']).toBe(false)
+      }
+    }
+  }
+  expect(publish.jobs.build.steps.some((step: any) => step.run?.includes('publish-release.mjs build'))).toBe(true)
+  expect(publish.jobs.publish.steps.some((step: any) => step.run === 'node scripts/ci/publish-release.mjs manifest')).toBe(true)
+  if (environment === 'production') {
+    expect(publish.jobs.release.needs).toBe('publish')
+    expect(publish.jobs.release.if).toContain("github.event_name == 'workflow_dispatch'")
+    expect(publish.jobs.release.if).toContain("github.ref == 'refs/heads/main'")
+    expect(publish.jobs.release.permissions).toEqual({ contents: 'write', packages: 'write' })
+    expect(publish.jobs.release.steps.at(-1).run).toBe('node scripts/ci/create-release.mjs')
+  } else expect(publish.jobs.release).toBeUndefined()
 })
-it('builds and fixture-verifies native tools only when their inputs change', () => {
+it('retains explicit manual regression, native fixtures and Compose acceptance separately from publishing', () => {
   const native = workflow('publish-native.yml')
-  expect(native.on.pull_request).toBeUndefined()
-  expect(native.on.push.branches).toEqual(['development', 'main'])
-  for (const path of ['docs/deployment/native-runner/**', 'apps/api/scripts/native-check-fixtures.mts', 'pnpm-lock.yaml']) expect(native.on.push.paths).toContain(path)
-  expect(native.on.push.paths).not.toContain('apps/web/**')
   expect(Object.entries(nativeImages)).toEqual(native.jobs['publish-native'].strategy.matrix.include.map((item:any)=>['preflyt-native-'+item.tool,[item.dockerfile,item.target]]))
   const steps = native.jobs['publish-native'].steps
-  const manager = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')).packageManager
-  expect(steps.find((step:any)=>step.name==='Install locked fixture dependencies').run).toContain('npm install --global '+manager)
   const test = steps.findIndex((step: any) => step.name === 'Verify the exact image with generated source')
   const push = steps.findIndex((step: any) => step.name === 'Publish only the verified image')
   expect(test).toBeGreaterThan(0)
   expect(push).toBeGreaterThan(test)
-  expect(steps[push].if).not.toContain('always()')
-  expect(workflow('publish-images.yml').jobs['publish-native']).toBeUndefined()
-})
-it('tests the published commit images without rebuilding and keeps docs off PRs', () => {
-  const compose = workflow('compose-acceptance.yml')
-  const steps = compose.jobs.compose.steps
-  const start = steps.find((step: any) => step.name === 'Build or pull the required images').run
-  const published = start.split('else')[0]
-  expect(published).toContain('pull')
-  expect(published).toContain('org.opencontainers.image.revision')
-  expect(published).toContain('test "$revision" = "$GITHUB_SHA"')
-  expect(published).not.toContain('compose.local.yaml build')
-  expect(start).not.toContain('up -d')
-  expect(steps.find((step:any)=>step.name==='Start services and wait for readiness').run).toContain('up -d --no-build --wait')
-  expect(workflow('docs.yml').on.pull_request).toBeUndefined()
-  expect(workflow('docs.yml').on.push.branches).toEqual(['main'])
-})
-it('routes each branch to its own verification and blocks image builds when that verification fails', () => {
-  const verify = workflow('verify.yml'), main = workflow('main-regression.yml')
-  expect(verify.on.pull_request.branches).toEqual(['development', 'main'])
-  expect(verify.jobs.scope.steps[0].run).toContain('*)')
-  expect(verify.jobs.scope.steps[0].run).toContain('exit 1')
+  const verify = workflow('verify.yml')
   expect(verify.jobs.main.uses).toBe('./.github/workflows/main-regression.yml')
-  expect(verify.jobs.main.if).toBe("${{ (github.base_ref || github.ref_name) == 'main' }}")
-  expect(verify.jobs.development.if).toBe("${{ (github.base_ref || github.ref_name) == 'development' }}")
-  for (const branch of ['development', 'main']) expect(verify.jobs[branch].needs).toBe('scope')
-  expect(main.jobs['compose-smoke']).toBeUndefined()
-  for (const name of ['API regression', 'Browser regression']) expect(main.jobs.regression.steps.find((step: any) => step.name === name).if).toContain('!cancelled()')
-  expect(main.jobs.regression.steps.some((step: any) => step.name === 'Preflyt development policy')).toBe(false)
-
+  expect(verify.jobs.development.uses).toBe('./.github/workflows/development-checks.yml')
+  const regression = workflow('main-regression.yml').jobs.regression
+  for (const name of ['API regression', 'Browser regression']) expect(regression.steps.find((step:any)=>step.name===name).run).toContain('test')
+  const compose = workflow('compose-acceptance.yml')
+  expect(compose.on.workflow_dispatch.inputs.published_images.type).toBe('boolean')
+  expect(compose.on.workflow_call.inputs.published_images.type).toBe('boolean')
+  expect(compose.jobs.compose.steps.find((step:any)=>step.name==='Start services and wait for readiness').run).toContain('up -d --no-build --wait')
 })
-it('chains the final gate to check jobs in the PR workflow, leaving docs separate', () => {
-  const verify = workflow('verify.yml'), gate = verify.jobs.preflyt_gate;
-  expect(gate.needs).toEqual(['scope', 'development', 'main']);
-  expect(gate.if).toContain('always()');
-  expect(gate.name).toBe('Preflyt final gate');
-  expect(gate.steps[0].with.mode).toBe('gate');
-  expect(existsSync(resolve(root, '.github/workflows/preflyt-gate.yml'))).toBe(false);
-  expect(existsSync(resolve(root, '.github/workflows/docs.yml'))).toBe(true);
-});
 it('combines actual test outcomes and rejects missing or malformed current reports without reusing stale evidence', () => {
   const dir = mkdtempSync(resolve(tmpdir(), 'preflyt-ci-junit-'))
   const out = resolve(dir, 'tests.xml'), api = resolve(dir, 'api.xml'), web = resolve(dir, 'web.xml')

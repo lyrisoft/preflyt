@@ -94,7 +94,6 @@ const config: Config = {
           position: 'left',
           label: 'Concepts',
         },
-        { href: `pathname://${baseUrl}llms.txt`, label: 'llms.txt', position: 'right' },
         { href: repository, label: 'GitHub', position: 'right' },
       ],
     },
@@ -123,11 +122,21 @@ const config: Config = {
           items: [
             { label: 'How Preflyt works', to: '/concepts/how-preflyt-works' },
             { label: 'Evidence and trust', to: '/concepts/evidence-and-trust' },
+            { label: 'Status labels', to: '/concepts/status-labels' },
+          ],
+        },
+        {
+          title: 'Community',
+          items: [
             { label: 'GitHub', href: repository },
+            { label: 'Contributing', href: `${repository}/blob/main/CONTRIBUTING.md` },
+            { label: 'Security policy', href: `${repository}/blob/main/SECURITY.md` },
+            { label: 'Apache-2.0 license', href: 'https://www.apache.org/licenses/LICENSE-2.0' },
+            { label: 'llms.txt', href: `pathname://${baseUrl}llms.txt` },
           ],
         },
       ],
-      copyright: `Preflyt is developed by Lyrisoft Technologies. Built with Docusaurus.`,
+      copyright: '© 2026 Lyrisoft Technologies. Preflyt Community Edition · Apache-2.0.',
     },
     prism: {
       theme: prismThemes.github,

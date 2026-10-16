@@ -1,5 +1,9 @@
 FROM node@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS node
-FROM semgrep/semgrep@sha256:93963d9295a366f59e4850127b1550400ee7b388f04fe144e4a1f6325d96e01b
+FROM semgrep/semgrep@sha256:93963d9295a366f59e4850127b1550400ee7b388f04fe144e4a1f6325d96e01b AS ce-rootfs
+# The vendor image also includes Semgrep Code. Preflyt uses only CE.
+RUN rm /usr/lib/python3.12/site-packages/semgrep/bin/semgrep-core-proprietary \
+    && test -x /usr/lib/python3.12/site-packages/semgrep/bin/semgrep-core
+COPY licenses /usr/share/licenses/preflyt-scanners
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
 COPY --from=node /usr/lib/libstdc++.so.6 /usr/lib/libstdc++.so.6
 COPY --from=node /usr/lib/libgcc_s.so.1 /usr/lib/libgcc_s.so.1
@@ -8,6 +12,12 @@ COPY config /opt/preflyt/config
 COPY semgrep-measure.mjs /opt/preflyt/semgrep-measure.mjs
 COPY semgrep-locations.mjs /opt/preflyt/semgrep-locations.mjs
 RUN ln -s /usr/bin/semgrep /usr/local/bin/semgrep
+# Flatten the sanitized filesystem so the proprietary binary is absent from every
+# shipped layer, including the standalone scanner image.
+FROM scratch
+COPY --from=ce-rootfs / /
+ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+    SEMGREP_IN_DOCKER=1 SEMGREP_USER_AGENT_APPEND=Docker PYTHONIOENCODING=utf8 PYTHONUNBUFFERED=1
 USER 65532:65532
 WORKDIR /workspace
 ENTRYPOINT ["/usr/local/bin/node", "/opt/preflyt/runner.mjs"]

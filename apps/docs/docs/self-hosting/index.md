@@ -9,7 +9,7 @@ description: Preflyt components, requirements and deployment options for self-ho
 
 Preflyt runs entirely as containers. The same application images run under **Docker Compose** or **Kubernetes**; only the manifests differ.
 
-See [Community Edition](community-edition.md) for included scope, licensing and current public-release preparation status.
+See [Community Edition](community-edition.md) for included features, licensing, contributions and support.
 
 ## Components
 
@@ -61,7 +61,7 @@ Node.js, pnpm, PostgreSQL and Redis do **not** need to be installed on the host.
 | [Kubernetes](kubernetes.md) | A single-instance bundle for clusters. Ingress, TLS, storage backups and capacity are your responsibility. |
 
 :::note Images
-Preflyt runs from container images stored privately at `ghcr.io/lyrisoft`. You need an account with read access to those packages, and you sign in with `docker login ghcr.io`. You do not need the source code. Stable releases use `vX.Y.Z` image tags; development builds use `sha-` plus the 40-character commit ID. Choose an existing published tag.
+Preflyt runs from public container images at `ghcr.io/lyrisoft`. No GitHub account, registry token or registry sign-in is required. You do not need a source checkout. Stable releases use `vX.Y.Z` image tags; development builds use `sha-` plus the 40-character commit ID. Choose an existing published tag.
 :::
 
 ## What stays outside the containers
