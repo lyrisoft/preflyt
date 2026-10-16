@@ -1,7 +1,7 @@
 import { themes as prismThemes } from 'prism-react-renderer'
 import type { Config } from '@docusaurus/types'
 import type * as Preset from '@docusaurus/preset-classic'
-import release from './release-config.json'
+import release from '../../release.json'
 
 // The documentation custom domain serves the site at its root.
 // Other installations may explicitly override the origin and base path.

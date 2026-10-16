@@ -1,3 +1,4 @@
+import release from '../../../../../release.json'
 import '@/styles/index.css'
 import { afterEach, expect, it, vi } from 'vitest'
 import { render } from 'vitest-browser-react'
@@ -324,4 +325,14 @@ it('keeps section navigation and the footer usable on a phone', async () => {
   await expect
     .poll(() => document.documentElement.scrollWidth)
     .toBeLessThanOrEqual(320)
+})
+
+
+it('uses the shared stable release badge and accurate public image access copy', async () => {
+  const view = await render(<MarketingHomepage />)
+  const badge = view.getByRole('link', {name: `Preflyt v${release.latestStable} release`, exact: true})
+  await expect.element(badge).toHaveAttribute('href', `https://github.com/lyrisoft/preflyt/releases/tag/v${release.latestStable}`)
+  await expect.element(view.getByRole('img', {name: `Preflyt v${release.latestStable}`, exact: true})).toHaveAttribute('src', `https://img.shields.io/badge/Preflyt-v${release.latestStable}-2f6f60?logo=github`)
+  expect(document.querySelector('.community-release-note')?.textContent).toContain('Container images are public.')
+  expect(document.querySelector('.community-release-note')?.textContent).not.toContain('images currently require access')
 })

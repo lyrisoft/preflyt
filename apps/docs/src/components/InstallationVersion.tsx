@@ -1,6 +1,6 @@
 import CodeBlock from '@theme/CodeBlock'
 import {useDocsVersion} from '@docusaurus/plugin-content-docs/client'
-import release from '../../release-config.json'
+import release from '../../../../release.json'
 
 export function useInstallationVersion() {
   const {version} = useDocsVersion()

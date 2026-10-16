@@ -1,3 +1,4 @@
+import release from '../../../../../release.json'
 import { ArrowRight, ArrowUpRight, Layers } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { EngineeringFigures } from './engineering-figures'
@@ -183,12 +184,12 @@ export function MarketingHomepage() {
                 aria-label='Releases and Community license'
               >
                 <a
-                  href='https://github.com/lyrisoft/preflyt/releases/tag/v0.1.1'
-                  aria-label='Preflyt v0.1.1 release'
+                  href={`https://github.com/lyrisoft/preflyt/releases/tag/v${release.latestStable}`}
+                  aria-label={`Preflyt v${release.latestStable} release`}
                 >
                   <img
-                    src='https://img.shields.io/badge/Preflyt-v0.1.1-2f6f60?logo=github'
-                    alt='Preflyt v0.1.1'
+                    src={`https://img.shields.io/badge/Preflyt-v${release.latestStable}-2f6f60?logo=github`}
+                    alt={`Preflyt v${release.latestStable}`}
                     height={20}
                   />
                 </a>
@@ -214,8 +215,8 @@ export function MarketingHomepage() {
                 </a>
               </div>
               <p className='community-release-note'>
-                Community Edition · Apache-2.0. Public release is in
-                preparation; source and images currently require access.
+                Community Edition · Apache-2.0. Container images are public.
+                Public source release is in preparation.
               </p>
             </div>
           </div>

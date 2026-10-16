@@ -6,7 +6,7 @@ import {tmpdir} from 'node:os'
 import {execFileSync} from 'node:child_process'
 import {fileURLToPath} from 'node:url'
 const root = fileURLToPath(new URL('..', import.meta.url))
-const release = JSON.parse(readFileSync(resolve(root, 'release-config.json')))
+const release = JSON.parse(readFileSync(resolve(root, '../../release.json')))
 const text = html => html.replace(/<[^>]*>/g, '').replace(/<!--.*?-->/gs, '').replace(/&quot;/g, '"').replace(/&#x27;|&#39;/g, "'").replace(/&amp;/g, '&')
 const readPage = path => readFileSync(resolve(root, 'build', path), 'utf8')
 const versions = JSON.parse(readFileSync(resolve(root, 'versions.json')))
