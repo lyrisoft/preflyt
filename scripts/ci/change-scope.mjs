@@ -17,7 +17,7 @@ export function imageRequired(branch, paths) {
     (/^apps\/(?:api|web)\//.test(path) && !testFile(path) && !/\/vitest\.config\./.test(path)) ||
     path.startsWith('deploy/') || path.startsWith('scripts/deploy/') ||
     path.startsWith('docs/deployment/native-runner/') ||
-    ['LICENSE', 'NOTICE', 'THIRD_PARTY_NOTICES.md', 'docker-compose.yaml', 'compose.local.yaml', '.env.example', '.github/workflows/publish-images.yml', '.github/workflows/compose-acceptance.yml'].includes(path) ||
+    ['release.json', 'LICENSE', 'NOTICE', 'THIRD_PARTY_NOTICES.md', 'docker-compose.yaml', 'compose.local.yaml', '.env.example', '.github/workflows/publish-images.yml', '.github/workflows/compose-acceptance.yml'].includes(path) ||
     (path.startsWith('scripts/ci/') && !testFile(path)));
 }
 
@@ -25,9 +25,9 @@ export function testPlan(paths) {
   const all = paths === null || paths.some(shared);
   return {
     api: all || paths.some(path => path.startsWith('apps/api/')),
-    web: all || paths.some(path => path.startsWith('apps/web/')),
+    web: all || paths.includes('release.json') || paths.some(path => path.startsWith('apps/web/')),
     allApi: all || paths.some(path => /^apps\/api\/(?:package\.json|(?:vitest|tsconfig).*\.json|vitest\.config\.[^/]+|test\/setup\.ts)$/.test(path)),
-    allWeb: all || paths.some(path => /^apps\/web\/(?:package\.json|(?:vite|vitest)\.config\.[^/]+|tsconfig[^/]*\.json)$/.test(path)),
+    allWeb: all || paths.includes('release.json') || paths.some(path => /^apps\/web\/(?:package\.json|(?:vite|vitest)\.config\.[^/]+|tsconfig[^/]*\.json)$/.test(path)),
   };
 }
 

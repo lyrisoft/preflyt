@@ -827,8 +827,8 @@ export function SelfHostingPage() {
             capacity depends on your infrastructure.
           </p>
           <p>
-            Public release preparation is in progress. The source repository and
-            application images currently require access. Managed Cloud is
+            Container images are public. The source repository remains private
+            while public source release is prepared. Managed Cloud is
             planned as a paid service for hosting, upgrades, backups and
             support; signup is not available yet.
           </p>

@@ -39,7 +39,8 @@
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/deploy/nginx.conf",
         "$TURBO_ROOT$/deploy/nginx.website.conf",
-        ".env*"
+        ".env*",
+        "$TURBO_ROOT$/release.json"
       ],
       "outputs": [
         "dist/**",
@@ -58,7 +59,8 @@
         "$TURBO_ROOT$/docs/**",
         "$TURBO_ROOT$/deploy/**",
         "$TURBO_ROOT$/docker-compose.yaml",
-        "$TURBO_ROOT$/.env.example"
+        "$TURBO_ROOT$/.env.example",
+        "$TURBO_ROOT$/release.json"
       ],
       "outputs": [
         "build/**",

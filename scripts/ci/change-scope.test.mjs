@@ -118,3 +118,12 @@ test('service-backed API suites are integration tests and main retains the full 
   assert.match(main, /API regression[\s\S]*pnpm --filter @preflyt\/api test --reporter/);
   assert.ok(!main.includes('--exclude'));
 });
+
+
+test('a shared release update rebuilds deployable web output and selects web verification', () => {
+  assert.equal(imageRequired('development', ['release.json']), true);
+  assert.deepEqual(testPlan(['release.json']), {api: false, web: true, allApi: false, allWeb: true});
+  const commands = focusedCommands('web', {paths: ['release.json'], base: 'a'.repeat(40)});
+  assert.equal(commands.length, 1);
+  assert.ok(!commands[0].some(arg => arg.startsWith('--changed=')));
+});

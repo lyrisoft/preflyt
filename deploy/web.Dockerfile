@@ -7,6 +7,7 @@ COPY patches ./patches
 COPY apps/web/package.json apps/web/package.json
 RUN pnpm install --filter @preflyt/web... --frozen-lockfile --ignore-scripts
 COPY apps/web apps/web
+COPY release.json release.json
 COPY deploy/nginx.conf deploy/nginx.conf
 COPY deploy/nginx.website.conf deploy/nginx.website.conf
 COPY scripts/deploy/license-bundle.mjs /opt/preflyt/license-bundle.mjs
