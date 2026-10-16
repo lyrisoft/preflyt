@@ -17,7 +17,7 @@ Preflyt is a self-hosted **Engineering Assurance & Readiness Platform**. It asse
 
 ## Community Edition
 
-[Preflyt Community Edition](self-hosting/community-edition.md) is free and self-hosted with unlimited repositories and Apache-2.0 licensing for original Preflyt code. It includes the core assurance workflow and optional BYOK AI; managed Cloud is planned for later. Public release qualification is still in progress, and published images currently require package access.
+[Preflyt Community Edition](self-hosting/community-edition.md) is free and self-hosted with unlimited repositories and Apache-2.0 licensing for original Preflyt code. It includes the core assurance workflow and optional BYOK AI; managed Cloud is planned for later. Published container images are public and require no registry sign-in. Choose the documentation version that matches your installation.
 
 ## Why teams use Preflyt
 

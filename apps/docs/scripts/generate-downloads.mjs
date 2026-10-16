@@ -11,18 +11,30 @@
 //
 // Run automatically before `dev` and `build`.
 import { execFileSync } from 'node:child_process'
-import { chmodSync, copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
+import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { Scalar, isMap, isScalar, isSeq, parseDocument } from 'yaml'
 
 const docs = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const repo = resolve(docs, '../..')
-const out = resolve(docs, 'static/downloads')
+const release = JSON.parse(readFileSync(resolve(docs, 'release-config.json'), 'utf8'))
+const version = process.argv.find(arg => arg.startsWith('--version='))?.split('=')[1] ?? 'next'
+if (version !== 'next' && !/^\d+\.\d+\.\d+$/.test(version)) throw new Error('Invalid documentation version')
+const sourceRef = process.argv.find(arg => arg.startsWith('--source-ref='))?.split('=')[1]
+const imageTag = version === 'next' ? release.nextImageTag : `v${version}`
+if (!/^(v\d+\.\d+\.\d+|sha-[a-f0-9]{40})$/.test(imageTag)) throw new Error('Invalid published image tag')
+const out = resolve(docs, 'static/downloads', version)
+if (version !== 'next' && (!sourceRef || existsSync(out))) {
+  throw new Error('Release downloads require a source ref and a new output directory; frozen releases must not be overwritten')
+}
 mkdirSync(out, { recursive: true })
 
 const registry = process.env.PREFLYT_DOCS_REGISTRY ?? 'ghcr.io/lyrisoft'
-const read = (path) => readFileSync(resolve(repo, path), 'utf8')
+const read = (path) => sourceRef
+  ? execFileSync('git', ['show', `${sourceRef}:${path}`], {cwd: repo, encoding: 'utf8'})
+  : readFileSync(resolve(repo, path), 'utf8')
 
 /** Compose interpolates `$` inside inline config content, so keep it literal. */
 const literal = (text) => text.replace(/\$/g, '$$$$')
@@ -116,7 +128,7 @@ description: The standalone Docker Compose file used to run Preflyt, generated f
 
 This is the file you download in the [Quick Start](../getting-started/quick-start.md). It is generated from the project's own deployment files, so it always matches the images it starts.
 
-Download it: [\`compose.yaml\`](pathname:///downloads/compose.yaml)
+Download it: [\`compose.yaml\`](pathname:///downloads/${version}/compose.yaml)
 
 ## How it differs from the repository's \`docker-compose.yaml\`
 
@@ -147,8 +159,8 @@ writeFileSync(resolve(generated, 'compose-yaml.md'), fence('yaml', 'compose.yaml
 // The settings file. Variables listed here are the ones a reader must set.
 const envLines = (local) => `# Preflyt settings. Keep this file private: chmod 600 .env
 #
-# REQUIRED. An existing stable version (vX.Y.Z) or development SHA tag.
-PREFLYT_VERSION=REPLACE_WITH_PUBLISHED_VERSION
+# Image tag matching the selected documentation version (${version}).
+PREFLYT_VERSION=${imageTag}
 
 # REQUIRED. ${local ? 'The address you open in your browser.' : 'Your public HTTPS address: no trailing slash, no path.'}
 WEB_ORIGIN=${local ? 'http://localhost:8080' : 'https://preflyt.example.com'}
@@ -188,13 +200,27 @@ if (missing.length)
 // Standalone backup and restore helpers (the repository copies assume its layout).
 for (const script of ['backup.sh', 'restore.sh']) {
   const target = resolve(out, script)
-  copyFileSync(resolve(docs, 'scripts/templates', script), target)
+  writeFileSync(target, read(`apps/docs/scripts/templates/${script}`))
   chmodSync(target, 0o755)
 }
 
 // Kubernetes bundle.
-execFileSync('tar', ['-czf', resolve(out, 'kubernetes.tgz'), '-C', resolve(repo, 'deploy'), 'kubernetes', 'kubernetes-shared-docker-runner'])
+const staging = mkdtempSync(resolve(tmpdir(), 'preflyt-docs-kubernetes-'))
+try {
+  for (const folder of ['kubernetes', 'kubernetes-shared-docker-runner']) {
+    mkdirSync(resolve(staging, folder))
+    // Enumerate the selected source revision, not a newer checkout's manifests.
+    const files = sourceRef
+      ? execFileSync('git', ['ls-tree', '-r', '--name-only', sourceRef, `deploy/${folder}`], {cwd: repo, encoding: 'utf8'}).trim().split('\n').map(path => path.slice(`deploy/${folder}/`.length))
+      : readdirSync(resolve(repo, 'deploy', folder))
+    for (const file of files) {
+      const content = read(`deploy/${folder}/${file}`).replace(/(ghcr\.io\/lyrisoft\/preflyt-[a-z-]+):development/g, `$1:${imageTag}`)
+      writeFileSync(resolve(staging, folder, file), content)
+    }
+  }
+  execFileSync('tar', ['-czf', resolve(out, 'kubernetes.tgz'), '-C', staging, 'kubernetes', 'kubernetes-shared-docker-runner'])
+} finally { rmSync(staging, {recursive: true, force: true}) }
 
-copyFileSync(resolve(repo, 'docs/deployment/native-runner/application.compose.yaml'), resolve(out, 'native-runner.compose.yaml'))
+writeFileSync(resolve(out, 'native-runner.compose.yaml'), read('docs/deployment/native-runner/application.compose.yaml'))
 
 console.log('Generated:', ['compose.yaml', 'preflyt.env.example', 'backup.sh', 'restore.sh', 'kubernetes.tgz', 'native-runner.compose.yaml', '_generated snippets'].join(', '))

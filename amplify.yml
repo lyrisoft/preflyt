@@ -1,0 +1,34 @@
+version: 1
+applications:
+  - appRoot: apps/web
+    env:
+      variables:
+        VITE_WEBSITE_MODE: 'true'
+        TURBO_TELEMETRY_DISABLED: '1'
+    frontend:
+      # Commands and artifact paths are relative to the repository root.
+      buildPath: /
+      phases:
+        preBuild:
+          commands:
+            - nvm install 24.4.1
+            - nvm use 24.4.1
+            - npm install --global pnpm@10.26.2
+            # Use Amplify's recommended hoisted linker only in its build container.
+            - pnpm install --frozen-lockfile --ignore-scripts --config.node-linker=hoisted
+        build:
+          commands:
+            - VITE_WEBSITE_MODE=true pnpm exec turbo run build --filter=@preflyt/web
+        postBuild:
+          commands:
+            - test -f apps/web/dist/index.html
+            - test -f apps/web/dist/404.html
+            - test ! -f apps/web/dist/app.html
+      artifacts:
+        baseDirectory: apps/web/dist
+        files:
+          - '**/*'
+      cache:
+        paths:
+          - node_modules/**/*
+          - .turbo/cache/**/*

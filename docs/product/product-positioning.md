@@ -25,6 +25,7 @@ Managed Cloud is a **planned** paid service for following through from findings 
 
 - One-click managed Slack, Microsoft Teams and email notification connections, plus Jira and Linear issue creation and status sync. An authorized administrator still grants provider access and chooses destinations.
 - Agentic AI investigation, proposed fixes and draft pull requests with explicit human approval and fresh assessment evidence.
+- Complement Dependabot: investigate dependency PRs, findings and CI failures, propose bounded fixes, and verify them against the team's standards before human-reviewed merging. This is planned Cloud scope; see the [remediation roadmap and implementation plan](../planning/cloud-remediation-roadmap.md).
 - Owner routing, reminders, escalations and cross-repository remediation campaigns, keeping ticket status separate from verified resolution.
 - Portfolio reporting and scheduled evidence packs, with original assessment links and explicit coverage gaps.
 - Managed AI and isolated scanner capacity, upgrades, monitoring, recoverable backups, team usage/spending controls, guided onboarding and priority support.

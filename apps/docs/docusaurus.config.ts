@@ -1,6 +1,7 @@
 import { themes as prismThemes } from 'prism-react-renderer'
 import type { Config } from '@docusaurus/types'
 import type * as Preset from '@docusaurus/preset-classic'
+import release from './release-config.json'
 
 // The documentation custom domain serves the site at its root.
 // Other installations may explicitly override the origin and base path.
@@ -57,6 +58,11 @@ const config: Config = {
         docs: {
           routeBasePath: '/',
           sidebarPath: './sidebars.ts',
+          lastVersion: release.latestStable,
+          versions: {
+            current: {label: 'Next', path: 'next', banner: 'unreleased'},
+            [release.latestStable]: {label: `v${release.latestStable}`, path: '', banner: 'none'},
+          },
           editUrl: `${repository}/edit/development/apps/docs/`,
         },
         blog: false,
@@ -94,6 +100,7 @@ const config: Config = {
           position: 'left',
           label: 'Concepts',
         },
+        {type: 'docsVersionDropdown', position: 'right'},
         { href: repository, label: 'GitHub', position: 'right' },
       ],
     },
