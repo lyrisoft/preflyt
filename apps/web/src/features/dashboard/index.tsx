@@ -691,18 +691,19 @@ function RepositoryNextAction({
                 ? 'Review optional checks'
                 : 'View assessment'
   return (
-    <Link
-      to='/repositories/$repositoryId'
-      params={{ repositoryId: repository.githubId }}
-      search={{
-        tab,
-        ...(repository.latestAssessment
-          ? { assessment: repository.latestAssessment.id }
-          : {}),
-      }}
-      className='inline-flex min-h-8 items-center text-xs font-medium underline-offset-4 hover:underline focus-visible:underline'
-    >
-      {label}
-    </Link>
+    <Button variant='outline' size='sm' asChild>
+      <Link
+        to='/repositories/$repositoryId'
+        params={{ repositoryId: repository.githubId }}
+        search={{
+          tab,
+          ...(repository.latestAssessment
+            ? { assessment: repository.latestAssessment.id }
+            : {}),
+        }}
+      >
+        {label}
+      </Link>
+    </Button>
   )
 }
