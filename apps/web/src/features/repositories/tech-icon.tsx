@@ -20,6 +20,8 @@ import {
   siSvelte,
   siSwift,
   siTypescript,
+  siTerraform,
+  siYaml,
   siVuedotjs,
   type SimpleIcon,
 } from 'simple-icons'
@@ -32,6 +34,8 @@ import {
 
 /** Names as reported by repository discovery. */
 const icons: Record<string, SimpleIcon> = {
+  Terraform: siTerraform,
+  YAML: siYaml,
   TypeScript: siTypescript,
   JavaScript: siJavascript,
   Python: siPython,

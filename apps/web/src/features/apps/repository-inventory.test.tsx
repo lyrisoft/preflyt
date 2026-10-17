@@ -359,3 +359,25 @@ it('shows API overall health consistently even when analysis is partial', async 
       ?.className
   ).toContain('text-warning-text')
 })
+
+it('shows Terraform and YAML stack labels for infrastructure repositories', async () => {
+  const view = await render(
+    <TooltipProvider>
+      <RepositoryInventoryTable
+        repositories={[{ ...repository, technologies: ['Terraform', 'YAML'] }]}
+        canManage
+        savingRepository={null}
+        onSelectionChange={vi.fn()}
+      />
+    </TooltipProvider>
+  )
+  await expect
+    .element(view.getByRole('img', { name: 'Terraform', exact: true }))
+    .toBeVisible()
+  await expect
+    .element(view.getByRole('img', { name: 'YAML', exact: true }))
+    .toBeVisible()
+  await expect
+    .element(view.getByText('Stack not detected'))
+    .not.toBeInTheDocument()
+})

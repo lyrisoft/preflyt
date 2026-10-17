@@ -45,7 +45,7 @@ export type ProfileSignal = {
   evidence: { path: string; blobSha: string; reason: string }[]
 }
 
-const ignored = /(^|\/)(node_modules|vendor|dist|build|coverage|\.git|\.claude\/skills|\.agents\/skills|\.codex\/skills)(\/|$)/
+const ignored = /(^|\/)(node_modules|vendor|dist|build|coverage|\.terraform|\.terragrunt-cache|\.git|\.claude\/skills|\.agents\/skills|\.codex\/skills)(\/|$)/
 const manifest =
   /(^|\/)(package\.json|pyproject\.toml|requirements[^/]*\.txt|go\.mod|Cargo\.toml|pom\.xml|build\.gradle(?:\.kts)?|Gemfile|composer\.json|[^/]+\.csproj)$/
 const workflow = /^\.github\/workflows\/[^/]+\.ya?ml$/
@@ -102,19 +102,96 @@ export function discoverRepositoryProfile(snapshot: RepositorySnapshot) {
   const extensions: Record<string, string> = {
     ts: 'TypeScript',
     tsx: 'TypeScript',
+    mts: 'TypeScript',
+    cts: 'TypeScript',
     js: 'JavaScript',
     jsx: 'JavaScript',
+    mjs: 'JavaScript',
+    cjs: 'JavaScript',
     py: 'Python',
+    pyi: 'Python',
+    pyw: 'Python',
     go: 'Go',
     rs: 'Rust',
     java: 'Java',
     kt: 'Kotlin',
+    kts: 'Kotlin',
     rb: 'Ruby',
+    rake: 'Ruby',
     php: 'PHP',
     cs: 'C#',
+    csx: 'C#',
     c: 'C',
+    h: 'C/C++',
     cpp: 'C++',
+    cc: 'C++',
+    cxx: 'C++',
+    hpp: 'C++',
+    hh: 'C++',
+    hxx: 'C++',
     swift: 'Swift',
+    dart: 'Dart',
+    scala: 'Scala',
+    sc: 'Scala',
+    ex: 'Elixir',
+    exs: 'Elixir',
+    erl: 'Erlang',
+    hrl: 'Erlang',
+    hs: 'Haskell',
+    lhs: 'Haskell',
+    clj: 'Clojure',
+    cljc: 'Clojure',
+    cljs: 'ClojureScript',
+    lua: 'Lua',
+    r: 'R',
+    sh: 'Shell',
+    bash: 'Shell',
+    zsh: 'Shell',
+    fish: 'Fish',
+    ps1: 'PowerShell',
+    psm1: 'PowerShell',
+    psd1: 'PowerShell',
+    sql: 'SQL',
+    html: 'HTML',
+    htm: 'HTML',
+    css: 'CSS',
+    scss: 'SCSS',
+    sass: 'Sass',
+    less: 'Less',
+    vue: 'Vue',
+    svelte: 'Svelte',
+    fs: 'F#',
+    fsx: 'F#',
+    fsi: 'F#',
+    pl: 'Perl',
+    pm: 'Perl',
+    groovy: 'Groovy',
+    gradle: 'Groovy',
+    proto: 'Protocol Buffers',
+    graphql: 'GraphQL',
+    gql: 'GraphQL',
+    zig: 'Zig',
+    jl: 'Julia',
+    sol: 'Solidity',
+    tf: 'Terraform',
+    tfvars: 'Terraform',
+    hcl: 'HCL',
+    yaml: 'YAML',
+    yml: 'YAML',
+    bicep: 'Bicep',
+    bicepparam: 'Bicep',
+    jsonnet: 'Jsonnet',
+    libsonnet: 'Jsonnet',
+    cue: 'CUE',
+    nix: 'Nix',
+  }
+  // These are file-format hints, not proof of a framework or analyzer coverage.
+  const languageOf = (file: RepositoryFile) => {
+    if (/\.tf(?:vars)?\.json$/i.test(file.path)) return 'Terraform'
+    const extension = /\.([^.\/]+)$/.exec(file.path)?.[1]
+    if (extension === 'C') return 'C++'
+    const key = extension?.toLowerCase()
+    return key && Object.hasOwn(extensions, key) ? extensions[key] : undefined
   }
   const representativeFirst = (groups: RepositoryFile[][]) => [
     ...new Set([
@@ -122,25 +199,17 @@ export function discoverRepositoryProfile(snapshot: RepositorySnapshot) {
       ...groups.flat(),
     ]),
   ]
-  const languageFiles = files.filter(
-    (file) => extensions[file.path.split('.').pop() ?? ''],
-  )
+  const languageFiles = files.filter((file) => languageOf(file))
   add(
     'languages',
     'Languages',
     representativeFirst(
       [...new Set(Object.values(extensions))].map((language) =>
-        languageFiles.filter(
-          (file) => extensions[file.path.split('.').pop()!] === language,
-        ),
-      ),
+        languageFiles.filter((file) => languageOf(file) === language)
+      )
     ),
-    [
-      ...new Set(
-        languageFiles.map((file) => extensions[file.path.split('.').pop()!]),
-      ),
-    ].sort(),
-    languageFiles.length === 0,
+    [...new Set(languageFiles.map((file) => languageOf(file)!))].sort(),
+    languageFiles.length === 0
   )
 
   const packages = matching(/(^|\/)package\.json$/)
@@ -256,7 +325,7 @@ export function discoverRepositoryProfile(snapshot: RepositorySnapshot) {
     'iac',
     'Infrastructure as code',
     matching(
-      /(\.tf$|(^|\/)(Chart\.yaml|kustomization\.ya?ml)$|(^|\/)(k8s|kubernetes|helm|terraform)\/)/,
+      /(\.tf(?:vars)?(?:\.json)?$|(^|\/)(Chart\.yaml|kustomization\.ya?ml)$|(^|\/)(k8s|kubernetes|helm|terraform)\/)/,
     ),
   )
   add(

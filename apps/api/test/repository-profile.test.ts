@@ -161,3 +161,114 @@ it('excludes installed agent skill links and scripts from application profile ch
  expect(result.signals.find(s=>s.id==='languages')!.observations).toEqual([])
  expect(result.omittedPaths[0].reason).toContain('outside supported application profile scope')
 })
+
+describe('infrastructure and additional language file hints', () => {
+  it.each([
+    ['schema.proto', 'Protocol Buffers'],
+    ['schema.graphql', 'GraphQL'],
+    ['query.gql', 'GraphQL'],
+    ['app.zig', 'Zig'],
+    ['main.jl', 'Julia'],
+    ['Contract.sol', 'Solidity'],
+    ['main.bicepparam', 'Bicep'],
+    ['main.tf', 'Terraform'],
+    ['modules/main.tf.json', 'Terraform'],
+    ['env/prod.tfvars', 'Terraform'],
+    ['env/prod.tfvars.json', 'Terraform'],
+    ['terragrunt.hcl', 'HCL'],
+    ['deploy/service.yaml', 'YAML'],
+    ['deploy/service.yml', 'YAML'],
+    ['deploy/SERVICE.YAML', 'YAML'],
+    ['main.bicep', 'Bicep'],
+    ['config.nix', 'Nix'],
+    ['main.jsonnet', 'Jsonnet'],
+    ['helpers.libsonnet', 'Jsonnet'],
+    ['schema.cue', 'CUE'],
+    ['index.mts', 'TypeScript'],
+    ['index.cts', 'TypeScript'],
+    ['index.mjs', 'JavaScript'],
+    ['index.cjs', 'JavaScript'],
+    ['types.pyi', 'Python'],
+    ['script.pyw', 'Python'],
+    ['build.gradle.kts', 'Kotlin'],
+    ['main.cc', 'C++'],
+    ['main.cxx', 'C++'],
+    ['main.C', 'C++'],
+    ['include/api.h', 'C/C++'],
+    ['include/api.hpp', 'C++'],
+    ['app.dart', 'Dart'],
+    ['app.scala', 'Scala'],
+    ['app.exs', 'Elixir'],
+    ['app.erl', 'Erlang'],
+    ['app.hs', 'Haskell'],
+    ['app.clj', 'Clojure'],
+    ['app.cljs', 'ClojureScript'],
+    ['app.lua', 'Lua'],
+    ['analysis.R', 'R'],
+    ['deploy.sh', 'Shell'],
+    ['deploy.bash', 'Shell'],
+    ['deploy.zsh', 'Shell'],
+    ['deploy.fish', 'Fish'],
+    ['deploy.ps1', 'PowerShell'],
+    ['modules.psm1', 'PowerShell'],
+    ['schema.sql', 'SQL'],
+    ['index.html', 'HTML'],
+    ['main.css', 'CSS'],
+    ['main.scss', 'SCSS'],
+    ['main.sass', 'Sass'],
+    ['main.less', 'Less'],
+    ['App.vue', 'Vue'],
+    ['App.svelte', 'Svelte'],
+    ['main.fs', 'F#'],
+    ['main.pl', 'Perl'],
+    ['build.gradle', 'Groovy'],
+  ])('detects %s as %s with exact file evidence', (path, language) => {
+    const snapshot = {
+      ...base(),
+      files: [{ path, sha: 'c'.repeat(40), size: 1 }],
+    }
+    expect(signal(snapshot, 'languages')).toMatchObject({
+      state: 'detected',
+      observations: [language],
+      evidence: [{ path, blobSha: 'c'.repeat(40) }],
+    })
+    expect(signal(snapshot, 'frameworks').observations).toEqual([])
+  })
+  it('recognizes Terraform JSON infrastructure without treating arbitrary JSON or YAML as Terraform or Kubernetes', () => {
+    const snapshot = {
+      ...base(),
+      files: ['main.tf.json', 'data/settings.json', 'deploy.yaml'].map(
+        (path) => ({ path, sha: 'c'.repeat(40), size: 1 })
+      ),
+    }
+    expect(signal(snapshot, 'iac').evidence.map((file) => file.path)).toEqual([
+      'main.tf.json',
+    ])
+    expect(signal(snapshot, 'languages').observations).toEqual([
+      'Terraform',
+      'YAML',
+    ])
+    expect(signal(snapshot, 'frameworks').observations).toEqual([])
+  })
+  it('keeps ignored dependencies, generated output and installed skills outside language detection', () => {
+    const snapshot = {
+      ...base(),
+      files: [
+        '.terraform/modules/example/main.tf',
+        '.terragrunt-cache/example/main.tf',
+        'vendor/main.tf',
+        'node_modules/file.yaml',
+        'dist/index.mjs',
+        '.agents/skills/demo/example.sh',
+        'README.md',
+        'terraform.tfstate',
+        'data.json',
+        'go',
+        'payload.constructor',
+        'payload.__proto__',
+      ].map((path) => ({ path, sha: 'c'.repeat(40), size: 1 })),
+    }
+    expect(signal(snapshot, 'languages').observations).toEqual([])
+    expect(signal(snapshot, 'languages').state).toBe('unknown')
+  })
+})
