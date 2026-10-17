@@ -196,3 +196,23 @@ describe('GitHub rate limit handling', () => {
     expect(action).not.toHaveBeenCalled()
   })
 })
+
+it('waits for a short shared request backlog instead of treating it as a GitHub failure',async()=>{
+ const cache={githubPermit:vi.fn().mockResolvedValueOnce(2050).mockResolvedValue(0),githubRemainingCooldown:vi.fn(async()=>0)}
+ const action=vi.fn(async()=>new Response('ok'))
+ await expect(new GitHubRequestLimiter(cache as any).run('installation:burst',action)).resolves.toHaveProperty('status',200)
+ expect(cache.githubPermit).toHaveBeenCalledTimes(2)
+ expect(action).toHaveBeenCalledTimes(1)
+})
+
+it('shares team directory cooldowns with repository reads for the same installation',async()=>{
+ const provider=new GitHubProviderService() as any
+ vi.spyOn(provider,'verifyInstallation').mockResolvedValue({accountType:'Organization',accountId:22n,accountLogin:'fixture',permissions:{members:'read'}})
+ vi.spyOn(provider,'installationToken').mockResolvedValue('fixture-token')
+ const fetch=vi.fn(async()=>new Response('{}',{status:429,headers:{'retry-after':'60'}}))
+ vi.stubGlobal('fetch',fetch)
+ await expect(provider.withOrganizationMembers(1n,22n,(_token:string,_login:string,request:(path:string)=>Promise<Response>)=>request('/orgs/fixture/teams?per_page=100&page=1'))).rejects.toBeInstanceOf(GitHubRateLimitError)
+ await expect(provider.verifyRepositoryAccess(1n,2n)).rejects.toBeInstanceOf(GitHubRateLimitError)
+ expect(fetch).toHaveBeenCalledTimes(1)
+ provider.close()
+})

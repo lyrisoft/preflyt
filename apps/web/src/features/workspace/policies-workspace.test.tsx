@@ -79,7 +79,7 @@ const options = {
   childTeams: [{ id: 'team', name: 'Platform' }],
   standards: [
     {
-      id: 'baseline-engineering',
+      id: 'org-standard-baseline',
       title: 'Baseline Engineering',
       version: '1.0.0',
     },
@@ -186,7 +186,7 @@ it('assigns a team only after server impact preview and carries the exact review
     .toEqual({
       branchRef: 'refs/heads/main',
       profile: 'RECOMMENDED',
-      packs: [{ id: 'baseline-engineering', version: '1.0.0' }],
+      packs: [{ id: 'org-standard-baseline', version: '1.0.0' }],
       expectedPreviewHash: 'a'.repeat(64),
     })
   await view.unmount()
@@ -316,5 +316,85 @@ it('keeps Branch policies and CI jobs in separate tabs without repository standa
   await expect
     .element(page.getByRole('heading', { name: 'Branch policies' }))
     .not.toBeInTheDocument()
+  await view.unmount()
+})
+
+it('shows the repository blocking organization preview and its recovery action', async () => {
+  const original = state.api.getMockImplementation()!
+  state.api.mockImplementation(async (path: string, ...args: unknown[]) => {
+    if (path.endsWith('/preview'))
+      throw Object.assign(
+        new Error(
+          'Cannot preview the organization baseline. 1 repository needs attention.'
+        ),
+        {
+          blockedRepositories: [
+            {
+              repositoryId: '101',
+              name: 'org/service',
+              reason: 'NOT_SELECTED',
+              message:
+                'This repository is not selected for Preflyt. Select it in Repositories, or review its approved scope in Teams.',
+            },
+          ],
+        }
+      )
+    return original(path, ...args)
+  })
+  const { view } = await mount('/policies?policyScope=organization')
+  await page.getByRole('button', { name: 'Prepare organization scope' }).click()
+  await page.getByRole('button', { name: 'Preview impact' }).click()
+  const alert = page.getByRole('alert')
+  await expect
+    .element(alert.getByText('org/service', { exact: true }))
+    .toBeVisible()
+  await expect
+    .element(
+      alert.getByText('This repository is not selected for Preflyt.', {
+        exact: false,
+      })
+    )
+    .toBeVisible()
+  await expect
+    .element(page.getByRole('button', { name: 'Apply and create drafts' }))
+    .not.toBeInTheDocument()
+  await view.unmount()
+})
+it('does not offer built-in templates or silently select one when the workspace library is empty', async () => {
+  const original = state.api.getMockImplementation()!
+  state.api.mockImplementation(async (path: string, ...args: unknown[]) =>
+    path === '/teams/options'
+      ? {
+          ...options,
+          standards: [
+            {
+              id: 'baseline-engineering',
+              version: '1.1.1',
+              title: 'Built-in baseline template',
+            },
+          ],
+        }
+      : original(path, ...args)
+  )
+  const { view } = await mount('/policies?policyScope=organization')
+  await page.getByRole('button', { name: 'Prepare organization scope' }).click()
+  await expect
+    .element(
+      page.getByRole('checkbox', {
+        name: 'Built-in baseline template · v1.1.1',
+      })
+    )
+    .not.toBeInTheDocument()
+  await expect
+    .element(
+      page.getByText(
+        'Create a workspace standard in Standards before assigning requirements.',
+        { exact: false }
+      )
+    )
+    .toBeVisible()
+  await expect
+    .element(page.getByRole('button', { name: 'Preview impact' }))
+    .toBeDisabled()
   await view.unmount()
 })

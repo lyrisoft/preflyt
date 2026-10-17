@@ -96,7 +96,7 @@ it('shows familiar groups with direct links and no competing active entry', asyn
       .element(
         page.getByRole('link', {
           name,
-          exact: !['AI Intelligence', 'Merge Protection'].includes(name),
+          exact: !['AI Intelligence', 'Skills'].includes(name),
         })
       )
       .toHaveAttribute('href', href)
@@ -154,15 +154,15 @@ it('keeps the restored mobile menu usable in both themes and closes it on naviga
     const view = await render(sidebar())
     await page.getByRole('button', { name: 'Toggle Sidebar' }).click()
     await expect
-      .element(page.getByRole('link', { name: 'Skills', exact: true }))
+      .element(page.getByRole('link', { name: 'Skills', exact: false }))
       .toBeVisible()
     expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(320)
-    const link = page.getByRole('link', { name: 'Skills', exact: true })
+    const link = page.getByRole('link', { name: 'Skills', exact: false })
     link.element().focus()
     expect(document.activeElement).toBe(link.element())
     await link.click()
     await expect
-      .element(page.getByRole('link', { name: 'Skills', exact: true }))
+      .element(page.getByRole('link', { name: 'Skills', exact: false }))
       .not.toBeInTheDocument()
     await view.unmount()
   }

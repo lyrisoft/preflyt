@@ -213,7 +213,7 @@ export class RepositoryHealthService {
    const row = await tx.repositoryHealthAssessment.findFirst({ where: { id, repositoryId: repo.id, organizationId: session.organizationId! } })
    if (!row) throw new NotFoundException('Health assessment is unavailable')
    if (!activeStates.includes(row.state)) return
-   await tx.repositoryHealthAssessment.updateMany({ where: { id, state: row.state }, data: { cancelledAt: new Date() } })
+   await tx.repositoryHealthAssessment.updateMany({ where: { id, state: row.state }, data: { cancelledAt: new Date(), ...(row.state==='QUEUED'?{leaseUntil:null}:{}) } })
    if (row.nativeRequestId) {
     await tx.nativeExecutionRequest.updateMany({ where: { id: row.nativeRequestId, state: 'QUEUED' }, data: { state: 'CANCELLED', cancelledById: session.identityId, reason: 'EXECUTION_CANCELLED', finishedAt: new Date(), leaseUntil: null } })
     await tx.nativeExecutionRequest.updateMany({ where: { id: row.nativeRequestId, state: { in: ['QUEUED','PREPARING','RUNNING'] } },
@@ -284,11 +284,12 @@ export class RepositoryHealthService {
     if (running.length >= 2 || running.some(r => r.organizationId === row.organizationId)) return null
    }
    const changed = await tx.repositoryHealthAssessment.updateMany({ where: { id, state: row.state, leaseUntil: row.leaseUntil },
-    data: { state: 'RUNNING', startedAt: row.startedAt ?? now, leaseToken: token, leaseUntil: new Date(Date.now()+120000), attempts: { increment: 1 } } })
+    data: { state: 'RUNNING', reason:null, plan:json({...row.plan as any,failure:undefined}), startedAt: row.startedAt ?? now, leaseToken: token, leaseUntil: new Date(Date.now()+120000), attempts: { increment: 1 } } })
    return changed.count ? tx.repositoryHealthAssessment.findUniqueOrThrow({ where: { id } }) : null
   })
   if (!claimed) return
   let row = claimed
+  let fetchedSource: Awaited<ReturnType<GitHubProviderService['readHealthScanSource']>> | undefined
   const session = sessionFor(row)
   try {
    const repo = await this.access.requireRepository(session, (await this.db.gitHubRepository.findUniqueOrThrow({ where: { id: row.repositoryId } })).githubId.toString(), 'execution.run')
@@ -303,7 +304,10 @@ export class RepositoryHealthService {
     await this.finish(row,token,'FAILED',row.report as HealthReport|null,'HEALTH_TEST_EXECUTION_REMOVED');return
    }
    if (!row.sourceSha) {
-    const snapshot = await this.github.readRepositorySnapshot(repo.installationId, repo.githubId, row.branch)
+    // A bounded Git fetch may outlive the ordinary worker lease.
+    await this.db.repositoryHealthAssessment.updateMany({where:{id,leaseToken:token},data:{leaseUntil:new Date(Date.now()+12*60000)}})
+    const snapshot = await this.github.readRepositorySnapshot(repo.installationId, repo.githubId, row.branch, !!this.scanner)
+    fetchedSource = snapshot.scanSource
     await this.access.requireRepository(session, repo.githubId.toString(), 'execution.run')
     const requestedCategory=(row.plan as any)?.requestedCategory as HealthCategory|undefined
     const profile = discoverRepositoryProfile(snapshot), analyses = selectedHealthAnalyses(snapshot,requestedCategory)
@@ -325,7 +329,7 @@ export class RepositoryHealthService {
     row = await this.db.repositoryHealthAssessment.findUniqueOrThrow({ where: { id } })
    }
    if ((row.plan as any)?.kind === 'AUTOMATIC_HEALTH') {
-    await this.automaticScan(row, token, session, repo)
+    await this.automaticScan(row, token, session, repo, fetchedSource)
     return
    }
    if (Date.now() - row.startedAt!.getTime() > 2100000) {
@@ -382,10 +386,11 @@ export class RepositoryHealthService {
     const native = await this.db.nativeExecutionRequest.findUnique({ where: { id: row.nativeRequestId } })
     if (native && ['QUEUED','PREPARING','RUNNING','CANCEL_REQUESTED'].includes(native.state)) { await this.defer(id,token); return }
    }
-   await this.finish(row,token,'FAILED',row.report as HealthReport | null, error instanceof GitHubRateLimitError ? 'GITHUB_RATE_LIMITED' : (error as Error)?.message === 'NO_APPLICABLE_ANALYSIS' ? 'NO_APPLICABLE_ANALYSIS' : (error as any)?.status === 403 ? 'ACCESS_REVOKED' : 'SOURCE_OR_ANALYSIS_UNAVAILABLE', error instanceof GitHubRateLimitError ? validRetryAt((error.getResponse() as any)?.retryAt) : null)
+   if (error instanceof GitHubRateLimitError) { await this.deferGitHub(row,token,error); return }
+   await this.finish(row,token,'FAILED',row.report as HealthReport | null, error instanceof HealthGitSourceError ? error.code : (error as Error)?.message === 'NO_APPLICABLE_ANALYSIS' ? 'NO_APPLICABLE_ANALYSIS' : (error as any)?.status === 403 ? 'ACCESS_REVOKED' : 'SOURCE_OR_ANALYSIS_UNAVAILABLE')
   }
  }
- private async automaticScan(row: any, token: string, session: AuthenticatedSession, repo: any) {
+ private async automaticScan(row: any, token: string, session: AuthenticatedSession, repo: any, fetchedSource?: Awaited<ReturnType<GitHubProviderService['readHealthScanSource']>>) {
   if (!this.scanner) throw new Error('Scanner client unavailable')
   const saved=row.plan as any
   let preparingSource=false
@@ -398,7 +403,7 @@ export class RepositoryHealthService {
     await this.db.repositoryHealthAssessment.updateMany({where:{id:row.id,leaseToken:token,cancelledAt:null},data:{leaseUntil:new Date(Date.now()+12*60000)}})
     preparingSource=true
     console.info(JSON.stringify({event:'health.worker.fetching_source',assessmentId:row.id}))
-    source=await this.github.readHealthScanSource(repo.installationId,repo.githubId,row.sourceSha,AbortSignal.timeout(600000),false)
+    source=fetchedSource??await this.github.readHealthScanSource(repo.installationId,repo.githubId,row.sourceSha,AbortSignal.timeout(600000),false)
     await this.access.requireRepository(session,repo.githubId.toString(),'execution.run')
     preparingSource=false
     pkg=await this.scanner.package(row.organizationId)
@@ -448,6 +453,7 @@ export class RepositoryHealthService {
    await this.finish(row,token,receipt.cancelled?'CANCELLED':receipt.checks.some(c=>!c.cleanupConfirmed)?'FAILED':'COMPLETED',report,receipt.cancelled?'EXECUTION_CANCELLED':null)
   } catch (error) {
    // An uncertain admit/status response cannot abandon an owned scanner job.
+   if (error instanceof GitHubRateLimitError) { await this.deferGitHub(row,token,error); return }
    const current=await this.db.repositoryHealthAssessment.findUniqueOrThrow({where:{id:row.id}})
    if ((current.plan as any)?.expected) {
     await this.db.repositoryHealthAssessment.updateMany({where:{id:row.id,leaseToken:token},data:{plan:json({...current.plan as any,stage:'RECONNECTING_SCANNER'})}})
@@ -460,6 +466,16 @@ export class RepositoryHealthService {
    next.policyContext=report.policyContext
    await this.finish(row,token,'FAILED',next,reason,reason==='GITHUB_RATE_LIMITED'?validRetryAt(response?.retryAt):null)
   }
+ }
+ private async deferGitHub(row: RepositoryHealthAssessment, token: string, error: GitHubRateLimitError) {
+  const retryAt = validRetryAt((error.getResponse() as any)?.retryAt)
+  const resumeAt = new Date(Math.max(Date.now()+5000, retryAt ? Date.parse(retryAt) : 0))
+  // PostgreSQL owns the delay; release the running slot so other workspaces can proceed.
+  const changed = await this.db.repositoryHealthAssessment.updateMany({where:{id:row.id,state:'RUNNING',leaseToken:token,cancelledAt:null},data:{
+   state:'QUEUED',reason:'GITHUB_RATE_LIMITED',finishedAt:null,leaseToken:null,leaseUntil:resumeAt,
+   plan:json({...row.plan as any,stage:'WAITING_GITHUB',failure:{retryAt:resumeAt.toISOString()}}),
+  }})
+  if (!changed.count) await this.db.repositoryHealthAssessment.updateMany({where:{id:row.id,leaseToken:token},data:{leaseToken:null,leaseUntil:null}})
  }
  private async defer(id: string, token: string) {
   await this.db.repositoryHealthAssessment.updateMany({ where: { id, leaseToken: token }, data: { leaseToken: null, leaseUntil: new Date(Date.now()+5000) } })

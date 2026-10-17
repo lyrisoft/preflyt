@@ -43,7 +43,8 @@ it.each([['development', 'development'], ['production', 'main']])('publishes %s 
   expect(publish.jobs.build.steps.some((step: any) => step.run?.includes('publish-release.mjs build'))).toBe(true)
   expect(publish.jobs.publish.steps.some((step: any) => step.run === 'node scripts/ci/publish-release.mjs manifest')).toBe(true)
   if (environment === 'production') {
-    expect(publish.jobs.release.needs).toBe('publish')
+    expect(publish.jobs.release.needs).toEqual(['branch', 'publish'])
+    expect(publish.jobs.release.steps.at(-1).env.PREFLYT_BUILD_VERSION).toBe('${{ needs.branch.outputs.version }}')
     expect(publish.jobs.release.if).toContain("github.event_name == 'workflow_dispatch'")
     expect(publish.jobs.release.if).toContain("github.ref == 'refs/heads/main'")
     expect(publish.jobs.release.permissions).toEqual({ contents: 'write', packages: 'write' })

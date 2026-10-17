@@ -41,6 +41,10 @@ Below the scope are two tabs:
 
 Organization and team requirements are included automatically. A repository policy can add to them but not weaken them.
 
+Organization and team assignment pickers show the latest version of each workspace standard. Create a workspace standard from a built-in template in **Standards** before assigning it. Saved assignments retain their recorded versions.
+
+If an impact preview is blocked, the error lists the affected repositories you can access and explains whether to select the repository, check GitHub access, or ask an Owner or Admin to review permissions. Repositories outside your access remain unnamed. Previewing does not remove approved repository coverage or bypass permissions.
+
 ## Approve and publish
 
 A new policy is a **draft**. To use it:

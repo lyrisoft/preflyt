@@ -1,3 +1,4 @@
+import * as gitSource from '../src/health/health-git-source.js'
 import { createHash } from 'node:crypto'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { RedisCacheService } from '../src/cache/redis-cache.service.js'
@@ -18,7 +19,6 @@ const setup = (
     denied?: boolean
     wrongRef?: boolean
     missingBranch?: boolean
-    mismatchedCommit?: boolean
     cache?: RedisCacheService
     branchCount?: number
   } = {},
@@ -42,12 +42,7 @@ const setup = (
   }))
   Object.assign(provider, { app: { octokit: { request: tokenRequest } } })
   ;(provider as any).appFingerprint = (provider as any).connectionFingerprint()
-  const fetchMock = vi.fn(async (url: string) => {
-    if (
-      options.denied ||
-      (options.missingBranch && url.includes('/git/ref/heads/'))
-    )
-      return new Response('{}', { status: 404 })
+  const fixtureBody = (url: string) => {
     let body: unknown
     if (url.endsWith('/repositories/2'))
       body = {
@@ -62,15 +57,12 @@ const setup = (
         name: i === 0 ? 'main' : i === 1 ? 'development' : `feature/${i}`,
       }))
     else if (
-      url.endsWith('/git/ref/heads/development') ||
-      url.endsWith('/git/ref/heads/feature%2Fother')
+      url.includes('/git/ref/heads/')
     )
       body = {
         ref: options.wrongRef
           ? 'refs/tags/development'
-          : url.endsWith('/development')
-            ? 'refs/heads/development'
-            : 'refs/heads/feature/other',
+          : 'refs/heads/' + decodeURIComponent(url.split('/git/ref/heads/')[1]!),
         object: { type: 'commit', sha: sourceSha },
       }
     else if (
@@ -78,7 +70,7 @@ const setup = (
       url.endsWith('/commits/feature%2Fwork')
     )
       body = {
-        sha: options.mismatchedCommit ? 'f'.repeat(40) : sourceSha,
+        sha: sourceSha,
         commit: { tree: { sha: treeSha } },
       }
     else if (url.endsWith(`/git/trees/${treeSha}?recursive=1`))
@@ -112,12 +104,22 @@ const setup = (
         ).toString('base64'),
       }
     else throw new Error('Unexpected GitHub endpoint: ' + url)
-    return new Response(JSON.stringify(body), {
-      headers: { 'content-type': 'application/json' },
-    })
+    return body
+  }
+  // The transport is mocked here; real Git object/hash and cleanup behavior is
+  // exercised by health-git-source.test.ts against a disposable Git repository.
+  const gitRead = vi.spyOn(gitSource, 'withHealthGitSource').mockImplementation(async (_input, consume) => consume({
+    treeSha,
+    request: async <T>(path: string) => fixtureBody(path) as T,
+    scanSource: vi.fn(),
+  }))
+  const fetchMock = vi.fn(async (url: string) => {
+    if (options.denied || (options.missingBranch && url.includes('/git/ref/heads/')))
+      return new Response('{}', { status: 404 })
+    return new Response(JSON.stringify(fixtureBody(url)), {headers: {'content-type':'application/json'}})
   })
   vi.stubGlobal('fetch', fetchMock)
-  return { provider, tokenRequest, fetchMock }
+  return { provider, tokenRequest, fetchMock, gitRead }
 }
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -127,7 +129,7 @@ afterEach(() => {
 
 describe('bounded GitHub snapshot reader', () => {
   it('scopes token to the repository and reads content only by pinned tree/blob hashes', async () => {
-    const { provider, tokenRequest, fetchMock } = setup()
+    const { provider, tokenRequest, fetchMock, gitRead } = setup()
     const snapshot = await provider.readRepositorySnapshot(1n, 2n)
     expect(snapshot).toMatchObject({
       sourceSha,
@@ -136,6 +138,7 @@ describe('bounded GitHub snapshot reader', () => {
       complete: true,
     })
     expect(snapshot.files[0]?.content).toBe(content)
+    expect(gitRead.mock.calls[0][0]).toMatchObject({sourceSha,repositoryId:'2',owner:'fixture',name:'app'})
     expect(tokenRequest).toHaveBeenCalledWith(
       'POST /app/installations/{installation_id}/access_tokens',
       expect.objectContaining({
@@ -143,7 +146,7 @@ describe('bounded GitHub snapshot reader', () => {
         permissions: { metadata: 'read', contents: 'read' },
       }),
     )
-    expect(fetchMock.mock.calls.map(([url]) => url)).toHaveLength(4)
+    expect(fetchMock.mock.calls.map(([url]) => url)).toHaveLength(2)
     expect(fetchMock.mock.calls.some(([url]) => url.includes('.env'))).toBe(
       false,
     )
@@ -153,7 +156,7 @@ describe('bounded GitHub snapshot reader', () => {
     let snapshot = await fixtures.provider.readRepositorySnapshot(1n, 2n)
     expect(snapshot.complete).toBe(false)
     expect(snapshot.files[0]?.contentError).toBe('size_limit')
-    expect(fixtures.fetchMock).toHaveBeenCalledTimes(3)
+    expect(fixtures.fetchMock).toHaveBeenCalledTimes(2)
     fixtures = setup({ invalidBlob: true })
     snapshot = await fixtures.provider.readRepositorySnapshot(1n, 2n)
     expect(snapshot.files[0]?.content).toBeUndefined()
@@ -183,7 +186,7 @@ it.each(['development', 'feature/other'])(
         url.endsWith('/git/ref/heads/' + encodeURIComponent(branch)),
       ),
     ).toBe(true)
-    expect(urls.some((url) => url.endsWith('/commits/' + sourceSha))).toBe(true)
+    expect(urls.some((url) => /\/(?:commits|git\/trees|git\/blobs)\//.test(url))).toBe(false)
     expect(urls.some((url) => url.endsWith('/commits/feature%2Fwork'))).toBe(
       false,
     )
@@ -207,11 +210,10 @@ it.each([
   expect(fetchMock).not.toHaveBeenCalled()
 })
 
-it('refuses missing branches, tag refs and mismatched branch commits', async () => {
+it('refuses missing branches and tag refs', async () => {
   for (const [options, message] of [
     [{ missingBranch: true }, 'branch is unavailable'],
     [{ wrongRef: true }, 'invalid branch revision'],
-    [{ mismatchedCommit: true }, 'different branch revision'],
   ] as const) {
     const { provider } = setup(options)
     await expect(

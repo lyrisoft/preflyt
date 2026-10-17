@@ -68,15 +68,26 @@ export class GitHubRequestLimiter {
     for (let attempt = 0; attempt < 3; attempt++) {
       const localCooldown = (this.cooldowns.get(key) ?? 0) - Date.now()
       if (localCooldown > 0) throw new GitHubRateLimitError(localCooldown)
-      let wait = await this.cache?.githubPermit(key)
-      if (wait == null) {
-        const now = Date.now(),
-          slot = Math.max(now, this.slots.get(key) ?? 0)
-        wait = slot - now
-        if (wait <= 2000) this.slots.set(key, slot + 250)
+      // A busy local queue is not an upstream rate-limit failure. Wait for a
+      // reservable slot, bounded to 30 seconds; real cooldowns still defer work.
+      const deadline = Date.now() + 30000
+      for (;;) {
+        let wait = await this.cache?.githubPermit(key)
+        if (wait == null) {
+          const now = Date.now(), slot = Math.max(now, this.slots.get(key) ?? 0)
+          wait = slot - now
+          if (wait <= 2000) this.slots.set(key, slot + 250)
+        }
+        if (wait <= 2000) {
+          if (wait > 0) await delay(wait)
+          break
+        }
+        const cooldown = Math.max((this.cooldowns.get(key) ?? 0) - Date.now(),
+          (await this.cache?.githubRemainingCooldown(key)) ?? 0)
+        if (cooldown > 0) throw new GitHubRateLimitError(cooldown)
+        if (Date.now() + wait > deadline) throw new GitHubRateLimitError(wait)
+        await delay(Math.min(1000, Math.max(50, wait - 2000)))
       }
-      if (wait > 2000) throw new GitHubRateLimitError(wait)
-      if (wait > 0) await delay(wait)
       // Another in-flight request may have reported a cooldown while this slot waited.
       const paused = Math.max(
         (this.cooldowns.get(key) ?? 0) - Date.now(),

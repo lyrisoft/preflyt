@@ -1,3 +1,4 @@
+import { GitHubRateLimitError } from '../github/github-rate-limit.js'
 import { ConflictException, ForbiddenException, Inject, Injectable } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service.js'
 import type { FindingSourceExcerpt, Prisma } from '../generated/prisma/client.js'
@@ -58,7 +59,12 @@ export class FindingSourceStore {
     }
     let text: string
     try { text = await file }
-    catch {
+    catch (error) {
+      if (error instanceof GitHubRateLimitError) {
+        const retryAt = Date.parse((error.getResponse() as {retryAt:string}).retryAt)
+        await this.db.findingSourceExcerpt.updateMany({where:{id:row.id,contentHash:null},data:{retryAfter:new Date(Math.max(Date.now()+5000,retryAt))}})
+        return unavailable()
+      }
       await this.db.findingSourceExcerpt.updateMany({ where: { id: row.id, contentHash: null }, data: { attempts: { increment: 1 }, retryAfter: new Date(Date.now() + Math.min(300000, 30000 * 2 ** Math.min(row.attempts, 4))) } })
       return unavailable()
     }

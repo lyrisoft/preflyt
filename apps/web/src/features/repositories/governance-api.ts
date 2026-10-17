@@ -1,5 +1,12 @@
 import { API_BASE_URL } from '@/lib/api'
 
+export type BlockedPolicyRepository = {
+  repositoryId: string | null
+  name: string | null
+  reason: string
+  message: string
+}
+
 async function governanceResponse(
   path: string,
   body?: unknown,
@@ -20,11 +27,24 @@ async function governanceResponse(
   if (!response.ok) {
     const error = (await response.json().catch(() => null)) as {
       message?: string
+      blockedRepositories?: BlockedPolicyRepository[]
     } | null
-    throw new Error(
-      typeof error?.message === 'string'
-        ? error.message
-        : 'The request could not be completed. Refresh and try again.'
+    throw Object.assign(
+      new Error(
+        typeof error?.message === 'string'
+          ? error.message
+          : 'The request could not be completed. Refresh and try again.'
+      ),
+      {
+        blockedRepositories: Array.isArray(error?.blockedRepositories)
+          ? error.blockedRepositories.filter(
+              (item) =>
+                item &&
+                typeof item.message === 'string' &&
+                (item.name === null || typeof item.name === 'string')
+            )
+          : [],
+      }
     )
   }
   return response
