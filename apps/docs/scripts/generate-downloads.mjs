@@ -24,6 +24,7 @@ const version = process.argv.find(arg => arg.startsWith('--version='))?.split('=
 if (version !== 'next' && !/^\d+\.\d+\.\d+$/.test(version)) throw new Error('Invalid documentation version')
 const sourceRef = process.argv.find(arg => arg.startsWith('--source-ref='))?.split('=')[1]
 const imageTag = version === 'next' ? release.nextImageTag : `v${version}`
+const contentRoot = resolve(process.argv.find(arg => arg.startsWith('--content-root='))?.slice('--content-root='.length) ?? resolve(docs, 'docs'))
 if (!/^(v\d+\.\d+\.\d+|sha-[a-f0-9]{40})$/.test(imageTag)) throw new Error('Invalid published image tag')
 const out = resolve(docs, 'static/downloads', version)
 if (version !== 'next' && (!sourceRef || existsSync(out))) {
@@ -114,7 +115,7 @@ writeFileSync(resolve(out, 'compose.yaml'), compose)
 
 // The same file, shown on the site.
 writeFileSync(
-  resolve(docs, 'docs/self-hosting/compose-file.md'),
+  resolve(contentRoot, 'self-hosting/compose-file.md'),
   `---
 id: compose-file
 title: Compose file
@@ -150,7 +151,7 @@ ${compose.trimEnd()}
 
 // ---- Copyable snippets shown in the guides --------------------------------
 
-const generated = resolve(docs, 'docs/_generated')
+const generated = resolve(contentRoot, '_generated')
 mkdirSync(generated, { recursive: true })
 const fence = (lang, title, body) => '```' + lang + ' title="' + title + '"\n' + body.trimEnd() + '\n```\n'
 

@@ -1,0 +1,13 @@
+# Application-side selection of the shared dedicated Docker controller.
+# Combine with the root docker-compose.yaml; deploy controller.compose.yaml separately.
+services:
+  api:
+    environment:
+      NATIVE_RUNTIME_BACKEND: docker
+      NATIVE_PREFLIGHT_ENABLED: "false"
+      NATIVE_EXECUTION_ENABLED: "false"
+  worker:
+    environment:
+      NATIVE_RUNTIME_BACKEND: docker
+      NATIVE_PREFLIGHT_ENABLED: "false"
+      NATIVE_EXECUTION_ENABLED: "false"

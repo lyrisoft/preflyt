@@ -16,7 +16,7 @@ export function useInstallationVersion() {
 export function InstallationVersion() {
   const {next, imageTag} = useInstallationVersion()
   return <p>{next
-    ? <>These are unreleased <strong>Next</strong> docs. Installation examples use the published development build <code>{imageTag}</code>; it may not contain later unreleased changes. Use v{release.latestStable} documentation for the stable release.</>
+    ? <>These are unreleased <strong>Next</strong> docs. Installation examples use the published build <code>{imageTag}</code>; it may not contain later unreleased changes. Use v{release.latestStable} documentation for the stable release.</>
     : <>These instructions and downloads are for <strong>Preflyt {imageTag}</strong>. Keep every application image on this version.</>}</p>
 }
 
