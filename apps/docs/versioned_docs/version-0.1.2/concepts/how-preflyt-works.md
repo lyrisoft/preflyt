@@ -2,7 +2,7 @@
 id: how-preflyt-works
 title: How Preflyt works
 sidebar_label: How Preflyt works
-description: How Preflyt connects repository health, approved engineering standards and verified CI evidence to traceable readiness results.
+description: How open source Preflyt connects repository health, approved engineering standards and verified CI evidence to traceable readiness results.
 ---
 
 # How Preflyt works
@@ -13,7 +13,7 @@ Problems found in QA or production cost more than problems found while you desig
 2. **What evidence** exists for each of them, and can you trust it?
 3. **Is it ready** to progress, or where are the gaps?
 
-Preflyt is an **Engineering Assurance & Readiness Platform**. It connects repository health, approved requirements and verified evidence from tests and scanners. Your configured GitHub Actions integration provides continuous PR feedback; the built-in Health scanner runs applicable static checks in isolated containers. AI helps investigate and explain findings, while deterministic checks and approved policies own readiness evaluation. GitHub applies any explicitly configured merge restrictions.
+Preflyt is an **open source engineering assurance platform for GitHub**. Self-host Community Edition under Apache-2.0. It connects repository health, approved requirements and verified evidence from tests and scanners. Your configured GitHub Actions integration provides continuous PR feedback; the built-in Health scanner runs applicable static checks in isolated containers. AI helps investigate and explain findings, while deterministic checks and approved policies own readiness evaluation. GitHub applies any explicitly configured merge restrictions.
 
 Preflyt works with your CI and scanning tools. It does not replace GitHub Actions, established testing frameworks or comprehensive scanner products. Built-in scanners have explicit coverage limits; existing tools can supply supported reports through configured policy commands.
 

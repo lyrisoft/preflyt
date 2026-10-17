@@ -6,14 +6,14 @@ export default function DocsHero() {
   const {next, prefix, imageTag} = useInstallationVersion()
   return (
     <div className='pf-hero'>
-      <p className='pf-eyebrow'>Engineering assurance for GitHub</p>
+      <p className='pf-eyebrow'>Self-hosted. Apache-2.0. Built for GitHub.</p>
       <h1 className='pf-hero__title'>
-        Know what passed. See what needs attention.
+        Open source engineering assurance.
       </h1>
       <p className='pf-hero__lead'>
-        Bring repository health, engineering standards and verified CI results
-        into one self-hosted workspace. Understand the evidence behind every
-        assessment.
+        Know what passed and what needs attention. Bring repository health,
+        approved engineering standards and verified CI evidence into one
+        self-hosted workspace.
       </p>
       <div className='pf-hero__actions'>
         <Link

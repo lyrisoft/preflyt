@@ -2,12 +2,12 @@
 id: community-edition
 title: Community Edition
 sidebar_label: Community Edition
-description: Open-source, self-hosted engineering assurance with Apache-2.0 licensing and unlimited repositories.
+description: Open source, self-hosted engineering assurance with Apache-2.0 licensing and unlimited repositories.
 ---
 
 # Preflyt Community Edition
 
-Preflyt Community Edition is free and self-hosted, with **unlimited repositories** subject to your infrastructure capacity. Original Preflyt code and documentation use Apache-2.0; third-party components retain their own licenses and notices. The separate Preflyt Action is MIT-licensed. The license does not grant product trademark or endorsement rights.
+Preflyt Community Edition is open source and self-hosted, with **unlimited repositories** subject to your infrastructure capacity. Original Preflyt code and documentation use Apache-2.0; third-party components retain their own licenses and notices. The separate Preflyt Action is MIT-licensed. The license does not grant product trademark or endorsement rights.
 
 Install Community Edition with the [Quick Start](../getting-started/quick-start.md) or follow the [production Docker Compose guide](docker-compose.md). Container images are distributed through GHCR; no subscription, license key or registry sign-in is required.
 
