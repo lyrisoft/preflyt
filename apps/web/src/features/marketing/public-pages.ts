@@ -2,16 +2,16 @@
 export const publicPages = [
   {
     path: '/',
-    title: 'Preflyt | Engineering assurance for GitHub',
+    title: 'Preflyt | Open source engineering assurance for GitHub',
     description:
-      'Know what passed and what needs attention. Bring repository health, engineering standards and verified CI results into one self-hosted workspace.',
+      'Open source engineering assurance for GitHub. Self-host repository health, engineering standards and verified CI evidence in one Apache-2.0 workspace.',
     manifest: 'src/routes/index.tsx?tsr-split=component',
   },
   {
     path: '/product',
     title: 'Product | Preflyt',
     description:
-      'Connect repository health, approved engineering standards, verified CI evidence and advisory AI in one engineering assurance platform.',
+      'Connect repository health, approved engineering standards, verified CI evidence and advisory AI in one open source engineering assurance platform.',
     manifest: 'src/routes/product.index.tsx?tsr-split=component',
   },
   {
@@ -40,14 +40,14 @@ export const publicPages = [
     path: '/pricing',
     title: 'Pricing | Preflyt Community and Cloud',
     description:
-      'Self-host Preflyt Community Edition for free under Apache-2.0. Explore what is included and the planned managed Cloud service, coming soon.',
+      'Self-host open source Preflyt Community Edition under Apache-2.0. Explore what is included and the planned managed Cloud service, coming soon.',
     manifest: 'src/routes/pricing.tsx?tsr-split=component',
   },
   {
     path: '/self-hosting',
     title: 'Self-hosting | Preflyt',
     description:
-      'Explore Preflyt Community Edition: Apache-2.0, no repository cap and optional AI. Start with Docker Compose; public release preparation is in progress.',
+      'Self-host Preflyt Community Edition for open source engineering assurance under Apache-2.0, with no repository cap and optional AI. Start with Docker Compose.',
     manifest: 'src/routes/self-hosting.tsx?tsr-split=component',
   },
 ] as const
