@@ -12,6 +12,9 @@ const state = vi.hoisted(() => ({
   policyState: 'DRAFT',
   policySelection: 'selection',
   count: 1,
+  workspace: true,
+  packId: 'org-standard-fixture',
+  editStandards: {} as Record<string, unknown>,
   fetch: vi.fn(),
 }))
 vi.mock('@tanstack/react-router', () => ({
@@ -30,65 +33,81 @@ vi.mock('@tanstack/react-router', () => ({
     </a>
   ),
 }))
-vi.mock('./repository-queries', () => ({
-  useStandards: () => ({
-    isPending: false,
-    isError: false,
-    data: {
-      catalogue: [
-        {
-          id: 'baseline',
-          version: '1.0.0',
-          digest: 'b'.repeat(64),
-          title: 'Baseline Engineering',
-          description: 'Baseline checks',
-          rules: [
-            { id: 'tests', title: 'Tests', requiredIn: ['RECOMMENDED'] },
-            { id: 'lint', title: 'Lint', requiredIn: [] },
+vi.mock('./repository-queries', () => {
+  const pack = {
+    id: 'org-standard-fixture',
+    version: '1.0.0',
+    digest: 'b'.repeat(64),
+    title: 'Workspace Engineering',
+    description: 'Workspace checks',
+    rules: [
+      { id: 'tests', title: 'Tests', requiredIn: ['RECOMMENDED'] },
+      { id: 'lint', title: 'Lint', requiredIn: [] },
+    ],
+  }
+  return {
+    useStandards: () => ({
+      isPending: false,
+      isError: false,
+      data: {
+        catalogue: [
+          pack,
+          { ...pack, id: 'builtin', title: 'Built-in Security Template' },
+        ],
+        workspaceCatalogue: state.workspace ? [pack] : [],
+        recommendations: [{ id: 'builtin', version: '1.0.0' }],
+        controls: [
+          { id: 'tests', title: 'Tests', required: true },
+          { id: 'lint', title: 'Lint', required: false },
+        ],
+        selection: {
+          id: 'selection',
+          packs: [
+            { id: state.workspace ? pack.id : 'builtin', version: '1.0.0' },
           ],
         },
-      ],
-      recommendations: [{ id: 'baseline', version: '1.0.0' }],
-      controls: [
-        { id: 'tests', title: 'Tests', required: true },
-        { id: 'lint', title: 'Lint', required: false },
-      ],
-      selection: {
-        id: 'selection',
-        packs: [{ id: 'baseline', version: '1.0.0' }],
       },
-    },
-  }),
-}))
+    }),
+  }
+})
 vi.mock('./engineering-queries', () => ({
   engineeringPath: (_id: string, p: string) => `/fixture${p}`,
-  engineeringRead: async () => ({
-    currentSelectionId: state.selection,
-    truncated: false,
-    revisions: Array.from({ length: state.count }, (_, i) => ({
-      id: `policy-${i}`,
-      branchRef: 'refs/heads/main',
-      revision: state.count - i,
-      selectionId: state.policySelection,
-      state: state.policyState,
-      definitionHash: 'a'.repeat(64),
-      draftedById: 'author',
-      approvedById: null,
-      definition: {
-        ...(state.owned ? { standardsSource: 'POLICY' } : {}),
-        mode: 'OBSERVE',
-        packs: [{ id: 'baseline', version: '1.0.0', digest: 'b'.repeat(64) }],
-        rules: [
-          {
-            id: 'tests',
-            title: 'Tests',
-            required: true,
-            capability: 'import_only',
-          },
-        ],
-      },
-    })),
-  }),
+  engineeringRead: async (_id: string, path: string) =>
+    path.startsWith('/standards?')
+      ? state.editStandards
+      : {
+          currentSelectionId: state.selection,
+          truncated: false,
+          revisions: Array.from({ length: state.count }, (_, i) => ({
+            id: `policy-${i}`,
+            branchRef: 'refs/heads/main',
+            revision: state.count - i,
+            selectionId: state.policySelection,
+            state: state.policyState,
+            definitionHash: 'a'.repeat(64),
+            draftedById: 'author',
+            approvedById: null,
+            definition: {
+              ...(state.owned ? { standardsSource: 'POLICY' } : {}),
+              mode: 'OBSERVE',
+              packs: [
+                {
+                  id: state.packId,
+                  version: '1.0.0',
+                  digest: 'b'.repeat(64),
+                },
+              ],
+              rules: [
+                {
+                  id: 'tests',
+                  title: 'Tests',
+                  required: true,
+                  capability: 'import_only',
+                },
+              ],
+            },
+          })),
+        },
 }))
 beforeEach(async () => {
   await page.viewport(1280, 900)
@@ -96,6 +115,9 @@ beforeEach(async () => {
   state.owned = false
   state.policyState = 'DRAFT'
   state.count = 1
+  state.workspace = true
+  state.packId = 'org-standard-fixture'
+  state.editStandards = {}
   state.fetch.mockReset().mockResolvedValue(
     new Response('{}', {
       status: 200,
@@ -130,7 +152,7 @@ it('creates a policy by selecting the branch and standards directly', async () =
     .element(page.getByRole('textbox', { name: 'Branch name' }))
     .toHaveValue('main')
   await expect
-    .element(page.getByText('Baseline Engineering', { exact: true }))
+    .element(page.getByText('Workspace Engineering', { exact: true }))
     .toBeVisible()
   await page.getByRole('button', { name: 'Create policy' }).click()
   await expect
@@ -140,7 +162,13 @@ it('creates a policy by selecting the branch and standards directly', async () =
         branchRef: 'refs/heads/main',
         standards: {
           profile: 'RECOMMENDED',
-          packs: [{ id: 'baseline', version: '1.0.0', digest: 'b'.repeat(64) }],
+          packs: [
+            {
+              id: 'org-standard-fixture',
+              version: '1.0.0',
+              digest: 'b'.repeat(64),
+            },
+          ],
         },
         requiredRules: [],
       })
@@ -177,7 +205,7 @@ it('does not require repository standards and does not block creation when repos
     .element(page.getByRole('button', { name: 'Create policy' }))
     .toBeEnabled()
   await page
-    .getByRole('checkbox', { name: 'Baseline Engineering', exact: false })
+    .getByRole('checkbox', { name: 'Workspace Engineering', exact: false })
     .click()
   await expect
     .element(page.getByRole('button', { name: 'Create policy' }))
@@ -192,6 +220,19 @@ it('keeps a policy with its own standards current after repository defaults chan
   await page
     .getByRole('button', { name: 'Review main version 1', exact: true })
     .click()
+  await expect
+    .element(
+      page.getByText(
+        'Existing GitHub rules may require a passing Preflyt result.',
+        { exact: false }
+      )
+    )
+    .toBeVisible()
+  await expect
+    .element(
+      page.getByText('Publishing saves a non-blocking policy', { exact: false })
+    )
+    .not.toBeInTheDocument()
   await expect
     .element(page.getByRole('button', { name: 'Approve policy' }))
     .toBeEnabled()
@@ -257,4 +298,69 @@ it('fits the standards picker and create action at 320px in both themes', async 
     path: 'src/features/repositories/__screenshots__/branch-policy-light-mobile.png',
   })
   await view.unmount()
+})
+
+it('offers workspace standards without built-in templates in a new branch policy', async () => {
+  await mount()
+  await page.getByRole('button', { name: 'New policy' }).click()
+  await expect
+    .element(
+      page.getByRole('checkbox', {
+        name: 'Workspace Engineering',
+        exact: false,
+      })
+    )
+    .toBeVisible()
+  await expect
+    .element(page.getByText('Built-in Security Template'))
+    .not.toBeInTheDocument()
+})
+it('does not preselect a built-in template when no workspace standards exist', async () => {
+  state.workspace = false
+  await mount()
+  await page.getByRole('button', { name: 'New policy' }).click()
+  await expect
+    .element(page.getByText('No workspace standards yet.', { exact: false }))
+    .toBeVisible()
+  await expect.element(page.getByRole('checkbox')).not.toBeInTheDocument()
+  await expect
+    .element(page.getByRole('button', { name: 'Create policy' }))
+    .toBeDisabled()
+  expect(state.fetch).not.toHaveBeenCalled()
+})
+
+it('preserves a saved template version when editing without offering other templates', async () => {
+  state.owned = true
+  state.packId = 'legacy-template'
+  const saved = {
+    id: 'legacy-template',
+    version: '1.0.0',
+    digest: 'b'.repeat(64),
+    title: 'Saved legacy standard',
+    rules: [{ id: 'tests', title: 'Tests', requiredIn: ['RECOMMENDED'] }],
+  }
+  state.editStandards = {
+    selectionIntegrity: true,
+    workspaceCatalogue: [],
+    catalogue: [
+      saved,
+      { ...saved, id: 'unused-template', title: 'Unused built-in template' },
+    ],
+  }
+  await mount()
+  await page
+    .getByRole('button', { name: 'Review main version 1', exact: true })
+    .click()
+  await page.getByRole('button', { name: 'Edit draft', exact: true }).click()
+  await expect
+    .element(
+      page.getByRole('checkbox', {
+        name: 'Saved legacy standard',
+        exact: false,
+      })
+    )
+    .toBeChecked()
+  await expect
+    .element(page.getByText('Unused built-in template'))
+    .not.toBeInTheDocument()
 })

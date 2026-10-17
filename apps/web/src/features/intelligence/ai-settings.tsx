@@ -196,6 +196,7 @@ export function AiSettingsPage({
           <div className='space-y-6'>
             <PageHeader
               title='AI Intelligence'
+              titleBadge={<StatusBadge tone='warning'>beta</StatusBadge>}
               description='Set up optional AI reviews for your development workflow.'
               section='Intelligence'
               icon={BrainCircuit}
@@ -323,6 +324,7 @@ function AiSettings({
     <div className='space-y-6'>
       <PageHeader
         title='AI Intelligence'
+        titleBadge={<StatusBadge tone='warning'>beta</StatusBadge>}
         description='Set up optional AI reviews for your development workflow.'
         section='Intelligence'
         icon={BrainCircuit}

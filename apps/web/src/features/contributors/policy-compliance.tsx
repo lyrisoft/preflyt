@@ -168,7 +168,7 @@ export function PolicyComplianceSummary({
                   color: 'text-primary',
                 },
                 {
-                  label: 'Failed checks',
+                  label: 'PRs with failed required checks',
                   value: String(data.blockedPrs),
                   detail: '',
                   icon: CircleAlert,

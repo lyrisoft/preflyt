@@ -532,3 +532,49 @@ it('contains long review titles in the accessible chart data at phone widths', a
     .toBe(true)
   await page.viewport(1280, 800)
 })
+
+it('searches repositories without changing findings until a repository is selected', async () => {
+  state.routeSearch = { page: 3 } as unknown as Record<string, string>
+  state.query = {
+    data: {
+      summary,
+      rows: [],
+      total: 0,
+      assessedRevisions: 0,
+      repositories: [
+        { githubId: '11', fullName: 'org/payments' },
+        { githubId: '22', fullName: 'org/accounts' },
+      ],
+      pageSize: 10,
+    },
+    refetch: vi.fn(),
+  }
+  const view = await render(<FindingsPage />)
+  await view
+    .getByRole('button', { name: 'Repository: All repositories' })
+    .click()
+  const search = page.getByPlaceholder('Search repositories…')
+  await search.fill('PAYMENTS')
+  await expect
+    .element(page.getByRole('option', { name: 'org/payments' }))
+    .toBeVisible()
+  await expect
+    .element(page.getByRole('option', { name: 'org/accounts' }))
+    .not.toBeInTheDocument()
+  expect(state.key[6]).toBe('all')
+  await search.fill('no-such-repository')
+  await expect
+    .element(page.getByText('No matching repositories.'))
+    .toBeVisible()
+  await search.fill('payments')
+  await userEvent.keyboard('{ArrowDown}{Enter}')
+  await expect
+    .element(view.getByRole('button', { name: 'Repository: org/payments' }))
+    .toBeVisible()
+  expect(state.key[6]).toBe('11')
+  expect(state.key[10]).toBe(1)
+  await view.getByRole('button', { name: 'Repository: org/payments' }).click()
+  await page.getByPlaceholder('Search repositories…').fill('')
+  await page.getByRole('option', { name: 'All repositories' }).click()
+  expect(state.key[6]).toBe('all')
+})

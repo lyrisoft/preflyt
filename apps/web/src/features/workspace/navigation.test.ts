@@ -112,3 +112,14 @@ it('includes the Audit log for Auditors without granting Access Control', () => 
     )
   ).not.toContain('Audit log')
 })
+
+it('marks only AI Intelligence and Skills as beta, leaving Merge Protection unbadged', () => {
+  const items = sidebarData.navGroups.flatMap((group) => group.items)
+  expect(
+    items.filter((item) => item.badge === 'beta').map((item) => item.title)
+  ).toEqual(['AI Intelligence', 'Skills'])
+  expect(
+    items.find((item) => item.title === 'Merge Protection')?.badge
+  ).toBeUndefined()
+  expect(items.some((item) => item.badge === 'Preview')).toBe(false)
+})

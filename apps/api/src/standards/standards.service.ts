@@ -103,6 +103,7 @@ export class StandardsService {
       ))
     return {
       catalogue: library,
+      workspaceCatalogue: [...latest.values()],
       adoptionProfiles,
       selection,
       selectionIntegrity,

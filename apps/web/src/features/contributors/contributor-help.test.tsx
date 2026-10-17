@@ -35,7 +35,7 @@ it('groups metric definitions, counting rules, data sources and supplied limits 
     'Data sources',
     'Pass rate',
     'PRs fully assessed',
-    'Failed checks',
+    'PRs with failed required checks',
     'Missing evidence',
     'Commits linked to contributor',
     'Imported coverage is partial.',

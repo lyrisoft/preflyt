@@ -384,30 +384,69 @@ it('keeps the editor usable at mobile width and exposes effective impact', async
   await page.viewport(1280, 900)
 })
 
-it('opens the organization baseline through an explicit action', async () => {
+it('requires confirmation before including repositories in organization scope', async () => {
   api.request.mockImplementation(async (path: string, body?: unknown) => {
     if (path === '/teams/options') return options
-    if (path === '/teams/baseline' && body) return { id: 'baseline' }
-    if (path === '/teams/baseline/edit') return { id: 'baseline' }
-    if (path === '/teams/baseline')
-      return { ...detail, id: 'baseline', source: 'ORGANIZATION', members: [] }
+    if (path === '/teams/baseline') return body ? { id: 'team' } : { id: null }
+    if (path === '/teams/team') return detail
     return { teams: [team], total: 1, pageSize: 20 }
   })
   const view = await mount()
-  await userEvent.click(
-    view.getByRole('button', {
-      name: 'Organization-wide requirements',
+  const open = () =>
+    view
+      .getByRole('button', {
+        name: 'Manage organization-wide standards',
+        exact: true,
+      })
+      .click()
+  const mutations = () =>
+    api.request.mock.calls.filter(
+      ([path, body]) => path === '/teams/baseline' && body
+    )
+  await open()
+  await expect
+    .element(
+      page.getByRole('heading', { name: 'Include all selected repositories?' })
+    )
+    .toBeVisible()
+  await expect
+    .element(page.getByText('No standards are assigned', { exact: false }))
+    .toBeVisible()
+  expect(mutations()).toHaveLength(0)
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click()
+  expect(mutations()).toHaveLength(0)
+  await open()
+  await page
+    .getByRole('button', { name: 'Include repositories and continue' })
+    .click()
+  await expect.poll(() => mutations().length).toBe(1)
+})
+
+it('opens existing organization scope without creating it again', async () => {
+  const request = api.request.getMockImplementation()!
+  api.request.mockImplementation(async (path: string, ...args: unknown[]) =>
+    path === '/teams/baseline' ? { id: 'team' } : request(path, ...args)
+  )
+  const view = await mount()
+  await view
+    .getByRole('button', {
+      name: 'Manage organization-wide standards',
       exact: true,
     })
-  )
+    .click()
   await expect
-    .poll(() =>
-      api.request.mock.calls.some(
-        ([path, body]) =>
-          path === '/teams/baseline' && JSON.stringify(body) === '{}'
-      )
-    )
+    .poll(() => api.request.mock.calls.some(([path]) => path === '/teams/team'))
     .toBe(true)
+  expect(
+    api.request.mock.calls.filter(
+      ([path, body]) => path === '/teams/baseline' && body
+    )
+  ).toHaveLength(0)
+  await expect
+    .element(
+      page.getByRole('heading', { name: 'Include all selected repositories?' })
+    )
+    .not.toBeInTheDocument()
 })
 
 it('uses one pagination control for the repository association table', async () => {

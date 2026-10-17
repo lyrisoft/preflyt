@@ -322,6 +322,14 @@ export class TeamsService {
       return { ...preview, approved: true };
     });
   }
+  async baselineStatus(s: AuthenticatedSession) {
+    await this.access.requireOrganization(s, "team.manage", true);
+    const team = await this.db.preflytTeam.findFirst({
+      where: { organizationId: s.organizationId!, source: "ORGANIZATION" },
+      select: { id: true },
+    });
+    return { id: team?.id ?? null };
+  }
   async baseline(s: AuthenticatedSession) {
     await this.access.requireOrganization(s, "team.manage", true);
     const existing = await this.db.preflytTeam.findFirst({

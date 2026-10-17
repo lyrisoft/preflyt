@@ -4,6 +4,7 @@ import { expect, it } from 'vitest'
 import { render } from 'vitest-browser-react'
 import { page } from 'vitest/browser'
 import { PageHeader } from './page-header'
+import { StatusBadge } from './status-badge'
 import { Button } from './ui/button'
 
 it('wraps wide desktop filters before squeezing the page title at tablet widths', async () => {
@@ -61,6 +62,34 @@ it('keeps long repository names and actions usable at 320px', async () => {
   await expect
     .element(view.getByRole('button', { name: 'Manage repositories' }))
     .toBeVisible()
+  expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(
+    window.innerWidth
+  )
+  await page.viewport(1280, 900)
+})
+
+it('places beta beside the title while keeping the heading name and mobile layout', async () => {
+  await page.viewport(320, 900)
+  const view = await render(
+    <main className='p-4'>
+      <PageHeader
+        title='AI Intelligence'
+        icon={GitBranch}
+        titleBadge={<StatusBadge tone='warning'>beta</StatusBadge>}
+      />
+    </main>
+  )
+  const heading = view.getByRole('heading', {
+    name: 'AI Intelligence',
+    exact: true,
+  })
+  await expect.element(heading).toBeVisible()
+  await expect
+    .element(view.getByText('beta'))
+    .toHaveClass('italic', 'text-yellow-700')
+  expect(heading.element().parentElement).toBe(
+    view.getByText('beta').element().parentElement
+  )
   expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(
     window.innerWidth
   )

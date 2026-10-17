@@ -335,12 +335,18 @@ it('adopts a verified complete definition and preserves it after library edits',
   ).body
   expect(view.selectionIntegrity).toBe(true)
   expect(view.controls).toHaveLength(2)
+  expect(view.workspaceCatalogue).toHaveLength(1)
+  expect(view.workspaceCatalogue[0]).toMatchObject({ id: first.packId, version: '1.0.2', title: 'Updated' })
+  expect(view.workspaceCatalogue.some((pack: any) => catalogue.some((builtin) => builtin.id === pack.id))).toBe(false)
+
   expect(view.catalogue.filter((p: any) => p.id === first.packId)).toHaveLength(
     2,
   )
 })
 it('rejects adoption from another tenant and detects changed stored definitions', async () => {
   const first = (await post(outsider, root, input).expect(201)).body
+  const workspace = (await get(owner, '/github/repositories/51/standards').expect(200)).body
+  expect(workspace.workspaceCatalogue).toEqual([])
   const previous = await db.repositoryStandardsSelection.findFirstOrThrow({
     where: { repositoryId: repo.id },
   })

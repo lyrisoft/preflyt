@@ -26,6 +26,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Main } from '@/components/layout/main'
 import { PageHeader } from '@/components/page-header'
 import { PageHelpDrawer } from '@/components/page-help-drawer'
+import { RepositoryPicker } from '@/components/repository-picker'
 import { ResultTimestamp } from '@/components/result-timestamp'
 import { StatusBadge } from '@/components/status-badge'
 import { SurfaceIcon } from '@/components/surface-icon'
@@ -295,26 +296,18 @@ function FindingsWorkspace() {
             ))}
           </SelectContent>
         </Select>
-        <Select
+        <RepositoryPicker
+          repositories={result.data?.repositories ?? []}
           value={repository}
+          allowAll
+          aria-label='Repository'
+          className='w-full min-w-0'
           onValueChange={(value) => {
             setRepository(value)
             setHealth(undefined)
             setPage(1)
           }}
-        >
-          <SelectTrigger aria-label='Repository' className='w-full'>
-            <SelectValue placeholder='All repositories' />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value='all'>All repositories</SelectItem>
-            {result.data?.repositories.map((repo) => (
-              <SelectItem key={repo.githubId} value={repo.githubId}>
-                {repo.fullName}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        />
         <Select
           value={severity}
           onValueChange={(value) => {

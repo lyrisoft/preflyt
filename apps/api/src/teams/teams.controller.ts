@@ -112,6 +112,9 @@ export class TeamsController {
     this.auth.assertOrigin(r.headers.origin);
     return this.teams.importTeam(r.preflytSession, b.installationId, b.teamId);
   }
+  @Header("Cache-Control", "no-store") @Get("baseline") baselineStatus(@Req() r: R) {
+    return this.teams.baselineStatus(r.preflytSession);
+  }
   @Header("Cache-Control", "no-store") @Post("baseline") baseline(@Req() r: R) {
     this.auth.assertOrigin(r.headers.origin);
     return this.teams.baseline(r.preflytSession);

@@ -8,6 +8,7 @@ import {
   isAiSettingsTab,
   validateIntelligenceSearch,
 } from './intelligence-search'
+import { SkillsPage } from './skills-page'
 
 const state = vi.hoisted(() => ({
   role: 'OWNER',
@@ -675,4 +676,19 @@ it('keeps stage overrides optional and moves automatic PR feedback out of model 
   await expect
     .element(view.getByRole('checkbox', { name: 'Post an AI review summary' }))
     .not.toBeInTheDocument()
+})
+
+vi.mock('./skills-catalogue', () => ({ SkillsCatalogue: () => null }))
+it('shows beta beside both Intelligence and Skills page titles', async () => {
+  const ai = await render(<AiSettingsPage />)
+  await expect.element(ai.getByText('beta', { exact: true })).toBeVisible()
+  await expect
+    .element(ai.getByRole('heading', { name: 'AI Intelligence', exact: true }))
+    .toBeVisible()
+  await ai.unmount()
+  const skills = await render(<SkillsPage />)
+  await expect.element(skills.getByText('beta', { exact: true })).toBeVisible()
+  await expect
+    .element(skills.getByRole('heading', { name: 'Skills', exact: true }))
+    .toBeVisible()
 })

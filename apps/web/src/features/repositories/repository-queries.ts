@@ -70,6 +70,7 @@ type StandardsControl = {
 export type Standards = {
   selectionIntegrity: boolean
   catalogue: Pack[]
+  workspaceCatalogue?: Pack[]
   adoptionProfiles: string[]
   selection: Selection | null
   recommendations: { id: string; version: string; reason: string }[]

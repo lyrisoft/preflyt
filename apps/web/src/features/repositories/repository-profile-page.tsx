@@ -25,7 +25,6 @@ import { AppHeader } from '@/components/layout/app-header'
 import { Main } from '@/components/layout/main'
 import { PageHeader } from '@/components/page-header'
 import { PageHelpDrawer } from '@/components/page-help-drawer'
-import { StatusBadge } from '@/components/status-badge'
 import { useHealth } from '../health/health-api'
 import { healthHelp } from '../health/health-help-content'
 import { RepositoryHealth } from '../health/repository-health'
@@ -509,8 +508,8 @@ export function RepositoryProfilePage() {
                 )
               ))}
             {result && tab !== 'assessments' && (
-              <p className='flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground'>
-                <StatusBadge tone='info'>No merge blocking</StatusBadge>
+              <p className='text-xs text-muted-foreground'>
+                Inspection does not enforce merge rules.
               </p>
             )}
           </PageHeader>
