@@ -42,6 +42,7 @@ if(process.argv[1]===fileURLToPath(import.meta.url)) {
   const dockerFree=Number(execFileSync('docker',['run','--rm','--network','none','--read-only','--cap-drop','ALL','--security-opt','no-new-privileges','--user','65532:65532','--pids-limit','32','--memory','64m','--entrypoint','node',base,'-e',"const s=require('node:fs').statfsSync('/');process.stdout.write(String(s.bavail*s.bsize))"],{encoding:'utf8',stdio:['ignore','pipe','inherit']}))
   checkLocalImageSpace(free,dockerFree)
   const target=localImageTargets(architecture,group,version),file=join(directory,`${group}-${architecture}.json`),log=join(directory,`${group}-${architecture}.log`)
+  if(group!=='native')for(const item of Object.values(target))item.args={...item.args,PREFLYT_BUILD_VERSION:'development',PREFLYT_BUILD_SHA:execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim()}
   writeFileSync(file,JSON.stringify({group:{default:{targets:Object.keys(target)}},target}))
   const fd=openSync(log,'w');console.info(`Building ${group} (${architecture}); host ${(free/1024**3).toFixed(1)} GiB, Docker ${(dockerFree/1024**3).toFixed(1)} GiB free; log: ${log}`)
   try{execFileSync('docker',['buildx','bake','-f',file,'--load','--progress=plain'],{stdio:['ignore',fd,fd]})}

@@ -4,6 +4,12 @@ import { render } from 'vitest-browser-react'
 import { page } from 'vitest/browser'
 import { OrganizationSettingsPage } from './organization-settings-page'
 
+vi.mock('@/features/installation-reporting/installation-reporting', () => ({
+  InstallationReportingSettings: () => (
+    <section>Installation reporting settings</section>
+  ),
+}))
+
 const state = vi.hoisted(() => ({
   query: {} as Record<string, unknown>,
   session: {

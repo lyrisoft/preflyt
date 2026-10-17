@@ -1,4 +1,5 @@
 import type { ComponentProps, ReactNode } from 'react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import '@/styles/index.css'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { render } from 'vitest-browser-react'
@@ -54,12 +55,14 @@ vi.mock('@tanstack/react-router', () => ({
   ),
 }))
 const sidebar = () => (
-  <SidebarProvider>
-    <AppSidebar />
-    <SidebarInset>
-      <SidebarTrigger />
-    </SidebarInset>
-  </SidebarProvider>
+  <QueryClientProvider client={new QueryClient()}>
+    <SidebarProvider>
+      <AppSidebar />
+      <SidebarInset>
+        <SidebarTrigger />
+      </SidebarInset>
+    </SidebarProvider>
+  </QueryClientProvider>
 )
 beforeEach(async () => {
   await page.viewport(1280, 900)

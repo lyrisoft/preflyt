@@ -57,7 +57,7 @@ try {
   message:{text:'This code block matches another analyzed block. Review whether extracting shared logic would make future changes easier.'},
   locations:[{physicalLocation}],
   relatedLocations:[...(matches.get(`${physicalLocation.artifactLocation.uri}:${physicalLocation.region.startLine}:${physicalLocation.region.endLine}`)?.values()??[])]
-   .sort((a,b)=>a.path.localeCompare(b.path)||a.line-b.line||a.endLine-b.endLine).slice(0,3)
+   .sort((a,b)=>a.path.localeCompare(b.path)||a.line-b.line||a.endLine-b.endLine)
    .map((block,id)=>({id,physicalLocation:{artifactLocation:{uri:block.path},region:{startLine:block.line,endLine:block.endLine}}})),
  }))
  const report=JSON.stringify({version:'2.1.0',runs:[{tool:{driver:{name:'Preflyt duplication',version:'jscpd-4.3.0/unique-lines-v1'}},properties:{preflytMeasurement:measurement},results}]})

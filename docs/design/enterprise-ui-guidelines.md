@@ -55,3 +55,13 @@ Reuse the root Sonner toaster in `apps/web/src/routes/__root.tsx`; do not mount 
 ## Table pagination
 
 Workspace tables use the shared `Table` component and `TablePagination`. Default to 10 rows and offer 10, 25, 50 and 100 in a labeled Rows per page dropdown. Changing the size returns to the first page. Keep the row range and Previous/Next controls together in one responsive footer. Server-paginated tables pass the selected size to the API and include it in the query key; never paginate an already paginated response a second time. Static marketing illustrations do not expose working table controls.
+
+## Interaction standards
+
+- Shared actions use the rem-based `--ui-action-font-size` token (13px at the default root size), neutral small-text tracking and minimum heights. Labels can wrap when larger text needs room; pagination/action groups must wrap with them.
+- Pointer-down feedback is immediate and semantic-color based. Actions still commit on release; a pressed appearance never claims server success. Keep keyboard focus and disabled states intact.
+- Coarse pointers get at least 44px targets for shared actions, selectors and dismiss buttons. Switches/checkboxes reserve layout space around their expanded targets so neighbors do not overlap. Desktop controls retain their dense visual size.
+- Interaction timing comes from `styles/interactions.css`: 150ms small surfaces, 220ms sheets, restrained ease-out. Do not add arbitrary spring or bounce effects to ordinary dialogs.
+- Reduced-motion handling belongs to shared primitives and applies to portalled content too. Prefer immediate state changes or gentle fades; preserve meaningful loading/status text.
+- Desktop sidebar and disclosure layout changes occur immediately; content may fade briefly. Do not animate chart/table container width or disclosure height through many intermediate layouts. Loading skeleton geometry must remain stable.
+- Custom expiry inputs validate complete dates during editing and empty/partial values on blur, show the interpreted local timestamp and timezone, and retain server-side validation as the final authority.

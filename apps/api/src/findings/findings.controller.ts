@@ -16,9 +16,18 @@ export class FindingsController {
   detail(@Req() req: Request & { preflytSession: AuthenticatedSession }, @Param('id') id: string, @Query('assessment') assessment?: string, @Query('origin') origin?: string) {
     return this.findings.detail(req.preflytSession, id, assessment, origin)
   }
+  @Get(':id/ignore') @Header('Cache-Control', 'no-store')
+  ignore(@Req() req: Request & { preflytSession: AuthenticatedSession }, @Param('id') id: string, @Query() query: Record<string, unknown>) {
+    return this.findings.getIgnore(req.preflytSession, id, query)
+  }
+  @Post(':id/ignore') @Header('Cache-Control', 'no-store')
+  setIgnore(@Req() req: Request & { preflytSession: AuthenticatedSession }, @Param('id') id: string, @Query() query: Record<string, unknown>, @Body() body: unknown) {
+    this.auth.assertOrigin(req.headers.origin)
+    return this.findings.setIgnore(req.preflytSession, id, query, body)
+  }
   @Get(':id/source') @Header('Cache-Control', 'no-store')
-  source(@Req() req: Request & { preflytSession: AuthenticatedSession }, @Param('id') id: string, @Query('assessment') assessment?: string, @Query('origin') origin?: string) {
-    return this.findings.source(req.preflytSession, id, assessment, origin)
+  source(@Req() req: Request & { preflytSession: AuthenticatedSession }, @Param('id') id: string, @Query('assessment') assessment?: string, @Query('origin') origin?: string, @Query('location') location?: string) {
+    return this.findings.source(req.preflytSession, id, assessment, origin, location)
   }
   @Get(':id/assignees') @Header('Cache-Control', 'no-store')
   assignees(@Req() req: Request & { preflytSession: AuthenticatedSession }, @Param('id') id: string) {

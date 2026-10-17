@@ -13,6 +13,7 @@ import { StatusBadge } from '@/components/status-badge'
 import type { HealthData } from '@/features/health/health-api'
 import { HotspotReview } from '@/features/health/hotspot-review'
 import { useNavigationSession } from '@/features/workspace/navigation-session'
+import { DuplicateCodeComparison } from './duplicate-code-comparison'
 import { useFindingAiGuidance } from './finding-ai-api'
 import { findingRequest, useFindingSource } from './finding-api'
 import {
@@ -20,6 +21,7 @@ import {
   FindingEvidence,
   FindingTriage,
 } from './finding-detail-sections'
+import { FindingIgnore } from './finding-ignore'
 import { findingsSearch, type findingDetailSearch } from './finding-search'
 import { FindingSourceViewer } from './finding-source'
 import { severityTone, type Finding } from './finding-types'
@@ -153,7 +155,11 @@ export function FindingDetailsPage({
           </Button>
         </div>
         <PageHeader
-          title={finding?.title ?? 'Finding details'}
+          title={
+            finding?.category === 'duplication'
+              ? 'Duplicate code block'
+              : (finding?.title ?? 'Finding details')
+          }
           section='Workspace'
           description={
             finding
@@ -179,6 +185,11 @@ export function FindingDetailsPage({
                     title: 'Source code',
                     content:
                       'The source viewer loads a saved, verified code excerpt from Preflyt after checking repository access. Existing findings without an excerpt fetch and save it once at the exact assessed commit. Highlighted lines are coordinates supplied by the report and verified to exist in that file. File-only findings show a bounded excerpt without highlighting. Check summaries and missing evidence may have no file or line.',
+                  },
+                  {
+                    title: 'Ignoring and reopening',
+                    content:
+                      'Ignoring persists across scans for the same source, rule, file, line range and message in this repository. A reason is required for ignoring or reopening; an optional expiry automatically reopens the finding. Saved assessments and merge policies remain unchanged. Review decisions and reasons are kept in the review history.',
                   },
                   {
                     title: 'Evidence and review',
@@ -240,24 +251,48 @@ export function FindingDetailsPage({
           finding && (
             <div className='grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_320px]'>
               <div className='min-w-0 space-y-5'>
-                <FindingSourceViewer
-                  key={sourcePath}
-                  finding={displayedFinding!}
-                  source={source}
-                  aiState={
-                    ai.generationFailed
-                      ? 'FAILED'
-                      : ai.data?.available
-                        ? ai.data.state
+                {finding.category === 'duplication' &&
+                finding.path &&
+                finding.line ? (
+                  <DuplicateCodeComparison
+                    key={sourcePath}
+                    finding={displayedFinding!}
+                    source={source}
+                    sourcePath={sourcePath}
+                    aiState={
+                      ai.generationFailed
+                        ? 'FAILED'
+                        : ai.data?.available
+                          ? ai.data.state
+                          : undefined
+                    }
+                    onRetryAi={
+                      ai.data?.canGenerate &&
+                      (ai.data.state === 'FAILED' || ai.generationFailed)
+                        ? ai.retryGeneration
                         : undefined
-                  }
-                  onRetryAi={
-                    ai.data?.canGenerate &&
-                    (ai.data.state === 'FAILED' || ai.generationFailed)
-                      ? ai.retryGeneration
-                      : undefined
-                  }
-                />
+                    }
+                  />
+                ) : (
+                  <FindingSourceViewer
+                    key={sourcePath}
+                    finding={displayedFinding!}
+                    source={source}
+                    aiState={
+                      ai.generationFailed
+                        ? 'FAILED'
+                        : ai.data?.available
+                          ? ai.data.state
+                          : undefined
+                    }
+                    onRetryAi={
+                      ai.data?.canGenerate &&
+                      (ai.data.state === 'FAILED' || ai.generationFailed)
+                        ? ai.retryGeneration
+                        : undefined
+                    }
+                  />
+                )}
                 <Card>
                   <CardHeader>
                     <CardTitle>Finding evidence</CardTitle>
@@ -304,6 +339,11 @@ export function FindingDetailsPage({
                     </div>
                   </CardContent>
                 </Card>
+                <FindingIgnore
+                  key={sourcePath}
+                  scope={`${session.data?.organizationId}:${session.data?.identityId}`}
+                  path={`findings/${findingId}/ignore?${health ? new URLSearchParams({ origin: 'health', repository: search.repository!, assessment: search.health! }) : params}`}
+                />
                 {health && finding.category === 'hotspot' && (
                   <HotspotReview
                     repositoryId={finding.repositoryId}

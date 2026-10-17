@@ -51,12 +51,12 @@ it('does not attach another or ambiguous rule explanation',()=>{
  expect(parse('sarif',guidedReport([rule],{...result,ruleIndex:0}))[0].reportGuidance!.explanation).toBe('Rule explanation')
 })
 
-it('retains bounded related ranges without changing finding identity',()=>{
+it('retains all valid related ranges without changing finding identity',()=>{
  const loc=(uri:string,startLine:number,endLine=startLine)=>({physicalLocation:{artifactLocation:{uri},region:{startLine,endLine}}})
  const base={ruleId:'duplicates',message:{text:'Repeated block'},locations:[loc('first.js',1,10)]}
  const related=[loc('../private',1),loc('first.js',1,10),loc('second.js',2,11),loc('second.js',2,11),loc('third.js',4,13),loc('fourth.js',5,14),loc('fifth.js',6,15)]
  const row=parse('sarif',sarif([{...base,relatedLocations:related.map((location,id)=>({...location,id}))}]))[0]
- expect(row.relatedLocations).toEqual([{path:'second.js',line:2,endLine:11},{path:'third.js',line:4,endLine:13},{path:'fourth.js',line:5,endLine:14}])
+ expect(row.relatedLocations).toEqual([{path:'second.js',line:2,endLine:11},{path:'third.js',line:4,endLine:13},{path:'fourth.js',line:5,endLine:14},{path:'fifth.js',line:6,endLine:15}])
  expect(row.fingerprint).toBe(parse('sarif',sarif([base]))[0].fingerprint)
 })
 

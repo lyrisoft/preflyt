@@ -220,7 +220,7 @@ export function OrganizationSettingsPage() {
           )}
         </TabsList>
         {session.data?.platformAdmin && (
-          <TabsContent value='configuration'>
+          <TabsContent value='configuration' className='space-y-4'>
             <ConfigurationPanel />
           </TabsContent>
         )}

@@ -1377,3 +1377,53 @@ model ContributorSyncState {
  updatedAt DateTime @updatedAt
  @@index([state, nextAttemptAt])
 }
+
+// Cross-scan human decisions; saved report evidence and policy results remain immutable.
+model FindingIgnore {
+  id String @id
+  organizationId String
+  repositoryGithubId String
+  state String
+  reason String
+  expiresAt DateTime?
+  revision Int @default(1)
+  updatedById String
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+  @@index([organizationId, repositoryGithubId])
+}
+
+model ReleaseCheck {
+ id String @id
+ enabled Boolean @default(true)
+ prereleases Boolean @default(false)
+ revision Int @default(1)
+ payload Json @default("[]")
+ etag String?
+ checkedAt DateTime?
+ retryAt DateTime?
+ leaseUntil DateTime?
+ error String?
+}
+model ReleaseRead {
+ identityId String @id
+ tag String
+ updatedAt DateTime @updatedAt
+}
+
+// One installation identity shared by every API replica using this database.
+model InstallationReporting {
+ countryReportingEnabled Boolean @default(false)
+ id String @id
+ installationId String @unique
+ enabled Boolean @default(true)
+ revision Int @default(1)
+ acknowledgedAt DateTime?
+ lastReportedAt DateTime?
+ nextAttemptAt DateTime?
+ leaseUntil DateTime?
+ leaseToken String?
+ failureCount Int @default(0)
+ error String?
+ updatedAt DateTime @updatedAt
+}

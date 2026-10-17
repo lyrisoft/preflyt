@@ -34,11 +34,13 @@ it('keeps success, failure, pending and inactive states consistent', () => {
   expect(statusTones['inspection complete']).toBe('success')
   expect(statusTones.approved).toBe('success')
   expect(statusTones['model unavailable']).toBe('error')
+  expect(statusTones['update available']).toBe('warning')
   expect(statusTones['sync needed']).toBe('warning')
   expect(statusTones.running).toBe('info')
   expect(statusTones['partial scan']).toBe('warning')
   expect(statusTones['verified ci coverage']).toBe('success')
   expect(statusTones['coverage not received']).toBe('warning')
+  expect(statusTones['not configured']).toBe('neutral')
   expect(statusTones.disabled).toBe('neutral')
   expect(statusTones['built-in']).toBe('neutral')
   expect(statusTones.enabled).toBe('success')
@@ -48,6 +50,8 @@ it('keeps success, failure, pending and inactive states consistent', () => {
 })
 
 it('preserves finding trust and gap semantics', () => {
+  expect(statusTones.ignored).toBe('neutral')
+  expect(statusTones.open).toBe('neutral')
   expect(statusTones.reported).toBe('neutral')
   expect(statusTones.suppressed).toBe('neutral')
   expect(statusTones['evidence missing']).toBe('warning')

@@ -72,6 +72,7 @@ export const severityTone: Record<string, StatusTone> = {
   unknown: 'neutral',
 }
 export const triageLabels: Record<string, string> = {
+  IGNORED: 'Ignored',
   REPORTED: 'Reported',
   IN_REVIEW: 'In review',
   RESOLVED: 'Resolved',

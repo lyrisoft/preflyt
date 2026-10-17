@@ -44,3 +44,13 @@ it('uses a separate redaction cache for credential detectors, including CI findi
   expect(secret.version).toBe(2);expect(secret.id).not.toBe(ordinary.id)
  }
 })
+
+it('reads only an authorized reported match at the assessed commit', async () => {
+ const {service,github}=fixture()
+ vi.spyOn(service,'finding').mockResolvedValue({repositoryId:'11',sourceSha:sha,path:'src/a.ts',line:2,category:'duplication',relatedLocations:[{path:'src/b.ts',line:20,endLine:25}]} as any)
+ const result=await service.source({} as any,'f'.repeat(64),undefined,undefined,'1')
+ expect(result.path).toBe('src/b.ts')
+ expect(github.read).toHaveBeenCalledWith('repo',sha,expect.objectContaining({path:'src/b.ts',line:20,endLine:25}))
+ for(const location of ['2','-1','1.5','../private','01']) await expect(service.source({} as any,'f'.repeat(64),undefined,undefined,location)).rejects.toThrow('Choose a reported location')
+ expect(github.read).toHaveBeenCalledTimes(1)
+})

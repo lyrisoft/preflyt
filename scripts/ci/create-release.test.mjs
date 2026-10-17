@@ -68,3 +68,11 @@ test('GitHub authorization failures never become permission to create a release'
   const f = fixture({ releaseError: true }); assert.throws(() => createRelease(env, f.run), /auth/);
   assert.ok(!f.calls.some(([, args]) => args[0] === 'release'));
 });
+
+test('published notes qualify only the verified image commit and planned build version cannot drift', () => {
+ const f=fixture();createRelease({...env,PREFLYT_BUILD_VERSION:'v0.1.0'},f.run);
+ const release=f.calls.find(([command,args])=>command==='gh'&&args[0]==='release'&&args[1]==='create');
+ assert.match(release[1][release[1].indexOf('--notes')+1],new RegExp(`preflyt-release-ready:v1 sha=${sha}`));
+ const wrong=fixture();assert.throws(()=>createRelease({...env,PREFLYT_BUILD_VERSION:'v0.1.9'},wrong.run),/Planned build version changed/);
+ assert.ok(!wrong.calls.some(([command])=>command==='docker'));
+});

@@ -41,3 +41,21 @@ Report bugs and propose improvements in [GitHub Issues](https://github.com/lyris
 Community support is best effort. Security fixes target the latest stable Community release; older releases have no promised backports. See [SECURITY.md](https://github.com/lyrisoft/preflyt/blob/main/SECURITY.md) for the supported-version policy and private reporting process.
 
 Send security vulnerabilities and Code of Conduct reports privately to **support@lyrisoft.tech**. Do not publish sensitive details in issues. Operators remain responsible for infrastructure, upgrades, backups and access controls.
+
+## Release notifications and What’s new
+
+The installed app shows its build version in the sidebar. Select it to open **What’s new**, read published release notes and follow the upgrade guide. Administrators see an amber indicator when a newer qualified release is available. Opening the panel marks the current notes as read for your user; it does not dismiss an available upgrade.
+
+Preflyt checks GitHub’s public release metadata at startup and every 12 hours. Results are cached in the installation database and shared by API replicas. Checks send no installation identifier, user details, repository details, source code or findings. They require outbound HTTPS access to `api.github.com`. Offline installations keep the last successful result and display the check time and failure state. A private release repository cannot be checked anonymously.
+
+Workspace Owners and Admins can choose **Check for updates**. Manual requests share a one-minute cooldown; failed checks back off for one hour. Deployment administrators can open **Update preferences** to disable automatic checks or include prereleases. Stable releases are selected by default. Release notes are available to all signed-in users.
+
+Upgrade notices require a published release marked ready by Preflyt’s production publication workflow after all required images are verified. A tag or an unqualified release alone does not produce an upgrade notice. Existing releases without that marker can still appear as release notes. Local images and development builds are labeled **Development**, with the source commit when available, and do not claim to be an installed stable release.
+
+Upgrades remain manual. Review the release notes, back up your database and follow the installation/upgrade instructions before replacing images. The panel never runs Docker commands or applies database changes.
+
+## Optional installation reporting
+
+Reporting is enabled by default and disclosed to deployment administrators, who can turn it off in **Settings → Configuration → Installation reporting**. To prevent the first report, set `PREFLYT_INSTALLATION_REPORTING_ENABLED=false` before startup. Reports contain only a random installation ID, Preflyt version, deployment type and schema version; no names, emails, repository identities, source code or findings are included. No report is sent until a receiver URL is configured. This is independent of the release checker and OpenTelemetry. See the [configuration reference](configuration.md#optional-installation-reporting) for details and retention.
+
+Country-level installation reporting is a separate administrator setting under **Settings → Configuration → Installation reporting** and is off by default. If enabled, the receiver uses a local database to keep only the country code, without storing the IP address. Set `PREFLYT_INSTALLATION_COUNTRY_REPORTING_ENABLED=false` to enforce off before startup. Unknown countries remain unknown. Turning it off clears the stored country on the next accepted report; if all reporting is disabled, previous collected data expires after 90 days of inactivity.

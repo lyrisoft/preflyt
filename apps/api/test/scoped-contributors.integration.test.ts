@@ -920,3 +920,22 @@ it('honors GitHub retry timing and stops repeated non-rate-limit failures', asyn
  await new ContributorSyncService(db,{readContributorBackfill:async()=>{throw new Error('offline')}} as never).reconcile()
  expect(await db.contributorSyncState.findUnique({where:{repositoryId:job.repositoryId}})).toMatchObject({state:'FAILED',attempts:5,failureCode:'IMPORT_FAILED'})
 })
+
+it('authorizes finding ignore HTTP routes, preserves read-only access and enforces mutation scope',async()=>{
+ const health=await savedHealthFixture()
+ const fingerprint=(health.report as any).findings[0].fingerprint
+ const path=`/findings/${fingerprint}/ignore?origin=health&repository=11&assessment=${health.id}`
+ await request(app.getHttpServer()).get(path).expect(401)
+ const read=await actor(developer,path).expect(200)
+ expect(read.body).toMatchObject({state:'OPEN',canManage:false,eligible:true})
+ await mutate(developer,path,{state:'IGNORED',reason:'Reviewed',expectedRevision:0}).expect(403)
+ await request(app.getHttpServer()).post(path).set('Cookie',`scope.sid=${owner}`).set('Origin','https://untrusted.example').send({state:'IGNORED',reason:'Reviewed',expectedRevision:0}).expect(403)
+ await mutate(owner,path,{state:'IGNORED',reason:'Intentional duplication',expectedRevision:0}).expect(201)
+ expect((await actor(developer,path).expect(200)).body.state).toBe('IGNORED')
+ await mutate(owner,path,{state:'OPEN',reason:'Review again',expectedRevision:1}).expect(201)
+ expect((await actor(owner,path).expect(200)).body.state).toBe('OPEN')
+ const other=await savedHealthFixture(21n)
+ await actor(owner,`/findings/${fingerprint}/ignore?origin=health&repository=21&assessment=${other.id}`).expect(403)
+ await db.gitHubRepository.update({where:{githubId:11n},data:{selected:false}})
+ await actor(owner,path).expect(403)
+})

@@ -257,6 +257,8 @@ export class AuthorizationService {
   async authorizeRequest(request: Request, session: AuthenticatedSession) {
     const path = request.path.replace(/\/$/, '')
     // The audit reader performs fresh organization and repository authorization.
+    if ((path === '/installation-reporting' && request.method === 'GET') || (/^\/installation-reporting\/(preferences|acknowledge)$/.test(path) && request.method === 'POST')) return false
+    if ((path === '/releases' && request.method === 'GET') || (/^\/releases\/(check|preferences|read)$/.test(path) && request.method === 'POST')) return false
     if (path === '/audit-log' && request.method === 'GET') return false
     if (path === '/configuration' || path.startsWith('/configuration/')) {
       if (session.platformAdmin !== true) await this.deny(session, 'deployment.configuration.manage')
@@ -382,7 +384,7 @@ export class AuthorizationService {
       path === '/github/repositories' ||
       path === '/github/repositories/overview' ||
       path === '/github/dashboard' ||
-      (path === '/findings' || /^\/findings\/[a-f0-9]{64}(?:\/(triage|assignees|source))?$/.test(path)) ||
+      (path === '/findings' || /^\/findings\/[a-f0-9]{64}(?:\/(triage|assignees|source|ignore))?$/.test(path)) ||
       path.startsWith('/contributors') ||
       path.startsWith('/organizations') ||
       path === '/standards/catalogue'

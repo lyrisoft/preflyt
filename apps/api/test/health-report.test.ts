@@ -96,7 +96,7 @@ it('accepts only bounded duplication matches and removes them from other or secr
  expect(rows[0].relatedLocations).toEqual([{path:'other.ts',line:2,endLine:6}])
  expect(validHealthFindings(rows)).toBe(true)
  for(const patch of [{path:'../private',line:1,endLine:2},{path:'file:///private',line:1,endLine:2},{path:'other.ts',line:2,endLine:1},{path:'other.ts',line:1,endLine:1000001},{path:'other.ts',line:1,endLine:2,fragment:'source'}]) expect(validHealthFindings([{...rows[0],relatedLocations:[patch]}])).toBe(false)
- expect(validHealthFindings([{...rows[0],relatedLocations:Array(4).fill(rows[0].relatedLocations![0])}])).toBe(false)
+ expect(validHealthFindings([{...rows[0],relatedLocations:Array.from({length:12},(_,i)=>({...rows[0].relatedLocations![0],path:`match${i}.ts`}))}])).toBe(true)
  for(const [secret,category] of [[true,'duplication'],[false,'security']] as const) expect(healthReceiptFindings(bytes.toString('base64'),hash,secret,category)![0]).not.toHaveProperty('relatedLocations')
 })
 

@@ -98,14 +98,16 @@ export function normalizeReportFindings(format: string, content: Uint8Array, sha
       const line = location?.region?.startLine
       const endLine = location?.region?.endLine
       const relatedLocations: RelatedFindingLocation[] = []
+      const seenLocations = new Set<string>()
       for(const related of result.relatedLocations ?? []) {
         const physical=related.physicalLocation, path=sourcePath(physical?.artifactLocation?.uri)
         const start=physical?.region?.startLine, end=physical?.region?.endLine ?? start
         if(!path || !Number.isSafeInteger(start) || start<1 || !Number.isSafeInteger(end) || end<start || end>1000000) continue
         if(path===sourcePath(location?.artifactLocation?.uri) && start===line && end===(endLine??line)) continue
-        if(relatedLocations.some(item=>item.path===path&&item.line===start&&item.endLine===end)) continue
+        const key = JSON.stringify([path, start, end])
+        if(seenLocations.has(key)) continue
+        seenLocations.add(key)
         relatedLocations.push({path,line:start,endLine:end})
-        if(relatedLocations.length===3) break
       }
       rows.push(finding({ category: 'security', severity,
         ...(relatedLocations.length ? {relatedLocations} : {}),

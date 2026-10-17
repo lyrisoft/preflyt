@@ -25,6 +25,7 @@ export function createRelease(env, run = (command, args) => execFileSync(command
   const api = (endpoint, ...args) => run('gh', ['api', `repos/${repository}/${endpoint}`, ...args]);
   const tags = api('tags', '--paginate', '--jq', '.[] | {name, sha: .commit.sha}').trim().split('\n').filter(Boolean).map(line => JSON.parse(line));
   const { version, reserved } = releaseVersion(tags, sha);
+  if (env.PREFLYT_BUILD_VERSION && env.PREFLYT_BUILD_VERSION !== version) throw new Error('Planned build version changed; rebuild before publication');
   const docker = args => run('docker', ['buildx', 'imagetools', ...args]);
   const raw = image => docker(['inspect', '--raw', image]);
   const digest = image => {
@@ -53,7 +54,7 @@ export function createRelease(env, run = (command, args) => execFileSync(command
   let release;
   try { release = JSON.parse(api(`releases/tags/${version}`)); } catch (error) { if (!/HTTP 404/.test(String(error.stderr ?? ''))) throw error; }
   if (release?.draft || release?.prerelease) throw new Error('Existing release is not a published stable release');
-  if (!release) run('gh', ['release', 'create', version, '--repo', repository, '--verify-tag', '--title', `Preflyt ${version}`, '--generate-notes', '--notes', `All application images use ${version} and sha-${sha}. Both linux/amd64 and linux/arm64 are available.`]);
+  if (!release) run('gh', ['release', 'create', version, '--repo', repository, '--verify-tag', '--title', `Preflyt ${version}`, '--generate-notes', '--notes', `All application images use ${version} and sha-${sha}. Both linux/amd64 and linux/arm64 are available.\n\nUpgrade guide: https://docs.preflytlabs.com/self-hosting/community-edition\n\n<!-- preflyt-release-ready:v1 sha=${sha} -->`]);
   return version;
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) console.log(createRelease(process.env));
