@@ -6,6 +6,7 @@ import {
   SidebarHeader,
   SidebarRail,
 } from '@/components/ui/sidebar'
+import { ReleasePanel } from '@/features/releases/release-panel'
 import { sidebarData } from './data/sidebar-data'
 import { useNavigation } from './data/use-navigation'
 import { NavGroup } from './nav-group'
@@ -26,6 +27,7 @@ export function AppSidebar() {
         ))}
       </SidebarContent>
       <SidebarFooter>
+        <ReleasePanel />
         <NavUser user={sidebarData.user} />
       </SidebarFooter>
       <SidebarRail />

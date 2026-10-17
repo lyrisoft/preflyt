@@ -1,0 +1,44 @@
+# Run once for Preflyt's adoption receiver, not once per customer installation.
+# Deploy behind an HTTPS reverse proxy. Keep both host bindings on loopback.
+services:
+  collector-db:
+    image: postgres:16-bookworm@sha256:0ea6700a3b4f0ae6ce746519073558aed4d88a79d8d07622a9a644946c7319c4
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: preflyt_collector
+      POSTGRES_DB: preflyt_adoption
+      POSTGRES_PASSWORD: ${COLLECTOR_DATABASE_PASSWORD:?Set a fresh database password}
+    volumes:
+      - collector-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U preflyt_collector -d preflyt_adoption']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  collector:
+    image: ${PREFLYT_IMAGE_REGISTRY:-ghcr.io/lyrisoft}/preflyt-api:${PREFLYT_VERSION:?Set a version containing the installation receiver}
+    command: [node, dist/installation-reporting/collector-main.js]
+    init: true
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
+    pids_limit: 64
+    ports:
+      - '127.0.0.1:8093:3020'
+    environment:
+      DATABASE_URL: postgresql://preflyt_collector:${COLLECTOR_DATABASE_PASSWORD}@collector-db:5432/preflyt_adoption
+      PREFLYT_INSTALLATION_COLLECTOR_HOST: 0.0.0.0
+      PREFLYT_INSTALLATION_COLLECTOR_PORT: '3020'
+      PREFLYT_INSTALLATION_COLLECTOR_ADMIN_TOKEN: ${COLLECTOR_ADMIN_TOKEN:?Set a fresh 32+ character administrator token}
+    depends_on:
+      collector-db:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, node, -e, 'fetch("http://127.0.0.1:3020/healthz").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))']
+      interval: 10s
+      timeout: 5s
+      retries: 20
+volumes:
+  collector-data:

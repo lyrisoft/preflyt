@@ -10,6 +10,15 @@ import { page } from 'vitest/browser'
 import { handleServerError } from '@/lib/handle-server-error'
 import { ConfigurationPanel } from './configuration-panel'
 
+vi.mock('@/features/installation-reporting/installation-reporting', () => ({
+  InstallationReportingSettings: () => (
+    <section>
+      <h3>Installation reporting</h3>
+      <p>Reporting preference controls</p>
+    </section>
+  ),
+}))
+
 const toastError = vi.hoisted(() => vi.fn())
 vi.mock('sonner', () => ({ toast: { error: toastError } }))
 afterEach(() => {
@@ -309,4 +318,30 @@ it('reports failed saves once through the global toast and preserves unsaved cha
   await expect
     .element(view.getByRole('switch', { name: 'GitHub event ingestion' }))
     .toBeChecked()
+})
+
+it('puts installation reporting in its own configuration section without unrelated save controls', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => Response.json(data))
+  )
+  await mount()
+  await expect
+    .element(page.getByText('Reporting preference controls'))
+    .not.toBeInTheDocument()
+  await page.getByRole('combobox', { name: 'Configuration section' }).click()
+  await page
+    .getByRole('option', { name: 'Installation reporting', exact: true })
+    .click()
+  await expect
+    .element(
+      page.getByRole('heading', { name: 'Installation reporting', exact: true })
+    )
+    .toBeVisible()
+  await expect
+    .element(page.getByRole('button', { name: 'Save changes' }))
+    .not.toBeInTheDocument()
+  await expect
+    .element(page.getByLabelText('SMTP password'))
+    .not.toBeInTheDocument()
 })

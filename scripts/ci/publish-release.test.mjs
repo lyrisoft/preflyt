@@ -51,3 +51,11 @@ test('invalid branch build configuration and release identity fail before Docker
     assert.throws(() => publishRelease('build', { ...env, ...overrides }, () => assert.fail('must not call Docker')), /Invalid/);
   }
 });
+
+test('published images embed planned version and exact source commit',()=>{
+ let config;
+ publishRelease('build',{...env,PREFLYT_BUILD_VERSION:'v0.1.3'},args=>args.includes('inspect')?missing():'',(_,contents)=>{config=JSON.parse(contents)});
+ for(const target of Object.values(config.target)){
+  assert.equal(target.args.PREFLYT_BUILD_VERSION,'v0.1.3');assert.equal(target.args.PREFLYT_BUILD_SHA,env.GITHUB_SHA);
+ }
+});

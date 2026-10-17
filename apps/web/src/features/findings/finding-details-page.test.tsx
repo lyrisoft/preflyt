@@ -19,6 +19,8 @@ const state = vi.hoisted(() => ({
   reportGuidance: false,
   testFailure: false,
   matches: false,
+  manyMatches: false,
+  matchDenied: false,
   prReview: false,
   unrated: false,
   ai: 'disabled' as 'disabled' | 'cached' | 'none' | 'failed',
@@ -110,6 +112,8 @@ beforeEach(() => {
     reportGuidance: false,
     testFailure: false,
     matches: false,
+    manyMatches: false,
+    matchDenied: false,
     ai: 'disabled',
     prReview: false,
     unrated: false,
@@ -117,8 +121,20 @@ beforeEach(() => {
   state.fetch
     .mockReset()
     .mockImplementation(async (url: string, init?: RequestInit) => {
+      if (state.matchDenied && url.includes('/source?location='))
+        return Response.json({ message: 'Access revoked' }, { status: 403 })
       if (state.fail)
         return Response.json({ message: 'Access revoked' }, { status: 403 })
+      if (url.includes('/ignore?'))
+        return Response.json({
+          state: 'OPEN',
+          reason: '',
+          revision: 0,
+          expiresAt: null,
+          canManage: false,
+          eligible: true,
+          history: [],
+        })
       if (url.includes('/finding-guidance')) {
         if (init?.method === 'POST')
           return Response.json({
@@ -164,7 +180,14 @@ beforeEach(() => {
         })
       if (url.includes('/source?') || url.endsWith('/source'))
         return Response.json({
-          path: state.noLocation ? null : 'src/db.ts',
+          path:
+            url.includes('location=') && !url.includes('location=0')
+              ? state.manyMatches
+                ? `match-${new URL(url, 'http://localhost').searchParams.get('location')}.ts`
+                : 'other file.ts'
+              : state.noLocation
+                ? null
+                : 'src/db.ts',
           line: state.noLocation ? null : 7,
           endLine: 9,
           sourceSha: state.mismatch ? 'b'.repeat(40) : sha,
@@ -218,7 +241,13 @@ beforeEach(() => {
                       }
                     : undefined,
                   relatedLocations: state.matches
-                    ? [{ path: 'other file.ts', line: 4, endLine: 12 }]
+                    ? state.manyMatches
+                      ? Array.from({ length: 12 }, (_, i) => ({
+                          path: `match-${i + 1}.ts`,
+                          line: 4,
+                          endLine: 12,
+                        }))
+                      : [{ path: 'other file.ts', line: 4, endLine: 12 }]
                     : undefined,
                   fingerprint: id,
                   title: 'Unsafe query',
@@ -553,19 +582,70 @@ it('shows analyzer-supplied advice as text with its own source label', async () 
   expect(document.querySelector('main script')).toBeNull()
 })
 
-it('shows matching blocks as links at the exact assessed commit', async () => {
+it('compares matching blocks at the assessed commit without navigating away', async () => {
   state.health = true
   state.matches = true
   await mount()
   await expect
-    .element(page.getByRole('heading', { name: 'Matching blocks' }))
+    .element(page.getByRole('heading', { name: 'Duplicate locations' }))
+    .toBeVisible()
+  await page
+    .getByRole('button', { name: 'Compare location 2', exact: true })
+    .click()
+  await expect
+    .element(page.getByRole('heading', { name: 'Matching block · location 2' }))
     .toBeVisible()
   await expect
-    .element(page.getByRole('link', { name: 'other file.ts:4–12' }))
+    .element(page.getByRole('link', { name: 'Open on GitHub' }).last())
     .toHaveAttribute(
       'href',
       `https://github.com/org/repo/blob/${sha}/other%20file.ts#L4-L12`
     )
+  expect(
+    state.fetch.mock.calls.some(([url]) =>
+      String(url).includes('/source?location=1')
+    )
+  ).toBe(true)
+  await page
+    .getByRole('button', { name: 'Preview location 2', exact: true })
+    .click()
+  await expect
+    .element(page.getByRole('heading', { name: 'Original block', exact: true }))
+    .not.toBeInTheDocument()
+})
+
+it('paginates all reported locations with ten rows by default', async () => {
+  state.health = true
+  state.matches = true
+  state.manyMatches = true
+  await mount()
+  await expect
+    .element(
+      page.getByRole('button', { name: 'Preview location 10', exact: true })
+    )
+    .toBeVisible()
+  await expect
+    .element(
+      page.getByRole('button', { name: 'Preview location 11', exact: true })
+    )
+    .not.toBeInTheDocument()
+  await page.getByRole('button', { name: 'Next', exact: true }).click()
+  await expect
+    .element(
+      page.getByRole('button', { name: 'Compare location 13', exact: true })
+    )
+    .toBeVisible()
+  await page
+    .getByRole('button', { name: 'Compare location 13', exact: true })
+    .click()
+  await expect
+    .element(
+      page.getByRole('heading', { name: 'Matching block · location 13' })
+    )
+    .toBeVisible()
+  expect(
+    state.fetch.mock.calls.some(([url]) => String(url).includes('location=12'))
+  ).toBe(true)
 })
 
 it('preserves saved analyzer explanations through the Health finding mapper', async () => {
@@ -678,4 +758,56 @@ it('shows an unrated historical review without inventing low or high severity', 
   await expect
     .element(page.getByText('Severity: - (not rated in this saved review)'))
     .toBeVisible()
+})
+
+it('keeps duplicate comparison usable at 320px and on desktop in both themes', async () => {
+  state.health = true
+  state.matches = true
+  for (const width of [320, 1600]) {
+    await page.viewport(width, 1000)
+    for (const dark of [false, true]) {
+      document.documentElement.classList.toggle('dark', dark)
+      const view = await mount()
+      await page
+        .getByRole('button', { name: 'Compare location 2', exact: true })
+        .click()
+      await expect
+        .element(
+          page.getByRole('heading', { name: 'Matching block · location 2' })
+        )
+        .toBeVisible()
+      await expect
+        .element(page.getByRole('link', { name: 'Open on GitHub' }).last())
+        .toHaveAttribute(
+          'href',
+          `https://github.com/org/repo/blob/${sha}/other%20file.ts#L4-L12`
+        )
+      expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width)
+      await page.screenshot({
+        path: `__screenshots__/duplicate-comparison-${width}-${dark ? 'dark' : 'light'}.png`,
+      })
+      await view.unmount()
+    }
+  }
+  document.documentElement.classList.remove('dark')
+  await page.viewport(1280, 800)
+})
+
+it('shows a matching-source permission error without displaying an unverified excerpt', async () => {
+  state.health = true
+  state.matches = true
+  state.matchDenied = true
+  await mount()
+  await page
+    .getByRole('button', { name: 'Preview location 2', exact: true })
+    .click()
+  await expect
+    .element(page.getByRole('alert'))
+    .toHaveTextContent(
+      'Repository access is unavailable or you do not have permission.'
+    )
+  await expect
+    .element(page.getByRole('button', { name: 'Retry source', exact: true }))
+    .toBeVisible()
+  expect(document.querySelector('.cm-editor')).toBeNull()
 })

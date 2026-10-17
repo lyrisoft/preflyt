@@ -47,6 +47,8 @@ Each result shows its type and source. The summary and charts use all matching r
 
 The details page places **Affected code** beside repository context and review controls. The read-only code editor preserves indentation and highlights syntax for supported languages. It shows numbered source lines fetched from the **exact assessed commit**, with the reported line or block highlighted. **Open on GitHub** links to that revision and location.
 
+For duplication findings, **Duplicate locations** lists the original block and every retained matching location, with ten rows per page and a page-size selector. Choose **Preview** to read a block in Preflyt or **Compare** to show it beside the original (stacked on narrow screens). Each excerpt and GitHub link uses the assessed commit. Older assessments may retain at most three matches; run a new assessment to collect all locations reported by the scanner. Scanner coverage and report-size limits still apply.
+
 SARIF findings can supply a line range. JUnit failures can supply explicit file/line attributes or a Python/pytest traceback location. Preflyt extracts only unambiguous repository-relative locations, then verifies the file and line range against the assessed commit before displaying code. Traceback-derived locations identify the failed test, which may differ from the underlying application defect. Existing finding links and review history remain stable; raw failure logs are not displayed. A file without line coordinates shows an excerpt without highlighting. Failed-check summaries and evidence gaps may have no source location; the page explains this and retains the assessment evidence. Invalid coordinates, unavailable files or revoked access do not produce invented code. Source excerpts are bounded, sensitive context lines are redacted, and secret findings show verified surrounding code with the matched secret lines replaced by a redaction marker. Credential values are never displayed.
 
 Verified, redacted excerpts are saved in Preflyt separately from the original assessment. New assessments queue capture in the background. Existing findings without a saved excerpt fetch and save it on first open; subsequent visits read the saved excerpt without fetching the file from GitHub. Repository access is checked on every visit. Source capture failures remain retryable and do not change the assessment result.
@@ -93,3 +95,13 @@ New reviews assign **low**, **medium**, **high** or **critical** severity and ex
 Details show the saved recommendation in **Problem and solution** and on the highlighted code line. Cited added lines use source from the exact assessed head commit. Removed lines use the retained, redacted **PR diff before the change**, clearly labelled separately. Evidence-only suggestions explain when no code location was cited. Repository permissions apply to both the suggestion and its code.
 
 Status, assignee and review notes use the existing triage controls. Resolving an AI suggestion does not change a check result or authorize merging.
+
+## Ignore and reopen across scans
+
+Open a finding and use **Finding review → Ignore finding**. A reason is required (for example, intentional duplication, a false positive, or accepted risk). Optionally choose an expiry in your local time. Users need permission to manage findings in that repository.
+
+The decision persists when the same source, rule, file, line range and message recur in subsequent scans of the same repository. A different source, changed location or changed message requires a new review; Preflyt does not silently ignore an entire rule or file.
+
+Ignored findings remain visible with an **Ignored** status. Choose **Status → Ignored** to find them. They are excluded from Findings metrics and charts. **Reopen finding** requires a reason and makes the finding active again. Expired ignores become active automatically on the next read without requiring a worker or another scan. Recent review decisions are shown in the finding, and changes are recorded in the audit log.
+
+This is a review decision, not deletion or a policy waiver. Original report evidence, saved Health totals, assessment results and merge checks remain unchanged. Failed-check summaries and missing-evidence entries cannot be ignored.

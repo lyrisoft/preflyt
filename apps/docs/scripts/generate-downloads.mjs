@@ -162,6 +162,13 @@ const envLines = (local) => `# Preflyt settings. Keep this file private: chmod 6
 # Image tag matching the selected documentation version (${version}).
 PREFLYT_VERSION=${imageTag}
 
+# Optional installation reporting (enabled by default). Set false before startup to opt out.
+# No data is sent until a reporting receiver is configured.
+PREFLYT_INSTALLATION_REPORTING_ENABLED=true
+# Country reporting requires a separate administrator opt-in. Set false to enforce off.
+PREFLYT_INSTALLATION_COUNTRY_REPORTING_ENABLED=
+PREFLYT_INSTALLATION_REPORTING_URL=
+
 # REQUIRED. ${local ? 'The address you open in your browser.' : 'Your public HTTPS address: no trailing slash, no path.'}
 WEB_ORIGIN=${local ? 'http://localhost:8080' : 'https://preflyt.example.com'}
 

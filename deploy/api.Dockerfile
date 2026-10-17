@@ -41,6 +41,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /
 WORKDIR /app
 COPY --from=build --chown=node:node /opt/api/ ./
 COPY --from=build --chown=node:node /workspace/apps/api/dist ./dist
+ARG PREFLYT_BUILD_VERSION=development
+ARG PREFLYT_BUILD_SHA=unknown
+ENV PREFLYT_BUILD_VERSION=$PREFLYT_BUILD_VERSION PREFLYT_BUILD_SHA=$PREFLYT_BUILD_SHA
 ENV NODE_ENV=production API_HOST=0.0.0.0 API_PORT=3000
 USER node
 EXPOSE 3000

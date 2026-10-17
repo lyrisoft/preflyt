@@ -1,3 +1,5 @@
+import { InstallationReportingModule } from './installation-reporting/installation-reporting.module.js'
+import { ReleasesModule } from './releases/releases.module.js'
 import { ConfigurationModule } from './configuration/configuration.module.js'
 import { TeamsModule } from './teams/teams.module.js'
 import { IntelligenceModule } from './intelligence/intelligence.module.js'
@@ -12,7 +14,7 @@ import { HealthController } from './health/health.controller.js'
 import { GitHubModule } from './github/github.module.js'
 import { PrismaModule } from './prisma/prisma.module.js'
 @Module({
-  imports: [ConfigurationModule, TeamsModule, IntelligenceModule, NotificationsModule, ContributorsModule,
+  imports: [InstallationReportingModule, ReleasesModule, ConfigurationModule, TeamsModule, IntelligenceModule, NotificationsModule, ContributorsModule,
     PrismaModule, AuthModule, GitHubModule, GitHubEventsModule, StandardsModule, AssessmentModule],
   controllers: [HealthController],
 })

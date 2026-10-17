@@ -236,3 +236,11 @@ grant package writes only to publishers and release writes only where needed.
 See [branch CI details](../../docs/deployment/branch-ci.md) for coverage/evidence
 contracts and [the repository launch runbook](../../docs/operations/community-repository-launch.md)
 for the separate public-release requirements.
+
+### Installed version and in-app release notices
+
+The production publisher plans its stable version before building and passes that version plus the source commit into API/web images. Publication refuses to continue if the planned version has changed. Development and local images are labeled Development.
+
+After verifying and tagging every required dual-architecture image, `create-release.mjs` includes a `preflyt-release-ready:v1` marker bound to the source commit in the published notes. The in-app checker uses this marker to distinguish installable releases from ordinary tags or notes. Do not add the marker to drafts or incomplete publications. Existing releases without it remain readable as notes but do not trigger upgrade recommendations.
+
+The in-app checker uses the public GitHub releases endpoint without installation/user credentials. Private repositories will report an unavailable check until public releases are reachable. No workflow runs are started by checking for updates, and the app never upgrades itself.

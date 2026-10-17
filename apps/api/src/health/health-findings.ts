@@ -14,7 +14,7 @@ export function validHealthFindings(value: unknown): value is ReportFinding[] {
  return Array.isArray(value) && value.length <= HEALTH_FINDINGS_PER_CHECK && value.every(f => f && typeof f === 'object' &&
   Object.keys(f).filter(k => k !== 'endLine' && k !== 'relatedLocations' && k !== 'reportGuidance').sort().join(',') === 'category,fingerprint,line,path,ruleId,severity,suppressed,title' &&
   (!('reportGuidance' in f) || validHealthRuleGuidance(f.reportGuidance)) &&
-  (!('relatedLocations' in f) || f.category==='duplication' && Array.isArray(f.relatedLocations) && f.relatedLocations.length<=3 && f.relatedLocations.every((l:any)=>
+  (!('relatedLocations' in f) || f.category==='duplication' && Array.isArray(f.relatedLocations) && f.relatedLocations.every((l:any)=>
    l && Object.keys(l).sort().join(',')==='endLine,line,path' && typeof l.path==='string' && l.path.length>0 && l.path.length<=500 &&
    !/^[\\/]|^[a-z]+:|[\\?#%\x00-\x1f]/i.test(l.path) && !l.path.split('/').some((p:string)=>['..','.',''].includes(p)) &&
    Number.isSafeInteger(l.line) && l.line>0 && Number.isSafeInteger(l.endLine) && l.endLine>=l.line && l.endLine<=1000000)) &&
