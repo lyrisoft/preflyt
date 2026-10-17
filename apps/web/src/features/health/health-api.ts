@@ -432,7 +432,7 @@ export const healthReasons: Record<string, string> = {
   SOURCE_ACCESS_UNAVAILABLE:
     'Repository files could not be fetched and verified. Check GitHub access and retry the assessment.',
   GITHUB_RATE_LIMITED:
-    'GitHub has temporarily limited repository requests. Wait for the GitHub request budget to reset, then reassess.',
+    'Repository requests are temporarily paused. Wait until the retry time, then reassess.',
   SCANNER_PENDING: 'Waiting for the Preflyt scanners.',
   SCANNER_RESULT_UNVERIFIED:
     'The scanner result could not be verified. Retry the assessment; no passing result was recorded.',
@@ -469,7 +469,7 @@ export function healthFailure(reason: string | null, canRetry = true) {
     SOURCE_FETCH_TIMED_OUT:
       'Select Reassess. If it times out again, ask your administrator to check the worker’s network access to github.com.',
     GITHUB_RATE_LIMITED:
-      'Wait for GitHub’s request limit to reset, then select Reassess.',
+      'Wait until the retry time, then select Reassess.',
     ACCESS_REVOKED:
       'Check that the repository is selected and the GitHub App still has access, then select Reassess.',
     SOURCE_ACCESS_UNAVAILABLE:

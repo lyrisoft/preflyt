@@ -7,7 +7,6 @@ import { join } from "node:path";
 import { readHealthScanSource } from "./health-scan-source.js";
 import {
   sourceLimits,
-  type GitSourceEntry,
 } from "../execution/native-source.js";
 
 export class HealthGitSourceError extends Error {
@@ -163,7 +162,7 @@ export const runHealthGit: HealthGitCommand = (args, options) =>
   });
 
 /** A shallow object fetch, with no worktree or credential-bearing repository configuration. */
-export async function readHealthGitSource(
+export async function withHealthGitSource<T>(
   input: {
     owner: string;
     name: string;
@@ -172,6 +171,11 @@ export async function readHealthGitSource(
     token: string;
     includeTestAssets?: boolean;
   },
+  consume: (local: {
+    treeSha: string;
+    request: <R>(path: string) => Promise<R>;
+    scanSource: () => ReturnType<typeof readHealthScanSource>;
+  }) => Promise<T>,
   externalSignal?: AbortSignal,
   command: HealthGitCommand = runHealthGit,
 ) {
@@ -285,14 +289,7 @@ export async function readHealthGitSource(
           path: match[5],
         };
       });
-    const request = async <T>(path: string): Promise<T> => {
-      if (path.endsWith("/git/commits/" + input.sourceSha))
-        return { sha: input.sourceSha, tree: { sha: treeSha } } as T;
-      if (path.endsWith("/git/trees/" + treeSha + "?recursive=1"))
-        return { sha: treeSha, truncated: false, tree: entries } as T;
-      throw new HealthGitSourceError("SOURCE_FETCH_FAILED");
-    };
-    const readBlobs = async (selected: GitSourceEntry[]) => {
+    const readBlobs = async (selected: Array<{sha:string;size?:number}>) => {
       const unique = [
         ...new Map(selected.map((entry) => [entry.sha, entry])).values(),
       ];
@@ -327,7 +324,18 @@ export async function readHealthGitSource(
         throw new HealthGitSourceError("SOURCE_FETCH_FAILED");
       return blobs;
     };
-    return await readHealthScanSource(
+    const request = async <T>(path: string): Promise<T> => {
+      if (path.endsWith("/git/commits/" + input.sourceSha))
+        return { sha: input.sourceSha, tree: { sha: treeSha } } as T;
+      if (path.endsWith("/git/trees/" + treeSha + "?recursive=1"))
+        return { sha: treeSha, truncated: false, tree: entries } as T;
+      const sha = /\/git\/blobs\/([a-f0-9]{40})$/.exec(path)?.[1];
+      const entry = entries.find(entry => entry.sha === sha && entry.type === 'blob' && (entry.size ?? Infinity) <= 262144);
+      if (entry) return (await readBlobs([entry])).get(entry.sha) as T;
+      throw new HealthGitSourceError("SOURCE_FETCH_FAILED");
+    };
+    return await consume({treeSha, request,
+      scanSource: () => readHealthScanSource(
       request,
       `/repos/${input.owner}/${input.name}`,
       input.repositoryId,
@@ -335,7 +343,8 @@ export async function readHealthGitSource(
       signal,
       readBlobs,
       input.includeTestAssets,
-    );
+      ),
+    });
   } catch (error) {
     if (error instanceof HealthGitSourceError) throw error;
     if (signal.aborted)
@@ -352,4 +361,19 @@ export async function readHealthGitSource(
   } finally {
     await rm(directory, { recursive: true, force: true, maxRetries: 3 });
   }
+}
+
+export async function readHealthGitSource(
+  input: {
+    owner: string;
+    name: string;
+    repositoryId: string;
+    sourceSha: string;
+    token: string;
+    includeTestAssets?: boolean;
+  },
+  externalSignal?: AbortSignal,
+  command: HealthGitCommand = runHealthGit,
+) {
+  return withHealthGitSource(input, local => local.scanSource(), externalSignal, command);
 }

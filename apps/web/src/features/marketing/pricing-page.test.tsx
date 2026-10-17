@@ -56,6 +56,10 @@ it.each([320, 768, 1440])(
     expect(document.querySelector('.pricing-cloud-workflows')).toBeNull()
     expect(document.querySelector('.pricing-planned-features')).toBeNull()
     expect(document.querySelector('form')).toBeNull()
+    expect(document.body.textContent).toContain(
+      'Community Edition source code and container images are public.'
+    )
+    expect(document.body.textContent).not.toContain('in preparation')
     expect(document.body.textContent).not.toContain('Agentic AI')
     expect(document.body.textContent).not.toContain('Repository-aware AI')
     expect(document.body.textContent).not.toContain('one-click integrations')

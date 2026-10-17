@@ -107,11 +107,14 @@ it('automatically scans the selected repository without standards, CI or manual 
   return {state:'COMPLETE',signature:signNativeReceipt(receipt,privateKey,publicKey),cleanupConfirmed:true}
  })}
  provider.readHealthScanSource.mockResolvedValue({source:{sourceHash:'e'.repeat(64)},excludedFiles:0,originalTreeSha:'b'.repeat(40)})
+ provider.readRepositorySnapshot.mockResolvedValueOnce({...await provider.readRepositorySnapshot(),scanSource:await provider.readHealthScanSource()})
+ provider.readHealthScanSource.mockClear()
  runtime.status.mockClear()
  service=new RepositoryHealthService(fixture.prisma,new AuthorizationService(fixture.prisma),provider as any,runtime as any,new FindingSourceStore(fixture.prisma,provider as any),scanner as any)
  const scan=await service.initial(owner.identityId,'51')
  await service.process(scan.id)
  expect(scanner.call).toHaveBeenCalledWith('admit',expect.objectContaining({repositoryId:'51',sourceSha:sha,selectionId:'health:'+scan.id}),expect.anything())
+ expect(provider.readHealthScanSource).not.toHaveBeenCalled()
  await fixture.prisma.repositoryHealthAssessment.update({where:{id:scan.id},data:{leaseUntil:null}})
  await service.process(scan.id)
  const result=await service.get(owner,'51')
@@ -508,15 +511,25 @@ it('removes test configuration and discovery endpoints',async()=>{
  await request(server).post('/github/repositories/51/health').set('Cookie','health.sid=owner').set('Origin','http://localhost:5173').send({requestKey:randomUUID(),category:'coverage'}).expect(400)
 })
 
-it('retains a safe GitHub retry time and exposes the reason for pre-report failures only to authorized readers', async () => {
+it('defers a rate-limited assessment durably and resumes automatically after its retry time', async () => {
  provider.readRepositorySnapshot.mockRejectedValueOnce(new GitHubRateLimitError(60000))
  const queued=await service.initial(owner.identityId,'51')
  await service.process(queued.id)
  const read=await service.get(owner,'51')
- expect(read.assessment).toMatchObject({state:'FAILED',sourceSha:null,report:null,reason:'GITHUB_RATE_LIMITED'})
+ expect(read.assessment).toMatchObject({state:'QUEUED',sourceSha:null,report:null,reason:'GITHUB_RATE_LIMITED'})
  expect(Date.parse(read.assessment!.retryAt!)).toBeGreaterThan(Date.now())
  expect(read.history[0].retryAt).toBe(read.assessment!.retryAt)
  expect(JSON.stringify(read)).not.toContain('retryAfterSeconds')
+ expect(await service.pending()).not.toContainEqual({id:queued.id})
+ const calls=provider.readRepositorySnapshot.mock.calls.length
+ await service.process(queued.id)
+ expect(provider.readRepositorySnapshot).toHaveBeenCalledTimes(calls)
+ await fixture.prisma.repositoryHealthAssessment.update({where:{id:queued.id},data:{leaseUntil:new Date(0)}})
+ await service.process(queued.id)
+ const resumed=await service.get(owner,'51')
+ expect(resumed.assessment).toMatchObject({state:'COMPLETED',reason:'REVIEW_REQUIRED',retryAt:null,sourceSha:sha})
+ expect(resumed.assessment!.id).toBe(queued.id)
+
  await expect(service.get(outsider,'51')).rejects.toThrow()
 })
 
@@ -537,4 +550,21 @@ it('retires previously queued test-only plans without fetching source or executi
  await service.process(row.id)
  expect(provider.readRepositorySnapshot).not.toHaveBeenCalled()
  expect((await service.get(owner,'51')).assessment).toMatchObject({state:'FAILED',reason:'HEALTH_TEST_EXECUTION_REMOVED'})
+})
+
+it('allows immediate cancellation during a GitHub retry delay',async()=>{
+ provider.readRepositorySnapshot.mockRejectedValueOnce(new GitHubRateLimitError(3600000))
+ const row=await service.initial(owner.identityId,'51'); await service.process(row.id)
+ await service.cancel(owner,'51',row.id); await service.process(row.id)
+ expect((await service.get(owner,'51')).assessment).toMatchObject({state:'CANCELLED'})
+})
+
+it('does not delay a cancellation received during a rate-limited source request',async()=>{
+ const row=await service.initial(owner.identityId,'51')
+ provider.readRepositorySnapshot.mockImplementationOnce(async()=>{
+  await service.cancel(owner,'51',row.id)
+  throw new GitHubRateLimitError(3600000)
+ })
+ await service.process(row.id);await service.process(row.id)
+ expect((await service.get(owner,'51')).assessment).toMatchObject({state:'CANCELLED'})
 })

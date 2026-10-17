@@ -1,3 +1,4 @@
+import { repositorySnapshotFromTree } from '../src/github/repository-snapshot.js'
 import { createHash } from 'node:crypto'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { GitHubProviderService } from '../src/github/github-provider.service.js'
@@ -160,11 +161,25 @@ it.each(['AGENTS.md','package.json','external','directory','directory-source','t
  })
  vi.spyOn(provider,'openRepository').mockResolvedValue({metadata:{owner:{login:'org'},name:'repo',full_name:'org/repo',default_branch:'main'},request})
  try {
-  const snapshot=await provider.readRepositorySnapshot(1n,2n)
+  const snapshot=await repositorySnapshotFromTree(request, '/repos/org/repo', {full_name:'org/repo'}, 'main', {sha:'a'.repeat(40)}, await request('/repos/org/repo/git/trees/tree'))
   expect(snapshot.complete).toBe(true)
   expect(snapshot.omittedPaths[0]).toMatchObject({path,scope:kind.startsWith('directory')?'directory':['external','tampered'].includes(kind)?'unknown':'file'})
   if (kind === 'directory') expect(snapshot.omittedPaths[0].affectedChecks).toEqual([])
   if (kind === 'directory-source') expect(snapshot.omittedPaths[0].affectedChecks).toEqual(['languages'])
   expect(request.mock.calls.every(([url])=>url.startsWith('/repos/org/repo/'))).toBe(true)
  } finally { provider.close() }
+})
+
+it('pins the branch with one REST read and delegates profile and scanner files to one Git fetch',async()=>{
+ const provider=new GitHubProviderService() as any, sha='a'.repeat(40)
+ const request=vi.fn(async()=>({ref:'refs/heads/feature/test',object:{type:'commit',sha}}))
+ const inspectSource=vi.fn(async()=>({sourceSha:sha,scanSource:{source:{sourceSha:sha}}}))
+ vi.spyOn(provider,'openRepository').mockResolvedValue({metadata:{owner:{login:'org'},name:'repo',default_branch:'main'},request,inspectSource})
+ await expect(provider.readRepositorySnapshot(1n,2n,'feature/test',true)).resolves.toHaveProperty('sourceSha',sha)
+ expect(request.mock.calls).toEqual([['/repos/org/repo/git/ref/heads/feature%2Ftest']])
+ expect(inspectSource).toHaveBeenCalledWith(sha,'feature/test',true)
+ request.mockResolvedValueOnce({ref:'refs/heads/other',object:{type:'commit',sha}})
+ await expect(provider.readRepositorySnapshot(1n,2n,'feature/test')).rejects.toThrow('invalid branch revision')
+ expect(inspectSource).toHaveBeenCalledTimes(1)
+ provider.close()
 })

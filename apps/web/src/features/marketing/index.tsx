@@ -1,6 +1,5 @@
 import { ArrowRight, ArrowUpRight, Layers } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import release from '../../../../../release.json'
 import { EngineeringFigures } from './engineering-figures'
 import { MarketingLayout, MarketingClosing } from './marketing-layout'
 import { ProductScene } from './product-scene'
@@ -184,22 +183,22 @@ export function MarketingHomepage() {
                 aria-label='Releases and Community license'
               >
                 <a
-                  href={`https://github.com/lyrisoft/preflyt/releases/tag/v${release.latestStable}`}
-                  aria-label={`Preflyt v${release.latestStable} release`}
+                  href='https://github.com/lyrisoft/preflyt/releases/latest'
+                  aria-label='Latest Preflyt release'
                 >
                   <img
-                    src={`https://img.shields.io/badge/Preflyt-v${release.latestStable}-2f6f60?logo=github`}
-                    alt={`Preflyt v${release.latestStable}`}
+                    src='https://img.shields.io/github/v/release/lyrisoft/preflyt?label=Preflyt&logo=github&color=2f6f60&cacheSeconds=300'
+                    alt='Latest Preflyt release on GitHub'
                     height={20}
                   />
                 </a>
                 <a
-                  href='https://github.com/marketplace/actions/preflyt-policy-check'
-                  aria-label='Preflyt Action on GitHub Marketplace'
+                  href='https://github.com/lyrisoft/preflyt-action/releases/latest'
+                  aria-label='Latest Preflyt Action release'
                 >
                   <img
-                    src='https://img.shields.io/github/v/release/lyrisoft/preflyt-action?label=Preflyt%20Action&logo=github'
-                    alt='Preflyt Action published release on GitHub Marketplace'
+                    src='https://img.shields.io/github/v/release/lyrisoft/preflyt-action?label=Preflyt%20Action&logo=github&cacheSeconds=300'
+                    alt='Latest Preflyt Action release on GitHub'
                     height={20}
                   />
                 </a>
@@ -215,8 +214,8 @@ export function MarketingHomepage() {
                 </a>
               </div>
               <p className='community-release-note'>
-                Community Edition · Apache-2.0. Container images are public.
-                Public source release is in preparation.
+                Community Edition · Apache-2.0. Source code and container images
+                are public.
               </p>
             </div>
           </div>
@@ -404,8 +403,8 @@ export function MarketingHomepage() {
               DCO sign-off; you retain ownership of your work.
             </p>
             <p>
-              Public contribution access opens with the Community release.
-              Existing collaborators can use the repository links now.
+              Contributions are welcome. Read the contributing guide and discuss
+              your idea in a GitHub issue.
             </p>
           </div>
           <div className='reference-actions'>

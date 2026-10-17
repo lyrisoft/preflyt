@@ -20,7 +20,7 @@ const options = {
   repositories: [{ id: '101', name: 'org/service', defaultBranch: 'main' }],
   standards: [
     {
-      id: 'baseline-engineering',
+      id: 'org-standard-baseline',
       version: '1.0.0',
       title: 'Baseline Engineering',
     },
@@ -183,7 +183,7 @@ it('requires an impact preview before creating drafts', async () => {
     .toEqual({
       branchRef: 'refs/heads/main',
       profile: 'RECOMMENDED',
-      packs: [{ id: 'baseline-engineering', version: '1.0.0' }],
+      packs: [{ id: 'org-standard-baseline', version: '1.0.0' }],
       expectedPreviewHash: impact.previewHash,
     })
 })

@@ -1,3 +1,4 @@
+import { GitHubRateLimitError } from '../src/github/github-rate-limit.js'
 import { beforeAll, beforeEach, afterAll, expect, it, vi } from 'vitest'
 import { disposableDatabase } from './disposable-database.js'
 import { FindingSourceStore } from '../src/findings/finding-source-store.service.js'
@@ -105,4 +106,21 @@ it('separates secret excerpts from ordinary cached source and masks unknown dete
  provider.readHealthSource.mockRejectedValue(new Error('offline'))
  expect(await new FindingSourceStore(fixture.prisma,provider as any).read(repositoryId,sha,secret)).toEqual(result)
  expect(sourceLocation(repositoryId,sha,{...secret,line:null,endLine:null})).toBeNull()
+})
+
+it('preserves the background capture allowance across rate limits and honors cooldown after restart',async()=>{
+ for(let attempt=0;attempt<4;attempt++) {
+  provider.readHealthSource.mockRejectedValueOnce(new GitHubRateLimitError(3600000))
+  await store.read(repositoryId,sha,location)
+  const row=await fixture.prisma.findingSourceExcerpt.findFirstOrThrow()
+  expect(row.attempts).toBe(0)
+  expect(row.retryAfter.getTime()).toBeGreaterThan(Date.now()+3500000)
+  store=new FindingSourceStore(fixture.prisma,provider as any)
+  await store.reconcile()
+  expect(provider.readHealthSource).toHaveBeenCalledTimes(attempt+1)
+  await fixture.prisma.findingSourceExcerpt.updateMany({data:{retryAfter:new Date(0)}})
+ }
+ await store.reconcile()
+ expect((await fixture.prisma.findingSourceExcerpt.findFirstOrThrow()).capturedAt).not.toBeNull()
+ expect(provider.readHealthSource).toHaveBeenCalledTimes(5)
 })

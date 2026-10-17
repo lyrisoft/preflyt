@@ -24,7 +24,7 @@ const faqs = [
   {
     question: 'Can I install Community Edition today?',
     answer:
-      'Yes. Public container images are available without registry sign-in. Follow the Community install guide to run Preflyt locally or on your infrastructure. Public source release is in preparation.',
+      'Yes. Public container images are available without registry sign-in. Follow the Community install guide to run Preflyt locally or on your infrastructure. The source code is public on GitHub.',
   },
   {
     question: 'Is there a repository limit?',
@@ -116,8 +116,7 @@ export function PricingPage() {
           </article>
         </section>
         <p className='pricing-access-note container'>
-          Community Edition container images are public. Public source release
-          is in preparation.{' '}
+          Community Edition source code and container images are public.{' '}
           <a href={installGuide}>
             View installation guide
             <ArrowUpRight className='icon small' aria-hidden='true' />

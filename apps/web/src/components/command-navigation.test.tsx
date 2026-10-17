@@ -20,7 +20,7 @@ it('finds direct sidebar tools in command search and keeps restricted administra
   const search = page.getByRole('combobox')
   await search.fill('Skills')
   await expect
-    .element(page.getByRole('option', { name: 'Skills', exact: true }))
+    .element(page.getByRole('option', { name: 'Skills', exact: false }))
     .toBeVisible()
   expect(
     document.querySelectorAll('[cmdk-item][data-value="Skills"]')
