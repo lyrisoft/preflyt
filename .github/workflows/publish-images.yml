@@ -135,3 +135,15 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PREFLYT_BUILD_VERSION: ${{ needs.inputs.outputs.version }}
         run: node scripts/ci/create-release.mjs
+
+  documentation:
+    name: Publish matching release documentation
+    needs: [inputs, release]
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/docs.yml
+    with:
+      release_tag: ${{ needs.inputs.outputs.version }}
