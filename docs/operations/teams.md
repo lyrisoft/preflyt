@@ -4,7 +4,7 @@ Open **Administration → Teams**. Owners and Admins can create teams from exist
 
 ## Workflow
 
-1. Create a local team, or discover/import a GitHub team. Imports are read-only and start with no approved repository policy scope.
+1. Create a local team, or discover/import GitHub teams. **Import all teams** imports every discovered team in the chosen organization across all pages, regardless of the name filter. Already imported teams are skipped. Requests run sequentially through the existing permission-checked import endpoint; progress and individual errors remain visible, and retries process only remaining teams. Keep the dialog open until it finishes. Imports are read-only and start with no approved repository policy scope.
 2. Review repositories and explicitly select policy scope. Only authorized, selected repositories are available.
 3. Open **Policies**, choose **Apply standards to → Team**, then select the team. Choose exact standard versions, a requirement level and an explicit branch. Preview added checks and conflicts. The same assignment remains available in Teams → Standards & policies.
 4. Apply the unchanged preview to create repository standards selections and policy drafts together. Concurrent changes require another preview.

@@ -23,7 +23,7 @@ Teams organize people and requirements. They **never grant access** to Preflyt o
 You can:
 
 - select **Create team** and choose existing workspace members, or
-- select **Import from GitHub** to bring in a team from your connected GitHub organization. Imports are read-only and start with no repositories in scope. The App needs **Members: Read-only** for this.
+- select **Import from GitHub** to bring in teams from your connected GitHub organization. After **List teams**, choose an individual team or **Import all teams**. Import all covers every page, regardless of the name filter, and skips teams already imported. Keep the dialog open while it runs; progress and individual failures remain visible. Retrying imports only the remaining teams. Imports are read-only and start with no repositories in scope. The App needs **Members: Read-only** for this.
 
 Each team has tabs: **Overview**, **Members**, **Repositories**, **Standards & policies**, **Effective impact** and **Activity**.
 

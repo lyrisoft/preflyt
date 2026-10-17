@@ -24,7 +24,7 @@ it.each([true, false])(
     const view = await render(<InspectionBadge profile={profile} />)
     await view
       .getByRole('button', {
-        name: complete ? 'Inspection complete' : 'Partial inspection',
+        name: complete ? 'Inspected' : 'Partial inspection',
       })
       .click()
     await expect
