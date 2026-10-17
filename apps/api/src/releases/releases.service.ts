@@ -3,7 +3,7 @@ import { PrismaService } from '../prisma/prisma.service.js'
 import { AuthorizationService } from '../auth/authorization.service.js'
 import type { AuthenticatedSession } from '../auth/session.guard.js'
 import { compareVersions, parseReleases, versionParts, type ReleaseNote } from './release-policy.js'
-const interval=12*60*60*1000
+const interval=60*60*1000
 @Injectable()
 export class ReleasesService implements OnModuleInit,OnModuleDestroy {
  private timer?:ReturnType<typeof setInterval>
@@ -24,15 +24,16 @@ export class ReleasesService implements OnModuleInit,OnModuleDestroy {
   const installed=process.env.PREFLYT_BUILD_VERSION??'development', sha=process.env.PREFLYT_BUILD_SHA??null
   return {installed,sha,development:!versionParts(installed),latest,notes,checkedAt:saved.checkedAt,error:saved.error,
    enabled:saved.enabled,prereleases:saved.prereleases,revision:saved.revision,
+   nextCheckAt: saved.leaseUntil && (!saved.retryAt || saved.leaseUntil > saved.retryAt) ? saved.leaseUntil : saved.retryAt,
    updateAvailable:!!latest&&!!versionParts(installed)&&compareVersions(latest.tag,installed)>0,
    unread:!!notes[0]&&seen?.tag!==notes[0].tag,
    canCheck:!!session.platformAdmin||['OWNER','ADMIN'].includes(session.role),canConfigure:!!session.platformAdmin}
  }
- async check(manual:boolean){
+ async check(manual:boolean,freshness=interval){
   const saved=await this.state(),now=new Date()
   if(!manual&&!saved.enabled)return
   if(saved.retryAt&&saved.retryAt>now)return
-  if(!manual&&saved.checkedAt&&now.getTime()-saved.checkedAt.getTime()<interval)return
+  if(!manual&&saved.checkedAt&&now.getTime()-saved.checkedAt.getTime()<freshness)return
   const leased=await this.db.releaseCheck.updateMany({where:{id:'preflyt',...(!manual?{enabled:true}:{}),AND:[{OR:[{leaseUntil:null},{leaseUntil:{lt:now}}]},{OR:[{retryAt:null},{retryAt:{lte:now}}]}]},data:{leaseUntil:new Date(now.getTime()+30000),retryAt:new Date(now.getTime()+60000)}})
   if(!leased.count)return
   try {
@@ -47,7 +48,7 @@ export class ReleasesService implements OnModuleInit,OnModuleDestroy {
   }catch{await this.db.releaseCheck.update({where:{id:'preflyt'},data:{error:'Could not check GitHub releases. Last saved release information is shown.',retryAt:new Date(now.getTime()+60*60*1000)}})}
   finally{await this.db.releaseCheck.update({where:{id:'preflyt'},data:{leaseUntil:null}})}
  }
- async refresh(session:AuthenticatedSession){await this.administrator(session);await this.check(true);return this.status(session)}
+ async refresh(session:AuthenticatedSession,automatic=false){await this.administrator(session);await this.check(!automatic,automatic?5*60*1000:interval);return this.status(session)}
  async settings(session:AuthenticatedSession,input:any){
   if(!session.platformAdmin)throw new ForbiddenException('Deployment administrator required')
   if(typeof input?.enabled!=='boolean'||typeof input?.prereleases!=='boolean'||!Number.isSafeInteger(input?.revision))throw new BadRequestException('Choose valid update preferences')
