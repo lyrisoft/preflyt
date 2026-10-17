@@ -434,7 +434,9 @@ export function RepositoryHealth({
                 {row.cancelled
                   ? 'Cancellation requested'
                   : row.state === 'QUEUED'
-                    ? 'Waiting for worker capacity'
+                    ? row.reason === 'GITHUB_RATE_LIMITED'
+                      ? 'Waiting to retry GitHub requests'
+                      : 'Waiting for worker capacity'
                     : ({
                         INSPECTING: 'Inspecting the selected commit',
                         FETCHING_SOURCE: 'Fetching repository files',
@@ -447,8 +449,17 @@ export function RepositoryHealth({
               <p className='mt-1 text-sm leading-relaxed text-muted-foreground'>
                 {row.cancelled
                   ? 'Waiting for the analysis runtime to confirm cleanup.'
-                  : 'Progress updates automatically. The assessment stays pinned to one commit.'}
+                  : row.reason === 'GITHUB_RATE_LIMITED'
+                    ? 'Repository requests are temporarily paused. This assessment will retry automatically.'
+                    : row.sourceSha
+                      ? 'Progress updates automatically. The assessment stays pinned to one commit.'
+                      : 'Progress updates automatically. The commit will be pinned before scanning.'}
               </p>
+              {row.reason === 'GITHUB_RATE_LIMITED' && row.retryAt && (
+                <p className='mt-1 text-sm text-muted-foreground'>
+                  Retry scheduled for <ResultTimestamp value={row.retryAt} />
+                </p>
+              )}
             </div>
           </div>
         )}

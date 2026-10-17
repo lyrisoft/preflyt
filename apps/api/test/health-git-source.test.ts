@@ -1,3 +1,4 @@
+import { repositorySnapshotFromTree } from '../src/github/repository-snapshot.js';
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import {
@@ -14,6 +15,7 @@ import { join } from "node:path";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import {
   readHealthGitSource,
+  withHealthGitSource,
   runHealthGit,
   HealthGitSourceError,
   type HealthGitCommand,
@@ -30,6 +32,7 @@ beforeAll(async () => {
   await git(["init", "--quiet"]);
   await git(["config", "user.name", "Fixture"]);
   await git(["config", "user.email", "fixture@example.invalid"]);
+  await writeFile(join(repo, "package.json"), JSON.stringify({dependencies:{react:"19"}}));
   await mkdir(join(repo, "src"));
   await writeFile(join(repo, "src/app.js"), "export const count = 1;\n");
   await writeFile(join(repo, "source.dat"), Buffer.from([0, 255, 1, 128]));
@@ -194,4 +197,31 @@ it("rejects an oversized temporary object store before reading source and remove
     }),
   ).rejects.toMatchObject({ code: "SOURCE_FETCH_LIMIT_EXCEEDED" });
   await expect(access(directory)).rejects.toThrow();
+});
+
+it('reads the profile and scanner source from the same pinned Git object store', async()=>{
+ const seen: Array<{args:string[];env:NodeJS.ProcessEnv;cwd:string}> = [];
+ const result = await withHealthGitSource(input(),async local=>{
+  const base='/repos/fixture/source';
+  const tree=await local.request<any>(`${base}/git/trees/${local.treeSha}?recursive=1`);
+  const snapshot=await repositorySnapshotFromTree(local.request,base,{full_name:'fixture/source'},'main',{sha},tree);
+  const scanned=await local.scanSource();
+  return {snapshot, scanned};
+ },undefined,localRunner(seen));
+ expect(result.snapshot.sourceSha).toBe(result.scanned.source.sourceSha);
+ expect(result.snapshot.treeSha).toBe(result.scanned.originalTreeSha);
+ expect(JSON.parse(result.snapshot.files.find(f=>f.path==='package.json')!.content!)).toHaveProperty('dependencies.react','19');
+ expect(seen.filter(call=>call.args[0]==='fetch')).toHaveLength(1);
+ await expect(access(seen[0].cwd)).rejects.toThrow();
+});
+
+it('rejects a fetched commit whose bytes do not match the pinned branch revision',async()=>{
+ const seen:Array<{args:string[];env:NodeJS.ProcessEnv;cwd:string}>=[];
+ const run=localRunner(seen);
+ await expect(readHealthGitSource(input(),undefined,async(args,options)=>{
+  const bytes=await run(args,options);
+  if(args[0]==='cat-file'&&args[1]==='commit')bytes[bytes.length-1]^=1;
+  return bytes;
+ })).rejects.toMatchObject({code:'SOURCE_FETCH_FAILED'});
+ await expect(access(seen[0].cwd)).rejects.toThrow();
 });

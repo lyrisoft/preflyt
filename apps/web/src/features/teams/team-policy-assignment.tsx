@@ -11,7 +11,10 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { StatusBadge } from '@/components/status-badge'
-import { governanceRequest } from '../repositories/governance-api'
+import {
+  governanceRequest,
+  type BlockedPolicyRepository,
+} from '../repositories/governance-api'
 import { Paging, PickList } from './team-controls'
 import type { Detail, Options, Impact } from './teams-page'
 
@@ -24,6 +27,9 @@ export function TeamPolicyAssignment({
   options: Options
   onApplied: () => Promise<void>
 }) {
+  const workspaceStandards = options.standards.filter((standard) =>
+    standard.id.startsWith('org-standard-')
+  )
   const [branch, setBranch] = useState(
     options.repositories.find((r) =>
       team.repositories.some(
@@ -33,15 +39,19 @@ export function TeamPolicyAssignment({
   )
   const [profile, setProfile] = useState('RECOMMENDED')
   const [packs, setPacks] = useState<string[]>(() => {
-    const baseline =
-      options.standards.find((p) => p.id === 'baseline-engineering') ??
-      options.standards[0]
+    const baseline = workspaceStandards[0]
     return baseline ? [`${baseline.id}@${baseline.version}`] : []
   })
   const [replacement, setReplacement] = useState('new')
   const [impact, setImpact] = useState<Impact | null>(null)
   const [page, setPage] = useState(1)
   const [error, setError] = useState('')
+  const [blockedRepositories, setBlockedRepositories] = useState<
+    BlockedPolicyRepository[]
+  >([])
+  const hasUnavailableSelection = packs.some(
+    (value) => !workspaceStandards.some((p) => `${p.id}@${p.version}` === value)
+  )
   const [busy, setBusy] = useState(false)
   const input = {
     branchRef: branch.trim().startsWith('refs/heads/')
@@ -58,6 +68,8 @@ export function TeamPolicyAssignment({
   function invalidatePreview() {
     inputRevision.current += 1
     setImpact(null)
+    setError('')
+    setBlockedRepositories([])
   }
   async function run(apply = false) {
     if (apply && (!impact || impact.conflicts || !impact.repositories.length))
@@ -69,6 +81,7 @@ export function TeamPolicyAssignment({
     const requestedRevision = inputRevision.current
     setBusy(true)
     setError('')
+    setBlockedRepositories([])
     try {
       if (apply) {
         await governanceRequest(`/teams/${team.id}/assign`, {
@@ -90,7 +103,12 @@ export function TeamPolicyAssignment({
         }
       }
     } catch (e) {
+      setImpact(null)
       setError((e as Error).message)
+      setBlockedRepositories(
+        (e as Error & { blockedRepositories?: BlockedPolicyRepository[] })
+          .blockedRepositories ?? []
+      )
     } finally {
       setBusy(false)
     }
@@ -102,9 +120,27 @@ export function TeamPolicyAssignment({
         <h3 className='font-semibold'>Assign standards</h3>
       </div>
       {error && (
-        <p role='alert' className='text-sm text-destructive'>
-          {error}
-        </p>
+        <div
+          role='alert'
+          className='space-y-3 rounded-lg border border-destructive/25 bg-destructive/5 p-4 text-sm'
+        >
+          <p className='font-medium text-destructive'>{error}</p>
+          {!!blockedRepositories.length && (
+            <ul
+              className='space-y-3'
+              aria-label='Repositories blocking preview'
+            >
+              {blockedRepositories.map((repo, index) => (
+                <li key={repo.repositoryId ?? index}>
+                  <p className='font-semibold'>
+                    {repo.name ?? 'Repository outside your access'}
+                  </p>
+                  <p className='mt-1 text-muted-foreground'>{repo.message}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       )}
       {!!team.assignments.filter((a) => !a.supersededAt).length && (
         <label className='block space-y-2 text-sm font-medium'>
@@ -115,6 +151,14 @@ export function TeamPolicyAssignment({
             onValueChange={(value) => {
               setReplacement(value)
               invalidatePreview()
+              if (value === 'new')
+                setPacks(
+                  workspaceStandards[0]
+                    ? [
+                        `${workspaceStandards[0].id}@${workspaceStandards[0].version}`,
+                      ]
+                    : []
+                )
               const previous = team.assignments.find((a) => a.id === value)
               if (previous) {
                 setBranch(previous.branchRef.replace('refs/heads/', ''))
@@ -122,7 +166,7 @@ export function TeamPolicyAssignment({
                 setPacks(
                   previous.packs.map((ref) => {
                     const latest =
-                      options.standards.find((p) => p.id === ref.id) ?? ref
+                      workspaceStandards.find((p) => p.id === ref.id) ?? ref
                     return `${latest.id}@${latest.version}`
                   })
                 )
@@ -189,7 +233,7 @@ export function TeamPolicyAssignment({
       </p>
       <PickList
         label='Standards'
-        items={options.standards.map((p) => ({
+        items={workspaceStandards.map((p) => ({
           id: `${p.id}@${p.version}`,
           name: `${p.title} · v${p.version}`,
         }))}
@@ -200,11 +244,30 @@ export function TeamPolicyAssignment({
           invalidatePreview()
         }}
       />
+      {!workspaceStandards.length && (
+        <p className='text-sm text-muted-foreground'>
+          Create a workspace standard in Standards before assigning
+          requirements. Built-in standards are templates.
+        </p>
+      )}
+      {hasUnavailableSelection && (
+        <p role='status' className='text-sm text-muted-foreground'>
+          This assignment includes a version outside the current workspace
+          library. Its saved requirements remain unchanged. Create a new
+          assignment using workspace standards.
+        </p>
+      )}
       <div className='flex justify-end'>
         <Button
           size='sm'
           variant='outline'
-          disabled={busy || !branch.trim() || !packs.length || packs.length > 5}
+          disabled={
+            busy ||
+            !branch.trim() ||
+            !packs.length ||
+            packs.length > 5 ||
+            hasUnavailableSelection
+          }
           onClick={() => void run()}
         >
           {busy ? 'Working…' : 'Preview impact'}

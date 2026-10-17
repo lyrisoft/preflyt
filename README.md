@@ -93,7 +93,7 @@ For continuous feedback: **review standards and workflow setup → merge the set
 
 One GitHub App supports repository access, PR reviews and check publication. Setup-PR writes and ruleset administration are optional permissions; a separate governance App is optional too. The public Preflyt Action uses short-lived GitHub OIDC authentication rather than a Preflyt API key. External report signatures are optional for the normal verified GitHub workflow path.
 
-GitHub Actions and webhooks need a reachable HTTPS API endpoint. A localhost installation requires a tunnel for live integration. Application images are currently private on GHCR and require package pull access; the public Action does not grant that access.
+GitHub Actions and webhooks need a reachable HTTPS API endpoint. A localhost installation requires a tunnel for live integration. Community Edition application images are public on GHCR and can be pulled without registry sign-in.
 
 ## Architecture
 
@@ -119,7 +119,7 @@ Use the [acceptance records](docs/acceptance) and [operator runbooks](docs/opera
 
 Use [GitHub issues](https://github.com/lyrisoft/preflyt/issues) for product feedback and reproducible defects. Include the affected version, workflow or commit, expected behavior and sanitized diagnostics. Exclude credentials, private source code and sensitive report contents.
 
-Contribute a standards/check improvement, supported CI report integration, scanner reproduction fixture or documentation correction. For an initial contribution, read [CONTRIBUTING.md](CONTRIBUTING.md), discuss the intended change in an issue and sign off each commit under the [DCO](DCO). Contributors retain ownership. Public contribution access opens with the Community release; current collaborators can participate now.
+Contribute a standards/check improvement, supported CI report integration, scanner reproduction fixture or documentation correction. For an initial contribution, read [CONTRIBUTING.md](CONTRIBUTING.md), discuss the intended change in an issue and sign off each commit under the [DCO](DCO). Contributors retain ownership. The repository is public and contributions are welcome.
 
 Report suspected vulnerabilities privately to **support@lyrisoft.tech** following [SECURITY.md](SECURITY.md). Read [SUPPORT.md](SUPPORT.md) for community help and [CONTRIBUTING.md](CONTRIBUTING.md) / [DCO](DCO) before contributing.
 

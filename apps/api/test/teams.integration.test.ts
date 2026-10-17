@@ -1,3 +1,4 @@
+import { OrganizationStandardsService } from '../src/standards/organization-standards.service.js';
 import "reflect-metadata";
 import { randomUUID } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
@@ -40,8 +41,8 @@ const membersRead = vi.fn(
   async (
     _installation: bigint,
     _org: bigint,
-    read: (token: string, login: string) => Promise<unknown>,
-  ) => read("fixture-token", "fixture-org"),
+    read: (token: string, login: string, request:(path:string)=>Promise<Response>) => Promise<unknown>,
+  ) => read("fixture-token", "fixture-org", path => fetch("https://api.github.com"+path)),
 );
 const fetchMock = vi.fn();
 const post = (actor: AuthenticatedSession, path: string, body: unknown) =>
@@ -1101,3 +1102,49 @@ it("rejects nested scope cycles, stale previews, cross-organization and unauthor
     .send({ childIds: [child], expectedPreviewHash: current.previewHash })
     .expect(403);
 });
+
+it('offers only the latest workspace versions, without templates or another organization standards',async()=>{
+ expect((await get(outsider,'/options').expect(200)).body.standards).toEqual([]);
+ const standards = new OrganizationStandardsService(db,access);
+ const input={title:'Workspace baseline',description:'Our checks',ruleIds:['ci.configured'],expectedVersionId:null};
+ const first=await standards.save(owner,input);
+ const second=await standards.save(owner,{...input,title:'Workspace baseline updated',expectedVersionId:first.id},first.packId);
+ const choices=(await get(owner,'/options').expect(200)).body.standards;
+ expect(choices.filter((p:any)=>p.id===first.packId)).toEqual([{id:first.packId,version:second.definition.version,title:'Workspace baseline updated'}]);
+ expect(choices.every((p:any)=>p.id.startsWith('org-standard-'))).toBe(true);
+ expect((await get(outsider,'/options').expect(200)).body.standards).toEqual([]);
+})
+it('identifies a deselected repository blocking the organization baseline and preserves its approved scope',async()=>{
+ const baseline=(await post(owner,'/baseline',{}).expect(201)).body;
+ await db.gitHubRepository.update({where:{githubId:101n},data:{selected:false}});
+ try {
+  const failed=(await post(owner,`/${baseline.id}/preview`,assignment).expect(403)).body;
+  expect(failed.message).toContain('organization baseline');
+  expect(failed.message).not.toContain('team policy');
+  expect(failed.blockedRepositories).toContainEqual(expect.objectContaining({repositoryId:'101',name:'fixture-org/repo-101',reason:'NOT_SELECTED'}));
+  expect(failed.blockedRepositories.find((r:any)=>r.repositoryId==='101').message).toContain('Select it in Repositories');
+  expect(await db.teamRepositoryScope.count({where:{teamId:baseline.id,policyScopeEnabled:true}})).toBe(12);
+ } finally {await db.gitHubRepository.update({where:{githubId:101n},data:{selected:true}})}
+})
+it('identifies unavailable repository access for a local Super Admin without bypassing the block',async()=>{
+ const id=await create(['101']);
+ owner.platformAdmin=true;
+ await db.gitHubRepository.update({where:{githubId:101n},data:{available:false}});
+ try {
+  const failed=(await post(owner,`/${id}/preview`,assignment).expect(403)).body;
+  expect(failed.blockedRepositories).toEqual([expect.objectContaining({name:'fixture-org/repo-101',reason:'ACCESS_UNAVAILABLE'})]);
+  expect(failed.blockedRepositories[0].message).toContain('GitHub App connection');
+ } finally {owner.platformAdmin=false;await db.gitHubRepository.update({where:{githubId:101n},data:{available:true}})}
+})
+it('does not expose a blocked repository name or id outside the callers grants',async()=>{
+ const id=await create(['101','102']);
+ const identity=await db.identity.create({data:{issuer:'fixture',subject:randomUUID()}});
+ const member=await db.organizationMembership.create({data:{identityId:identity.id,organizationId:owner.organizationId!,role:'POLICY_MANAGER'}});
+ const repo=await db.gitHubRepository.findUniqueOrThrow({where:{githubId:101n}});
+ await db.repositoryGrant.create({data:{membershipId:member.id,repositoryId:repo.id}});
+ const manager={...owner,identityId:identity.id,role:'POLICY_MANAGER',platformAdmin:false} as AuthenticatedSession; actors.push(manager);
+ const failed=(await post(manager,`/${id}/preview`,assignment).expect(403)).body;
+ expect(failed.blockedRepositories).toEqual([expect.objectContaining({repositoryId:null,name:null,reason:'PERMISSION_REQUIRED'})]);
+ expect(JSON.stringify(failed)).not.toContain('repo-102');
+ expect(failed.blockedRepositories[0].message).toContain('workspace Owner or Admin');
+})

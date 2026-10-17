@@ -18,7 +18,6 @@ import { AuthorizationService } from "../auth/authorization.service.js";
 import type { AuthenticatedSession } from "../auth/session.guard.js";
 import { GitHubProviderService } from "../github/github-provider.service.js";
 import {
-  catalogue,
   catalogueVersions,
   resolvePacks,
   type AdoptionProfile,
@@ -489,6 +488,10 @@ export class TeamsService {
         select: { id: true, accountLogin: true },
       }),
     ]);
+    // organizationCatalogue is ordered newest revision first. Templates and
+    // historical versions remain resolvable for saved assignments, not picker choices.
+    const workspaceStandards = new Map<string, (typeof versions)[number]>();
+    for (const version of versions) if (!workspaceStandards.has(version.id)) workspaceStandards.set(version.id, version);
     return {
       childTeams: await this.db.preflytTeam.findMany({
         where: {
@@ -508,7 +511,7 @@ export class TeamsService {
         id: m.id,
         name: m.identity.displayName ?? m.identity.subject,
       })),
-      standards: [...catalogue, ...versions].map((p) => ({
+      standards: [...workspaceStandards.values()].map((p) => ({
         id: p.id,
         version: p.version,
         title: p.title,
@@ -917,23 +920,12 @@ export class TeamsService {
     return this.github.withOrganizationMembers(
       installationId,
       orgId,
-      async (token, login) => {
+      async (_token, login, requestPage) => {
         const request = async (path: string) => {
           try {
             const rows: Record<string, any>[] = [];
             for (let page = 1; page <= 10; page++) {
-              const response = await fetch(
-                `https://api.github.com${path}?per_page=100&page=${page}`,
-                {
-                  headers: {
-                    accept: "application/vnd.github+json",
-                    authorization: `Bearer ${token}`,
-                    "x-github-api-version": "2022-11-28",
-                  },
-                  redirect: "error",
-                  signal: AbortSignal.timeout(10000),
-                },
-              );
+              const response = await requestPage(`${path}?per_page=100&page=${page}`);
               if (!response.ok)
                 throw new ServiceUnavailableException(
                   response.status === 403 || response.status === 429
@@ -1597,23 +1589,35 @@ export class TeamsService {
     };
   }
   async preview(s: AuthenticatedSession, id: string, b: AssignmentInput) {
-    await this.access.requireOrganization(s, "team.policy.assign", true);
-    const repos = await this.access.repositoryScope(
-      s.identityId,
-      s.organizationId,
-      "policy.draft",
-    );
+    const member = await this.access.requireOrganization(s, "team.policy.assign", true);
+    const team = await this.team(this.db, id, s.organizationId!);
+    const repos = await this.access.repositoryScope(s.identityId, s.organizationId, "policy.draft");
     const scopes = await this.db.teamRepositoryScope.findMany({
-      where: {
-        teamId: id,
-        team: { organizationId: s.organizationId! },
-        policyScopeEnabled: true,
-      },
+      where: { teamId: id, team: { organizationId: s.organizationId! }, policyScopeEnabled: true },
+      include: { repository: { include: { installation: true } } },
+      orderBy: { repositoryId: "asc" },
     });
-    if (scopes.some((scope) => !repos.some((r) => r.id === scope.repositoryId)))
-      throw new ForbiddenException(
-        "You must be able to manage every repository in this team policy scope",
-      );
+    const blocked = scopes.filter(scope => !repos.some(repo => repo.id === scope.repositoryId));
+    if (blocked.length) {
+      const readable = await this.access.repositoryScope(s.identityId, s.organizationId, "policy.read", false);
+      const blockedRepositories = blocked.map(({repository: repo}) => {
+        const visible = repo.installation.organizationId === s.organizationId &&
+          (readable.some(item => item.id === repo.id) ||
+          (s.platformAdmin === true && ["OWNER", "ADMIN"].includes(member.role)));
+        const reason = !repo.available || !repo.installation.active ? "ACCESS_UNAVAILABLE" :
+          !repo.selected ? "NOT_SELECTED" : "PERMISSION_REQUIRED";
+        const message = reason === "ACCESS_UNAVAILABLE"
+          ? "GitHub access is unavailable. Check the GitHub App connection and sync repositories."
+          : reason === "NOT_SELECTED"
+            ? "This repository is not selected for Preflyt. Select it in Repositories, or review its approved scope in Teams."
+            : "You cannot create policy drafts for this repository. Ask a workspace Owner or Admin to review your access.";
+        return { repositoryId: visible ? repo.githubId.toString() : null, name: visible ? repo.fullName : null,
+          reason: visible ? reason : "PERMISSION_REQUIRED", message: visible ? message : "A repository in this scope is outside your access. Ask a workspace Owner or Admin to review the approved repository scope." };
+      });
+      throw new ForbiddenException({ code: "POLICY_PREVIEW_REPOSITORIES_BLOCKED",
+        message: `Cannot preview the ${team.source === "ORGANIZATION" ? "organization baseline" : "team assignment"}. ${blocked.length} ${blocked.length === 1 ? "repository needs" : "repositories need"} attention.`,
+        blockedRepositories });
+    }
     return this.db.$transaction((tx) => this.impact(tx, s, id, b), {
       isolationLevel: "Serializable",
       timeout: 30000,

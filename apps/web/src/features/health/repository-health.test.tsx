@@ -1365,13 +1365,13 @@ it('explains a pre-scan GitHub rate-limit failure without needing a report, incl
   await expect
     .element(
       failure.getByText(
-        'Wait for GitHub’s request limit to reset, then select Reassess.'
+        'Wait until the retry time, then select Reassess.'
       )
     )
     .toBeVisible()
   await expect
     .element(
-      failure.getByText('GitHub has temporarily limited repository requests.', {
+      failure.getByText('Repository requests are temporarily paused.', {
         exact: false,
       })
     )
@@ -1385,7 +1385,7 @@ it('explains a pre-scan GitHub rate-limit failure without needing a report, incl
     .toBeVisible()
   await expect
     .element(
-      history.getByText('GitHub has temporarily limited repository requests.', {
+      history.getByText('Repository requests are temporarily paused.', {
         exact: false,
       })
     )
@@ -1425,3 +1425,23 @@ it.each(['password=provider-secret', '__proto__', 'constructor'])(
       .not.toBeInTheDocument()
   }
 )
+
+it('shows an automatic retry instead of a failure while GitHub requests are paused', async () => {
+  state.state = 'QUEUED'
+  state.failureReason = 'GITHUB_RATE_LIMITED'
+  state.noReport = true
+  state.unpinned = true
+  state.retryAt = '2026-10-17T15:00:00.000Z'
+  await mount()
+  await expect
+    .element(
+      page.getByText('Waiting to retry GitHub requests', { exact: true })
+    )
+    .toBeVisible()
+  await expect
+    .element(page.getByText('Retry scheduled for', { exact: false }))
+    .toBeVisible()
+  await expect
+    .element(page.getByRole('alert', { name: 'Assessment failure' }))
+    .not.toBeInTheDocument()
+})

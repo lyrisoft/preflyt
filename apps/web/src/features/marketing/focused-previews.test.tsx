@@ -1,4 +1,3 @@
-import release from '../../../../../release.json'
 import '@/styles/index.css'
 import { afterEach, expect, it, vi } from 'vitest'
 import { render } from 'vitest-browser-react'
@@ -327,12 +326,58 @@ it('keeps section navigation and the footer usable on a phone', async () => {
     .toBeLessThanOrEqual(320)
 })
 
-
-it('uses the shared stable release badge and accurate public image access copy', async () => {
+it('uses the dynamic latest release badge and accurate public release copy', async () => {
   const view = await render(<MarketingHomepage />)
-  const badge = view.getByRole('link', {name: `Preflyt v${release.latestStable} release`, exact: true})
-  await expect.element(badge).toHaveAttribute('href', `https://github.com/lyrisoft/preflyt/releases/tag/v${release.latestStable}`)
-  await expect.element(view.getByRole('img', {name: `Preflyt v${release.latestStable}`, exact: true})).toHaveAttribute('src', `https://img.shields.io/badge/Preflyt-v${release.latestStable}-2f6f60?logo=github`)
-  expect(document.querySelector('.community-release-note')?.textContent).toContain('Container images are public.')
-  expect(document.querySelector('.community-release-note')?.textContent).not.toContain('images currently require access')
+  const badge = view.getByRole('link', {
+    name: 'Latest Preflyt release',
+    exact: true,
+  })
+  await expect
+    .element(badge)
+    .toHaveAttribute(
+      'href',
+      'https://github.com/lyrisoft/preflyt/releases/latest'
+    )
+  await expect
+    .element(
+      view.getByRole('img', {
+        name: 'Latest Preflyt release on GitHub',
+        exact: true,
+      })
+    )
+    .toHaveAttribute(
+      'src',
+      'https://img.shields.io/github/v/release/lyrisoft/preflyt?label=Preflyt&logo=github&color=2f6f60&cacheSeconds=300'
+    )
+  await expect
+    .element(
+      view.getByRole('link', {
+        name: 'Latest Preflyt Action release',
+        exact: true,
+      })
+    )
+    .toHaveAttribute(
+      'href',
+      'https://github.com/lyrisoft/preflyt-action/releases/latest'
+    )
+  await expect
+    .element(
+      view.getByRole('img', {
+        name: 'Latest Preflyt Action release on GitHub',
+        exact: true,
+      })
+    )
+    .toHaveAttribute(
+      'src',
+      'https://img.shields.io/github/v/release/lyrisoft/preflyt-action?label=Preflyt%20Action&logo=github&cacheSeconds=300'
+    )
+  expect(
+    document.querySelector('.community-release-note')?.textContent
+  ).toContain('Source code and container images are public.')
+  expect(
+    document.querySelector('.community-release-note')?.textContent
+  ).not.toContain('in preparation')
+  await expect
+    .element(view.getByText('Contributions are welcome.', { exact: false }))
+    .toBeVisible()
 })

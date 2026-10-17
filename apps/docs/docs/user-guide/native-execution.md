@@ -44,7 +44,7 @@ Native onboarding is an advanced operator task, not a single enable switch:
 5. Configure the deployment's native trust settings and enable **Native runtime preflight** in **Settings → Configuration → Native execution**. Confirm the live sandbox matches its review. Enable **Native execution** only after runtime/tool review and acceptance; the controller must also have execution enabled.
 6. Recreate services after environment changes; restart API and worker services after OIDC or SMTP connection changes. Saved GitHub connections refresh automatically. Re-check after runtime, image or review changes. A revoked, expired or changed review blocks requests rather than falling back to a weaker runtime.
 
-The [operator runbook](https://github.com/lyrisoft/preflyt/blob/development/docs/operations/native-execution.md) and [runner deployment files](https://github.com/lyrisoft/preflyt/tree/development/docs/deployment/native-runner) contain the exact signed schemas, Docker/Kubernetes overrides and credential contracts. These source links require access to the private Preflyt repository. Arrange that access with Lyrisoft before attempting native setup; this page is not a complete standalone production installer.
+The [operator runbook](https://github.com/lyrisoft/preflyt/blob/development/docs/operations/native-execution.md) and [runner deployment files](https://github.com/lyrisoft/preflyt/tree/development/docs/deployment/native-runner) contain the exact signed schemas, Docker/Kubernetes overrides and credential contracts. These source links are public. Review the runbook and deployment files before attempting native setup; this page is not a complete standalone production installer.
 
 ## Repository Health is automatic
 
