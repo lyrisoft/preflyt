@@ -1,10 +1,13 @@
 version: 2
 updates:
+  # Temporarily paused to conserve build minutes. Restore the limits below
+  # (5, 2 and 3) to resume version update PRs. Security PRs are controlled
+  # separately in GitHub repository settings.
   - package-ecosystem: npm
     directory: /
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0
     groups:
       tooling:
         dependency-type: development
@@ -12,9 +15,9 @@ updates:
     directory: /docs/deployment/native-runner/duplication
     schedule:
       interval: weekly
-    open-pull-requests-limit: 2
+    open-pull-requests-limit: 0
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
-    open-pull-requests-limit: 3
+    open-pull-requests-limit: 0
