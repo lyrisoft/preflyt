@@ -57,7 +57,7 @@ it('preserves normal GitHub sign-in when configured', async () => {
   )
   const screen = await render(<SignIn />)
   await expect
-    .element(page.getByRole('link', { name: 'Continue with GitHub' }))
+    .element(page.getByRole('button', { name: 'Continue with GitHub' }))
     .toBeVisible()
   await expect
     .element(page.getByRole('link', { name: 'Start setup' }))

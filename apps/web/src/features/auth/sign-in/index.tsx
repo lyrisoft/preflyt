@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useSearch } from '@tanstack/react-router'
 import { ArrowRight, LoaderCircle, LockKeyhole } from 'lucide-react'
 import { siGithub } from 'simple-icons'
@@ -25,6 +25,18 @@ export function SignIn() {
   const [superAdminEnabled, setSuperAdminEnabled] = useState(false)
   const [loading, setLoading] = useState(true)
   const [checkAttempt, setCheckAttempt] = useState(0)
+  const [startingGitHub, setStartingGitHub] = useState(false)
+  const githubSubmission = useRef(false)
+
+  useEffect(() => {
+    // Browsers can restore the disabled control from the back-forward cache.
+    const restoreSignIn = () => {
+      githubSubmission.current = false
+      setStartingGitHub(false)
+    }
+    window.addEventListener('pageshow', restoreSignIn)
+    return () => window.removeEventListener('pageshow', restoreSignIn)
+  }, [])
 
   useEffect(() => {
     let active = true
@@ -120,13 +132,31 @@ export function SignIn() {
             ) : (
               <>
                 {githubEnabled && (
-                  <Button asChild className='h-11 w-full justify-start px-4'>
-                    <a
-                      href={signInProviderHref(
-                        API_BASE_URL,
-                        '/auth/github/login',
-                        redirect
-                      )}
+                  <form
+                    aria-label='GitHub sign-in'
+                    action={`${API_BASE_URL}/auth/github/login`}
+                    method='get'
+                    onSubmit={(event) => {
+                      if (githubSubmission.current) {
+                        event.preventDefault()
+                        return
+                      }
+                      githubSubmission.current = true
+                      setStartingGitHub(true)
+                    }}
+                  >
+                    {redirect && (
+                      <input
+                        type='hidden'
+                        name='redirect'
+                        value={signInReturnPath(redirect)}
+                      />
+                    )}
+                    <Button
+                      type='submit'
+                      disabled={startingGitHub}
+                      aria-busy={startingGitHub}
+                      className='h-11 w-full justify-start px-4'
                     >
                       <svg
                         aria-hidden='true'
@@ -135,13 +165,22 @@ export function SignIn() {
                       >
                         <path d={siGithub.path} />
                       </svg>
-                      Continue with GitHub
-                      <ArrowRight
-                        aria-hidden='true'
-                        className='ms-auto size-4'
-                      />
-                    </a>
-                  </Button>
+                      {startingGitHub
+                        ? 'Connecting to GitHub…'
+                        : 'Continue with GitHub'}
+                      {startingGitHub ? (
+                        <LoaderCircle
+                          aria-hidden='true'
+                          className='ms-auto size-4 animate-spin motion-reduce:animate-none'
+                        />
+                      ) : (
+                        <ArrowRight
+                          aria-hidden='true'
+                          className='ms-auto size-4'
+                        />
+                      )}
+                    </Button>
+                  </form>
                 )}
                 {oidcEnabled && (
                   <Button
