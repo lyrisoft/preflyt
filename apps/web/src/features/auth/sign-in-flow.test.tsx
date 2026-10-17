@@ -50,8 +50,8 @@ afterEach(() => vi.unstubAllGlobals())
 it('discovers configured sign-in methods with cookies and preserves provider login links', async () => {
   const view = await render(<SignIn />)
   await expect
-    .element(view.getByRole('link', { name: 'Continue with GitHub' }))
-    .toHaveAttribute('href', `${API_BASE_URL}/auth/github/login`)
+    .element(view.getByRole('form', { name: 'GitHub sign-in' }))
+    .toHaveAttribute('action', `${API_BASE_URL}/auth/github/login`)
   await expect
     .element(view.getByRole('link', { name: 'Continue with SSO' }))
     .toHaveAttribute('href', `${API_BASE_URL}/auth/login`)
@@ -82,8 +82,15 @@ it.each([
     const query = new URLSearchParams({ redirect: destination })
     const view = await render(<SignIn />)
     await expect
-      .element(view.getByRole('link', { name: 'Continue with GitHub' }))
-      .toHaveAttribute('href', `${API_BASE_URL}/auth/github/login?${query}`)
+      .element(view.getByRole('form', { name: 'GitHub sign-in' }))
+      .toHaveAttribute('action', `${API_BASE_URL}/auth/github/login`)
+    expect(
+      new FormData(
+        view
+          .getByRole('form', { name: 'GitHub sign-in' })
+          .element() as HTMLFormElement
+      ).get('redirect')
+    ).toBe(destination)
     await expect
       .element(view.getByRole('link', { name: 'Continue with SSO' }))
       .toHaveAttribute('href', `${API_BASE_URL}/auth/login?${query}`)
@@ -143,7 +150,7 @@ it.each([
       .element(view.getByText(/sign-in.*not configured|no.*sign-in.*options/i))
       .toBeVisible()
     await expect
-      .element(view.getByRole('link', { name: 'Continue with GitHub' }))
+      .element(view.getByRole('button', { name: 'Continue with GitHub' }))
       .not.toBeInTheDocument()
     await expect
       .element(view.getByRole('link', { name: 'Continue with SSO' }))
@@ -164,7 +171,7 @@ it('keeps Super Admin recovery reachable when sign-in method discovery fails', a
     .element(view.getByRole('link', { name: 'Super Admin access' }))
     .toHaveAttribute('href', '/super-admin/login')
   await expect
-    .element(view.getByRole('link', { name: 'Continue with GitHub' }))
+    .element(view.getByRole('button', { name: 'Continue with GitHub' }))
     .not.toBeInTheDocument()
   await expect
     .element(view.getByRole('link', { name: 'Continue with SSO' }))
@@ -180,7 +187,7 @@ it.each(['github', 'oidc'])(
       .element(view.getByRole('alert'))
       .toHaveTextContent(/sign-in could not be completed/i)
     await expect
-      .element(view.getByRole('link', { name: 'Continue with GitHub' }))
+      .element(view.getByRole('button', { name: 'Continue with GitHub' }))
       .toBeVisible()
     await expect
       .element(view.getByRole('link', { name: 'Continue with SSO' }))
@@ -300,4 +307,48 @@ it('disables administrator submission while a login request is pending', async (
     .element(view.getByRole('alert'))
     .toHaveTextContent(/too many attempts/i)
   await expect.element(view.getByLabelText('Password')).toHaveValue('')
+})
+
+it('disables GitHub sign-in, shows progress and restores it after browser Back', async () => {
+  let navigations = 0
+  const intercept = (event: Event) => {
+    if (
+      !(event.target instanceof HTMLFormElement) ||
+      event.target.getAttribute('aria-label') !== 'GitHub sign-in'
+    )
+      return
+    if (!event.defaultPrevented) navigations++
+    event.preventDefault()
+  }
+  document.addEventListener('submit', intercept)
+  try {
+    const view = await render(<SignIn />)
+    const start = view.getByRole('button', { name: 'Continue with GitHub' })
+    await expect.element(start).toBeEnabled()
+    await start.click()
+    const pending = view.getByRole('button', { name: 'Connecting to GitHub…' })
+    await expect.element(pending).toBeDisabled()
+    await expect.element(pending).toHaveAttribute('aria-busy', 'true')
+    expect(pending.element().querySelector('svg.animate-spin')).not.toBeNull()
+    expect(navigations).toBe(1)
+    const pendingButton = pending.element() as HTMLButtonElement
+    pendingButton.click()
+    const form = view
+      .getByRole('form', { name: 'GitHub sign-in' })
+      .element() as HTMLFormElement
+    form.requestSubmit()
+    expect(navigations).toBe(1)
+    expect(
+      state.fetch.mock.calls.every(([url]) => url.endsWith('/auth/methods'))
+    ).toBe(true)
+    window.dispatchEvent(
+      new PageTransitionEvent('pageshow', { persisted: true })
+    )
+    await expect.element(start).toBeEnabled()
+    await expect.element(start).toHaveAttribute('aria-busy', 'false')
+    await start.click()
+    expect(navigations).toBe(2)
+  } finally {
+    document.removeEventListener('submit', intercept)
+  }
 })
