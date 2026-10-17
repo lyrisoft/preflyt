@@ -4,7 +4,7 @@ id: index
 title: Preflyt Documentation
 hide_title: true
 sidebar_label: Welcome
-description: A self-hosted engineering assurance platform connecting repository health, approved standards and verified CI evidence to traceable readiness results.
+description: Open source engineering assurance for GitHub, connecting repository health, approved standards and verified CI evidence to traceable readiness results.
 ---
 
 import DocsHero from '@site/src/components/DocsHero'
@@ -13,11 +13,11 @@ import DocsHero from '@site/src/components/DocsHero'
 
 ![Preflyt Engineering Overview showing repository coverage, pull request assessments, adopted standards and assessment activity.](/img/engineering-overview.png)
 
-Preflyt is a self-hosted **Engineering Assurance & Readiness Platform**. It assesses repository health and verifies CI evidence against approved engineering standards, giving teams a traceable readiness result for each assessed change. Repository health and CI assessments share a findings workspace, so developers can move from a reported issue to its evidence, assessed source and suggested next steps.
+Preflyt is an **open source engineering assurance platform for GitHub**, self-hosted under Apache-2.0. It assesses repository health and verifies CI evidence against approved engineering standards, giving teams a traceable readiness result for each assessed change. Repository health and CI assessments share a findings workspace, so developers can move from a reported issue to its evidence, assessed source and suggested next steps.
 
 ## Community Edition
 
-[Preflyt Community Edition](self-hosting/community-edition.md) is free and self-hosted with unlimited repositories and Apache-2.0 licensing for original Preflyt code. It includes the core assurance workflow and optional BYOK AI; managed Cloud is planned for later. Published container images are public and require no registry sign-in. Choose the documentation version that matches your installation.
+[Preflyt Community Edition](self-hosting/community-edition.md) is open source and self-hosted with unlimited repositories and Apache-2.0 licensing for original Preflyt code. It includes the core assurance workflow and optional BYOK AI; managed Cloud is planned for later. Published container images are public and require no registry sign-in. Choose the documentation version that matches your installation.
 
 ## Why teams use Preflyt
 
