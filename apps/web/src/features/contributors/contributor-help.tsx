@@ -25,7 +25,7 @@ const complianceDefinitions = [
     'Fully assessed PRs divided by all authored PRs recorded in the selected period and repository scope.',
   ],
   [
-    'Failed checks',
+    'PRs with failed required checks',
     'PRs with at least one known required-check failure. A PR can have both failed checks and missing evidence.',
   ],
   [

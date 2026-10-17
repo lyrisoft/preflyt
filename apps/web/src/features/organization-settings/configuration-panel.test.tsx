@@ -345,3 +345,55 @@ it('puts installation reporting in its own configuration section without unrelat
     .element(page.getByLabelText('SMTP password'))
     .not.toBeInTheDocument()
 })
+
+it('explains that allowing activation does not activate GitHub rules', async () => {
+  const fetcher = vi.fn(async (_url, options) =>
+    Response.json(
+      options?.method === 'PATCH'
+        ? { restartRequired: false }
+        : {
+            ...data,
+            fields: [
+              ...data.fields,
+              {
+                key: 'GITHUB_RULESET_ACTIVATION_ENABLED',
+                label: 'Allow GitHub ruleset activation',
+                group: 'Governance',
+                kind: 'boolean',
+                configured: false,
+                value: 'false',
+                restart: false,
+              },
+            ],
+          }
+    )
+  )
+  vi.stubGlobal('fetch', fetcher)
+  await mount()
+  await page.getByRole('combobox', { name: 'Configuration section' }).click()
+  await page.getByRole('option', { name: 'Governance', exact: true }).click()
+  await expect
+    .element(
+      page.getByText('Turning this on does not activate any ruleset', {
+        exact: false,
+      })
+    )
+    .toBeVisible()
+  await page
+    .getByRole('switch', { name: 'Allow GitHub ruleset activation' })
+    .click()
+  expect(
+    fetcher.mock.calls.some(([, options]) => options?.method === 'PATCH')
+  ).toBe(false)
+  await page.getByRole('button', { name: 'Save changes' }).click()
+  await expect
+    .poll(() =>
+      fetcher.mock.calls.some(([, options]) => options?.method === 'PATCH')
+    )
+    .toBe(true)
+  expect(
+    fetcher.mock.calls
+      .filter(([, options]) => options?.method === 'PATCH')
+      .every(([url]) => String(url).endsWith('/configuration'))
+  ).toBe(true)
+})

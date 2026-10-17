@@ -136,7 +136,7 @@ export const configurationFields: ConfigurationField[] = [
   ),
   field(
     "GITHUB_RULESET_ACTIVATION_ENABLED",
-    "Ruleset activation",
+    "Allow GitHub ruleset activation",
     "Governance",
     "boolean",
     "false",

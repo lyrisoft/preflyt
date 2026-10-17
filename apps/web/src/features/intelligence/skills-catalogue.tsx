@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   BookOpen,
@@ -14,7 +14,18 @@ import {
   ShieldCheck,
   Workflow,
 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { toast } from 'sonner'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card'
 import {
   Dialog,
@@ -86,6 +97,7 @@ const categoryIcon = (category?: string) =>
   })[category ?? ''] ?? FileText
 
 export function SkillsCatalogue() {
+  const retireTrigger = useRef<HTMLButtonElement>(null)
   const session = useNavigationSession(),
     manage = canAdminister(session.data?.role),
     approve =
@@ -128,6 +140,7 @@ export function SkillsCatalogue() {
       Template | ReviewSkill | null | undefined
     >(),
     [selected, setSelected] = useState<ReviewSkill>(),
+    [retireOpen, setRetireOpen] = useState(false),
     [reviewed, setReviewed] = useState(false),
     [filter, setFilter] = useState(''),
     [page, setPage] = useState(1),
@@ -156,6 +169,8 @@ export function SkillsCatalogue() {
     setError('')
     try {
       await governanceRequest('/ai/skills' + path, body)
+      if (path.endsWith('/retire')) toast.success('Skill version retired')
+      setRetireOpen(false)
       setEditing(undefined)
       setSelected(undefined)
       await client.invalidateQueries({ queryKey: key })
@@ -164,6 +179,10 @@ export function SkillsCatalogue() {
       setPage(1)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save skill')
+      if (path.endsWith('/retire'))
+        toast.error(
+          e instanceof Error ? e.message : 'Could not retire skill version'
+        )
     } finally {
       setBusy(false)
     }
@@ -679,17 +698,16 @@ export function SkillsCatalogue() {
                   {manage && selected.status === 'APPROVED' && (
                     <>
                       <Button
+                        ref={retireTrigger}
                         size='sm'
                         variant='destructive'
                         disabled={busy}
-                        onClick={() =>
-                          void action(`/${selected.id}/retire`, {
-                            expectedDigest: selected.contentDigest,
-                            reviewed: false,
-                          })
-                        }
+                        onClick={() => {
+                          setError('')
+                          setRetireOpen(true)
+                        }}
                       >
-                        Retire
+                        Retire this version
                       </Button>
                       <Button
                         size='sm'
@@ -715,6 +733,53 @@ export function SkillsCatalogue() {
           </SheetContent>
         )}
       </Sheet>
+      <AlertDialog
+        open={retireOpen && !!selected}
+        onOpenChange={(open) => {
+          if (!busy) setRetireOpen(open)
+        }}
+      >
+        <AlertDialogContent
+          onCloseAutoFocus={(event) => {
+            if (selected) {
+              event.preventDefault()
+              retireTrigger.current?.focus()
+            }
+          }}
+        >
+          <AlertDialogHeader>
+            <AlertDialogTitle>Retire this skill version?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Retiring {selected?.name} v{selected?.version} disables it and
+              makes it unavailable for new AI reviews. This cannot be undone. To
+              use these instructions again, create, approve and enable a new
+              version. Existing saved reviews stay unchanged.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {error && (
+            <p role='alert' className='text-sm text-destructive'>
+              {error}
+            </p>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className={buttonVariants({ variant: 'destructive' })}
+              disabled={busy}
+              onClick={(event) => {
+                event.preventDefault()
+                if (selected)
+                  void action(`/${selected.id}/retire`, {
+                    expectedDigest: selected.contentDigest,
+                    reviewed: false,
+                  })
+              }}
+            >
+              {busy ? 'Retiring…' : 'Retire version permanently'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <Dialog
         open={editing !== undefined}
         onOpenChange={(open) => {

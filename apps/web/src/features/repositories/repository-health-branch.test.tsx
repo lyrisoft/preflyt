@@ -165,6 +165,12 @@ beforeEach(() => {
 it('loads the selected branch, clears the old assessment pin and preserves the branch on page remount', async () => {
   const first = await mount()
   await expect
+    .element(page.getByText('Inspection does not enforce merge rules.'))
+    .toBeVisible()
+  await expect
+    .element(page.getByText('No merge blocking', { exact: true }))
+    .not.toBeInTheDocument()
+  await expect
     .element(page.getByRole('combobox', { name: 'Repository branch' }))
     .toHaveValue('development')
   await expect

@@ -369,11 +369,30 @@ export function ConfigurationPanel() {
                           key={field.key}
                           className='flex min-h-14 items-center justify-between gap-4 rounded-lg border bg-muted/20 px-4 py-3'
                         >
-                          <Label htmlFor={`configuration-${field.key}`}>
-                            {field.label}
-                          </Label>
+                          <div className='space-y-1'>
+                            <Label htmlFor={`configuration-${field.key}`}>
+                              {field.label}
+                            </Label>
+                            {field.key ===
+                              'GITHUB_RULESET_ACTIVATION_ENABLED' && (
+                              <p
+                                id='ruleset-activation-description'
+                                className='text-xs text-muted-foreground'
+                              >
+                                Allows approved rulesets to be activated in
+                                Merge Protection. Turning this on does not
+                                activate any ruleset or change existing GitHub
+                                rules.
+                              </p>
+                            )}
+                          </div>
                           <Switch
                             id={`configuration-${field.key}`}
+                            aria-describedby={
+                              field.key === 'GITHUB_RULESET_ACTIVATION_ENABLED'
+                                ? 'ruleset-activation-description'
+                                : undefined
+                            }
                             checked={
                               (draft?.values[field.key] ?? field.value) ===
                               'true'

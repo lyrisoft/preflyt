@@ -597,3 +597,61 @@ it('shows the workflow editing skill as automatically used without assessment ad
     .not.toBeInTheDocument()
   expect(state.save).not.toHaveBeenCalled()
 })
+
+it('confirms irreversible retirement and keeps failures available for retry', async () => {
+  state.query = {
+    data: {
+      skills: [{ ...skill, status: 'APPROVED', enabled: true }],
+      templates: [],
+    },
+    isPending: false,
+    isError: false,
+  }
+  const view = await render(<SkillsCatalogue />)
+  await view.getByRole('button', { name: 'Review', exact: true }).click()
+  await page
+    .getByRole('button', { name: 'Retire this version', exact: true })
+    .click()
+  await expect
+    .element(page.getByText('This cannot be undone.', { exact: false }))
+    .toBeVisible()
+  expect(state.save).not.toHaveBeenCalled()
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click()
+  expect(state.save).not.toHaveBeenCalled()
+  await page
+    .getByRole('button', { name: 'Retire this version', exact: true })
+    .click()
+  state.save.mockRejectedValueOnce(new Error('Retirement failed'))
+  await page.getByRole('button', { name: 'Retire version permanently' }).click()
+  await expect.element(page.getByRole('alertdialog')).toBeVisible()
+  await expect
+    .element(page.getByRole('alertdialog').getByRole('alert'))
+    .toHaveTextContent('Retirement failed')
+  await page.getByRole('button', { name: 'Retire version permanently' }).click()
+  await expect.element(page.getByRole('alertdialog')).not.toBeInTheDocument()
+  expect(state.save).toHaveBeenLastCalledWith(
+    '/ai/skills/skill/retire',
+    expect.objectContaining({
+      expectedDigest: skill.contentDigest,
+      reviewed: false,
+    })
+  )
+})
+
+it('does not offer retirement to a reviewer without administration permission', async () => {
+  state.role = 'SECURITY_ENGINEER'
+  state.query = {
+    data: {
+      skills: [{ ...skill, status: 'APPROVED', enabled: true }],
+      templates: [],
+    },
+    isPending: false,
+    isError: false,
+  }
+  const view = await render(<SkillsCatalogue />)
+  await view.getByRole('button', { name: 'Review', exact: true }).click()
+  await expect
+    .element(page.getByRole('button', { name: 'Retire this version' }))
+    .not.toBeInTheDocument()
+  expect(state.save).not.toHaveBeenCalled()
+})

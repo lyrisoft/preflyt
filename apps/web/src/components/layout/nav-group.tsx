@@ -18,6 +18,7 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar'
 import { primaryDestination } from '@/features/workspace/navigation-policy'
+import { StatusBadge } from '../status-badge'
 import { Badge } from '../ui/badge'
 import {
   DropdownMenu,
@@ -60,6 +61,14 @@ export function NavGroup({ title, items }: NavGroupProps) {
 }
 
 function NavBadge({ children }: { children: ReactNode }) {
+  if (children === 'beta')
+    return (
+      <span title='Beta release: available to use, with changes still expected.'>
+        <StatusBadge tone='warning' compact>
+          beta
+        </StatusBadge>
+      </span>
+    )
   return <Badge className='rounded-full px-1 py-0 text-xs'>{children}</Badge>
 }
 

@@ -55,6 +55,7 @@ export const statusTones: Readonly<Record<string, StatusTone>> = {
   'model unavailable': 'error',
   draft: 'warning',
   preview: 'warning',
+  beta: 'warning',
   drifted: 'warning',
   unknown: 'warning',
   deploying: 'info',

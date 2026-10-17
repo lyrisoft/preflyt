@@ -190,7 +190,7 @@ export function GatePolicyPanel({
             ? 'Policy approved'
             : path.endsWith('/edit')
               ? 'Policy draft updated'
-              : 'Non-blocking policy published'
+              : 'Policy published'
       )
     },
   })
@@ -216,7 +216,8 @@ export function GatePolicyPanel({
     (policy) =>
       policy.branchRef === selected?.branchRef && policy.state === 'PUBLISHED'
   )
-  const catalogue = draftCatalogue ?? standards.data?.catalogue ?? []
+  const workspaceCatalogue = standards.data?.workspaceCatalogue ?? []
+  const catalogue = draftCatalogue ?? workspaceCatalogue
   const groups = [
     ...new Map(
       catalogue.map((pack) => [
@@ -267,7 +268,19 @@ export function GatePolicyPanel({
         throw new Error(
           'Saved standards could not be verified. Create a new policy.'
         )
-      setDraftCatalogue(data.catalogue)
+      setDraftCatalogue([
+        ...(data.workspaceCatalogue ?? []),
+        ...data.catalogue.filter(
+          (pack) =>
+            policy.definition.packs.some(
+              (ref) => ref.id === pack.id && ref.version === pack.version
+            ) &&
+            !(data.workspaceCatalogue ?? []).some(
+              (available) =>
+                available.id === pack.id && available.version === pack.version
+            )
+        ),
+      ])
       setDraftPacks(
         policy.definition.packs.flatMap((ref) =>
           data.catalogue.filter(
@@ -298,12 +311,11 @@ export function GatePolicyPanel({
     setBranch(initialBranch)
     setRequired([])
     setProfile(standards.data?.selection?.profile ?? 'RECOMMENDED')
-    const suggested =
-      standards.data?.selection?.packs ?? standards.data?.recommendations ?? []
+    const suggested = standards.data?.selection?.packs ?? []
     setDraftPacks(
       suggested
         .flatMap((ref) =>
-          (standards.data?.catalogue ?? []).filter(
+          workspaceCatalogue.filter(
             (p) => p.id === ref.id && p.version === ref.version
           )
         )
@@ -623,8 +635,8 @@ export function GatePolicyPanel({
               </div>
               {!groups.length && (
                 <p role='status' className='text-sm text-muted-foreground'>
-                  No standards available. Create a standard on the Standards
-                  page.
+                  No workspace standards yet. Create a standard or copy a
+                  built-in template on the Standards page.
                 </p>
               )}
               <p className='text-xs text-muted-foreground'>
@@ -924,9 +936,9 @@ export function GatePolicyPanel({
                     />
                     {selected.state === 'DRAFT'
                       ? actions?.approvalReason ||
-                        'Approve this policy, then publish it. Publishing saves a non-blocking policy; it does not activate GitHub rules.'
+                        'Approve this policy, then publish it. Publishing updates branch requirements for future PR evaluations. Existing GitHub rules may require a passing Preflyt result. Publishing does not create or activate GitHub rules.'
                       : actions?.publicationReason ||
-                        'This policy is approved and ready to publish. Publishing does not activate GitHub rules.'}
+                        'This policy is approved and ready to publish. Publishing updates branch requirements for future PR evaluations. Existing GitHub rules may require a passing Preflyt result. Publishing does not create or activate GitHub rules.'}
                   </p>
                 )}
                 {selected.state === 'PUBLISHED' && (

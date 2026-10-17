@@ -65,6 +65,18 @@ async function mount() {
 it('requires reasons, submits an optional expiry and reopens with optimistic revision', async () => {
   await mount()
   await expect
+    .element(
+      page.getByText('Saved assessments and merge rules are unchanged.', {
+        exact: false,
+      })
+    )
+    .toBeVisible()
+  await expect
+    .element(
+      page.getByText('line range and message are unchanged', { exact: false })
+    )
+    .toBeVisible()
+  await expect
     .element(page.getByRole('button', { name: 'Ignore finding', exact: true }))
     .toBeDisabled()
   await page
