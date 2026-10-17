@@ -1,4 +1,4 @@
-import {Body,Controller,Get,Post,Header,Inject,Req,UseGuards} from '@nestjs/common'
+import {BadRequestException,Body,Controller,Get,Post,Header,Inject,Req,UseGuards} from '@nestjs/common'
 import type {Request} from 'express'
 import {AuthService} from '../auth/auth.service.js'
 import {SessionGuard,type AuthenticatedSession} from '../auth/session.guard.js'
@@ -8,7 +8,7 @@ type SessionRequest=Request&{preflytSession:AuthenticatedSession}
 export class ReleasesController {
  constructor(@Inject(ReleasesService)private readonly releases:ReleasesService,@Inject(AuthService)private readonly auth:AuthService){}
  @Get() @Header('Cache-Control','no-store') status(@Req()r:SessionRequest){return this.releases.status(r.preflytSession)}
- @Post('check') @Header('Cache-Control','no-store') check(@Req()r:SessionRequest){this.auth.assertOrigin(r.headers.origin);return this.releases.refresh(r.preflytSession)}
+ @Post('check') @Header('Cache-Control','no-store') check(@Req()r:SessionRequest,@Body()body?:{automatic?:unknown}){this.auth.assertOrigin(r.headers.origin);if(body?.automatic!==undefined&&typeof body.automatic!=='boolean')throw new BadRequestException('Choose a valid release check');return this.releases.refresh(r.preflytSession,body?.automatic===true)}
  @Post('preferences') @Header('Cache-Control','no-store') preferences(@Req()r:SessionRequest,@Body()body:unknown){this.auth.assertOrigin(r.headers.origin);return this.releases.settings(r.preflytSession,body)}
  @Post('read') @Header('Cache-Control','no-store') read(@Req()r:SessionRequest,@Body()body:{tag?:unknown}){this.auth.assertOrigin(r.headers.origin);return this.releases.read(r.preflytSession,body?.tag)}
 }
