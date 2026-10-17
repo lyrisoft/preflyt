@@ -13,6 +13,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       publish: ${{ steps.scope.outputs.publish }}
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -27,6 +28,12 @@ jobs:
           CI_BASE_SHA: ${{ github.event.before }}
           CI_HEAD_SHA: ${{ github.sha }}
         run: node scripts/ci/change-scope.mjs images
+      - name: Plan installed release version
+        if: github.ref == 'refs/heads/main'
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/ci/plan-release.mjs
   build:
     needs: inputs
     if: ${{ needs.inputs.outputs.publish == 'true' }}
@@ -65,6 +72,7 @@ jobs:
         env:
           ARCH: ${{ matrix.platform.arch }}
           BUILD_GROUP: ${{ matrix.group }}
+          PREFLYT_BUILD_VERSION: ${{ needs.inputs.outputs.version || 'development' }}
         run: |
           node --test scripts/deploy/*.test.mjs
           node scripts/ci/publish-release.mjs build
@@ -103,7 +111,7 @@ jobs:
   release:
     name: Create versioned main release
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
-    needs: [publish, accept-published]
+    needs: [inputs, publish, accept-published]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -125,4 +133,5 @@ jobs:
       - name: Tag verified images and publish release notes
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PREFLYT_BUILD_VERSION: ${{ needs.inputs.outputs.version }}
         run: node scripts/ci/create-release.mjs

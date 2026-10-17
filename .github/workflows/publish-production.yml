@@ -11,11 +11,22 @@ jobs:
     name: Require main branch
     runs-on: ubuntu-24.04
     timeout-minutes: 2
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - name: Validate manual publication target
         env:
           PUBLICATION_REF: ${{ github.ref }}
         run: test "$PUBLICATION_REF" = refs/heads/main
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - name: Plan installed release version
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/ci/plan-release.mjs
   build:
     needs: branch
     name: Build ${{ matrix.group }} (${{ matrix.platform.arch }})
@@ -54,6 +65,7 @@ jobs:
         env:
           ARCH: ${{ matrix.platform.arch }}
           BUILD_GROUP: ${{ matrix.group }}
+          PREFLYT_BUILD_VERSION: ${{ needs.branch.outputs.version }}
         run: |
           node scripts/ci/publish-release.mjs build
   publish:
@@ -83,7 +95,7 @@ jobs:
   release:
     name: Create versioned main release
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
-    needs: publish
+    needs: [branch, publish]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -106,4 +118,5 @@ jobs:
       - name: Tag built images and publish release notes
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PREFLYT_BUILD_VERSION: ${{ needs.branch.outputs.version }}
         run: node scripts/ci/create-release.mjs

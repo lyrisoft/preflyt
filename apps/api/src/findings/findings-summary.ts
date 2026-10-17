@@ -9,7 +9,7 @@ type SummaryRow = {
 const severities = ['critical', 'high', 'medium', 'low', 'unknown'] as const
 /** Aggregate the same scoped, deduplicated and filtered rows before pagination. */
 export function summarizeFindings(rows: SummaryRow[], kind: string) {
-  const active = rows.filter((row) => row.status !== 'Suppressed')
+  const active = rows.filter((row) => !['Suppressed', 'Ignored'].includes(row.status))
   const issues = active.filter((row) => row.category !== 'evidence')
   const gaps = active.filter((row) => row.category === 'evidence')
   const chartRows = kind === 'gaps' ? gaps : issues
@@ -36,7 +36,8 @@ export function summarizeFindings(rows: SummaryRow[], kind: string) {
       ['critical', 'high'].includes(row.severity),
     ).length,
     evidenceGaps: gaps.length,
-    suppressed: rows.length - active.length,
+    suppressed: rows.filter(row => row.status === 'Suppressed').length,
+    ignored: rows.filter(row => row.status === 'Ignored').length,
     bySeverity: severities.map((name) => ({
       name,
       count: chartRows.filter((row) => row.severity === name).length,

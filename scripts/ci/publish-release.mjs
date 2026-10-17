@@ -29,12 +29,12 @@ export function publishRelease(mode, env, docker = (args) => execFileSync('docke
         context: '.', dockerfile, target: stage, platforms: [`linux/${arch}`],
         attest: [{ type: 'sbom' }, { type: 'provenance', mode: 'max' }],
         tags: [tag(image, `-${arch}`)],
-        ...(image === 'preflyt-health-scanner' ? { args: { PREFLYT_DATABASE_EPOCH: new Date().toISOString().slice(0, 10) } } : {}),
+        args: { PREFLYT_BUILD_VERSION: env.PREFLYT_BUILD_VERSION ?? 'development', PREFLYT_BUILD_SHA: sha, ...(image === 'preflyt-health-scanner' ? { PREFLYT_DATABASE_EPOCH: new Date().toISOString().slice(0, 10) } : {}) },
         'cache-from': [`type=registry,ref=ghcr.io/${owner}/${image}:build-cache-${arch}`],
         // Export only the sanitized final scanner layers. The upstream Semgrep
         // build input contains an unused proprietary binary removed before export.
         'cache-to': [`type=registry,mode=${image === 'preflyt-health-scanner' ? 'min' : 'max'},ref=ghcr.io/${owner}/${image}:build-cache-${arch}`],
-        labels: { 'org.opencontainers.image.source': `https://github.com/${repository}`, 'org.opencontainers.image.revision': sha },
+        labels: { 'org.opencontainers.image.source': `https://github.com/${repository}`, 'org.opencontainers.image.revision': sha, 'org.opencontainers.image.version': env.PREFLYT_BUILD_VERSION ?? 'development' },
       };
     }
     if (Object.keys(targets).length) {

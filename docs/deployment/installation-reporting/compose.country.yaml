@@ -1,0 +1,14 @@
+# Receiver-side only: add after compose.yaml to enable local country lookups.
+# Supply a licensed GeoIP2/GeoLite2 Country MMDB; it is not bundled in Preflyt images.
+services:
+  collector:
+    environment:
+      PREFLYT_INSTALLATION_COLLECTOR_COUNTRY_DATABASE: /geoip/country.mmdb
+      PREFLYT_INSTALLATION_COLLECTOR_TRUSTED_PROXIES: ${COLLECTOR_TRUSTED_PROXIES:-}
+    volumes:
+      - type: bind
+        source: ${COLLECTOR_COUNTRY_DATABASE:?Set an absolute path to the country MMDB file}
+        target: /geoip/country.mmdb
+        read_only: true
+        bind:
+          create_host_path: false

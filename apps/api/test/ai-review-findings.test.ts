@@ -84,6 +84,7 @@ function fixture() {
       findMany: vi.fn().mockResolvedValue([review]),
       findUnique: vi.fn().mockResolvedValue(review),
     },
+    findingIgnore: { findMany: vi.fn().mockResolvedValue([]) },
     findingDisposition: { findMany: vi.fn().mockResolvedValue([]) },
   };
   const access: any = {

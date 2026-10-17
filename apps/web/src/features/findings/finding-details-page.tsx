@@ -21,6 +21,7 @@ import {
   FindingEvidence,
   FindingTriage,
 } from './finding-detail-sections'
+import { FindingIgnore } from './finding-ignore'
 import { findingsSearch, type findingDetailSearch } from './finding-search'
 import { FindingSourceViewer } from './finding-source'
 import { severityTone, type Finding } from './finding-types'
@@ -186,6 +187,11 @@ export function FindingDetailsPage({
                       'The source viewer loads a saved, verified code excerpt from Preflyt after checking repository access. Existing findings without an excerpt fetch and save it once at the exact assessed commit. Highlighted lines are coordinates supplied by the report and verified to exist in that file. File-only findings show a bounded excerpt without highlighting. Check summaries and missing evidence may have no file or line.',
                   },
                   {
+                    title: 'Ignoring and reopening',
+                    content:
+                      'Ignoring persists across scans for the same source, rule, file, line range and message in this repository. A reason is required for ignoring or reopening; an optional expiry automatically reopens the finding. Saved assessments and merge policies remain unchanged. Review decisions and reasons are kept in the review history.',
+                  },
+                  {
                     title: 'Evidence and review',
                     content:
                       'A source location identifies where an analyzer reported an issue; it does not independently confirm a defect or exploit. Report source verification and original evidence remain visible. Review notes and human triage do not change the assessment or merge result. Secret excerpts and credential-looking context lines are hidden.',
@@ -333,6 +339,11 @@ export function FindingDetailsPage({
                     </div>
                   </CardContent>
                 </Card>
+                <FindingIgnore
+                  key={sourcePath}
+                  scope={`${session.data?.organizationId}:${session.data?.identityId}`}
+                  path={`findings/${findingId}/ignore?${health ? new URLSearchParams({ origin: 'health', repository: search.repository!, assessment: search.health! }) : params}`}
+                />
                 {health && finding.category === 'hotspot' && (
                   <HotspotReview
                     repositoryId={finding.repositoryId}

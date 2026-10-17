@@ -172,3 +172,21 @@ Native execution is disabled by default and needs its own reviewed controller. S
 | `AI_PROVIDER_ENCRYPTION_KEY` | | Base64 of 32 random bytes. Generate before first startup, separately from every other key. API and worker use the same value. |
 
 Models and endpoints are created by organization admins under **AI Intelligence**, not in the environment.
+
+## Optional installation reporting
+
+Installation reporting is enabled by default (**opt-out**) and is separate from OpenTelemetry and release checks. A deployment administrator can disable it under **Settings → Configuration → Installation reporting**. The settings show the exact report fields and last accepted delivery time.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `PREFLYT_INSTALLATION_COUNTRY_REPORTING_ENABLED` | empty | Country reporting is off until an administrator opts in. Set `false` to enforce off regardless of the saved preference. |
+| `PREFLYT_INSTALLATION_REPORTING_ENABLED` | `true` | Set `false` before the first startup to prevent all installation reporting. This environment override cannot be enabled from the UI. |
+| `PREFLYT_INSTALLATION_REPORTING_URL` | empty | HTTPS receiver URL ending exactly in `/v1/installations`. Until configured, nothing is sent. Credentials, query strings, fragments and redirects are rejected. |
+| `PREFLYT_DEPLOYMENT_TYPE` | `unknown` (`compose` in Compose) | One of `compose`, `kubernetes`, `linux`, `development` or `unknown`. No hostname or machine details. |
+| `PREFLYT_INSTALLATION_REPORTING_ALLOW_LOCAL_HTTP` | `false` | Development-only override for an explicit local receiver. Ignored in production. |
+
+Reports contain only a schema version, random installation ID, Preflyt version, deployment type and a boolean country-lookup permission flag. They contain no names, emails, organization/repository identities, source code or findings. The random ID is shared by API replicas using the same database. An initial report is attempted at startup, then about once per day. Receiver failures do not stop the app. Disabling prevents future reports but does not retract a report already sent. Inactive receiver records are removed after 90 days.
+
+There is currently no bundled production receiver URL. The maintainer must host and configure the receiver before production installations can report. Development builds are excluded from adoption counts. Offline installations continue to work normally.
+
+Country-level installation reporting is a separate administrator setting under **Settings → Configuration → Installation reporting** and is off by default. If enabled, the receiver uses a local database to keep only the country code, without storing the IP address. Set `PREFLYT_INSTALLATION_COUNTRY_REPORTING_ENABLED=false` to enforce off before startup. Unknown countries remain unknown. Turning it off clears the stored country on the next accepted report; if all reporting is disabled, previous collected data expires after 90 days of inactivity.

@@ -11,6 +11,9 @@ COPY release.json release.json
 COPY deploy/nginx.conf deploy/nginx.conf
 COPY deploy/nginx.website.conf deploy/nginx.website.conf
 COPY scripts/deploy/license-bundle.mjs /opt/preflyt/license-bundle.mjs
+ARG PREFLYT_BUILD_VERSION=development
+ARG PREFLYT_BUILD_SHA=unknown
+ENV VITE_PREFLYT_BUILD_VERSION=$PREFLYT_BUILD_VERSION VITE_PREFLYT_BUILD_SHA=$PREFLYT_BUILD_SHA
 ARG PUBLIC_SITE_URL=""
 ARG PUBLIC_SITE_INDEXABLE=false
 ARG VITE_WEBSITE_MODE=false

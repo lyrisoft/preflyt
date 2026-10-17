@@ -30,6 +30,7 @@ export type FindingsSummary = {
   affectedRepositories: number
   criticalHigh: number
   evidenceGaps: number
+  ignored?: number
   suppressed: number
   chartTotal: number
   bySeverity: { name: string; count: number }[]
@@ -108,6 +109,11 @@ export function FindingsOverview({
           </Card>
         ))}
       </dl>
+      {!!summary.ignored && (
+        <p className='text-sm text-muted-foreground'>
+          {summary.ignored} ignored entries excluded from metrics and charts.
+        </p>
+      )}
       {summary.suppressed > 0 && (
         <p className='text-sm text-muted-foreground'>
           {summary.suppressed} source-suppressed entries excluded from metrics

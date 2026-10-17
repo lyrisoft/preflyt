@@ -125,6 +125,16 @@ beforeEach(() => {
         return Response.json({ message: 'Access revoked' }, { status: 403 })
       if (state.fail)
         return Response.json({ message: 'Access revoked' }, { status: 403 })
+      if (url.includes('/ignore?'))
+        return Response.json({
+          state: 'OPEN',
+          reason: '',
+          revision: 0,
+          expiresAt: null,
+          canManage: false,
+          eligible: true,
+          history: [],
+        })
       if (url.includes('/finding-guidance')) {
         if (init?.method === 'POST')
           return Response.json({

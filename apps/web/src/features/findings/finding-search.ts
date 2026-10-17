@@ -33,7 +33,7 @@ export const findingsSearch = z.object({
     .optional()
     .catch(undefined),
   triage: z
-    .enum(['all', 'REPORTED', 'IN_REVIEW', 'RESOLVED'])
+    .enum(['all', 'REPORTED', 'IN_REVIEW', 'RESOLVED', 'IGNORED'])
     .optional()
     .catch(undefined),
   q: z.string().max(100).optional().catch(undefined),

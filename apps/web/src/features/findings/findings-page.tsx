@@ -573,7 +573,9 @@ function FindingsWorkspace() {
                           </p>
                         </td>
                         <td className='p-4'>
-                          {row.origin === 'ai' && row.severity === 'unknown' ? (
+                          {row.status !== 'Ignored' &&
+                          row.origin === 'ai' &&
+                          row.severity === 'unknown' ? (
                             <span title='This saved review did not rate severity'>
                               -
                             </span>
@@ -587,7 +589,8 @@ function FindingsWorkspace() {
                         </td>
                         <td className='p-4 whitespace-nowrap'>
                           <StatusBadge tone='neutral'>
-                            {row.origin === 'ai' &&
+                            {row.status !== 'Ignored' &&
+                            row.origin === 'ai' &&
                             row.triage?.state &&
                             row.triage.state !== 'REPORTED'
                               ? triageLabels[row.triage.state]

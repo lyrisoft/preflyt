@@ -1,3 +1,4 @@
+import { findingIgnoreId, ignoreState, validateIgnore } from './finding-ignore.js';
 import { reportedLocation } from './reported-location.js';
 import { readPageSize } from '../pagination.js';
 import { findingReferenceGuidance } from '../health/finding-guidance.js';
@@ -50,7 +51,7 @@ export class FindingsService {
         .toLowerCase(),
       page = Number(query.page ?? 1);
     if (
-      !["all", "REPORTED", "IN_REVIEW", "RESOLVED"].includes(triage) ||
+      !["all", "REPORTED", "IN_REVIEW", "RESOLVED", "IGNORED"].includes(triage) ||
       !["findings", "gaps", "ai"].includes(kind) ||
       !["all", "ci", "health", "ai"].includes(source) ||
       (health !== undefined && (!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(health) || source !== "health" || repository === "all")) ||
@@ -309,8 +310,9 @@ export class FindingsService {
           }
         : { state: "REPORTED", assigneeId: null, note: "", revision: 0 };
     }
+    await this.applyIgnores(session, matching);
     matching = matching.filter(
-      (row) => triage === "all" || row.triage.state === triage,
+      (row) => triage === "all" || (triage === "IGNORED" ? row.ignore?.state === "IGNORED" : row.ignore?.state !== "IGNORED" && row.triage.state === triage),
     );
     const filtered = matching.filter(
       (row) =>
@@ -364,9 +366,10 @@ export class FindingsService {
       row.triage = saved ? { state: saved.state, assigneeId: saved.assigneeId, note: saved.note, revision: saved.revision, updatedAt: saved.updatedAt }
         : { state: 'REPORTED', assigneeId: null, note: '', revision: 0 };
     }
+    await this.applyIgnores(session, [...unique.values()]);
     const matching = [...unique.values()].filter(row =>
       (filters.severity === 'all' || row.severity === filters.severity) && (filters.category === 'all' || filters.category === 'ai') &&
-      (filters.triage === 'all' || row.triage.state === filters.triage) &&
+      (filters.triage === 'all' || (filters.triage === 'IGNORED' ? row.ignore?.state === 'IGNORED' : row.ignore?.state !== 'IGNORED' && row.triage.state === filters.triage)) &&
       (!filters.lookupId || row.id === filters.lookupId) &&
       (!filters.search || `${row.title} ${row.recommendation} ${row.repository} ${row.sourceSha} ${row.pullRequest} ${row.checkTitle} ${row.evidenceLocations.map((e: any) => e.path ?? e.label).join(' ')}`.toLowerCase().includes(filters.search)));
     await this.access.requireOrganization(session, 'assessment.read');
@@ -402,6 +405,59 @@ export class FindingsService {
     throw new NotFoundException(
       "Finding is unavailable in your current scope or retained assessment window",
     );
+  }
+  private async applyIgnores(session: AuthenticatedSession, rows: any[]) {
+    if (!rows.length) return;
+    const saved = await this.db.findingIgnore.findMany({ where: { organizationId: session.organizationId!,
+      id: { in: rows.map(row => findingIgnoreId(session.organizationId!, row)) } } });
+    const byId = new Map(saved.map(row => [row.id, row]));
+    for (const row of rows) {
+      row.ignore = ignoreState(byId.get(findingIgnoreId(session.organizationId!, row)));
+      if (row.ignore.state === 'IGNORED') row.status = 'Ignored';
+    }
+  }
+  private async ignoreFinding(session: AuthenticatedSession, id: string, query: Record<string, unknown>) {
+    if (query.origin !== 'health') return this.finding(session, id, query.assessment as string | undefined, query.origin as string | undefined);
+    const repository = String(query.repository ?? ''), assessment = String(query.assessment ?? '');
+    const repo = await this.access.requireRepository(session, repository, 'assessment.read');
+    if (!/^[a-f0-9]{64}$/.test(id) || !/^[a-f0-9-]{36}$/.test(assessment)) throw new BadRequestException('Choose a valid finding');
+    const saved = await this.db.repositoryHealthAssessment.findFirst({where: { id: assessment, repositoryId: repo.id, organizationId: session.organizationId! }});
+    const row = (saved?.report as unknown as HealthReport | null)?.findings.find(f => f.fingerprint === id);
+    if (!row || !saved?.sourceSha) throw new NotFoundException('Finding is unavailable');
+    return { ...row, origin: 'health', repositoryId: repository, assessmentId: assessment, sourceSha: saved.sourceSha };
+  }
+  async getIgnore(session: AuthenticatedSession, id: string, query: Record<string, unknown>) {
+    const finding = await this.ignoreFinding(session, id, query);
+    await this.access.requireRepository(session, finding.repositoryId, 'assessment.read');
+    const key = findingIgnoreId(session.organizationId!, finding);
+    const saved = await this.db.findingIgnore.findFirst({where: {id: key, organizationId: session.organizationId!}});
+    const history = await this.db.auditEvent.findMany({where: { event: { in: ['finding.ignored', 'finding.reopened'] },
+      metadata: { path: ['ignoreId'], equals: key } }, orderBy: {createdAt: 'desc'}, take: 20, select: {event:true, createdAt:true, metadata:true}});
+    await this.access.requireRepository(session, finding.repositoryId, 'assessment.read');
+    return { ...ignoreState(saved), canManage: !!rolePermissions[session.role]?.includes('findings.manage'),
+      eligible: !['check', 'evidence'].includes(finding.category), history: history.map(h => ({event:h.event, at:h.createdAt,
+        reason:(h.metadata as any)?.reason, expiresAt:(h.metadata as any)?.expiresAt})) };
+  }
+  async setIgnore(session: AuthenticatedSession, id: string, query: Record<string, unknown>, input: unknown) {
+    const data = validateIgnore(input);
+    await this.access.requireOrganization(session, 'findings.manage', true);
+    const finding = await this.ignoreFinding(session, id, query);
+    if (['check', 'evidence'].includes(finding.category)) throw new BadRequestException('Check results and missing evidence cannot be ignored.');
+    const key = findingIgnoreId(session.organizationId!, finding);
+    return this.db.$transaction(async tx => {
+      const access = new AuthorizationService(tx as PrismaService);
+      const repo = await access.requireRepository(session, finding.repositoryId, 'findings.manage');
+      const values = {...data, updatedById:session.identityId};
+      const revision = (input as {expectedRevision:number}).expectedRevision;
+      const changed = revision === 0
+        ? await tx.findingIgnore.createMany({data:[{id:key, organizationId:session.organizationId!, repositoryGithubId:finding.repositoryId, ...values}], skipDuplicates:true})
+        : await tx.findingIgnore.updateMany({where:{id:key, organizationId:session.organizationId!, revision}, data:{...values, revision:{increment:1}}});
+      if (!changed.count) throw new ConflictException('The ignore decision changed. Refresh and try again.');
+      await tx.auditEvent.create({data:{event:data.state === 'IGNORED' ? 'finding.ignored' : 'finding.reopened', actorId:session.identityId,
+        metadata:{organizationId:session.organizationId!, repositoryId:repo.id, ignoreId:key, findingId:id, assessmentId:finding.assessmentId,
+          reason:data.reason, expiresAt:data.expiresAt?.toISOString() ?? null, revision:revision+1}}});
+      return ignoreState(await tx.findingIgnore.findUniqueOrThrow({where:{id:key}}));
+    });
   }
   async detail(session: AuthenticatedSession, id: string, assessment?: string, origin?: string) {
     const finding = await this.finding(session, id, assessment, origin);

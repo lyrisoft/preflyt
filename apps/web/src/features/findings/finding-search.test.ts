@@ -31,3 +31,7 @@ it('preserves numeric repository IDs parsed from URLs and AI filters', () => {
   for (const repository of [-1, 1.5, Number.MAX_SAFE_INTEGER + 1, '../private'])
     expect(findingsSearch.parse({ repository }).repository).toBeUndefined()
 })
+
+it('preserves ignored filter in deep links', () => {
+  expect(findingsSearch.parse({ triage: 'IGNORED' }).triage).toBe('IGNORED')
+})

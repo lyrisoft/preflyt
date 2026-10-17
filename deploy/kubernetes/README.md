@@ -73,3 +73,7 @@ Enable AI model configuration and advisory reviews in Settings → Configuration
 ### Shared Docker assessment runner
 
 Kubernetes-hosted Preflyt can use the same dedicated Docker controller as a Compose-hosted deployment. Render `kubectl kustomize deploy/kubernetes-shared-docker-runner` to select this backend while leaving execution disabled. No Kubernetes native launcher, Docker socket or engine credentials are added to the application. Supply the actual reviewed controller approval and application-side key through the existing Secret/configuration contract. See [shared runner qualification](../../docs/operations/p5-runner-qualification.md). The Kubernetes-native job launcher remains a separate optional backend.
+
+### Optional installation reporting
+
+The API reports a random installation ID, version and deployment type when a receiver URL is configured. Reporting is enabled by default and disclosed in Settings → Configuration. Set `PREFLYT_INSTALLATION_REPORTING_ENABLED: "false"` in `preflyt-config` before the first deployment to prevent the first report. The deployment administrator can also disable future reports in Settings → Configuration. No production receiver URL is bundled yet; an empty URL sends nothing. Restart API pods after environment changes. All replicas share one ID and delivery schedule in PostgreSQL. See [installation reporting operations](../../docs/operations/installation-reporting.md).
