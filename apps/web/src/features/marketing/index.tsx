@@ -1,6 +1,6 @@
-import release from '../../../../../release.json'
 import { ArrowRight, ArrowUpRight, Layers } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import release from '../../../../../release.json'
 import { EngineeringFigures } from './engineering-figures'
 import { MarketingLayout, MarketingClosing } from './marketing-layout'
 import { ProductScene } from './product-scene'
@@ -154,7 +154,7 @@ export function MarketingHomepage() {
         <section className='reference-hero container'>
           <div className='hero-copy'>
             <span className='reference-label'>
-              Engineering assurance for GitHub
+              Open source engineering assurance for GitHub
             </span>
             <h1>
               Know what passed.
