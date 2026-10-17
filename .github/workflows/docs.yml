@@ -1,6 +1,16 @@
 name: Documentation
 on:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Published stable release tag (blank selects the newest published release)
+        required: false
+        type: string
+  workflow_call:
+    inputs:
+      release_tag:
+        required: true
+        type: string
 permissions:
   contents: read
 concurrency:
@@ -17,6 +27,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
       - name: Check GitHub Pages configuration
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
         if: github.event_name != 'pull_request'
@@ -27,6 +38,12 @@ jobs:
         run: |
           npm install --global pnpm@10.26.2
           pnpm install --frozen-lockfile --ignore-scripts --filter @preflyt/docs...
+      - name: Synchronize published release documentation
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DOCS_RELEASE_TAG: ${{ inputs.release_tag }}
+        run: node apps/docs/scripts/sync-releases.mjs
       - name: Type-check and build (fails on broken links and undocumented variables)
         env:
           DOCS_URL: https://docs.preflytlabs.com
