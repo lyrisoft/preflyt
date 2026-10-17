@@ -978,6 +978,12 @@ export class TeamsService {
   async discover(s: AuthenticatedSession, id?: string) {
     await this.access.requireOrganization(s, "team.import", true);
     const { link, installation } = await this.installation(s, id);
+    const imported = new Set(
+      (await this.db.preflytTeam.findMany({
+        where: { organizationId: s.organizationId!, source: "GITHUB" },
+        select: { githubTeamId: true },
+      })).map((team) => team.githubTeamId),
+    );
     return this.providerRead(
       installation.id,
       link.githubOrganizationId,
@@ -998,6 +1004,7 @@ export class TeamsService {
               name: t.name,
               slug: t.slug,
               parentId: t.parent?.id ? String(t.parent.id) : null,
+              imported: imported.has(String(t.id)),
             };
           },
         ),

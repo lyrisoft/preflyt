@@ -380,83 +380,88 @@ export function RepositoryProfilePage() {
             icon={GitBranch}
             tone='blue'
             actions={
-              <>
-                {canSelectBranch && result && tab !== 'assessments' ? (
-                  <div className='flex flex-col gap-2'>
-                    <label
-                      className='text-xs font-medium text-muted-foreground'
-                      htmlFor='profile-branch'
-                    >
-                      {tab === 'health' ? 'Branch' : 'Inspect branch'}
-                    </label>
-                    <div className='flex flex-wrap items-center gap-2'>
-                      <BranchPicker
-                        repositoryId={repositoryId}
-                        actorId={sessionQuery.data?.identityId}
-                        label={
-                          tab === 'health'
-                            ? 'Repository branch'
-                            : 'Inspect branch'
-                        }
-                        value={selectedBranch}
-                        disabled={
-                          tab === 'health'
-                            ? healthTarget.isPending || healthTarget.isError
-                            : discovering
-                        }
-                        onValueChange={(branch) => {
-                          if (tab === 'health') {
-                            void navigate({
-                              search: (old) => ({
-                                ...old,
-                                branch,
-                                health: undefined,
-                              }),
-                              replace: true,
-                            })
-                          } else setBranchChoice({ repositoryId, branch })
-                        }}
-                      />
-                      {tab !== 'health' && (
-                        <Button
-                          size='sm'
-                          variant='outline'
+              <div className='flex max-w-full flex-col gap-2'>
+                <div className='flex flex-wrap items-end gap-2 sm:justify-end'>
+                  {canSelectBranch && result && tab !== 'assessments' ? (
+                    <div className='flex flex-col gap-2'>
+                      <label
+                        className='text-xs font-medium text-muted-foreground'
+                        htmlFor='profile-branch'
+                      >
+                        {tab === 'health' ? 'Branch' : 'Inspect branch'}
+                      </label>
+                      <div className='flex flex-wrap items-center gap-2'>
+                        <BranchPicker
+                          repositoryId={repositoryId}
+                          actorId={sessionQuery.data?.identityId}
+                          label={
+                            tab === 'health'
+                              ? 'Repository branch'
+                              : 'Inspect branch'
+                          }
+                          value={selectedBranch}
                           disabled={
-                            loading || discovering || !inspectionBranch.trim()
+                            tab === 'health'
+                              ? healthTarget.isPending || healthTarget.isError
+                              : discovering
                           }
-                          onClick={() =>
-                            discovery.mutate({
-                              id: repositoryId,
-                              branch: inspectionBranch.trim(),
-                            })
-                          }
-                        >
-                          {discovering ? (
-                            <LoaderCircle className='animate-spin' />
-                          ) : (
-                            <RefreshCw />
-                          )}
-                          {discovering
-                            ? 'Discovering…'
-                            : profile
-                              ? 'Refresh profile'
-                              : 'Discover profile'}
-                        </Button>
-                      )}
+                          onValueChange={(branch) => {
+                            if (tab === 'health') {
+                              void navigate({
+                                search: (old) => ({
+                                  ...old,
+                                  branch,
+                                  health: undefined,
+                                }),
+                                replace: true,
+                              })
+                            } else setBranchChoice({ repositoryId, branch })
+                          }}
+                        />
+                        {tab !== 'health' && (
+                          <Button
+                            size='sm'
+                            variant='outline'
+                            disabled={
+                              loading || discovering || !inspectionBranch.trim()
+                            }
+                            onClick={() =>
+                              discovery.mutate({
+                                id: repositoryId,
+                                branch: inspectionBranch.trim(),
+                              })
+                            }
+                          >
+                            {discovering ? (
+                              <LoaderCircle className='animate-spin' />
+                            ) : (
+                              <RefreshCw />
+                            )}
+                            {discovering
+                              ? 'Discovering…'
+                              : profile
+                                ? 'Refresh profile'
+                                : 'Discover profile'}
+                          </Button>
+                        )}
+                      </div>
                     </div>
-                    <p className='text-xs text-muted-foreground'>
-                      {tab === 'health'
-                        ? 'Open Health to inspect or analyze the selected branch.'
-                        : 'Refresh profile to inspect the selected branch.'}
+                  ) : null}
+                  {result && (
+                    <RepositoryHelp
+                      limitations={profile?.report.limitations ?? []}
+                    />
+                  )}
+                </div>
+                {canSelectBranch &&
+                  result &&
+                  tab !== 'assessments' &&
+                  tab !== 'health' && (
+                    <p className='max-w-sm text-xs text-muted-foreground sm:text-right'>
+                      Refresh profile to inspect the selected branch.
                     </p>
-                  </div>
-                ) : null}
-                {result && (
-                  <RepositoryHelp
-                    limitations={profile?.report.limitations ?? []}
-                  />
-                )}
-              </>
+                  )}
+              </div>
             }
           >
             <div className='flex flex-wrap items-center gap-x-3 gap-y-2'>

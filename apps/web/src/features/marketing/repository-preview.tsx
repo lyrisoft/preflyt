@@ -55,7 +55,7 @@ export function RepositoryPreview({
           <div className='flex flex-wrap items-center gap-3 text-xs text-muted-foreground'>
             <span>Inspected branch: main</span>
             <span>Commit: 7c82a1f</span>
-            <StatusBadge tone='success'>Inspection complete</StatusBadge>
+            <StatusBadge tone='success'>Inspected</StatusBadge>
           </div>
         </div>
       </PageHeader>

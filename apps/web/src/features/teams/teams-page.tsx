@@ -528,6 +528,7 @@ export function TeamsWorkspace({
         <ImportTeams
           options={options.data}
           onClose={() => setImporting(false)}
+          onBatchImported={refresh}
           onImported={async (teamId) => {
             setImporting(false)
             setId(teamId)
@@ -1112,22 +1113,31 @@ function ImportTeams({
   options,
   onClose,
   onImported,
+  onBatchImported,
 }: {
   options: Options
   onClose: () => void
   onImported: (id: string) => Promise<void>
+  onBatchImported: () => Promise<void>
 }) {
   const [installation, setInstallation] = useState(
     options.installations[0]?.id ?? ''
   )
   const [teams, setTeams] = useState<
-    { id: string; name: string; parentId: string | null }[]
+    { id: string; name: string; parentId: string | null; imported?: boolean }[]
   >([])
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [loaded, setLoaded] = useState(false)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [batch, setBatch] = useState<{
+    completed: number
+    total: number
+    failed: number
+  } | null>(null)
+  const [failures, setFailures] = useState<Record<string, string>>({})
+  const pending = teams.filter((team) => !team.imported)
   const filtered = teams.filter((t) =>
     t.name.toLowerCase().includes(search.toLowerCase())
   )
@@ -1135,6 +1145,10 @@ function ImportTeams({
     setBusy(true)
     setError('')
     setLoaded(false)
+    setBatch(null)
+    setFailures({})
+    setSearch('')
+    setPage(1)
     try {
       const result = await governanceRequest<{ teams: typeof teams }>(
         '/teams/github/discover',
@@ -1163,6 +1177,55 @@ function ImportTeams({
       setBusy(false)
     }
   }
+  async function importAll() {
+    if (busy || !pending.length) return
+    setBusy(true)
+    setError('')
+    setFailures({})
+    const selectedInstallation = installation
+    const targets = [...pending]
+    let completed = 0
+    let failed = 0
+    setBatch({ completed, total: targets.length, failed })
+    try {
+      // Reuse server-authorized imports, one at a time, across every list page.
+      for (const team of targets) {
+        try {
+          await governanceRequest<{ id: string }>('/teams/github/import', {
+            installationId: selectedInstallation,
+            teamId: team.id,
+          })
+          setTeams((current) =>
+            current.map((item) =>
+              item.id === team.id ? { ...item, imported: true } : item
+            )
+          )
+        } catch (e) {
+          failed++
+          setFailures((current) => ({
+            ...current,
+            [team.id]: (e as Error).message,
+          }))
+        }
+        completed++
+        setBatch({ completed, total: targets.length, failed })
+      }
+      if (failed) {
+        toast.error(
+          `Imported ${completed - failed} GitHub teams; ${failed} failed`
+        )
+      } else {
+        toast.success(`Imported ${completed - failed} GitHub teams`)
+      }
+      if (completed > failed) {
+        await onBatchImported()
+      }
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
   return (
     <Dialog
       open
@@ -1172,7 +1235,7 @@ function ImportTeams({
     >
       <DialogContent className='flex max-h-[85svh] flex-col sm:max-w-2xl'>
         <DialogHeader>
-          <DialogTitle>Import GitHub team</DialogTitle>
+          <DialogTitle>Import GitHub teams</DialogTitle>
           <DialogDescription>
             Import members and repository associations. No repositories are
             covered until you approve them.
@@ -1188,12 +1251,16 @@ function ImportTeams({
             <div className='flex gap-2'>
               <OptionSelect
                 label='GitHub organization'
+                disabled={busy}
                 className='min-w-0 flex-1'
                 value={installation}
                 onValueChange={(value) => {
                   setInstallation(value)
                   setLoaded(false)
                   setTeams([])
+                  setBatch(null)
+                  setFailures({})
+                  setError('')
                 }}
                 options={options.installations.map((i) => ({
                   value: i.id,
@@ -1206,7 +1273,7 @@ function ImportTeams({
                 disabled={busy}
                 onClick={() => void discover()}
               >
-                {busy ? 'Loading…' : 'List teams'}
+                {busy && !loaded ? 'Loading…' : 'List teams'}
               </Button>
             </div>
           ) : (
@@ -1216,6 +1283,35 @@ function ImportTeams({
           )}
           {loaded && (
             <>
+              <div className='flex flex-wrap items-center justify-between gap-3'>
+                <p className='text-sm text-muted-foreground'>
+                  {teams.length} teams · {teams.length - pending.length} already
+                  imported
+                </p>
+                <Button
+                  size='sm'
+                  disabled={busy || !pending.length}
+                  onClick={() => void importAll()}
+                >
+                  <Github className='size-4' aria-hidden='true' />
+                  {busy && batch
+                    ? `Importing ${batch.completed} of ${batch.total}…`
+                    : `Import all teams (${pending.length})`}
+                </Button>
+              </div>
+              <p className='text-xs text-muted-foreground'>
+                Import all includes every page in this organization, regardless
+                of the filter.
+              </p>
+              {batch && (
+                <p role='status' className='text-sm'>
+                  {busy
+                    ? `Processed ${batch.completed} of ${batch.total} teams.`
+                    : `Imported ${batch.completed - batch.failed} of ${batch.total} teams.`}
+                  {batch.failed > 0 &&
+                    ` ${batch.failed} failed. See the team errors below and retry the remaining teams.`}
+                </p>
+              )}
               <Input
                 aria-label='Filter GitHub teams'
                 placeholder='Filter GitHub teams…'
@@ -1231,22 +1327,29 @@ function ImportTeams({
                     className='flex items-center justify-between gap-3 border-b p-3 last:border-b-0'
                     key={t.id}
                   >
-                    <span className='text-sm font-medium'>
-                      {t.name}
-                      {t.parentId && (
-                        <span className='ml-2 text-xs font-normal text-muted-foreground'>
-                          Nested team
-                        </span>
+                    <div className='min-w-0'>
+                      <span className='text-sm font-medium'>
+                        {t.name}
+                        {t.parentId && (
+                          <span className='ml-2 text-xs font-normal text-muted-foreground'>
+                            Nested team
+                          </span>
+                        )}
+                      </span>
+                      {failures[t.id] && (
+                        <p className='mt-1 text-sm text-destructive'>
+                          {failures[t.id]}
+                        </p>
                       )}
-                    </span>
+                    </div>
                     <Button
                       size='sm'
                       variant='outline'
-                      disabled={busy}
+                      disabled={busy || t.imported}
                       onClick={() => void importTeam(t.id)}
                     >
                       <Github className='size-4' />
-                      Import
+                      {t.imported ? 'Imported' : 'Import'}
                     </Button>
                   </div>
                 ))}
