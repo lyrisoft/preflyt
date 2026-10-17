@@ -264,6 +264,104 @@ it('imports a selected GitHub team with the server verified identity', async () 
     .toEqual({ installationId: '1001', teamId: '300' })
 })
 
+it('imports every page despite a filter, skipping teams already imported', async () => {
+  await page.viewport(320, 760)
+  const original = api.request.getMockImplementation()!
+  api.request.mockImplementation(async (path: string, body?: unknown) => {
+    if (path === '/teams/github/discover')
+      return {
+        teams: Array.from({ length: 13 }, (_, i) => ({
+          id: String(300 + i),
+          name: `Remote team ${i}`,
+          parentId: i === 12 ? '300' : null,
+          imported: i === 0,
+        })),
+      }
+    return original(path, body)
+  })
+  const view = await mount()
+  await view.getByRole('button', { name: 'Import from GitHub' }).click()
+  await view.getByRole('button', { name: 'List teams' }).click()
+  await view
+    .getByRole('textbox', { name: 'Filter GitHub teams' })
+    .fill('team 1')
+  await view.getByRole('button', { name: 'Import all teams (12)' }).click()
+  await expect
+    .element(view.getByRole('status'))
+    .toHaveTextContent('Imported 12 of 12 teams.')
+  expect(
+    api.request.mock.calls
+      .filter(([path]) => path === '/teams/github/import')
+      .map(([, body]) => body)
+  ).toEqual(
+    Array.from({ length: 12 }, (_, i) => ({
+      installationId: '1001',
+      teamId: String(301 + i),
+    }))
+  )
+  await expect
+    .element(view.getByRole('button', { name: 'Import all teams (0)' }))
+    .toBeDisabled()
+  await expect.element(view.getByRole('dialog')).toBeVisible()
+  expect(
+    document.querySelector('[role="dialog"]')!.getBoundingClientRect().right
+  ).toBeLessThanOrEqual(320)
+  await page.viewport(1280, 900)
+})
+
+it('continues after a failed import and retries only teams still pending', async () => {
+  const original = api.request.getMockImplementation()!
+  let retry = false
+  let release: (() => void) | undefined
+  api.request.mockImplementation(
+    async (path: string, body?: { teamId?: string }) => {
+      if (path === '/teams/github/discover')
+        return {
+          teams: [300, 301, 302].map((id) => ({
+            id: String(id),
+            name: `Remote ${id}`,
+            parentId: null,
+          })),
+        }
+      if (path === '/teams/github/import' && body?.teamId === '300' && !retry)
+        await new Promise<void>((resolve) => {
+          release = resolve
+        })
+      if (path === '/teams/github/import' && body?.teamId === '301' && !retry)
+        throw new Error('GitHub is rate-limited. Retry later.')
+      return original(path, body)
+    }
+  )
+  const view = await mount()
+  await view.getByRole('button', { name: 'Import from GitHub' }).click()
+  await view.getByRole('button', { name: 'List teams' }).click()
+  await view.getByRole('button', { name: 'Import all teams (3)' }).click()
+  await expect.poll(() => !!release).toBe(true)
+  await expect
+    .element(view.getByRole('combobox', { name: 'GitHub organization' }))
+    .toBeDisabled()
+  await expect
+    .element(view.getByRole('button', { name: 'Import', exact: true }).first())
+    .toBeDisabled()
+  release!()
+  await expect
+    .element(view.getByRole('status'))
+    .toHaveTextContent('Imported 2 of 3 teams. 1 failed.')
+  await expect
+    .element(view.getByText('GitHub is rate-limited. Retry later.'))
+    .toBeVisible()
+  retry = true
+  await view.getByRole('button', { name: 'Import all teams (1)' }).click()
+  await expect
+    .element(view.getByRole('status'))
+    .toHaveTextContent('Imported 1 of 1 teams.')
+  expect(
+    api.request.mock.calls
+      .filter(([path]) => path === '/teams/github/import')
+      .map(([, body]) => body.teamId)
+  ).toEqual(['300', '301', '302', '301'])
+})
+
 it('keeps the editor usable at mobile width and exposes effective impact', async () => {
   await page.viewport(390, 844)
   const screen = await mount()

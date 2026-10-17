@@ -36,7 +36,7 @@ it('explores demo findings, contributors and repository details without private 
     .element(view.getByRole('heading', { name: 'northstar/platform-api' }))
     .toBeVisible()
   await expect
-    .element(view.getByText('Inspection complete', { exact: true }))
+    .element(view.getByText('Inspected', { exact: true }))
     .toBeVisible()
   await expect
     .element(view.getByText('Analysis coverage', { exact: true }))

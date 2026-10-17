@@ -15,7 +15,7 @@ export function InspectionBadge({ profile }: { profile: Profile }) {
           tone={profile.complete ? 'success' : 'warning'}
           className='cursor-pointer'
         >
-          {profile.complete ? 'Inspection complete' : 'Partial inspection'}
+          {profile.complete ? 'Inspected' : 'Partial inspection'}
         </StatusBadge>
       </PopoverTrigger>
       <PopoverContent

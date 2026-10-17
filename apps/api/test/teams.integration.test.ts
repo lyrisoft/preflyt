@@ -389,12 +389,18 @@ it("imports 12 GitHub repository associations with empty policy scope and preser
     )
   ).body;
   expect(discovered.teams[0].id).toBe("300");
+  expect(discovered.teams[0].imported).toBe(false);
+  await post(developer, "/github/discover", { installationId: "1001" }).expect(403);
   const id = (
     await post(owner, "/github/import", {
       installationId: "1001",
       teamId: "300",
     }).expect(201)
   ).body.id;
+  const rediscovered = (
+    await post(owner, "/github/discover", { installationId: "1001" }).expect(201)
+  ).body;
+  expect(rediscovered.teams[0].imported).toBe(true);
   let detail = (await get(owner, "/" + id).expect(200)).body;
   expect(detail.repositories).toHaveLength(12);
   expect(detail.repositories.every((r: any) => !r.policyScopeEnabled)).toBe(
