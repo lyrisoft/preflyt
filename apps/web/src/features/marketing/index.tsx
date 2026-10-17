@@ -154,17 +154,17 @@ export function MarketingHomepage() {
         <section className='reference-hero container'>
           <div className='hero-copy'>
             <span className='reference-label'>
-              Open source engineering assurance for GitHub
+              Self-hosted. Apache-2.0. Built for GitHub.
             </span>
             <h1>
-              Know what passed.
+              Open source
               <br />
-              See what needs attention.
+              engineering assurance.
             </h1>
             <p>
-              Bring repository health, engineering standards and verified CI
-              results into one workspace. Understand the evidence behind every
-              assessment.
+              Know what passed and what needs attention. Bring repository
+              health, approved engineering standards and verified CI evidence
+              into one self-hosted workspace.
             </p>
             <div className='reference-actions'>
               <a href={docs} className='button'>
