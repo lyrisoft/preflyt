@@ -515,11 +515,15 @@ it("unchanged team scope edits do not invalidate saved policy sources", async ()
 });
 
 it("creates one organization baseline, previews every connected repository and preserves publication approval", async () => {
+  await get(developer, "/baseline").expect(403);
+  expect((await get(owner, "/baseline").expect(200)).body).toEqual({ id: null });
   await post(developer, "/baseline", {}).expect(403);
   const baseline = (await post(owner, "/baseline", {}).expect(201)).body;
   expect((await post(reviewer, "/baseline", {}).expect(201)).body.id).toBe(
     baseline.id,
   );
+  expect((await get(owner, "/baseline").expect(200)).body.id).toBe(baseline.id);
+  expect((await get(outsider, "/baseline").expect(200)).body).toEqual({ id: null });
   const detail = (await get(owner, "/" + baseline.id).expect(200)).body;
   expect(detail.source).toBe("ORGANIZATION");
   expect(detail.repositories).toHaveLength(12);

@@ -114,3 +114,14 @@ it('shows the newest activity once per PR, keeps repository identities separate 
   expect(result.items[0].id).toBe('updated')
   expect(result.items[1].repositoryId).toBe('other')
 })
+
+it('counts pull requests with failed checks rather than individual checks', () => {
+  const html = renderToStaticMarkup(
+    <PolicyComplianceSummary
+      data={{ ...fixture(), blockedPrs: 3, eligiblePrs: 4 }}
+      period={period}
+      onEvidence={() => {}}
+    />
+  )
+  expect(html).toContain('aria-label="PRs with failed required checks: 3"')
+})

@@ -292,3 +292,27 @@ it('supports a compact badge without changing semantic colors', async () => {
       'border-transparent'
     )
 })
+
+it('renders beta release maturity as a small raised italic yellow badge', async () => {
+  expect(statusTones.beta).toBe('warning')
+  const view = await render(
+    <StatusBadge tone='info' compact>
+      beta
+    </StatusBadge>
+  )
+  await expect
+    .element(view.getByText('beta'))
+    .toHaveClass(
+      'italic',
+      'text-yellow-700',
+      'dark:text-yellow-300',
+      'bg-transparent',
+      'border-0',
+      '[&>span]:hidden',
+      'relative',
+      '-top-1.5',
+      'text-[10px]',
+      'min-h-0'
+    )
+  await expect.element(view.getByText('beta')).not.toHaveClass('text-info-text')
+})

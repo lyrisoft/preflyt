@@ -159,7 +159,12 @@ export function FindingIgnore({
             <p className='text-sm leading-relaxed text-muted-foreground'>
               {ignored
                 ? 'Reopen this finding to include it in active results.'
-                : 'Ignore this exact finding across future scans of this repository.'}
+                : 'Hide matching findings from active results in this repository, including future scans.'}
+            </p>
+            <p className='text-xs leading-relaxed text-muted-foreground'>
+              A finding matches only when its source, category, rule, file, line
+              range and message are unchanged. Moving code can produce a new
+              finding. Saved assessments and merge rules are unchanged.
             </p>
             {data.canManage && (
               <form

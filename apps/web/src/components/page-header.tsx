@@ -14,6 +14,7 @@ const headerTones: Record<SurfaceTone, string> = {
 export function PageHeader({
   title,
   headingLevel = 1,
+  titleBadge,
   description,
   section,
   icon,
@@ -24,6 +25,7 @@ export function PageHeader({
   children,
 }: {
   title: string
+  titleBadge?: ReactNode
   headingLevel?: 1 | 2
   description?: string
   section?: string
@@ -52,9 +54,18 @@ export function PageHeader({
               {section}
             </p>
           )}
-          <Heading className='text-xl font-semibold tracking-tight break-words sm:text-2xl'>
-            {title}
-          </Heading>
+          <div
+            className={
+              titleBadge
+                ? 'flex flex-wrap items-center gap-x-2 gap-y-1'
+                : undefined
+            }
+          >
+            <Heading className='min-w-0 text-xl font-semibold tracking-tight break-words sm:text-2xl'>
+              {title}
+            </Heading>
+            {titleBadge}
+          </div>
           {description && (
             <p className='mt-1 max-w-[72ch] text-sm leading-relaxed text-muted-foreground'>
               {description}

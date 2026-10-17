@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { discoverRepositoryProfile } from '../src/github/repository-profile.js'
 import { GitHubService } from '../src/github/github.service.js'
 import type { GitHubProviderService } from '../src/github/github-provider.service.js'
 import type { PrismaService } from '../src/prisma/prisma.service.js'
@@ -182,4 +183,23 @@ describe('repository inventory technology projection', () => {
       syncState: 'SYNCED',
     })
   })
+})
+
+it('projects discovered Terraform and YAML file hints into inventory stack without rescanning content', async () => {
+  const report = discoverRepositoryProfile({
+    sourceSha: profile.sourceSha,
+    treeSha: 'b'.repeat(40),
+    branch: 'main',
+    fullName: 'fixture/iac',
+    complete: true,
+    warnings: [],
+    files: [
+      { path: 'main.tf', sha: 'c'.repeat(40), size: 1 },
+      { path: 'gitops/app.yml', sha: 'd'.repeat(40), size: 1 },
+    ],
+  })
+  const { service } = setup([row(true, [{ ...profile, report }])])
+  expect(
+    (await service.repositoryOverview()).repositories[0].technologies
+  ).toEqual(['Terraform', 'YAML'])
 })

@@ -3,6 +3,7 @@ import { AppHeader } from '@/components/layout/app-header'
 import { Main } from '@/components/layout/main'
 import { PageHeader } from '@/components/page-header'
 import { PageHelpDrawer } from '@/components/page-help-drawer'
+import { StatusBadge } from '@/components/status-badge'
 import { useNavigationSession } from '../workspace/navigation-session'
 import { SkillsCatalogue } from './skills-catalogue'
 
@@ -42,6 +43,7 @@ export function SkillsPage() {
         <div className='space-y-6'>
           <PageHeader
             title='Skills'
+            titleBadge={<StatusBadge tone='warning'>beta</StatusBadge>}
             description='Instructions for AI reviews and workflow editing.'
             section='Intelligence'
             icon={Sparkles}

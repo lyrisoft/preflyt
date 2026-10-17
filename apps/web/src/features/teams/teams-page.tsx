@@ -16,6 +16,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
@@ -178,6 +179,7 @@ export function TeamsWorkspace({
   const [id, setId] = useState<string | null>(null)
   const [editor, setEditor] = useState<Detail | 'new' | null>(null)
   const [importing, setImporting] = useState(false)
+  const [baselineSetup, setBaselineSetup] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false)
@@ -232,12 +234,29 @@ export function TeamsWorkspace({
     setBusy(true)
     setError('')
     try {
+      const result = await governanceRequest<{ id: string | null }>(
+        '/teams/baseline'
+      )
+      if (result.id) setId(result.id)
+      else setBaselineSetup(true)
+    } catch (error) {
+      setError((error as Error).message)
+      toast.error((error as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+  async function createBaseline() {
+    setBusy(true)
+    setError('')
+    try {
       const result = await governanceRequest<{ id: string }>(
         '/teams/baseline',
         {}
       )
+      setBaselineSetup(false)
       setId(result.id)
-      toast.success('Organization-wide requirements ready')
+      toast.success('Organization scope ready. Choose standards next.')
       await refresh()
     } catch (error) {
       setError((error as Error).message)
@@ -313,7 +332,7 @@ export function TeamsWorkspace({
               onClick={() => void openBaseline()}
             >
               <ShieldCheck className='size-4' />
-              Organization-wide requirements
+              Manage organization-wide standards
             </Button>
           )}
           {canManage && (
@@ -524,6 +543,43 @@ export function TeamsWorkspace({
           }}
         />
       )}
+      <Dialog
+        open={baselineSetup}
+        onOpenChange={(open) => {
+          if (!busy) setBaselineSetup(open)
+        }}
+      >
+        <DialogContent showCloseButton={!busy}>
+          <DialogHeader>
+            <DialogTitle>Include all selected repositories?</DialogTitle>
+            <DialogDescription>
+              This approves your organization's currently selected repositories
+              for organization-wide standards. No standards are assigned, no
+              policies are published, and no GitHub rules are activated. Choose
+              and review standards next.
+            </DialogDescription>
+          </DialogHeader>
+          {error && (
+            <p role='alert' className='text-sm text-destructive'>
+              {error}
+            </p>
+          )}
+          <DialogFooter>
+            <Button
+              variant='outline'
+              disabled={busy}
+              onClick={() => setBaselineSetup(false)}
+            >
+              Cancel
+            </Button>
+            <Button disabled={busy} onClick={() => void createBaseline()}>
+              {busy
+                ? 'Including repositories…'
+                : 'Include repositories and continue'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {importing && options.data && (
         <ImportTeams
           options={options.data}
