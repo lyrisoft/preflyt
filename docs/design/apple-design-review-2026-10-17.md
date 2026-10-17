@@ -97,3 +97,7 @@ Other observations below are source-backed opportunities, not measured frame-rat
 4. Profile sidebar/collapsible transitions before changing their architecture.
 
 Keep Preflyt's enterprise visual language. Do not add translucent panels throughout, replace its fonts, animate every card, or add drag gestures to normal dialogs merely to resemble a native Apple app. The useful adoption is better feedback, clarity, accessibility and control.
+
+## Implementation follow-up
+
+The user subsequently authorized these improvements on 2026-10-17. The implementation, local verification and Compose rollout are recorded in [Apple Design acceptance](../acceptance/2026-10-17-apple-design-improvements.md). The review above remains the historical baseline.

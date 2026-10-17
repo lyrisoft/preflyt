@@ -115,6 +115,9 @@ body:has(.marketing-site) {
 .marketing-site .brand-light {
   display: block;
 }
+.marketing-site .header .brand {
+  width: 176px;
+}
 .marketing-site .desktop-nav {
   display: flex;
   align-items: center;
@@ -1190,6 +1193,9 @@ body:has(.marketing-site) {
   .marketing-site .brand {
     width: 96px;
   }
+  .marketing-site .header .brand {
+    width: 144px;
+  }
   .marketing-site .nav-actions {
     gap: 10px;
   }
@@ -1698,6 +1704,21 @@ body:has(.marketing-site) {
 .marketing-site .reference-community {
   padding-block: var(--website-section-space);
   border-bottom: 1px solid var(--website-line);
+}
+@media (max-width: 360px) {
+  .marketing-site .header .brand {
+    width: 136px;
+  }
+  .marketing-site .nav-actions {
+    gap: 6px;
+  }
+  .marketing-site .nav-actions .button.compact {
+    padding-inline: 8px;
+    font-size: 0.75rem;
+  }
+  .marketing-site .nav-actions .button.compact .icon {
+    display: none;
+  }
 }
 .marketing-site .reference-community h2 {
   font-size: var(--website-heading-section);

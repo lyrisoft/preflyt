@@ -8,6 +8,7 @@ import {
   RotateCcw,
 } from 'lucide-react'
 import { API_BASE_URL } from '@/lib/api'
+import { localExpiry, localExpiryDescription } from '@/lib/local-expiry'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -90,6 +91,7 @@ export function FindingIgnore({
   })
   const data = query.isError ? undefined : query.data
   const ignored = data?.state === 'IGNORED'
+  const parsedExpiry = expiry ? localExpiry(expiry) : null
   if (data && !data.eligible) return null
   return (
     <Card className='gap-0 overflow-hidden' aria-labelledby={`${id}-title`}>
@@ -168,21 +170,26 @@ export function FindingIgnore({
                   if (save.isPending || !reason.trim()) return
                   let expiresAt: string | null = null
                   if (!ignored && expiryMode !== 'never') {
-                    const date =
-                      expiryMode === 'custom'
-                        ? new Date(expiry)
-                        : new Date(
-                            Date.now() +
-                              Number(expiryMode) * 24 * 60 * 60 * 1000
-                          )
-                    if (
-                      !Number.isFinite(date.getTime()) ||
-                      date.getTime() <= Date.now()
-                    ) {
-                      setExpiryError('Choose a future date and time.')
-                      return
+                    if (expiryMode === 'custom') {
+                      const parsed = localExpiry(expiry)
+                      if (!parsed.date) {
+                        setExpiryError(parsed.error)
+                        return
+                      }
+                      expiresAt = parsed.date.toISOString()
+                    } else {
+                      const date = new Date(
+                        Date.now() + Number(expiryMode) * 24 * 60 * 60 * 1000
+                      )
+                      if (
+                        !Number.isFinite(date.getTime()) ||
+                        date.getTime() <= Date.now()
+                      ) {
+                        setExpiryError('Choose a future date and time.')
+                        return
+                      }
+                      expiresAt = date.toISOString()
                     }
-                    expiresAt = date.toISOString()
                   }
                   setExpiryError(null)
                   save.mutate({
@@ -279,16 +286,28 @@ export function FindingIgnore({
                             type='datetime-local'
                             className='text-sm font-normal [color-scheme:light] dark:[color-scheme:dark]'
                             aria-invalid={!!expiryError}
-                            aria-describedby={
-                              expiryError ? `${id}-expiry-error` : undefined
-                            }
+                            aria-describedby={`${id}-expiry-preview${expiryError ? ` ${id}-expiry-error` : ''}`}
                             required
                             value={expiry}
+                            onBlur={() =>
+                              setExpiryError(localExpiry(expiry).error)
+                            }
                             onChange={(event) => {
-                              setExpiry(event.target.value)
-                              setExpiryError(null)
+                              const value = event.target.value
+                              setExpiry(value)
+                              setExpiryError(
+                                value ? localExpiry(value).error : null
+                              )
                             }}
                           />
+                          <p
+                            id={`${id}-expiry-preview`}
+                            className='text-xs leading-relaxed text-muted-foreground'
+                          >
+                            {parsedExpiry?.date
+                              ? localExpiryDescription(parsedExpiry.date)
+                              : `Time zone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}.`}
+                          </p>
                         </div>
                       )}
                       {expiryError && (
@@ -320,7 +339,9 @@ export function FindingIgnore({
                     disabled={
                       save.isPending ||
                       !reason.trim() ||
-                      (!ignored && expiryMode === 'custom' && !expiry)
+                      (!ignored &&
+                        expiryMode === 'custom' &&
+                        (!expiry || !!expiryError))
                     }
                   >
                     {save.isPending ? (

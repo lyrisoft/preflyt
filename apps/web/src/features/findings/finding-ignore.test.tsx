@@ -179,12 +179,18 @@ it('validates a custom date without sending an invalid decision', async () => {
     .element(page.getByRole('button', { name: 'Ignore finding', exact: true }))
     .toBeDisabled()
   await page.getByLabelText('Date and time (local)').fill('2020-01-01T12:00')
-  await page
-    .getByRole('button', { name: 'Ignore finding', exact: true })
-    .click()
   await expect
     .element(page.getByRole('alert'))
     .toHaveTextContent('Choose a future date and time.')
+  await expect
+    .element(page.getByRole('button', { name: 'Ignore finding', exact: true }))
+    .toBeDisabled()
+  await page.getByLabelText('Date and time (local)').fill('2099-01-01T12:00')
+  await expect.element(page.getByRole('alert')).not.toBeInTheDocument()
+  await expect.element(page.getByText(/Reopens.*2099/)).toBeVisible()
+  await expect
+    .element(page.getByRole('button', { name: 'Ignore finding', exact: true }))
+    .toBeEnabled()
   expect(
     fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')
   ).toHaveLength(0)

@@ -31,7 +31,7 @@ export function TablePagination({
       aria-label='Table pagination'
       className='flex flex-wrap items-center justify-between gap-3 border-t px-3 py-3 text-xs text-muted-foreground'
     >
-      <div className='flex items-center gap-2'>
+      <div className='flex flex-wrap items-center gap-2'>
         <span>Rows per page</span>
         <Select
           value={String(pageSize)}
