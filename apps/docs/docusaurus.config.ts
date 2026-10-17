@@ -11,7 +11,7 @@ const repository = 'https://github.com/lyrisoft/preflyt'
 
 const config: Config = {
   title: 'Preflyt',
-  tagline: 'Engineering confidence before production',
+  tagline: 'Open source engineering assurance for GitHub',
   favicon: 'img/brand/favicon.svg',
   url,
   baseUrl,
@@ -33,6 +33,7 @@ const config: Config = {
     },
   ],
   headTags: [
+    { tagName: 'meta', attributes: { name: 'keywords', content: 'open source engineering assurance, open source engineering standards, repository health, CI evidence, self-hosted, GitHub, Apache-2.0' } },
     { tagName: 'link', attributes: { rel: 'preconnect', href: 'https://fonts.googleapis.com' } },
     {
       tagName: 'link',
