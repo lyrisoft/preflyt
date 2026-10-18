@@ -5,11 +5,29 @@ import {
   rateDelay,
 } from '../src/github/github-rate-limit.js'
 import { GitHubProviderService } from '../src/github/github-provider.service.js'
+import { Logger } from '@nestjs/common'
 afterEach(() => {
   vi.unstubAllGlobals()
   vi.unstubAllEnvs()
+  vi.restoreAllMocks()
 })
 describe('GitHub rate limit handling', () => {
+  it('logs upstream budget evidence once without logging credentials or response bodies', async () => {
+    const log = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => {})
+    const limiter = new GitHubRequestLimiter()
+    const action = vi.fn(async () => new Response('secret-source-body', { status: 403, headers: {
+      'x-ratelimit-remaining': '0', 'x-ratelimit-limit': '5000',
+      'x-ratelimit-reset': String(Math.ceil(Date.now() / 1000) + 60),
+    } }))
+    await expect(limiter.run('installation:123', action, true, 'contents')).rejects.toBeInstanceOf(GitHubRateLimitError)
+    await expect(limiter.run('installation:123', action, true, 'contents')).rejects.toBeInstanceOf(GitHubRateLimitError)
+    expect(log).toHaveBeenCalledTimes(1)
+    expect(log).toHaveBeenCalledWith(expect.objectContaining({ event: 'github.rate_limit', budget: 'installation',
+      operation: 'contents', kind: 'primary', remaining: 0, limit: 5000 }))
+    expect(JSON.stringify(log.mock.calls)).not.toContain('installation:123')
+    expect(JSON.stringify(log.mock.calls)).not.toContain('secret-source-body')
+    expect(action).toHaveBeenCalledTimes(1)
+  })
   it('rechecks a shared cooldown established by another replica while a slot waited', async () => {
     const cache = {
       githubPermit: async () => 1,

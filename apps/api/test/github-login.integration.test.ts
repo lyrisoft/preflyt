@@ -364,7 +364,9 @@ it('caps Owner repository reads to provider evidence and fails closed on expired
   )
   await expect(
     access.repositoryScope(current.identityId, current.organizationId),
-  ).rejects.toThrow('Provider unavailable')
+  ).rejects.toThrow('verification is pending')
+  expect(provider.verify.mock.calls.length).toBe(calls)
+  await userAccess.reconcile()
   expect((await auth.currentSession(session.sessionToken)).authenticated).toBe(
     true,
   )
@@ -466,6 +468,9 @@ it('syncs the GitHub directory without granting access and reuses scoped snapsho
     preflytSession: current,
     headers: { origin: 'http://localhost:5173' },
   } as any
+  await expect(controller.githubDirectory(req, 'dev', '1')).rejects.toThrow('being synchronized')
+  expect(provider.members).not.toHaveBeenCalled()
+  await userAccess.reconcile()
   const snapshot = await controller.githubDirectory(req, 'dev', '1')
   expect(snapshot).toMatchObject({
     total: 1,
@@ -495,6 +500,7 @@ it('filters granted GitHub members before pagination and makes revoked members a
     preflytSession: current,
     headers: { origin: 'http://localhost:5173' },
   } as any
+  await controller.syncGitHubDirectory(req)
   expect(await controller.githubDirectory(req, '', '1', 'true')).toMatchObject({
     total: 1,
     members: [{ login: 'developer' }],

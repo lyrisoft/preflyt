@@ -1,22 +1,43 @@
-# Redis metadata cache
+# Redis cache and GitHub coordination
 
-Set `REDIS_URL=redis://127.0.0.1:6379/0` and a unique `REDIS_CACHE_PREFIX=preflyt:development:cache` in `apps/api/.env`. Restart the API after changing environment settings. The existing local Valkey service is Redis-compatible. An unset URL disables caching.
+Set the same `REDIS_URL` and deployment-specific `REDIS_CACHE_PREFIX` in the API and worker. Docker Compose supplies both and waits for cache health. For terminal development, configure both processes explicitly. Use authenticated TLS (`rediss://`) for remote services.
 
-Docker Compose passes the optional URL from `deploy/.env`; use an address reachable from the API container, such as `redis://host.docker.internal:6379/0` on Docker Desktop, or an external service DNS name. Use authenticated TLS (`rediss://`) for remote services. Preflyt does not provision or alter that service.
+Use a dedicated Redis/Valkey service with `noeviction`. Metadata, refresh leases and request-budget counters share this service; eviction must not remove active coordination. Keep the persistent BullMQ queue separate. Monitor memory and Redis availability. Redis commands have 500 ms limits and a five-second reconnect cooldown. Configured Redis failure pauses new coordinated GitHub requests instead of issuing uncoordinated upstream traffic. Authorized PostgreSQL views remain readable. Without a configured URL, single-process development uses in-memory coordination only; this is unsuitable for multiple API/worker processes.
 
-GitHub installation repository metadata is cached for 30 seconds, scoped by deployment prefix, App ID and installation ID. Names, branches and inventory additions/removals can lag by that interval. The existing Refresh button requests `GET /github/repositories?refresh=true` to bypass cached inventory. Connecting/reconnecting or detecting installation revocation invalidates its entry. Only owned keys are deleted; no database flush commands are used.
+## Shared display refreshes
 
-The dashboard loads `GET /github/repositories/overview` from the last synced PostgreSQL state, without waiting for GitHub or Redis. Current selection and active-installation flags come from PostgreSQL. This display snapshot is not proof of current upstream access; use the repositories page to refresh it.
+Ordinary branch, workflow, ruleset and health-freshness reads use PostgreSQL snapshots. Missing data queues one durable refresh and returns `GITHUB_SYNC_PENDING` with a retry time. Saved data stays readable during a refresh or GitHub cooldown, subject to current local authorization. Refresh buttons queue work; they do not bypass a cooldown. Finding source reads similarly queue background capture and retain only redacted excerpts.
 
-Every repository-management listing still checks installation status live. Enabling repository selection checks current upstream repository access; profile access/discovery retains its existing live verification. Selection state and session/role information are read from PostgreSQL and never cached. Cached entries contain no GitHub tokens or credentials. The workflow editor caches the selected workflow YAML as described below; other repository source files are not cached. GitHub verification failures do not serve stale responses.
+Run the worker alongside the API. It refreshes recently viewed snapshots after five minutes, claims jobs with database leases, and fences publication against access changes and newer webhook events. `GITHUB_DISPLAY_REFRESH_BATCH` limits each pass (default 10, range 1–50). Snapshots unused for seven days are removed. Freshness indicators use the actual saved observation time, never the time a page opened.
 
-Redis operations have 500 ms connection/command limits and a five-second reconnect cooldown. Missing, expired, invalid or oversized (over 2 MiB) cache entries fetch fresh metadata. Redis failure falls back to the upstream source; it does not change API authentication or readiness. Configure cache memory limits and an eviction policy on a dedicated cache instance; keep future durable BullMQ queues on separate storage with a no-eviction policy.
+Signed push, branch create/delete, repository, ruleset and workflow-run events queue refreshes for connected repositories. Enable `GITHUB_EVENTS_ENABLED` and configure the webhook secret and URL. Existing GitHub Apps must enable the corresponding event subscriptions; changing the manifest does not update installed Apps. Periodic reconciliation covers missed events. Replayed deliveries do not multiply work or reset throttling deadlines.
 
-Run the scoped tests from the repository: `pnpm --filter @preflyt/api exec vitest run test/redis-cache.integration.test.ts test/github.integration.test.ts`. Redis tests use unique keys on the local service, delete only those keys, and require it to be reachable. Set `TEST_REDIS_URL` to override its default `redis://127.0.0.1:6379/0`.
+GitHub-linked user access uses unexpired local evidence, with background renewal near expiry. Missing or expired evidence queues verification and blocks access until verification succeeds. Local role, repository selection, active installation and access revision checks still run on every read. Access-related webhooks invalidate evidence. Saved data never extends an expired authorization grant.
 
+Worker upstream reads share Redis refresh leases and bounded installation verification (`GITHUB_ACCESS_CACHE_SECONDS`, default 30, range 5–60 seconds). Keys include the connection, installation, repository and access revision. Installation GET requests use ETags where available; a successful `304` reuses the saved body and refunds the primary-budget reservation only in the matching reset window. Conditional bodies are credential-scoped, size-limited and retained for one hour; token values are not stored in Redis.
 
-## Workflow editor
+Writes verify upstream access. Setup PR creation rechecks the source and branch against the reviewed base commit. Display snapshots never authorize a merge or supply execution evidence.
 
-The GitHub workflow list and selected workflow YAML are cached for five minutes in the existing Redis cache. Entries are scoped by deployment prefix, GitHub App, installation, repository and access revision; YAML additionally includes the workflow and branch. Current installation/repository access is checked before any cache hit is returned. Invalid entries fetch fresh data. Redis failure falls back to GitHub.
+## Budget-aware scheduling
 
-The browser keeps YAML fresh for five minutes and retains inactive entries for 30 minutes, scoped to the signed-in identity, organization, repository and policy. Reopening the editor or switching back to a previously selected workflow reuses that content. Refresh bypasses both server caches and reloads the workflow list and selected YAML, while keeping local edits. Creating a setup PR always rechecks the current source and branch against the reviewed base commit. Execution verification and assessment outcomes are never sourced from these display caches.
+The limiter records GitHub limit, remaining and reset headers per existing authentication scope. Atomic reservations prevent replicas from spending the same observed remaining request. Late responses cannot raise remaining budget within a reset window. Cooldowns and pacing use Redis time; app and installation scopes are isolated.
+
+Compose sets `GITHUB_REQUEST_PRIORITY=interactive` for the API and `background` for the worker; the terminal worker also defaults to background. Background calls spread their available budget over the remaining window and stop at the interactive reserve (`GITHUB_INTERACTIVE_RESERVE_PERCENT`, default 10, bounded to 1–50%). Interactive calls can spend that reserve. Durable display/access refreshes, inventory and PR sync, pipeline processing, readiness automation, source capture, pre-inference AI reviews and AI feedback retain pending work during budget deferrals. Native preparation retains its lease until the retry time, subject to its overall execution deadline. BullMQ lifecycle delivery is delayed without spending a retry attempt. Short waits are bounded; long deferrals return the retry timestamp. Once AI inference has started, it is not automatically replayed; review expiry and execution safety deadlines still apply. Secondary GitHub restrictions still take precedence.
+
+Before headers are known, calls use conservative 250 ms pacing. Restarting nonpersistent Redis loses observations and leases, so avoid routine restarts under load. Other applications consuming the same GitHub budget and secondary limits can still cause throttling; the reserve is not a guarantee of unlimited capacity. Observe `github.rate_limit` logs without tokens, raw URLs or source contents.
+
+## Local verification
+
+Run the focused concurrency suites against an isolated service:
+
+```sh
+TEST_REDIS_URL=redis://127.0.0.1:16391/0 pnpm --filter @preflyt/api exec vitest run test/github-coordination.integration.test.ts test/redis-cache.integration.test.ts
+```
+
+Tests create unique prefixes and delete only their own keys. They cover shared refreshes, fencing, bounded verification, revocation, atomic budgets, installation isolation and coordination outages.
+
+## Refresh progress and recovery
+
+The workflow setup page checks saved data automatically at the server's `retryAt` time. These checks never set `refresh=true`, never replay a write, and stop when data arrives or an unrelated error occurs. Polling pauses while the tab is in the background. Loading is shown as a status rather than an error; failed refreshes and delayed workers have distinct messages.
+
+Cold reads report `GITHUB_SYNC_PENDING` while queued or leased, `GITHUB_RATE_LIMITED` during a provider cooldown, and `GITHUB_SYNC_FAILED` after a refresh failure. If a due job has no active lease and has not progressed for `GITHUB_DISPLAY_STALL_SECONDS` (default 180; range 30–900), the API reports `GITHUB_SYNC_STALLED`. This detects missing progress, not a confirmed worker outage. Administrators should check worker health, migrations, shared database/configuration and `github.display_refresh_failed` log entries. Repeated page checks do not reset the job's retry deadline.

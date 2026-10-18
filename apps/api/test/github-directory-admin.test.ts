@@ -14,6 +14,7 @@ const installation = {
   accessRevision: 1,
 }
 const db = {
+  gitHubAccessRefresh: {upsert: vi.fn()},
   gitHubUserAccount: { findUnique: vi.fn() },
   gitHubOrganizationLink: { findUnique: vi.fn() },
   gitHubInstallation: { findFirst: vi.fn(), findUnique: vi.fn() },

@@ -1,4 +1,7 @@
+import { GitHubDisplayReads, type DisplayOperation } from './github-display-read.js'
+import { conditionalGitHubRead } from './github-conditional-read.js'
 import { repositorySnapshotFromTree } from './repository-snapshot.js'
+import { GitHubSharedRead } from './github-shared-read.js'
 import { inlineIssues, maxInlineIssues, sameInlineIssue, type FeedbackFinding } from '../intelligence/pr-review-feedback.js'
 import { configurationValue } from '../configuration/runtime-configuration.js'
 import { sameReviewPr, prReviewSource } from '../intelligence/pr-review-context.js'
@@ -17,6 +20,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  NotFoundException,
   ServiceUnavailableException,
   Inject,
   Optional,
@@ -63,6 +67,7 @@ export class GitHubProviderService {
     this.cancellation.abort()
   }
   private readonly limiter: GitHubRequestLimiter
+  private readonly sharedRead: GitHubSharedRead
   private readonly tokens = new Map<
     string,
     { token: string; expiresAt: number }
@@ -74,6 +79,7 @@ export class GitHubProviderService {
     @Optional() @Inject(PrismaService) private readonly prisma?: PrismaService,
   ) {
     this.limiter = new GitHubRequestLimiter(cache)
+    this.sharedRead = new GitHubSharedRead(cache)
   }
   private async installationToken(
     installationId: bigint,
@@ -127,21 +133,49 @@ export class GitHubProviderService {
           },
         }),
       route.startsWith('GET '),
+      route === 'GET /app/installations/{installation_id}' ? 'installation.verify'
+        : route === 'POST /app/installations/{installation_id}/access_tokens' ? 'token.create' : 'other',
     )
   }
   private apiFetch(scope: string, url: string | URL, options: RequestInit) {
-    return this.limiter.run(
+    return conditionalGitHubRead(this.cache, scope, url, options, conditionalOptions => this.limiter.run(
       scope,
       () =>
         fetch(url, {
-          ...options,
+          ...conditionalOptions,
           signal: options.signal
             ? AbortSignal.any([options.signal, this.cancellation.signal])
             : this.cancellation.signal,
         }),
       !options.method || options.method === 'GET',
-    )
+      /\/contents\//.test(new URL(url).pathname) ? 'contents'
+        : /\/branches\//.test(new URL(url).pathname) ? 'branches'
+        : /\/actions\//.test(new URL(url).pathname) ? 'actions'
+        : /^\/repositories\/\d+$/.test(new URL(url).pathname) ? 'repository' : 'other',
+    ))
   }
+
+  private displayReads?: GitHubDisplayReads
+  private displayStore() {
+    if (!this.prisma) throw new ServiceUnavailableException('Saved GitHub data is unavailable')
+    return this.displayReads ??= new GitHubDisplayReads(this.prisma, () => this.connectionFingerprint(), async (operation, installation, repository, args) => {
+      switch (operation) {
+        case 'branches': return this.listRepositoryBranches(installation, repository, args[0], true)
+        case 'rulesets': return this.listRepositoryRulesets(installation, repository, args[0], true, args[1])
+        case 'ruleset': return this.getRepositoryRuleset(installation, repository, args[0], true)
+        case 'insights': return this.readRulesetInsights(installation, repository, args[0], args[1])
+        case 'workflows': return this.discoverPipelineWorkflows(installation, repository, true)
+        case 'workflow': return this.readPipelineWorkflow(installation, repository, args[0], args[1], true)
+        case 'standalone': return this.readStandaloneWorkflowSource(installation, repository, args[0], true)
+        case 'head': return {head: await this.verifyReadinessBranch(installation, repository, args[0]), checkedAt: new Date().toISOString()}
+        default: throw new BadRequestException('Unsupported GitHub display request')
+      }
+    })
+  }
+  savedDisplay<T>(operation: DisplayOperation, installation: bigint, repository: bigint, args: any[], refresh = false): Promise<T> {
+    return this.displayStore().read<T>(operation, installation, repository, args, refresh)
+  }
+  refreshDisplayReads() { return this.displayStore().reconcile() }
 
   createInstallationUrl(state: string) {
     return this.requireApp().getInstallationUrl({ state })
@@ -349,7 +383,7 @@ export class GitHubProviderService {
       )
       if ([401, 403, 404].includes(response.status))
         for (const key of this.tokens.keys())
-          if (key.startsWith(`${installationId}:`)) this.tokens.delete(key)
+          if (key.startsWith(`${this.connectionFingerprint()}:${installationId}:`)) this.tokens.delete(key)
       if (response.status === 404) throw new GitHubInstallationRevokedError()
       if (!response.ok)
         throw new Error('Unable to list GitHub installation repositories')
@@ -410,30 +444,24 @@ export class GitHubProviderService {
     ) => Promise<T>,
     refresh = false,
   ) {
-    // Even cached responses require current installation and repository access.
+    // Display reads use bounded verification; explicit refreshes require upstream proof.
     const reader = await this.openRepository(
       installationId,
       repositoryId,
       'metadata',
+      undefined, 60_000, !refresh,
     )
     const access = await this.prisma?.gitHubInstallation.findUnique({
       where: { id: installationId },
       select: { accessRevision: true },
     })
-    const key = `github-rulesets:v1:${this.requireAppId()}:${installationId}:${repositoryId}:${access?.accessRevision ?? 0}:${suffix}`
-    const cached = refresh ? undefined : await this.cache?.get(key)
-    if (cached) {
-      try {
-        return JSON.parse(cached) as T
-      } catch {
-        /* Re-read malformed cache. */
-      }
-    }
-    return this.limiter.singleFlight(`${key}:${refresh ? 'refresh' : 'read'}`, async () => {
-      const result = await load(reader)
-      await this.cache?.set(key, JSON.stringify(result), 300)
-      return result
-    })
+    const fingerprint = this.connectionFingerprint()
+    const key = `github-rulesets:v2:${fingerprint}:${installationId}:${repositoryId}:${access?.accessRevision ?? 0}:${suffix}`
+    const value = await this.sharedRead.read(key, 300, refresh, () => load(reader), value => !!value && typeof value === 'object')
+    const current = await this.prisma?.gitHubInstallation.findUnique({ where: { id: installationId }, select: { active: true, accessRevision: true } })
+    if (current?.active === false || current?.accessRevision !== access?.accessRevision || fingerprint !== this.connectionFingerprint()) throw new ForbiddenException('GitHub access changed. Refresh and try again.')
+    await reader.assertAccess?.()
+    return value
   }
   async listRepositoryRulesets(
     installationId: bigint,
@@ -470,6 +498,7 @@ export class GitHubProviderService {
     installationId: bigint,
     repositoryId: bigint,
     id: number,
+    refresh = false,
   ) {
     if (!Number.isSafeInteger(id) || id < 1)
       throw new BadRequestException('Invalid ruleset ID')
@@ -486,6 +515,7 @@ export class GitHubProviderService {
           fetchedAt: new Date().toISOString(),
         }
       },
+      refresh,
     )
   }
 
@@ -493,35 +523,24 @@ export class GitHubProviderService {
     installationId: bigint,
     repositoryId: bigint,
     page = 1,
+    refresh = false,
   ) {
     if (!Number.isInteger(page) || page < 1 || page > 1000)
       throw new BadRequestException('Invalid branch list page')
-    // Recheck upstream repository access before returning even cached branch names.
-    const { metadata, request } = await this.openRepository(
+    // Local access revisions are checked even when the short upstream proof is reusable.
+    const { metadata, request, assertAccess } = await this.openRepository(
       installationId,
       repositoryId,
+      'contents', undefined, 60_000, !refresh,
     )
     const access = await this.prisma?.gitHubInstallation.findUnique({
       where: { id: installationId },
       select: { accessRevision: true },
     })
-    const key = `github-branches:${this.requireAppId()}:${installationId}:${repositoryId}:${access?.accessRevision ?? 0}:${page}`
-    const cached = await this.cache?.get(key)
-    if (cached) {
-      try {
-        const value = JSON.parse(cached)
-        if (
-          Array.isArray(value.branches) &&
-          value.branches.length <= 100 &&
-          value.branches.every((name: unknown) => validProfileBranch(name)) &&
-          typeof value.hasMore === 'boolean'
-        )
-          return value as { branches: string[]; hasMore: boolean }
-      } catch {
-        /* An invalid cache entry is replaced from GitHub. */
-      }
-    }
-    return this.limiter.singleFlight(key, async () => {
+    const fingerprint = this.connectionFingerprint()
+    const key = `github-branches:v2:${fingerprint}:${installationId}:${repositoryId}:${access?.accessRevision ?? 0}:${page}`
+    const valid = (value: {branches: string[]; hasMore: boolean}) => !!value && Array.isArray(value.branches) && value.branches.length <= 100 && value.branches.every(validProfileBranch) && typeof value.hasMore === 'boolean'
+    const result = await this.sharedRead.read(key, 300, refresh, async () => {
       const rows = await request<{ name: string }[]>(
         `/repos/${encodeURIComponent(metadata.owner.login)}/${encodeURIComponent(metadata.name)}/branches?per_page=100&page=${page}`,
       )
@@ -537,9 +556,12 @@ export class GitHubProviderService {
         branches: [...new Set(rows.map((row) => row.name))],
         hasMore: rows.length === 100 && page < 1000,
       }
-      await this.cache?.set(key, JSON.stringify(result), 300)
       return result
-    })
+    }, valid)
+    const current = await this.prisma?.gitHubInstallation.findUnique({ where: { id: installationId }, select: { active: true, accessRevision: true } })
+    if (current?.active === false || current?.accessRevision !== access?.accessRevision || fingerprint !== this.connectionFingerprint()) throw new ForbiddenException('GitHub access changed. Refresh and try again.')
+    await assertAccess?.()
+    return result
   }
 
   async readRepositorySnapshot(
@@ -604,29 +626,17 @@ export class GitHubProviderService {
     load: () => Promise<T>,
     valid: (value: T) => boolean,
   ): Promise<T> {
-    if (!this.cache) return load()
     const access = await this.prisma?.gitHubInstallation.findUnique({
       where: { id: installationId },
       select: { accessRevision: true },
     })
-    const key = `github-pipeline:v1:${this.requireAppId()}:${installationId}:${repositoryId}:${access?.accessRevision ?? 0}:${suffix}`
-    const cached = refresh ? null : await this.cache.get(key)
-    if (cached) {
-      try {
-        const value = JSON.parse(cached) as T
-        if (valid(value)) return value
-      } catch {
-        // Invalid cache entries are replaced with verified upstream data.
-      }
-    }
-    return this.limiter.singleFlight(
-      `${key}:${refresh ? 'refresh' : 'read'}`,
-      async () => {
-        const result = await load()
-        await this.cache!.set(key, JSON.stringify(result), 300)
-        return result
-      },
-    )
+    const fingerprint = this.connectionFingerprint()
+    const key = `github-pipeline:v2:${fingerprint}:${installationId}:${repositoryId}:${access?.accessRevision ?? 0}:${suffix}`
+    const value = await this.sharedRead.read(key, 300, refresh, load, valid)
+    const current = await this.prisma?.gitHubInstallation.findUnique({ where: { id: installationId }, select: { active: true, accessRevision: true } })
+    if (current?.active === false || current?.accessRevision !== access?.accessRevision || fingerprint !== this.connectionFingerprint())
+      throw new ForbiddenException('GitHub access changed. Refresh and try again.')
+    return value
   }
 
   async discoverPipelineWorkflows(
@@ -638,8 +648,9 @@ export class GitHubProviderService {
       installationId,
       repositoryId,
       'actions',
+      undefined, 60_000, !refresh,
     )
-    return this.readPipelineCache(
+    const result = await this.readPipelineCache(
       installationId,
       repositoryId,
       'workflows',
@@ -685,6 +696,29 @@ export class GitHubProviderService {
             /^\.github\/workflows\/[a-zA-Z0-9_-]+\.ya?ml$/.test(w.path),
         ),
     )
+    await reader.assertAccess?.()
+    return result
+  }
+
+  /** Branch source for a new workflow; does not require an existing workflow ID. */
+  async readStandaloneWorkflowSource(installationId: bigint, repositoryId: bigint, branch: string, refresh = false) {
+    branch = branch.replace(/^refs\/heads\//, '')
+    if (!validProfileBranch(branch)) throw new BadRequestException('Choose an existing target branch')
+    const reader = await this.openRepository(installationId, repositoryId, 'contents', undefined, 60_000, !refresh)
+    const result = await this.readPipelineCache(installationId, repositoryId,
+      `standalone-source:${encodeURIComponent(branch)}`, refresh,
+      async () => {
+        const root = `/repos/${encodeURIComponent(reader.metadata.owner.login)}/${encodeURIComponent(reader.metadata.name)}`
+        const state = await reader.request<{ commit: { sha: string } }>(`${root}/branches/${encodeURIComponent(branch)}`, {
+          notFound: `Target branch "${branch}" was not found. Select or publish a policy for an existing branch.`,
+          forbidden: 'GitHub denied access to the target branch. Check the GitHub App’s repository access and Contents read permission.',
+        })
+        if (!/^[a-f0-9]{40}$/.test(state.commit?.sha)) throw new ServiceUnavailableException('Target branch revision could not be verified')
+        return reader.inspectSource(state.commit.sha, branch, false)
+      },
+      value => !!value && value.branch === branch && /^[a-f0-9]{40}$/.test(value.sourceSha) && Array.isArray(value.files) && Array.isArray(value.warnings))
+    await reader.assertAccess?.()
+    return result
   }
 
   async readPipelineWorkflow(
@@ -701,8 +735,9 @@ export class GitHubProviderService {
       installationId,
       repositoryId,
       'contents',
+      undefined, 60_000, !refresh,
     )
-    return this.readPipelineCache(
+    const result = await this.readPipelineCache(
       installationId,
       repositoryId,
       `workflow:${workflowId}:${encodeURIComponent(branch)}`,
@@ -719,6 +754,10 @@ export class GitHubProviderService {
         const root = `/repos/${encodeURIComponent(reader.metadata.owner.login)}/${encodeURIComponent(reader.metadata.name)}`
         const branchState = await reader.request<{ commit: { sha: string } }>(
           `${root}/branches/${encodeURIComponent(branch)}`,
+          {
+            notFound: `Policy branch "${branch}" was not found in ${reader.metadata.owner.login}/${reader.metadata.name}. Select or publish a policy for an existing branch.`,
+            forbidden: 'GitHub denied access to the policy branch. Check the GitHub App’s repository access and Contents read permission.',
+          },
         )
         if (!/^[a-f0-9]{40}$/.test(branchState.commit?.sha))
           throw new ServiceUnavailableException(
@@ -733,6 +772,10 @@ export class GitHubProviderService {
           path: string
         }>(
           `${root}/contents/${workflow.path.split('/').map(encodeURIComponent).join('/')}?ref=${branchState.commit.sha}`,
+          {
+            notFound: `Workflow "${workflow.path}" was not found on policy branch "${branch}". Choose a workflow present on that branch or add it there.`,
+            forbidden: 'GitHub denied access to the workflow file. Check the GitHub App’s repository access and Contents read permission.',
+          },
         )
         if (
           file.type !== 'file' ||
@@ -781,18 +824,29 @@ export class GitHubProviderService {
         Buffer.byteLength(value.workflow) <= 32768 &&
         !value.workflow.includes('\0'),
     )
+    await reader.assertAccess?.()
+    return result
   }
 
-  async pipelineWriteAvailability(installationId: bigint) {
-    const installation = await this.verifyInstallation(installationId)
-    const available = ['contents', 'workflows', 'pull_requests'].every(key => installation.permissions[key] === 'write')
-    return { available, reason: available ? null : 'Creating a setup PR requires GitHub App Contents, Workflows and Pull requests write permissions.' }
+  async pipelineWriteAvailability(installationId: bigint, cached = false) {
+    const load = async () => {
+      const installation = await this.verifyInstallation(installationId)
+      const available = ['contents', 'workflows', 'pull_requests'].every(key => installation.permissions[key] === 'write')
+      return { available, reason: available ? null : 'Creating a setup PR requires GitHub App Contents, Workflows and Pull requests write permissions.' }
+    }
+    if (!cached || !this.prisma) return load()
+    const state = await this.prisma.gitHubInstallation.findUnique({where: {id: installationId}, select: {active: true, permissions: true}})
+    if (!state?.active) throw new ForbiddenException('GitHub installation access is unavailable')
+    const permissions = state.permissions as Record<string, string>
+    const available = ['contents', 'workflows', 'pull_requests'].every(key => permissions?.[key] === 'write')
+    return {available, reason: available ? null : 'Creating a setup PR requires GitHub App Contents, Workflows and Pull requests write permissions. Sync the installation after approving permissions.'}
   }
 
   /** Called only after the user reviews YAML and explicitly requests a setup PR. Never writes the base branch. */
-  async createPipelineSetupPr(installationId: bigint, repositoryId: bigint, branch: string, baseSha: string, files: Record<string, string>, requestId: string) {
+  async createPipelineSetupPr(installationId: bigint, repositoryId: bigint, branch: string, baseSha: string, files: Record<string, string>, requestId: string, standalone = false) {
     branch = branch.replace(/^refs\/heads\//, '')
-    if (!/^[a-f0-9]{40}$/.test(baseSha) || !/^[a-f0-9-]{36}$/.test(requestId) || Object.keys(files).length !== 1 ||
+    if (!validProfileBranch(branch) || !/^[a-f0-9]{40}$/.test(baseSha) || !/^[a-f0-9-]{36}$/.test(requestId) || Object.keys(files).length !== 1 ||
+      (standalone && !Object.hasOwn(files, '.github/workflows/preflyt.yml')) ||
       Object.entries(files).some(([path, content]) => !/^\.github\/workflows\/[a-zA-Z0-9_-]+\.ya?ml$/.test(path) || Buffer.byteLength(content) > 65536))
       throw new BadRequestException('Invalid reviewed workflow files')
     const write = await this.pipelineWriteAvailability(installationId)
@@ -827,10 +881,12 @@ export class GitHubProviderService {
       const parent = await call(`/git/commits/${baseSha}`)
       if (!/^[a-f0-9]{40}$/.test(parent.tree?.sha)) throw new ServiceUnavailableException('Repository tree could not be verified')
       const entries: Record<string, unknown>[] = Object.entries(files).map(([path, content]) => ({ path, mode: '100644', type: 'blob', content }))
-      const oldTree = await call(`/git/trees/${parent.tree.sha}?recursive=1`)
-      if (oldTree.truncated) throw new ServiceUnavailableException('Repository tree could not be fully checked')
-      if (oldTree.tree?.some((entry: any) => entry.path === '.github/workflows/preflyt-gate.yml'))
-        entries.push({ path: '.github/workflows/preflyt-gate.yml', mode: '100644', type: 'blob', sha: null })
+      if (!standalone) {
+        const oldTree = await call(`/git/trees/${parent.tree.sha}?recursive=1`)
+        if (oldTree.truncated) throw new ServiceUnavailableException('Repository tree could not be fully checked')
+        if (oldTree.tree?.some((entry: any) => entry.path === '.github/workflows/preflyt-gate.yml'))
+          entries.push({ path: '.github/workflows/preflyt-gate.yml', mode: '100644', type: 'blob', sha: null })
+      }
       const tree = await call('/git/trees', 'POST', { base_tree: parent.tree.sha, tree: entries })
       if (!/^[a-f0-9]{40}$/.test(tree.sha)) throw new ServiceUnavailableException('Workflow tree could not be created')
       const commit = await call('/git/commits', 'POST', { message: 'Connect Preflyt policy checks', tree: tree.sha, parents: [baseSha] })
@@ -839,7 +895,8 @@ export class GitHubProviderService {
       // No force push; a duplicate concurrent request stops here and can recover on retry.
       await call('/git/refs', 'POST', { ref: `refs/heads/${head}`, sha: commitSha })
     }
-    const pr = existing[0] ?? await call('/pulls', 'POST', { title: 'Connect Preflyt policy checks', head, base: branch, body: 'Adds the reviewed checks and final Preflyt gate in one workflow using the published Action. Review the workflow before merging. Existing tests, scan steps and branch protection are preserved.' })
+    const pr = existing[0] ?? await call('/pulls', 'POST', { title: standalone ? 'Add Preflyt pull request checks' : 'Connect Preflyt policy checks', head, base: branch,
+      body: standalone ? `Adds the reviewed standalone Preflyt workflow for pull requests targeting ${branch}. Includes project setup, published-policy checks and the final verification gate. Review setup commands, services and required configuration before merging. Existing CI and deployment workflows are unchanged. Setup is proposed until merged and a PR run is verified; merge protection requires separate activation.` : 'Adds the reviewed checks and final Preflyt gate in one workflow using the published Action. Review the workflow before merging. Existing tests, scan steps and branch protection are preserved.' })
     const expected = `https://github.com/${reader.metadata.owner.login}/${reader.metadata.name}/pull/`
     if (!Number.isSafeInteger(pr.number) || pr.number < 1 || pr.html_url !== expected + pr.number || pr.head?.sha !== commitSha || pr.base?.ref !== branch)
       throw new ServiceUnavailableException('Setup PR could not be verified; check the repository before retrying')
@@ -1351,10 +1408,35 @@ export class GitHubProviderService {
     permission: 'contents' | 'pull_requests' | 'metadata' | 'actions' | 'checks' | 'administration' = 'contents',
     externalSignal?: AbortSignal,
     timeoutMs = 60_000,
+    cachedAccess = false,
   ) {
+    const fingerprint = this.connectionFingerprint()
+    const state = await this.prisma?.gitHubInstallation.findUnique({
+      where: { id: installationId }, select: { active: true, accessRevision: true },
+    })
+    if (state?.active === false) throw new ForbiddenException('GitHub installation access is unavailable')
+    const accessKey = state?.active === true ? `github-access:v1:${fingerprint}:${installationId}:${state.accessRevision}` : undefined
+    const accessTtl = Math.floor(Math.min(60, Math.max(5, Number(process.env.GITHUB_ACCESS_CACHE_SECONDS) || 30)))
+    const metadataKey = accessKey ? `${accessKey}:repository:${repositoryId}` : undefined
+    const assertAccess = async () => {
+      if (fingerprint !== this.connectionFingerprint()) throw new ForbiddenException('GitHub connection changed. Refresh and try again.')
+      if (!state || !this.prisma) return
+      const current = await this.prisma.gitHubInstallation.findUnique({where: {id: installationId}, select: {active: true, accessRevision: true}})
+      if (!current || current.active === false || current.accessRevision !== state.accessRevision)
+        throw new ForbiddenException('GitHub access changed. Refresh and try again.')
+    }
     try {
-      await this.verifyInstallation(installationId)
+      if (accessKey && cachedAccess) await this.sharedRead.read(`${accessKey}:installation`, accessTtl, false, async () => {
+        await this.verifyInstallation(installationId)
+        return { verified: true }
+      }, value => value?.verified === true)
+      else await this.verifyInstallation(installationId)
     } catch (error) {
+      if (error instanceof GitHubInstallationRevokedError && accessKey) {
+        await this.cache?.delete(`${accessKey}:installation`)
+        await this.cache?.delete(`${accessKey}:write-availability`)
+        if (metadataKey) await this.cache?.delete(metadataKey)
+      }
       if (error instanceof GitHubRateLimitError) throw error
       if (error instanceof GitHubInstallationRevokedError)
         throw new ForbiddenException(
@@ -1382,7 +1464,7 @@ export class GitHubProviderService {
     const timeout = AbortSignal.timeout(timeoutMs)
     const signal = externalSignal ? AbortSignal.any([externalSignal, timeout]) : timeout
     signal.throwIfAborted()
-    const request = async <T>(path: string): Promise<T> => {
+    const request = async <T>(path: string, errors?: { notFound: string; forbidden: string }): Promise<T> => {
       const response = await this.apiFetch(
         `installation:${installationId}`,
         `https://api.github.com${path}`,
@@ -1393,8 +1475,16 @@ export class GitHubProviderService {
         },
       )
       if ([401, 403, 404].includes(response.status))
+      {
         for (const key of this.tokens.keys())
-          if (key.startsWith(`${installationId}:`)) this.tokens.delete(key)
+          if (key.startsWith(`${fingerprint}:${installationId}:`)) this.tokens.delete(key)
+        if (metadataKey) await this.cache?.delete(metadataKey)
+        if (accessKey) await this.cache?.delete(`${accessKey}:installation`)
+      }
+      if (response.status === 404 && errors)
+        throw new NotFoundException(errors.notFound)
+      if (response.status === 403 && errors)
+        throw new ForbiddenException(errors.forbidden)
       if (
         response.status === 401 ||
         response.status === 404 ||
@@ -1424,13 +1514,23 @@ export class GitHubProviderService {
       }
       return JSON.parse(Buffer.concat(chunks).toString('utf8')) as T
     }
-    const metadata = await request<{
+    type Metadata = {
       id: number
       name: string
       full_name: string
       owner: { login: string }
       default_branch: string | null
-    }>(`/repositories/${repositoryId}`)
+    }
+    const loadMetadata = () => request<Metadata>(`/repositories/${repositoryId}`)
+    const validMetadata = (value: Metadata) => !!value && String(value.id) === String(repositoryId) && typeof value.name === 'string' && !!value.name && typeof value.owner?.login === 'string' && !!value.owner.login
+    const metadata = metadataKey && cachedAccess
+      ? await this.sharedRead.read(metadataKey, accessTtl, false, loadMetadata, validMetadata)
+      : await loadMetadata()
+    if (accessKey) {
+      const current = await this.prisma!.gitHubInstallation.findUnique({ where: { id: installationId }, select: { active: true, accessRevision: true } })
+      if (!current?.active || current.accessRevision !== state!.accessRevision || fingerprint !== this.connectionFingerprint())
+        throw new ForbiddenException('GitHub access changed. Refresh and try again.')
+    }
     if (
       BigInt(metadata.id) !== repositoryId ||
       !metadata.owner?.login ||
@@ -1451,7 +1551,7 @@ export class GitHubProviderService {
       const scanSource = includeScanSource ? await local.scanSource() : undefined
       return {...snapshot, scanSource}
     }, signal)
-    return { metadata, request, healthSource, inspectSource }
+    return { metadata, request, healthSource, inspectSource, assertAccess }
   }
 
   private apiHeaders(token: string) {

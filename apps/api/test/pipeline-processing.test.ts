@@ -71,3 +71,13 @@ describe("durable pipeline processing", () => {
     expect(comment).not.toContain("<script>");
   });
 });
+
+it('keeps throttled pipeline verification pending without spending failure attempts', async () => {
+ const {GitHubRateLimitError}=await import('../src/github/github-rate-limit.js')
+ const error=new GitHubRateLimitError(300000), updateMany=vi.fn().mockResolvedValue({count:1})
+ const prisma:any={pipelineRunSubmission:{findMany:vi.fn().mockResolvedValue([{id:'receipt',repositoryId:'repo',organizationId:'org',attempts:99,payload:{}}]),updateMany},gitHubRepository:{findUnique:vi.fn().mockResolvedValue({githubId:2n,installationId:1n,selected:true,available:true,readinessAutomation:{enabled:true,organizationId:'org'}})}}
+ const github:any={readPipelineVerificationRun:vi.fn().mockRejectedValue(error)}
+ await new PipelineProcessingService(prisma,{requireRepository:vi.fn()} as any,github,{} as any).reconcile()
+ expect(updateMany).toHaveBeenLastCalledWith(expect.objectContaining({data:expect.objectContaining({state:'PENDING',failureCode:'GITHUB_RATE_LIMITED',nextAttemptAt:new Date((error.getResponse() as any).retryAt)})}))
+ expect(updateMany.mock.calls.at(-1)![0].data.attempts).toBeUndefined()
+})

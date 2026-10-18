@@ -278,7 +278,7 @@ it("rechecks policy access for retained history and rejects revoked access", asy
       .mockResolvedValueOnce(repo)
       .mockRejectedValueOnce(new Error("Revoked")),
   };
-  const live = { getRepositoryRuleset: vi.fn().mockResolvedValue({}) };
+  const live = { savedDisplay: vi.fn().mockResolvedValue({}) };
   await expect(
     new GitHubRulesetService(access as any, live as any, history).insights(
       {} as any,
@@ -292,7 +292,7 @@ it("rechecks policy access for retained history and rejects revoked access", asy
 it("resolves the public GitHub repository ID to its internal snapshot scope", async () => {
   await history.sync(repo.id);
   const access = { requireRepository: vi.fn().mockResolvedValue(repo) };
-  const provider = { getRepositoryRuleset: vi.fn().mockResolvedValue({}) };
+  const provider = { savedDisplay: vi.fn().mockResolvedValue({}) };
   const response = await new GitHubRulesetService(
     access as any,
     provider as any,

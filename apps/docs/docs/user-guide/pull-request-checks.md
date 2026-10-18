@@ -64,17 +64,30 @@ The **Public Preflyt API URL** applies without a restart. If it is empty, the sn
 
 ## Install the policy runner once
 
-1. Open **Policies** and choose the **CI jobs** tab.
-2. Choose the repository and the branch policy. Under **Policy workflow snippet**, select **Copy snippet**. You can also use **View YAML** on any standard in **Standards**.
-3. Paste it into your pull request workflow, for example `.github/workflows/ci.yml`. Keep your own dependency installation steps **before** the Preflyt step.
-4. Commit it to a branch and open a pull request.
+1. Open **Policies → CI jobs**, choose the repository and its published target-branch policy.
+2. Review the complete `.github/workflows/preflyt.yml` draft and the detected project setup. Existing CI and deployment files stay separate.
+3. Select **Generate workflow with AI** to request a repository-specific proposal. Instructions are optional. Preflyt uses the built-in **Preflyt CI setup** skill automatically; you do not need to adopt or configure a second skill.
+4. Review the comparison, the source workflow used for setup, and any unresolved prerequisites. Select **Use this draft** to apply the proposal to the editor. AI does not write to GitHub.
+5. Confirm that you reviewed the YAML and target branch, then select **Create setup PR** or **Create update PR**. If the App lacks write permissions, download the workflow and open the PR manually.
+
+### AI setup and existing workflows
+
+The single **Preflyt CI setup** skill supports creation and updates. In creation mode, AI reads detected package scripts, package-manager and workspace information, and supported existing CI prerequisites at the selected commit. It chooses a supplied setup plan; Preflyt renders the workflow and validates the PR trigger, Action version, permissions and final gate. It does not accept invented commands, services or unsupported Action inputs from the model. Missing setup stays visible in the notes and can be edited manually.
+
+Setup follows the checks in your published policy. Static checks do not start databases, create test environment files, run migrations or seed data. Lint, type checks and builds install the selected project's dependencies. Test infrastructure is proposed only when an existing CI job matches the selected test command and package directory. If that match is uncertain, review the setup notes and edit the YAML. A built-in container scan may also need a local image build. When selected checks or commands change, review the updated setup comparison before replacing an installed workflow.
+
+For **Container scanning**, Preflyt detects your Dockerfiles automatically. If there is one, no selection is needed. If there are several, choose your app under **Dockerfile to build**. Preflyt adds the build step and image tag automatically; the image is built on the GitHub Actions runner. Review the displayed build context and any build arguments or secrets your app needs. Your Dockerfile choice is kept when generating with AI, downloading or creating the workflow PR. Changing it resets the review confirmation and preserves any manual YAML edits until you load the new generated workflow.
+
+The existing workflow-edit endpoint uses the same skill in update mode with stricter preservation checks: triggers, existing jobs, deployment behavior and existing commands must remain intact. The skill is inspectable and downloadable under **Skills**; it is not an AI assessment check and cannot decide readiness.
+
+AI requires a tested Repository model, enabled source sharing and repository permission to run AI reviews and publish policy setup. The affected setup information is sent to that configured model. Potential credential-bearing files are excluded from creation context; keep credentials in GitHub secrets. The UI explains unavailable AI, and manual YAML editing remains available. Generating a proposal does not execute checks, verify reports, create a PR or activate merge protection.
 
 The generated standalone snippet has two jobs. When integrating with an existing workflow, keep its check jobs and add one terminal gate:
 
 - **`preflyt_checks`** runs your checks and submits the results using the Preflyt Action.
 - **`preflyt_gate`** (named **Preflyt final gate**) waits for Preflyt's verified result and fails if the policy fails or is incomplete. It depends on every other job in that PR workflow. Do not add a separate `workflow_run` publication-gate workflow. Documentation and post-merge deployment workflows can remain separate.
 
-The snippet contains your API URL and the exact Preflyt Action version `v2.1.1`. It contains no check list or report mapping. The Action fetches the published target-branch policy at the beginning of each run. Adding a check or changing a standard takes effect after you publish a new policy revision; the workflow stays the same.
+The snippet contains your API URL and the exact Preflyt Action version `v2.1.2`. It contains no check list or report mapping. The Action fetches the published target-branch policy at the beginning of each run. Adding a check or changing a standard takes effect after you publish a new policy revision; the workflow stays the same.
 
 ```yaml
 # Shape of the generated snippet. Copy the real one from Preflyt.
@@ -92,7 +105,7 @@ jobs:
       # Your dependency installation steps go here.
       - name: Preflyt policy
         if: ${{ always() && github.event_name == 'pull_request' }}
-        uses: lyrisoft/preflyt-action@v2.1.1
+        uses: lyrisoft/preflyt-action@v2.1.2
         with:
           api-url: https://preflyt.example.com/api
   preflyt_gate:
@@ -103,7 +116,7 @@ jobs:
 
 ### What the built-in checks run
 
-The built-in security recipes automatically pull pinned scanner images: **Semgrep** for static application security, **Gitleaks** for secrets, and **Trivy** for dependency, container and infrastructure scans. Docker must be available on the Linux runner. Source is mounted read-only, scans receive no GitHub/OIDC credentials or Docker socket, and raw scanner logs are suppressed. Set `CONTAINER_IMAGE` in the job when selecting container image scanning.
+The built-in security recipes automatically pull pinned scanner images: **Semgrep** for static application security, **Gitleaks** for secrets, and **Trivy** for dependency, container and infrastructure scans. Docker must be available on the Linux runner. Source is mounted read-only, scans receive no GitHub/OIDC credentials or Docker socket, and raw scanner logs are suppressed. Workflow setup adds the container build step and `CONTAINER_IMAGE` automatically. Action v2.1.2 scans runner-built images through a read-only archive, without giving the scanner access to the Docker daemon. For a manually maintained workflow, build the image first and set `CONTAINER_IMAGE` to its local tag.
 
 Built-in SAST uses **Preflyt SAST v1**, an owned, digest-checked set of 18 review-oriented JavaScript/TypeScript, Python and shell rules. The scanner runs offline. This is specific pattern coverage, not the full Semgrep registry, interfile taint analysis or an exhaustive security audit. The Action contains the exact rules and narrow fixture exceptions; a separately licensed scanner can run through a custom SARIF command.
 

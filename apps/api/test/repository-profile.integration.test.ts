@@ -39,7 +39,7 @@ const snapshot = (): RepositorySnapshot => ({
 const provider = {
   verifyRepositoryAccess: vi.fn(),
   readRepositorySnapshot: vi.fn(),
-  listRepositoryBranches: vi.fn(),
+  savedDisplay: vi.fn(),
 }
 const owner = (method: 'get' | 'post') =>
   request(app.getHttpServer())
@@ -142,7 +142,7 @@ beforeEach(async () => {
     .mockReset()
     .mockResolvedValue({ fullName: 'fixture/app', branch: 'main' })
   provider.readRepositorySnapshot.mockReset().mockResolvedValue(snapshot())
-  provider.listRepositoryBranches
+  provider.savedDisplay
     .mockReset()
     .mockResolvedValue({ branches: ['main', 'development'], hasMore: false })
 })
@@ -279,7 +279,7 @@ it('serves branch choices only to authenticated selected-repository readers and 
     .set('Cookie', 'test.sid=OWNER')
     .expect(200)
   expect(response.body.branches).toEqual(['main', 'development'])
-  expect(provider.listRepositoryBranches).toHaveBeenCalledWith(500n, 501n, 2)
+  expect(provider.savedDisplay).toHaveBeenCalledWith('branches', 500n, 501n, [2])
   await request(app.getHttpServer())
     .get(path + '?page=no')
     .set('Cookie', 'test.sid=OWNER')

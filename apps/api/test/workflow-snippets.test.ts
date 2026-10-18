@@ -27,11 +27,12 @@ it("combines a standard into one copyable step and deduplicates its checks", () 
   const workflow = parse(result.snippet);
   const steps = workflow.jobs.preflyt_checks.steps.filter((s: any) => s.uses === policyAction);
   expect(workflow.jobs.preflyt_gate.needs).toEqual(["preflyt_checks"]);
+  expect(workflow.jobs.preflyt_gate.steps[0].uses).toBe(policyAction);
   expect(steps).toHaveLength(1);
   expect(result.checkIds).toEqual(["tests.required", "security.sast"]);
   expect(result.ready).toBe(true);
   expect(steps[0].uses).toBe(policyAction);
-  expect(policyAction).toBe('lyrisoft/preflyt-action@v2.1.1');
+  expect(policyAction).toBe('lyrisoft/preflyt-action@v2.1.2');
   expect(steps[0].with).toEqual({ 'api-url': 'https://preflyt.example/api' });
   expect(result.execution).toBe('policy');
   expect(workflowSnippet([{ id: 'secrets.scan', title: 'Secrets' }], 'https://preflyt.example/api').snippet).toBe(result.snippet);

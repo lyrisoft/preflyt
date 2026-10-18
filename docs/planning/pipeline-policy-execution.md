@@ -92,3 +92,11 @@ The separate public Action provisions pinned Semgrep, Gitleaks and Trivy contain
 The editor installs or upgrades one policy runner, without per-check Add controls. Generated YAML is independent of the selected check list. The previous explicit mapping helper and Action input are removed; Preflyt is the only consumer being migrated. Existing exact-commit, run-attempt, policy integrity, authorization, GitHub verification and final publication gates remain in force.
 
 Validation includes policy export access/staleness/integrity regressions, workflow preservation, the actual API manifest executed by the separate Action, clean/failing/missing-command outcomes, path protection, credential stripping and real Docker scanners. The Action must be tested and published first; Preflyt changes are pushed only after its immutable release is available.
+
+## Standalone PR installation — 18 October 2026
+
+The installation flow now generates a complete `.github/workflows/preflyt.yml` for the selected published policy branch. This supersedes selecting an existing CI/deployment workflow and inserting a snippet. The target branch is explicit; PR opened/update/reopen/ready events run the checks and final gate in the same workflow.
+
+Generation proposes repository-backed verification prerequisites, supported manifest-based dependency setup and a local container build when unambiguous. The user reviews setup warnings and the complete file before creating a setup/update PR against the policy branch. Unknown setup and subdirectory command requirements remain explicit. New PR creation does not depend on an existing workflow ID, does not edit existing CI/deployment workflows, and registers actual sources only after verified runs. Existing legacy API endpoints remain available for compatibility.
+
+See [standalone PR workflow installation](../operations/standalone-pr-workflow.md). The bundled Preflyt CI setup skill supports source-backed creation and preservation-checked updates. Focused API/browser regression and TypeScript checks are recorded in the CI setup acceptance report; live GitHub/runner acceptance remains pending.

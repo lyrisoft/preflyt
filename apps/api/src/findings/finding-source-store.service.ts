@@ -30,9 +30,10 @@ export class FindingSourceStore {
       await this.db.findingSourceExcerpt.createMany({ data: [location], skipDuplicates: true })
       row = await this.db.findingSourceExcerpt.findUniqueOrThrow({ where: { id: location.id } })
     }
+    await this.activeRepository(row)
     if (row.contentHash) return this.decode(row)
     if (row.retryAfter > new Date()) return unavailable()
-    return this.capture(row)
+    return {lines: [], retryable: true, reason: 'Source is queued for background capture. Retry shortly.', truncated: false}
   }
   private capture(row: FindingSourceExcerpt, files = this.files): Promise<Excerpt> {
     const existing = this.reads.get(row.id)
@@ -50,6 +51,8 @@ export class FindingSourceStore {
     // A second process may have captured it after the pending list was read.
     const latest = await this.db.findingSourceExcerpt.findUniqueOrThrow({ where: { id: row.id } })
     if (latest.contentHash) return this.decode(latest)
+    const claimed = await this.db.findingSourceExcerpt.updateMany({where: {id: row.id, contentHash: null, retryAfter: {lte: new Date()}}, data: {retryAfter: new Date(Date.now() + 120000)}})
+    if (!claimed.count) return unavailable()
     const repo = await this.activeRepository(row)
     const fileKey = digest([repo.installationId.toString(), repo.githubId.toString(), row.sourceSha, row.path])
     let file = files.get(fileKey)

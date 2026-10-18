@@ -10,7 +10,7 @@ class ManifestDto {
   @IsString() @MaxLength(39) organization!: string;
   @IsString() @MaxLength(100) name!: string;
   @IsString() @MaxLength(2048) apiUrl!: string;
-  @IsBoolean() setupPullRequests!: boolean;
+  @IsBoolean() setupPullRequests: boolean = true;
   @IsBoolean() managedProtection!: boolean;
 }
 type AuthRequest = Request & { preflytSession: AuthenticatedSession };

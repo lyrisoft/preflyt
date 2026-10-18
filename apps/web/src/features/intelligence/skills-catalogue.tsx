@@ -311,8 +311,10 @@ export function SkillsCatalogue() {
                           </p>
                           {t.purpose === 'workflow_edit' && (
                             <p className='border-t pt-3 text-xs text-muted-foreground'>
-                              v{t.version} · Used automatically by Rewrite
-                              workflow in Policies.
+                              v{t.version} ·{' '}
+                              {
+                                'Used automatically when creating or updating workflows in Policies.'
+                              }
                             </p>
                           )}
                           {t.checks?.length ? (
@@ -486,8 +488,10 @@ export function SkillsCatalogue() {
           </DialogHeader>
           {preview?.purpose === 'workflow_edit' && (
             <p className='text-xs text-muted-foreground'>
-              v{preview.version} · Used automatically by Rewrite workflow in
-              Policies.
+              v{preview.version} ·{' '}
+              {
+                'Used automatically when creating or updating workflows in Policies.'
+              }
             </p>
           )}
           {preview && (
