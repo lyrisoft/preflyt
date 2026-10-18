@@ -130,6 +130,28 @@ it('enforces active sessions and write-origin validation at the HTTP boundary', 
   await request(app.getHttpServer()).get('/notifications').set('Cookie', 'test.sid=owner').expect(200)
   await request(app.getHttpServer()).post('/notifications/read-all').set('Cookie', 'test.sid=owner').set('Origin', 'https://evil.example').expect(403)
 })
+it('counts unread notifications without loading reports or repository choices, and limits the open preview to five', async () => {
+  for(let i=0;i<8;i++){const event=await create();await deliverNotification(db,event.id)}
+  const list=vi.spyOn(db.inboxNotification,'findMany'),choices=vi.spyOn(db.notificationEvent,'groupBy'),reports=vi.spyOn(db.commitAssessment,'findMany')
+  try {
+    expect(await service.summary(session())).toEqual({enabled:true,unreadCount:8})
+    expect(list).not.toHaveBeenCalled();expect(choices).not.toHaveBeenCalled();expect(reports).not.toHaveBeenCalled()
+    expect((await service.preview(session())).items).toHaveLength(5)
+    expect(choices).not.toHaveBeenCalled()
+    await service.list(session(),{})
+    expect(choices).toHaveBeenCalledOnce()
+    await db.repositoryGrant.deleteMany()
+    expect((await service.summary(session(developer))).unreadCount).toBe(0)
+    expect((await service.preview(session(developer))).items).toEqual([])
+    expect((await service.summary({...session(),organizationId:'elsewhere'})).unreadCount).toBe(0)
+    await db.repositoryGrant.create({data:{membershipId:(await db.organizationMembership.findFirstOrThrow({where:{identityId:developer}})).id,repositoryId:repoId}})
+    for(const path of ['summary','preview']){
+      await request(app.getHttpServer()).get('/notifications/'+path).expect(401)
+      const response=await request(app.getHttpServer()).get('/notifications/'+path).set('Cookie','test.sid=owner').set('Origin','http://localhost:5173').expect(200)
+      expect(response.headers['cache-control']).toBe('no-store')
+    }
+  } finally {list.mockRestore();choices.mockRestore();reports.mockRestore()}
+})
 
 it('keeps the durable event pending during queue outage and stops retry after five failures', async () => {
   const event = await create()

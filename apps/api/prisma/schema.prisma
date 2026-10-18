@@ -332,6 +332,8 @@ model RepositoryStandardsSelection {
 
 // Immutable exact-SHA reports; administrative associations never establish trusted gates.
 model CommitAssessment {
+  findingReadRevision BigInt @default(dbgenerated("nextval('preflyt_finding_read_revision'::regclass)")) @ignore
+  findingArtifactIds String[] @default([]) @ignore
   id             String @id @default(cuid())
   repositoryId   String
   repository     GitHubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
@@ -374,6 +376,8 @@ model RepositoryCiBindings {
 }
 
 model RepositoryPullRequest {
+ retentionReferencesComplete Boolean @default(false) @ignore
+ retentionCommits PullRequestRetentionCommit[]
  aiReviewAttemptAt DateTime?
  verifiedInstallationId String?
  verifiedAccessRevision Int?
@@ -390,6 +394,16 @@ model RepositoryPullRequest {
  lastSyncAttemptAt DateTime?
  @@unique([repositoryId,number])
  @@index([lastSyncAttemptAt])
+}
+
+// Exact text SHA references used only to conservatively protect retention.
+model PullRequestRetentionCommit {
+ pullRequestId String
+ pullRequest RepositoryPullRequest @relation(fields:[pullRequestId],references:[id],onDelete:Cascade,onUpdate:Cascade)
+ repositoryId String
+ sourceSha String
+ @@id([pullRequestId,sourceSha])
+ @@index([repositoryId,sourceSha])
 }
 
 // Append-only cryptographic verification receipts. Original uploads/labels stay unchanged.
@@ -991,6 +1005,7 @@ model AiReviewSkill {
   @@index([organizationId, createdAt])
 }
 model AiSkillReview {
+  findingReadRevision BigInt @default(dbgenerated("nextval('preflyt_finding_read_revision'::regclass)")) @ignore
   nextAttemptAt DateTime @default(now())
   usage Json?
   inlineFeedbackUrl String?
@@ -1264,6 +1279,7 @@ model RepositoryHealthTarget {
   updatedAt DateTime @updatedAt
 }
 model RepositoryHealthAssessment {
+  findingReadRevision BigInt @default(dbgenerated("nextval('preflyt_finding_read_revision'::regclass)")) @ignore
   testSettings Json?
   id String @id @default(uuid())
   repositoryId String

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { Bell } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -8,7 +9,12 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 import { StatusBadge } from '@/components/status-badge'
-import { useInbox, titles, type Item } from './notification-query'
+import {
+  useInbox,
+  useNotificationCount,
+  titles,
+  type Item,
+} from './notification-query'
 
 export function NotificationItem({
   item,
@@ -181,24 +187,30 @@ export function NotificationItem({
   )
 }
 export function NotificationBell() {
-  const { query, read, session } = useInbox({ unread: 'true' })
+  const [open, setOpen] = useState(false)
+  const count = useNotificationCount()
+  const { query, read, session } = useInbox(
+    { unread: 'true' },
+    { enabled: open, preview: true }
+  )
+  const unreadCount = count.data?.unreadCount ?? query.data?.unreadCount ?? 0
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
           variant='ghost'
           size='icon'
           className='relative'
           aria-label={
-            query.isError || session.isError
+            count.isError || session.isError
               ? 'Notifications unavailable'
-              : `Notifications, ${query.data?.unreadCount ?? 0} unread`
+              : `Notifications, ${unreadCount} unread`
           }
         >
           <Bell className='size-4' />
-          {!!query.data?.unreadCount && (
+          {!!unreadCount && (
             <span className='absolute end-0 top-0 min-w-4 rounded-full bg-red-600 px-1 text-[10px] leading-4 font-semibold text-white'>
-              {query.data.unreadCount > 99 ? '99+' : query.data.unreadCount}
+              {unreadCount > 99 ? '99+' : unreadCount}
             </span>
           )}
         </Button>

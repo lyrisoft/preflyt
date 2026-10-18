@@ -87,6 +87,12 @@ function fixture() {
     findingIgnore: { findMany: vi.fn().mockResolvedValue([]) },
     findingDisposition: { findMany: vi.fn().mockResolvedValue([]) },
   };
+  db.$transaction=vi.fn(async (read:any)=>read(db));
+  db.$queryRaw=vi.fn(async (query:any)=>{
+    if(query.sql.includes('FOR SHARE'))return [];
+    if(query.sql.includes('FROM "AiSkillReview" r'))return [{id:review.id,findingReadRevision:BigInt('0x'+digest(review).slice(0,12)),assessmentId:assessment.id,assessmentRevision:BigInt('0x'+digest(assessment).slice(0,12))}];
+    return [];
+  });
   const access: any = {
     requireRepository: vi.fn().mockResolvedValue(repo),
     requireOrganization: vi.fn(),

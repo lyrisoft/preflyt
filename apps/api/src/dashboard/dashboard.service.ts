@@ -1,3 +1,4 @@
+import { latestRepositoryIds } from '../prisma/latest-repository-rows.js'
 import { configurationValue } from '../configuration/runtime-configuration.js'
 import {
   BadRequestException,
@@ -141,7 +142,7 @@ export class DashboardService {
     days: number,
     choices: { githubId: string; fullName: string }[],
   ) {
-    const rows = ids.length
+    const repositories = ids.length
       ? await this.prisma.gitHubRepository.findMany({
           where: {
             id: { in: ids },
@@ -161,26 +162,30 @@ export class DashboardService {
                 lastVerifiedAt: true,
               },
             },
-            standards: {
-              orderBy: { revision: 'desc' },
-              take: 1,
-              select: { id: true, profile: true },
-            },
-            profiles: {
-              orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-              take: 1,
-              select: { report: true, complete: true, sourceSha: true, branch: true },
-            },
-            assessments: {
-              where: { createdAt: { lte: now } },
-              orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-              take: 1,
-              select: { id: true, sourceSha: true, createdAt: true, request: true, plan: true, report: true, assessmentHash: true },
-            },
+
           },
           orderBy: { fullName: 'asc' },
         })
       : []
+    const liveRepositoryIds = repositories.map(row => row.id)
+    const [standardIds, profileIds, assessmentIds] = await Promise.all([
+      latestRepositoryIds(this.prisma, 'RepositoryStandardsSelection', liveRepositoryIds),
+      latestRepositoryIds(this.prisma, 'RepositoryProfile', liveRepositoryIds),
+      latestRepositoryIds(this.prisma, 'CommitAssessment', liveRepositoryIds, Prisma.sql`"createdAt" <= ${now}`),
+    ])
+    const [standards, profiles, assessments] = await Promise.all([
+      this.prisma.repositoryStandardsSelection.findMany({where:{id:{in:standardIds}},select:{repositoryId:true,id:true,profile:true}}),
+      this.prisma.repositoryProfile.findMany({where:{id:{in:profileIds}},select:{repositoryId:true,report:true,complete:true,sourceSha:true,branch:true}}),
+      this.prisma.commitAssessment.findMany({where:{id:{in:assessmentIds}},select:{repositoryId:true,id:true,sourceSha:true,createdAt:true,request:true,plan:true,report:true,assessmentHash:true}}),
+    ])
+    const standardsByRepo = new Map(standards.map(row => [row.repositoryId,row]))
+    const profilesByRepo = new Map(profiles.map(row => [row.repositoryId,row]))
+    const assessmentsByRepo = new Map(assessments.map(row => [row.repositoryId,row]))
+    const rows = repositories.map(row => ({...row,
+      standards: standardsByRepo.has(row.id) ? [standardsByRepo.get(row.id)!] : [],
+      profiles: profilesByRepo.has(row.id) ? [profilesByRepo.get(row.id)!] : [],
+      assessments: assessmentsByRepo.has(row.id) ? [assessmentsByRepo.get(row.id)!] : [],
+    }))
     // A revocation during collection must not leave its data in the response.
     const liveIds = rows.map((row) => row.id)
     const [activity, totals, pullRequests] = liveIds.length

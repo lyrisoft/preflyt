@@ -75,7 +75,13 @@ export class NotificationsService {
       },
     };
   }
-  async list(session: AuthenticatedSession, filters: InboxFilters) {
+  async summary(session: AuthenticatedSession) {
+    if (!notificationsEnabled()) return {enabled:false,unreadCount:0}
+    const scope=await this.scope(session)
+    return {enabled:true,unreadCount:await this.db.inboxNotification.count({where:{AND:[scope,{readAt:null}]}})}
+  }
+  async preview(session: AuthenticatedSession) { return this.list(session,{unread:'true'},true) }
+  async list(session: AuthenticatedSession, filters: InboxFilters, preview = false) {
     if (!notificationsEnabled())
       return {
         enabled: false,
@@ -156,18 +162,17 @@ export class NotificationsService {
           },
         },
         orderBy: [{ deliveredAt: "desc" }, { id: "desc" }],
-        take: 25,
+        take: preview ? 5 : 25,
         skip: (page - 1) * 25,
       }),
-      this.db.inboxNotification.count({ where }),
+      preview ? Promise.resolve(0) : this.db.inboxNotification.count({ where }),
       this.db.inboxNotification.count({
         where: { AND: [scope, { readAt: null }] },
       }),
-      this.db.notificationEvent.findMany({
-        where: { notifications: { some: scope } },
-        distinct: ["repositoryGithubId"],
-        select: { repositoryGithubId: true, repositoryName: true },
-      }),
+      preview ? Promise.resolve([]) : this.db.notificationEvent.groupBy({
+        by: ['repositoryGithubId'], where: {notifications:{some:scope}},
+        _max: {repositoryName:true}, orderBy: {repositoryGithubId:'asc'},
+      }).then(rows=>rows.map(row=>({repositoryGithubId:row.repositoryGithubId,repositoryName:row._max.repositoryName ?? ''}))),
     ]);
     // Fetch context only for events already admitted by the current inbox scope.
     const assessmentIds = items.flatMap((row) =>
@@ -214,7 +219,7 @@ export class NotificationsService {
     const revisions = new Map(policies.map((row) => [row.id, row]));
     return {
       enabled: true,
-      total,
+      total: preview ? unreadCount : total,
       unreadCount,
       page,
       repositories,

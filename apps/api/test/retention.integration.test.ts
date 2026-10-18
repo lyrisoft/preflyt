@@ -1,4 +1,6 @@
 import 'reflect-metadata'
+import { createHash } from 'node:crypto'
+import {candidates} from '../src/retention/retention-queries.js'
 import {beforeAll,beforeEach,afterAll,it,expect,vi} from 'vitest'
 import {disposableDatabase} from './disposable-database.js'
 import {RetentionService} from '../src/retention/retention.service.js'
@@ -21,7 +23,38 @@ beforeEach(async()=>{
  const a=await workspace(1),b=await workspace(2),v=await workspace(3,'VIEWER');owner=a.session;repoId=a.repo;other=b.session;otherRepo=b.repo;viewer=v.session
  service=new RetentionService(db,new AuthorizationService(db))
 })
-async function assessment(id:string,repositoryId=repoId,days=120){return fixture.prisma.commitAssessment.create({data:{id,repositoryId,sourceSha:id.padEnd(40,'a').slice(0,40),selectionId:'selection',requestKey:id,inputHash:id,request:{},plan:{},report:{},assessmentHash:id,createdAt:ago(days)}})}
+async function assessment(id:string,repositoryId=repoId,days=120){return fixture.prisma.commitAssessment.create({data:{id,repositoryId,sourceSha:createHash('sha1').update(id).digest('hex'),selectionId:'selection',requestKey:id,inputHash:id,request:{},plan:{},report:{},assessmentHash:id,createdAt:ago(days)}})}
+it('protects indexed open PR references, follows context updates and isolates repositories',async()=>{
+ const db=fixture.prisma,old=await assessment('old'),otherOld=await assessment('other-old',otherRepo)
+ await assessment('latest',repoId,1);await assessment('other-latest',otherRepo,1)
+ const eligible=async()=>new Set((await db.$queryRaw<{id:string}[]>(candidates('assessmentDays',owner.organizationId!,ago(90)).sql)).map(row=>row.id))
+ const pr=await db.repositoryPullRequest.create({data:{repositoryId:repoId,number:1,objectId:'pr-1',context:{state:'open',head:{sha:old.sourceSha},base:{sha:otherOld.sourceSha}}}})
+ expect(await eligible()).not.toContain('old')
+ expect(await db.pullRequestRetentionCommit.count({where:{pullRequestId:pr.id}})).toBe(2)
+ await db.repositoryPullRequest.update({where:{id:pr.id},data:{context:{state:'open',arbitrary:'abc'+old.sourceSha+'def'}}})
+ expect(await eligible()).not.toContain('old')
+ await db.repositoryPullRequest.update({where:{id:pr.id},data:{context:{state:'closed',head:{sha:old.sourceSha}}}})
+ expect(await eligible()).toContain('old')
+ await db.repositoryPullRequest.update({where:{id:pr.id},data:{context:{state:'open',head:{sha:'b'.repeat(40)}}}})
+ expect(await eligible()).toContain('old')
+ await db.repositoryPullRequest.create({data:{repositoryId:otherRepo,number:2,objectId:'pr-2',context:{state:'open',head:{sha:old.sourceSha}}}})
+ expect(await eligible()).toContain('old')
+ await db.repositoryPullRequest.delete({where:{id:pr.id}})
+ expect(await db.pullRequestRetentionCommit.count({where:{pullRequestId:pr.id}})).toBe(0)
+})
+it('retains history conservatively for oversized PR contexts and invalid legacy commit IDs',async()=>{
+ const db=fixture.prisma
+ await assessment('old');await assessment('latest',repoId,1)
+ await db.commitAssessment.create({data:{id:'legacy',repositoryId:repoId,sourceSha:'not-a-valid-sha',selectionId:'s',requestKey:'legacy',inputHash:'fixture',request:{},plan:{},report:{},assessmentHash:'fixture',createdAt:ago(130)}})
+ const eligible=async()=>(await db.$queryRaw<{id:string}[]>(candidates('assessmentDays',owner.organizationId!,ago(90)).sql)).map(r=>r.id)
+ expect(await eligible()).toEqual(['old'])
+ const pr=await db.repositoryPullRequest.create({data:{repositoryId:repoId,number:1,objectId:'pr',context:{state:'open',large:'z'.repeat(270000)}}})
+ expect(await eligible()).toEqual([])
+ await db.repositoryPullRequest.update({where:{id:pr.id},data:{context:{state:'open',large:'a'.repeat(9000)}}})
+ expect(await eligible()).toEqual([])
+ await db.repositoryPullRequest.update({where:{id:pr.id},data:{context:{state:'closed'}}})
+ expect(await eligible()).toEqual(['old'])
+})
 it('defaults to disabled, enforces admin scope, validates periods and rejects stale saves',async()=>{
  expect(await service.get(owner)).toMatchObject({enabled:false,assessmentDays:90,auditDays:365})
  await expect(service.get(viewer)).rejects.toThrow()
