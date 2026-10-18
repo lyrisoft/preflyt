@@ -1,5 +1,10 @@
 import { useRef, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import {
   ArrowUpRight,
@@ -21,6 +26,13 @@ import {
   CardDescription,
 } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { ResultTimestamp } from '@/components/result-timestamp'
@@ -60,6 +72,12 @@ type Source = {
   exists: boolean
   notes: string[]
   setupSources: string[]
+  containerScan?: {
+    dockerfiles: string[]
+    dockerfile: string | null
+    buildContext: string | null
+    needsSelection: boolean
+  } | null
 }
 type Proposal = {
   workflow: string
@@ -115,9 +133,11 @@ function StandaloneWorkflowSetup({
   ]
   const refresh = useRef(false)
   const refreshSource = useRef(false)
+  const [dockerfile, setDockerfile] = useState('')
   const [draft, setDraft] = useState<{
     workflow: string
     baseSha: string
+    dockerfile: string | null
   } | null>(null)
   const [reviewed, setReviewed] = useState(false)
   const [view, setView] = useState<'edit' | 'review'>('edit')
@@ -147,8 +167,9 @@ function StandaloneWorkflowSetup({
     },
   })
   // eslint-disable-next-line @tanstack/query/exhaustive-deps
-  const source = useQuery({
-    queryKey: [...key, 'standalone'],
+  const source = useQuery<Source>({
+    queryKey: [...key, 'standalone', dockerfile],
+    placeholderData: keepPreviousData,
     enabled: !!query.data,
     retry: false,
     staleTime: 5 * 60_000,
@@ -158,7 +179,7 @@ function StandaloneWorkflowSetup({
       const force = refreshSource.current
       refreshSource.current = false
       return governanceRequest<Source>(
-        `${base}/standalone?policy=${encodeURIComponent(policyId)}${force ? '&refresh=true' : ''}`,
+        `${base}/standalone?policy=${encodeURIComponent(policyId)}${dockerfile ? `&dockerfile=${encodeURIComponent(dockerfile)}` : ''}${force ? '&refresh=true' : ''}`,
         undefined,
         signal
       )
@@ -169,7 +190,15 @@ function StandaloneWorkflowSetup({
   const baseSha = draft?.baseSha ?? source.data?.baseSha ?? ''
   const changed = !!draft && draft.workflow !== source.data?.workflow
   const stale = !!draft && draft.baseSha !== source.data?.baseSha
-  const body = () => ({ policyId, workflow: yaml, baseSha })
+  const containerScan = source.data?.containerScan
+  const selectedDockerfile = dockerfile || containerScan?.dockerfile || null
+  const staleContainer = !!draft && draft.dockerfile !== selectedDockerfile
+  const body = () => ({
+    policyId,
+    workflow: yaml,
+    baseSha,
+    ...(selectedDockerfile ? { dockerfile: selectedDockerfile } : {}),
+  })
   const createPr = useMutation({
     mutationFn: () => {
       const id = requestId ?? crypto.randomUUID()
@@ -218,7 +247,17 @@ function StandaloneWorkflowSetup({
   })
   const busy = createPr.isPending || download.isPending || rewrite.isPending
   const changeYaml = (workflow: string) => {
-    setDraft({ workflow, baseSha })
+    setDraft({ workflow, baseSha, dockerfile: selectedDockerfile })
+    setReviewed(false)
+    setRequestId(null)
+    setProposal(null)
+    setPr(null)
+    createPr.reset()
+    download.reset()
+    rewrite.reset()
+  }
+  const chooseDockerfile = (value: string) => {
+    setDockerfile(value)
     setReviewed(false)
     setRequestId(null)
     setProposal(null)
@@ -260,7 +299,15 @@ function StandaloneWorkflowSetup({
     canPerform(session.data, 'ai.review.run', repositoryId) &&
     data.ai.available
   const hasSource = !!source.data && !source.isError
-  const blocked = busy || !canManage || !hasSource || stale || !data.apiUrl
+  const blocked =
+    busy ||
+    source.isFetching ||
+    !canManage ||
+    !hasSource ||
+    stale ||
+    staleContainer ||
+    !!containerScan?.needsSelection ||
+    !data.apiUrl
   return (
     <Card className='overflow-hidden'>
       <CardHeader>
@@ -359,15 +406,100 @@ function StandaloneWorkflowSetup({
                 void source.refetch()
               }}
             />
+            {!!dockerfile && (
+              <Button
+                variant='outline'
+                size='sm'
+                onClick={() => {
+                  chooseDockerfile('')
+                  void client.invalidateQueries({
+                    queryKey: [...key, 'standalone'],
+                  })
+                }}
+              >
+                Detect Dockerfiles again
+              </Button>
+            )}
           </div>
         ) : (
           source.data && (
             <>
+              {containerScan && (
+                <section
+                  className='space-y-2 border-t pt-3'
+                  aria-label='Container image setup'
+                >
+                  <h4 className='text-sm font-medium'>Container image</h4>
+                  {containerScan.dockerfiles.length > 1 ? (
+                    <>
+                      <label htmlFor='container-dockerfile' className='text-sm'>
+                        Dockerfile to build
+                      </label>
+                      <Select
+                        value={selectedDockerfile ?? ''}
+                        onValueChange={chooseDockerfile}
+                        disabled={!canManage || busy || source.isFetching}
+                      >
+                        <SelectTrigger
+                          id='container-dockerfile'
+                          className='min-h-9 w-full min-w-0 whitespace-normal data-[size=default]:h-auto *:data-[slot=select-value]:line-clamp-none *:data-[slot=select-value]:break-all'
+                        >
+                          <SelectValue placeholder='Choose a Dockerfile' />
+                        </SelectTrigger>
+                        <SelectContent className='max-w-[calc(100vw-2rem)]'>
+                          {containerScan.dockerfiles.map((path) => (
+                            <SelectItem
+                              key={path}
+                              value={path}
+                              className='break-all whitespace-normal'
+                            >
+                              {path}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className='text-xs text-muted-foreground'>
+                        Choose the app to scan. Preflyt adds its image build and
+                        image tag to this workflow.
+                      </p>
+                    </>
+                  ) : containerScan.dockerfile ? (
+                    <p className='text-sm break-all'>
+                      Detected Dockerfile:{' '}
+                      <code>{containerScan.dockerfile}</code>
+                    </p>
+                  ) : (
+                    <p className='text-sm'>
+                      No Dockerfile found. Add one to the repository, or remove
+                      Container scanning from this policy.
+                    </p>
+                  )}
+                  {source.isFetching ? (
+                    <p
+                      role='status'
+                      className='flex items-center gap-2 text-xs text-muted-foreground'
+                    >
+                      <Loader2 className='size-3.5 animate-spin' />
+                      Updating container build…
+                    </p>
+                  ) : (
+                    containerScan.buildContext && (
+                      <p className='text-xs break-all text-muted-foreground'>
+                        Build context: <code>{containerScan.buildContext}</code>
+                        . The image is built on the GitHub Actions runner.
+                      </p>
+                    )
+                  )}
+                </section>
+              )}
               <WorkflowSnippet
                 setup={{
                   snippet: yaml,
                   notes: [],
-                  ready: !!data.apiUrl,
+                  ready:
+                    !!data.apiUrl &&
+                    !containerScan?.needsSelection &&
+                    !source.isFetching,
                   checkIds: data.checks.map((c) => c.id),
                   execution: 'policy',
                   complete: true,
@@ -394,11 +526,17 @@ function StandaloneWorkflowSetup({
                   before creating a PR.
                 </p>
               )}
-              {(changed || stale) && (
+              {staleContainer && (
+                <p role='alert' className='text-sm text-destructive'>
+                  The Dockerfile changed. Your edited YAML is preserved. Load
+                  the generated workflow to apply the new container build.
+                </p>
+              )}
+              {(changed || stale || staleContainer) && (
                 <Button
                   size='sm'
                   variant='outline'
-                  disabled={busy}
+                  disabled={busy || source.isFetching}
                   onClick={() => {
                     setDraft(null)
                     setProposal(null)
@@ -516,7 +654,9 @@ function StandaloneWorkflowSetup({
                   <YamlWorkflowEditor
                     value={yaml}
                     onChange={changeYaml}
-                    readOnly={!canManage || busy}
+                    readOnly={
+                      !canManage || busy || source.isFetching || staleContainer
+                    }
                     label='Standalone PR workflow YAML'
                     fullscreenTarget={editorSection}
                   />

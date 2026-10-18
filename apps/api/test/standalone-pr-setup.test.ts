@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { PipelineSetupController } from "../src/assessments/pipeline-setup.controller.js";
 import { standalonePrWorkflow } from "../src/assessments/standalone-pr-workflow.js";
+import { gunzipSync } from "node:zlib";
 
 const rules = [{ id: "security.sast", title: "Security", required: true }];
 const snapshot = {
@@ -43,12 +44,10 @@ beforeEach(() => {
   vi.stubEnv("GITHUB_CHECK_PUBLICATION_ENABLED", "true");
   vi.stubEnv("AUTOMATIC_CHECK_PUBLICATION_ENABLED", "true");
   github = {
-    createPipelineSetupPr: vi
-      .fn()
-      .mockResolvedValue({
-        number: 7,
-        url: "https://github.com/fixture/app/pull/7",
-      }),
+    createPipelineSetupPr: vi.fn().mockResolvedValue({
+      number: 7,
+      url: "https://github.com/fixture/app/pull/7",
+    }),
   };
   access = { requireRepository: vi.fn().mockResolvedValue({}) };
   prisma = {
@@ -85,26 +84,75 @@ const body = () => ({
   baseSha: snapshot.sourceSha,
   requestId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
 });
-it('generates a review-only draft using the verified branch source and dedicated service', async () => {
-  const ai = { generate: vi.fn(async () => ({ workflow: generated.workflow, summary: 'Review setup', skill: { id: 'preflyt-ci-setup' } })) };
+it("generates a review-only draft using the verified branch source and dedicated service", async () => {
+  const ai = {
+    generate: vi.fn(async () => ({
+      workflow: generated.workflow,
+      summary: "Review setup",
+      skill: { id: "preflyt-ci-setup" },
+    })),
+  };
   (controller as any).ai = ai;
-  await expect(controller.standaloneGenerate('6', { ...body(), instructions: '' }, request)).resolves.toMatchObject({ skill: { id: 'preflyt-ci-setup' } });
-  expect(ai.generate).toHaveBeenCalledWith(session, '6', 'policy', expect.any(Array), snapshot, generated.workflow, '', 'https://preflyt.example', body().requestId);
+  await expect(
+    controller.standaloneGenerate(
+      "6",
+      { ...body(), instructions: "" },
+      request,
+    ),
+  ).resolves.toMatchObject({ skill: { id: "preflyt-ci-setup" } });
+  expect(ai.generate).toHaveBeenCalledWith(
+    session,
+    "6",
+    "policy",
+    expect.any(Array),
+    snapshot,
+    generated.workflow,
+    "",
+    "https://preflyt.example",
+    body().requestId,
+    undefined,
+  );
   expect(github.createPipelineSetupPr).not.toHaveBeenCalled();
   expect(automation.configure).not.toHaveBeenCalled();
 });
-it('rejects stale source or permission loss before generation and a branch move during inference', async () => {
-  const ai = { generate: vi.fn(async () => ({ workflow: generated.workflow, summary: 'Review setup' })) };
+it("rejects stale source or permission loss before generation and a branch move during inference", async () => {
+  const ai = {
+    generate: vi.fn(async () => ({
+      workflow: generated.workflow,
+      summary: "Review setup",
+    })),
+  };
   (controller as any).ai = ai;
-  await expect(controller.standaloneGenerate('6', { ...body(), baseSha: 'd'.repeat(40), instructions: '' }, request)).rejects.toThrow('branch changed');
+  await expect(
+    controller.standaloneGenerate(
+      "6",
+      { ...body(), baseSha: "d".repeat(40), instructions: "" },
+      request,
+    ),
+  ).rejects.toThrow("branch changed");
   expect(ai.generate).not.toHaveBeenCalled();
-  access.requireRepository.mockRejectedValueOnce(new Error('Not allowed'));
-  await expect(controller.standaloneGenerate('6', { ...body(), instructions: '' }, request)).rejects.toThrow('Not allowed');
+  access.requireRepository.mockRejectedValueOnce(new Error("Not allowed"));
+  await expect(
+    controller.standaloneGenerate(
+      "6",
+      { ...body(), instructions: "" },
+      request,
+    ),
+  ).rejects.toThrow("Not allowed");
   expect(ai.generate).not.toHaveBeenCalled();
   const source = (controller as any).standaloneSource;
   const current = await source();
-  source.mockResolvedValueOnce(current).mockResolvedValueOnce({ ...current, generated: { ...generated, baseSha: 'e'.repeat(40) } });
-  await expect(controller.standaloneGenerate('6', { ...body(), instructions: '' }, request)).rejects.toThrow('changed during generation');
+  source.mockResolvedValueOnce(current).mockResolvedValueOnce({
+    ...current,
+    generated: { ...generated, baseSha: "e".repeat(40) },
+  });
+  await expect(
+    controller.standaloneGenerate(
+      "6",
+      { ...body(), instructions: "" },
+      request,
+    ),
+  ).rejects.toThrow("changed during generation");
   expect(github.createPipelineSetupPr).not.toHaveBeenCalled();
 });
 it("creates exactly the reviewed standalone file on the selected policy branch without a workflow ID", async () => {
@@ -148,4 +196,109 @@ it("enables the publisher before the first setup PR can trigger a run", async ()
   expect(automation.configure.mock.invocationCallOrder[0]).toBeLessThan(
     github.createPipelineSetupPr.mock.invocationCallOrder[0],
   );
+});
+
+async function containerFixture() {
+  const base = await (controller as any).standaloneSource();
+  const containerRules = [
+    { id: "containers.scan", title: "Containers", required: true },
+  ];
+  const source = {
+    ...snapshot,
+    files: ["api/Dockerfile", "web/Dockerfile"].map((path) => ({
+      path,
+      content: "FROM node:22",
+      size: 12,
+      sha: "c".repeat(40),
+    })),
+  };
+  const draft = standalonePrWorkflow(
+    source,
+    containerRules,
+    "https://preflyt.example",
+    undefined,
+    "web/Dockerfile",
+  );
+  (controller as any).standaloneSource.mockResolvedValue({
+    ...base,
+    snapshot: source,
+    policy: { ...base.policy, definition: { rules: containerRules } },
+    generated: standalonePrWorkflow(
+      source,
+      containerRules,
+      "https://preflyt.example",
+    ),
+  });
+  return {
+    source,
+    draft,
+    body: { ...body(), workflow: draft.workflow, dockerfile: "web/Dockerfile" },
+  };
+}
+it("detects Dockerfiles and generates the explicitly selected app without a GitHub write", async () => {
+  await containerFixture();
+  await expect(
+    controller.standalone("6", "policy", request, undefined, "web/Dockerfile"),
+  ).resolves.toMatchObject({
+    containerScan: { dockerfile: "web/Dockerfile", needsSelection: false },
+    workflow: expect.stringContaining("PREFLYT_DOCKERFILE: web/Dockerfile"),
+  });
+  expect(github.createPipelineSetupPr).not.toHaveBeenCalled();
+});
+it("rejects unresolved and invalid Dockerfile selections before generation, download or PR creation", async () => {
+  const fixture = await containerFixture();
+  const ai = { generate: vi.fn() };
+  (controller as any).ai = ai;
+  for (const dockerfile of [undefined, "other/Dockerfile"]) {
+    const payload = { ...fixture.body, dockerfile };
+    await expect(
+      controller.standalonePullRequest("6", payload, request),
+    ).rejects.toThrow();
+    await expect(
+      controller.standalonePackage("6", payload, request),
+    ).rejects.toThrow();
+    await expect(
+      controller.standaloneGenerate(
+        "6",
+        { ...payload, instructions: "" },
+        request,
+      ),
+    ).rejects.toThrow();
+  }
+  expect(ai.generate).not.toHaveBeenCalled();
+  expect(github.createPipelineSetupPr).not.toHaveBeenCalled();
+});
+it("preserves a selected Dockerfile through AI generation, archive and PR audit", async () => {
+  const fixture = await containerFixture();
+  const ai = {
+    generate: vi.fn().mockResolvedValue({
+      workflow: fixture.draft.workflow,
+      summary: "Build web",
+    }),
+  };
+  (controller as any).ai = ai;
+  await controller.standaloneGenerate(
+    "6",
+    { ...fixture.body, instructions: "" },
+    request,
+  );
+  expect(ai.generate.mock.calls[0].at(-1)).toBe("web/Dockerfile");
+  const archive = await controller.standalonePackage(
+    "6",
+    fixture.body,
+    request,
+  );
+  expect(
+    gunzipSync(Buffer.from(archive.archive, "base64")).toString(),
+  ).toContain("PREFLYT_DOCKERFILE: web/Dockerfile");
+  await controller.standalonePullRequest("6", fixture.body, request);
+  expect(
+    github.createPipelineSetupPr.mock.calls[0][4][
+      ".github/workflows/preflyt.yml"
+    ],
+  ).toContain("PREFLYT_DOCKERFILE: web/Dockerfile");
+  expect(
+    prisma.auditEvent.createMany.mock.calls[0][0].data[0].metadata
+      .containerScan,
+  ).toMatchObject({ dockerfile: "web/Dockerfile", buildContext: "web" });
 });

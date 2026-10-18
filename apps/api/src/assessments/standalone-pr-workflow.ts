@@ -9,6 +9,7 @@ import { publicationGateJob } from "./pipeline-gate-workflow.js";
 import { checkReportFormat } from "./check-report-adapters.js";
 import { checkExecution } from "./workflow-snippets.js";
 import { FINAL_GATE_NAME } from "./pipeline-jobs.js";
+import { containerScanSetup } from "./container-scan-setup.js";
 import {
   matchesTestTarget,
   workflowSetupTargets,
@@ -387,6 +388,7 @@ export function standalonePrWorkflow(
   rules: WorkflowRule[],
   apiUrl: string | null,
   setupSource?: string,
+  dockerfile?: string,
 ) {
   if (!validProfileBranch(snapshot.branch))
     throw new BadRequestException("Choose an existing target branch");
@@ -497,15 +499,10 @@ export function standalonePrWorkflow(
       "Additional project runtimes were found. Add their setup and dependency commands in the YAML before the policy checks.",
     );
   const env = { ...(object(setup?.env) ? setup.env : {}) };
-  if (
-    rules.some((r) => r.id === "containers.scan" && !r.workflowCommand) &&
-    !env.CONTAINER_IMAGE
-  ) {
-    const dockerfiles = snapshot.files.filter((f) =>
-      /(^|\/)Dockerfile$/.test(f.path),
-    );
-    if (dockerfiles.length === 1) {
-      const path = dockerfiles[0]!.path;
+  const containerScan = containerScanSetup(snapshot, rules, dockerfile);
+  if (containerScan) {
+    if (containerScan.dockerfile) {
+      const path = containerScan.dockerfile;
       env.CONTAINER_IMAGE =
         "preflyt-pr:${{ github.event.pull_request.head.sha }}";
       steps.push({
@@ -513,16 +510,18 @@ export function standalonePrWorkflow(
         "working-directory": ".",
         env: {
           PREFLYT_DOCKERFILE: path,
-          PREFLYT_BUILD_CONTEXT: posix.dirname(path),
+          PREFLYT_BUILD_CONTEXT: containerScan.buildContext,
         },
         run: 'docker build --file "$PREFLYT_DOCKERFILE" --tag "$CONTAINER_IMAGE" "$PREFLYT_BUILD_CONTEXT"',
       });
       notes.push(
-        `Container scan builds ${path} locally without pushing or deploying. Review its build context, arguments and any required build secrets.`,
+        `Container scanning builds ${path} on the GitHub Actions runner with build context ${containerScan.buildContext}. The build step and CONTAINER_IMAGE are configured automatically. Review any required build arguments or secrets.`,
       );
     } else
       notes.push(
-        "Container scanning needs a local image. Set CONTAINER_IMAGE and add its build step; multiple or missing Dockerfiles prevent automatic selection.",
+        containerScan.needsSelection
+          ? "Several Dockerfiles were detected. Choose the app's Dockerfile to generate its image build and image tag."
+          : "No Dockerfile was detected at this commit. Add a Dockerfile to the repository, or remove Container scanning from this policy. You can also configure a reviewed image build in the YAML.",
       );
   }
   for (const rule of rules)
@@ -623,7 +622,13 @@ export function standalonePrWorkflow(
     exists: !!previous,
     notes: [...new Set(notes)],
     setupSources: setup ? [setup.source] : [],
-    inputHash: digest({ sourceSha: snapshot.sourceSha, rules, apiUrl }),
+    containerScan,
+    inputHash: digest({
+      sourceSha: snapshot.sourceSha,
+      rules,
+      apiUrl,
+      dockerfile: containerScan?.dockerfile,
+    }),
   };
 }
 

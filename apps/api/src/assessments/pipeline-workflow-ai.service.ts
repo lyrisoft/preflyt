@@ -171,10 +171,10 @@ export class PipelineWorkflowAiService {
   async generate(
     session: AuthenticatedSession, repositoryId: string, policyId: string,
     rules: WorkflowRule[], snapshot: RepositorySnapshot, workflow: string,
-    instructions: string, apiUrl: string, requestId: string,
+    instructions: string, apiUrl: string, requestId: string, dockerfile?: string,
   ) {
     return this.rewrite(session, repositoryId, policyId, `refs/heads/${snapshot.branch}`,
-      rules, workflow, instructions, apiUrl, requestId, snapshot);
+      rules, workflow, instructions, apiUrl, requestId, snapshot, dockerfile);
   }
   async rewrite(
     session: AuthenticatedSession,
@@ -187,6 +187,7 @@ export class PipelineWorkflowAiService {
     apiUrl: string,
     requestId: string,
     setupSnapshot?: RepositorySnapshot,
+    setupDockerfile?: string,
   ) {
     readWorkflow(workflow);
     if (
@@ -198,7 +199,7 @@ export class PipelineWorkflowAiService {
         "Replace credentials with GitHub secret references before using AI",
       );
     const { route, provider } = await this.model(session, repositoryId);
-    const setup = setupSnapshot ? ciSetupContext(setupSnapshot, rules, apiUrl) : null;
+    const setup = setupSnapshot ? ciSetupContext(setupSnapshot, rules, apiUrl, setupDockerfile) : null;
     if (setup && setupContainsCredentials(instructions)) throw new BadRequestException('Remove credentials from your setup request before using AI');
     const skill = setup ? preflytCiSetupSkillRef : githubActionsWorkflowSkillRef;
     const event = setup ? 'pipeline.workflow.generate' : 'pipeline.workflow.rewrite';

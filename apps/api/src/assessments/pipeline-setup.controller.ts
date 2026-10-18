@@ -50,11 +50,13 @@ import {
 import { PipelineWorkflowAiService } from "./pipeline-workflow-ai.service.js";
 import { reportProofPolicy } from "../github-events/ci-attestation-policy.js";
 import { standalonePrWorkflow, standaloneWorkflowPath, validateStandalonePrWorkflow } from './standalone-pr-workflow.js';
+import { containerScanSetup, requireContainerSelection } from './container-scan-setup.js';
 
 class StandaloneDto {
   @IsString() @MaxLength(80) policyId!: string;
   @IsString() @MaxLength(32768) workflow!: string;
   @IsString() @Matches(/^[a-f0-9]{40}$/) baseSha!: string;
+  @IsOptional() @IsString() @MaxLength(512) dockerfile?: string;
 }
 class StandalonePrDto extends StandaloneDto {
   @IsUUID() requestId!: string;
@@ -287,8 +289,9 @@ export class PipelineSetupController {
   @Get('standalone')
   @Header('Cache-Control', 'no-store')
   async standalone(@Param('repositoryId') id: string, @Query('policy') policyId: string,
-    @Req() req: Request & { preflytSession: AuthenticatedSession }, @Query('refresh') refresh?: string) {
-    return (await this.standaloneSource(req.preflytSession, id, policyId, refresh === 'true')).generated;
+    @Req() req: Request & { preflytSession: AuthenticatedSession }, @Query('refresh') refresh?: string, @Query('dockerfile') dockerfile?: string) {
+    const current = await this.standaloneSource(req.preflytSession, id, policyId, refresh === 'true');
+    return dockerfile ? standalonePrWorkflow(current.snapshot, this.rules(current.policy.definition), publicPipelineUrl(), undefined, dockerfile) : current.generated;
   }
   private async reviewedStandalone(req: Request & { preflytSession: AuthenticatedSession }, id: string, body: StandaloneDto) {
     this.auth.assertOrigin(req.headers.origin);
@@ -298,14 +301,16 @@ export class PipelineSetupController {
       throw new ConflictException('The target branch changed. Refresh the workflow and review the updated setup before creating a PR.');
     const url = publicPipelineUrl();
     if (!url) throw new BadRequestException('Configure the public HTTPS Preflyt API URL before installing the workflow');
+    const containerScan = containerScanSetup(current.snapshot, this.rules(current.policy.definition), body.dockerfile);
+    requireContainerSelection(containerScan);
     validateStandalonePrWorkflow(body.workflow, this.rules(current.policy.definition), current.policy.branchRef, url);
-    return current;
+    return { ...current, containerScan };
   }
   @Post('standalone/pull-request')
   @Header('Cache-Control', 'no-store')
   async standalonePullRequest(@Param('repositoryId') id: string, @Body() body: StandalonePrDto,
     @Req() req: Request & { preflytSession: AuthenticatedSession }) {
-    const { repo, policy } = await this.reviewedStandalone(req, id, body);
+    const { repo, policy, containerScan } = await this.reviewedStandalone(req, id, body);
     await this.access.requireRepository(req.preflytSession, id, 'policy.draft');
     if (configurationValue('GITHUB_CHECK_PUBLICATION_ENABLED') !== 'true' || configurationValue('AUTOMATIC_CHECK_PUBLICATION_ENABLED') !== 'true')
       throw new BadRequestException('Enable automatic PR check publication in this deployment before creating the setup PR');
@@ -321,7 +326,7 @@ export class PipelineSetupController {
     await this.prisma.auditEvent.createMany({ data: [{ id: `standalone-setup:${id}:${body.requestId}`,
       event: 'pipeline.workflow.standalone-pr.created', actorId: req.preflytSession.identityId,
       metadata: { repositoryId: id, organizationId: req.preflytSession.organizationId!, policyId: policy.id,
-        branch: policy.branchRef, path: standaloneWorkflowPath, workflowHash: digest(body.workflow), ...result } }], skipDuplicates: true });
+        branch: policy.branchRef, path: standaloneWorkflowPath, workflowHash: digest(body.workflow), containerScan, ...result } }], skipDuplicates: true });
     return { ...result, path: standaloneWorkflowPath, branch: policy.branchRef };
   }
   @Post('standalone/package')
@@ -335,9 +340,9 @@ export class PipelineSetupController {
   @Header('Cache-Control', 'no-store')
   async standaloneGenerate(@Param('repositoryId') id: string, @Body() body: StandaloneRewriteDto,
     @Req() req: Request & { preflytSession: AuthenticatedSession }) {
-    const { policy, snapshot } = await this.reviewedStandalone(req, id, body);
+    const { policy, snapshot, containerScan } = await this.reviewedStandalone(req, id, body);
     const result = await this.ai.generate(req.preflytSession, id, policy.id, this.rules(policy.definition),
-      snapshot, body.workflow, body.instructions, publicPipelineUrl()!, body.requestId);
+      snapshot, body.workflow, body.instructions, publicPipelineUrl()!, body.requestId, containerScan?.dockerfile ?? undefined);
     await this.context(req.preflytSession, id, body.policyId);
     const current = await this.standaloneSource(req.preflytSession, id, body.policyId, true);
     if (current.generated.baseSha !== body.baseSha || digest(current.policy.definition) !== digest(policy.definition))

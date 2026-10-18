@@ -8,6 +8,10 @@ import {
   validateStandalonePrWorkflow,
 } from "./standalone-pr-workflow.js";
 import { preflytCiSetupInstructions } from "../intelligence/preflyt-ci-setup-skill.js";
+import {
+  containerScanSetup,
+  requireContainerSelection,
+} from "./container-scan-setup.js";
 
 // Do not send literal credentials in copied CI configuration to a model. References
 // remain reviewable; real credentials belong in GitHub's secret store.
@@ -46,7 +50,10 @@ export function ciSetupContext(
   snapshot: RepositorySnapshot,
   rules: WorkflowRule[],
   apiUrl: string,
+  dockerfile?: string,
 ) {
+  const containerScan = containerScanSetup(snapshot, rules, dockerfile);
+  requireContainerSelection(containerScan);
   // Manifests provide scripts/engines; workflow candidates provide exact setup.
   // Never send arbitrary source, lockfile contents, or unread files to inference.
   if (
@@ -92,19 +99,38 @@ export function ciSetupContext(
   const safeFiles = snapshot.files.filter(
     (file) => !file.content || !setupContainsCredentials(file.content),
   );
-  const source = { ...snapshot, files: safeFiles };
+  // The build needs the selected path, never Dockerfile source in the AI prompt.
+  // Retain path metadata when sensitive Dockerfile content has been excluded.
+  const source = {
+    ...snapshot,
+    files: snapshot.files.flatMap((file) =>
+      safeFiles.includes(file)
+        ? [file]
+        : containerScan?.dockerfiles.includes(file.path)
+          ? [{ ...file, content: undefined }]
+          : [],
+    ),
+  };
   const fallback = standalonePrWorkflow(
     {
       ...source,
-      files: safeFiles.filter((f) => !/^\.github\/workflows\//.test(f.path)),
+      files: source.files.filter((f) => !/^\.github\/workflows\//.test(f.path)),
     },
     rules,
     apiUrl,
+    undefined,
+    containerScan?.dockerfile ?? undefined,
   );
   const variants = [
     fallback,
     ...standaloneSetupSources(source, rules).map((setup) =>
-      standalonePrWorkflow(source, rules, apiUrl, setup),
+      standalonePrWorkflow(
+        source,
+        rules,
+        apiUrl,
+        setup,
+        containerScan?.dockerfile ?? undefined,
+      ),
     ),
   ];
   const choices = [
@@ -146,6 +172,7 @@ export function ciSetupContext(
       available: !!file.content && safeFiles.includes(file),
     })),
     policy: { checks: rules, apiUrl },
+    containerScan,
     choices,
   };
   // A bounded request is rejected rather than silently losing setup evidence.
@@ -201,6 +228,7 @@ export function ciSetupContext(
         workflow: choice.workflow,
         summary: result.summary,
         setupSources: choice.sources,
+        containerScan,
         notes: [
           ...choice.notes,
           ...evidence.warnings,

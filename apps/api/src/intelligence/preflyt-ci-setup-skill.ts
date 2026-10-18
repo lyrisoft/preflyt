@@ -15,6 +15,7 @@ Use this skill to create or update a Preflyt PR workflow. The request mode selec
 
 ## Create mode: generate a reviewable draft
 - Choose exactly one supplied setupId. Preflyt renders the selected source-backed workflow; do not output arbitrary YAML or alter commands. This keeps the draft tied to the inspected commit.
+- Keep the user's detected Dockerfile selection. Preflyt generates its local build, build context and PR-specific CONTAINER_IMAGE. Never substitute another Dockerfile, require manual image tags or add an image push. Unresolved Dockerfile choices must be selected in the UI before generation.
 - Keep existing CI and deployment files unchanged. The standalone workflow targets the selected policy branch and runs same-repository, non-draft PRs with least privilege.
 - The supported Preflyt Action reads approved check commands and report paths from the published policy. Do not add duplicate test commands, hard-code check lists or use unreleased Action inputs.
 - Tests and required services run in GitHub Actions, never in Repository Health. JUnit or SARIF must come from actual executed commands; coverage requires the supported verified-CI integration. Missing evidence cannot pass.
@@ -46,12 +47,12 @@ const manifest = validateSkill({
 export const preflytCiSetupSkillRef = Object.freeze({
   id: "preflyt-ci-setup",
   name: manifest.name,
-  version: 2,
+  version: 3,
   purpose: "workflow_edit" as const,
   contentDigest: digest({
     schema: 1,
     context: "ci_setup",
-    version: 2,
+    version: 3,
     ...manifest,
   }),
 });

@@ -241,7 +241,7 @@ describe("standalone PR workflow generation", () => {
       api,
     );
     expect(generated.notes.join(" ")).toContain(
-      "multiple or missing Dockerfiles",
+      "Several Dockerfiles were detected",
     );
     expect(generated.notes.join(" ")).toContain("Additional project runtimes");
     expect(generated.workflow).not.toContain("docker build");
