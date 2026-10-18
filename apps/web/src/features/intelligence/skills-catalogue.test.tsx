@@ -558,15 +558,15 @@ it('keeps built-in skill cards aligned and readable in both themes and on mobile
   await page.viewport(1280, 900)
 })
 
-it('shows the workflow editing skill as automatically used without assessment adoption actions', async () => {
+it('shows one CI setup skill for creating and updating workflows without assessment adoption actions', async () => {
   state.query = {
     data: {
       skills: [],
       templates: [
         {
           ...template,
-          id: 'github-actions',
-          name: 'GitHub Actions workflow',
+          id: 'preflyt-ci-setup',
+          name: 'Preflyt CI setup',
           purpose: 'workflow_edit',
           version: 1,
           category: 'GitHub Actions',
@@ -579,11 +579,9 @@ it('shows the workflow editing skill as automatically used without assessment ad
     .element(view.getByText('Used automatically', { exact: false }))
     .toBeVisible()
   await expect
-    .element(view.getByRole('button', { name: 'Use GitHub Actions workflow' }))
+    .element(view.getByRole('button', { name: 'Use Preflyt CI setup' }))
     .not.toBeInTheDocument()
-  await view
-    .getByRole('button', { name: 'View GitHub Actions workflow' })
-    .click()
+  await view.getByRole('button', { name: 'View Preflyt CI setup' }).click()
   await expect
     .element(
       page.getByRole('dialog').getByText('Used automatically', { exact: false })

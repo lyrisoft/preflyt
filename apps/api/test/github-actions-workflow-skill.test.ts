@@ -18,6 +18,8 @@ import {
   runPromptInference,
 } from "../src/intelligence/skill-inference.js";
 import { AiTransportError } from "../src/intelligence/ai-http.js";
+import { preflytCiSetupSkillRef, preflytCiSetupSkill } from '../src/intelligence/preflyt-ci-setup-skill.js';
+import { standalonePrWorkflow } from '../src/assessments/standalone-pr-workflow.js';
 
 vi.mock("../src/intelligence/ai-configuration.js", async (original) => ({
   ...(await original<
@@ -139,6 +141,44 @@ beforeEach(() => {
     );
 });
 afterEach(() => vi.restoreAllMocks());
+const setupSnapshot = { sourceSha: 'a'.repeat(40), treeSha: 'b'.repeat(40), branch: 'main', fullName: 'fixture/app', complete: true, warnings: [], files: [] };
+const setupWorkflow = standalonePrWorkflow(setupSnapshot, rules, 'https://api.preflyt.example').workflow;
+const generate = () => service.generate(session, '123', 'policy', rules, setupSnapshot, setupWorkflow, '', 'https://api.preflyt.example', 'setup-request');
+describe('dedicated Preflyt CI setup generation', () => {
+  it('uses the dedicated skill and repository context, renders only a source-backed choice, and audits its version', async () => {
+    vi.mocked(runPromptInference).mockImplementation(async (_provider, prompt, _tokens, _signal, validate, usage) => {
+      const data = JSON.parse(prompt.user);
+      expect(prompt.system).toBe(preflytCiSetupSkill.instructions);
+      expect(data.context.sourceSha).toBe(setupSnapshot.sourceSha);
+      await usage?.({ inputTokens: 10, outputTokens: 10, cachedTokens: null });
+      return validate(JSON.stringify({ setupId: data.context.choices[0].setupId, summary: 'Static setup; review missing test prerequisites.' }));
+    });
+    expect(await generate()).toMatchObject({ workflow: setupWorkflow, skill: preflytCiSetupSkillRef });
+    for (const event of ['requested', 'usage', 'completed']) expect(db.auditEvent.create).toHaveBeenCalledWith({ data: expect.objectContaining({ event: `pipeline.workflow.generate.${event}`, metadata: expect.objectContaining({ skill: preflytCiSetupSkillRef }) }) });
+    const listed = await new ReviewSkillsService(db, access).list(session);
+    expect(listed.templates.filter((item: any) => item.purpose === 'workflow_edit')).toEqual([preflytCiSetupSkill]);
+  });
+  it('rejects generation without repository permission before inference', async () => {
+    access.requireRepository.mockRejectedValue(new Error('Not allowed'));
+    await expect(generate()).rejects.toThrow('Not allowed');
+    expect(runPromptInference).not.toHaveBeenCalled();
+  });
+  it('requires source sharing and shares the rewrite hourly limit', async () => {
+    db.aiStageRoute.findUnique.mockResolvedValue({ ...route, allowSource: false });
+    await expect(generate()).rejects.toThrow('Allow source sharing');
+    expect(runPromptInference).not.toHaveBeenCalled();
+    db.aiStageRoute.findUnique.mockResolvedValue(route);
+    db.auditEvent.count.mockResolvedValue(20);
+    await expect(generate()).rejects.toThrow('Hourly workflow rewrite limit');
+    expect(runPromptInference).not.toHaveBeenCalled();
+  });
+  it('rejects an invented model setup without retaining the provider response', async () => {
+    vi.mocked(runPromptInference).mockImplementation(async (_p, _prompt, _t, _s, validate) => validate(JSON.stringify({ setupId: 'invented', summary: 'private-model-response' })));
+    await expect(generate()).rejects.toThrow('not found');
+    expect(JSON.stringify(db.auditEvent.create.mock.calls)).not.toContain('private-model-response');
+    expect(db.auditEvent.create).toHaveBeenCalledWith({ data: expect.objectContaining({ event: 'pipeline.workflow.generate.failed' }) });
+  });
+});
 const rewrite = () =>
   service.rewrite(
     session,

@@ -1,4 +1,4 @@
-import { githubActionsWorkflowSkill } from "./github-actions-workflow-skill.js";
+import { preflytCiSetupSkill } from './preflyt-ci-setup-skill.js';
 import { readUpstreamSkill } from "./upstream-skill.js";
 import { createHash, randomUUID } from "node:crypto";
 import {
@@ -43,7 +43,7 @@ export class ReviewSkillsService {
     await this.access.requireOrganization(session, "ai.skills.read");
     return {
       skills,
-      templates: [githubActionsWorkflowSkill, ...skillTemplates],
+      templates: [preflytCiSetupSkill, ...skillTemplates],
       executionMode: "instructions_only",
       context: "assessment_evidence",
     };
@@ -76,8 +76,8 @@ export class ReviewSkillsService {
   }
   async builtinMarkdown(session: AuthenticatedSession, id: string) {
     await this.access.requireOrganization(session, "ai.skills.read");
-    const skill = [githubActionsWorkflowSkill, ...skillTemplates].find(
-      (template) => template.id === id,
+    const skill = [preflytCiSetupSkill, ...skillTemplates].find(
+      (template) => template.id === (id === "github-actions" ? "preflyt-ci-setup" : id),
     );
     if (!skill) throw new NotFoundException("Built-in skill unavailable");
     return exportSkillMarkdown(skill);

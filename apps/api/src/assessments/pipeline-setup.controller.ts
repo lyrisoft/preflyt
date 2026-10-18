@@ -49,6 +49,20 @@ import {
 } from "./pipeline-workflow.js";
 import { PipelineWorkflowAiService } from "./pipeline-workflow-ai.service.js";
 import { reportProofPolicy } from "../github-events/ci-attestation-policy.js";
+import { standalonePrWorkflow, standaloneWorkflowPath, validateStandalonePrWorkflow } from './standalone-pr-workflow.js';
+
+class StandaloneDto {
+  @IsString() @MaxLength(80) policyId!: string;
+  @IsString() @MaxLength(32768) workflow!: string;
+  @IsString() @Matches(/^[a-f0-9]{40}$/) baseSha!: string;
+}
+class StandalonePrDto extends StandaloneDto {
+  @IsUUID() requestId!: string;
+}
+class StandaloneRewriteDto extends StandaloneDto {
+  @IsString() @MaxLength(2000) instructions!: string;
+  @IsUUID() requestId!: string;
+}
 
 class ConnectDto {
   @IsString() @MaxLength(80) policyId!: string;
@@ -187,13 +201,8 @@ export class PipelineSetupController {
       id,
       policyId,
     );
-    const [workflows, bindings, config, submissions, ai, write, setupPr] =
+    const [bindings, config, submissions, ai, write, setupPr] =
       await Promise.all([
-        this.github.discoverPipelineWorkflows(
-          repo.installationId,
-          repo.githubId,
-          refresh === "true",
-        ),
         this.bindings.get(id, policy.id),
         this.prisma.readinessAutomation.findUnique({
           where: { repositoryId: repo.id },
@@ -203,6 +212,7 @@ export class PipelineSetupController {
             repositoryId: repo.id,
             organizationId: req.preflytSession.organizationId!,
             policyId: policy.id,
+            payload: { path: ['signerWorkflow'], equals: `${repo.fullName}/.github/workflows/preflyt.yml` },
           },
           orderBy: { createdAt: "desc" },
           take: 5,
@@ -219,7 +229,7 @@ export class PipelineSetupController {
         this.github.pipelineWriteAvailability(repo.installationId),
         this.prisma.auditEvent.findFirst({
           where: {
-            event: "pipeline.workflow.setup-pr.created",
+            event: "pipeline.workflow.standalone-pr.created",
             metadata: { path: ["policyId"], equals: policy.id },
           },
           orderBy: { createdAt: "desc" },
@@ -232,7 +242,6 @@ export class PipelineSetupController {
       }
     ).rules;
     return {
-      ...workflows,
       apiUrl: publicPipelineUrl(),
       workflowSetup: workflowSnippet(this.rules(policy.definition)),
       ai,
@@ -267,6 +276,85 @@ export class PipelineSetupController {
       proofConfigured: !!reportProofPolicy(),
       submissions,
     };
+  }
+  private async standaloneSource(session: AuthenticatedSession, id: string, policyId: string, refresh = false) {
+    const { repo, policy } = await this.context(session, id, policyId);
+    const snapshot = await this.github.readStandaloneWorkflowSource(repo.installationId, repo.githubId, policy.branchRef, refresh);
+    const generated = standalonePrWorkflow(snapshot, this.rules(policy.definition), publicPipelineUrl());
+    await this.context(session, id, policyId);
+    return { repo, policy, generated, snapshot };
+  }
+  @Get('standalone')
+  @Header('Cache-Control', 'no-store')
+  async standalone(@Param('repositoryId') id: string, @Query('policy') policyId: string,
+    @Req() req: Request & { preflytSession: AuthenticatedSession }, @Query('refresh') refresh?: string) {
+    return (await this.standaloneSource(req.preflytSession, id, policyId, refresh === 'true')).generated;
+  }
+  private async reviewedStandalone(req: Request & { preflytSession: AuthenticatedSession }, id: string, body: StandaloneDto) {
+    this.auth.assertOrigin(req.headers.origin);
+    await this.access.requireRepository(req.preflytSession, id, 'policy.publish');
+    const current = await this.standaloneSource(req.preflytSession, id, body.policyId, true);
+    if (current.generated.baseSha !== body.baseSha)
+      throw new ConflictException('The target branch changed. Refresh the workflow and review the updated setup before creating a PR.');
+    const url = publicPipelineUrl();
+    if (!url) throw new BadRequestException('Configure the public HTTPS Preflyt API URL before installing the workflow');
+    validateStandalonePrWorkflow(body.workflow, this.rules(current.policy.definition), current.policy.branchRef, url);
+    return current;
+  }
+  @Post('standalone/pull-request')
+  @Header('Cache-Control', 'no-store')
+  async standalonePullRequest(@Param('repositoryId') id: string, @Body() body: StandalonePrDto,
+    @Req() req: Request & { preflytSession: AuthenticatedSession }) {
+    const { repo, policy } = await this.reviewedStandalone(req, id, body);
+    await this.access.requireRepository(req.preflytSession, id, 'policy.draft');
+    if (configurationValue('GITHUB_CHECK_PUBLICATION_ENABLED') !== 'true' || configurationValue('AUTOMATIC_CHECK_PUBLICATION_ENABLED') !== 'true')
+      throw new BadRequestException('Enable automatic PR check publication in this deployment before creating the setup PR');
+    // Enable the publisher before GitHub can dispatch the setup PR. No workflow ID
+    // exists yet; verified PR runs register their actual source automatically.
+    const config = await this.prisma.readinessAutomation.findUnique({ where: { repositoryId: repo.id } });
+    if (!config?.enabled) await this.automation.configure(req.preflytSession, id, true, config?.revision ?? 0);
+    await this.context(req.preflytSession, id, body.policyId);
+    await this.access.requireRepository(req.preflytSession, id, 'policy.publish');
+    const result = await this.github.createPipelineSetupPr(repo.installationId, repo.githubId, policy.branchRef,
+      body.baseSha, { [standaloneWorkflowPath]: body.workflow }, body.requestId, true);
+    // Recovering an uncertain GitHub write returns the same PR and audit identity.
+    await this.prisma.auditEvent.createMany({ data: [{ id: `standalone-setup:${id}:${body.requestId}`,
+      event: 'pipeline.workflow.standalone-pr.created', actorId: req.preflytSession.identityId,
+      metadata: { repositoryId: id, organizationId: req.preflytSession.organizationId!, policyId: policy.id,
+        branch: policy.branchRef, path: standaloneWorkflowPath, workflowHash: digest(body.workflow), ...result } }], skipDuplicates: true });
+    return { ...result, path: standaloneWorkflowPath, branch: policy.branchRef };
+  }
+  @Post('standalone/package')
+  @Header('Cache-Control', 'no-store')
+  async standalonePackage(@Param('repositoryId') id: string, @Body() body: StandaloneDto,
+    @Req() req: Request & { preflytSession: AuthenticatedSession }) {
+    await this.reviewedStandalone(req, id, body);
+    return { archive: setupArchive({ [standaloneWorkflowPath]: body.workflow }), filename: 'preflyt-pr-workflow.tar.gz' };
+  }
+  @Post('standalone/generate')
+  @Header('Cache-Control', 'no-store')
+  async standaloneGenerate(@Param('repositoryId') id: string, @Body() body: StandaloneRewriteDto,
+    @Req() req: Request & { preflytSession: AuthenticatedSession }) {
+    const { policy, snapshot } = await this.reviewedStandalone(req, id, body);
+    const result = await this.ai.generate(req.preflytSession, id, policy.id, this.rules(policy.definition),
+      snapshot, body.workflow, body.instructions, publicPipelineUrl()!, body.requestId);
+    await this.context(req.preflytSession, id, body.policyId);
+    const current = await this.standaloneSource(req.preflytSession, id, body.policyId, true);
+    if (current.generated.baseSha !== body.baseSha || digest(current.policy.definition) !== digest(policy.definition))
+      throw new ConflictException('The branch or policy changed during generation. Refresh setup and generate a new draft.');
+    validateStandalonePrWorkflow(result.workflow, this.rules(current.policy.definition), current.policy.branchRef, publicPipelineUrl()!);
+    return result;
+  }
+  @Post('standalone/rewrite')
+  @Header('Cache-Control', 'no-store')
+  async standaloneRewrite(@Param('repositoryId') id: string, @Body() body: StandaloneRewriteDto,
+    @Req() req: Request & { preflytSession: AuthenticatedSession }) {
+    const { policy } = await this.reviewedStandalone(req, id, body);
+    const result = await this.ai.rewrite(req.preflytSession, id, policy.id, policy.branchRef, this.rules(policy.definition),
+      body.workflow, body.instructions, publicPipelineUrl()!, body.requestId);
+    validateStandalonePrWorkflow(result.workflow, this.rules(policy.definition), policy.branchRef, publicPipelineUrl()!);
+    await this.context(req.preflytSession, id, body.policyId);
+    return result;
   }
   @Post()
   @Header("Cache-Control", "no-store")
@@ -361,13 +449,7 @@ export class PipelineSetupController {
       id,
       policyId,
     );
-    const source = await this.github.readPipelineWorkflow(
-      repo.installationId,
-      repo.githubId,
-      workflowId,
-      policy.branchRef,
-      refresh === "true",
-    );
+    const source = await this.github.readPipelineWorkflow(repo.installationId, repo.githubId, workflowId, policy.branchRef, refresh === "true");
     await this.access.requireRepository(req.preflytSession, id, "policy.read");
     return {
       ...source,

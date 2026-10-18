@@ -64,10 +64,19 @@ The **Public Preflyt API URL** applies without a restart. If it is empty, the sn
 
 ## Install the policy runner once
 
-1. Open **Policies** and choose the **CI jobs** tab.
-2. Choose the repository and the branch policy. Under **Policy workflow snippet**, select **Copy snippet**. You can also use **View YAML** on any standard in **Standards**.
-3. Paste it into your pull request workflow, for example `.github/workflows/ci.yml`. Keep your own dependency installation steps **before** the Preflyt step.
-4. Commit it to a branch and open a pull request.
+1. Open **Policies → CI jobs**, choose the repository and its published target-branch policy.
+2. Review the complete `.github/workflows/preflyt.yml` draft and the detected project setup. Existing CI and deployment files stay separate.
+3. Select **Generate workflow with AI** to request a repository-specific proposal. Instructions are optional. Preflyt uses the built-in **Preflyt CI setup** skill automatically; you do not need to adopt or configure a second skill.
+4. Review the comparison, the source workflow used for setup, and any unresolved prerequisites. Select **Use this draft** to apply the proposal to the editor. AI does not write to GitHub.
+5. Confirm that you reviewed the YAML and target branch, then select **Create setup PR** or **Create update PR**. If the App lacks write permissions, download the workflow and open the PR manually.
+
+### AI setup and existing workflows
+
+The single **Preflyt CI setup** skill supports creation and updates. In creation mode, AI reads detected package scripts, package-manager and workspace information, and supported existing CI prerequisites at the selected commit. It chooses a supplied setup plan; Preflyt renders the workflow and validates the PR trigger, Action version, permissions and final gate. It does not accept invented commands, services or unsupported Action inputs from the model. Missing setup stays visible in the notes and can be edited manually.
+
+The existing workflow-edit endpoint uses the same skill in update mode with stricter preservation checks: triggers, existing jobs, deployment behavior and existing commands must remain intact. The skill is inspectable and downloadable under **Skills**; it is not an AI assessment check and cannot decide readiness.
+
+AI requires a tested Repository model, enabled source sharing and repository permission to run AI reviews and publish policy setup. The affected setup information is sent to that configured model. Potential credential-bearing files are excluded from creation context; keep credentials in GitHub secrets. The UI explains unavailable AI, and manual YAML editing remains available. Generating a proposal does not execute checks, verify reports, create a PR or activate merge protection.
 
 The generated standalone snippet has two jobs. When integrating with an existing workflow, keep its check jobs and add one terminal gate:
 

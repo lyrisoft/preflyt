@@ -30,6 +30,10 @@ import {
   type WorkflowRule,
 } from "./pipeline-workflow.js";
 
+import { preflytCiSetupSkillRef } from '../intelligence/preflyt-ci-setup-skill.js';
+import { ciSetupContext, setupContainsCredentials } from './preflyt-ci-setup.js';
+import type { RepositorySnapshot } from '../github/repository-profile.js';
+
 // Rewrites return an entire workflow, unlike short assessment review findings.
 // Leave room for that YAML and model reasoning without adding user budget settings.
 const workflowResponseTokenLimit = 32768;
@@ -147,6 +151,7 @@ export class PipelineWorkflowAiService {
       return {
         available: true,
         skill: githubActionsWorkflowSkillRef,
+        setupSkill: preflytCiSetupSkillRef,
         model: provider.name + " / " + provider.modelId,
         reason: null,
       };
@@ -154,6 +159,7 @@ export class PipelineWorkflowAiService {
       return {
         available: false,
         skill: githubActionsWorkflowSkillRef,
+        setupSkill: preflytCiSetupSkillRef,
         model: null,
         reason:
           error instanceof HttpException
@@ -161,6 +167,14 @@ export class PipelineWorkflowAiService {
             : "AI workflow rewriting is unavailable",
       };
     }
+  }
+  async generate(
+    session: AuthenticatedSession, repositoryId: string, policyId: string,
+    rules: WorkflowRule[], snapshot: RepositorySnapshot, workflow: string,
+    instructions: string, apiUrl: string, requestId: string,
+  ) {
+    return this.rewrite(session, repositoryId, policyId, `refs/heads/${snapshot.branch}`,
+      rules, workflow, instructions, apiUrl, requestId, snapshot);
   }
   async rewrite(
     session: AuthenticatedSession,
@@ -172,6 +186,7 @@ export class PipelineWorkflowAiService {
     instructions: string,
     apiUrl: string,
     requestId: string,
+    setupSnapshot?: RepositorySnapshot,
   ) {
     readWorkflow(workflow);
     if (
@@ -183,7 +198,11 @@ export class PipelineWorkflowAiService {
         "Replace credentials with GitHub secret references before using AI",
       );
     const { route, provider } = await this.model(session, repositoryId);
-    const prompt = githubActionsWorkflowPrompt({
+    const setup = setupSnapshot ? ciSetupContext(setupSnapshot, rules, apiUrl) : null;
+    if (setup && setupContainsCredentials(instructions)) throw new BadRequestException('Remove credentials from your setup request before using AI');
+    const skill = setup ? preflytCiSetupSkillRef : githubActionsWorkflowSkillRef;
+    const event = setup ? 'pipeline.workflow.generate' : 'pipeline.workflow.rewrite';
+    const prompt = setup ? { ...setup.prompt, user: JSON.stringify({ mode: 'generate', context: JSON.parse(setup.prompt.user), request: instructions }) } : githubActionsWorkflowPrompt({
       policy: {
         branch,
         checks: rules.map((rule) => ({
@@ -198,7 +217,7 @@ export class PipelineWorkflowAiService {
         "Add the checks required by this policy, retaining existing flows.",
     });
     const organizationId = session.organizationId!;
-    const auditId = `workflow-rewrite:${requestId}`;
+    const auditId = `workflow-${setup ? "generate" : "rewrite"}:${requestId}`;
     if (await this.db.auditEvent.findUnique({ where: { id: auditId } }))
       throw new ConflictException(
         "This rewrite request was already submitted. Start a new rewrite.",
@@ -243,7 +262,7 @@ export class PipelineWorkflowAiService {
         );
       const hourly = await tx.auditEvent.count({
         where: {
-          event: "pipeline.workflow.rewrite.requested",
+          event: { in: ["pipeline.workflow.rewrite.requested", "pipeline.workflow.generate.requested"] },
           metadata: { path: ["organizationId"], equals: organizationId },
           createdAt: { gt: new Date(Date.now() - 3600000) },
         },
@@ -254,16 +273,17 @@ export class PipelineWorkflowAiService {
         data: {
           id: auditId,
           actorId: session.identityId,
-          event: "pipeline.workflow.rewrite.requested",
+          event: `${event}.requested`,
           metadata: {
             organizationId,
             repositoryId,
             policyId,
             requestId,
-            skill: githubActionsWorkflowSkillRef,
+            skill,
             providerId: provider.id,
             routeRevision: route.revision,
-            inputHash: digest(workflow),
+            inputHash: setup?.inputHash ?? digest(workflow),
+            ...(setupSnapshot ? { sourceSha: setupSnapshot.sourceSha } : {}),
           },
         },
       });
@@ -272,20 +292,20 @@ export class PipelineWorkflowAiService {
       const result = await runPromptInference(
         provider,
         prompt,
-        workflowResponseTokenLimit,
+        setup ? 2048 : workflowResponseTokenLimit,
         AbortSignal.timeout(90000),
-        (raw, credential) => validateRewrite(raw, workflow, credential),
+        (raw, credential) => setup ? setup.validate(raw, credential) : validateRewrite(raw, workflow, credential),
         async (usage) => {
           await this.db.auditEvent.create({
             data: {
-              event: "pipeline.workflow.rewrite.usage",
+              event: `${event}.usage`,
               actorId: session.identityId,
               metadata: {
                 organizationId,
                 repositoryId,
                 policyId,
                 requestId,
-                skill: githubActionsWorkflowSkillRef,
+                skill,
                 ...usage,
               },
             },
@@ -309,14 +329,14 @@ export class PipelineWorkflowAiService {
         );
       await this.db.auditEvent.create({
         data: {
-          event: "pipeline.workflow.rewrite.completed",
+          event: `${event}.completed`,
           actorId: session.identityId,
           metadata: {
             organizationId,
             repositoryId,
             policyId,
             requestId,
-            skill: githubActionsWorkflowSkillRef,
+            skill,
             outputHash: digest(result.workflow),
           },
         },
@@ -324,20 +344,20 @@ export class PipelineWorkflowAiService {
       return {
         ...result,
         model: provider.name + " / " + provider.modelId,
-        skill: githubActionsWorkflowSkillRef,
+        skill,
       };
     } catch (error) {
       const failure = rewriteFailure(error);
       await this.db.auditEvent.create({
         data: {
-          event: "pipeline.workflow.rewrite.failed",
+          event: `${event}.failed`,
           actorId: session.identityId,
           metadata: {
             organizationId,
             repositoryId,
             policyId,
             requestId,
-            skill: githubActionsWorkflowSkillRef,
+            skill,
             failureCode: failure.code,
             ...("location" in failure && failure.location
               ? { location: failure.location }

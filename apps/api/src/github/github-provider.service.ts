@@ -17,6 +17,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  NotFoundException,
   ServiceUnavailableException,
   Inject,
   Optional,
@@ -687,6 +688,27 @@ export class GitHubProviderService {
     )
   }
 
+  /** Branch source for a new workflow; does not require an existing workflow ID. */
+  async readStandaloneWorkflowSource(installationId: bigint, repositoryId: bigint, branch: string, refresh = false) {
+    branch = branch.replace(/^refs\/heads\//, '')
+    if (!validProfileBranch(branch)) throw new BadRequestException('Choose an existing target branch')
+    const reader = await this.openRepository(installationId, repositoryId, 'contents')
+    const result = await this.readPipelineCache(installationId, repositoryId,
+      `standalone-source:${encodeURIComponent(branch)}`, refresh,
+      async () => {
+        const root = `/repos/${encodeURIComponent(reader.metadata.owner.login)}/${encodeURIComponent(reader.metadata.name)}`
+        const state = await reader.request<{ commit: { sha: string } }>(`${root}/branches/${encodeURIComponent(branch)}`, {
+          notFound: `Target branch "${branch}" was not found. Select or publish a policy for an existing branch.`,
+          forbidden: 'GitHub denied access to the target branch. Check the GitHub App’s repository access and Contents read permission.',
+        })
+        if (!/^[a-f0-9]{40}$/.test(state.commit?.sha)) throw new ServiceUnavailableException('Target branch revision could not be verified')
+        return reader.inspectSource(state.commit.sha, branch, false)
+      },
+      value => !!value && value.branch === branch && /^[a-f0-9]{40}$/.test(value.sourceSha) && Array.isArray(value.files) && Array.isArray(value.warnings))
+    await (reader as { assertAccess?: () => Promise<void> }).assertAccess?.()
+    return result
+  }
+
   async readPipelineWorkflow(
     installationId: bigint,
     repositoryId: bigint,
@@ -702,7 +724,7 @@ export class GitHubProviderService {
       repositoryId,
       'contents',
     )
-    return this.readPipelineCache(
+    const result = await this.readPipelineCache(
       installationId,
       repositoryId,
       `workflow:${workflowId}:${encodeURIComponent(branch)}`,
@@ -719,6 +741,10 @@ export class GitHubProviderService {
         const root = `/repos/${encodeURIComponent(reader.metadata.owner.login)}/${encodeURIComponent(reader.metadata.name)}`
         const branchState = await reader.request<{ commit: { sha: string } }>(
           `${root}/branches/${encodeURIComponent(branch)}`,
+          {
+            notFound: `Policy branch "${branch}" was not found in ${reader.metadata.owner.login}/${reader.metadata.name}. Select or publish a policy for an existing branch.`,
+            forbidden: 'GitHub denied access to the policy branch. Check the GitHub App’s repository access and Contents read permission.',
+          },
         )
         if (!/^[a-f0-9]{40}$/.test(branchState.commit?.sha))
           throw new ServiceUnavailableException(
@@ -733,6 +759,10 @@ export class GitHubProviderService {
           path: string
         }>(
           `${root}/contents/${workflow.path.split('/').map(encodeURIComponent).join('/')}?ref=${branchState.commit.sha}`,
+          {
+            notFound: `Workflow "${workflow.path}" was not found on policy branch "${branch}". Choose a workflow present on that branch or add it there.`,
+            forbidden: 'GitHub denied access to the workflow file. Check the GitHub App’s repository access and Contents read permission.',
+          },
         )
         if (
           file.type !== 'file' ||
@@ -781,6 +811,8 @@ export class GitHubProviderService {
         Buffer.byteLength(value.workflow) <= 32768 &&
         !value.workflow.includes('\0'),
     )
+    await (reader as { assertAccess?: () => Promise<void> }).assertAccess?.()
+    return result
   }
 
   async pipelineWriteAvailability(installationId: bigint) {
@@ -790,9 +822,10 @@ export class GitHubProviderService {
   }
 
   /** Called only after the user reviews YAML and explicitly requests a setup PR. Never writes the base branch. */
-  async createPipelineSetupPr(installationId: bigint, repositoryId: bigint, branch: string, baseSha: string, files: Record<string, string>, requestId: string) {
+  async createPipelineSetupPr(installationId: bigint, repositoryId: bigint, branch: string, baseSha: string, files: Record<string, string>, requestId: string, standalone = false) {
     branch = branch.replace(/^refs\/heads\//, '')
-    if (!/^[a-f0-9]{40}$/.test(baseSha) || !/^[a-f0-9-]{36}$/.test(requestId) || Object.keys(files).length !== 1 ||
+    if (!validProfileBranch(branch) || !/^[a-f0-9]{40}$/.test(baseSha) || !/^[a-f0-9-]{36}$/.test(requestId) || Object.keys(files).length !== 1 ||
+      (standalone && !Object.hasOwn(files, '.github/workflows/preflyt.yml')) ||
       Object.entries(files).some(([path, content]) => !/^\.github\/workflows\/[a-zA-Z0-9_-]+\.ya?ml$/.test(path) || Buffer.byteLength(content) > 65536))
       throw new BadRequestException('Invalid reviewed workflow files')
     const write = await this.pipelineWriteAvailability(installationId)
@@ -827,10 +860,12 @@ export class GitHubProviderService {
       const parent = await call(`/git/commits/${baseSha}`)
       if (!/^[a-f0-9]{40}$/.test(parent.tree?.sha)) throw new ServiceUnavailableException('Repository tree could not be verified')
       const entries: Record<string, unknown>[] = Object.entries(files).map(([path, content]) => ({ path, mode: '100644', type: 'blob', content }))
-      const oldTree = await call(`/git/trees/${parent.tree.sha}?recursive=1`)
-      if (oldTree.truncated) throw new ServiceUnavailableException('Repository tree could not be fully checked')
-      if (oldTree.tree?.some((entry: any) => entry.path === '.github/workflows/preflyt-gate.yml'))
-        entries.push({ path: '.github/workflows/preflyt-gate.yml', mode: '100644', type: 'blob', sha: null })
+      if (!standalone) {
+        const oldTree = await call(`/git/trees/${parent.tree.sha}?recursive=1`)
+        if (oldTree.truncated) throw new ServiceUnavailableException('Repository tree could not be fully checked')
+        if (oldTree.tree?.some((entry: any) => entry.path === '.github/workflows/preflyt-gate.yml'))
+          entries.push({ path: '.github/workflows/preflyt-gate.yml', mode: '100644', type: 'blob', sha: null })
+      }
       const tree = await call('/git/trees', 'POST', { base_tree: parent.tree.sha, tree: entries })
       if (!/^[a-f0-9]{40}$/.test(tree.sha)) throw new ServiceUnavailableException('Workflow tree could not be created')
       const commit = await call('/git/commits', 'POST', { message: 'Connect Preflyt policy checks', tree: tree.sha, parents: [baseSha] })
@@ -839,7 +874,8 @@ export class GitHubProviderService {
       // No force push; a duplicate concurrent request stops here and can recover on retry.
       await call('/git/refs', 'POST', { ref: `refs/heads/${head}`, sha: commitSha })
     }
-    const pr = existing[0] ?? await call('/pulls', 'POST', { title: 'Connect Preflyt policy checks', head, base: branch, body: 'Adds the reviewed checks and final Preflyt gate in one workflow using the published Action. Review the workflow before merging. Existing tests, scan steps and branch protection are preserved.' })
+    const pr = existing[0] ?? await call('/pulls', 'POST', { title: standalone ? 'Add Preflyt pull request checks' : 'Connect Preflyt policy checks', head, base: branch,
+      body: standalone ? `Adds the reviewed standalone Preflyt workflow for pull requests targeting ${branch}. Includes project setup, published-policy checks and the final verification gate. Review setup commands, services and required configuration before merging. Existing CI and deployment workflows are unchanged. Setup is proposed until merged and a PR run is verified; merge protection requires separate activation.` : 'Adds the reviewed checks and final Preflyt gate in one workflow using the published Action. Review the workflow before merging. Existing tests, scan steps and branch protection are preserved.' })
     const expected = `https://github.com/${reader.metadata.owner.login}/${reader.metadata.name}/pull/`
     if (!Number.isSafeInteger(pr.number) || pr.number < 1 || pr.html_url !== expected + pr.number || pr.head?.sha !== commitSha || pr.base?.ref !== branch)
       throw new ServiceUnavailableException('Setup PR could not be verified; check the repository before retrying')
@@ -1382,7 +1418,7 @@ export class GitHubProviderService {
     const timeout = AbortSignal.timeout(timeoutMs)
     const signal = externalSignal ? AbortSignal.any([externalSignal, timeout]) : timeout
     signal.throwIfAborted()
-    const request = async <T>(path: string): Promise<T> => {
+    const request = async <T>(path: string, errors?: { notFound: string; forbidden: string }): Promise<T> => {
       const response = await this.apiFetch(
         `installation:${installationId}`,
         `https://api.github.com${path}`,
@@ -1395,6 +1431,8 @@ export class GitHubProviderService {
       if ([401, 403, 404].includes(response.status))
         for (const key of this.tokens.keys())
           if (key.startsWith(`${installationId}:`)) this.tokens.delete(key)
+      if (response.status === 404 && errors) throw new NotFoundException(errors.notFound)
+      if (response.status === 403 && errors) throw new ForbiddenException(errors.forbidden)
       if (
         response.status === 401 ||
         response.status === 404 ||
