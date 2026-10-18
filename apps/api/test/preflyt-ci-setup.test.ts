@@ -174,3 +174,44 @@ it("does not let an unrelated expression hide a literal credential assignment", 
   ).toBe(false);
   expect(setupContainsCredentials("id-token: write")).toBe(false);
 });
+
+it.each([
+  "security.sast",
+  "security.dependencies",
+  "lint.required",
+  "types.required",
+  "build.required",
+])("never offers AI a test-infrastructure setup for selected %s", (id) => {
+  const context = ciSetupContext(
+    snapshot,
+    [{ id, title: id, required: true }],
+    "https://preflyt.example",
+  );
+  expect(context.choices).toHaveLength(1);
+  for (const choice of context.choices) {
+    expect(choice.sources).toEqual([]);
+    expect(choice.workflow).not.toContain("postgres:16");
+    expect(choice.workflow).not.toContain("TEST_DATABASE_PASSWORD");
+    expect(
+      context.validate(
+        JSON.stringify({
+          setupId: choice.setupId,
+          summary: "Use the setup needed by this static check.",
+        }),
+      ).workflow,
+    ).toBe(choice.workflow);
+  }
+  expect(context.prompt.system).toContain("selected executable policy checks");
+});
+it("excludes test jobs for other package directories from AI choices", () => {
+  const context = ciSetupContext(
+    snapshot,
+    [{ ...rules[0]!, workflowCommand: "cd apps/api && pnpm test" }],
+    "https://preflyt.example",
+  );
+  expect(context.choices).toHaveLength(1);
+  expect(context.choices[0]!.workflow).not.toContain("postgres:16");
+  expect(context.choices[0]!.notes.join(" ")).toContain(
+    "No reusable test setup matched",
+  );
+});

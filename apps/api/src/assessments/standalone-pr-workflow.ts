@@ -10,6 +10,11 @@ import { checkReportFormat } from "./check-report-adapters.js";
 import { checkExecution } from "./workflow-snippets.js";
 import { FINAL_GATE_NAME } from "./pipeline-jobs.js";
 import {
+  matchesTestTarget,
+  workflowSetupTargets,
+  type SetupTarget,
+} from "./workflow-setup-requirements.js";
+import {
   readWorkflow,
   validateSetupWorkflow,
   type WorkflowRule,
@@ -35,7 +40,10 @@ const deployStep =
   /configure-aws-credentials|amazon-ecr-login|build-push-action|\baws\s|\b(?:deploy|publish)\b|docker\s+(?:push|login)|--push\b/i;
 
 /** Reuse an existing verification job's prerequisites, not its tests or deployments. */
-function verificationSetups(snapshot: RepositorySnapshot) {
+function verificationSetups(
+  snapshot: RepositorySnapshot,
+  targets: SetupTarget[],
+) {
   const candidates: {
     steps: Step[];
     env: unknown;
@@ -43,8 +51,11 @@ function verificationSetups(snapshot: RepositorySnapshot) {
     services: unknown;
     directory: string;
     source: string;
-    score: number;
   }[] = [];
+  const tests = targets.filter((target) => target.tests);
+  if (!tests.length) return candidates;
+  if (targets.some((target) => target.directory !== tests[0]!.directory))
+    return candidates;
   for (const file of snapshot.files) {
     if (
       !/^\.github\/workflows\/[^/]+\.ya?ml$/.test(file.path) ||
@@ -70,12 +81,31 @@ function verificationSetups(snapshot: RepositorySnapshot) {
           !/^ubuntu-\d+\.\d+$/.test(String(job["runs-on"])))
       )
         continue;
-      const end = job.steps.findIndex(
-        (step: Step) =>
-          typeof step.run === "string" && projectCheck.test(step.run),
+      const defaults = job.defaults ?? value.defaults;
+      const matched = tests.map((target) =>
+        job.steps.findIndex(
+          (step: Step) =>
+            typeof step.run === "string" &&
+            matchesTestTarget(
+              target,
+              step.run,
+              step["working-directory"] ??
+                defaults?.run?.["working-directory"] ??
+                ".",
+            ),
+        ),
       );
-      if (end < 0) continue;
+      // Do not combine unrelated test jobs or assume an earlier check is setup.
+      if (matched.some((index) => index < 0) || new Set(matched).size !== 1)
+        continue;
+      const end = Math.min(...matched);
       const steps: Step[] = job.steps.slice(0, end);
+      if (
+        steps.some(
+          (step) => typeof step.run === "string" && projectCheck.test(step.run),
+        )
+      )
+        continue;
       if (
         !steps.some(
           (s) =>
@@ -130,24 +160,73 @@ function verificationSetups(snapshot: RepositorySnapshot) {
           (job.defaults ?? value.defaults)?.run?.["working-directory"] ??
           ".",
         source: `${file.path} → ${id}`,
-        score: (/test/i.test(id) ? 10 : 0) + steps.length,
       });
     }
   }
-  return candidates.sort(
-    (a, b) => b.score - a.score || a.source.localeCompare(b.source),
+  // Identical commands can be used by unit and integration jobs with different
+  // env/services. Do not guess that the largest job is the selected test setup.
+  const signatures = new Set(
+    candidates.map(({ steps, env, defaults, services }) =>
+      digest({ steps, env, defaults, services }),
+    ),
   );
+  return signatures.size > 1
+    ? []
+    : candidates.sort((a, b) => a.source.localeCompare(b.source));
 }
 
-export function standaloneSetupSources(snapshot: RepositorySnapshot) {
-  return verificationSetups(snapshot).map((setup) => setup.source).slice(0, 8);
+export function standaloneSetupSources(
+  snapshot: RepositorySnapshot,
+  rules: WorkflowRule[],
+) {
+  return verificationSetups(snapshot, workflowSetupTargets(rules, snapshot))
+    .map((setup) => setup.source)
+    .slice(0, 8);
 }
 
-function manifestSetup(snapshot: RepositorySnapshot, notes: string[]) {
+function manifestSetup(
+  snapshot: RepositorySnapshot,
+  notes: string[],
+  targets: SetupTarget[],
+) {
   const steps: Step[] = [checkout];
-  const packages = snapshot.files.filter(
+  if (!targets.length) return steps;
+  const allPackages = snapshot.files.filter(
     (f) => /(^|\/)package\.json$/.test(f.path) && f.content,
   );
+  // Built-in project recipes execute at the root. Explicit commands may select
+  // another package; only that package (or its workspace install root) is set up.
+  const nodeTargets = targets.filter((target) => target.runtime === "node");
+  const packages = [
+    ...new Set(
+      nodeTargets.flatMap((target) => {
+        const file = allPackages.find(
+          (item) => item.path === posix.join(target.directory, "package.json"),
+        );
+        if (!file) {
+          notes.push(
+            `No package.json was found in ${target.directory} for ${target.title}. Review its Workflow command in Standards and dependency setup in the YAML.`,
+          );
+          return [];
+        }
+        const parents = allPackages.filter(
+          (parent) =>
+            parent !== file &&
+            (posix.dirname(parent.path) === "." ||
+              file.path.startsWith(posix.dirname(parent.path) + "/")) &&
+            (snapshot.files.some(
+              (f) =>
+                f.path ===
+                posix.join(posix.dirname(parent.path), "pnpm-workspace.yaml"),
+            ) ||
+              /"workspaces"\s*:/.test(parent.content ?? "")),
+        );
+        return [
+          parents.sort((a, b) => a.path.length - b.path.length)[0] ?? file,
+        ];
+      }),
+    ),
+  ];
   if (packages.length > 8)
     notes.push(
       "More than eight JavaScript projects were found. Review dependency setup for the projects used by this policy.",
@@ -242,9 +321,14 @@ function manifestSetup(snapshot: RepositorySnapshot, notes: string[]) {
       });
     }
   }
+  const pythonDirectories = targets
+    .filter((target) => target.runtime === "python")
+    .map((target) => target.directory);
   if (
-    snapshot.files.some((f) =>
-      /(^|\/)(requirements[^/]*\.txt|pyproject\.toml)$/.test(f.path),
+    snapshot.files.some(
+      (f) =>
+        pythonDirectories.includes(posix.dirname(f.path)) &&
+        /(^|\/)(requirements[^/]*\.txt|pyproject\.toml)$/.test(f.path),
     )
   ) {
     steps.push({
@@ -252,8 +336,10 @@ function manifestSetup(snapshot: RepositorySnapshot, notes: string[]) {
       uses: "actions/setup-python@v5",
       with: { "python-version": "3.x" },
     });
-    const requirements = snapshot.files.filter((f) =>
-      /(^|\/)requirements\.txt$/.test(f.path),
+    const requirements = snapshot.files.filter(
+      (f) =>
+        /(^|\/)requirements\.txt$/.test(f.path) &&
+        pythonDirectories.includes(posix.dirname(f.path)),
     );
     for (const file of requirements.slice(0, 4))
       steps.push({
@@ -266,8 +352,15 @@ function manifestSetup(snapshot: RepositorySnapshot, notes: string[]) {
         "Python project detected. Add its reviewed dependency installation command before the policy checks.",
       );
   }
-  if (snapshot.files.some((f) => /(^|\/)go\.mod$/.test(f.path))) {
-    const module = snapshot.files.find((f) => /(^|\/)go\.mod$/.test(f.path))!;
+  const modules = snapshot.files.filter(
+    (f) =>
+      /(^|\/)go\.mod$/.test(f.path) &&
+      targets.some(
+        (target) =>
+          target.runtime === "go" && target.directory === posix.dirname(f.path),
+      ),
+  );
+  for (const module of modules) {
     steps.push({
       name: "Set up Go",
       uses: "actions/setup-go@v5",
@@ -279,6 +372,13 @@ function manifestSetup(snapshot: RepositorySnapshot, notes: string[]) {
       run: "go mod download",
     });
   }
+  for (const target of targets.filter(
+    (target) =>
+      target.runtime === "unknown" && target.command !== "default-tests",
+  ))
+    notes.push(
+      `Setup for ${target.title} could not be determined from its Workflow command. Review its runtime, dependencies and any required services in the YAML. No unrelated test infrastructure was copied.`,
+    );
   return steps;
 }
 
@@ -324,24 +424,29 @@ export function standalonePrWorkflow(
     throw new ConflictException(
       `${standaloneWorkflowPath} already exists and is not managed by this setup. Rename it or review it manually before installing.`,
     );
-  const setups = verificationSetups(snapshot);
-  const setup = setupSource ? setups.find((item) => item.source === setupSource) : setups[0];
-  if (setupSource && !setup) throw new BadRequestException('The selected setup is unavailable at this commit');
-  const steps = setup?.steps ?? manifestSetup(snapshot, notes);
+  const targets = workflowSetupTargets(rules, snapshot);
+  const setups = verificationSetups(snapshot, targets);
+  const setup = setupSource
+    ? setups.find((item) => item.source === setupSource)
+    : setups[0];
+  if (setupSource && !setup)
+    throw new BadRequestException(
+      "The selected setup is unavailable at this commit",
+    );
+  const steps =
+    setup?.steps.map((step) => ({ ...step })) ??
+    manifestSetup(snapshot, notes, targets);
   if (setup)
     notes.push(
-      `Project setup copied from ${setup.source} at commit ${snapshot.sourceSha.slice(0, 12)}. Review services, environment values and setup commands before creating the PR.`,
+      `Test setup copied from ${setup.source} at commit ${snapshot.sourceSha.slice(0, 12)} because its test command and directory match this policy. Review which services, environment values and setup commands those tests need before creating the PR.`,
     );
-  else if (
-    rules.some((r) =>
-      /^(tests\.required|frontend\.components|service\.resilience|custom-junit-)/.test(
-        r.id,
-      ),
-    )
-  )
+  else if (targets.some((target) => target.tests))
     notes.push(
-      "No reusable test setup was found. Review required databases, environment variables and migrations in the YAML before running project checks.",
+      "No reusable test setup matched the selected test commands and directories unambiguously. Review their required services and environment in the YAML before running tests.",
     );
+  const rootPython = snapshot.files.some((file) =>
+    /^(requirements[^/]*\.txt|pyproject\.toml)$/.test(file.path),
+  );
   const projectDirectory =
     setup?.directory ??
     (snapshot.files.some((f) => f.path === "package.json")
@@ -356,7 +461,9 @@ export function standalonePrWorkflow(
       (r) =>
         /^(tests\.required|types\.required|build\.required|lint\.required)$/.test(
           r.id,
-        ) && !r.workflowCommand,
+        ) &&
+        !r.workflowCommand &&
+        (r.id !== "tests.required" || !rootPython),
     )
   )
     notes.push(
@@ -377,13 +484,23 @@ export function standalonePrWorkflow(
         f.path,
       ),
     ) &&
+    targets.some(
+      (target) =>
+        target.runtime === "unknown" ||
+        (target.command === "default-tests" &&
+          target.runtime === "python" &&
+          !rootPython),
+    ) &&
     !setup
   )
     notes.push(
       "Additional project runtimes were found. Add their setup and dependency commands in the YAML before the policy checks.",
     );
   const env = { ...(object(setup?.env) ? setup.env : {}) };
-  if (rules.some((r) => r.id === "containers.scan") && !env.CONTAINER_IMAGE) {
+  if (
+    rules.some((r) => r.id === "containers.scan" && !r.workflowCommand) &&
+    !env.CONTAINER_IMAGE
+  ) {
     const dockerfiles = snapshot.files.filter((f) =>
       /(^|\/)Dockerfile$/.test(f.path),
     );
@@ -429,7 +546,9 @@ export function standalonePrWorkflow(
     with: { "api-url": url, "job-name": "Preflyt policy checks" },
   });
   const workflow =
-    "# Preflyt pull request workflow\n# Setup changes are reviewed through a PR. Check commands come from the published target-branch policy.\n" +
+    "# Preflyt pull request workflow\n" +
+    `# Preflyt setup policy: ${digest(rules.map(({ id, workflowCommand, reportPath }) => ({ id, workflowCommand, reportPath })).sort((a, b) => a.id.localeCompare(b.id)))}\n` +
+    "# Setup changes are reviewed through a PR. Check commands come from the published target-branch policy.\n" +
     stringify(
       {
         name: "Preflyt pull request checks",
@@ -466,8 +585,8 @@ export function standalonePrWorkflow(
       { lineWidth: 0 },
     );
   readWorkflow(workflow);
-  // Preserve reviewed project customizations when the installed workflow already
-  // satisfies the current contract. Policy check lists are fetched on each run.
+  // Do not retain old test infrastructure after policy commands or setup change.
+  // Preserve comments and timeout edits only when the actual setup still matches.
   let proposed = workflow;
   if (previous?.content && apiUrl && !setupSource) {
     try {
@@ -477,10 +596,21 @@ export function standalonePrWorkflow(
         `refs/heads/${snapshot.branch}`,
         apiUrl,
       );
+      const shape = (text: string) => {
+        const value = readWorkflow(text).value;
+        for (const job of Object.values(value.jobs))
+          delete job["timeout-minutes"];
+        return digest(value);
+      };
+      if (
+        previous.content.split("\n")[1] !== workflow.split("\n")[1] ||
+        shape(previous.content) !== shape(workflow)
+      )
+        throw new Error("Policy or setup changed");
       proposed = previous.content;
     } catch {
       notes.push(
-        "The installed Preflyt workflow needs an update. Review its previous setup in the comparison before replacing it.",
+        "The selected checks or their setup have changed. Review the comparison before replacing the installed Preflyt workflow; previous setup is not carried forward automatically.",
       );
     }
   }

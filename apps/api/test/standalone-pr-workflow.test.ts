@@ -7,6 +7,7 @@ import {
   validateStandalonePrWorkflow,
 } from "../src/assessments/standalone-pr-workflow.js";
 import { policyAction } from "../src/assessments/pipeline-action.js";
+import type { WorkflowRule } from "../src/assessments/pipeline-workflow.js";
 
 const rules = [
   { id: "tests.required", title: "Unit tests", required: true },
@@ -112,7 +113,7 @@ describe("standalone PR workflow generation", () => {
         "api/package.json": "{}",
         "api/package-lock.json": "{}",
       }),
-      rules,
+      [{ ...rules[0]!, workflowCommand: "cd api && npm test" }, rules[1]!],
       api,
     );
     const job = parse(generated.workflow).jobs.preflyt_checks;
@@ -148,7 +149,7 @@ describe("standalone PR workflow generation", () => {
       ".github/workflows/merge-verify.yml → test",
     ]);
     expect(generated.notes.join(" ")).toContain(
-      "commands execute from the repository root",
+      "test command and directory match",
     );
   });
   it("does not copy setup that requires deployment credentials or unresolved job inputs", () => {
@@ -161,7 +162,7 @@ describe("standalone PR workflow generation", () => {
     ]) {
       const generated = standalonePrWorkflow(
         source({ ".github/workflows/verify.yml": unsafe }),
-        rules,
+        [{ ...rules[0]!, workflowCommand: "cd api && npm test" }],
         api,
       );
       expect(generated.setupSources).toEqual([]);
@@ -245,4 +246,311 @@ describe("standalone PR workflow generation", () => {
     expect(generated.notes.join(" ")).toContain("Additional project runtimes");
     expect(generated.workflow).not.toContain("docker build");
   });
+});
+
+const staticIds = [
+  "security.sast",
+  "secrets.scan",
+  "security.dependencies",
+  "iac.policy",
+  "iac.exposures",
+  "containers.scan",
+  "lint.required",
+  "types.required",
+  "build.required",
+];
+const infrastructure = () => {
+  const workflow = parse(verification);
+  workflow.env = { DATABASE_URL: "${{ secrets.TEST_DATABASE_URL }}" };
+  workflow.jobs.test.steps.splice(
+    2,
+    0,
+    {
+      name: "Start infra",
+      run: "docker compose -f docker-compose.infra.yml up -d --wait postgres valkey neo4j clickhouse",
+    },
+    { name: "Compose test environment", run: "cp .env.example .env" },
+    { name: "Seed RBAC", "working-directory": "api", run: "npm run seed:rbac" },
+  );
+  return stringify(workflow);
+};
+const projectFiles = () => ({
+  ".github/workflows/merge-verify.yml": infrastructure(),
+  "package.json": '{"engines":{"node":"22"}}',
+  "package-lock.json": "{}",
+  "api/package.json": "{}",
+  "api/package-lock.json": "{}",
+  "web/package.json": "{}",
+  "web/package-lock.json": "{}",
+  "requirements.txt": "pytest",
+  "go.mod": "module fixture",
+});
+const selected = (id: string, workflowCommand?: string): WorkflowRule[] => [
+  {
+    id,
+    title: id,
+    required: true,
+    ...(workflowCommand ? { workflowCommand } : {}),
+  },
+];
+
+it.each(staticIds)(
+  "omits test infrastructure for selected %s, including Compose and environment setup",
+  (id) => {
+    const generated = standalonePrWorkflow(
+      source(projectFiles()),
+      selected(id),
+      api,
+    );
+    const job = parse(generated.workflow).jobs.preflyt_checks;
+    expect(job.services).toBeUndefined();
+    expect(job.defaults).toBeUndefined();
+    expect(generated.workflow).not.toMatch(
+      /postgres|valkey|neo4j|clickhouse|DATABASE_URL|\.env|prisma:apply|seed:rbac|setup-python|setup-go/,
+    );
+    expect(generated.setupSources).toEqual([]);
+    const installs = job.steps.filter((step: any) => step.run === "npm ci");
+    expect(installs.map((step: any) => step["working-directory"])).toEqual(
+      ["lint.required", "types.required", "build.required"].includes(id)
+        ? ["."]
+        : [],
+    );
+    if (!["lint.required", "types.required", "build.required"].includes(id))
+      expect(job.steps).toHaveLength(2); // Checkout and policy runner; image ambiguity is a review note.
+  },
+);
+it("matches selected package and test script rather than borrowing a broader integration setup", () => {
+  const workflow = parse(infrastructure());
+  workflow.jobs.test.env = workflow.env;
+  delete workflow.env;
+  workflow.jobs.unit = {
+    "runs-on": "ubuntu-latest",
+    defaults: { run: { "working-directory": "api" } },
+    steps: [
+      { uses: "actions/checkout@v4" },
+      { run: "npm ci" },
+      { run: "npm run test:unit" },
+    ],
+  };
+  const files = {
+    ...projectFiles(),
+    ".github/workflows/merge-verify.yml": stringify(workflow),
+  };
+  const generated = standalonePrWorkflow(
+    source(files),
+    selected("tests.required", "npm --prefix api run test:unit"),
+    api,
+  );
+  expect(generated.setupSources).toEqual([
+    ".github/workflows/merge-verify.yml → unit",
+  ]);
+  expect(generated.workflow).not.toMatch(
+    /postgres|docker compose|DATABASE_URL|prisma:apply|seed:rbac/,
+  );
+  expect(generated.workflow).not.toContain("run: npm run test:unit");
+});
+it("does not mistake nested tests or integration scripts for the default root test recipe", () => {
+  const generated = standalonePrWorkflow(
+    source(projectFiles()),
+    selected("tests.required"),
+    api,
+  );
+  expect(generated.setupSources).toEqual([]);
+  expect(generated.workflow).not.toContain("postgres");
+  expect(generated.notes.join(" ")).toContain("No reusable test setup matched");
+  const other = standalonePrWorkflow(
+    source(projectFiles()),
+    selected("tests.required", "cd api && npm run test:unit"),
+    api,
+  );
+  expect(other.setupSources).toEqual([]);
+  expect(other.workflow).not.toContain("postgres");
+});
+it("scopes fallback installation to the explicit package, or its workspace install root", () => {
+  const files = projectFiles();
+  const command = selected("lint.required", "cd api && npm run lint");
+  const draft = standalonePrWorkflow(source(files), command, api);
+  const directories = (workflow: string) =>
+    parse(workflow)
+      .jobs.preflyt_checks.steps.filter((s: any) => s.run === "npm ci")
+      .map((s: any) => s["working-directory"]);
+  expect(directories(draft.workflow)).toEqual(["api"]);
+  files["package.json"] = '{"workspaces":["api","web"]}';
+  expect(
+    directories(standalonePrWorkflow(source(files), command, api).workflow),
+  ).toEqual(["."]);
+});
+it("uses the actual override command to choose setup rather than the check title or report format", () => {
+  const generated = standalonePrWorkflow(
+    source(projectFiles()),
+    selected("tests.required", "cd api && npm run lint"),
+    api,
+  );
+  expect(generated.workflow).not.toContain("postgres");
+  expect(generated.notes.join(" ")).not.toContain("No reusable test setup");
+  const custom = standalonePrWorkflow(
+    source(projectFiles()),
+    selected(
+      "custom-junit-12345678-1234-4123-8123-123456789abc",
+      "./scripts/verify.sh",
+    ),
+    api,
+  );
+  expect(custom.workflow).not.toContain("postgres");
+  expect(custom.notes.join(" ")).toContain("could not be determined");
+  const unknown = standalonePrWorkflow(
+    source(projectFiles()),
+    selected("tests.required", "./scripts/verify.sh"),
+    api,
+  );
+  expect(unknown.notes.join(" ")).toContain("could not be determined");
+  expect(unknown.workflow).not.toContain("npm ci");
+});
+it("does not add a local image build when container scanning uses an approved command override", () => {
+  const generated = standalonePrWorkflow(
+    source({ ...projectFiles(), Dockerfile: "FROM node:22" }),
+    selected("containers.scan", "./scan-image.sh"),
+    api,
+  );
+  expect(generated.workflow).not.toContain("docker build");
+});
+it("regenerates installed test setup when checks or commands change, and exposes the original for review", () => {
+  const files = projectFiles();
+  const tests = selected("tests.required", "cd api && npm test");
+  const original = standalonePrWorkflow(source(files), tests, api).workflow;
+  expect(original).toContain("postgres");
+  for (const policy of [
+    selected("security.sast"),
+    selected("tests.required", "cd api && npm run test:unit"),
+  ]) {
+    const generated = standalonePrWorkflow(
+      source({ ...files, [standaloneWorkflowPath]: original }),
+      policy,
+      api,
+    );
+    expect(generated.original).toBe(original);
+    expect(generated.workflow).not.toMatch(
+      /postgres|prisma:apply|seed:rbac|DATABASE_URL/,
+    );
+    expect(generated.notes.join(" ")).toContain("setup have changed");
+  }
+});
+it("does not preserve extra infrastructure under an unchanged policy stamp or in legacy installed workflows", () => {
+  const policy = selected("security.sast");
+  const original = standalonePrWorkflow(source({}), policy, api).workflow;
+  const yaml = parse(original);
+  yaml.jobs.preflyt_checks.services = { postgres: { image: "postgres:16" } };
+  for (const installed of [
+    original.split("\n").slice(0, 2).join("\n") + "\n" + stringify(yaml),
+    original.replace(/^# Preflyt setup policy:.*\n/m, ""),
+  ]) {
+    const generated = standalonePrWorkflow(
+      source({ [standaloneWorkflowPath]: installed }),
+      policy,
+      api,
+    );
+    expect(generated.workflow).toBe(original);
+    expect(generated.notes.join(" ")).toContain("setup have changed");
+  }
+});
+
+it("does not guess between different environments for the same test command", () => {
+  const workflow = parse(verification);
+  workflow.jobs.unit = {
+    ...workflow.jobs.test,
+    services: undefined,
+    steps: [
+      { uses: "actions/checkout@v4" },
+      { run: "npm ci", "working-directory": "api" },
+      { run: "npm test", "working-directory": "api" },
+    ],
+  };
+  const draft = standalonePrWorkflow(
+    source({
+      ...projectFiles(),
+      ".github/workflows/merge-verify.yml": stringify(workflow),
+    }),
+    selected("tests.required", "cd api && npm test"),
+    api,
+  );
+  expect(draft.setupSources).toEqual([]);
+  expect(draft.workflow).not.toContain("postgres");
+  expect(draft.notes.join(" ")).toContain("unambiguously");
+});
+it("does not reuse a partial setup across different selected packages or test commands", () => {
+  const policy = [
+    ...selected("tests.required", "cd api && npm test"),
+    ...selected("lint.required", "cd web && npm run lint"),
+  ];
+  const draft = standalonePrWorkflow(source(projectFiles()), policy, api);
+  expect(draft.setupSources).toEqual([]);
+  expect(draft.workflow).not.toContain("postgres");
+  expect(
+    parse(draft.workflow)
+      .jobs.preflyt_checks.steps.filter((s: any) => s.run === "npm ci")
+      .map((s: any) => s["working-directory"]),
+  ).toEqual(["api", "web"]);
+});
+it("selecting a CI setup explicitly cannot bypass static-check filtering", () => {
+  expect(() =>
+    standalonePrWorkflow(
+      source(projectFiles()),
+      selected("security.sast"),
+      api,
+      ".github/workflows/merge-verify.yml → test",
+    ),
+  ).toThrow("unavailable");
+});
+
+it("does not borrow Python test infrastructure for the built-in Node test recipe", () => {
+  const workflow = stringify({
+    name: "Python checks",
+    on: "pull_request",
+    jobs: {
+      python: {
+        "runs-on": "ubuntu-latest",
+        services: { postgres: { image: "postgres:16" } },
+        steps: [{ uses: "actions/checkout@v4" }, { run: "pytest" }],
+      },
+    },
+  });
+  const draft = standalonePrWorkflow(
+    source({ ...projectFiles(), ".github/workflows/python.yml": workflow }),
+    selected("tests.required"),
+    api,
+  );
+  expect(draft.setupSources).toEqual([]);
+  expect(draft.workflow).not.toContain("postgres");
+});
+it("sets up only Python or Go when that runtime is selected by a project command", () => {
+  for (const [command, runtime, excluded] of [
+    ["pytest", "setup-python", "setup-node"],
+    ["go test ./...", "setup-go", "setup-python"],
+  ]) {
+    const draft = standalonePrWorkflow(
+      source(projectFiles()),
+      selected("tests.required", command),
+      api,
+    );
+    expect(draft.workflow).toContain(runtime);
+    expect(draft.workflow).not.toContain(excluded);
+    expect(draft.workflow).not.toContain("postgres");
+  }
+});
+
+it("does not ask for unrelated runtime setup just because another language exists in the repository", () => {
+  const draft = standalonePrWorkflow(
+    source({ ...projectFiles(), "Cargo.toml": "[package]" }),
+    selected("lint.required"),
+    api,
+  );
+  expect(draft.notes.join(" ")).not.toContain("Additional project runtimes");
+  const python = standalonePrWorkflow(
+    source({ "requirements.txt": "pytest", "api/package.json": "{}" }),
+    selected("tests.required"),
+    api,
+  );
+  expect(python.notes.join(" ")).not.toContain(
+    "commands execute from the repository root",
+  );
 });

@@ -103,7 +103,7 @@ export function ciSetupContext(
   );
   const variants = [
     fallback,
-    ...standaloneSetupSources(source).map((setup) =>
+    ...standaloneSetupSources(source, rules).map((setup) =>
       standalonePrWorkflow(source, rules, apiUrl, setup),
     ),
   ];
