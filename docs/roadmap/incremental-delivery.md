@@ -1,7 +1,7 @@
 # Preflyt incremental delivery plan: usable vertical slices
 
-**Status:** Ordered delivery roadmap with explicit source-implementation notes. Only entries marked implemented describe current code; phase completion still requires its deployment and live acceptance gates.
-**Version:** 0.2 · **Updated:** 2026-10-13
+**Status:** Community delivery roadmap is P0–P5. The planned P6–P12 work was transferred to the private `lyrisoft/preflyt-cloud` issue backlog on 2026-10-18. Only entries explicitly marked implemented describe current code; release acceptance remains required.
+**Version:** 0.3 · **Updated:** 2026-10-18
 **Related:** [SDLC capability model](../product/sdlc-capabilities.md) · [PRD](../PRD.md) · [ADR-0004](../architecture/ADR-0004-shift-left-assessment-governance.md)
 
 **Approved revision (2026-10-11):** Repository Health Assessment is inserted as P5 after P4. Former P5–P11 are now P6–P12; their scope, implementation notes and outstanding acceptance gates are preserved. P5 core implementation is present; executed-analysis production acceptance remains pending. See [P5 specification](../product/repository-health-assessment.md).
@@ -31,15 +31,9 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 | **P3** | **Native Secure Validation** | PR + approved executor | Execute security/testing/IaC scans safely and enrich findings beyond imported evidence |
 | **P4** | **Advanced AI Engineering Intelligence** | SDLC assessments | Advanced model-routed investigations and recommendations; Cloud-only P4.RI repository-aware review follow-up; deterministic gates remain independent |
 | **P5** | **Repository Health Assessment** | Repository selection + Health UI | Automatically assess a selected branch, report actionable findings and freshness without requiring CI |
-| **P6** | **Developer Experience: CLI + IDE** | Laptop / VS Code | Shared local engine, CLI, policy sync, inline diagnostics, AI explanations and optional Git hooks |
-| **P7** | **QA Release Readiness** | QA/CI + UI | Import end-to-end/contract/regression evidence and validate release candidate readiness |
-| **P8** | **k6 Performance Evidence** | Existing k6/CI + UI | Import k6 results and gate comparable performance evidence against budgets |
-| **P9** | **Managed k6 Smoke & Load** | Performance UI + approved runner | Run approved smoke/load tests, view reports and thresholds safely |
-| **P10** | **Advanced Performance Profiles** | Performance UI | Stress/spike/soak/breakpoint/scalability with safety controls and baselines |
-| **P11** | **Production Feedback Loop** | Read-only incident/deploy integration | Link escaped incidents to releases and earlier checks; propose human-approved improvements |
-| **P12** | **Operational Expansion** | GitLab / scheduled profiles | Expand providers, distributed k6, trends, observability correlations and cost/compliance checks |
+| **P6–P12** | **Transferred to Preflyt Cloud** | Private Cloud backlog | Planned developer tooling, QA, performance, production feedback and operational expansion are no longer Community release commitments |
 
-**P0–P3 form the first commercially meaningful MVP foundation.** P4 expands the core AI intelligence capability, with P4.RI as a separately accepted optional follow-up; P5 delivers automatic repository health and first value without CI; P6–P10 deepen Shift Left through local, QA and performance workflows; P11 moves production learnings earlier; P12 expands scale and integrations. The first deliverable is P0, **not** an empty architecture scaffold.
+**P0–P3 form the first commercially meaningful MVP foundation.** P4 expands core AI intelligence (with the optional Cloud-only P4.RI follow-up), and P5 provides repository health assessment without requiring CI. **The Community delivery sequence ends at P5.** The P6–P12 backlog is owned by the private `lyrisoft/preflyt-cloud` repository; the issue tracker there is the current source of implementation scope and acceptance for those stages. Existing Community capabilities must stay independently usable. The first deliverable remains P0, **not** an empty architecture scaffold.
 
 ## 3. Detailed per-phase tasks and completion gates
 
@@ -224,103 +218,23 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 
 **Completion gates:** Demonstrate fresh repository onboarding without CI, seeded findings and a clean fixture on qualified adapters, correct branch/SHA binding, worker retries without duplicate scans/notifications, unsupported languages and scanner failure reported honestly, cross-repository/organization denial, isolation rejection and cancellation cleanup. Prove no changes to published policy, AI routing or merge protection. Deploy and upgrade through Compose with migration/rollback and runtime qualification evidence; infrastructure qualification cannot be replaced by fixture tests.
 
-### P6 — Developer Experience: CLI and IDE Extension
+### P6–P12 — Transferred to Preflyt Cloud (2026-10-18)
 
-**Incremental release contract:** P6.1 shared local engine and installable CLI; P6.2 authenticated repository link and cached policy; P6.3 installable VS Code extension with inline diagnostics; P6.4 AI explanation and revision-bound PR gate visibility; P6.5 opt-in Git hooks and tested compatible editors. Each is independently usable and deployable. See [developer CLI and IDE specification](../product/developer-cli-ide-extension.md).
+This portion of the original phased roadmap was **moved into GitHub issues in the private `lyrisoft/preflyt-cloud` repository** and is no longer planned as Community Edition delivery. Existing numbering is retained for continuity:
 
+- **P6** — Developer experience: shared CLI, repository policy sync, VS Code extension, optional AI/PR status and Git hooks (five independently usable release issues).
+- **P7** — QA release readiness.
+- **P8** — Imported k6 performance evidence and budgets.
+- **P9** — Managed k6 smoke and bounded load tests.
+- **P10** — Advanced performance profiles.
+- **P11** — Production evidence feedback.
+- **P12** — Operational and provider expansion.
 
-**User value:** A developer runs fast local checks and gets actionable feedback before pushing code.
-
-**Tasks:**
-- P6.1 Ship signed/reproducible Node.js/TypeScript CLI package with documented install/update/remove.
-- P6.2 Local fast lint/typecheck/secret/dependency checks on a working tree, per-tool scope and execution consent.
-- P6.3 Cache approved repository policy and show cache freshness; add explicit opt-in pre-commit integration.
-- P6.4 Present local findings with file/line; optionally submit redacted evidence or ask for AI explanation with consent.
-- P6.5 Tests for offline mode, dirty tree, missing tools, revoked identity, policy cache age and safe uninstall.
-
-**Done when:** Developers can install and run the CLI locally, discover a seeded issue without pushing to CI, and work without a model key. Local PASS is labeled **advisory**, never a trusted CI green result.
-
-### P7 — QA Release Readiness
-
-**User value:** QA can evaluate a real release candidate using traceable functional test and compatibility evidence.
-
-**Tasks:**
-- P7.1 Release candidate/environment identity, deployment SHA/image, test-suite inventory and QA evidence import.
-- P7.2 Unit/integration/E2E/regression/contract test adapters and correct discovered/executed/skipped counts.
-- P7.3 Database migration/API compatibility check templates using isolated test environments and fixtures.
-- P7.4 QA readiness policy and optional authorized sign-off, report and audit.
-- P7.5 Test missing mandatory suites, zero tests, failed contract, stale candidate and manually approved exception.
-
-**Done when:** QA can select a candidate, see required suites and contract findings, and make an evidence-backed pass/block/incomplete decision without depending on AI or P8+ capabilities.
-
-### P8 — k6 Performance Evidence and Budgets
-
-**User value:** A team already running k6 in CI can import a run and receive a performance assessment/gate, **without** Preflyt running load.
-
-**Tasks:**
-- P8.1 Performance target/profile metadata (approved environment, service/revision, workload identity).
-- P8.2 k6 summary/threshold parser with tool-version, script/config digest and artifact provenance.
-- P8.3 Performance budget policy (latency percentiles, error rate, throughput/iterations, dropped iterations).
-- P8.4 First comparable baseline record and clear INCOMPARABLE/INCOMPLETE cases; performance report in UI.
-- P8.5 Test missing metrics, absent threshold, underachieved load, mismatched revisions and invalid artifact.
-
-**Done when:** One existing k6 report can be imported and compared to a configured budget, producing a defensible quality-gate result. No execution permissions or Operator are needed.
-
-### P9 — Managed k6 Smoke and Load
-
-**User value:** An authorized engineer can configure and execute a controlled smoke/load test against a registered non-production target.
-
-**Tasks:**
-- P9.1 Target service/environment registry, ownership verification, scoped test auth and script versioning.
-- P9.2 Performance profiles, VUs/arrival-rate settings, duration/ramp and threshold setup in UI.
-- P9.3 k6 runner adapter on approved isolated runtime with resource quotas, egress restrictions, non-production target allowlist, cost controls and cancellation.
-- P9.4 Test lifecycle and live progress, results, artifacts, operator audit, error/timeout states.
-- P9.5 Verify no arbitrary URLs, SSRF redirects/DNS pivots, credentials in scripts/logs, unbounded request rates or load-generator saturation marked falsely as app regression.
-
-**Done when:** A user runs a smoke and a bounded load test on an approved staging service, sees achieved VUs/iterations/RPS/latency/errors and a budget gate, and can cancel safely. P8 imported-run functionality remains available.
-
-### P10 — Advanced Performance Testing
-
-**User value:** Performance engineers can execute and compare stress, spike, soak, breakpoint and scalability workloads with safe automated stop conditions.
-
-**Tasks:**
-- P10.1 Add advanced workload profiles/stage shapes, recovery windows, stop-on-threshold and budget alerts.
-- P10.2 Profile-specific approvals for higher-impact tests and dedicated runner pools/regions where needed.
-- P10.3 Comparable multi-run baselines, runner-vs-target saturation detection, latency drift and test reproducibility.
-- P10.4 Optional SigNoz/OpenTelemetry/Prometheus correlation and AI-assisted explanation with evidence links.
-- P10.5 Safety tests for long soak cancellation, spike rate clamps, runaway breakpoint ramp, target outage and production default-deny.
-
-**Done when:** One stress, spike and soak scenario each produces a safe, interpretable evidence-backed report and is cancelled/stopped under its policy. Production load tests remain prohibited without separate explicit operational approval.
-
-### P11 — Production Evidence Feedback
-
-**User value:** An SRE links a production incident to a released version and an earlier missing or failed engineering check, then proposes an improved PR/release policy.
-
-**Tasks:**
-- P11.1 Read-only incident/alert/telemetry or deployment evidence connector (start with one provider and one release mapping).
-- P11.2 Correlate incident, service, deployment SHA/version, prior assessments and missing controls; distinguish hypothesis from proved cause.
-- P11.3 Create a **policy improvement proposal**, separate from active policy enforcement.
-- P11.4 Authorized owner review/approval, audited policy version change and later effectiveness reporting.
-- P11.5 Validate with known incident fixture plus ambiguous and stale/insufficient evidence cases.
-
-**Done when:** A real or fixture incident produces a sourced, reviewable prevention recommendation; an engineering owner can choose to apply it as a new policy, and Preflyt does not directly modify production or auto-remediate.
-
-### P12 — Operational expansion
-
-**User value:** Teams can onboard more systems and run validated broader engineering assessments without replacing existing installations.
-
-**Tasks:**
-- P12.1 GitLab adapter with repository/CI/check provider parity and scope-tested auth.
-- P12.2 Scheduled baseline/drift assessments, historical quality coverage and trend reporting.
-- P12.3 Distributed k6 Operator support (when justified), workload topology policy and runner health.
-- P12.4 Broader cost/compliance/observability rules with domain-specific evidence and applicability.
-- P12.5 Migration and scaling/reliability tests, concurrent organizations only after explicit tenant-isolation review.
-
-**Done when:** At least one new provider/domain/scale workflow works end-to-end with documented compatibility and no regressions to already deployed stages. Optional sub-slices can be independently released rather than waiting for all P12 tasks.
+The private Cloud issues retain per-phase implementation tasks, dependencies, negative-path tests, user-facing acceptance and operational gates. Public Git history retains the original detailed section. Preflyt Loops is an additional, independently tracked Cloud-only initiative. This change does **not** reclassify implemented P0–P5 Community capabilities as paid features.
 
 ## 4. Capability breakdown within each SDLC stage
 
-These subphases map to the global deployment phases above and may be tracked as issue groups, **not separate undeployable feature branches**.
+These subphases show the historical cross-edition capability progression. **P6–P12 are Cloud-only** and now tracked in private Cloud issues, not in the Community implementation queue. P0–P5 remain Community work. Subphases should be implemented as independently usable vertical slices, **not undeployable feature branches**.
 
 | Stage | Usable first slice | Second slice | Third slice | Advanced slice |
 | --- | --- | --- | --- | --- |
@@ -378,7 +292,7 @@ flowchart TD
     P10 --> P12["P12 Provider / Scale Expansion"]
 ~~~
 
-AI is a core product capability introduced in P0/P1; inference is optional at runtime, and deterministic checks remain functional without model access. P4.RI is a Cloud-only optional repository-intelligence extension of P0/P4, not a prerequisite for P5–P12 or deterministic checks. P8 (import k6 results) can be prioritized soon after P2 because it needs **no managed load generator**. P9 requires separately verified target/runner safety; P3 real-repository execution approval is not bypassed by test infrastructure.
+**Ownership boundary:** P0–P5 are Community phases, P6–P12 are Cloud phases; the dependency diagram spans both editions and is not a Community delivery commitment. AI is a core product capability introduced in P0/P1; inference is optional at runtime, and deterministic checks remain functional without model access. P4.RI is a Cloud-only optional repository-intelligence extension of P0/P4, not a prerequisite for P5–P12 or deterministic checks. P8 (import k6 results) can be prioritized soon after P2 because it needs **no managed load generator**. P9 requires separately verified target/runner safety; P3 real-repository execution approval is not bypassed by test infrastructure.
 
 P0 deployment is intentionally useful without a scanner, model or extensive policy framework. All subsequent releases **add** capability without requiring a full platform rewrite.
 
