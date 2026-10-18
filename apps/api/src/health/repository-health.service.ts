@@ -1,6 +1,7 @@
 import { reportedLocation } from '../findings/reported-location.js'
 import { readPageSize } from '../pagination.js'
 import { HealthGitSourceError } from './health-git-source.js'
+import { branchCoverage } from './branch-coverage.js'
 import { verifiedHealthCiCoverage } from './health-ci-coverage.js'
 import { findingReferenceGuidance } from './finding-guidance.js'
 import { overallHealth } from './health-overall.js'
@@ -93,18 +94,25 @@ export class RepositoryHealthService {
   if (!Number.isInteger(page) || page < 1 || page > 1000) throw new BadRequestException('Choose a valid history page')
   if (selectedBranch !== undefined && !validProfileBranch(selectedBranch)) throw new BadRequestException('Choose a valid assessment branch')
   const target = await this.db.repositoryHealthTarget.findUnique({ where: { repositoryId: repo.id } })
-  const requestedBranch = selectedBranch ?? target?.branch ?? repo.defaultBranch
+  const requestedBranch = selectedBranch ?? repo.defaultBranch ?? target?.branch
   // Browsing another branch is a read, not a change to the shared scan target.
   // Explicit report links retain their own branch unless a branch filter is supplied.
   const reportScope = id
    ? { id, ...(selectedBranch !== undefined ? { branch: selectedBranch } : {}) }
    : { branch: requestedBranch ?? '' }
-  const row = await this.db.repositoryHealthAssessment.findFirst({
+  let row = await this.db.repositoryHealthAssessment.findFirst({
    where: { repositoryId: repo.id, organizationId: session.organizationId!, ...reportScope },
    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
   })
+  const latestAttempt = row
+  // An in-flight/failed attempt does not erase the last completed result. Historical report links stay exact.
+  if (row && row.state !== 'COMPLETED' && (!id || activeStates.includes(row.state))) {
+   const previous = await this.db.repositoryHealthAssessment.findFirst({where: {repositoryId: repo.id,
+    organizationId: session.organizationId!, branch: row.branch, state: 'COMPLETED', report: {not: Prisma.DbNull}}, orderBy: [{createdAt: 'desc'}, {id: 'desc'}]})
+   if (previous) row = previous
+  }
   const branch = selectedBranch ?? row?.branch ?? requestedBranch
-  const checkedAt = target?.branch === branch ? target.headCheckedAt : null
+  const checkedAt = target?.branch === branch ? target?.headCheckedAt : null
   const recent = checkedAt && Date.now() - checkedAt.getTime() <= 60000
   const head = recent ? target?.headSha : null
   const freshness = row && row.branch === target?.branch && head && row.sourceSha ? head === row.sourceSha ? 'CURRENT' : 'STALE' : 'UNVERIFIED'
@@ -129,7 +137,10 @@ export class RepositoryHealthService {
   await this.access.requireRepository(session, githubId, 'assessment.read')
   const ciCoverage=await verifiedHealthCiCoverage(this.db,repo,row?.sourceSha??null)
   await this.access.requireRepository(session, githubId, 'assessment.read')
-  return {ciCoverage, categoryResults, hotspotReview:row?hotspotSummary(row.report as HealthReport|null,reviews,row.id):null, repository: repo.fullName, branch, assessment: row ? dto(row) : null, freshness, checkedAt, history: history.map(h => ({ ...dto(h, false), report: undefined })), total, page, timeline,
+  const coverage = await branchCoverage(this.db, repo, session.organizationId!, branch ?? null, row?.sourceSha ?? null, ciCoverage)
+  const refreshRequest = await this.db.repositoryHealthRefresh.findUnique({where: {repositoryId_branch: {repositoryId: repo.id, branch: branch ?? ''}}})
+  await this.access.requireRepository(session, githubId, 'assessment.read')
+  return {ciCoverage, branchCoverage: coverage, refreshPending: !!refreshRequest, latestAttempt: latestAttempt && dto(latestAttempt, false), categoryResults, hotspotReview:row?hotspotSummary(row.report as HealthReport|null,reviews,row.id):null, repository: repo.fullName, branch, assessment: row ? dto(row) : null, freshness, checkedAt, history: history.map(h => ({ ...dto(h, false), report: undefined })), total, page, timeline,
    trend: row?.report ? comparableHealthTrend(row.report as HealthReport, prior?.report as HealthReport | null) : null }
  }
  /** Upstream head verification is separate from loading immutable saved reports. */
@@ -272,7 +283,39 @@ export class RepositoryHealthService {
  }
  /** Durable inbox recovery. BullMQ transports IDs only; PostgreSQL owns immutable job scope. */
  async pending() {
+  await this.refreshBranches()
   return this.db.repositoryHealthAssessment.findMany({ where: { state: { in: activeStates }, OR: [{ leaseUntil: null }, { leaseUntil: { lte: new Date() } }] }, select: { id: true }, orderBy: { createdAt: 'asc' }, take: 20 })
+ }
+ /** Coalesce pushes while a scan runs and retain work when rate/admission limits apply. */
+ async refreshBranches() {
+  const requests = await this.db.repositoryHealthRefresh.findMany({where: {nextAttemptAt: {lte: new Date()}}, orderBy: {nextAttemptAt: 'asc'}, take: 10})
+  for (const request of requests) {
+   const claimed = await this.db.repositoryHealthRefresh.updateMany({where: {repositoryId: request.repositoryId, branch: request.branch, revision: request.revision, nextAttemptAt: request.nextAttemptAt}, data: {nextAttemptAt: new Date(Date.now() + 60000)}})
+   if (!claimed.count) continue
+   const repo = await this.db.gitHubRepository.findUnique({where: {id: request.repositoryId}, include: {healthTarget: true, readinessAutomation: true, installation: true}})
+   if (!repo || !repo.selected || !repo.available || !repo.installation.active || repo.defaultBranch !== request.branch) {
+    await this.db.repositoryHealthRefresh.deleteMany({where: {repositoryId: request.repositoryId, branch: request.branch, revision: request.revision}}); continue
+   }
+   const actor = (repo.readinessAutomation?.enabled ? repo.readinessAutomation : null) ?? repo.healthTarget
+   if (!actor) {
+    await this.db.repositoryHealthRefresh.deleteMany({where: {repositoryId: request.repositoryId, branch: request.branch, revision: request.revision}}); continue
+   }
+   const active = await this.db.repositoryHealthAssessment.findFirst({where: {repositoryId: repo.id, state: {in: activeStates}}})
+   if (active) continue
+   const latest = await this.db.repositoryHealthAssessment.findFirst({where: {repositoryId: repo.id, branch: request.branch, state: 'COMPLETED'}, orderBy: {createdAt: 'desc'}})
+   if (latest?.sourceSha !== request.sourceSha) {
+    try {
+     const queued = await this.start(sessionFor(actor), repo.githubId.toString(), {branch: request.branch, requestKey: randomUUID()})
+     if (queued.createdAt < request.requestedAt) continue
+    }
+    catch (error) {
+     // Retain the request through throttling/admission limits. Revoked access never executes a scan.
+     if (!(error instanceof ConflictException)) await this.db.repositoryHealthRefresh.updateMany({where: {repositoryId: repo.id, branch: request.branch, revision: request.revision}, data: {nextAttemptAt: new Date(Date.now() + 300000)}})
+     continue
+    }
+   }
+   await this.db.repositoryHealthRefresh.deleteMany({where: {repositoryId: repo.id, branch: request.branch, revision: request.revision}})
+  }
  }
  async process(id: string) {
   const token = randomUUID(), now = new Date()

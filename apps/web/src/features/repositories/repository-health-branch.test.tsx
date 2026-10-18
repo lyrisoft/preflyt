@@ -208,7 +208,7 @@ it('loads the selected branch, clears the old assessment pin and preserves the b
     .element(page.getByRole('status', { name: 'Loaded Health branch' }))
     .toHaveTextContent('codex/coverage')
 })
-it('replaces a historical URL pin with the newly queued assessment and retains it on reload', async () => {
+it('clears a historical URL pin after queuing and keeps the branch view on reload', async () => {
   state.search = {
     branch: 'codex/coverage',
     health: '11111111-1111-4111-8111-111111111111',
@@ -217,7 +217,7 @@ it('replaces a historical URL pin with the newly queued assessment and retains i
   await page.getByRole('button', { name: 'Queue assessment fixture' }).click()
   await expect
     .poll(() => state.search.health)
-    .toBe('22222222-2222-4222-8222-222222222222')
+    .toBeUndefined()
   expect(state.search.branch).toBe('codex/coverage')
   await first.unmount()
   await mount()
@@ -227,8 +227,7 @@ it('replaces a historical URL pin with the newly queued assessment and retains i
         const url = new URL(String(input), 'http://localhost')
         return (
           url.searchParams.get('branch') === 'codex/coverage' &&
-          url.searchParams.get('assessment') ===
-            '22222222-2222-4222-8222-222222222222'
+          url.searchParams.get('assessment') === null
         )
       })
     )

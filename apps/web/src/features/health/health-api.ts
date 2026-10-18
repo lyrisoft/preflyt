@@ -144,6 +144,23 @@ export type HealthTimelinePoint = {
   findings: number
 }
 export type HealthData = {
+  latestAttempt?: HealthAssessment | null
+  refreshPending?: boolean
+  branchCoverage?: {
+    branch: string | null
+    result: NonNullable<HealthData['ciCoverage']>
+    matchesHealth: boolean
+    latestAttempt: {
+      state: string
+      sourceSha: string
+      failureCode: string | null
+      retryAt: string
+      createdAt: string
+      finishedAt: string | null
+      runUrl: string
+    } | null
+  }
+
   categoryResults?: Partial<
     Record<
       HealthCategory,
@@ -309,9 +326,19 @@ export function useHealth(
     retry: false,
     staleTime: 10000,
     refetchInterval: (q) =>
-      ['QUEUED', 'RUNNING'].includes(q.state.data?.assessment?.state ?? '')
+      q.state.data?.refreshPending ||
+      ['QUEUED', 'RUNNING'].includes(
+        q.state.data?.latestAttempt?.state ??
+          q.state.data?.assessment?.state ??
+          ''
+      ) ||
+      ['PENDING', 'PROCESSING'].includes(
+        q.state.data?.branchCoverage?.latestAttempt?.state ?? ''
+      )
         ? 5000
-        : false,
+        : assessment
+          ? false
+          : 30000,
   })
 }
 export type HealthFreshness = {
@@ -468,8 +495,7 @@ export function healthFailure(reason: string | null, canRetry = true) {
       'Check GitHub App access and select Reassess. If it continues, ask your administrator to check the worker’s network access to github.com.',
     SOURCE_FETCH_TIMED_OUT:
       'Select Reassess. If it times out again, ask your administrator to check the worker’s network access to github.com.',
-    GITHUB_RATE_LIMITED:
-      'Wait until the retry time, then select Reassess.',
+    GITHUB_RATE_LIMITED: 'Wait until the retry time, then select Reassess.',
     ACCESS_REVOKED:
       'Check that the repository is selected and the GitHub App still has access, then select Reassess.',
     SOURCE_ACCESS_UNAVAILABLE:

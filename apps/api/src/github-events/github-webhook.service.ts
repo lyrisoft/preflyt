@@ -1,3 +1,4 @@
+import { requestHealthRefresh } from '../health/health-refresh.js'
 import { readPageSize } from '../pagination.js'
 import { isPreflytFeedback } from './preflyt-feedback.js'
 import { configurationValue } from '../configuration/runtime-configuration.js'
@@ -119,7 +120,7 @@ export class GitHubWebhookService {
     // original signed bytes, bind only supported CI/PR events to an existing,
     // selected repository connection. Never create or grant access from a hook.
     if (
-      ['pull_request', 'workflow_run', 'check_run'].includes(event) &&
+      ['pull_request', 'workflow_run', 'check_run', 'push'].includes(event) &&
       body && typeof body === 'object' && !Array.isArray(body) &&
       !Object.hasOwn(body, 'installation')
     ) {
@@ -164,6 +165,8 @@ export class GitHubWebhookService {
             if ((prior.metadata as {payloadHash?: string}).payloadHash !== payloadHash) throw new ConflictException('GitHub delivery identifier was reused')
             return
           }
+          if (event === 'push' && !(body as any).deleted)
+            await requestHealthRefresh(tx, connected, (body as any).ref, (body as any).after)
           await tx.gitHubDisplayRead.updateMany({where: {installationId, repositoryGithubId, state: {not: 'INVALID'}}, data: {state: 'PENDING', generation: {increment: 1}}})
           await tx.gitHubDisplayRead.updateMany({where: {installationId, repositoryGithubId, OR: [{errorCode: null}, {errorCode: {not: 'GITHUB_RATE_LIMITED'}}]}, data: {nextAttemptAt: new Date()}})
         })

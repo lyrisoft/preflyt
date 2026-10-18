@@ -19,7 +19,10 @@ import { currentStandards } from "../standards/policy-standards.js";
 import { digest } from "./assessment-digest.js";
 import { checkReportFormat } from "./check-report-adapters.js";
 import { normalizePipelineSubmission } from "./pipeline-submission.js";
-import { policyExecution, POLICY_EXECUTION_VERSION } from './policy-execution.js';
+import {
+  policyExecution,
+  POLICY_EXECUTION_VERSION,
+} from "./policy-execution.js";
 
 const numeric = (value: unknown): value is string =>
   typeof value === "string" &&
@@ -88,52 +91,73 @@ export class PipelinePolicyController {
       throw new ConflictException(
         "Workflow run changed or is no longer active",
       );
-    let number: number;
-    const fromRef = /^refs\/pull\/([1-9]\d*)\/merge$/.exec(
-      String(claims.ref),
-    )?.[1];
-    if (pr !== undefined && !numeric(pr))
-      throw new ForbiddenException("Invalid pull request");
-    if (fromRef && pr && fromRef !== pr)
-      throw new ForbiddenException(
-        "Pull request does not match the workflow identity",
-      );
-    if (pr || fromRef) number = Number(pr ?? fromRef);
-    else {
-      const matches = (
-        await this.github.readOpenReadinessPullRequests(
-          repo.installationId,
-          repo.githubId,
-        )
-      ).filter(
-        (p) =>
-          p.headSha === claims.sha &&
-          p.headRepositoryId === claims.repository_id &&
-          !p.draft,
-      );
-      if (matches.length !== 1)
-        throw new ConflictException(
-          "This commit must belong to exactly one open pull request",
+    let number: number | null = null;
+    let headSha = String(claims.sha);
+    let branchRef: string;
+    const branchRun =
+      claims.event_name === "push" &&
+      !pr &&
+      typeof claims.ref === "string" &&
+      claims.ref.startsWith("refs/heads/");
+    if (branchRun) {
+      branchRef = String(claims.ref);
+      if (
+        !Number.isFinite(Date.parse(run.runCreatedAt)) ||
+        run.event !== "push" ||
+        run.sourceSha !== claims.sha ||
+        `refs/heads/${run.headBranch}` !== branchRef
+      )
+        throw new ForbiddenException(
+          "Branch workflow identity could not be verified",
         );
-      number = matches[0].number;
-    }
-    const { context } = await this.github.readPullRequest(
-      repo.installationId,
-      repo.githubId,
-      number,
-    );
-    if (
-      context.state !== "open" ||
-      context.draft ||
-      context.head.repositoryId !== claims.repository_id ||
-      context.base.repositoryId !== claims.repository_id ||
-      run.sourceSha !== context.head.sha ||
-      (!fromRef && claims.sha !== context.head.sha)
-    )
-      throw new ForbiddenException(
-        "Only the current commit of a same-repository open pull request is supported",
+    } else {
+      const fromRef = /^refs\/pull\/([1-9]\d*)\/merge$/.exec(
+        String(claims.ref),
+      )?.[1];
+      if (pr !== undefined && !numeric(pr))
+        throw new ForbiddenException("Invalid pull request");
+      if (fromRef && pr && fromRef !== pr)
+        throw new ForbiddenException(
+          "Pull request does not match the workflow identity",
+        );
+      if (pr || fromRef) number = Number(pr ?? fromRef);
+      else {
+        const matches = (
+          await this.github.readOpenReadinessPullRequests(
+            repo.installationId,
+            repo.githubId,
+          )
+        ).filter(
+          (p) =>
+            p.headSha === claims.sha &&
+            p.headRepositoryId === claims.repository_id &&
+            !p.draft,
+        );
+        if (matches.length !== 1)
+          throw new ConflictException(
+            "This commit must belong to exactly one open pull request",
+          );
+        number = matches[0].number;
+      }
+      const { context } = await this.github.readPullRequest(
+        repo.installationId,
+        repo.githubId,
+        number!,
       );
-    const branchRef = `refs/heads/${context.base.ref}`;
+      if (
+        context.state !== "open" ||
+        context.draft ||
+        context.head.repositoryId !== claims.repository_id ||
+        context.base.repositoryId !== claims.repository_id ||
+        run.sourceSha !== context.head.sha ||
+        (!fromRef && claims.sha !== context.head.sha)
+      )
+        throw new ForbiddenException(
+          "Only the current commit of a same-repository open pull request is supported",
+        );
+      branchRef = `refs/heads/${context.base.ref}`;
+      headSha = context.head.sha;
+    }
     const policy = await this.prisma.gatePolicyRevision.findFirst({
       where: {
         repositoryId: repo.id,
@@ -196,9 +220,9 @@ export class PipelinePolicyController {
       repositoryId: claims.repository_id,
       state: policy.state,
       branchRef,
-      stage: "pull_request",
+      stage: branchRun ? "branch" : "pull_request",
       pullRequest: number,
-      headSha: context.head.sha,
+      headSha,
       sourceSha: claims.sha,
       checks: definition.rules.map((rule) => ({
         id: rule.id,
@@ -210,7 +234,7 @@ export class PipelinePolicyController {
         execution: policyExecution(rule),
       })),
     };
-    return { repo, config, session, run, claims, policy, exported };
+    return { repo, config, session, run, claims, policy, exported, branchRun };
   }
 
   @Get("policy")
@@ -229,23 +253,47 @@ export class PipelinePolicyController {
     @Query("pr") pr: string | undefined,
     @Body() body: unknown,
   ) {
-    const { repo, config, session, claims, exported, run } = await this.context(
-      authorization,
-      pr,
-    );
+    const { repo, config, session, claims, exported, run, branchRun } =
+      await this.context(authorization, pr);
     const normalized = normalizePipelineSubmission(body, exported);
     let submissionJobId: string | undefined;
-    if (normalized.verificationScope === 'jobs') {
+    if (branchRun && normalized.verificationScope !== "jobs")
+      throw new ForbiddenException(
+        "Use the current Preflyt Action with job verification for branch results",
+      );
+    if (normalized.verificationScope === "jobs") {
       const jobName = (body as Record<string, unknown>).jobName;
-      if (typeof jobName !== 'string' || !jobName || jobName.length > 200 || jobName === 'Preflyt final gate')
-        throw new ForbiddenException('Identify the check job that submits these reports');
-      const jobs = await this.github.readPipelineJobs(repo.installationId, repo.githubId, String(claims.run_id), Number(claims.run_attempt));
-      const matches = jobs.filter(job => (job.name === jobName || job.name.endsWith(' / ' + jobName)) &&
-        job.sourceSha === run.sourceSha && job.status === 'in_progress');
-      if (matches.length !== 1) throw new ConflictException('The report-producing job could not be identified; set the Action job-name input to its display name');
+      if (
+        typeof jobName !== "string" ||
+        !jobName ||
+        jobName.length > 200 ||
+        jobName === "Preflyt final gate"
+      )
+        throw new ForbiddenException(
+          "Identify the check job that submits these reports",
+        );
+      const jobs = await this.github.readPipelineJobs(
+        repo.installationId,
+        repo.githubId,
+        String(claims.run_id),
+        Number(claims.run_attempt),
+      );
+      const matches = jobs.filter(
+        (job) =>
+          (job.name === jobName || job.name.endsWith(" / " + jobName)) &&
+          job.sourceSha === run.sourceSha &&
+          job.status === "in_progress",
+      );
+      if (matches.length !== 1)
+        throw new ConflictException(
+          "The report-producing job could not be identified; set the Action job-name input to its display name",
+        );
       submissionJobId = matches[0].id;
     }
-    const payload = { ...normalized, ...(submissionJobId ? { submissionJobId } : {}) };
+    const payload = {
+      ...normalized,
+      ...(submissionJobId ? { submissionJobId } : {}),
+    };
     const inputHash = digest(payload);
     const id = digest({
       repository: repo.id,
@@ -275,6 +323,44 @@ export class PipelinePolicyController {
         throw new ConflictException(
           "Policy or workflow configuration changed; run again",
         );
+      if (branchRun) {
+        const branchId = `branch:${id}`;
+        await tx.repositoryBranchRun.createMany({
+          data: [
+            {
+              id: branchId,
+              repositoryId: repo.id,
+              organizationId: config.organizationId,
+              branch: exported.branchRef.slice(11),
+              sourceSha: exported.headSha,
+              runId: String(claims.run_id),
+              runAttempt: Number(claims.run_attempt),
+              workflowId: run.workflowId,
+              runCreatedAt: new Date(run.runCreatedAt),
+              policyId: exported.id,
+              policyHash: exported.definitionHash,
+              configRevision: config.revision,
+              actorId: config.actorId,
+              inputHash,
+              payload,
+            },
+          ],
+          skipDuplicates: true,
+        });
+        const saved = await tx.repositoryBranchRun.findUniqueOrThrow({
+          where: { id: branchId },
+        });
+        if (saved.inputHash !== inputHash)
+          throw new ConflictException(
+            "Results for this run were already submitted with different content",
+          );
+        return {
+          id: saved.id,
+          state: saved.state,
+          verification: "PENDING",
+          result: normalized.result,
+        };
+      }
       await tx.pipelineRunSubmission.createMany({
         data: [
           {
@@ -287,7 +373,7 @@ export class PipelinePolicyController {
             workflowSha: exported.sourceSha,
             runId: String(claims.run_id),
             runAttempt: Number(claims.run_attempt),
-            prNumber: exported.pullRequest,
+            prNumber: exported.pullRequest!,
             inputHash,
             payload,
             submittedById: config.actorId,

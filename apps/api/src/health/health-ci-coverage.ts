@@ -10,13 +10,13 @@ export function ciCoverageMeasurement(content: Uint8Array): CiCoverageMeasuremen
 }
 export type HealthCiCoverage = { sourceSha: string | null; state: 'VERIFIED'|'MISSING'|'UNVERIFIED'; reason: string; runUrl?: string; receivedAt?: string; measurement?: CiCoverageMeasurement; tests?: {tests:number;passed:number;failures:number;errors:number;skipped:number}; testsState?: 'PASS'|'FAIL'|'INCOMPLETE'; artifactIds?: string[] }
 /** Read-only evidence projection. Saved Health reports and deterministic gate results are never changed. */
-export async function verifiedHealthCiCoverage(db: any, repo: {id:string;githubId:bigint;installationId:bigint;fullName:string}, sourceSha: string | null): Promise<HealthCiCoverage> {
+export async function verifiedHealthCiCoverage(db: any, repo: {id:string;githubId:bigint;installationId:bigint;fullName:string}, sourceSha: string | null, expected?: {runId: string; runAttempt: number; branch: string | null}): Promise<HealthCiCoverage> {
  const missing:HealthCiCoverage={sourceSha,state:'MISSING',reason:'CI_COVERAGE_NOT_RECEIVED'}
  if(!sourceSha)return missing
- const observations=await db.importedCiEvidence.findMany({where:{repositoryGithubId:repo.githubId,installationId:repo.installationId,sourceSha,sourceKind:{in:['workflow_run','workflow_jobs']},sourceStatus:'completed'},orderBy:{observedAt:'desc'},take:31,include:{delivery:true,artifacts:{take:11,include:{attestations:{take:2,orderBy:{createdAt:'desc'}}}}}})
+ const observations=await db.importedCiEvidence.findMany({where:{repositoryGithubId:repo.githubId,installationId:repo.installationId,sourceSha,...(expected ? {sourceObjectId: expected.runId, sourceIdentity:{path:['runAttempt'],equals:expected.runAttempt}} : {}),sourceKind:{in:['workflow_run','workflow_jobs']},sourceStatus:'completed'},orderBy:{observedAt:'desc'},take:31,include:{delivery:true,artifacts:{take:11,include:{attestations:{take:2,orderBy:{createdAt:'desc'}}}}}})
  if(observations.length>30)return {...missing,state:'UNVERIFIED',reason:'CI_EVIDENCE_LIMIT'}
- const audits=await db.auditEvent.findMany({where:{event:'pipeline.run.verified',AND:[{metadata:{path:['repositoryId'],equals:repo.id}},{metadata:{path:['sourceSha'],equals:sourceSha}}]},orderBy:{createdAt:'desc'},take:101,select:{metadata:true}})
- const receipts=audits.length<=100 ? audits.map((a:any)=>a.metadata).filter((m:any)=>m.schemaVersion===1&&m.repositoryId===repo.id&&m.sourceSha===sourceSha&&Array.isArray(m.reports)&&Array.isArray(m.jobIds)&&m.jobIds.length>0) : []
+ const audits=await db.auditEvent.findMany({where:{event:{in:['pipeline.run.verified','branch.run.verified']},AND:[{metadata:{path:['repositoryId'],equals:repo.id}},{metadata:{path:['sourceSha'],equals:sourceSha}}]},orderBy:{createdAt:'desc'},take:101,select:{metadata:true}})
+ const receipts=audits.length<=100 ? audits.map((a:any)=>a.metadata).filter((m:any)=>m.schemaVersion===1&&m.repositoryId===repo.id&&m.sourceSha===sourceSha&&Array.isArray(m.reports)&&Array.isArray(m.jobIds)&&m.jobIds.length>0&&(!expected||(m.branch===expected.branch&&m.runId===expected.runId&&m.runAttempt===expected.runAttempt))) : []
  let unverified:HealthCiCoverage|undefined
  const seenRuns=new Set<string>()
  for(const observation of observations){

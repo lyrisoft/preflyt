@@ -72,6 +72,27 @@ For a recovery cutover, stop web/API/worker, restore to a new database, and set 
 
 ## Upgrade and rollback
 
+### Existing local PostgreSQL server
+
+To reuse a dedicated Preflyt database on an existing local PostgreSQL server,
+set `PREFLYT_EXTERNAL_DATABASE_URL` in the protected root `.env`. On Docker
+Desktop, use `host.docker.internal` instead of `127.0.0.1` for the database host.
+Keep the existing encryption keys so saved configuration remains readable.
+Stop any host development worker before starting Compose against the same database;
+a host worker with an unavailable scanner connection can claim and fail scan jobs.
+Use the Preflyt database, not another application's database.
+
+```sh
+docker compose -f docker-compose.yaml -f compose.local.yaml -f compose.external-db.yaml up -d --build --wait
+```
+
+The external database override excludes the bundled database from normal startup.
+Migrations, API and worker all connect to the supplied database. For this local
+setup, `COMPOSE_FILE=docker-compose.yaml:compose.local.yaml:compose.external-db.yaml`
+in `.env` makes subsequent `docker compose` commands use the same files.
+
+### Release upgrades
+
 1. Record the currently running source revision, immutable image IDs/tags and database name. Preserve those images. Never overwrite a release tag with a different build.
 2. Review the new migrations and old/new application compatibility. Stop web/API/worker for this initial single-instance upgrade flow; take a database backup and rehearse restore into a new target.
 3. Update to the reviewed source revision and change `PREFLYT_VERSION` to its unique revision/release tag. Pull the published images, or build source images locally. PostgreSQL and its volume remain in place.

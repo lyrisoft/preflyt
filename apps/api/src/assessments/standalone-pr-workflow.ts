@@ -22,15 +22,51 @@ import {
 } from "./pipeline-workflow.js";
 
 export const standaloneWorkflowPath = ".github/workflows/preflyt.yml";
+/** Reuse a configured report path; otherwise use the selected test project's conventional LCOV output. */
+export function coverageReportPath(
+  snapshot: RepositorySnapshot,
+  rules: WorkflowRule[],
+) {
+  for (const file of snapshot.files) {
+    if (!/^\.github\/workflows\/[^/]+\.ya?ml$/.test(file.path) || !file.content)
+      continue;
+    try {
+      const steps = Object.values(
+        readWorkflow(file.content).value.jobs,
+      ).flatMap((job) => job.steps ?? []);
+      const path = steps.find(
+        (step: any) =>
+          isPolicyAction(step.uses) &&
+          typeof step.with?.["coverage-report"] === "string",
+      )?.with?.["coverage-report"];
+      if (
+        typeof path === "string" &&
+        /^[a-zA-Z0-9_./-]+$/.test(path) &&
+        !path.startsWith("/") &&
+        !path.split("/").includes("..")
+      )
+        return path;
+    } catch {
+      /* Other workflows may be outside the supported editing subset. */
+    }
+  }
+  const tests = workflowSetupTargets(rules, snapshot).filter(
+    (target) => target.tests,
+  );
+  return posix.join(
+    tests.length === 1 ? tests[0]!.directory : ".",
+    "coverage/lcov.info",
+  );
+}
 const checkout = {
   uses: "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
   with: {
-    ref: "${{ github.event.pull_request.head.sha }}",
+    ref: "${{ github.event.pull_request.head.sha || github.sha }}",
     "persist-credentials": false,
   },
 };
 const sameRepository =
-  "${{ github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft }}";
+  "${{ github.event_name == 'push' || (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft) }}";
 type Step = Record<string, any>;
 const object = (value: unknown): value is Record<string, any> =>
   !!value && typeof value === "object" && !Array.isArray(value);
@@ -421,7 +457,7 @@ export function standalonePrWorkflow(
     );
   if (
     previous?.content &&
-    !previous.content.startsWith("# Preflyt pull request workflow")
+    !/^# Preflyt pull request(?: and branch)? workflow\n/.test(previous.content)
   )
     throw new ConflictException(
       `${standaloneWorkflowPath} already exists and is not managed by this setup. Rename it or review it manually before installing.`,
@@ -504,7 +540,7 @@ export function standalonePrWorkflow(
     if (containerScan.dockerfile) {
       const path = containerScan.dockerfile;
       env.CONTAINER_IMAGE =
-        "preflyt-pr:${{ github.event.pull_request.head.sha }}";
+        "preflyt-pr:${{ github.event.pull_request.head.sha || github.sha }}";
       steps.push({
         name: "Build the image for container scanning",
         "working-directory": ".",
@@ -538,20 +574,28 @@ export function standalonePrWorkflow(
     notes.push(
       "A deployment administrator must configure the public HTTPS Preflyt API URL before this workflow can run.",
     );
+  notes.push(
+    `Checks run on pull requests and pushes to ${snapshot.branch}. Coverage is read from ${coverageReportPath(snapshot, rules)}; the published test command must generate this LCOV file. Health refreshes automatically when the default branch changes.`,
+  );
   const url = apiUrl ?? "<PUBLIC_PREFLYT_API_URL>";
   steps.push({
     name: "Run published policy checks",
     uses: policyAction,
-    with: { "api-url": url, "job-name": "Preflyt policy checks" },
+    with: {
+      "api-url": url,
+      "job-name": "Preflyt policy checks",
+      "coverage-report": coverageReportPath(snapshot, rules),
+    },
   });
   const workflow =
-    "# Preflyt pull request workflow\n" +
+    "# Preflyt pull request and branch workflow\n" +
     `# Preflyt setup policy: ${digest(rules.map(({ id, workflowCommand, reportPath }) => ({ id, workflowCommand, reportPath })).sort((a, b) => a.id.localeCompare(b.id)))}\n` +
     "# Setup changes are reviewed through a PR. Check commands come from the published target-branch policy.\n" +
     stringify(
       {
-        name: "Preflyt pull request checks",
+        name: "Preflyt checks",
         on: {
+          push: { branches: [snapshot.branch] },
           pull_request: {
             branches: [snapshot.branch],
             types: ["opened", "synchronize", "reopened", "ready_for_review"],
@@ -559,7 +603,7 @@ export function standalonePrWorkflow(
         },
         concurrency: {
           group:
-            "preflyt-${{ github.workflow }}-${{ github.event.pull_request.number }}",
+            "preflyt-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}",
           "cancel-in-progress": true,
         },
         permissions: { contents: "read" },
@@ -577,7 +621,7 @@ export function standalonePrWorkflow(
           },
           preflyt_gate: {
             ...publicationGateJob(["preflyt_checks"], url),
-            if: "${{ always() && !cancelled() && github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft }}",
+            if: "${{ always() && !cancelled() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft }}",
           },
         },
       },
@@ -632,7 +676,7 @@ export function standalonePrWorkflow(
   };
 }
 
-/** The submitted preview must remain a PR-only workflow for this exact policy branch. */
+/** Keep checks on this policy branch; PR publication runs only for pull requests. */
 export function validateStandalonePrWorkflow(
   workflow: string,
   rules: WorkflowRule[],
@@ -648,7 +692,9 @@ export function validateStandalonePrWorkflow(
   const branch = branchRef.replace(/^refs\/heads\//, "");
   if (
     !object(value.on) ||
-    Object.keys(value.on).join(",") !== "pull_request" ||
+    Object.keys(value.on).sort().join(",") !== "pull_request,push" ||
+    !object(value.on.push) ||
+    digest(value.on.push) !== digest({ branches: [branch] }) ||
     !object(value.on.pull_request) ||
     digest(value.on.pull_request.branches) !== digest([branch]) ||
     digest(value.on.pull_request.types) !==
@@ -658,13 +704,26 @@ export function validateStandalonePrWorkflow(
     value.on.pull_request["branches-ignore"]
   )
     throw new BadRequestException(
-      "Keep the pull request trigger and selected target branch unchanged",
+      "Keep the pull request and push triggers on the selected target branch",
     );
   const jobs = Object.entries(value.jobs);
+  if (value.jobs.preflyt_checks?.if !== sameRepository)
+    throw new BadRequestException(
+      "Keep branch checks and same-repository PR checks enabled",
+    );
+
   const gates = jobs.filter(([, job]) => job.name === FINAL_GATE_NAME);
   if (gates.length !== 1)
     throw new BadRequestException("Keep one Preflyt final gate job");
   const [gateId, gate] = gates[0]!;
+  if (
+    gate.if !==
+    "${{ always() && !cancelled() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft }}"
+  )
+    throw new BadRequestException(
+      "The final gate must run only on same-repository pull requests",
+    );
+
   const checks = jobs.filter(([id]) => id !== gateId);
   if (
     !Array.isArray(gate.needs) ||
@@ -691,7 +750,8 @@ export function validateStandalonePrWorkflow(
       if (
         typeof step.uses === "string" &&
         step.uses.startsWith("actions/checkout@") &&
-        (step.with?.ref !== "${{ github.event.pull_request.head.sha }}" ||
+        (step.with?.ref !==
+          "${{ github.event.pull_request.head.sha || github.sha }}" ||
           step.with?.["persist-credentials"] !== false)
       )
         throw new BadRequestException(

@@ -759,10 +759,12 @@ function StandaloneWorkflowSetup({
               <section className='space-y-3 rounded-lg border p-3'>
                 <h4 className='text-sm font-medium'>Review setup PR</h4>
                 <p className='text-xs text-muted-foreground'>
-                  Includes the workflow above with project setup, policy checks
-                  and a final gate. Each run reads the published policy. Missing
-                  setup or evidence cannot pass. Merge protection requires
-                  separate activation.
+                  Runs the published checks on pull requests and after changes
+                  merge into this branch. CI supplies coverage; Health refreshes
+                  when the default branch changes. The final merge gate runs
+                  only on pull requests. Review the coverage report path in the
+                  YAML and ensure your test command generates it. Merge
+                  protection requires separate activation.
                 </p>
                 <div className='flex items-start gap-2'>
                   <Checkbox

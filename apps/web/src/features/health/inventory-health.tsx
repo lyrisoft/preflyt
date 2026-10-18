@@ -100,7 +100,7 @@ export function InventoryHealthAction({
   if (!item) return null
 
   return (
-    <Button asChild variant='outline' size='sm'>
+    <Button asChild variant='outline' size='sm' className='whitespace-nowrap'>
       <Link
         to='/repositories/$repositoryId'
         params={{ repositoryId }}

@@ -57,7 +57,11 @@ export function containerScanSetup(
   const previous = snapshot.files.find(
     (file) => file.path === ".github/workflows/preflyt.yml",
   )?.content;
-  if (!selected && previous?.startsWith("# Preflyt pull request workflow")) {
+  if (
+    !selected &&
+    previous &&
+    /^# Preflyt pull request(?: and branch)? workflow\n/.test(previous)
+  ) {
     try {
       const steps = parse(previous)?.jobs?.preflyt_checks?.steps;
       installed = Array.isArray(steps)

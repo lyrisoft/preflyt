@@ -9,7 +9,6 @@ import {
   Bug,
   Wrench,
   Copy,
-  TestTubeDiagonal,
   Clock3,
   ArrowUpRight,
   GitCommitHorizontal,
@@ -50,6 +49,7 @@ import { BranchPicker } from '@/features/repositories/branch-picker'
 import { useNavigationSession } from '@/features/workspace/navigation-session'
 import { canPerform } from '@/features/workspace/scoped-access'
 import { AnalysisCoverage } from './analysis-coverage'
+import { BranchCoverageCard } from './branch-coverage-card'
 import {
   healthRequest,
   HealthRequestError,
@@ -109,7 +109,10 @@ export function RepositoryHealth({
     true,
     selectedBranch || branch || undefined
   )
-  const loaded = query.isError ? undefined : query.data
+  const reportDenied =
+    query.error instanceof HealthRequestError &&
+    [401, 403].includes(query.error.status)
+  const loaded = reportDenied ? undefined : query.data
   const freshnessQuery = useHealthFreshness(
     repositoryId,
     loaded?.assessment?.id
@@ -124,7 +127,9 @@ export function RepositoryHealth({
   const recent = (at: string | null | undefined, loadedAt: number) =>
     !!at && loadedAt - new Date(at).getTime() <= 60000
   const freshness =
-    freshnessQuery.isError || (!!checked && freshnessQuery.isStale)
+    query.isError ||
+    freshnessQuery.isError ||
+    (!!checked && freshnessQuery.isStale)
       ? 'UNVERIFIED'
       : checked?.assessmentId === row?.id &&
           checked?.sourceSha === row?.sourceSha &&
@@ -155,7 +160,7 @@ export function RepositoryHealth({
       )
     },
     onSuccess: async (assessment) => {
-      setSelectedReport(assessment.id)
+      setSelectedReport(undefined)
       setPage(1)
       await onAssessmentQueued?.(assessment)
       await refresh()
@@ -164,13 +169,17 @@ export function RepositoryHealth({
   const cancel = useMutation({
     mutationFn: () =>
       healthRequest(
-        `repositories/${repositoryId}/health/${row!.id}/cancel`,
+        `repositories/${repositoryId}/health/${(data?.latestAttempt ?? row)!.id}/cancel`,
         undefined,
         {}
       ),
     onSuccess: refresh,
   })
   const active = !!row && ['QUEUED', 'RUNNING'].includes(row.state)
+  const latest = data?.latestAttempt ?? row
+  const updating =
+    !!data?.refreshPending ||
+    (!!latest && ['QUEUED', 'RUNNING'].includes(latest.state))
   const chosenBranch =
     selectedBranch ?? (branch || data?.branch || defaultBranch || '')
   const rows =
@@ -251,22 +260,6 @@ export function RepositoryHealth({
           icon: Copy,
           tone: 'violet' as SurfaceTone,
         },
-        {
-          label: 'Test coverage',
-          category: 'coverage' as const,
-          value: data?.ciCoverage?.measurement
-            ? `${((100 * data.ciCoverage.measurement.coveredLines) / data.ciCoverage.measurement.analyzedLines).toFixed(1)}%`
-            : 'Unavailable',
-          finishedAt: data?.ciCoverage?.receivedAt ?? null,
-          assessmentId: row?.id,
-          description: data?.ciCoverage?.measurement
-            ? 'Verified CI line coverage'
-            : data?.ciCoverage?.state === 'UNVERIFIED'
-              ? 'CI coverage not verified'
-              : 'Coverage not received from CI',
-          icon: TestTubeDiagonal,
-          tone: 'teal' as SurfaceTone,
-        },
       ]
     : []
   return (
@@ -316,7 +309,8 @@ export function RepositoryHealth({
                     query.isError ||
                     freshnessDenied ||
                     start.isPending ||
-                    (active && chosenBranch === row.branch)
+                    (updating &&
+                      chosenBranch === (latest?.branch ?? data?.branch))
                   }
                   onClick={() => start.mutate({ branch: chosenBranch })}
                 >
@@ -416,6 +410,64 @@ export function RepositoryHealth({
                 </Button>
               )}
             </div>
+          </div>
+        )}
+        {latest && latest.id !== row?.id && (
+          <div
+            role={latest.state === 'FAILED' ? 'alert' : 'status'}
+            className='flex flex-wrap items-center gap-3 border-t p-4 text-sm'
+          >
+            <StatusBadge
+              tone={
+                updating
+                  ? 'info'
+                  : latest.state === 'FAILED'
+                    ? 'error'
+                    : 'neutral'
+              }
+            >
+              {updating
+                ? 'Updating'
+                : latest.state === 'FAILED'
+                  ? 'Update failed'
+                  : 'Cancelled'}
+            </StatusBadge>
+            <span>
+              {updating
+                ? 'The previous Health result stays visible while the new assessment runs.'
+                : 'The latest assessment did not finish. Showing the previous Health result.'}
+            </span>
+            {latest.reason && (
+              <span className='text-muted-foreground'>
+                {healthFailure(latest.reason, allowed).message}
+              </span>
+            )}
+            {latest.retryAt && (
+              <span>
+                Retry scheduled for <ResultTimestamp value={latest.retryAt} />
+              </span>
+            )}
+            {updating && allowed && (
+              <Button
+                size='sm'
+                variant='outline'
+                disabled={cancel.isPending || latest.cancelled}
+                onClick={() => cancel.mutate()}
+              >
+                Cancel assessment
+              </Button>
+            )}
+          </div>
+        )}
+        {data?.refreshPending && !active && latest?.id === row?.id && (
+          <div
+            role='status'
+            className='flex items-center gap-3 border-t p-4 text-sm'
+          >
+            <StatusBadge tone='info'>Updating</StatusBadge>
+            <span>
+              A branch update is queued. The previous result stays visible.
+            </span>
           </div>
         )}
         {active && (
@@ -537,7 +589,23 @@ export function RepositoryHealth({
           {start.error?.message ?? cancel.error?.message}
         </p>
       )}
-      {query.isPending ? null : query.isError || freshnessDenied ? (
+      {data && (
+        <BranchCoverageCard
+          repositoryId={repositoryId}
+          assessmentId={row?.id}
+          coverage={data.branchCoverage}
+          exact={data.ciCoverage}
+          branch={chosenBranch}
+          healthSha={row?.sourceSha ?? null}
+        />
+      )}
+      {query.isError && data && (
+        <p role='alert' className='text-sm text-muted-foreground'>
+          The latest report could not be loaded. Showing the last saved result.
+          Retry using Refresh health report.
+        </p>
+      )}
+      {query.isPending ? null : (!data && query.isError) || freshnessDenied ? (
         <Card>
           <CardHeader>
             <CardTitle>Health unavailable</CardTitle>
@@ -583,7 +651,7 @@ export function RepositoryHealth({
             </p>
           )}
           {report && !active && (
-            <div className='grid gap-4 sm:grid-cols-2 xl:grid-cols-5'>
+            <div className='grid gap-4 sm:grid-cols-2 xl:grid-cols-4'>
               {metrics.map((metric) => (
                 <Link
                   key={metric.label}

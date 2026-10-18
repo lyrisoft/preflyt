@@ -260,11 +260,15 @@ export function FindingDetailsPage({
                     source={source}
                     sourcePath={sourcePath}
                     aiState={
-                      ai.generationFailed
-                        ? 'FAILED'
-                        : ai.data?.available
-                          ? ai.data.state
-                          : undefined
+                      ai.isLoading
+                        ? 'LOADING'
+                        : ai.generationFailed
+                          ? 'FAILED'
+                          : ai.isPreparing
+                            ? 'RUNNING'
+                            : ai.data?.available
+                              ? ai.data.state
+                              : undefined
                     }
                     onRetryAi={
                       ai.data?.canGenerate &&
@@ -279,11 +283,15 @@ export function FindingDetailsPage({
                     finding={displayedFinding!}
                     source={source}
                     aiState={
-                      ai.generationFailed
-                        ? 'FAILED'
-                        : ai.data?.available
-                          ? ai.data.state
-                          : undefined
+                      ai.isLoading
+                        ? 'LOADING'
+                        : ai.generationFailed
+                          ? 'FAILED'
+                          : ai.isPreparing
+                            ? 'RUNNING'
+                            : ai.data?.available
+                              ? ai.data.state
+                              : undefined
                     }
                     onRetryAi={
                       ai.data?.canGenerate &&

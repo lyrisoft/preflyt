@@ -115,7 +115,9 @@ export function RepositoryInventoryTable({
             <TableHead className='px-4'>Visibility</TableHead>
             <TableHead className='px-4'>Stack</TableHead>
             <TableHead className='px-4'>GitHub account</TableHead>
-            <TableHead className='px-4 text-right'>Actions</TableHead>
+            <TableHead className='w-px px-4 text-right whitespace-nowrap'>
+              Actions
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -236,7 +238,7 @@ export function RepositoryInventoryTable({
                 <TableCell className='px-4 text-muted-foreground'>
                   {repository.installation.accountLogin}
                 </TableCell>
-                <TableCell className='px-4 text-right'>
+                <TableCell className='w-px px-4 text-right whitespace-nowrap'>
                   <InventoryHealthAction
                     repositoryId={repository.githubId}
                     name={repository.fullName}

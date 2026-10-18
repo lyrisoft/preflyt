@@ -29,7 +29,7 @@ const source = (files: Record<string, string>): RepositorySnapshot => ({
   })),
 });
 it.each(["Dockerfile", "api/Dockerfile.production", "docker/api.Dockerfile"])(
-  "automatically builds the only detected %s with a PR-bound image tag",
+  "automatically builds the only detected %s with an event-commit-bound image tag",
   (path) => {
     const draft = standalonePrWorkflow(
       source({ [path]: "FROM node:22" }),
@@ -42,7 +42,7 @@ it.each(["Dockerfile", "api/Dockerfile.production", "docker/api.Dockerfile"])(
     });
     const job = parse(draft.workflow).jobs.preflyt_checks;
     expect(job.env.CONTAINER_IMAGE).toBe(
-      "preflyt-pr:${{ github.event.pull_request.head.sha }}",
+      "preflyt-pr:${{ github.event.pull_request.head.sha || github.sha }}",
     );
     expect(
       job.steps.find(

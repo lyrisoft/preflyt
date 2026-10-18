@@ -1,0 +1,16 @@
+# Optional existing PostgreSQL server. Keep a dedicated Preflyt database.
+# Use alongside docker-compose.yaml (and compose.local.yaml for local use).
+services:
+  db:
+    profiles: [bundled-database]
+  migrate:
+    depends_on: !reset {}
+    environment:
+      DATABASE_URL: ${PREFLYT_EXTERNAL_DATABASE_URL:?Set PREFLYT_EXTERNAL_DATABASE_URL}
+    networks: [backend, egress]
+  api:
+    environment:
+      DATABASE_URL: ${PREFLYT_EXTERNAL_DATABASE_URL:?Set PREFLYT_EXTERNAL_DATABASE_URL}
+  worker:
+    environment:
+      DATABASE_URL: ${PREFLYT_EXTERNAL_DATABASE_URL:?Set PREFLYT_EXTERNAL_DATABASE_URL}
