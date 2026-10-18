@@ -143,9 +143,9 @@ it('changing branches preserves reports and branch advancement marks the pinned 
  const first=await service.initial(owner.identityId,'51');await service.process(first.id)
  provider.readRepositorySnapshot.mockResolvedValueOnce({sourceSha:'d'.repeat(40),treeSha:'b'.repeat(40),branch:'release',fullName:'fixture/repo',complete:true,warnings:[],files:[]})
  const second=await service.start(owner,'51',{branch:'release',requestKey:randomUUID()});await service.process(second.id)
- expect((await service.get(owner,'51',first.id)).assessment?.branch).toBe('development');expect((await service.get(owner,'51')).assessment?.branch).toBe('release')
+ expect((await service.get(owner,'51',first.id)).assessment?.branch).toBe('development');expect((await service.get(owner,'51')).assessment?.branch).toBe('development')
  await fixture.prisma.repositoryHealthTarget.update({where:{repositoryId:repoId},data:{headCheckedAt:new Date(0)}});provider.savedDisplay.mockResolvedValue({head:'e'.repeat(40),checkedAt:new Date().toISOString()})
- expect((await service.get(owner,'51')).freshness).toBe('UNVERIFIED');expect((await service.freshness(owner,'51',second.id)).freshness).toBe('STALE');expect((await service.get(owner,'51')).freshness).toBe('STALE');expect((await fixture.prisma.repositoryHealthAssessment.findUniqueOrThrow({where:{id:first.id}})).sourceSha).toBe(sha)
+ expect((await service.get(owner,'51')).freshness).toBe('UNVERIFIED');expect((await service.freshness(owner,'51',second.id)).freshness).toBe('STALE');expect((await service.get(owner,'51',undefined,1,'release')).freshness).toBe('STALE');expect((await fixture.prisma.repositoryHealthAssessment.findUniqueOrThrow({where:{id:first.id}})).sourceSha).toBe(sha)
 })
 it('reads the requested branch without changing the saved target or borrowing another branch report',async()=>{
  const first=await service.initial(owner.identityId,'51');await service.process(first.id)
@@ -571,3 +571,80 @@ it('does not delay a cancellation received during a rate-limited source request'
  await service.process(row.id);await service.process(row.id)
  expect((await service.get(owner,'51')).assessment).toMatchObject({state:'CANCELLED'})
 })
+
+it('keeps the last completed Health result during a refresh and after failure without changing historical links',async()=>{
+ const first=await service.initial(owner.identityId,'51');await service.process(first.id);
+ await fixture.prisma.repositoryHealthAssessment.update({where:{id:first.id},data:{createdAt:new Date(Date.now()-120000)}});
+ const next=await service.start(owner,'51',{branch:'development',requestKey:randomUUID()});
+ expect(await service.get(owner,'51')).toMatchObject({assessment:{id:first.id,state:'COMPLETED'},latestAttempt:{id:next.id,state:'QUEUED'}});
+ await fixture.prisma.repositoryHealthAssessment.update({where:{id:next.id},data:{state:'FAILED',reason:'SCANNER_UNAVAILABLE',finishedAt:new Date()}});
+ expect(await service.get(owner,'51')).toMatchObject({assessment:{id:first.id},latestAttempt:{id:next.id,state:'FAILED'}});
+ expect((await service.get(owner,'51',next.id)).assessment?.id).toBe(next.id);
+ await expect(service.get(outsider,'51')).rejects.toThrow();
+});
+
+it('coalesces signed default-branch pushes and never queues a second active Health scan',async()=>{
+ const {requestHealthRefresh}=await import('../src/health/health-refresh.js');const db=fixture.prisma;
+ const first=await service.initial(owner.identityId,'51');await service.process(first.id);
+ await db.repositoryHealthAssessment.update({where:{id:first.id},data:{createdAt:new Date(Date.now()-120000)}});
+ const repo={id:repoId,defaultBranch:'development'};
+ await requestHealthRefresh(db,repo,'refs/tags/v1','b'.repeat(40));
+ await requestHealthRefresh(db,repo,'refs/heads/other','b'.repeat(40));
+ expect(await db.repositoryHealthRefresh.count()).toBe(0);
+ await requestHealthRefresh(db,repo,'refs/heads/development','b'.repeat(40));
+ await requestHealthRefresh(db,repo,'refs/heads/development','c'.repeat(40));
+ expect(await db.repositoryHealthRefresh.findFirst()).toMatchObject({revision:2,sourceSha:'c'.repeat(40)});
+ await db.repositoryHealthRefresh.updateMany({data:{nextAttemptAt:new Date(0)}});
+ await service.refreshBranches();
+ expect(await db.repositoryHealthAssessment.count({where:{state:'QUEUED'}})).toBe(1);
+ await requestHealthRefresh(db,repo,'refs/heads/development','d'.repeat(40));
+ await db.repositoryHealthRefresh.updateMany({data:{nextAttemptAt:new Date(0)}});
+ await service.refreshBranches();
+ expect(await db.repositoryHealthAssessment.count({where:{state:'QUEUED'}})).toBe(1);
+ expect(await db.repositoryHealthRefresh.count()).toBe(1);
+});
+
+async function branchFixture(){
+ const db=fixture.prisma,definition={rules:[]};
+ const policy=await db.gatePolicyRevision.create({data:{repositoryId:repoId,organizationId:owner.organizationId!,branchRef:'refs/heads/development',revision:1,selectionId:'fixture',definition,definitionHash:digest(definition),state:'PUBLISHED',draftedById:owner.identityId}});
+ await db.readinessAutomation.create({data:{repositoryId:repoId,organizationId:owner.organizationId!,actorId:owner.identityId,enabled:true}});
+ const content='SF:app.ts\nDA:1,1\nDA:2,0\nLF:2\nLH:1\nend_of_record\n';
+ const payload={signerWorkflow:'fixture/repo/.github/workflows/ci.yml',submissionJobId:'7',reports:[{ruleId:'tests.coverage',format:'lcov',content,sha256:createHash('sha256').update(content).digest('hex')}]};
+ const run=await db.repositoryBranchRun.create({data:{id:'branch:fixture',repositoryId:repoId,organizationId:owner.organizationId!,branch:'development',sourceSha:sha,runId:'12',runAttempt:2,runCreatedAt:new Date(),workflowId:'4',policyId:policy.id,policyHash:policy.definitionHash,configRevision:1,actorId:owner.identityId,inputHash:digest(payload),payload}});
+ const github={readReadinessWorkflowRun:vi.fn(async()=>({event:'push',headBranch:'development',sourceSha:sha,runAttempt:2,workflowId:'4',workflowPath:'.github/workflows/ci.yml',status:'completed'})),readPipelineJobs:vi.fn(async()=>[{id:'7',sourceSha:sha,status:'completed',conclusion:'success',steps:[{status:'completed',conclusion:'success'}]}])};
+ const {BranchCiService}=await import('../src/health/branch-ci.service.js');const worker=new BranchCiService(db,new AuthorizationService(db),github as any);
+ return {db,policy,run,payload,github,worker};
+}
+it('verifies branch coverage independently of Health and PR gates, retaining previous coverage during throttling',async()=>{
+ const {db,run,worker,github}=await branchFixture();
+ await worker.reconcile();await worker.reconcile();
+ expect(await db.repositoryBranchRun.findUnique({where:{id:run.id}})).toMatchObject({state:'VERIFIED',payload:{}});
+ const data=await service.get(owner,'51');
+ expect(data.assessment).toBeNull();expect(data.branchCoverage.result).toMatchObject({state:'VERIFIED',sourceSha:sha,measurement:{analyzedLines:2,coveredLines:1}});
+ expect(await db.commitAssessment.count()).toBe(0);expect(await db.gitHubCheckPublication.count()).toBe(0);
+ expect(await db.auditEvent.count({where:{event:'branch.run.verified'}})).toBe(1);
+ expect(await db.auditEvent.count({where:{event:'pipeline.run.verified'}})).toBe(0);
+ // A report from an older workflow may arrive later than the current branch result.
+ await db.repositoryBranchRun.create({data:{...run,id:'branch:late-old',sourceSha:'c'.repeat(40),runId:'11',runCreatedAt:new Date(Date.now()-60000),state:'VERIFIED',payload:{},failureCode:null}});
+ expect((await service.get(owner,'51')).branchCoverage.result.measurement).toMatchObject({coveredLines:1});
+ await db.repositoryBranchRun.create({data:{...run,id:'branch:new',sourceSha:'b'.repeat(40),runId:'13',runCreatedAt:new Date(Date.now()+1000),state:'PENDING',leaseUntil:null}});
+ github.readReadinessWorkflowRun.mockRejectedValueOnce(new GitHubRateLimitError(60000));
+ await worker.reconcile();
+ expect(await db.repositoryBranchRun.findUnique({where:{id:'branch:new'}})).toMatchObject({state:'PENDING',failureCode:'GITHUB_RATE_LIMITED',attempts:0});
+ expect((await service.get(owner,'51')).branchCoverage.result.measurement).toMatchObject({coveredLines:1});
+});
+it('rejects tampered branch payloads, supplied invalid proofs and failed report jobs',async()=>{
+ for(const kind of ['payload','proof','job','branch','revoked']){
+  const {db,run,payload,github,worker}=await branchFixture();
+  if(kind==='payload')await db.repositoryBranchRun.update({where:{id:run.id},data:{payload:{tampered:true}}});
+  if(kind==='proof'){const next={...payload,reports:payload.reports.map(r=>({...r,proof:'invalid'}))};await db.repositoryBranchRun.update({where:{id:run.id},data:{payload:next,inputHash:digest(next)}})}
+  if(kind==='job')github.readPipelineJobs.mockResolvedValueOnce([{id:'7',sourceSha:sha,status:'completed',conclusion:'failure',steps:[]}]);
+  if(kind==='branch')github.readReadinessWorkflowRun.mockResolvedValueOnce({event:'push',headBranch:'other',sourceSha:sha,runAttempt:2,workflowId:'4',workflowPath:'.github/workflows/ci.yml',status:'completed'});
+  if(kind==='revoked')await db.organizationMembership.updateMany({where:{identityId:owner.identityId},data:{active:false}});
+  await worker.reconcile();
+  expect(await db.auditEvent.count({where:{event:'branch.run.verified'}})).toBe(0);
+  expect((await service.get(developer,'51')).branchCoverage.result.measurement).toBeUndefined();
+  if(kind!=='revoked')expect(await db.repositoryBranchRun.findUnique({where:{id:run.id}})).toMatchObject({state:'FAILED',payload:{}});
+  await db.repositoryBranchRun.deleteMany();await db.gatePolicyRevision.deleteMany();await db.readinessAutomation.deleteMany();await db.importedCiEvidence.deleteMany();await db.gitHubWebhookDelivery.deleteMany();
+ }
+});

@@ -591,7 +591,7 @@ export class GitHubProviderService {
     const root=`/repos/${encodeURIComponent(reader.metadata.owner.login)}/${encodeURIComponent(reader.metadata.name)}`
     const run=await reader.request<Record<string,any>>(`${root}/actions/runs/${runId}`)
     if(String(run.id)!==runId || String(run.repository?.id)!==repositoryId.toString() || String(run.head_repository?.id)!==repositoryId.toString() || !Number.isSafeInteger(run.run_attempt) || run.run_attempt<1 || !Number.isSafeInteger(run.workflow_id) || run.workflow_id<1 || !/^[a-f0-9]{40}$/.test(run.head_sha))throw new ServiceUnavailableException('Workflow run identity could not be verified')
-    return {sourceSha:run.head_sha,runAttempt:run.run_attempt,status:run.status,conclusion:run.conclusion,workflowId:String(run.workflow_id),event:String(run.event),workflowPath:typeof run.path === "string" ? run.path.split("@")[0] : ""}
+    return {runCreatedAt: typeof run.created_at === "string" ? run.created_at : "",headBranch:typeof run.head_branch === "string" ? run.head_branch : "",sourceSha:run.head_sha,runAttempt:run.run_attempt,status:run.status,conclusion:run.conclusion,workflowId:String(run.workflow_id),event:String(run.event),workflowPath:typeof run.path === "string" ? run.path.split("@")[0] : ""}
   }
   /** Read the exact attempt directly from GitHub; display caches cannot establish execution. */
   async readPipelineJobs(installationId: bigint, repositoryId: bigint, runId: string, attempt: number) {

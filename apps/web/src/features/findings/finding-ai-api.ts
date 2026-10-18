@@ -78,8 +78,15 @@ export function useFindingAiGuidance(scope: FindingAiScope | null) {
   })
   const mutation = useMutation({
     meta: { silent: true },
-    mutationFn: (retry: boolean) => request(scope!, retry),
-    onSuccess: () => client.invalidateQueries({ queryKey: key }),
+    mutationFn: async (retry: boolean) => {
+      const queryKey = key
+      const data = await request(scope!, retry)
+      return { data, queryKey }
+    },
+    onSuccess: ({ data, queryKey }) => {
+      client.setQueryData(queryKey, data)
+      return client.invalidateQueries({ queryKey })
+    },
   })
   const { mutate } = mutation
   useEffect(() => {
@@ -100,8 +107,17 @@ export function useFindingAiGuidance(scope: FindingAiScope | null) {
   }, [scope, query.data, session.data?.organizationId, mutate])
   return {
     data: query.data,
+    isLoading: query.isLoading,
     retryGeneration: () => mutate(query.data?.state === 'FAILED'),
     isGenerating: mutation.isPending,
-    generationFailed: mutation.isError,
+    generationFailed: mutation.isError || query.isError,
+    isPreparing:
+      !mutation.isError &&
+      !query.isError &&
+      (mutation.isPending ||
+        (query.data?.available &&
+          (query.data.state === 'QUEUED' ||
+            query.data.state === 'RUNNING' ||
+            (query.data.state === 'NONE' && query.data.canGenerate)))),
   }
 }

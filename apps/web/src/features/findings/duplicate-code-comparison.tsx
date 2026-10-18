@@ -150,20 +150,11 @@ export function DuplicateCodeComparison({
         </div>
       </div>
       <div className='overflow-hidden rounded-xl border bg-card'>
-        {(aiState === 'QUEUED' || aiState === 'RUNNING') && (
-          <p role='status' className='px-4 py-3 text-sm text-muted-foreground'>
-            Preparing AI guidance. Current guidance is shown for now.
-          </p>
-        )}
-        {aiState === 'FAILED' && onRetryAi && (
-          <div className='flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm'>
-            <span>AI guidance is unavailable. Current guidance is shown.</span>
-            <Button variant='outline' size='sm' onClick={onRetryAi}>
-              Retry AI guidance
-            </Button>
-          </div>
-        )}
-        <FindingGuidance finding={finding} />
+        <FindingGuidance
+          finding={finding}
+          aiState={aiState}
+          onRetryAi={onRetryAi}
+        />
       </div>
     </section>
   )

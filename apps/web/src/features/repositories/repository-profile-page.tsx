@@ -568,7 +568,7 @@ export function RepositoryProfilePage() {
                       search: (old) => ({
                         ...old,
                         branch: assessment.branch,
-                        health: assessment.id,
+                        health: undefined,
                       }),
                       replace: true,
                     })

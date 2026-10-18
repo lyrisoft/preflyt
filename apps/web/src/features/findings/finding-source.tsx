@@ -181,23 +181,13 @@ export function FindingSourceViewer({
           </div>
         </>
       )}
-      {aiState === 'QUEUED' || aiState === 'RUNNING' ? (
-        <p
-          role='status'
-          className='border-t px-4 py-2 text-xs text-muted-foreground'
-        >
-          Preparing AI guidance. Current guidance is shown for now.
-        </p>
-      ) : null}
-      {aiState === 'FAILED' && onRetryAi && (
-        <div className='flex flex-wrap items-center justify-between gap-2 border-t px-4 py-2 text-xs text-muted-foreground'>
-          <span>AI guidance is unavailable. Current guidance is shown.</span>
-          <Button variant='outline' size='sm' onClick={onRetryAi}>
-            Retry AI guidance
-          </Button>
-        </div>
+      {showGuidance && (
+        <FindingGuidance
+          finding={finding}
+          aiState={aiState}
+          onRetryAi={onRetryAi}
+        />
       )}
-      {showGuidance && <FindingGuidance finding={finding} />}
     </Card>
   )
 }

@@ -76,6 +76,7 @@ describe("standalone PR workflow generation", () => {
     expect(generated.path).toBe(standaloneWorkflowPath);
     expect(generated.exists).toBe(false);
     expect(yaml.on).toEqual({
+      push: {branches: ["development"]},
       pull_request: {
         branches: ["development"],
         types: ["opened", "synchronize", "reopened", "ready_for_review"],
@@ -128,7 +129,7 @@ describe("standalone PR workflow generation", () => {
       job.steps.some((s: any) => s.run === "npm test" || s.name === "Deploy"),
     ).toBe(false);
     expect(job.steps[0].with).toMatchObject({
-      ref: "${{ github.event.pull_request.head.sha }}",
+      ref: "${{ github.event.pull_request.head.sha || github.sha }}",
       "persist-credentials": false,
     });
     expect(
@@ -553,4 +554,12 @@ it("does not ask for unrelated runtime setup just because another language exist
   expect(python.notes.join(" ")).not.toContain(
     "commands execute from the repository root",
   );
+});
+
+it('preserves a configured coverage report path and rejects branch publication edits',()=>{
+  const configured=source({'.github/workflows/ci.yml':stringify({on:{pull_request:null},jobs:{checks:{'runs-on':'ubuntu-latest',steps:[{uses:policyAction,with:{'coverage-report':'api/TestResults/coverage.info'}}]}}})});
+  const generated=standalonePrWorkflow(configured,[],api),yaml=parse(generated.workflow);
+  expect(yaml.jobs.preflyt_checks.steps.find((s:any)=>s.uses===policyAction).with['coverage-report']).toBe('api/TestResults/coverage.info');
+  yaml.jobs.preflyt_gate.if='${{ always() }}';
+  expect(()=>validateStandalonePrWorkflow(stringify(yaml),[],'refs/heads/development',api)).toThrow('only on same-repository');
 });

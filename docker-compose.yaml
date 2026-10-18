@@ -41,7 +41,7 @@ services:
 
   migrate:
     # Upgrade this image with the API/worker: apply read indexes, PR retention
-    # references and Findings revision triggers before application processes start.
+    # references, Findings revision triggers and branch Health/CI queues before startup.
     image: ${PREFLYT_IMAGE_REGISTRY:-preflyt-local}/preflyt-api-migration:${PREFLYT_VERSION:-development}
     build:
       context: .

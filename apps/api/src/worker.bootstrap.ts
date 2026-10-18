@@ -1,3 +1,4 @@
+import { BranchCiService } from './health/branch-ci.service.js'
 import { RetentionService } from './retention/retention.service.js'
 import { ContributorSyncService } from './contributors/contributor-sync.service.js'
 import { FindingsService } from './findings/findings.service.js'
@@ -178,6 +179,8 @@ async function start() {
   let automationRun: Promise<void> | undefined
   const pipeline = new PipelineProcessingService(prisma, emailAuthorization, githubProvider, assessments,
     submissionId => aiReviews.dispatchVerifiedPipeline(submissionId))
+  const branchCi = new BranchCiService(prisma, emailAuthorization, githubProvider)
+  let branchCiRun: Promise<void> | undefined
   let pipelineRun: Promise<void> | undefined
   let lastWarning = 0
   const warn = () => {
@@ -261,6 +264,7 @@ async function start() {
       if (!sourceRun) sourceRun = findingSources.reconcile().catch(warn).finally(() => { sourceRun = undefined })
       if (!healthRun) healthRun = health.pending().then(async rows => { for (const row of rows) await healthQueue.add('assess', { id: row.id }, { jobId: row.id, removeOnComplete: true, removeOnFail: true, attempts: 3, backoff: { type: 'exponential', delay: 5000 } }) }).catch(warn).finally(() => { healthRun = undefined })
       if (!nativeRun) nativeRun = native.reconcile().catch(warn).finally(() => { nativeRun = undefined })
+      if (!branchCiRun) branchCiRun = branchCi.reconcile().catch(warn).finally(() => { branchCiRun = undefined })
       if (!pipelineRun) pipelineRun = pipeline.reconcile().catch(warn).finally(() => { pipelineRun = undefined })
       if (!automationRun) automationRun = automation.reconcile().catch(warn).finally(() => { automationRun = undefined })
       if (!historyRun) historyRun = rulesetHistory.reconcile().catch(warn).finally(() => { historyRun = undefined })
@@ -315,6 +319,7 @@ async function start() {
     await aiReviewRun
     await nativeRun
     await syncRun
+    await branchCiRun
     await pipelineRun
     await automationRun
     await historyRun

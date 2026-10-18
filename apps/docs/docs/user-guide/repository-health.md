@@ -7,7 +7,7 @@ description: Read branch analysis, exact-revision findings, limits and report hi
 
 # Repository health
 
-Health assesses a selected branch without requiring CI. Explicit repository selection queues the first assessment; **Reassess** creates another revision report. The API and worker fetch the exact selected commit and coordinate work. The built-in scanner service runs applicable fixed Health analyzers in isolated containers. GitHub connection, repository selection and existing Preflyt permissions are the authorization; no additional approval, policy selection or CI workflow is required. Tests run in your existing CI environment. Health displays verified test results and coverage for the assessed commit, as described below.
+Health assesses a selected branch without requiring CI. Explicit repository selection queues the first assessment; **Reassess** creates another revision report. The API and worker fetch the exact selected commit and coordinate work. The built-in scanner service runs applicable fixed Health analyzers in isolated containers. GitHub connection, repository selection and existing Preflyt permissions are the authorization; no additional approval, policy selection or CI workflow is required. Tests run in your existing CI environment. Health and test coverage load independently for the selected branch. Each result shows its own commit and date; coverage can be available before a Health scan finishes.
 
 <figure className="pf-guide-screenshot">
   <a href="/img/guides/repository-health.jpg" target="_blank" rel="noreferrer">
@@ -48,7 +48,7 @@ Wait for **Preflyt Health scanner is ready** before selecting or reassessing a r
 | Stale | That branch head has advanced beyond the report. |
 | Freshness unverified | GitHub could not be checked, the cached check expired, or this is a historical report for another branch. |
 
-Branch checks are cached for one minute. Open or refresh Health to check again; Overview does not poll every repository's branch. The last check time is shown. P5 does not start a full scan on every push.
+Branch checks are cached for one minute. Open or refresh Health to check again; Overview does not poll every repository's branch. The last check time is shown. Signed push events for the repository default branch queue a Health refresh. Closely spaced pushes are combined, and a running scan finishes before the newest pending change is assessed. Existing access checks and scan admission limits still apply.
 
 ## Supported analysis defaults
 
@@ -88,11 +88,19 @@ Counts exclude suppressed results and deduplicate matching findings from the sam
 
 ## Reassessment and history
 
-Owners, Admins and Security Engineers with repository access can reassess or cancel. Choose another branch and select **Reassess** to persist the new target. To rerun security, reliability, maintainability or duplication, open its **Scope and evidence** details under **Analysis coverage** and select the Run action. Open the **Test coverage** detail page to inspect verified CI reports and link to their workflow logs. The five metric cards show results and dates; they do not contain run controls. A category run saves its own partial-scope report, even when its selected analyzers finish. It cannot establish whole-repository health. Reports retain their original branch, SHA, evidence and timestamps. History is paginated by branch.
+Owners, Admins and Security Engineers with repository access can reassess or cancel. Choose another branch and select **Reassess** to persist the new target. To rerun security, reliability, maintainability or duplication, open its **Scope and evidence** details under **Analysis coverage** and select the Run action. Open the **Test coverage** detail page to inspect verified CI reports and link to their workflow logs. The four static-analysis cards and separate test coverage card show results and dates; they do not contain run controls. A category run saves its own partial-scope report, even when its selected analyzers finish. It cannot establish whole-repository health. Reports retain their original branch, SHA, evidence and timestamps. History is paginated by branch.
 
-The cards may reuse a category result from an earlier run only when it belongs to the exact same branch and commit. Each card shows its own assessment date and links to findings in that saved report. A result from another commit is never carried forward. Full-scan graph comparisons exclude category-only runs; those runs remain visible in assessment history.
+The cards may reuse a category result from an earlier run only when it belongs to the exact same branch and commit. Each card shows its own assessment date and links to findings in that saved report. While a refresh runs or fails, the last completed result on that branch stays visible with an update message. Its original commit and date remain visible. Coverage from a different commit is labelled separately and is never combined with the Health report as if it described the same revision. Full-scan graph comparisons exclude category-only runs; those runs remain visible in assessment history.
 
 Requests are limited to ten per repository per hour, with one active job per repository. Full scans also have a one-minute branch cooldown; category runs can follow each other within the hourly limit. Duplicate requests and retries reuse the active job. Complete reports with compatible tools, configuration and analysis scope can show introduced and no-longer-reported counts. No-longer-reported does not independently prove a fix.
+
+## Automatic branch coverage
+
+The generated **Review setup PR** workflow runs published checks on pull requests and pushes to its configured target branch, including merges. It checks out the exact PR head or pushed commit. The final merge gate runs only for pull requests; branch reports never publish a PR gate result.
+
+Review the `coverage-report` path in the generated YAML and ensure the published test command produces that LCOV file. Preflyt reuses a coverage path already configured in a Preflyt workflow; otherwise it suggests `coverage/lcov.info` in the selected test project. A missing file stays **Coverage not received**, rather than becoming zero coverage. Existing workflows need the updated setup PR before push coverage runs are available. Preflyt does not add push triggers to an existing deployment workflow.
+
+Verified branch reports appear independently of Health and retain their exact workflow attempt, commit and received time. Previous verified coverage remains visible while the latest report is being verified or is waiting for GitHub's request limit. A failed update displays its reason and links to the latest workflow. Branch checks require the same enabled repository automation, published branch policy and verified GitHub identity as PR checks.
 
 ## Continue with CI
 

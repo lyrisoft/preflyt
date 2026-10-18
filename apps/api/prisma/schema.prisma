@@ -203,6 +203,8 @@ model GitHubRepository {
   readinessAutomation ReadinessAutomation?
   readinessTasks ReadinessTask[]
   pipelineSubmissions PipelineRunSubmission[]
+  branchRuns RepositoryBranchRun[]
+  healthRefreshes RepositoryHealthRefresh[]
   rulesetDeployments GitHubRulesetDeployment[]
   ruleSuiteSnapshots GitHubRuleSuiteSnapshot[]
   insightsSync GitHubInsightsSync?
@@ -1509,4 +1511,47 @@ model WorkspaceRetention {
  lastResult Json?
  lastError Boolean @default(false)
  @@index([enabled, nextRunAt])
+}
+
+// Branch CI is evidence for repository health, never a PR gate or publication.
+model RepositoryBranchRun {
+  id String @id
+  repositoryId String
+  repository GitHubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  organizationId String
+  branch String
+  sourceSha String
+  runId String
+  runAttempt Int
+  runCreatedAt DateTime
+  workflowId String
+  policyId String
+  policyHash String
+  configRevision Int
+  actorId String
+  inputHash String
+  payload Json
+  state String @default("PENDING")
+  failureCode String?
+  attempts Int @default(0)
+  nextAttemptAt DateTime @default(now())
+  leaseToken String?
+  leaseUntil DateTime?
+  createdAt DateTime @default(now())
+  finishedAt DateTime?
+  @@index([state, nextAttemptAt])
+  @@index([repositoryId, branch, runCreatedAt, runAttempt], map: "RepositoryBranchRun_branch_order_idx")
+}
+
+// One outstanding refresh per branch; signed events replace obsolete requests.
+model RepositoryHealthRefresh {
+  repositoryId String
+  repository GitHubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  branch String
+  sourceSha String
+  revision Int @default(1)
+  requestedAt DateTime @default(now())
+  nextAttemptAt DateTime @default(now())
+  @@id([repositoryId, branch])
+  @@index([nextAttemptAt])
 }
