@@ -131,8 +131,6 @@ The Docker Compose deployment includes the Health scanner, a separate TLS-protec
 
 Scanner licensing and release preparation are documented in [Scanner licensing](docs/operations/scanner-licensing.md), [dependency security patches](docs/operations/dependency-security-patches.md) and [repository launch preparation](docs/operations/community-repository-launch.md). Preflyt's Apache-2.0 license does not replace upstream licenses or grant rights to proprietary scanner components.
 
-Planned repository-aware AI review with searchable code indexing and related-code retrieval outside the PR diff (issue #97 / P4.RI) is **Cloud-only**. Community Edition retains its existing profiles, Health/source evidence and optional BYOK diff-based reviews.
-
 ### Optional installation reporting
 
-Installation reporting is enabled by default (opt-out), with a disclosure and switch in Settings → Configuration. Set `PREFLYT_INSTALLATION_REPORTING_ENABLED=false` before first startup to prevent reports. Only a random installation ID, version, deployment type and schema version are included. No report is sent until a receiver URL is configured. See [reporting details and receiver operations](docs/operations/installation-reporting.md).
+Installation reporting is enabled by default (opt-out), with a disclosure and switch in Settings → Configuration.
