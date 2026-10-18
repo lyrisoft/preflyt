@@ -170,13 +170,14 @@ export class ContributorsService {
           take: 5001,
         })
       : []
-    const associated = (r: (typeof observations)[number]) =>
-      assessments.filter(
-        (a) =>
-          a.repositoryId === r.repositoryId &&
-          a.sourceSha === r.sourceSha &&
-          (a.request as any)?.pullRequest?.number === r.pullRequestNumber,
-      )
+    const assessmentsByPr = new Map<string, typeof assessments>()
+    const assessmentKey = (repositoryId:string, sourceSha:string, number:unknown) => JSON.stringify([repositoryId,sourceSha,typeof number,number])
+    for (const assessment of assessments) {
+      const key=assessmentKey(assessment.repositoryId,assessment.sourceSha,(assessment.request as any)?.pullRequest?.number)
+      const group=assessmentsByPr.get(key) ?? []
+      group.push(assessment);assessmentsByPr.set(key,group)
+    }
+    const associated = (row: (typeof observations)[number]) => assessmentsByPr.get(assessmentKey(row.repositoryId,row.sourceSha,row.pullRequestNumber)) ?? []
     const allPrs = unique(observations, 'PR_AUTHOR')
     const data = [...seen.values()]
       .map((group) => {

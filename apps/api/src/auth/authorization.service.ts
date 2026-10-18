@@ -385,6 +385,7 @@ export class AuthorizationService {
     }
     if (
       path === '/notifications' ||
+      (request.method === 'GET' && /^\/notifications\/(summary|preview)$/.test(path)) ||
       /^\/notifications\/(preferences|read-all|[a-zA-Z0-9-]{1,80}\/read)$/.test(path) ||
       path === '/github/repositories' ||
       path === '/github/repositories/overview' ||

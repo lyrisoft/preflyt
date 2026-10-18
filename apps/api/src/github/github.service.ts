@@ -1,3 +1,4 @@
+import { latestRepositoryIds } from '../prisma/latest-repository-rows.js'
 import { RepositoryHealthService } from '../health/repository-health.service.js'
 import { RepositoryProfileService } from './repository-profile.service.js'
 import { configurationValue } from '../configuration/runtime-configuration.js'
@@ -370,6 +371,7 @@ export class GitHubService {
           },
         },
         select: {
+          id: true,
           githubId: true,
           name: true,
           fullName: true,
@@ -378,13 +380,7 @@ export class GitHubService {
           isPrivate: true,
           selected: true,
           installation: { select: { accountLogin: true } },
-          profiles: {
-            // Inventory is visible before selection; profile details are not.
-            where: { repository: { selected: true } },
-            orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-            take: 1,
-            select: { report: true, createdAt: true, sourceSha: true },
-          },
+
         },
         orderBy: [{ ownerLogin: 'asc' }, { name: 'asc' }],
       }),
@@ -406,6 +402,9 @@ export class GitHubService {
         orderBy: { accountLogin: 'asc' },
       }),
     ])
+    const profileIds = await latestRepositoryIds(this.prisma, 'RepositoryProfile', repositories.filter(r => r.selected).map(r => r.id))
+    const profiles = await this.prisma.repositoryProfile.findMany({where: {id: {in: profileIds}}, select: {repositoryId:true,report:true,createdAt:true,sourceSha:true}})
+    const byRepository = new Map(profiles.map(row => [row.repositoryId, row]))
     return {
       installations: allInstallations.map((installation) => ({
         id: installation.id.toString(),
@@ -415,8 +414,8 @@ export class GitHubService {
         accountLogin: installation.accountLogin,
         active: installation.active,
       })),
-      repositories: repositories.map(({ profiles, ...repository }) => {
-        const profile = repository.selected ? profiles[0] : undefined
+      repositories: repositories.map(({ id, ...repository }) => {
+        const profile = repository.selected ? byRepository.get(id) : undefined
         return {
           ...repository,
           githubId: repository.githubId.toString(),

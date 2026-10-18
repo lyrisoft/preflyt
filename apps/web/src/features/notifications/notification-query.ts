@@ -74,21 +74,47 @@ export async function notificationRequest<T>(
     )
   return response.json() as Promise<T>
 }
-export function useInbox(filters: Record<string, string> = {}) {
+export function useNotificationCount() {
+  const session = useNavigationSession()
+  return useQuery({
+    queryKey: [
+      'notifications',
+      session.data?.identityId,
+      session.data?.organizationId,
+      'summary',
+    ],
+    queryFn: ({ signal }) =>
+      notificationRequest<{ enabled: boolean; unreadCount: number }>(
+        '/summary',
+        signal
+      ),
+    enabled: !!session.data?.identityId && !session.isFetching,
+    staleTime: 10000,
+    refetchInterval: 30000,
+    retry: false,
+  })
+}
+export function useInbox(
+  filters: Record<string, string> = {},
+  options: { enabled?: boolean; preview?: boolean } = {}
+) {
   const session = useNavigationSession()
   const query = useQuery({
     queryKey: [
       'notifications',
       session.data?.identityId,
       session.data?.organizationId,
-      filters,
+      options.preview ? 'preview' : filters,
     ],
     queryFn: ({ signal }) =>
       notificationRequest<InboxData>(
-        `?${new URLSearchParams(filters)}`,
+        options.preview ? '/preview' : `?${new URLSearchParams(filters)}`,
         signal
       ),
-    enabled: !!session.data?.identityId && !session.isFetching,
+    enabled:
+      options.enabled !== false &&
+      !!session.data?.identityId &&
+      !session.isFetching,
     staleTime: 0,
     gcTime: 0,
     refetchInterval: 30000,

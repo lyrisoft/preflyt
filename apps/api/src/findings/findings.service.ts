@@ -1,4 +1,6 @@
 import { findingIgnoreId, ignoreState, validateIgnore } from './finding-ignore.js';
+import { FindingReadCache } from './finding-read-cache.js';
+import { Prisma } from '../generated/prisma/client.js';
 import { reportedLocation } from './reported-location.js';
 import { readPageSize } from '../pagination.js';
 import { findingReferenceGuidance } from '../health/finding-guidance.js';
@@ -25,8 +27,11 @@ import type { HealthReport } from "../health/health-report.js";
 import { summarizeFindings } from "./findings-summary.js";
 import { aiReviewFindingRows } from './ai-review-findings.js';
 import { redactHealthSource } from '../health/health-report.js';
+type CandidateOptions = {source:string;kind:string;health?:string;assessment?:string;lookupId?:string};
 @Injectable()
 export class FindingsService {
+  private readonly readCache=new FindingReadCache();
+  private readonly readInflight=new Map<string,Promise<unknown>>();
   constructor(
     @Inject(PrismaService) private readonly db: PrismaService,
     @Inject(AuthorizationService) private readonly access: AuthorizationService,
@@ -83,6 +88,67 @@ export class FindingsService {
       const result = await this.aiFindings(session, selected, scope, { page, pageSize, search, severity, category, triage, assessment, lookupId });
       return kind === 'gaps' ? { ...result, rows: [], total: 0, summary: summarizeFindings([], 'gaps') } : result;
     }
+    const candidates = await this.projection(session,selected,{source,kind,health,assessment,lookupId},
+      reader=>reader.collectCandidates(session,selected,{source,kind,health,assessment,lookupId}));
+    let matching = candidates.rows.filter(
+      (row) =>
+        (severity === "all" || row.severity === severity) &&
+        (category === 'all' || row.category === category ||
+          (['check','evidence'].includes(row.category) && ({security:/^(?:security\.(?!hotspots$)|secrets\.|iac\.)/,reliability:/^quality\.reliability$/,maintainability:/^quality\.maintainability$/,duplication:/^quality\.duplication$/,hotspot:/^security\.hotspots$/,coverage:/^tests\.coverage$/} as Record<string,RegExp>)[category]?.test(row.ruleId ?? ''))) &&
+        (!search ||
+          `${row.title} ${row.recommendation ?? ""} ${row.repository} ${row.sourceSha} ${row.pullRequest ?? ""} ${row.ruleId ?? ""} ${row.path ?? ""}`
+            .toLowerCase()
+            .includes(search)),
+    );
+    const dispositions = await this.db.findingDisposition.findMany({
+      where: {
+        organizationId: session.organizationId!,
+        id: { in: matching.filter(row => ["ci", "ai"].includes(row.origin)).map((row) => row.id) },
+      },
+    });
+    const dispositionById=new Map(dispositions.map(item=>[item.id,item]));
+    for (const row of matching) {
+      row.referenceGuidance = findingReferenceGuidance(row.ruleId);
+      const saved = ["ci", "ai"].includes(row.origin) && dispositionById.get(row.id)?.sourceSha===row.sourceSha && dispositionById.get(row.id);
+      row.triage = saved
+        ? {
+            state: saved.state,
+            assigneeId: saved.assigneeId,
+            note: saved.note,
+            revision: saved.revision,
+            updatedAt: saved.updatedAt,
+          }
+        : { state: "REPORTED", assigneeId: null, note: "", revision: 0 };
+    }
+    await this.applyIgnores(session, matching);
+    matching = matching.filter(
+      (row) => triage === "all" || (triage === "IGNORED" ? row.ignore?.state === "IGNORED" : row.ignore?.state !== "IGNORED" && row.triage.state === triage),
+    );
+    const filtered = matching.filter(
+      (row) =>
+        (row.category === "evidence") === (kind === "gaps") &&
+        (!lookupId || row.id === lookupId),
+    );
+    return {
+      canManage: !!rolePermissions[session.role]?.includes("findings.manage"),
+      summary: summarizeFindings(matching, kind),
+      rows: filtered.slice((page - 1) * pageSize, page * pageSize),
+      total: filtered.length,
+      page,
+      pageSize,
+      truncated: candidates.truncated,
+      repositories: scope.map((repo) => ({
+        githubId: String(repo.githubId),
+        fullName: repo.fullName,
+      })),
+      assessedRevisions: candidates.assessedRevisions,
+      incompleteHealth: candidates.incompleteHealth,
+      inspectionOnly: candidates.inspectionOnly,
+    };
+  }
+
+  private async collectCandidates(session:AuthenticatedSession,selected:any[],options:CandidateOptions) {
+    const {source,kind,health,assessment,lookupId}=options;
     const records = source === "health" ? [] : await this.db.commitAssessment.findMany({
       where: { repositoryId: { in: selected.map((item) => item.id) }, ...(assessment ? { id: assessment } : {}) },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -267,8 +333,7 @@ export class FindingsService {
         });
       }
     }
-    const ai = source === 'all' && kind !== 'gaps' ? await this.aiFindings(session, selected, scope,
-      { page: 1, pageSize, search: '', severity: 'all', category: 'all', triage: 'all', assessment, lookupId }, true) : undefined;
+    const ai = source === 'all' && kind !== 'gaps' ? await this.aiCandidateRows(session,selected,assessment) : undefined;
     if (ai) rows.push(...ai.rows);
     // Put all sources in one stable chronological order before deduplication/pagination.
     rows.sort((a, b) => (b.observedAt ?? "").localeCompare(a.observedAt ?? "") || a.id.localeCompare(b.id));
@@ -279,73 +344,15 @@ export class FindingsService {
       if (existing) existing.occurrences++;
       else unique.set(row.id, row);
     }
-    let matching = [...unique.values()].filter(
-      (row) =>
-        (severity === "all" || row.severity === severity) &&
-        (category === 'all' || row.category === category ||
-          (['check','evidence'].includes(row.category) && ({security:/^(?:security\.(?!hotspots$)|secrets\.|iac\.)/,reliability:/^quality\.reliability$/,maintainability:/^quality\.maintainability$/,duplication:/^quality\.duplication$/,hotspot:/^security\.hotspots$/,coverage:/^tests\.coverage$/} as Record<string,RegExp>)[category]?.test(row.ruleId ?? ''))) &&
-        (!search ||
-          `${row.title} ${row.recommendation ?? ""} ${row.repository} ${row.sourceSha} ${row.pullRequest ?? ""} ${row.ruleId ?? ""} ${row.path ?? ""}`
-            .toLowerCase()
-            .includes(search)),
-    );
-    const dispositions = await this.db.findingDisposition.findMany({
-      where: {
-        organizationId: session.organizationId!,
-        id: { in: matching.filter(row => ["ci", "ai"].includes(row.origin)).map((row) => row.id) },
-      },
-    });
-    for (const row of matching) {
-      row.referenceGuidance = findingReferenceGuidance(row.ruleId);
-      const saved = ["ci", "ai"].includes(row.origin) && dispositions.find(
-        (item) => item.id === row.id && item.sourceSha === row.sourceSha,
-      );
-      row.triage = saved
-        ? {
-            state: saved.state,
-            assigneeId: saved.assigneeId,
-            note: saved.note,
-            revision: saved.revision,
-            updatedAt: saved.updatedAt,
-          }
-        : { state: "REPORTED", assigneeId: null, note: "", revision: 0 };
-    }
-    await this.applyIgnores(session, matching);
-    matching = matching.filter(
-      (row) => triage === "all" || (triage === "IGNORED" ? row.ignore?.state === "IGNORED" : row.ignore?.state !== "IGNORED" && row.triage.state === triage),
-    );
-    const filtered = matching.filter(
-      (row) =>
-        (row.category === "evidence") === (kind === "gaps") &&
-        (!lookupId || row.id === lookupId),
-    );
-    return {
-      canManage: !!rolePermissions[session.role]?.includes("findings.manage"),
-      summary: summarizeFindings(matching, kind),
-      rows: filtered.slice((page - 1) * pageSize, page * pageSize),
-      total: filtered.length,
-      page,
-      pageSize,
-      truncated:
-        records.length > 200 ||
-        healthRecords.length > 200 || ai?.truncated ||
-        new Set(artifactRefs).size > 100 ||
-        detailTruncated,
-      repositories: scope.map((repo) => ({
-        githubId: String(repo.githubId),
-        fullName: repo.fullName,
-      })),
-      assessedRevisions: new Set([...latest.keys(), ...latestHealth.keys(), ...(ai?.rows.map(row => `${selected.find(repo => String(repo.githubId) === row.repositoryId)?.id}:${row.sourceSha}`) ?? [])]).size,
-      incompleteHealth,
-      inspectionOnly: source === "health" && latestHealth.size > 0 && [...latestHealth.values()].every(saved => (saved.report as unknown as HealthReport).mode === "INSPECTION_ONLY"),
-    };
+    return {rows:[...unique.values()],truncated:records.length>200 || healthRecords.length>200 || !!ai?.truncated || new Set(artifactRefs).size>100 || detailTruncated,
+      assessedRevisions:new Set([...latest.keys(),...latestHealth.keys(),...(ai?.rows.map(row=>`${selected.find(repo=>String(repo.githubId)===row.repositoryId)?.id}:${row.sourceSha}`)??[])]).size,
+      incompleteHealth,inspectionOnly:source==='health' && latestHealth.size>0 && [...latestHealth.values()].every(saved=>(saved.report as unknown as HealthReport).mode==='INSPECTION_ONLY')};
   }
 
-  private async aiFindings(session: AuthenticatedSession, selected: any[], scope: any[],
-    filters: { page: number; pageSize: number; search: string; severity: string; category: string; triage: string; assessment?: string; lookupId?: string }, allRows = false) {
+  private async aiCandidateRows(session:AuthenticatedSession,selected:any[],assessment?:string) {
     const records = await this.db.aiSkillReview.findMany({
       where: { organizationId: session.organizationId!, repositoryId: { in: selected.map(r => r.id) },
-        stage: 'pull_request', state: 'SUCCEEDED', ...(filters.assessment ? { assessmentId: filters.assessment } : {}) },
+        stage: 'pull_request', state: 'SUCCEEDED', ...(assessment ? { assessmentId: assessment } : {}) },
       include: { assessment: true }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 201,
     });
     const unique = new Map<string, any>();
@@ -358,6 +365,13 @@ export class FindingsService {
         if (!unique.has(row.id)) unique.set(row.id, row);
       }
     }
+    return {rows:[...unique.values()],truncated:records.length>200 || limited};
+  }
+
+  private async aiFindings(session: AuthenticatedSession, selected: any[], scope: any[],
+    filters: { page: number; pageSize: number; search: string; severity: string; category: string; triage: string; assessment?: string; lookupId?: string }, allRows = false) {
+    const candidates=await this.projection(session,selected,{source:'ai',kind:'ai',assessment:filters.assessment},reader=>reader.aiCandidateRows(session,selected,filters.assessment));
+    const unique=new Map<string,any>(candidates.rows.map(row=>[row.id,row]));
     const dispositions = await this.db.findingDisposition.findMany({ where: {
       organizationId: session.organizationId!, id: { in: [...unique.keys()] },
     } });
@@ -381,10 +395,43 @@ export class FindingsService {
       aiSummary: { suggestions: matching.length, repositories: new Set(matching.map(r => r.repositoryId)).size,
         pullRequests: new Set(matching.map(r => `${r.repositoryId}:${r.pullRequest}`)).size },
       rows: allRows ? matching : matching.slice((filters.page - 1) * filters.pageSize, filters.page * filters.pageSize), total: matching.length,
-      page: filters.page, pageSize: filters.pageSize, truncated: records.length > 200 || limited,
+      page: filters.page, pageSize: filters.pageSize, truncated: candidates.truncated,
       repositories: scope.map(repo => ({ githubId: String(repo.githubId), fullName: repo.fullName })),
       assessedRevisions: new Set([...unique.values()].map(r => `${r.repositoryId}:${r.sourceSha}`)).size,
     };
+  }
+
+  /** A repeatable snapshot plus shared parent locks fences dependency updates.
+   * Artifact/evidence triggers advance the parent's revision in the same write
+   * transaction. Cached rows therefore cannot hide a changed integrity check. */
+  private async projection<T>(session:AuthenticatedSession,selected:any[],options:CandidateOptions,build:(reader:FindingsService)=>Promise<T>):Promise<T> {
+    const ids=selected.map(repo=>repo.id),aiOnly=options.kind==='ai'||options.source==='ai';
+    for(let attempt=0;attempt<2;attempt++)try {
+      return await this.db.$transaction(async tx=>{
+        type Version={id:string;findingReadRevision:bigint};
+        type AiVersion=Version & {assessmentId:string;assessmentRevision:bigint};
+        const [ci,health,ai]=await Promise.all([
+          ids.length && !aiOnly && options.source!=='health' ? tx.$queryRaw<Version[]>(Prisma.sql`SELECT id,"findingReadRevision" FROM "CommitAssessment" WHERE "repositoryId" IN (${Prisma.join(ids)}) ${options.assessment ? Prisma.sql`AND id=${options.assessment}` : Prisma.empty} ORDER BY "createdAt" DESC,id DESC LIMIT 201`) : [],
+          ids.length && !aiOnly && options.source!=='ci' && !options.lookupId ? tx.$queryRaw<Version[]>(Prisma.sql`SELECT id,"findingReadRevision" FROM "RepositoryHealthAssessment" WHERE "organizationId"=${session.organizationId!} AND "repositoryId" IN (${Prisma.join(ids)}) AND state IN ('COMPLETED','FAILED') ${options.health ? Prisma.sql`AND id=${options.health}` : Prisma.empty} ORDER BY "createdAt" DESC,id DESC LIMIT 201`) : [],
+          ids.length && (aiOnly || (options.source==='all' && options.kind!=='gaps')) ? tx.$queryRaw<AiVersion[]>(Prisma.sql`SELECT r.id,r."findingReadRevision",a.id AS "assessmentId",a."findingReadRevision" AS "assessmentRevision" FROM "AiSkillReview" r JOIN "CommitAssessment" a ON a.id=r."assessmentId" WHERE r."organizationId"=${session.organizationId!} AND r."repositoryId" IN (${Prisma.join(ids)}) AND r.stage='pull_request' AND r.state='SUCCEEDED' ${options.assessment ? Prisma.sql`AND r."assessmentId"=${options.assessment}` : Prisma.empty} ORDER BY r."createdAt" DESC,r.id DESC LIMIT 201`) : [],
+        ]);
+        const locks:[string,string[]][]=[['CommitAssessment',[...new Set([...ci.map(row=>row.id),...ai.map(row=>row.assessmentId)])]],['RepositoryHealthAssessment',health.map(row=>row.id)],['AiSkillReview',ai.map(row=>row.id)]];
+        for(const [table,keys] of locks)if(keys.length)await tx.$queryRaw(Prisma.sql`SELECT id FROM ${Prisma.raw('"'+table+'"')} WHERE id IN (${Prisma.join(keys)}) ORDER BY id FOR SHARE`);
+        const key=digest({version:1,organizationId:session.organizationId,scope:selected.map(repo=>[repo.id,String(repo.githubId),repo.fullName,String(repo.installationId)]),options:{source:options.source,includeAi:aiOnly || (options.source==='all' && options.kind!=='gaps'),health:options.health,assessment:options.assessment,lookupHealth:!!options.lookupId},
+          ci:ci.map(row=>[row.id,String(row.findingReadRevision)]),health:health.map(row=>[row.id,String(row.findingReadRevision)]),ai:ai.map(row=>[row.id,String(row.findingReadRevision),row.assessmentId,String(row.assessmentRevision)])});
+        const cached=this.readCache.get<T>(key);if(cached!==undefined)return cached;
+        const pending=this.readInflight.get(key);if(pending)return structuredClone(await pending) as T;
+        const promise=build(new FindingsService(tx as unknown as PrismaService,this.access,this.sources));
+        this.readInflight.set(key,promise);
+        try {const value=await promise;this.readCache.set(key,value);return value}finally{this.readInflight.delete(key)}
+      },{isolationLevel:'RepeatableRead',timeout:15000});
+    }catch(error){
+      const failure=error as {code?:string;meta?:{code?:string;driverAdapterError?:{cause?:{originalCode?:string}}}};
+      const sqlState=failure?.meta?.code ?? failure?.meta?.driverAdapterError?.cause?.originalCode;
+      if(failure?.code!=='P2034' && sqlState!=='40001' && sqlState!=='40P01')throw error;
+      if(attempt)throw new ConflictException('Findings changed while loading. Refresh and try again.');
+    }
+    throw new ConflictException('Findings changed while loading. Refresh and try again.');
   }
 
   private async finding(session: AuthenticatedSession, id: string, assessment?: string, origin?: string) {
