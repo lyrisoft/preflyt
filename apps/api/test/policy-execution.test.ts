@@ -55,7 +55,7 @@ it('rejects missing identity, revoked access, stale PR and altered policy before
   await expect(f.controller.policy('Bearer fixture')).rejects.toThrow('integrity');
 });
 
-it.skipIf(!process.env.PREFLYT_ACTION_CHECKOUT)('runs the actual exported API manifest in the separate Action checkout', async () => {
+it.skipIf(!process.env.PREFLYT_ACTION_CHECKOUT).each(['pull_request','push'])('runs the actual exported API manifest in the separate Action checkout (%s)', async event => {
   const root = await mkdtemp(join(tmpdir(), 'preflyt-contract-'));
   const git = (...args: string[]) => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
   try {
@@ -64,21 +64,37 @@ it.skipIf(!process.env.PREFLYT_ACTION_CHECKOUT)('runs the actual exported API ma
     git('add', 'source.txt');
     git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-qm', 'fixture');
     const head = git('rev-parse', 'HEAD');
+    if(event==='push')mocks.identity.mockResolvedValue({repository_id:'51',repository:'org/repo',run_id:'100',run_attempt:'1',sha:head,event_name:'push',ref:'refs/heads/development',workflow_ref:'org/repo/.github/workflows/ci.yml@refs/heads/development'});
     const f = fixture();
-    f.github.readReadinessWorkflowRun.mockResolvedValue({ runAttempt: 1, status: 'in_progress', sourceSha: head });
+    f.github.readReadinessWorkflowRun.mockResolvedValue({ runAttempt: 1, status: 'in_progress', sourceSha: head, event, headBranch:'development',runCreatedAt:new Date().toISOString() });
     f.github.readPullRequest.mockResolvedValue({ context: { state: 'open', draft: false, head: { sha: head, repositoryId: '51' }, base: { ref: 'development', repositoryId: '51' } } });
     const definition = { rules: [{ id: 'build.required', title: 'Build', required: true, workflowCommand: 'python3 -c "raise SystemExit(0)"' }] };
     f.db.gatePolicyRevision.findFirst.mockResolvedValue({ ...f.policy, definition, definitionHash: digest(definition) } as any);
     const exported = await f.controller.policy('Bearer fixture');
     await writeFile(join(root, 'policy.json'), JSON.stringify(exported));
     execFileSync('python3', [join(process.env.PREFLYT_ACTION_CHECKOUT!, 'run.py')], { cwd: root, encoding: 'utf8', env: { ...process.env,
-      GITHUB_WORKSPACE: root, GITHUB_SHA: merge, GITHUB_REPOSITORY_ID: '51', GITHUB_RUN_ID: '100', GITHUB_RUN_ATTEMPT: '1',
+      GITHUB_WORKSPACE: root, GITHUB_SHA: event==='push'?head:merge, GITHUB_REPOSITORY_ID: '51', GITHUB_RUN_ID: '100', GITHUB_RUN_ATTEMPT: '1',
       GITHUB_WORKFLOW_REF: 'org/repo/.github/workflows/ci.yml@refs/pull/7/merge', RUNNER_TEMP: root,
       PREFLYT_POLICY_PATH: join(root, 'policy.json'), GITHUB_OUTPUT: join(root, 'outputs'), GITHUB_STEP_SUMMARY: join(root, 'summary') } });
     const outputs = Object.fromEntries((await readFile(join(root, 'outputs'), 'utf8')).trim().split('\n').map(line => line.split('=')));
     expect(outputs.result).toBe('passed');
     const bundle = JSON.parse(await readFile(outputs.bundle!, 'utf8'));
-    expect(bundle).toMatchObject({ headSha: head, sourceSha: merge, policyHash: exported.definitionHash, repositoryId: '51' });
+    expect(bundle).toMatchObject({ headSha: head, sourceSha: event==='push'?head:merge, policyHash: exported.definitionHash, repositoryId: '51' });
     expect(bundle.reports[0]).toMatchObject({ ruleId: 'build.required', format: 'junit' });
   } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+it('exports push-branch commands without requiring an open PR and rejects mismatched identities', async () => {
+  const f=fixture();
+  mocks.identity.mockResolvedValue({repository_id:'51',repository:'org/repo',run_id:'100',run_attempt:'1',sha,event_name:'push',ref:'refs/heads/development',workflow_ref:'org/repo/.github/workflows/ci.yml@refs/heads/development'});
+  const run={event:'push',headBranch:'development',sourceSha:sha,runAttempt:1,status:'in_progress',runCreatedAt:new Date().toISOString()};
+  f.github.readReadinessWorkflowRun.mockResolvedValue(run);
+  expect(await f.controller.policy('Bearer fixture')).toMatchObject({stage:'branch',pullRequest:null,headSha:sha,sourceSha:sha,branchRef:'refs/heads/development'});
+  expect(f.github.readPullRequest).not.toHaveBeenCalled();
+  for(const patch of [{headBranch:'other'},{sourceSha:merge},{event:'pull_request'},{runCreatedAt:''},{runAttempt:2}]){
+    f.github.readReadinessWorkflowRun.mockResolvedValueOnce({...run,...patch});
+    await expect(f.controller.policy('Bearer fixture')).rejects.toThrow();
+  }
+  f.access.requireRepository.mockRejectedValueOnce(new Error('Permission denied'));
+  await expect(f.controller.policy('Bearer fixture')).rejects.toThrow('Permission');
 });

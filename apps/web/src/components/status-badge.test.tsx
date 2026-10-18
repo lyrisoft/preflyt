@@ -30,6 +30,9 @@ it('distinguishes available plans from future offerings', async () => {
 })
 
 it('keeps success, failure, pending and inactive states consistent', () => {
+  expect(statusTones.updating).toBe('info')
+  expect(statusTones['update failed']).toBe('error')
+  expect(statusTones['earlier commit']).toBe('warning')
   expect(statusTones.synced).toBe('success')
   expect(statusTones.inspected).toBe('success')
   expect(statusTones['inspection complete']).toBe('success')

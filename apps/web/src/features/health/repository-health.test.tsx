@@ -8,6 +8,13 @@ import { HealthCoverageDetails } from './health-coverage-details'
 import { RepositoryHealth } from './repository-health'
 
 const state = vi.hoisted(() => ({
+  latestAttempt: null as null | {
+    id: string
+    branch: string
+    state: string
+    reason: string | null
+    retryAt: string | null
+  },
   mode: 'EXECUTED',
   state: 'COMPLETED',
   progress: 'SCANNING',
@@ -300,6 +307,7 @@ const row = () => ({
 })
 beforeEach(() => {
   state.mode = 'EXECUTED'
+  state.latestAttempt = null
   state.state = 'COMPLETED'
   state.failureReason = null
   state.noReport = false
@@ -427,6 +435,7 @@ beforeEach(() => {
         JSON.stringify({
           branch: 'development',
           assessment: row(),
+          latestAttempt: state.latestAttempt,
           ciCoverage: state.coverage
             ? {
                 state: 'VERIFIED',
@@ -656,7 +665,7 @@ it('loads the chosen branch immediately and never displays the previous branch r
     )
     .toBe(true)
 })
-it('follows the newly queued assessment instead of reopening an older report', async () => {
+it('keeps the branch view unpinned after queuing so previous results remain visible', async () => {
   const queuedId = '22222222-2222-4222-8222-222222222222',
     onQueued = vi.fn()
   const original = state.fetch.getMockImplementation()!
@@ -680,7 +689,7 @@ it('follows the newly queued assessment instead of reopening an older report', a
           init?.method !== 'POST' &&
           new URL(String(input), 'http://localhost').searchParams.get(
             'assessment'
-          ) === queuedId
+          ) === null
       )
     )
     .toBe(true)
@@ -1248,7 +1257,7 @@ it('explains why security findings can coexist with unavailable metrics', async 
     .element(page.getByText('No verified duplication measurement'))
     .toBeVisible()
   await expect
-    .element(page.getByText('Coverage not received from CI'))
+    .element(page.getByText('Coverage not received', { exact: true }))
     .toBeVisible()
 })
 
@@ -1364,9 +1373,7 @@ it('explains a pre-scan GitHub rate-limit failure without needing a report, incl
     .toBeVisible()
   await expect
     .element(
-      failure.getByText(
-        'Wait until the retry time, then select Reassess.'
-      )
+      failure.getByText('Wait until the retry time, then select Reassess.')
     )
     .toBeVisible()
   await expect
@@ -1445,3 +1452,30 @@ it('shows an automatic retry instead of a failure while GitHub requests are paus
     .element(page.getByRole('alert', { name: 'Assessment failure' }))
     .not.toBeInTheDocument()
 })
+
+for (const pendingState of ['RUNNING', 'FAILED']) {
+  it(`keeps completed Health findings visible when the next assessment is ${pendingState}`, async () => {
+    state.latestAttempt = {
+      id: '22222222-2222-4222-8222-222222222222',
+      branch: 'development',
+      state: pendingState,
+      reason: pendingState === 'FAILED' ? 'SCANNER_UNAVAILABLE' : null,
+      retryAt: null,
+    }
+    await mount()
+    await expect
+      .element(
+        page.getByText(
+          pendingState === 'FAILED' ? 'Update failed' : 'Updating',
+          { exact: true }
+        )
+      )
+      .toBeVisible()
+    await expect
+      .element(page.getByText('Retained findings in the analyzed scope'))
+      .toBeVisible()
+    await expect
+      .element(page.getByRole('button', { name: 'Reassess', exact: true }))
+      [pendingState === 'FAILED' ? 'toBeEnabled' : 'toBeDisabled']()
+  })
+}
