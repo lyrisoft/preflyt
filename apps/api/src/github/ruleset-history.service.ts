@@ -1,3 +1,4 @@
+import { GitHubRateLimitError } from './github-rate-limit.js';
 import { readPageSize } from '../pagination.js'
 import { configurationValue } from '../configuration/runtime-configuration.js'
 import {
@@ -224,14 +225,15 @@ export class RulesetHistoryService {
           },
         });
       });
-    } catch {
+    } catch (error) {
+      const limited = error instanceof GitHubRateLimitError;
       await this.prisma.gitHubInsightsSync.updateMany({
         where: { repositoryId, leaseId },
         data: {
           leaseId: null,
           leaseUntil: null,
-          nextRunAt: new Date(Date.now() + 300000),
-          error: true,
+          nextRunAt: limited ? new Date((error.getResponse() as {retryAt: string}).retryAt) : new Date(Date.now() + 300000),
+          error: !limited,
         },
       });
     }

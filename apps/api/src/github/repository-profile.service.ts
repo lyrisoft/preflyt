@@ -68,11 +68,7 @@ export class RepositoryProfileService {
     if (!Number.isInteger(page) || page < 1 || page > 1000)
       throw new BadRequestException('Invalid branch list page')
     const repository = await this.selectedRepository(rawId)
-    const result = await this.provider.listRepositoryBranches(
-      repository.installationId,
-      repository.githubId,
-      page,
-    )
+    const result = await this.provider.savedDisplay<Awaited<ReturnType<GitHubProviderService['listRepositoryBranches']>>>('branches', repository.installationId, repository.githubId, [page])
     // Selection/revocation may change while GitHub is responding.
     await this.selectedRepository(rawId)
     return result

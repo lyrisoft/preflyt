@@ -236,8 +236,7 @@ describe('ruleset authorization', () => {
     const service = new GitHubRulesetService(
       { requireRepository } as unknown as AuthorizationService,
       {
-        listRepositoryRulesets,
-        getRepositoryRuleset,
+        savedDisplay: vi.fn((operation: string) => operation === 'rulesets' ? listRepositoryRulesets() : getRepositoryRuleset()),
       } as unknown as GitHubProviderService,
     )
     return {

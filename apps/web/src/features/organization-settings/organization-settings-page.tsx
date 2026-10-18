@@ -29,6 +29,7 @@ import { canPerform } from '@/features/workspace/scoped-access'
 import { ConfigurationPanel } from './configuration-panel'
 import { GitHubIdentityLink } from './github-identity-link'
 import { PrCheckSettings } from './pr-check-settings'
+import { RetentionSettings } from './retention-settings'
 import { ThemeCards } from './theme-cards'
 
 type Settings = {
@@ -81,7 +82,8 @@ export function OrganizationSettingsPage() {
       ? defaultTab
       : requestedTab === 'configuration' && !session.data?.platformAdmin
         ? defaultTab
-        : requestedTab === 'workspace' && !canManageWorkspace
+        : ['workspace', 'retention'].includes(requestedTab ?? '') &&
+            !canManageWorkspace
           ? defaultTab
           : (requestedTab ?? defaultTab)
   const client = useQueryClient()
@@ -137,6 +139,9 @@ export function OrganizationSettingsPage() {
                 if (canManageWorkspace && session.data?.organizationId)
                   void settings.refetch()
                 void client.invalidateQueries({
+                  queryKey: ['workspace-retention'],
+                })
+                void client.invalidateQueries({
                   queryKey: ['deployment-configuration'],
                 })
                 void client.invalidateQueries({
@@ -153,6 +158,11 @@ export function OrganizationSettingsPage() {
             <PageHelpDrawer
               title='Settings'
               sections={[
+                {
+                  title: 'Data retention',
+                  content:
+                    'Owners and Admins can set workspace retention periods, preview eligible records, and enable background cleanup. Cleanup keeps linked evidence and current assessments. Health reports and decision receipts remain protected. Container logs, images and backups are managed on the server.',
+                },
                 {
                   title: 'PR feedback',
                   content:
@@ -205,6 +215,9 @@ export function OrganizationSettingsPage() {
             <Bell className='size-4' />
             Notifications
           </TabsTrigger>
+          {canManageWorkspace && (
+            <TabsTrigger value='retention'>Data retention</TabsTrigger>
+          )}
           <TabsTrigger value='appearance'>
             <Palette className='size-4' />
             Appearance
@@ -227,6 +240,11 @@ export function OrganizationSettingsPage() {
         {canPublishChecks && (
           <TabsContent value='pr-checks'>
             <PrCheckSettings />
+          </TabsContent>
+        )}
+        {canManageWorkspace && (
+          <TabsContent value='retention'>
+            <RetentionSettings key={session.data?.organizationId} />
           </TabsContent>
         )}
         <TabsContent value='workspace' className='space-y-4'>

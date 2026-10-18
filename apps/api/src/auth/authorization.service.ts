@@ -215,9 +215,10 @@ export class AuthorizationService {
     session: AuthenticatedSession,
     id: string,
     permission: string,
-    selected = true
+    selected = true,
+    fresh?: boolean
   ) {
-    const member = await this.requireOrganization(session, permission)
+    const member = await this.requireOrganization(session, permission, fresh)
     if (!/^[1-9]\d{0,15}$/.test(id)) await this.deny(session, permission)
     const repository = await this.prisma.gitHubRepository.findFirst({
       where: {
@@ -259,6 +260,10 @@ export class AuthorizationService {
     // The audit reader performs fresh organization and repository authorization.
     if ((path === '/installation-reporting' && request.method === 'GET') || (/^\/installation-reporting\/(preferences|acknowledge)$/.test(path) && request.method === 'POST')) return false
     if ((path === '/releases' && request.method === 'GET') || (/^\/releases\/(check|preferences|read)$/.test(path) && request.method === 'POST')) return false
+    if (path === '/retention' || path.startsWith('/retention/')) {
+      await this.requireOrganization(session, 'organization.members.manage', request.method !== 'GET' && path !== '/retention/preview')
+      return true
+    }
     if (path === '/audit-log' && request.method === 'GET') return false
     if (path === '/configuration' || path.startsWith('/configuration/')) {
       if (session.platformAdmin !== true) await this.deny(session, 'deployment.configuration.manage')
@@ -375,7 +380,7 @@ export class AuthorizationService {
     // supports a deployment admin creating the first workspace after ownership proof.
     if (path === '/github/connection' && request.method === 'GET') return false
     if (path === '/notifications/channels' || /^\/notifications\/channels\/[a-zA-Z0-9-]{1,80}(?:\/test)?$/.test(path)) {
-      await this.requireOrganization(session, 'notifications.manage', true)
+      await this.requireOrganization(session, 'notifications.manage', request.method !== 'GET')
       return true
     }
     if (

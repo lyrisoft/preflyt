@@ -32,7 +32,7 @@ it('reviews useful PR defaults before starting GitHub registration', async () =>
   const view = await mount()
   await expect
     .element(view.getByRole('switch', { name: 'Create setup PRs' }))
-    .not.toBeChecked()
+    .toBeChecked()
   await expect
     .element(view.getByRole('switch', { name: 'Manage GitHub rulesets' }))
     .not.toBeChecked()
@@ -46,7 +46,7 @@ it('reviews useful PR defaults before starting GitHub registration', async () =>
     .toBeVisible()
   expect(fetcher.mock.calls.every(([, options]) => !options?.method)).toBe(true)
 })
-it('submits only the public manifest after optional capabilities are reviewed', async () => {
+it('includes setup PR permissions by default and submits only the reviewed public manifest', async () => {
   let posted: { action: string; value: string } | undefined
   vi.spyOn(HTMLFormElement.prototype, 'submit').mockImplementation(function (
     this: HTMLFormElement
@@ -74,12 +74,11 @@ it('submits only the public manifest after optional capabilities are reviewed', 
   vi.stubGlobal('fetch', fetcher)
   const view = await mount()
   await view.getByLabelText('GitHub organization').fill('fixture-org')
-  await view.getByRole('switch', { name: 'Create setup PRs' }).click()
   await view.getByRole('button', { name: 'Review App setup' }).click()
   await expect
     .element(
       view.getByText(
-        'Also write repository contents and workflow files for setup PRs.'
+        'Contents, Workflows and Pull requests: write. These permissions let Preflyt create setup branches, commit workflow files and open setup PRs.'
       )
     )
     .toBeVisible()
@@ -122,4 +121,18 @@ it('keeps the new setup form within a narrow viewport', async () => {
   await expect.element(view.getByLabelText('GitHub organization')).toBeVisible()
   expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390)
   await page.viewport(1280, 720)
+})
+
+it('explains the consequence of explicitly opting out of setup PR permissions', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => Response.json({ status: null, installationUrl: null }))
+  )
+  const view = await mount()
+  await view.getByRole('switch', { name: 'Create setup PRs' }).click()
+  await expect
+    .element(
+      view.getByText('Setup PR creation will be unavailable.', { exact: false })
+    )
+    .toBeVisible()
 })

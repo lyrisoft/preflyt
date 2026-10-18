@@ -17,6 +17,7 @@ export type WorkflowSnippetData = {
   ready: boolean
   checkIds: string[]
   execution?: 'policy'
+  complete?: boolean
 }
 export function WorkflowSnippet({
   setup,
@@ -56,11 +57,17 @@ export function WorkflowSnippet({
           <DialogHeader className='pr-8'>
             <DialogTitle>{title}</DialogTitle>
             <DialogDescription>
-              Install these jobs once. Each run executes the published branch
-              policy, including newly selected checks. Scanner images are
-              installed automatically. Keep project dependency installation
-              before the policy step and configure project commands in
-              Standards.
+              {setup.complete ? (
+                'Save this complete file under .github/workflows/preflyt.yml through a reviewed PR. It runs for pull requests targeting the selected policy branch. Review its project setup before merging.'
+              ) : (
+                <>
+                  Install these jobs once. Each run executes the published
+                  branch policy, including newly selected checks. Scanner images
+                  are installed automatically. Keep project dependency
+                  installation before the policy step and configure project
+                  commands in Standards.
+                </>
+              )}
             </DialogDescription>
           </DialogHeader>
           <div className='flex justify-end'>
@@ -70,14 +77,18 @@ export function WorkflowSnippet({
               onClick={async () => {
                 try {
                   await navigator.clipboard.writeText(setup.snippet)
-                  toast.success('Workflow snippet copied')
+                  toast.success(
+                    setup.complete
+                      ? 'Workflow copied'
+                      : 'Workflow snippet copied'
+                  )
                 } catch {
                   toast.error('Could not copy. Select and copy the YAML below.')
                 }
               }}
             >
               <Copy />
-              Copy snippet
+              {setup.complete ? 'Copy workflow' : 'Copy snippet'}
             </Button>
           </div>
           <div className='workflow-snippet overflow-hidden rounded-lg border [&_.cm-editor]:!h-[min(55svh,32rem)]'>

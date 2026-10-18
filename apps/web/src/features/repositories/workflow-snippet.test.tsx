@@ -83,3 +83,26 @@ it('keeps the policy bootstrap modal usable at 320px with long immutable pins', 
     await page.viewport(1280, 800)
   }
 })
+
+it('presents a complete standalone workflow with accurate copy and copy action', async () => {
+  const { WorkflowSnippet } = await import('./workflow-snippet')
+  const copy = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue()
+  const workflow =
+    'name: Preflyt PR checks\non:\n  pull_request:\n    branches: [development]\njobs: {}\n'
+  const view = await render(
+    <WorkflowSnippet
+      title='Preflyt pull request workflow'
+      setup={{
+        snippet: workflow,
+        notes: [],
+        ready: true,
+        checkIds: [],
+        complete: true,
+      }}
+    />
+  )
+  await view.getByRole('button', { name: 'View YAML' }).click()
+  await expect.element(view.getByText(/Save this complete file/)).toBeVisible()
+  await view.getByRole('button', { name: 'Copy workflow' }).click()
+  expect(copy).toHaveBeenCalledWith(workflow)
+})

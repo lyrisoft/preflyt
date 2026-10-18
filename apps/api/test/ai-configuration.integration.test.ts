@@ -1530,7 +1530,7 @@ it("exposes built-in defaults and downloads Markdown without creating or approvi
     .set("Cookie", `ai.sid=${owner.identityId}`)
     .expect(200);
   expect(list.body.templates.map((template: any) => template.id).sort()).toEqual(
-    ["github-actions", ...skillTemplates.map((template) => template.id)].sort(),
+    ["preflyt-ci-setup", ...skillTemplates.map((template) => template.id)].sort(),
   );
   const template = list.body.templates.find(
     (s: any) => s.id === "migration-safety",
@@ -2249,4 +2249,45 @@ it('retries with a replacement stage route even when its revision number matches
   expect(saved.automaticKey).not.toBe(first.automaticKey);
   await db.aiSkillReview.update({ where: { id: saved.id }, data: { state: 'UNAVAILABLE' } });
   expect((await f.reviews.retry(owner, f.repo.githubId.toString(), saved.id)).id).toBe(saved.id);
+});
+
+it('keeps AI feedback queued without spending attempts when GitHub throttles publication', async () => {
+  vi.stubEnv("GITHUB_CHECK_PUBLICATION_ENABLED", "true");
+  const f = await prFixture({summary: true});
+  await f.reviews.dispatchAutomatic(); f.infer(); await f.reviews.reconcile();
+  const job = await db.aiSkillReview.findFirstOrThrow({where: {assessmentId: f.assessment.id}});
+  await db.aiSkillReview.update({where: {id: job.id}, data: {feedbackAttempts: 4}});
+  const {GitHubRateLimitError} = await import('../src/github/github-rate-limit.js');
+  f.github.publishAiReviewSummary.mockRejectedValueOnce(new GitHubRateLimitError(600000));
+  await f.reviews.publishPendingSummary();
+  const saved = await db.aiSkillReview.findUniqueOrThrow({where: {id: job.id}});
+  expect(saved.feedbackState).toBe('RETRY'); expect(saved.feedbackAttempts).toBe(4);
+  expect(saved.feedbackAttemptAt!.getTime() + 60000).toBeGreaterThan(Date.now() + 590000);
+  await f.reviews.publishPendingSummary();
+  expect(f.github.publishAiReviewSummary).toHaveBeenCalledTimes(1);
+});
+
+it('uses local authorization for review cancellation polling and fresh authorization at execution boundaries', async () => {
+  const permission = vi.fn().mockRejectedValue(new Error('stop after authorization'));
+  const review = new SkillReviewService(db, {requireRepository: permission} as any, {} as any, {} as any);
+  await expect((review as any).current(owner, '51', 'assessment', {}, true)).rejects.toThrow('stop after authorization');
+  expect(permission).toHaveBeenLastCalledWith(owner, '51', 'ai.review.run', true, false);
+  await expect((review as any).current(owner, '51', 'assessment', {})).rejects.toThrow('stop after authorization');
+  expect(permission).toHaveBeenLastCalledWith(owner, '51', 'ai.review.run', true, true);
+});
+
+it('keeps a throttled pre-inference review queued without calling the model', async () => {
+  const f = await prFixture({summary: true});
+  await f.reviews.dispatchAutomatic();
+  const {GitHubRateLimitError} = await import('../src/github/github-rate-limit.js');
+  const verify = vi.spyOn(f.reviews as any, 'verifyLivePr').mockRejectedValue(new GitHubRateLimitError(60000));
+  const calls = fetchMock.mock.calls.length;
+  await f.reviews.reconcile();
+  const job = await db.aiSkillReview.findFirstOrThrow({where: {assessmentId: f.assessment.id}});
+  expect(job.state).toBe('QUEUED'); expect(job.startedAt).toBeNull(); expect(job.finishedAt).toBeNull();
+  expect(job.nextAttemptAt.getTime()).toBeGreaterThan(Date.now() + 59000);
+  expect(fetchMock.mock.calls.length).toBe(calls);
+  verify.mockClear();
+  await f.reviews.reconcile();
+  expect(verify).not.toHaveBeenCalled();
 });

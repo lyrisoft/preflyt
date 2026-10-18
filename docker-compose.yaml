@@ -179,6 +179,11 @@ services:
       HEALTH_SCANNER_CONNECTION_FILE: /run/preflyt-health/connection.json
       REDIS_URL: ${REDIS_URL:-redis://cache:6379/0}
       REDIS_CACHE_PREFIX: ${REDIS_CACHE_PREFIX:-preflyt:production:cache}
+      RETENTION_CLEANUP_ENABLED: ${RETENTION_CLEANUP_ENABLED:-true}
+      GITHUB_DISPLAY_STALL_SECONDS: ${GITHUB_DISPLAY_STALL_SECONDS:-180}
+      GITHUB_ACCESS_CACHE_SECONDS: ${GITHUB_ACCESS_CACHE_SECONDS:-30}
+      GITHUB_INTERACTIVE_RESERVE_PERCENT: ${GITHUB_INTERACTIVE_RESERVE_PERCENT:-10}
+      GITHUB_REQUEST_PRIORITY: interactive
       QUEUE_REDIS_URL: ${QUEUE_REDIS_URL:-redis://queue:6379/0}
       QUEUE_PREFIX: ${QUEUE_PREFIX:-preflyt:production:queue}
       DATABASE_URL: postgresql://preflyt_app:${DATABASE_APP_PASSWORD:?Set DATABASE_APP_PASSWORD}@db:5432/${PREFLYT_DATABASE:-preflyt}
@@ -293,9 +298,20 @@ services:
       GITHUB_APP_CLIENT_ID: ${GITHUB_APP_CLIENT_ID:-}
       GITHUB_APP_CLIENT_SECRET: ${GITHUB_APP_CLIENT_SECRET:-}
       OTEL_SERVICE_NAME: preflyt-worker
+      REDIS_URL: ${REDIS_URL:-redis://cache:6379/0}
+      REDIS_CACHE_PREFIX: ${REDIS_CACHE_PREFIX:-preflyt:production:cache}
+      RETENTION_CLEANUP_ENABLED: ${RETENTION_CLEANUP_ENABLED:-true}
+      GITHUB_DISPLAY_STALL_SECONDS: ${GITHUB_DISPLAY_STALL_SECONDS:-180}
+      GITHUB_ACCESS_CACHE_SECONDS: ${GITHUB_ACCESS_CACHE_SECONDS:-30}
+      GITHUB_INTERACTIVE_RESERVE_PERCENT: ${GITHUB_INTERACTIVE_RESERVE_PERCENT:-10}
+      GITHUB_REQUEST_PRIORITY: background
+      RETENTION_CLEANUP_BATCH: ${RETENTION_CLEANUP_BATCH:-250}
+      GITHUB_DISPLAY_REFRESH_BATCH: ${GITHUB_DISPLAY_REFRESH_BATCH:-10}
       QUEUE_REDIS_URL: ${QUEUE_REDIS_URL:-redis://queue:6379/0}
       QUEUE_PREFIX: ${QUEUE_PREFIX:-preflyt:production:queue}
     depends_on:
+      cache:
+        condition: service_healthy
       queue:
         condition: service_healthy
       migrate:
@@ -321,7 +337,8 @@ services:
 
   cache:
     image: valkey/valkey:7.2-alpine@sha256:c6c2f0020be34bbf684a53a0ef716ab16ff70295186d4d9f2518435beb7afbff
-    command: [valkey-server, --maxmemory, 128mb, --maxmemory-policy, allkeys-lru, --save, '']
+    # Coordination leases and request budgets must not be evicted under memory pressure.
+    command: [valkey-server, --maxmemory, 128mb, --maxmemory-policy, noeviction, --save, '']
     restart: unless-stopped
     healthcheck:
       test: [CMD, valkey-cli, ping]

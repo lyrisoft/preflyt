@@ -106,3 +106,11 @@ it.each(['wrong-owner', 'unexpected-permission', 'missing-events', 'invalid-key'
   const result = await request(app.getHttpServer()).get('/configuration/github-app/status').set('Cookie', 'sid=super'); expect(result.body).toEqual({ status: 'FAILED', installationUrl: null });
 });
 it('consumes concurrent confirmations once', async () => { const value = await prepared(); await Promise.all([complete(value.state, value.cookie), complete(value.state, value.cookie)]); expect(fetch).toHaveBeenCalledTimes(1); });
+
+it('includes every setup PR write permission when the guided option is omitted', async () => {
+ const {setupPullRequests: _option,...defaults}=options
+ expect(githubAppManifest(defaults).manifest.default_permissions).toMatchObject({contents:'write',workflows:'write',pull_requests:'write'})
+ const response=await request(app.getHttpServer()).post('/configuration/github-app').set('Cookie','sid=super').set('Origin','http://localhost:5173').send({...defaults,expectedRevision:1}).expect(201)
+ expect(response.body.manifest.default_permissions).toMatchObject({contents:'write',workflows:'write',pull_requests:'write'})
+ expect(response.body.manifest.default_permissions.administration).toBeUndefined()
+})

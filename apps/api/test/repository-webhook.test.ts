@@ -6,11 +6,17 @@ import type { PrismaService } from '../src/prisma/prisma.service.js'
 
 const secret = 'signed-repository-hook-test-0000000000000000'
 const db = {
+  $transaction: vi.fn(),
+  auditEvent: {createMany: vi.fn()},
+  gitHubDisplayRead: {updateMany: vi.fn()},
   gitHubRepository: { findFirst: vi.fn() },
   gitHubWebhookDelivery: { findUnique: vi.fn(), createMany: vi.fn() },
 }
 beforeEach(() => {
   vi.resetAllMocks()
+  db.$transaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => fn(db))
+  db.auditEvent.createMany.mockResolvedValue({count: 1})
+  db.gitHubDisplayRead.updateMany.mockResolvedValue({count: 0})
   vi.stubEnv('GITHUB_EVENTS_ENABLED', 'true')
   vi.stubEnv('GITHUB_WEBHOOK_SECRET', secret)
   db.gitHubRepository.findFirst.mockResolvedValue({installationId: 77n, fullName: 'fixture/app', ownerLogin: 'fixture'})

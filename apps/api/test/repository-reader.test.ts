@@ -225,6 +225,7 @@ it('refuses missing branches and tag refs', async () => {
 it('caches branch pages for five minutes while rechecking repository access on each request', async () => {
   const entries = new Map<string, string>()
   const cache = {
+    delete: vi.fn(async (key: string) => { entries.delete(key) }),
     get: vi.fn(async (key: string) => entries.get(key) ?? null),
     set: vi.fn(async (key: string, value: string) => {
       entries.set(key, value)

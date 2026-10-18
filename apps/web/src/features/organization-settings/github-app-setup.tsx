@@ -38,7 +38,7 @@ export function GitHubAppSetup({
   const [organization, setOrganization] = useState('')
   const [name, setName] = useState('Preflyt')
   const [apiUrl, setApiUrl] = useState(publicApiUrl)
-  const [setupPullRequests, setSetupPullRequests] = useState(false)
+  const [setupPullRequests, setSetupPullRequests] = useState(true)
   const [managedProtection, setManagedProtection] = useState(false)
   const [review, setReview] = useState(false)
   const organizations = useOrganizations()
@@ -132,10 +132,11 @@ export function GitHubAppSetup({
           </Button>
           <p className='text-sm text-muted-foreground'>
             Use this App for repository access, PR reviews and check
-            publication. Add Contents and Workflows write permissions to create
-            setup PRs, or Repository Administration and Organization
-            Administration write permissions for Preflyt-managed protection,
-            then approve the updated installation in GitHub.
+            publication. Creating setup PRs requires Contents, Workflows and
+            Pull requests: write. For an existing App, update its permissions in
+            GitHub, approve the updated installation, then sync the installation
+            in Preflyt. Preflyt-managed protection also needs Repository
+            Administration and Organization Administration write permissions.
           </p>
           <p className='text-xs text-muted-foreground'>
             A separate governance App is optional. Existing policies and model
@@ -222,6 +223,11 @@ export function GitHubAppSetup({
               />
             </div>
           </div>
+          <p className='text-sm text-muted-foreground'>
+            {setupPullRequests
+              ? 'Setup PR permissions are included: Contents, Workflows and Pull requests write access. GitHub will ask you to approve them during installation.'
+              : 'Setup PR creation will be unavailable. You can download the workflow and create a PR yourself. Enable Create setup PRs to include the required write permissions.'}
+          </p>
           {review && (
             <div className='space-y-2 rounded-lg border bg-muted/20 p-4 text-sm'>
               <h5 className='font-semibold'>Review App permissions</h5>
@@ -231,8 +237,9 @@ export function GitHubAppSetup({
               </p>
               {setupPullRequests && (
                 <p>
-                  Also write repository contents and workflow files for setup
-                  PRs.
+                  Contents, Workflows and Pull requests: write. These
+                  permissions let Preflyt create setup branches, commit workflow
+                  files and open setup PRs.
                 </p>
               )}
               {managedProtection && (

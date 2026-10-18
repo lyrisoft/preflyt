@@ -9,7 +9,7 @@ it('starts all released services with separate persistent queue and disposable c
   expect(config.services.queue.command).toContain('noeviction')
   expect(config.services.queue.command).toContain('yes')
   expect(config.services.queue.volumes).toEqual(['queue_data:/data'])
-  expect(config.services.cache.command).toContain('allkeys-lru')
+  expect(config.services.cache.command).toContain('noeviction')
   expect(config.services.cache.volumes).toBeUndefined()
   expect(config.services.worker.depends_on.queue.condition).toBe('service_healthy')
   for (const name of ['db', 'cache', 'queue', 'api', 'worker']) expect(config.services[name].ports).toBeUndefined()

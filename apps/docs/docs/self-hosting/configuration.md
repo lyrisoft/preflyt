@@ -95,13 +95,17 @@ Defaults are what Preflyt uses when you do not set a value. A blank default mean
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `REDIS_URL` | `redis://cache:6379/0` | Metadata cache. Override only for a separately managed service. |
-| `REDIS_CACHE_PREFIX` | `preflyt:production:cache` | Key prefix for the cache. |
+| `REDIS_URL` | `redis://cache:6379/0` | Metadata cache and shared GitHub request coordination. API and worker must use the same service. |
+| `REDIS_CACHE_PREFIX` | `preflyt:production:cache` | Shared API/worker prefix; use a different prefix for each deployment. |
+| `GITHUB_DISPLAY_STALL_SECONDS` | `180` | Report a queued refresh as delayed after this many seconds without an active worker lease. Clamped to 30–900; does not bypass GitHub cooldowns. |
+| `GITHUB_DISPLAY_REFRESH_BATCH` | `10` | Maximum durable display refresh jobs per worker pass, clamped to 1–50. |
+| `GITHUB_ACCESS_CACHE_SECONDS` | `30` | Shared upstream verification lifetime, clamped to 5–60 seconds. Normal pages use saved data; writes verify upstream access. |
+| `GITHUB_INTERACTIVE_RESERVE_PERCENT` | `10` | Observed GitHub budget reserved from background work, clamped to 1–50%. |
 | `QUEUE_REDIS_URL` | `redis://queue:6379/0` | Job queue. It must not evict keys. |
 | `QUEUE_PREFIX` | `preflyt:production:queue` | Key prefix for the queue. |
 
 :::caution Keep the queue separate
-The cache evicts under memory pressure. The queue must use `noeviction` with persistence. Do not point both at the same evicting instance. Different Redis database numbers do not isolate memory.
+Both services must use `noeviction`: the cache now holds GitHub coordination leases and budget counters. The queue also requires persistence. Keep them separate and monitor memory. When configured Redis is unavailable, new coordinated GitHub requests pause; saved PostgreSQL views remain available subject to authorization. Different Redis database numbers do not isolate memory.
 :::
 
 ### Telemetry
@@ -190,3 +194,9 @@ Reports contain only a schema version, random installation ID, Preflyt version, 
 There is currently no bundled production receiver URL. The maintainer must host and configure the receiver before production installations can report. Development builds are excluded from adoption counts. Offline installations continue to work normally.
 
 Country-level installation reporting is a separate administrator setting under **Settings → Configuration → Installation reporting** and is off by default. If enabled, the receiver uses a local database to keep only the country code, without storing the IP address. Set `PREFLYT_INSTALLATION_COUNTRY_REPORTING_ENABLED=false` to enforce off before startup. Unknown countries remain unknown. Turning it off clears the stored country on the next accepted report; if all reporting is disabled, previous collected data expires after 90 days of inactivity.
+
+## Workspace data retention
+
+Owners and Admins configure workspace-specific periods in **Settings → Data retention**. Automatic cleanup is disabled for each workspace until explicitly enabled. `RETENTION_CLEANUP_ENABLED=false` pauses the worker for all workspaces; set it consistently on the API and worker. `RETENTION_CLEANUP_BATCH` bounds each category per pass (default 250; range 10–1000). These deployment controls supplement the saved workspace settings.
+
+The workspace retention section supports saved CI assessments, finding source excerpts, notifications, contributor activity and routine audit events. The defaults are 90 days for the first four categories and 365 days for routine audit history. Existing workspaces start with automatic cleanup off. Preview counts and confirm settings before enabling it. Linked evidence, latest assessments, pending work, Health reports and decision receipts remain protected. Host logs, Docker images and backups are managed separately; this section does not prune server volumes or backup files.

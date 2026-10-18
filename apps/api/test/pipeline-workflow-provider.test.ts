@@ -33,10 +33,45 @@ it("loads a branch-pinned workflow using contents read access and normalizes pol
     baseSha: "a".repeat(40),
     workflow,
   });
-  expect(reader).toHaveBeenCalledWith(5n, 6n, "contents");
+  expect(reader).toHaveBeenCalledWith(5n, 6n, "contents", undefined, 60_000, true);
   expect(request.mock.calls[0][0]).toBe("/repos/fixture/app/branches/main");
   expect(request.mock.calls[1][0]).toContain("?ref=" + "a".repeat(40));
   provider.close();
+});
+
+it.each([
+  ["branch", 404, 'Policy branch "main" was not found in fixture/app'],
+  ["file", 404, 'Workflow ".github/workflows/ci.yml" was not found on policy branch "main"'],
+  ["branch", 403, "GitHub denied access to the policy branch"],
+  ["file", 403, "GitHub denied access to the workflow file"],
+  ["metadata", 404, "GitHub repository access is unavailable"],
+] as const)("reports %s lookup failures (%s) without switching branches", async (stage, status, message) => {
+  const provider = new GitHubProviderService() as any;
+  vi.spyOn(provider, "verifyInstallation").mockResolvedValue({ id: 5n });
+  vi.spyOn(provider, "installationToken").mockResolvedValue("test-token");
+  vi.spyOn(provider, "discoverPipelineWorkflows").mockResolvedValue({
+    workflows: [{ id: "7", name: "CI", path: ".github/workflows/ci.yml" }],
+    truncated: false,
+  });
+  const paths: string[] = [];
+  vi.spyOn(provider, "apiFetch").mockImplementation(async (_scope: unknown, url: string) => {
+    const path = new URL(url).pathname;
+    paths.push(path);
+    const current = path.includes("/branches/") ? "branch" : path.includes("/contents/") ? "file" : "metadata";
+    return new Response(JSON.stringify(current === "metadata"
+      ? { id: 6, name: "app", owner: { login: "fixture" }, default_branch: "master" }
+      : { commit: { sha: "a".repeat(40) } }), { status: current === stage ? status : 200 });
+  });
+  try {
+    await expect(provider.readPipelineWorkflow(5n, 6n, "7", "refs/heads/main", true)).rejects.toMatchObject({
+      message: expect.stringContaining(message),
+      status: stage === "metadata" ? 403 : status,
+    });
+    expect(paths.some(path => path.includes("/branches/master"))).toBe(false);
+    if (stage === "branch") expect(paths.some(path => path.includes("/contents/"))).toBe(false);
+  } finally {
+    provider.close();
+  }
 });
 it("does not mint a write token when the GitHub App lacks workflow write permission", async () => {
   const provider = new GitHubProviderService() as any;

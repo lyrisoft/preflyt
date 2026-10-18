@@ -27,8 +27,16 @@ async function governanceResponse(
   if (!response.ok) {
     const error = (await response.json().catch(() => null)) as {
       message?: string
+      code?: string
+      retryAt?: string
+      retryAfterSeconds?: number
       blockedRepositories?: BlockedPolicyRepository[]
     } | null
+    const fallbackRetryAt =
+      typeof error?.retryAfterSeconds === 'number' &&
+      error.retryAfterSeconds > 0
+        ? new Date(Date.now() + error.retryAfterSeconds * 1000)
+        : null
     throw Object.assign(
       new Error(
         typeof error?.message === 'string'
@@ -36,6 +44,14 @@ async function governanceResponse(
           : 'The request could not be completed. Refresh and try again.'
       ),
       {
+        code: typeof error?.code === 'string' ? error.code : undefined,
+        retryAt:
+          typeof error?.retryAt === 'string' &&
+          Number.isFinite(Date.parse(error.retryAt))
+            ? error.retryAt
+            : fallbackRetryAt && Number.isFinite(fallbackRetryAt.getTime())
+              ? fallbackRetryAt.toISOString()
+              : undefined,
         blockedRepositories: Array.isArray(error?.blockedRepositories)
           ? error.blockedRepositories.filter(
               (item) =>

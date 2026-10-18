@@ -38,7 +38,7 @@ flowchart LR
 | `health-init` | A one-shot job that prepares protected scanner volumes and client certificates. |
 | `health-scanner` | Runs fixed static Health analyzers and returns signed results; no application credentials. |
 | `db` | PostgreSQL 16. The source of truth for all Preflyt data. |
-| `cache` | Valkey (Redis-compatible), 128 MB, evicting, no persistence. Metadata cache only. |
+| `cache` | Valkey (Redis-compatible), 128 MB, `noeviction`, no persistence. Metadata cache and shared GitHub request coordination. |
 | `queue` | A separate Valkey with `noeviction` and AOF persistence for the job queue. |
 | `otel-collector` | Optional OpenTelemetry collector, started with the `observability` profile. |
 

@@ -146,9 +146,10 @@ export class RepositoryHealthService {
   }
   let head = target?.headSha ?? null, checkedAt = target?.headCheckedAt ?? null
   if (target && (!checkedAt || Date.now() - checkedAt.getTime() > 60000)) {
-   head = await this.github.verifyReadinessBranch(repo.installationId, repo.githubId, target.branch).catch(() => null)
+   const saved = await this.github.savedDisplay<{head: string; checkedAt: string}>('head', repo.installationId, repo.githubId, [target.branch]).catch(() => null)
+   head = saved && Date.now() - Date.parse(saved.checkedAt) < 60000 ? saved.head : null
    await this.access.requireRepository(session, githubId, 'assessment.read')
-   checkedAt = new Date()
+   checkedAt = saved ? new Date(saved.checkedAt) : null
    const changed = await this.db.repositoryHealthTarget.updateMany({ where: { repositoryId: repo.id, revision: target.revision, branch: target.branch }, data: { headSha: head, headCheckedAt: checkedAt } })
    if (!changed.count) { head = null; checkedAt = null }
   }
@@ -229,7 +230,7 @@ export class RepositoryHealthService {
   const finding=(row?.report as HealthReport|null)?.findings.find(f=>f.fingerprint===fingerprint&&f.category==='hotspot')
   if(!row?.sourceSha||!finding) throw new NotFoundException('Hotspot is unavailable in this assessment')
   const saved=await this.db.repositoryHealthHotspotReview.findFirst({where:{id:hotspotDispositionId(id,fingerprint),organizationId:session.organizationId!,repositoryId:repo.id,assessmentId:id,sourceSha:row.sourceSha}})
-  const member=await this.access.requireOrganization(session,'assessment.read',true)
+  const member=await this.access.requireOrganization(session,'assessment.read',false)
   await this.access.requireRepository(session,githubId,'assessment.read')
   return {state:saved?.state??'TO_REVIEW',note:saved?.note??'',revision:saved?.revision??0,updatedAt:saved?.updatedAt??null,updatedById:saved?.updatedById??null,canReview:rolePermissions[member.role]?.includes('findings.manage')??false}
  }

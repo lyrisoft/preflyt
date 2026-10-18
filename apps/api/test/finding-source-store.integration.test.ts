@@ -22,8 +22,13 @@ beforeEach(async () => {
  provider.readHealthSource.mockReset().mockResolvedValue('first\nunsafe();\napi_key="private-value"\nlast')
  store = new FindingSourceStore(db, provider as any)
 })
+async function capture(...args: Parameters<FindingSourceStore['read']>) {
+ await store.read(...args)
+ await store.reconcile()
+ return store.read(...args)
+}
 it('captures only redacted excerpts and serves them after a process restart without GitHub', async () => {
- const first = await store.read(repositoryId, sha, location)
+ const first = await capture(repositoryId, sha, location)
  expect(first.lines).toContainEqual({ number: 3, text: '[Sensitive source line hidden]' })
  const persisted = await fixture.prisma.findingSourceExcerpt.findFirstOrThrow()
  expect(persisted.capturedAt).not.toBeNull()
@@ -34,11 +39,11 @@ it('captures only redacted excerpts and serves them after a process restart with
  expect(provider.readHealthSource).toHaveBeenCalledTimes(1)
 })
 it('isolates snapshots by repository, revision and reported block', async () => {
- await store.read(repositoryId, sha, location)
+ await capture(repositoryId, sha, location)
  const other = await fixture.prisma.gitHubRepository.create({ data: { githubId: 12n, installationId: 1n, name: 'other', fullName: 'fixture/other', ownerLogin: 'fixture', isPrivate: true, selected: true } })
- await store.read(other.id, sha, location)
- await store.read(repositoryId, 'b'.repeat(40), location)
- await store.read(repositoryId, sha, { ...location, line: 1, endLine: 1 })
+ await capture(other.id, sha, location)
+ await capture(repositoryId, 'b'.repeat(40), location)
+ await capture(repositoryId, sha, { ...location, line: 1, endLine: 1 })
  expect(await fixture.prisma.findingSourceExcerpt.count()).toBe(4)
  expect(provider.readHealthSource).toHaveBeenCalledTimes(4)
 })
@@ -50,7 +55,7 @@ it('queues capture transactionally, deduplicates and prepares new findings befor
  await store.reconcile()
  expect(provider.readHealthSource).toHaveBeenCalledTimes(1)
  expect(await db.findingSourceExcerpt.count({ where: { capturedAt: { not: null } } })).toBe(2)
- await store.read(repositoryId, sha, location)
+ await capture(repositoryId, sha, location)
  expect(provider.readHealthSource).toHaveBeenCalledTimes(1)
 })
 it('queues redacted secret excerpts, rejects unsafe paths and bounds stored code', async () => {
@@ -58,19 +63,19 @@ it('queues redacted secret excerpts, rejects unsafe paths and bounds stored code
  await db.$transaction(tx => queueFindingSources(tx, repositoryId, sha, [{ ...location, checkId: 'secrets.scan' }, { ...location, ruleId: 'gitleaks' }, { ...location, path: '../private' }]))
  expect(await db.findingSourceExcerpt.count()).toBe(1)
  provider.readHealthSource.mockResolvedValue(Array.from({length: 200}, () => 'x'.repeat(3000)).join('\n'))
- const result = await store.read(repositoryId, sha, { ...location, line: 10, endLine: 180 })
+ const result = await capture(repositoryId, sha, { ...location, line: 10, endLine: 180 })
  expect(result.lines).toHaveLength(60)
  expect(result.lines.every(line => line.text.length <= 2000)).toBe(true)
  expect(result.truncated).toBe(true)
 })
 it('keeps transient failure retryable and fails closed on altered stored excerpts', async () => {
  provider.readHealthSource.mockRejectedValueOnce(new Error('private-provider-error'))
- const failed = await store.read(repositoryId, sha, location)
+ const failed = await capture(repositoryId, sha, location)
  expect(failed.lines).toEqual([])
  expect(JSON.stringify(failed)).not.toContain('private-provider-error')
  expect((await fixture.prisma.findingSourceExcerpt.findFirstOrThrow()).contentHash).toBeNull()
  await fixture.prisma.findingSourceExcerpt.updateMany({ data: { retryAfter: new Date(0) } })
- await store.read(repositoryId, sha, location)
+ await capture(repositoryId, sha, location)
  await fixture.prisma.findingSourceExcerpt.updateMany({ data: { content: { lines: [{number: 2,text: 'altered'}], reason: null, truncated: false } } })
  await expect(store.read(repositoryId, sha, location)).rejects.toThrow('integrity')
 })
@@ -78,6 +83,7 @@ it('still denies stored code after a user grant or repository access is revoked'
  const db = fixture.prisma, access = new AuthorizationService(db), service = new FindingsService(db, access, store)
  vi.spyOn(service as any, 'finding').mockResolvedValue({ ...location, repositoryId: '11', sourceSha: sha, category: 'security' })
  await service.source(owner, 'f'.repeat(64))
+ await store.reconcile()
  await db.organizationMembership.updateMany({ where: { identityId: owner.identityId }, data: { active: false } })
  await expect(service.source(owner, 'f'.repeat(64))).rejects.toThrow()
  expect(provider.readHealthSource).toHaveBeenCalledTimes(1)
@@ -89,16 +95,18 @@ it('still denies stored code after a user grant or repository access is revoked'
 })
 it('does not retain source when repository access changes during capture', async () => {
  provider.readHealthSource.mockImplementationOnce(async () => { await fixture.prisma.gitHubRepository.update({ where: { id: repositoryId }, data: { available: false } }); return 'private source' })
+ await store.read(repositoryId, sha, location)
+ await expect(store.reconcile()).rejects.toThrow('access')
  await expect(store.read(repositoryId, sha, location)).rejects.toThrow('access')
  expect((await fixture.prisma.findingSourceExcerpt.findFirstOrThrow()).content).toBeNull()
 })
 
 it('separates secret excerpts from ordinary cached source and masks unknown detector ranges before storage', async () => {
  provider.readHealthSource.mockResolvedValue('before();\nopaque-sensitive-value\nsecond-sensitive-line\nafter();')
- const normal = await store.read(repositoryId, sha, location)
+ const normal = await capture(repositoryId, sha, location)
  expect(normal.lines[1].text).toBe('opaque-sensitive-value')
  const secret = {...location, checkId:'secrets.scan', ruleId:'unrecognized-detector'}
- const result = await store.read(repositoryId, sha, secret)
+ const result = await capture(repositoryId, sha, secret)
  expect(result.lines).toEqual([{number:1,text:'before();'},{number:2,text:'[Potential credential redacted]'},{number:3,text:'[Potential credential redacted]'},{number:4,text:'after();'}])
  const saved = await fixture.prisma.findingSourceExcerpt.findUniqueOrThrow({where:{id:sourceLocation(repositoryId,sha,secret)!.id}})
  expect(JSON.stringify(saved.content)).not.toContain('sensitive-value')
@@ -111,7 +119,7 @@ it('separates secret excerpts from ordinary cached source and masks unknown dete
 it('preserves the background capture allowance across rate limits and honors cooldown after restart',async()=>{
  for(let attempt=0;attempt<4;attempt++) {
   provider.readHealthSource.mockRejectedValueOnce(new GitHubRateLimitError(3600000))
-  await store.read(repositoryId,sha,location)
+  await capture(repositoryId,sha,location)
   const row=await fixture.prisma.findingSourceExcerpt.findFirstOrThrow()
   expect(row.attempts).toBe(0)
   expect(row.retryAfter.getTime()).toBeGreaterThan(Date.now()+3500000)
@@ -123,4 +131,10 @@ it('preserves the background capture allowance across rate limits and honors coo
  await store.reconcile()
  expect((await fixture.prisma.findingSourceExcerpt.findFirstOrThrow()).capturedAt).not.toBeNull()
  expect(provider.readHealthSource).toHaveBeenCalledTimes(5)
+})
+
+it('queues a cold source read without calling GitHub on the page request',async()=>{
+ const result=await store.read(repositoryId,sha,location)
+ expect(result.retryable).toBe(true);expect(provider.readHealthSource).not.toHaveBeenCalled()
+ await store.reconcile();expect((await store.read(repositoryId,sha,location)).lines.length).toBeGreaterThan(0)
 })

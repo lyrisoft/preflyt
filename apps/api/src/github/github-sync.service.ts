@@ -1,3 +1,4 @@
+import { GitHubRateLimitError } from './github-rate-limit.js'
 import { PrismaService } from '../prisma/prisma.service.js'
 import {
   GitHubProviderService,
@@ -124,6 +125,8 @@ export class GitHubSyncService {
     } catch (error) {
       await this.prisma.$transaction(async (tx) => {
         const revoked = error instanceof GitHubInstallationRevokedError
+        const limited = error instanceof GitHubRateLimitError
+        const retryAt = limited ? new Date((error.getResponse() as {retryAt: string}).retryAt) : null
         const changed = await tx.gitHubInstallation.updateMany({
           where: {
             id,
@@ -131,8 +134,8 @@ export class GitHubSyncService {
             syncLeaseUntil: lease,
           },
           data: {
-            syncLeaseUntil: null,
-            syncState: revoked ? 'REVOKED' : 'ERROR',
+            syncLeaseUntil: retryAt,
+            syncState: limited ? 'PENDING' : revoked ? 'REVOKED' : 'ERROR',
             ...(revoked
               ? { active: false, accessRevision: { increment: 1 } }
               : {}),

@@ -1,3 +1,4 @@
+import { GitHubRateLimitError } from '../github/github-rate-limit.js';
 import { readPageSize } from '../pagination.js'
 import { effectiveAiRoute } from "../intelligence/effective-ai-route.js";
 import { currentStandards } from "../standards/policy-standards.js";
@@ -498,7 +499,11 @@ export class ReadinessAutomationService {
           plan.policyEvaluation?.status ?? "INCOMPLETE",
         );
       });
-    } catch {
+    } catch (error) {
+      if (error instanceof GitHubRateLimitError) {
+        await finish({state: 'UNKNOWN', message: 'GitHub verification is queued until the request limit resets.', nextAttemptAt: new Date((error.getResponse() as {retryAt: string}).retryAt)});
+        return;
+      }
       const current = await this.prisma.readinessTask.findUnique({
         where: { id },
       });
