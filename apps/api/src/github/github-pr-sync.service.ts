@@ -1,3 +1,4 @@
+import { GitHubRateLimitError } from './github-rate-limit.js'
 import { PrismaService } from '../prisma/prisma.service.js'
 import { GitHubProviderService } from './github-provider.service.js'
 export class GitHubPrSyncService {
@@ -94,10 +95,11 @@ export class GitHubPrSyncService {
           },
         })
       })
-    } catch {
+    } catch (error) {
+      const retryAt = error instanceof GitHubRateLimitError ? new Date((error.getResponse() as {retryAt: string}).retryAt) : null
       await this.prisma.repositoryPullRequest.updateMany({
         where: { id, revision: before.revision },
-        data: { syncState: 'ERROR', verifiedAt: null },
+        data: { syncState: retryAt ? 'PENDING' : 'ERROR', verifiedAt: null, ...(retryAt ? {lastSyncAttemptAt: new Date(retryAt.getTime() - 300000)} : {}) },
       })
     }
   }

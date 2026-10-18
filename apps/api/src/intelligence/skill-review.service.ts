@@ -1,3 +1,4 @@
+import { GitHubRateLimitError } from "../github/github-rate-limit.js";
 import type { ProviderUsage } from "./skill-inference.js";
 import { actionableFindings, conciseReviewSummary } from "./pr-review-feedback.js";
 import { aiReviewFindingRows, sameReviewedPrRevision } from '../findings/ai-review-findings.js';
@@ -602,9 +603,10 @@ export class SkillReviewService {
     repoId: string,
     assessmentId: string,
     snapshot: Snapshot,
+    localOnly = false,
   ) {
     if (!skillReviewsEnabled()) throw new Error("Disabled");
-    await this.access.requireRepository(session, repoId, "ai.review.run");
+    await this.access.requireRepository(session, repoId, "ai.review.run", true, !localOnly);
     const assessment = await this.assessments.get(repoId, assessmentId);
     if (
       assessment.assessmentHash !== snapshot.context.assessmentHash ||
@@ -1108,10 +1110,16 @@ export class SkillReviewService {
           },
         },
       });
-    } catch {
+    } catch (error) {
+      const limited = error instanceof GitHubRateLimitError;
       await this.db.aiSkillReview.update({
         where: { id: job.id },
-        data: {
+        data: limited ? {
+          feedbackState: "RETRY",
+          feedbackAttempts: { decrement: 1 },
+          // The selector adds a one-minute delay to this timestamp.
+          feedbackAttemptAt: new Date(Date.parse((error.getResponse() as {retryAt: string}).retryAt) - 60000),
+        } : {
           feedbackState: job.feedbackAttempts >= 4 ? "UNAVAILABLE" : "RETRY",
         },
       });
@@ -1133,13 +1141,13 @@ export class SkillReviewService {
       },
     });
     const job = await this.db.aiSkillReview.findFirst({
-      where: { state: "QUEUED" },
+      where: { state: "QUEUED", nextAttemptAt: {lte: new Date()} },
       orderBy: { createdAt: "asc" },
       include: { repository: true },
     });
     if (!job) return;
     const claim = await this.db.aiSkillReview.updateMany({
-      where: { id: job.id, state: "QUEUED" },
+      where: { id: job.id, state: "QUEUED", nextAttemptAt: {lte: new Date()} },
       data: { state: "RUNNING", startedAt: new Date() },
     });
     if (!claim.count) return;
@@ -1163,6 +1171,8 @@ export class SkillReviewService {
           60000 * Math.max(1, Math.min(snapshot.providers.length, 2)),
         ),
       ]);
+    let inferenceStarted = false;
+    let deferred = false;
     let checking = false;
     const timer = setInterval(() => {
       if (checking) return;
@@ -1176,6 +1186,7 @@ export class SkillReviewService {
             job.repository.githubId.toString(),
             job.assessmentId,
             snapshot,
+            true,
           );
         })
         .catch(() => controller.abort())
@@ -1216,6 +1227,7 @@ export class SkillReviewService {
           throw new Error("Provider changed");
         await this.verifyLivePr(job.repository, snapshot);
         try {
+          inferenceStarted = true;
           findings = await runSkillInference(
             provider,
             reviewTasks(snapshot.checks, snapshot.skills),
@@ -1383,6 +1395,16 @@ export class SkillReviewService {
         { isolationLevel: "Serializable" },
       );
     } catch (error) {
+      // Never replay an inference that may already have incurred provider usage.
+      if (error instanceof GitHubRateLimitError && !inferenceStarted) {
+        deferred = true;
+        await this.db.aiSkillReview.updateMany({where: {id: job.id, state: "RUNNING"}, data: {
+          state: "QUEUED", startedAt: null, finishedAt: null,
+          nextAttemptAt: new Date((error.getResponse() as {retryAt: string}).retryAt),
+          failure: "Waiting for GitHub requests to resume.",
+        }});
+        return;
+      }
       const responseMessages: Record<AiResponseError["code"], string> = {
         MODEL_UNAVAILABLE: "The configured model rejected the request. Check the model connection.",
         TRUNCATED: "The model response was cut off. Retry the review.",
@@ -1411,7 +1433,7 @@ export class SkillReviewService {
       await this.db.auditEvent.create({
         data: {
           actorId: job.actorId,
-          event: "ai.review.finished",
+          event: deferred ? "ai.review.deferred" : "ai.review.finished",
           metadata: { organizationId: job.organizationId, reviewId: job.id },
         },
       });

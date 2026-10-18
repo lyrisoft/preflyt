@@ -1,7 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import { resolveWebOrigin } from '../config/web-origin.js';
 import { validateConfiguration } from './configuration-store.js';
-export type ManifestOptions = { organization: string; name: string; apiUrl: string; setupPullRequests: boolean; managedProtection: boolean };
+export type ManifestOptions = { organization: string; name: string; apiUrl: string; setupPullRequests?: boolean; managedProtection: boolean };
 export function githubAppManifest(options: ManifestOptions) {
   if (!/^[a-z\d](?:[a-z\d-]{0,37}[a-z\d])?$/i.test(options.organization) ||
       !/^[a-z\d][a-z\d ._-]{2,99}$/i.test(options.name))
@@ -9,10 +9,11 @@ export function githubAppManifest(options: ManifestOptions) {
   validateConfiguration({ PREFLYT_PUBLIC_API_URL: options.apiUrl });
   const api = options.apiUrl.replace(/\/$/, '');
   const web = resolveWebOrigin();
+  const setupPullRequests = options.setupPullRequests !== false;
   const permissions: Record<string, string> = {
-    metadata: 'read', contents: options.setupPullRequests ? 'write' : 'read',
+    metadata: 'read', contents: setupPullRequests ? 'write' : 'read',
     actions: 'read', checks: 'write', pull_requests: 'write', members: 'read',
-    ...(options.setupPullRequests ? { workflows: 'write' } : {}),
+    ...(setupPullRequests ? { workflows: 'write' } : {}),
     ...(options.managedProtection ? { administration: 'write', organization_administration: 'write' } : {}),
   };
   return {
@@ -24,7 +25,7 @@ export function githubAppManifest(options: ManifestOptions) {
       redirect_url: `${web}/api/configuration/github-app/callback`,
       callback_urls: [`${web}/api/auth/github/callback`, `${web}/api/github/oauth/callback`],
       default_permissions: permissions,
-      default_events: ['push', 'pull_request', 'check_run', 'check_suite', 'workflow_run', 'repository', 'pull_request_review', 'organization', 'team', 'membership', ...(options.managedProtection ? ['repository_ruleset'] : [])],
+      default_events: ['push', 'create', 'delete', 'pull_request', 'check_run', 'check_suite', 'workflow_run', 'repository', 'pull_request_review', 'organization', 'team', 'membership', ...(options.managedProtection ? ['repository_ruleset'] : [])],
       request_oauth_on_install: false,
     },
   };

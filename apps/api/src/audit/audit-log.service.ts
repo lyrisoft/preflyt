@@ -134,7 +134,7 @@ export class AuditLogService {
   constructor(@Inject(PrismaService) private readonly db: PrismaService,
     @Inject(AuthorizationService) private readonly access: AuthorizationService) {}
   async list(session: AuthenticatedSession, input: Record<string, unknown>) {
-    const member = await this.access.requireOrganization(session, 'audit.read', true);
+    const member = await this.access.requireOrganization(session, 'audit.read', false);
     const filters = auditFilters(input);
     const repositories = await this.access.repositoryScope(session.identityId, member.organizationId, 'repository.read', false);
     if (filters.repository !== 'all' && !repositories.some(r => r.githubId.toString() === filters.repository))

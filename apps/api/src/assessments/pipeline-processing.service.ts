@@ -1,3 +1,4 @@
+import { GitHubRateLimitError } from '../github/github-rate-limit.js';
 import { CheckPublicationService } from "./check-publication.service.js";
 import { registerPipelineSources } from "./pipeline-source-registration.js";
 import { randomUUID } from "node:crypto";
@@ -475,7 +476,11 @@ export class PipelineProcessingService {
             actorId: row.submittedById, metadata: { submissionId: row.id },
           }], skipDuplicates: true }).catch(() => undefined);
         }
-      } catch {
+      } catch (error) {
+        if (error instanceof GitHubRateLimitError) {
+          await finish({state: 'PENDING', nextAttemptAt: new Date((error.getResponse() as {retryAt: string}).retryAt), failureCode: 'GITHUB_RATE_LIMITED'});
+          continue;
+        }
         await finish({
           state: row.attempts >= 11 ? "FAILED" : "PENDING",
           attempts: { increment: 1 },

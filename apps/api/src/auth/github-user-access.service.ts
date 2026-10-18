@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto'
+import { GitHubRateLimitError, GitHubRefreshPendingError } from '../github/github-rate-limit.js'
 import { configurationValue } from '../configuration/runtime-configuration.js'
 import { RedisCacheService } from '../cache/redis-cache.service.js'
 import {
@@ -54,6 +56,14 @@ export class GitHubUserAccessService {
       )
     if (!account) await this.requireDirectoryAdmin(identityId, organizationId)
     const key = `github-member-directory:${organizationId}:${link.githubOrganizationId}:${account?.id ?? `installation-admin-${identityId}`}:${installation.id}:${installation.accessRevision}`
+    if (!refresh) {
+      const row = await this.db.gitHubAccessRefresh.upsert({where: {key}, create: {key, identityId, organizationId, kind: 'directory'}, update: {}})
+      if (row.state === 'READY' && row.fetchedAt && Date.now() - row.fetchedAt.getTime() > 300000)
+        await this.db.gitHubAccessRefresh.updateMany({where: {key, state: 'READY'}, data: {state: 'PENDING', nextAttemptAt: new Date()}})
+      await this.assertDirectoryContext(identityId, organizationId, link.githubOrganizationId, installation.id, installation.accessRevision, !account)
+      if (row.value) return row.value as unknown as {syncedAt: string; members: {id: string; login: string; avatarUrl: string | null}[]}
+      throw new ServiceUnavailableException('GitHub members are being synchronized. Retry shortly.')
+    }
     let snapshot = this.directories.get(key)
     if (!snapshot) {
       const cached = await this.cache?.get(key)
@@ -126,6 +136,7 @@ export class GitHubUserAccessService {
         !account
       )
       const result = { syncedAt: new Date().toISOString(), members }
+      await this.db.gitHubAccessRefresh.upsert({where: {key}, create: {key, identityId, organizationId, kind: 'directory', value: result, fetchedAt: new Date(), state: 'READY'}, update: {value: result, fetchedAt: new Date(), state: 'READY'}})
       if (this.directories.size >= 128) this.directories.clear()
       this.directories.set(key, result)
       await this.cache?.set(key, JSON.stringify(result), 300)
@@ -219,25 +230,37 @@ export class GitHubUserAccessService {
         'GitHub access changed during sync. Try again.'
       )
   }
-  private lastReconciliation = 0
-  private reconciliationCursor: string | undefined
+  private async queueAccess(identityId: string, organizationId: string) {
+    const key = `access:${identityId}:${organizationId}`
+    await this.db.gitHubAccessRefresh.upsert({where: {key}, create: {key, identityId, organizationId, kind: 'access'}, update: {}})
+  }
   async reconcile() {
-    if (configurationValue('GITHUB_LOGIN_ENABLED') !== 'true' || Date.now() - this.lastReconciliation < 60000) return
-    this.lastReconciliation = Date.now()
-    const rows = await this.db.gitHubUserAccessEvidence.findMany({
-      where: { expiresAt: { lte: new Date() } }, orderBy: { id: 'asc' }, take: 10,
-      ...(this.reconciliationCursor ? { cursor: { id: this.reconciliationCursor }, skip: 1 } : {}),
-      include: { account: true },
-    })
-    this.reconciliationCursor = rows.at(-1)?.id
+    await this.db.gitHubAccessRefresh.deleteMany({where: {state: 'READY', fetchedAt: {lt: new Date(Date.now() - 7 * 86400000)}, leaseToken: null}})
+    if (configurationValue('GITHUB_LOGIN_ENABLED') === 'true') {
+      const expiring = await this.db.gitHubUserAccessEvidence.findMany({where: {expiresAt: {lt: new Date(Date.now() + 60000)}}, take: 20, orderBy: {expiresAt: 'asc'}, include: {account: true}})
+      for (const row of expiring) await this.queueAccess(row.account.identityId, row.organizationId)
+    }
+    const now = new Date()
+    const rows = await this.db.gitHubAccessRefresh.findMany({where: {state: 'PENDING', nextAttemptAt: {lte: now}, OR: [{leaseUntil: null}, {leaseUntil: {lt: now}}]}, orderBy: {nextAttemptAt: 'asc'}, take: 10})
     for (const row of rows) {
-      const member = await this.db.organizationMembership.findUnique({ where: { organizationId_identityId: { organizationId: row.organizationId, identityId: row.account.identityId } } })
-      if (!member?.active) {
-        await this.db.gitHubUserAccessEvidence.deleteMany({ where: { id: row.id } })
-        continue
+      const leaseToken = randomUUID()
+      const claimed = await this.db.gitHubAccessRefresh.updateMany({where: {key: row.key, state: 'PENDING', nextAttemptAt: {lte: now}, OR: [{leaseUntil: null}, {leaseUntil: {lt: now}}]}, data: {leaseToken, leaseUntil: new Date(Date.now() + 120000)}})
+      if (!claimed.count) continue
+      const where = {key: row.key, leaseToken}
+      try {
+        const member = await this.db.organizationMembership.findUnique({where: {organizationId_identityId: {organizationId: row.organizationId, identityId: row.identityId}}})
+        if (!member?.active) { await this.db.gitHubAccessRefresh.deleteMany({where}); continue }
+        if (row.kind === 'access') {
+          await this.repositoryIds(row.identityId, row.organizationId, true)
+          await this.db.gitHubAccessRefresh.deleteMany({where})
+        } else {
+          const value = await this.directory(row.identityId, row.organizationId, true)
+          await this.db.gitHubAccessRefresh.updateMany({where: {...where, leaseUntil: {gt: new Date()}}, data: {value, fetchedAt: new Date(), state: 'READY', leaseToken: null, leaseUntil: null}})
+        }
+      } catch (error) {
+        const limited = error instanceof GitHubRateLimitError
+        await this.db.gitHubAccessRefresh.updateMany({where, data: {leaseToken: null, leaseUntil: null, nextAttemptAt: limited ? new Date((error.getResponse() as {retryAt: string}).retryAt) : new Date(Date.now() + 60000)}})
       }
-      // Failure never extends stale authorization evidence or deletes local sessions.
-      await this.repositoryIds(row.account.identityId, row.organizationId, true).catch(() => undefined)
     }
   }
   async repositoryIds(
@@ -262,7 +285,7 @@ export class GitHubUserAccessService {
       throw new ForbiddenException(
         'This organization has no active GitHub connection'
       )
-    const credential = await new GitHubCredentialService(this.db, this.provider).access(account.id, account.credential)
+    const credential = fresh ? await new GitHubCredentialService(this.db, this.provider).access(account.id, account.credential) : undefined
     const evidence = await this.db.gitHubUserAccessEvidence.findUnique({
       where: {
         accountId_organizationId: { accountId: account.id, organizationId },
@@ -275,13 +298,20 @@ export class GitHubUserAccessService {
       evidence.accessRevision === installation.accessRevision &&
       evidence.expiresAt > new Date()
     )
-      return evidence.repositoryGithubIds
+      {
+        if (evidence.expiresAt.getTime() - Date.now() < 60000) await this.queueAccess(identityId, organizationId)
+        return evidence.repositoryGithubIds
+      }
+    if (!fresh) {
+      await this.queueAccess(identityId, organizationId)
+      throw new GitHubRefreshPendingError()
+    }
     const key = `${account.id}:${organizationId}:${installation.id}:${installation.accessRevision}`
     const pending = this.refreshes.get(key)
     if (pending) return pending
     const refresh = (async () => {
       try {
-        const token = credential.token
+        const token = credential!.token
         const verified = await this.provider.verify(
           token,
           installation.id,
@@ -308,7 +338,7 @@ export class GitHubUserAccessService {
           expiresAt: new Date(
             Math.min(
               Date.now() + 300000,
-              credential.expiresAt.getTime()
+              credential!.expiresAt.getTime()
             )
           ),
         }

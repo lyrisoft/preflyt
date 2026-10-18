@@ -1,3 +1,4 @@
+import { RetentionService } from './retention/retention.service.js'
 import { ContributorSyncService } from './contributors/contributor-sync.service.js'
 import { FindingsService } from './findings/findings.service.js'
 import { FindingAiGuidanceService } from './findings/finding-ai-guidance.service.js'
@@ -35,7 +36,8 @@ import {
 } from './telemetry.js'
 import 'reflect-metadata'
 import { writeFile, unlink } from 'node:fs/promises'
-import { Queue, Worker } from 'bullmq'
+import { Queue, Worker, DelayedError } from 'bullmq'
+import { GitHubRateLimitError } from './github/github-rate-limit.js'
 import { Redis } from 'ioredis'
 import { RedisCacheService } from './cache/redis-cache.service.js'
 import { GitHubProviderService } from './github/github-provider.service.js'
@@ -49,6 +51,7 @@ import {
 } from './github-events/github-event-queue.js'
 
 async function start() {
+  process.env.GITHUB_REQUEST_PRIORITY ??= 'background'
   if (!process.env.QUEUE_REDIS_URL)
     throw new Error('Configure QUEUE_REDIS_URL before starting the worker')
   const prefix = process.env.QUEUE_PREFIX ?? 'preflyt:queue'
@@ -77,7 +80,7 @@ async function start() {
   const dispatcher = new GitHubEventDispatcher(prisma, queue)
   const worker = new Worker(
     queueName,
-    async (job) => {
+    async (job, token) => {
       if (
         typeof job.data?.deliveryId !== 'string' ||
         !/^[a-f0-9-]{36}$/.test(job.data.deliveryId)
@@ -88,7 +91,11 @@ async function start() {
           where: { id: job.data.deliveryId },
         })
         if (!access || access.state !== 'RECEIVED') return
-        await sync.sync(access.installationId)
+        try { await sync.sync(access.installationId) } catch (error) {
+          if (!(error instanceof GitHubRateLimitError)) throw error
+          await job.moveToDelayed(Date.parse((error.getResponse() as {retryAt: string}).retryAt), token)
+          throw new DelayedError()
+        }
         await prisma.gitHubAccessDelivery.updateMany({
           where: { id: access.id, state: 'RECEIVED' },
           data: { state: 'PROCESSED', processedAt: new Date() },
@@ -165,7 +172,7 @@ async function start() {
   let nativeRun: Promise<void> | undefined
   const exceptions = new PolicyExceptionService(prisma, emailAuthorization)
   const checks = new CheckPublicationService(prisma, emailAuthorization, githubProvider, assessments, exceptions)
-  const deployments = new RulesetDeploymentService(prisma, emailAuthorization, githubProvider, checks)
+  const deployments = new RulesetDeploymentService(prisma, emailAuthorization, githubProvider, checks, cache)
   let driftRun: Promise<void> | undefined
   const automation = new ReadinessAutomationService(prisma, emailAuthorization, githubProvider, assessments, checks, exceptions)
   let automationRun: Promise<void> | undefined
@@ -207,6 +214,9 @@ async function start() {
   })
   let closing = false
   let reconciling = false
+  const retention = new RetentionService(prisma, emailAuthorization)
+  let retentionRun: Promise<void> | undefined
+  let displayRun: Promise<void> | undefined
   let syncRun: Promise<void> | undefined
   const heartbeat =
     process.env.WORKER_HEARTBEAT_FILE ?? '/tmp/preflyt-github-worker-heartbeat'
@@ -232,6 +242,8 @@ async function start() {
           await dispatchNotificationChannelEmails(prisma, emailQueue)
         }
       }
+      if (!retentionRun) retentionRun = retention.reconcile().catch(warn).finally(() => { retentionRun = undefined })
+      if (!displayRun) displayRun = githubProvider.refreshDisplayReads().catch(warn).finally(() => { displayRun = undefined })
       if (!syncRun) {
         syncRun = sync
           .reconcile()
@@ -307,6 +319,8 @@ async function start() {
     await automationRun
     await historyRun
     await driftRun
+    await retentionRun
+    await displayRun
     cache.onModuleDestroy()
     stopConfiguration()
     await prisma.$disconnect()

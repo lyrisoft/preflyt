@@ -146,6 +146,29 @@ export class GitHubWebhookService {
         createHash('sha256').update(event).update(raw).digest('hex'),
         access,
       )
+    let displayAccepted = false
+    // Only signed, connected-repository events may queue display refreshes. Never grant access from payloads.
+    if (['push', 'create', 'delete', 'repository', 'repository_ruleset', 'workflow_run'].includes(event)) {
+      const payload = body as {installation?: {id?: number}; repository?: {id?: number}}
+      if (Number.isSafeInteger(payload?.installation?.id) && Number.isSafeInteger(payload?.repository?.id)) {
+        await this.prisma.$transaction(async tx => {
+          const installationId = BigInt(payload.installation!.id!), repositoryGithubId = BigInt(payload.repository!.id!)
+          const connected = await tx.gitHubRepository.findFirst({where: {githubId: repositoryGithubId, installationId, selected: true, available: true, installation: {active: true}}})
+          if (!connected) return
+          displayAccepted = true
+          const id = `github-display:${deliveryId.toLowerCase()}`
+          const payloadHash = createHash('sha256').update(event).update(raw).digest('hex')
+          const receipt = await tx.auditEvent.createMany({data: [{id, event: 'github.display_refresh_requested', metadata: {payloadHash, installationId: installationId.toString(), repositoryGithubId: repositoryGithubId.toString()}}], skipDuplicates: true})
+          if (!receipt.count) {
+            const prior = await tx.auditEvent.findUniqueOrThrow({where: {id}})
+            if ((prior.metadata as {payloadHash?: string}).payloadHash !== payloadHash) throw new ConflictException('GitHub delivery identifier was reused')
+            return
+          }
+          await tx.gitHubDisplayRead.updateMany({where: {installationId, repositoryGithubId, state: {not: 'INVALID'}}, data: {state: 'PENDING', generation: {increment: 1}}})
+          await tx.gitHubDisplayRead.updateMany({where: {installationId, repositoryGithubId, OR: [{errorCode: null}, {errorCode: {not: 'GITHUB_RATE_LIMITED'}}]}, data: {nextAttemptAt: new Date()}})
+        })
+      }
+    }
     const normalized = normalizeGitHubEvent(event, body)
     const contributorEvent = normalizeContributorEvent(event, body)
     if (contributorEvent) {
@@ -159,7 +182,7 @@ export class GitHubWebhookService {
       )
       if (!normalized || !captured.accepted) return captured
     }
-    if (!normalized) return { accepted: false, reason: 'unsupported_event' }
+    if (!normalized) return displayAccepted ? { accepted: true, reason: 'display_refresh_queued' } : { accepted: false, reason: 'unsupported_event' }
     if (isPreflytFeedback(normalized.sourceIdentity))
       return { accepted: false, reason: 'preflyt_feedback_check' }
     const id = deliveryId.toLowerCase()

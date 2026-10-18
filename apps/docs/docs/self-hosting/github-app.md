@@ -18,7 +18,7 @@ Preflyt uses the same App for reading repositories, publishing pull request chec
 Sign in as **Super Admin** and open **Settings → Configuration → GitHub → Create your GitHub App**.
 
 1. Enter your GitHub organization and the public HTTPS API URL. With the bundled web proxy, use `<WEB_ORIGIN>/api`.
-2. Leave optional capabilities off unless you want Preflyt to **Create setup PRs** or **Manage GitHub rulesets**. The default App can read repositories and workflow results, verify organization membership, and publish checks and advisory PR reviews.
+2. Keep **Create setup PRs** enabled (the default). Preflyt requests **Contents: write**, **Workflows: write** and **Pull requests: write** so it can create the workflow setup PR. It also requests the permissions for reading workflow results and organization membership and publishing checks. **Manage GitHub rulesets** remains optional and requires additional administration permissions. Turn off setup PR creation only if you intend to add the workflow manually.
 3. Choose **Review App setup**, then **Confirm in GitHub**. GitHub registers the App with Preflyt's permissions, callbacks and webhook settings. Preflyt saves the generated credentials encrypted and continues to installation automatically.
 4. Choose your organization and repositories once in GitHub. Confirm GitHub organization ownership when prompted. This verifies the connection; it does not sign you into Preflyt as the GitHub user.
 5. Preflyt returns you to **Repositories**, using the same admin account and session, with the selected repositories imported. There is no second installation or required repository selection in Integrations. A new workspace is created only after ownership verification; existing workspace connections require that same admin's workspace permission.
@@ -75,7 +75,7 @@ GitHub cannot deliver webhooks to `localhost`. For local trials, expose your ins
 | --- | --- | --- |
 | Members | Read-only | The member directory, GitHub sign-in, role grants and team import. |
 
-**Only if you use the guided setup pull request:** Preflyt can open a pull request that adds the Preflyt workflow to a repository. That needs **Contents**, **Workflows** and **Pull requests** set to **Read and write**. Preflyt never edits your default branch directly. If you prefer, copy the workflow yourself and keep Contents read-only.
+**Setup PR permissions (included by default in guided App creation):** Preflyt can open a pull request that adds the Preflyt workflow to a repository. That needs **Contents**, **Workflows** and **Pull requests** set to **Read and write**. Preflyt never edits your default branch directly. If you prefer, copy the workflow yourself and keep Contents read-only.
 
 **Only if Preflyt manages GitHub organization rulesets:** **Organization administration: Read and write**. Leave it off otherwise. See [Merge Protection](../user-guide/merge-protection.md).
 
@@ -151,3 +151,10 @@ Registration alone does not prove repository access, webhook processing or PR pu
 Fresh registration was tested on **2026-10-11** with a private test App installed only on the acceptance repository. GitHub confirmation returned to Preflyt; credentials were saved encrypted automatically. The API used the new connection without restarting. GitHub owner sign-in, workspace creation, explicit repository selection, automatic file inspection and processing of two genuine GitHub check events passed.
 
 This result covers registration and onboarding. It does not establish a new AI review or policy-gated PR publication result. The test used a temporary webhook tunnel; production needs a stable public HTTPS API URL. GitHub required Mobile re-authentication before App creation, and separate approval before installing the App on the selected repository.
+
+
+### Setup PR permissions in guided registration
+
+**Create setup PRs** is enabled by default. The App registration manifest requests **Contents: write**, **Workflows: write** and **Pull requests: write**, and GitHub asks for approval when the App is installed. Turning this option off explicitly creates a reduced-permission App; workflow downloads remain available, but Preflyt cannot open setup PRs.
+
+Opening an installation link for an existing App does not change its registered permission requirements. Apps created with the earlier reduced defaults need these permissions added to the same App in GitHub, followed by approval of the installation update. Sync the installation in Preflyt afterward to refresh its saved permissions. Recreating the App is unnecessary. These permissions do not activate merge protection.

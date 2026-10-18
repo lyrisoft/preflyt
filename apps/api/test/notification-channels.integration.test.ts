@@ -166,6 +166,8 @@ it("creates shared email channels with normalized addresses and no dependency on
     revision: 1,
     lastDelivery: null,
   });
+  expect(freshGithub.mock.calls.every(([, , fresh]) => fresh === true)).toBe(true);
+  freshGithub.mockClear();
   const listed = await http("get", "", admin).expect(200);
   expect(listed.body).toMatchObject({
     organizationId: org,
@@ -176,7 +178,7 @@ it("creates shared email channels with normalized addresses and no dependency on
     items: [{ id: response.body.id }],
   });
   expect(listed.headers["cache-control"]).toBe("no-store");
-  expect(freshGithub.mock.calls.every(([, , fresh]) => fresh === true)).toBe(
+  expect(freshGithub.mock.calls.every(([, , fresh]) => fresh === false)).toBe(
     true,
   );
   const audit = await db.auditEvent.findFirstOrThrow({

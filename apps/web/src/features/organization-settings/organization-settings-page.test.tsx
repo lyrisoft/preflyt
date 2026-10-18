@@ -4,6 +4,10 @@ import { render } from 'vitest-browser-react'
 import { page } from 'vitest/browser'
 import { OrganizationSettingsPage } from './organization-settings-page'
 
+vi.mock('./retention-settings', () => ({
+  RetentionSettings: () => <section>Workspace data retention controls</section>,
+}))
+
 vi.mock('@/features/installation-reporting/installation-reporting', () => ({
   InstallationReportingSettings: () => (
     <section>Installation reporting settings</section>
@@ -250,6 +254,9 @@ it('opens personal notifications for readers and keeps settings focused on their
     .element(view.getByRole('tab', { name: 'Workspace', exact: true }))
     .not.toBeInTheDocument()
   await expect
+    .element(view.getByRole('tab', { name: 'Data retention' }))
+    .not.toBeInTheDocument()
+  await expect
     .element(view.getByRole('tab', { name: 'Appearance' }))
     .toBeVisible()
   await expect
@@ -285,4 +292,12 @@ it('opens workspace settings for managers and resolves old directory deep links'
       .not.toBeInTheDocument()
     await view.unmount()
   }
+})
+
+it('opens retention settings for workspace managers', async () => {
+  state.initialTab = 'retention'
+  const view = await render(<OrganizationSettingsPage />)
+  await expect
+    .element(view.getByText('Workspace data retention controls'))
+    .toBeVisible()
 })

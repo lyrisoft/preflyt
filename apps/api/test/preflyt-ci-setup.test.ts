@@ -76,6 +76,7 @@ it("keeps the dedicated versioned skill identical to its inspectable Markdown", 
     ),
   ).toEqual(validateSkill(preflytCiSetupSkill));
   expect(preflytCiSetupSkill.contentDigest).toMatch(/^[a-f0-9]{64}$/);
+  expect(preflytCiSetupSkill.version).toBe(4);
 });
 it("grounds monorepo detection, scripts, lockfiles, services and setup in the exact commit", () => {
   const context = build(),
@@ -95,7 +96,7 @@ it("grounds monorepo detection, scripts, lockfiles, services and setup in the ex
       summary: "Reuse the API CI setup and review its secret reference.",
     }),
   );
-  expect(result.workflow).toContain("lyrisoft/preflyt-action@v2.1.1");
+  expect(result.workflow).toContain("lyrisoft/preflyt-action@v2.1.2");
   expect(result.workflow).not.toContain("run: pnpm test");
   expect(result.setupSources).toEqual([".github/workflows/ci.yml → tests"]);
   expect(result.sourceSha).toBe(snapshot.sourceSha);

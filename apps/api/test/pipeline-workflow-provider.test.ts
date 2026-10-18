@@ -33,7 +33,7 @@ it("loads a branch-pinned workflow using contents read access and normalizes pol
     baseSha: "a".repeat(40),
     workflow,
   });
-  expect(reader).toHaveBeenCalledWith(5n, 6n, "contents");
+  expect(reader).toHaveBeenCalledWith(5n, 6n, "contents", undefined, 60_000, true);
   expect(request.mock.calls[0][0]).toBe("/repos/fixture/app/branches/main");
   expect(request.mock.calls[1][0]).toContain("?ref=" + "a".repeat(40));
   provider.close();

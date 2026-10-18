@@ -62,16 +62,16 @@ describe('GitHub Insights reader',()=>{
 describe('Insights authorization',()=>{
  it('rechecks repository access after reading and rejects revocation',async()=>{
   const access={requireRepository:vi.fn().mockResolvedValueOnce({installationId:500n,githubId:501n}).mockRejectedValueOnce(new Error('Access revoked'))}
-  const provider={getRepositoryRuleset:vi.fn().mockResolvedValue({}),readRulesetInsights:vi.fn().mockResolvedValue({summary:{activePass:1}})}
+  const provider={savedDisplay:vi.fn().mockResolvedValue({}),readRulesetInsights:vi.fn().mockResolvedValue({summary:{activePass:1}})}
   const service=new GitHubRulesetService(access as any,provider as any)
   await expect(service.insights({} as any,'501',7,{page:1,period:'week'})).rejects.toThrow('Access revoked')
   expect(access.requireRepository).toHaveBeenCalledWith({},'501','policy.read')
  })
  it('denies ungranted repositories before contacting GitHub',async()=>{
   const access={requireRepository:vi.fn().mockRejectedValue(new Error('Denied'))}
-  const provider={getRepositoryRuleset:vi.fn()}
+  const provider={savedDisplay:vi.fn()}
   await expect(new GitHubRulesetService(access as any,provider as any).insights({} as any,'501',7,{page:1,period:'week'})).rejects.toThrow('Denied')
-  expect(provider.getRepositoryRuleset).not.toHaveBeenCalled()
+  expect(provider.savedDisplay).not.toHaveBeenCalled()
  })
  it.each([{page:0,period:'week'},{page:1,period:'year'},{page:1,period:'week',ref:'*'},{page:1,period:'week',result:'success'}])('rejects invalid filters before GitHub reads',async options=>{
   const access={requireRepository:vi.fn()}
@@ -82,7 +82,7 @@ describe('Insights authorization',()=>{
 
 it('rechecks assessment permissions after linking exact commit evidence', async () => {
  const access = { requireRepository: vi.fn().mockResolvedValue({ id: 'internal', installationId: 500n, githubId: 501n }) };
- const provider = { getRepositoryRuleset: vi.fn().mockResolvedValue({}), readRulesetInsights: vi.fn().mockResolvedValue({ suites: [] }) };
+ const provider = { savedDisplay: vi.fn().mockResolvedValue({suites:[]}) };
  const history = { linkAssessments: vi.fn(async () => { access.requireRepository.mockRejectedValue(new Error('Access revoked')); return []; }) };
  await expect(new GitHubRulesetService(access as any, provider as any, history as any).insights({} as any, '501', 7, { page: 1, period: 'week' })).rejects.toThrow('Access revoked');
  expect(history.linkAssessments).toHaveBeenCalledWith('internal', []);

@@ -420,6 +420,7 @@ enum OrganizationRole {
 }
 
 model Organization {
+  retention WorkspaceRetention?
   id            String                   @id @default(cuid())
   name          String
   createdAt     DateTime                 @default(now())
@@ -669,6 +670,7 @@ model NotificationEvent {
   notifications InboxNotification[]
   channelDeliveries NotificationChannelDelivery[]
   @@index([deliveredAt, failedAt, createdAt])
+  @@index([organizationId, createdAt])
 }
 model InboxNotification {
   id String @id @default(cuid())
@@ -749,6 +751,7 @@ model GitHubCheckPublication {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@index([organizationId, repositoryId, createdAt])
+  @@index([assessmentId])
 }
 
 // Repository-scoped explicit authorization for the background publisher.
@@ -794,6 +797,7 @@ model ReadinessTask {
  updatedAt DateTime @updatedAt
  @@unique([repositoryId,prNumber])
  @@index([nextAttemptAt,leaseUntil])
+  @@index([assessmentId])
 }
 model GitHubRulesetDeployment {
  id String @id @default(cuid())
@@ -987,6 +991,7 @@ model AiReviewSkill {
   @@index([organizationId, createdAt])
 }
 model AiSkillReview {
+  nextAttemptAt DateTime @default(now())
   usage Json?
   inlineFeedbackUrl String?
   automaticKey String? @unique
@@ -1017,6 +1022,7 @@ model AiSkillReview {
   @@unique([organizationId, actorId, fingerprint])
   @@index([state, createdAt])
   @@index([organizationId, repositoryId, assessmentId, createdAt])
+  @@index([assessmentId])
 }
 model AiReviewBudget {
   id String @id @default(uuid())
@@ -1106,6 +1112,7 @@ model FindingDisposition {
   updatedAt DateTime @updatedAt
   createdAt DateTime @default(now())
   @@index([organizationId, repositoryGithubId, state])
+  @@index([assessmentId])
 }
 
 // Deployment-wide operational settings; connection roots and encryption keys stay outside the database.
@@ -1189,6 +1196,7 @@ model PipelineRunSubmission {
   @@index([repositoryId, createdAt])
   @@index([state, createdAt])
   @@index([nextAttemptAt])
+  @@index([assessmentId])
 }
 
 // Approved exceptions never mutate the frozen policy or its original evidence.
@@ -1356,6 +1364,7 @@ model AiFindingGuidance {
   @@index([organizationId, repositoryId, assessmentId, findingId])
   @@index([state, leaseUntil, createdAt])
   @@index([organizationId, createdAt])
+  @@index([assessmentId])
 }
 
 // Durable, restart-safe initial contributor history collection for selected repositories.
@@ -1426,4 +1435,62 @@ model InstallationReporting {
  failureCount Int @default(0)
  error String?
  updatedAt DateTime @updatedAt
+}
+
+// Saved display data is never execution evidence or authority to write to GitHub.
+model GitHubDisplayRead {
+  key String @id
+  generation Int @default(0)
+  installationId BigInt
+  repositoryGithubId BigInt
+  accessRevision Int
+  fingerprint String
+  operation String
+  args Json
+  value Json?
+  fetchedAt DateTime?
+  requestedAt DateTime @default(now())
+  nextAttemptAt DateTime @default(now())
+  leaseToken String?
+  leaseUntil DateTime?
+  state String @default("PENDING")
+  errorCode String?
+  @@index([state, nextAttemptAt])
+  @@index([installationId, repositoryGithubId])
+}
+
+model GitHubAccessRefresh {
+  key String @id
+  identityId String
+  organizationId String
+  kind String
+  value Json?
+  fetchedAt DateTime?
+  state String @default("PENDING")
+  nextAttemptAt DateTime @default(now())
+  leaseToken String?
+  leaseUntil DateTime?
+  @@index([state, nextAttemptAt])
+}
+
+// Workspace-controlled retention. No deletion until an administrator enables it.
+model WorkspaceRetention {
+ organization Organization @relation(fields:[organizationId],references:[id],onDelete:Cascade)
+ organizationId String @id
+ revision Int @default(1)
+ enabled Boolean @default(false)
+ assessmentDays Int @default(90)
+ sourceDays Int @default(90)
+ notificationDays Int @default(90)
+ activityDays Int @default(90)
+ auditDays Int @default(365)
+ updatedAt DateTime @updatedAt
+ updatedById String?
+ nextRunAt DateTime @default(now())
+ leaseToken String?
+ leaseUntil DateTime?
+ lastRunAt DateTime?
+ lastResult Json?
+ lastError Boolean @default(false)
+ @@index([enabled, nextRunAt])
 }

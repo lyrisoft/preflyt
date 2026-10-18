@@ -87,7 +87,7 @@ The generated standalone snippet has two jobs. When integrating with an existing
 - **`preflyt_checks`** runs your checks and submits the results using the Preflyt Action.
 - **`preflyt_gate`** (named **Preflyt final gate**) waits for Preflyt's verified result and fails if the policy fails or is incomplete. It depends on every other job in that PR workflow. Do not add a separate `workflow_run` publication-gate workflow. Documentation and post-merge deployment workflows can remain separate.
 
-The snippet contains your API URL and the exact Preflyt Action version `v2.1.1`. It contains no check list or report mapping. The Action fetches the published target-branch policy at the beginning of each run. Adding a check or changing a standard takes effect after you publish a new policy revision; the workflow stays the same.
+The snippet contains your API URL and the exact Preflyt Action version `v2.1.2`. It contains no check list or report mapping. The Action fetches the published target-branch policy at the beginning of each run. Adding a check or changing a standard takes effect after you publish a new policy revision; the workflow stays the same.
 
 ```yaml
 # Shape of the generated snippet. Copy the real one from Preflyt.
@@ -105,7 +105,7 @@ jobs:
       # Your dependency installation steps go here.
       - name: Preflyt policy
         if: ${{ always() && github.event_name == 'pull_request' }}
-        uses: lyrisoft/preflyt-action@v2.1.1
+        uses: lyrisoft/preflyt-action@v2.1.2
         with:
           api-url: https://preflyt.example.com/api
   preflyt_gate:
@@ -116,7 +116,7 @@ jobs:
 
 ### What the built-in checks run
 
-The built-in security recipes automatically pull pinned scanner images: **Semgrep** for static application security, **Gitleaks** for secrets, and **Trivy** for dependency, container and infrastructure scans. Docker must be available on the Linux runner. Source is mounted read-only, scans receive no GitHub/OIDC credentials or Docker socket, and raw scanner logs are suppressed. Set `CONTAINER_IMAGE` in the job when selecting container image scanning.
+The built-in security recipes automatically pull pinned scanner images: **Semgrep** for static application security, **Gitleaks** for secrets, and **Trivy** for dependency, container and infrastructure scans. Docker must be available on the Linux runner. Source is mounted read-only, scans receive no GitHub/OIDC credentials or Docker socket, and raw scanner logs are suppressed. Workflow setup adds the container build step and `CONTAINER_IMAGE` automatically. Action v2.1.2 scans runner-built images through a read-only archive, without giving the scanner access to the Docker daemon. For a manually maintained workflow, build the image first and set `CONTAINER_IMAGE` to its local tag.
 
 Built-in SAST uses **Preflyt SAST v1**, an owned, digest-checked set of 18 review-oriented JavaScript/TypeScript, Python and shell rules. The scanner runs offline. This is specific pattern coverage, not the full Semgrep registry, interfile taint analysis or an exhaustive security audit. The Action contains the exact rules and narrow fixture exceptions; a separately licensed scanner can run through a custom SARIF command.
 

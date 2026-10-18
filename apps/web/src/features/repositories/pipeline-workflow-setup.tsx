@@ -41,6 +41,7 @@ import { SurfaceIcon } from '@/components/surface-icon'
 import { useNavigationSession } from '../workspace/navigation-session'
 import { canPerform } from '../workspace/scoped-access'
 import { governanceRequest } from './governance-api'
+import { workflowRefreshInterval } from './workflow-refresh-polling'
 import { WorkflowRequestError } from './workflow-request-error'
 import { WorkflowSnippet } from './workflow-snippet'
 import { YamlWorkflowEditor } from './yaml-workflow-editor'
@@ -150,9 +151,12 @@ function StandaloneWorkflowSetup({
   )
   // Refresh controls do not identify data; repository, policy and identity do.
   // eslint-disable-next-line @tanstack/query/exhaustive-deps
-  const query = useQuery({
+  const query = useQuery<Setup>({
     queryKey: key,
     retry: false,
+    refetchInterval: (query) => workflowRefreshInterval(query.state.error),
+    refetchIntervalInBackground: false,
+    meta: { silent: true },
     staleTime: 5 * 60_000,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
@@ -172,6 +176,9 @@ function StandaloneWorkflowSetup({
     placeholderData: keepPreviousData,
     enabled: !!query.data,
     retry: false,
+    refetchInterval: (query) => workflowRefreshInterval(query.state.error),
+    refetchIntervalInBackground: false,
+    meta: { silent: true },
     staleTime: 5 * 60_000,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
@@ -287,6 +294,8 @@ function StandaloneWorkflowSetup({
       <Card>
         <CardContent className='flex flex-wrap items-center justify-between gap-3 pt-4'>
           <WorkflowRequestError
+            automatic
+            checking={query.isFetching}
             error={query.error}
             retry={() => void query.refetch()}
           />
@@ -399,10 +408,11 @@ function StandaloneWorkflowSetup({
         ) : source.isError ? (
           <div className='flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3'>
             <WorkflowRequestError
+              automatic
+              checking={source.isFetching}
               error={source.error}
               label='Reload branch setup'
               retry={() => {
-                refreshSource.current = true
                 void source.refetch()
               }}
             />

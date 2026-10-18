@@ -170,6 +170,37 @@ it('hides generation from read-only users and fits a narrow viewport', async () 
   }
 })
 
+it('loads a queued workflow automatically after retryAt without forcing a refresh or writing', async () => {
+  const original = state.request.getMockImplementation()!
+  let reads = 0
+  state.request.mockImplementation(async (path: string, ...args: unknown[]) => {
+    if (path.includes('/standalone?') && ++reads === 1)
+      throw Object.assign(
+        new Error('Waiting for the background worker to load GitHub data.'),
+        {
+          code: 'GITHUB_SYNC_PENDING',
+          retryAt: new Date(Date.now() + 1400).toISOString(),
+        }
+      )
+    return original(path, ...args)
+  })
+  const view = await show()
+  await expect
+    .element(view.getByRole('status'))
+    .toHaveTextContent('Loading GitHub data')
+  expect(reads).toBe(1)
+  await expect.element(view.getByText('Workflow preview')).toBeVisible()
+  expect(reads).toBe(2)
+  expect(
+    state.request.mock.calls.every(
+      ([path, body]) =>
+        !String(path).includes('refresh=true') && body === undefined
+    )
+  ).toBe(true)
+  await new Promise((resolve) => setTimeout(resolve, 1200))
+  expect(reads).toBe(2)
+})
+
 function detectContainers(paths: string[], installed?: string) {
   const original = state.request.getMockImplementation()!
   state.request.mockImplementation(async (path: string, ...args: unknown[]) => {

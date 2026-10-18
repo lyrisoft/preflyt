@@ -1,6 +1,7 @@
 export type SettingsTab =
   | 'manage'
   | 'workspace'
+  | 'retention'
   | 'notifications'
   | 'appearance'
   | 'configuration'
@@ -18,6 +19,7 @@ export function validateSettingsSearch(
     tab: [
       'manage',
       'workspace',
+      'retention',
       'notifications',
       'appearance',
       'configuration',

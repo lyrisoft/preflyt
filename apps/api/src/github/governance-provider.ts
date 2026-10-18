@@ -1,3 +1,4 @@
+import type { RedisCacheService } from '../cache/redis-cache.service.js'
 import { App } from '@octokit/app'
 import { ForbiddenException, ServiceUnavailableException } from '@nestjs/common'
 import { governanceConfiguration } from './governance-config.js'
@@ -30,7 +31,8 @@ export function matchesRuleset(expected: unknown, actual: unknown): boolean {
   )
 }
 export class GovernanceProvider {
-  private readonly limiter = new GitHubRequestLimiter()
+  private readonly limiter: GitHubRequestLimiter
+  constructor(cache?: RedisCacheService) { this.limiter = new GitHubRequestLimiter(cache) }
   async open(fullName: string, repositoryInstallationId?: bigint) {
     const config = governanceConfiguration(repositoryInstallationId)
     const organization = fullName.split('/')[0]
@@ -42,7 +44,7 @@ export class GovernanceProvider {
       options: Record<string, unknown> = {},
     ) =>
       this.limiter.run(
-        `governance:${config.appId}:${config.installationId}`,
+        `app:${config.appId}`,
         () =>
           app.octokit.request(route, {
             ...options,
@@ -81,7 +83,7 @@ export class GovernanceProvider {
     const root = `https://api.github.com/orgs/${encodeURIComponent(organization)}/rulesets`
     const call = async (method: string, path = '', body?: unknown) => {
       const result = await this.limiter.run(
-        `governance:${config.appId}:${config.installationId}`,
+        `installation:${config.installationId}`,
         () =>
           fetch(root + path, {
             method,

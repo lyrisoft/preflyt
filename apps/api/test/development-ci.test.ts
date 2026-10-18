@@ -31,7 +31,8 @@ it.each([['development', 'development'], ['production', 'main']])('publishes %s 
   expect(publish.jobs.build.strategy.matrix.platform).toEqual([{ arch: 'amd64', runner: 'ubuntu-24.04' }, { arch: 'arm64', runner: 'ubuntu-24.04-arm' }])
   expect(publish.jobs.publish.needs).toBe('build')
   for (const job of Object.values(publish.jobs) as any[]) {
-    expect(job.uses).toBeUndefined() // no transitive regression/Compose calls
+    // Documentation publication is allowed; no transitive regression/Compose calls.
+    if (job.uses) expect(job.uses).toBe('./.github/workflows/docs.yml')
     for (const step of job.steps ?? []) {
       expect(step.run ?? '').not.toMatch(/--test|vitest|playwright|compose|pnpm.*test/)
       if (step.uses?.startsWith('actions/checkout@')) {

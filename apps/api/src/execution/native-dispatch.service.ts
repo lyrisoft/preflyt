@@ -1,3 +1,4 @@
+import { GitHubRateLimitError } from '../github/github-rate-limit.js'
 import { nativeSelectionCurrent } from './native-selection-current.js'
 import { recordNativeExecutionFailure } from '../notifications/notification-event.js'
 import { configurationValue } from '../configuration/runtime-configuration.js'
@@ -186,7 +187,11 @@ export class NativeDispatchService {
           data: { leaseUntil: new Date(Date.now() + 5000) },
         })
       }
-    } catch {
+    } catch (error) {
+      if (error instanceof GitHubRateLimitError && row.state === 'PREPARING') {
+        await this.prisma.nativeExecutionRequest.updateMany({where: {id, leaseUntil: lease, state: 'PREPARING', cancelledById: null}, data: {leaseUntil: new Date((error.getResponse() as {retryAt: string}).retryAt), reason: 'GITHUB_RATE_LIMITED'}})
+        return
+      }
       if (this.shutdown.signal.aborted) return // Another worker resumes the same admitted attempt after the lease expires.
       const expected = nativeEvidenceExpected(row)
       if (expected) {

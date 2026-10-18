@@ -29,12 +29,7 @@ export class GitHubRulesetService {
       repositoryId,
       "policy.read",
     );
-    const result = await this.provider.listRepositoryRulesets(
-      repository.installationId,
-      repository.githubId,
-      page,
-      refresh, pageSize,
-    );
+    const result = await this.provider.savedDisplay<Awaited<ReturnType<GitHubProviderService['listRepositoryRulesets']>>>('rulesets', repository.installationId, repository.githubId, [page, pageSize], refresh);
     await this.access.requireRepository(session, repositoryId, "policy.read");
     return result;
   }
@@ -76,11 +71,7 @@ export class GitHubRulesetService {
       "policy.read",
     );
     // Verify this ruleset is actually accessible from the selected repository.
-    await this.provider.getRepositoryRuleset(
-      repository.installationId,
-      repository.githubId,
-      id,
-    );
+    await this.provider.savedDisplay<Awaited<ReturnType<GitHubProviderService['getRepositoryRuleset']>>>('ruleset', repository.installationId, repository.githubId, [id]);
     const result =
       options.source === "retained"
         ? await this.history!.read(
@@ -90,12 +81,7 @@ export class GitHubRulesetService {
             repository.fullName,
             options,
           )
-        : await this.provider.readRulesetInsights(
-            repository.installationId,
-            repository.githubId,
-            id,
-            options,
-          );
+        : await this.provider.savedDisplay<Awaited<ReturnType<GitHubProviderService['readRulesetInsights']>>>('insights', repository.installationId, repository.githubId, [id, options]);
     if (this.history) {
       await this.access.requireRepository(session, repositoryId, 'assessment.read');
       const suites = await this.history.linkAssessments(repository.id, result.suites);
@@ -118,11 +104,7 @@ export class GitHubRulesetService {
       repositoryId,
       "policy.read",
     );
-    const result = await this.provider.getRepositoryRuleset(
-      repository.installationId,
-      repository.githubId,
-      id,
-    );
+    const result = await this.provider.savedDisplay<Awaited<ReturnType<GitHubProviderService['getRepositoryRuleset']>>>('ruleset', repository.installationId, repository.githubId, [id]);
     await this.access.requireRepository(session, repositoryId, "policy.read");
     return result;
   }

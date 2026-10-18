@@ -1,3 +1,5 @@
+import { Optional } from '@nestjs/common';
+import { RedisCacheService } from '../cache/redis-cache.service.js';
 import { readPageSize } from '../pagination.js'
 import { currentStandards } from '../standards/policy-standards.js';
 import { sameIdentity } from '../auth/same-identity.js';
@@ -29,7 +31,7 @@ export const governanceEnabled = () =>
   configurationValue('GITHUB_RULESET_ACTIVATION_ENABLED') === "true";
 @Injectable()
 export class RulesetDeploymentService {
-  private readonly governance = new GovernanceProvider();
+  private readonly governance: GovernanceProvider;
   private stopped = false;
   close() {
     this.stopped = true;
@@ -107,7 +109,8 @@ export class RulesetDeploymentService {
     private readonly github: GitHubProviderService,
     @Inject(CheckPublicationService)
     private readonly checks: CheckPublicationService,
-  ) {}
+    @Optional() @Inject(RedisCacheService) cache?: RedisCacheService,
+  ) { this.governance = new GovernanceProvider(cache); }
   private async authorize(session: AuthenticatedSession, id: string) {
     const repo = await this.access.requireRepository(
       session,

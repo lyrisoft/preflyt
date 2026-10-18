@@ -228,7 +228,7 @@ export class PipelineSetupController {
           },
         }),
         this.ai.availability(req.preflytSession, id),
-        this.github.pipelineWriteAvailability(repo.installationId),
+        this.github.pipelineWriteAvailability(repo.installationId, true),
         this.prisma.auditEvent.findFirst({
           where: {
             event: "pipeline.workflow.standalone-pr.created",
@@ -279,9 +279,9 @@ export class PipelineSetupController {
       submissions,
     };
   }
-  private async standaloneSource(session: AuthenticatedSession, id: string, policyId: string, refresh = false) {
+  private async standaloneSource(session: AuthenticatedSession, id: string, policyId: string, refresh = false, live = false) {
     const { repo, policy } = await this.context(session, id, policyId);
-    const snapshot = await this.github.readStandaloneWorkflowSource(repo.installationId, repo.githubId, policy.branchRef, refresh);
+    const snapshot = live ? await this.github.readStandaloneWorkflowSource(repo.installationId, repo.githubId, policy.branchRef, true) : await this.github.savedDisplay<Awaited<ReturnType<GitHubProviderService['readStandaloneWorkflowSource']>>>('standalone', repo.installationId, repo.githubId, [policy.branchRef], refresh);
     const generated = standalonePrWorkflow(snapshot, this.rules(policy.definition), publicPipelineUrl());
     await this.context(session, id, policyId);
     return { repo, policy, generated, snapshot };
@@ -296,7 +296,7 @@ export class PipelineSetupController {
   private async reviewedStandalone(req: Request & { preflytSession: AuthenticatedSession }, id: string, body: StandaloneDto) {
     this.auth.assertOrigin(req.headers.origin);
     await this.access.requireRepository(req.preflytSession, id, 'policy.publish');
-    const current = await this.standaloneSource(req.preflytSession, id, body.policyId, true);
+    const current = await this.standaloneSource(req.preflytSession, id, body.policyId, true, true);
     if (current.generated.baseSha !== body.baseSha)
       throw new ConflictException('The target branch changed. Refresh the workflow and review the updated setup before creating a PR.');
     const url = publicPipelineUrl();
@@ -344,7 +344,7 @@ export class PipelineSetupController {
     const result = await this.ai.generate(req.preflytSession, id, policy.id, this.rules(policy.definition),
       snapshot, body.workflow, body.instructions, publicPipelineUrl()!, body.requestId, containerScan?.dockerfile ?? undefined);
     await this.context(req.preflytSession, id, body.policyId);
-    const current = await this.standaloneSource(req.preflytSession, id, body.policyId, true);
+    const current = await this.standaloneSource(req.preflytSession, id, body.policyId, true, true);
     if (current.generated.baseSha !== body.baseSha || digest(current.policy.definition) !== digest(policy.definition))
       throw new ConflictException('The branch or policy changed during generation. Refresh setup and generate a new draft.');
     validateStandalonePrWorkflow(result.workflow, this.rules(current.policy.definition), current.policy.branchRef, publicPipelineUrl()!);
@@ -454,7 +454,7 @@ export class PipelineSetupController {
       id,
       policyId,
     );
-    const source = await this.github.readPipelineWorkflow(repo.installationId, repo.githubId, workflowId, policy.branchRef, refresh === "true");
+    const source = await this.github.savedDisplay<Awaited<ReturnType<GitHubProviderService['readPipelineWorkflow']>>>('workflow', repo.installationId, repo.githubId, [workflowId, policy.branchRef], refresh === "true");
     await this.access.requireRepository(req.preflytSession, id, "policy.read");
     return {
       ...source,

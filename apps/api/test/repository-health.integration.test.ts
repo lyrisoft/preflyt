@@ -31,7 +31,7 @@ import type { AuthenticatedSession } from '../src/auth/session.guard.js'
 vi.mock('../src/execution/native-runtime.js',()=>({nativeRuntimeApproval:vi.fn()}))
 let app: INestApplication
 let fixture: Awaited<ReturnType<typeof disposableDatabase>>, service: RepositoryHealthService, owner: AuthenticatedSession, developer: AuthenticatedSession, outsider: AuthenticatedSession, repoId: string
-const provider={readRepositorySnapshot:vi.fn(),verifyReadinessBranch:vi.fn(),readHealthSource:vi.fn(),readHealthScanSource:vi.fn()}, runtime={status:vi.fn()}
+const provider={savedDisplay:vi.fn(),readRepositorySnapshot:vi.fn(),verifyReadinessBranch:vi.fn(),readHealthSource:vi.fn(),readHealthScanSource:vi.fn()}, runtime={status:vi.fn()}
 const sha='a'.repeat(40)
 beforeAll(async()=>{
  fixture=await disposableDatabase('health')
@@ -55,7 +55,7 @@ beforeEach(async()=>{
  const repo=await db.gitHubRepository.create({data:{githubId:51n,installationId:50n,name:'repo',fullName:'fixture/repo',ownerLogin:'fixture',isPrivate:true,selected:true,defaultBranch:'development'}});repoId=repo.id
  const m=await db.organizationMembership.findFirstOrThrow({where:{identityId:developer.identityId}});await db.repositoryGrant.create({data:{repositoryId:repo.id,membershipId:m.id}})
  provider.readRepositorySnapshot.mockResolvedValue({sourceSha:sha,treeSha:'b'.repeat(40),branch:'development',fullName:'fixture/repo',complete:true,warnings:[],files:[{path:'app.ts',sha:'c'.repeat(40),size:20}]})
- provider.verifyReadinessBranch.mockResolvedValue(sha);runtime.status.mockResolvedValue({executionAvailable:false,reason:'REVIEW_REQUIRED'})
+ provider.savedDisplay.mockResolvedValue({head:sha,checkedAt:new Date().toISOString()});provider.verifyReadinessBranch.mockResolvedValue(sha);runtime.status.mockResolvedValue({executionAvailable:false,reason:'REVIEW_REQUIRED'})
  vi.stubEnv('NOTIFICATIONS_ENABLED','true');vi.stubEnv('NATIVE_TOOL_REVIEWS','[]')
  service=new RepositoryHealthService(db,new AuthorizationService(db),provider as any,runtime as any,new FindingSourceStore(db,provider as any))
 })
@@ -144,7 +144,7 @@ it('changing branches preserves reports and branch advancement marks the pinned 
  provider.readRepositorySnapshot.mockResolvedValueOnce({sourceSha:'d'.repeat(40),treeSha:'b'.repeat(40),branch:'release',fullName:'fixture/repo',complete:true,warnings:[],files:[]})
  const second=await service.start(owner,'51',{branch:'release',requestKey:randomUUID()});await service.process(second.id)
  expect((await service.get(owner,'51',first.id)).assessment?.branch).toBe('development');expect((await service.get(owner,'51')).assessment?.branch).toBe('release')
- await fixture.prisma.repositoryHealthTarget.update({where:{repositoryId:repoId},data:{headCheckedAt:new Date(0)}});provider.verifyReadinessBranch.mockResolvedValue('e'.repeat(40))
+ await fixture.prisma.repositoryHealthTarget.update({where:{repositoryId:repoId},data:{headCheckedAt:new Date(0)}});provider.savedDisplay.mockResolvedValue({head:'e'.repeat(40),checkedAt:new Date().toISOString()})
  expect((await service.get(owner,'51')).freshness).toBe('UNVERIFIED');expect((await service.freshness(owner,'51',second.id)).freshness).toBe('STALE');expect((await service.get(owner,'51')).freshness).toBe('STALE');expect((await fixture.prisma.repositoryHealthAssessment.findUniqueOrThrow({where:{id:first.id}})).sourceSha).toBe(sha)
 })
 it('reads the requested branch without changing the saved target or borrowing another branch report',async()=>{
@@ -193,7 +193,7 @@ it.each(['secrets.scan','quality.reliability','quality.maintainability','quality
  await sink.complete(native.id,signNativeReceipt(receipt,key,pub));await db.repositoryHealthAssessment.update({where:{id:first.id},data:{leaseUntil:null}});await service.process(first.id)
  const report=(await service.get(owner,'51')).assessment!;expect(report.report?.findings[0]).toMatchObject({path:'app.ts',line:1,category});expect(report.report?.completeness).toBe('PARTIAL');expect(await db.commitAssessment.count()).toBe(0);expect(await db.gitHubCheckPublication.count()).toBe(0)
  if(ruleId==='quality.duplication') expect(report.report?.measurements?.duplication).toMatchObject({analyzedLines:100,duplicatedLines:20})
- if(ruleId==='secrets.scan') { provider.readHealthSource.mockResolvedValue('sensitive fixture\ncontext'); const excerpt=await service.source(owner,'51',first.id,report.report!.findings[0].fingerprint);expect(excerpt.lines[0]?.text).toBe('[Potential credential redacted]');expect(provider.readHealthSource).toHaveBeenCalled() }
+ if(ruleId==='secrets.scan') { provider.readHealthSource.mockResolvedValue('sensitive fixture\ncontext'); await service.source(owner,'51',first.id,report.report!.findings[0].fingerprint); await new FindingSourceStore(fixture.prisma,provider as any).reconcile(); const excerpt=await service.source(owner,'51',first.id,report.report!.findings[0].fingerprint);expect(excerpt.lines[0]?.text).toBe('[Potential credential redacted]');expect(provider.readHealthSource).toHaveBeenCalled() }
  expect(await db.notificationEvent.count()).toBe(1)
 })
 
@@ -217,6 +217,9 @@ it('reveals only bounded, redacted context from the assessed revision and rechec
  report.findings=[{fingerprint,checkId:'security.sast',evidence:'ANALYZER_REPORTED',category:'security',title:'Potential issue',ruleId:'fixture-rule',severity:'high',path:'app.ts',line:8,suppressed:false}]
  await fixture.prisma.repositoryHealthAssessment.update({where:{id:row.id},data:{report}})
  const text=Array.from({length:20},(_,i)=>i===5?'password="sensitive-value"':`line ${i+1}`).join('\n');provider.readHealthSource.mockResolvedValue(text)
+ const queued=await service.source(developer,'51',row.id,fingerprint)
+ expect(queued.retryable).toBe(true);expect(provider.readHealthSource).not.toHaveBeenCalled()
+ await new FindingSourceStore(fixture.prisma,provider as any).reconcile()
  const source=await service.source(developer,'51',row.id,fingerprint)
  expect(provider.readHealthSource).toHaveBeenCalledWith(50n,51n,sha,'app.ts');expect(source.lines.map(l=>l.number)).toEqual([3,4,5,6,7,8,9,10,11,12,13]);expect(JSON.stringify(source)).not.toContain('sensitive-value')
  provider.readHealthSource.mockResolvedValue('only one line');expect(await service.source(developer,'51',row.id,fingerprint)).toEqual(source);expect(provider.readHealthSource).toHaveBeenCalledTimes(1)
@@ -348,22 +351,22 @@ it('can load bounded inventory health beyond the first report page and validates
  for(const size of ['0','1001','NaN','1.5']) await request(app.getHttpServer()).get('/github/health?pageSize='+size).set('Cookie','health.sid=owner').expect(400)
 })
 
-it('returns saved reports while an upstream head check is blocked and rechecks permissions on freshness responses',async()=>{
+it('returns saved reports while a saved-head read is pending and rechecks permissions on freshness responses',async()=>{
  const report=await service.initial(owner.identityId,'51');await service.process(report.id)
  await fixture.prisma.repositoryHealthTarget.update({where:{repositoryId:repoId},data:{headCheckedAt:new Date(0),headSha:sha}})
  provider.verifyReadinessBranch.mockClear()
  const saved=await service.get(developer,'51',report.id)
  expect(saved.assessment?.id).toBe(report.id);expect(saved.freshness).toBe('UNVERIFIED');expect(provider.verifyReadinessBranch).not.toHaveBeenCalled()
  let release!:()=>void
- const upstream=new Promise<string>(resolve=>{release=()=>resolve(sha)})
- provider.verifyReadinessBranch.mockReturnValueOnce(upstream)
+ const upstream=new Promise<any>(resolve=>{release=()=>resolve({head:sha,checkedAt:new Date().toISOString()})})
+ provider.savedDisplay.mockClear();provider.savedDisplay.mockReturnValueOnce(upstream)
  const checking=service.freshness(developer,'51',report.id)
- await vi.waitFor(()=>expect(provider.verifyReadinessBranch).toHaveBeenCalledTimes(1))
+ await vi.waitFor(()=>expect(provider.savedDisplay).toHaveBeenCalledTimes(1))
  const during=await service.get(developer,'51',report.id)
  expect(during.assessment?.id).toBe(report.id);expect(during.freshness).toBe('UNVERIFIED')
  release();expect((await checking).freshness).toBe('CURRENT')
  await fixture.prisma.repositoryHealthTarget.update({where:{repositoryId:repoId},data:{headCheckedAt:new Date(0)}})
- provider.verifyReadinessBranch.mockImplementationOnce(async()=>{await fixture.prisma.repositoryGrant.deleteMany();return sha})
+ provider.savedDisplay.mockImplementationOnce(async()=>{await fixture.prisma.repositoryGrant.deleteMany();return {head:sha,checkedAt:new Date().toISOString()}})
  await expect(service.freshness(developer,'51',report.id)).rejects.toThrow()
 })
 it('freshness HTTP responses remain scoped, private and fail honestly when GitHub is unavailable',async()=>{
@@ -372,7 +375,7 @@ it('freshness HTTP responses remain scoped, private and fail honestly when GitHu
  await request(server).get(url).expect(401)
  await request(server).get(url).set('Cookie','health.sid=outsider').expect(403)
  await request(server).get('/github/repositories/51/health/freshness?assessment=bad').set('Cookie','health.sid=owner').expect(400)
- provider.verifyReadinessBranch.mockRejectedValueOnce(new Error('private-provider-value'))
+ provider.savedDisplay.mockRejectedValueOnce(new Error('private-provider-value'))
  await fixture.prisma.repositoryHealthTarget.update({where:{repositoryId:repoId},data:{headCheckedAt:new Date(0)}})
  const result=await request(server).get(url).set('Cookie','health.sid=owner').expect(200)
  expect(result.headers['cache-control']).toBe('no-store');expect(result.body).toMatchObject({assessmentId:report.id,freshness:'UNVERIFIED'});expect(JSON.stringify(result.body)).not.toContain('private-provider-value')

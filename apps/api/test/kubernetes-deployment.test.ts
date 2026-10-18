@@ -49,7 +49,7 @@ describe('Kubernetes container deployment contract', () => {
     expect(api.envFrom[1].secretRef.name).toBe('preflyt-api-secrets')
     expect(worker.envFrom[1].secretRef.name).toBe('preflyt-worker-secrets')
   })
-  it('retains database and queue storage but allows cache eviction', () => {
+  it('retains database and queue storage and preserves active coordination locks', () => {
     for (const name of ['db', 'queue']) {
       const set = get('StatefulSet', name)
       expect(set.spec.persistentVolumeClaimRetentionPolicy).toEqual({

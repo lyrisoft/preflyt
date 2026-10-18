@@ -215,7 +215,11 @@ export class NotificationChannelsService {
   }
 
   async list(session: AuthenticatedSession) {
-    const organizationId = await this.scope(session);
+    const { organizationId } = await this.authorization.requireOrganization(
+      session,
+      "notifications.manage",
+      false,
+    );
     const items = await this.db.organizationNotificationChannel.findMany({
       where: { organizationId, deletedAt: null },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
