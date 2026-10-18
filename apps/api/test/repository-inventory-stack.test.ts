@@ -19,6 +19,7 @@ const profile: SavedProfile = {
 }
 function row(selected = true, profiles: SavedProfile[] = [profile]) {
   return {
+    id: 'repo-42',
     githubId: 42n,
     name: 'api',
     fullName: 'fixture/api',
@@ -32,7 +33,9 @@ function row(selected = true, profiles: SavedProfile[] = [profile]) {
 }
 function setup(rows: ReturnType<typeof row>[]) {
   const prisma = {
-    gitHubRepository: { findMany: vi.fn(async () => rows) },
+    gitHubRepository: { findMany: vi.fn(async () => rows.map(({profiles,...repo})=>repo)) },
+    $queryRaw: vi.fn(async (_query:any) => rows.filter(r=>r.selected && r.profiles.length).map(r=>({id:`profile-${r.id}`}))),
+    repositoryProfile: {findMany:vi.fn(async(_args:any)=>rows.filter(r=>r.selected && r.profiles.length).map(r=>({...r.profiles[0],repositoryId:r.id})))},
     gitHubInstallation: {
       findMany: vi.fn(async () => [
         {
@@ -68,15 +71,13 @@ describe('repository inventory technology projection', () => {
       expect.objectContaining({
         where: { available: true, installation: { active: true } },
         select: expect.objectContaining({
-          profiles: {
-            where: { repository: { selected: true } },
-            orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-            take: 1,
-            select: { report: true, createdAt: true, sourceSha: true },
-          },
+          id: true,
         }),
       }),
     )
+    expect(prisma.$queryRaw).toHaveBeenCalledOnce()
+    expect(prisma.$queryRaw.mock.calls[0][0].sql).toContain('LIMIT 1')
+    expect(prisma.repositoryProfile.findMany).toHaveBeenCalledWith({where:{id:{in:['profile-repo-42']}},select:{repositoryId:true,report:true,createdAt:true,sourceSha:true}})
     expect(prisma.gitHubInstallation.findMany).toHaveBeenCalledOnce()
   })
 
@@ -162,7 +163,7 @@ describe('repository inventory technology projection', () => {
   it('never consults the provider on normal inventory reads or triggers one request per repository', async () => {
     const { service, prisma, provider } = setup([
       row(),
-      { ...row(), githubId: 43n },
+      { ...row(), id:'repo-43',githubId: 43n },
     ])
     const result = await service.listRepositories()
     expect(result.repositories).toHaveLength(2)

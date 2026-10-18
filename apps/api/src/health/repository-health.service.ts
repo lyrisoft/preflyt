@@ -25,14 +25,14 @@ import { verifiedNativeEvidence } from '../execution/native-evidence.js'
 import { nativeRequestIntegrity } from '../execution/native-request-integrity.js'
 import { digest } from '../assessments/assessment-digest.js'
 import { notificationsEnabled } from '../notifications/notification-event.js'
-import type { Prisma, RepositoryHealthAssessment } from '../generated/prisma/client.js'
+import { Prisma, type RepositoryHealthAssessment } from '../generated/prisma/client.js'
 import { healthReport, comparableHealthTrend, healthTimeline, type HealthReport, healthAssessmentResult } from './health-report.js'
 import { healthCategories, healthCategoryMetric, selectedHealthAnalyses, type HealthCategory } from './health-categories.js'
 const activeStates = ['QUEUED', 'RUNNING']
 const json = (value: unknown) => value as Prisma.InputJsonValue
 const sessionFor = (row: { actorId: string; organizationId: string }): AuthenticatedSession => ({ authenticated: true, identityId: row.actorId, organizationId: row.organizationId, subject: 'repository-health', email: null, role: 'WORKER' })
 const validRetryAt = (value: unknown): string | null => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(value) && Number.isFinite(Date.parse(value)) ? new Date(value).toISOString() : null
-const dto = (row: RepositoryHealthAssessment) => ({ overallHealth:overallHealth(row.report as HealthReport|null,row.state), id: row.id, branch: row.branch, state: row.state, sourceSha: row.sourceSha, progress: row.state === 'RUNNING' ? ((row.plan as any)?.stage ?? (row.sourceSha ? 'FETCHING_SOURCE' : 'INSPECTING')) : null, category: (row.plan as any)?.requestedCategory ?? null, includeCoverage: row.includeCoverage, report: row.report ? { ...(row.report as unknown as HealthReport), findings: (row.report as unknown as HealthReport).findings.map(f => ({...f,referenceGuidance:findingReferenceGuidance(f.ruleId)})) } : null, retryAt:validRetryAt((row.plan as any)?.failure?.retryAt), reason: row.reason, cancelled: !!row.cancelledAt, createdAt: row.createdAt, startedAt: row.startedAt, finishedAt: row.finishedAt })
+const dto = (row: RepositoryHealthAssessment, includeReport = true) => ({ overallHealth:overallHealth(row.report as HealthReport|null,row.state), id: row.id, branch: row.branch, state: row.state, sourceSha: row.sourceSha, progress: row.state === 'RUNNING' ? ((row.plan as any)?.stage ?? (row.sourceSha ? 'FETCHING_SOURCE' : 'INSPECTING')) : null, category: (row.plan as any)?.requestedCategory ?? null, includeCoverage: row.includeCoverage, report: includeReport && row.report ? { ...(row.report as unknown as HealthReport), findings: (row.report as unknown as HealthReport).findings.map(f => ({...f,referenceGuidance:findingReferenceGuidance(f.ruleId)})) } : null, retryAt:validRetryAt((row.plan as any)?.failure?.retryAt), reason: row.reason, cancelled: !!row.cancelledAt, createdAt: row.createdAt, startedAt: row.startedAt, finishedAt: row.finishedAt })
 const markSelection = (report: HealthReport, category?: HealthCategory) => {
  if (category) {
   report.selection = category
@@ -129,7 +129,7 @@ export class RepositoryHealthService {
   await this.access.requireRepository(session, githubId, 'assessment.read')
   const ciCoverage=await verifiedHealthCiCoverage(this.db,repo,row?.sourceSha??null)
   await this.access.requireRepository(session, githubId, 'assessment.read')
-  return {ciCoverage, categoryResults, hotspotReview:row?hotspotSummary(row.report as HealthReport|null,reviews,row.id):null, repository: repo.fullName, branch, assessment: row ? dto(row) : null, freshness, checkedAt, history: history.map(h => ({ ...dto(h), report: undefined })), total, page, timeline,
+  return {ciCoverage, categoryResults, hotspotReview:row?hotspotSummary(row.report as HealthReport|null,reviews,row.id):null, repository: repo.fullName, branch, assessment: row ? dto(row) : null, freshness, checkedAt, history: history.map(h => ({ ...dto(h, false), report: undefined })), total, page, timeline,
    trend: row?.report ? comparableHealthTrend(row.report as HealthReport, prior?.report as HealthReport | null) : null }
  }
  /** Upstream head verification is separate from loading immutable saved reports. */
@@ -165,15 +165,15 @@ export class RepositoryHealthService {
   const scope = await this.access.repositoryScope(session.identityId, session.organizationId, 'assessment.read')
   const selectedScope = selected ? scope.filter(r => r.id === selected.id) : scope
   // Scope before reading reports. Large installations get an explicit bounded summary, never invented totals.
-  const repos = await this.db.gitHubRepository.findMany({ where: { id: { in: selectedScope.slice(0,1000).map(r => r.id) } }, include: { healthTarget: true,
-   healthAssessments: { where: { organizationId: session.organizationId! }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 1 } }, orderBy: { fullName: 'asc' } })
-  // Usually the latest report is on the selected branch. Fetch only mismatches
-  // with the existing repository/branch index; never blend branches or history.
-  const chosenRows = await Promise.all(repos.map(async repo => {
-   const branch=repo.healthTarget?.branch??repo.defaultBranch
-   const latest=repo.healthAssessments[0]
-   return latest?.branch===branch?latest:await this.db.repositoryHealthAssessment.findFirst({where:{repositoryId:repo.id,organizationId:session.organizationId!,branch:branch??''},orderBy:[{createdAt:'desc'},{id:'desc'}]})
-  }))
+  const repos = await this.db.gitHubRepository.findMany({ where: { id: { in: selectedScope.slice(0,1000).map(r => r.id) } }, include: { healthTarget: true }, orderBy: { fullName: 'asc' } })
+  const heads = repos.length ? await this.db.$queryRaw<{id:string;repositoryId:string}[]>(Prisma.sql`
+    SELECT latest.id, wanted."repositoryId" FROM (VALUES ${Prisma.join(repos.map(repo => Prisma.sql`(${repo.id}, ${repo.healthTarget?.branch ?? repo.defaultBranch ?? ''})`))}) wanted("repositoryId", branch)
+    CROSS JOIN LATERAL (SELECT id FROM "RepositoryHealthAssessment" h
+      WHERE h."repositoryId"=wanted."repositoryId" AND h.branch=wanted.branch AND h."organizationId"=${session.organizationId!}
+      ORDER BY h."createdAt" DESC,h.id DESC LIMIT 1) latest`) : []
+  const reports = await this.db.repositoryHealthAssessment.findMany({where:{id:{in:heads.map(row=>row.id)},organizationId:session.organizationId!}})
+  const byRepository = new Map(reports.map(row=>[row.repositoryId,row]))
+  const chosenRows = repos.map(repo=>byRepository.get(repo.id))
   const items = repos.map((repo,index) => {
    const row = chosenRows[index], report = row?.report as HealthReport | null
    const branch = repo.healthTarget?.branch ?? repo.defaultBranch

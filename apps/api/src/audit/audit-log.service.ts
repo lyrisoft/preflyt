@@ -81,11 +81,21 @@ export function auditFilters(input: Record<string, unknown>) {
 }
 
 // Resolve historical records through their actual source resources, never through
-// the actor's current membership. Raw metadata remains server-side.
+// the actor's current membership. Raw metadata remains server-side. Resolve the
+// two repository identifier forms into equality keys, so PostgreSQL can hash
+// join once rather than rescan repositories for each event. The UNION preserves
+// the old OR-join semantics, including ambiguous identifiers, without duplicating
+// a repository whose internal and GitHub IDs are identical.
 function contextSql(organizationId: string, repositoryIds: string[]) {
   const allowed = repositoryIds.length ? Prisma.sql`r.id IN (${Prisma.join(repositoryIds)})` : Prisma.sql`FALSE`;
-  return Prisma.sql`WITH contextual AS (
-    SELECT a.*, r.id AS "repositoryId", r."githubId"::text AS "repositoryGithubId", r."fullName" AS repository,
+  return Prisma.sql`WITH repository_keys AS MATERIALIZED (
+    SELECT r.id AS lookup, r.id, r."githubId"::text AS "githubId", r."fullName", r."installationId"
+    FROM "GitHubRepository" r
+    UNION ALL
+    SELECT r."githubId"::text AS lookup, r.id, r."githubId"::text AS "githubId", r."fullName", r."installationId"
+    FROM "GitHubRepository" r WHERE r.id <> r."githubId"::text
+  ), contextual AS (
+    SELECT a.id, a.event, a."createdAt", r.id AS "repositoryId", r."githubId" AS "repositoryGithubId", r."fullName" AS repository,
       COALESCE(i."organizationId", installation."organizationId", team."organizationId", NULLIF(a.metadata->>'organizationId', '')) AS "organizationId",
       (key.value IS NOT NULL OR a.metadata ?| ARRAY['deploymentId','publicationId','assessmentId','selectionId','draftId','policyId','requestId','reviewId','submissionId','taskId']) AS "repositoryReferenced"
     FROM "AuditEvent" a
@@ -103,17 +113,20 @@ function contextSql(organizationId: string, repositoryIds: string[]) {
     CROSS JOIN LATERAL (SELECT COALESCE(NULLIF(a.metadata->>'repositoryGithubId', ''), NULLIF(a.metadata->>'githubRepositoryId', ''),
       NULLIF(a.metadata->>'repositoryId', ''), deployment."repositoryId", publication."repositoryId", assessment."repositoryId",
       selection."repositoryId", draft."repositoryId", policy."repositoryId", execution."repositoryId", review."repositoryId", submission."repositoryId", task."repositoryId") AS value) key
-    LEFT JOIN "GitHubRepository" r ON r.id = key.value OR r."githubId"::text = key.value
+    LEFT JOIN repository_keys r ON r.lookup = key.value
     LEFT JOIN "GitHubInstallation" i ON i.id = r."installationId"
     LEFT JOIN "GitHubInstallation" installation ON installation.id::text = a.metadata->>'installationId'
-    WHERE (NULLIF(a.metadata->>'organizationId', '') IS NULL OR a.metadata->>'organizationId' = ${organizationId})
+    WHERE COALESCE(NULLIF(a.metadata->>'organizationId', ''), '') IN ('', ${organizationId})
       AND (r.id IS NULL OR ${allowed})
-  ), scoped AS (
+  ), scoped AS MATERIALIZED (
     SELECT * FROM contextual WHERE "organizationId" = ${organizationId}
       AND ("repositoryId" IS NOT NULL OR NOT "repositoryReferenced")
   )`;
 }
-type AuditRow = { id: string; event: string; actorId: string | null; createdAt: Date; metadata: Prisma.JsonValue;
+// JSON aggregation happens only after pagination. Large event metadata never
+// enters the materialized scope used for counts and filter choices.
+type AuditResult = { rows: AuditRow[]; total: bigint; actions: string[] };
+type AuditRow = { id: string; event: string; actorId: string | null; createdAt: string; metadata: Prisma.JsonValue;
   repositoryId: string | null; repositoryGithubId: string | null; repository: string | null };
 const detailKeys: Record<string, string> = {
   permission: 'Permission', packId: 'Standard', skillKey: 'Review skill', branchRef: 'Branch', prNumber: 'Pull request', sourceSha: 'Commit', revision: 'Version',
@@ -147,20 +160,30 @@ export class AuditLogService {
     if (filters.to) clauses.push(Prisma.sql`"createdAt" < ${filters.to}`);
     const where = Prisma.join(clauses, ' AND ');
     const pageSize = readPageSize(input.pageSize);
-    const [rows, counts, actions] = await this.db.$transaction(async tx => Promise.all([
-      tx.$queryRaw<AuditRow[]>(Prisma.sql`${context} SELECT * FROM scoped WHERE ${where} ORDER BY "createdAt" DESC, id DESC LIMIT ${pageSize} OFFSET ${(filters.page - 1) * pageSize}`),
-      tx.$queryRaw<{ total: bigint }[]>(Prisma.sql`${context} SELECT COUNT(*) AS total FROM scoped WHERE ${where}`),
-      tx.$queryRaw<{ event: string }[]>(Prisma.sql`${context} SELECT DISTINCT event FROM scoped ORDER BY event LIMIT 500`),
-    ]), { isolationLevel: 'RepeatableRead', timeout: 15000 });
+    const [result] = await this.db.$transaction(tx => tx.$queryRaw<AuditResult[]>(Prisma.sql`${context},
+      filtered AS MATERIALIZED (SELECT * FROM scoped WHERE ${where}),
+      page AS (
+        SELECT * FROM filtered ORDER BY "createdAt" DESC, id DESC
+        LIMIT ${pageSize} OFFSET ${(filters.page - 1) * pageSize}
+      )
+      SELECT (SELECT COUNT(*) FROM filtered) AS total,
+        ARRAY(SELECT DISTINCT event FROM scoped ORDER BY event LIMIT 500) AS actions,
+        COALESCE((SELECT jsonb_agg(item ORDER BY item."createdAt" DESC, item.id DESC) FROM (
+          SELECT page.id, page.event, page."createdAt" AT TIME ZONE 'UTC' AS "createdAt",
+            page."repositoryId", page."repositoryGithubId", page.repository, a."actorId", a.metadata
+          FROM page JOIN "AuditEvent" a ON a.id = page.id
+        ) item), '[]'::jsonb) AS rows
+    `), { isolationLevel: 'RepeatableRead', timeout: 15000 });
+    const rows = result.rows;
     const actors = await this.db.identity.findMany({ where: { id: { in: rows.flatMap(row => row.actorId ? [row.actorId] : []) } },
       select: { id: true, displayName: true, githubAccounts: { where: { host: 'github.com' }, select: { login: true }, take: 1 } } });
-    const total = Number(counts[0].total);
+    const total = Number(result.total);
     return { page: filters.page, pageSize, total, hasMore: filters.page * pageSize < total,
       repositories: repositories.map(r => ({ id: r.githubId.toString(), name: r.fullName })).sort((a,b) => a.name.localeCompare(b.name)),
-      actions: actions.map(a => ({ id: a.event, label: auditActionLabel(a.event) })).sort((a,b) => a.label.localeCompare(b.label)),
+      actions: result.actions.map(event => ({ id: event, label: auditActionLabel(event) })).sort((a,b) => a.label.localeCompare(b.label)),
       items: rows.map(row => {
         const actor = actors.find(a => a.id === row.actorId);
-        return { id: row.id, action: row.event, actionLabel: auditActionLabel(row.event), createdAt: row.createdAt,
+        return { id: row.id, action: row.event, actionLabel: auditActionLabel(row.event), createdAt: new Date(row.createdAt),
           actor: { id: row.actorId, name: row.actorId ? (actor?.displayName || actor?.githubAccounts[0]?.login || 'User ' + row.actorId.slice(0,8)) : 'Automated system' },
           repository: row.repositoryGithubId ? { id: row.repositoryGithubId, name: row.repository } : null,
           details: details(row.metadata) };

@@ -9,6 +9,10 @@ type SessionRequest = Request & { preflytSession: AuthenticatedSession }
 export class NotificationsController {
   constructor(@Inject(NotificationsService) private readonly inbox: NotificationsService,
     @Inject(AuthService) private readonly auth: AuthService) {}
+  @Get('summary') @Header('Cache-Control', 'no-store')
+  summary(@Req() req: SessionRequest) { return this.inbox.summary(req.preflytSession) }
+  @Get('preview') @Header('Cache-Control', 'no-store')
+  preview(@Req() req: SessionRequest) { return this.inbox.preview(req.preflytSession) }
   @Get('preferences') @Header('Cache-Control', 'no-store')
   preferences(@Req() req: SessionRequest) { return this.inbox.preferences(req.preflytSession) }
   @Post('preferences') @Header('Cache-Control', 'no-store')

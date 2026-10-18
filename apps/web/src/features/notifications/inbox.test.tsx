@@ -16,6 +16,7 @@ const inbox = vi.hoisted(() => ({
 }))
 vi.mock('./notification-query', () => ({
   useInbox: () => inbox,
+  useNotificationCount: () => inbox.query,
   titles: {
     AI_MODEL_UNAVAILABLE: 'Model requests keep failing',
     AI_REVIEW_BUDGET_REACHED: 'Previous AI review could not start',

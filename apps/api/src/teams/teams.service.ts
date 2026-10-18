@@ -1,3 +1,6 @@
+import { teamContextReader } from './team-context-read.js'
+import { latestRepositoryIds } from '../prisma/latest-repository-rows.js'
+import { Prisma as Sql } from '../generated/prisma/client.js'
 import { readPageSize } from '../pagination.js'
 import {
   nestedSnapshot,
@@ -572,42 +575,29 @@ export class TeamsService {
     if (activeAssignments.length > 100)
       throw new ConflictException("Team assignment limit reached");
     const branchRefs = [...new Set(activeAssignments.map((a) => a.branchRef))];
+    const enabledScopes=scopes.filter(scope=>scope.policyScopeEnabled)
+    const repositoryIds=enabledScopes.map(scope=>scope.repositoryId)
+    const [selectionIds,heads]=await Promise.all([
+      latestRepositoryIds(this.db,'RepositoryStandardsSelection',repositoryIds),
+      repositoryIds.length && branchRefs.length ? this.db.$queryRaw<{id:string}[]>(Sql.sql`
+        SELECT latest.id FROM unnest(ARRAY[${Sql.join(repositoryIds)}]::text[]) repo(id)
+        CROSS JOIN unnest(ARRAY[${Sql.join(branchRefs)}]::text[]) branch(ref)
+        CROSS JOIN LATERAL (SELECT id FROM "GatePolicyRevision" p
+          WHERE p."repositoryId"=repo.id AND p."branchRef"=branch.ref AND p."organizationId"=${s.organizationId!}
+          ORDER BY p.revision DESC LIMIT 1) latest`) : Promise.resolve([]),
+    ])
+    const [selections,policies]=await Promise.all([
+      this.db.repositoryStandardsSelection.findMany({where:{id:{in:selectionIds}}}),
+      this.db.gatePolicyRevision.findMany({where:{id:{in:heads.map(row=>row.id)},organizationId:s.organizationId!}}),
+    ])
+    const selectionsByRepo=new Map(selections.map(selection=>[selection.repositoryId,selection]))
+    const policiesByBranch=new Map(policies.map(policy=>[JSON.stringify([policy.repositoryId,policy.branchRef]),policy]))
+    const verifier=await teamContextReader(this.db,policies.map(policy=>(policy.definition as any)?.teamContext))
     const impact = [];
-    for (const scope of scopes.filter((r) => r.policyScopeEnabled)) {
-      const [heads, selection] = await Promise.all([
-        branchRefs.length
-          ? this.db.gatePolicyRevision.groupBy({
-              by: ["branchRef"],
-              where: {
-                repositoryId: scope.repositoryId,
-                organizationId: s.organizationId!,
-                branchRef: { in: branchRefs },
-              },
-              _max: { revision: true },
-              orderBy: { branchRef: "asc" },
-              take: branchRefs.length,
-            })
-          : Promise.resolve([]),
-        this.db.repositoryStandardsSelection.findFirst({
-          where: { repositoryId: scope.repositoryId },
-          orderBy: { revision: "desc" },
-        }),
-      ]);
-      const policies = heads.length
-        ? await this.db.gatePolicyRevision.findMany({
-            where: {
-              repositoryId: scope.repositoryId,
-              organizationId: s.organizationId!,
-              OR: heads.map((head) => ({
-                branchRef: head.branchRef,
-                revision: head._max.revision!,
-              })),
-            },
-            take: branchRefs.length,
-          })
-        : [];
+    for (const scope of enabledScopes) {
+      const selection=selectionsByRepo.get(scope.repositoryId)
       for (const branchRef of branchRefs.length ? branchRefs : [null]) {
-        const policy = policies.find((p) => p.branchRef === branchRef);
+        const policy = policiesByBranch.get(JSON.stringify([scope.repositoryId,branchRef]));
         const context = (
           policy?.definition as { teamContext?: unknown } | undefined
         )?.teamContext;
@@ -628,7 +618,7 @@ export class TeamsService {
           );
         if (policy)
           try {
-            await verifyTeamContext(this.db, scope.repositoryId, context);
+            await verifyTeamContext(verifier, scope.repositoryId, context);
           } catch (e) {
             if (e instanceof ConflictException) current = false;
             else throw e;
