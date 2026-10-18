@@ -23,7 +23,8 @@ const state = vi.hoisted(() => ({
   matchDenied: false,
   prReview: false,
   unrated: false,
-  ai: 'disabled' as 'disabled' | 'cached' | 'none' | 'failed',
+  ai: 'disabled' as
+    'disabled' | 'cached' | 'none' | 'failed' | 'queued' | 'running',
   fetch: vi.fn(),
 }))
 vi.mock('@/features/workspace/navigation-session', () => ({
@@ -165,9 +166,13 @@ beforeEach(() => {
           state:
             state.ai === 'none'
               ? 'NONE'
-              : state.ai === 'failed'
-                ? 'FAILED'
-                : 'UNAVAILABLE',
+              : state.ai === 'queued'
+                ? 'QUEUED'
+                : state.ai === 'running'
+                  ? 'RUNNING'
+                  : state.ai === 'failed'
+                    ? 'FAILED'
+                    : 'UNAVAILABLE',
           result: null,
         })
       }
@@ -359,7 +364,7 @@ it('shows saved AI guidance as the primary issue, effect and fix without request
     )
   ).toHaveLength(0)
 })
-it('keeps saved guidance visible while AI is unavailable or waiting to run', async () => {
+it('prioritizes AI loading over saved guidance when generation is enabled', async () => {
   state.reportGuidance = true
   state.ai = 'disabled'
   const first = await mount()
@@ -391,9 +396,99 @@ it('keeps saved guidance visible while AI is unavailable or waiting to run', asy
         ).length
     )
     .toBe(1)
+  await expect.element(page.getByText('Preparing AI guidance')).toBeVisible()
+  await expect
+    .element(page.getByText('External rule explanation.'))
+    .not.toBeInTheDocument()
+  expect(
+    document.querySelector(
+      '[role="status"] [data-slot="ai-loading-ring"].animate-spin'
+    )
+  ).not.toBeNull()
+  expect(
+    document.querySelector('[role="status"] .lucide-sparkles')
+  ).not.toBeNull()
+  expect(
+    document.querySelector('[role="status"] .lucide-sparkles.animate-spin')
+  ).toBeNull()
+  await expect
+    .element(
+      page.getByRole('heading', { name: 'Suggested solution', exact: true })
+    )
+    .not.toBeInTheDocument()
+})
+it.each(['queued', 'running'] as const)(
+  'shows only AI progress for %s guidance on duplicate findings',
+  async (ai) => {
+    state.health = true
+    state.ai = ai
+    state.reportGuidance = true
+    await page.viewport(320, 900)
+    await mount()
+    await expect.element(page.getByText('Preparing AI guidance')).toBeVisible()
+    expect(
+      document.querySelectorAll('[data-slot="ai-loading-ring"]')
+    ).toHaveLength(1)
+    expect(
+      document.querySelector(
+        '[data-slot="ai-guidance-skeleton"][aria-hidden="true"]'
+      )
+    ).not.toBeNull()
+    expect(document.querySelector('#finding-problem')).toBeNull()
+    expect(document.querySelector('#finding-solution')).toBeNull()
+    expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(320)
+    for (const dark of [false, true]) {
+      document.documentElement.classList.toggle('dark', dark)
+      document
+        .querySelector('[data-slot="ai-guidance-skeleton"]')
+        ?.scrollIntoView({ block: 'center' })
+      await page.screenshot({
+        path: `__screenshots__/ai-guidance-${ai}-${dark ? 'dark' : 'light'}.png`,
+      })
+    }
+    document.documentElement.classList.remove('dark')
+  }
+)
+it('replaces the AI skeleton with the completed recommendation', async () => {
+  state.ai = 'running'
+  state.reportGuidance = true
+  await mount()
+  await expect.element(page.getByText('Preparing AI guidance')).toBeVisible()
+  state.ai = 'cached'
+  await expect
+    .element(page.getByText('Bind the input as a query parameter.'))
+    .toBeVisible()
+  expect(
+    document.querySelector('[data-slot="ai-guidance-skeleton"]')
+  ).toBeNull()
+  await expect
+    .element(page.getByText('External rule explanation.'))
+    .not.toBeInTheDocument()
+})
+it('falls back to saved guidance and offers retry when AI fails', async () => {
+  state.reportGuidance = true
+  state.ai = 'failed'
+  await mount()
+  await expect
+    .element(
+      page.getByText(
+        'AI recommendations are unavailable. Showing saved guidance.'
+      )
+    )
+    .toBeVisible()
   await expect
     .element(page.getByText('External rule explanation.'))
     .toBeVisible()
+  await page.getByRole('button', { name: 'Retry AI guidance' }).click()
+  await expect
+    .poll(
+      () =>
+        state.fetch.mock.calls.filter(
+          ([url, init]) =>
+            url.includes('/finding-guidance') && init?.method === 'POST'
+        ).length
+    )
+    .toBe(1)
 })
 it('explains a missing source location without displaying fabricated code', async () => {
   state.noLocation = true

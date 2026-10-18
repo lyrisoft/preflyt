@@ -1474,8 +1474,10 @@ for (const pendingState of ['RUNNING', 'FAILED']) {
     await expect
       .element(page.getByText('Retained findings in the analyzed scope'))
       .toBeVisible()
-    await expect
-      .element(page.getByRole('button', { name: 'Reassess', exact: true }))
-      [pendingState === 'FAILED' ? 'toBeEnabled' : 'toBeDisabled']()
+    const reassess = expect.element(
+      page.getByRole('button', { name: 'Reassess', exact: true })
+    )
+    if (pendingState === 'FAILED') await reassess.toBeEnabled()
+    else await reassess.toBeDisabled()
   })
 }

@@ -5,17 +5,29 @@ import {
   Sparkles,
   Wrench,
 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
+import { Skeleton } from '@/components/ui/skeleton'
 import { SurfaceIcon } from '@/components/surface-icon'
 import { findingGuidanceText } from './finding-guidance-text'
 import type { Finding } from './finding-types'
 
 /** Saved explanations sit beside their source; generic advice never claims a diagnosed cause. */
-export function FindingGuidance({ finding }: { finding: Finding }) {
+export function FindingGuidance({
+  finding,
+  aiState,
+  onRetryAi,
+}: {
+  finding: Finding
+  aiState?: string
+  onRetryAi?: () => void
+}) {
+  const preparing = aiState === 'QUEUED' || aiState === 'RUNNING'
+
   const guide = finding.guidance
   const {
     title,
@@ -30,6 +42,66 @@ export function FindingGuidance({ finding }: { finding: Finding }) {
       ? `Lines ${finding.line}–${finding.endLine}`
       : `Line ${finding.line}`
     : null
+  if (preparing || aiState === 'LOADING') {
+    return (
+      <section
+        aria-label='Problem and solution'
+        className='min-w-0 border-t bg-muted/10 p-4'
+      >
+        <div
+          role='status'
+          aria-live='polite'
+          className='flex items-center gap-3'
+        >
+          <span
+            aria-hidden='true'
+            className='relative inline-flex size-10 shrink-0 items-center justify-center'
+          >
+            <SurfaceIcon
+              icon={Sparkles}
+              tone='violet'
+              className='rounded-full border-transparent'
+            />
+            <span
+              data-slot='ai-loading-ring'
+              className='absolute inset-0 animate-spin rounded-full border-2 border-violet-500/20 border-t-violet-500 motion-reduce:animate-none dark:border-violet-400/20 dark:border-t-violet-400'
+            />
+          </span>
+          <div className='min-w-0 space-y-1'>
+            <h2 className='text-sm font-semibold'>
+              {preparing ? 'Preparing AI guidance' : 'Loading guidance'}
+            </h2>
+            <p className='text-xs leading-relaxed text-muted-foreground'>
+              {preparing
+                ? 'The explanation and suggested solution will appear here when ready.'
+                : 'Checking for recommendations for this finding.'}
+            </p>
+          </div>
+        </div>
+        <div
+          aria-hidden='true'
+          data-slot='ai-guidance-skeleton'
+          className='mt-5 space-y-5'
+        >
+          <div className='space-y-3'>
+            <Skeleton className='h-3.5 w-24 motion-reduce:animate-none' />
+            <div className='space-y-2'>
+              <Skeleton className='h-3 w-full motion-reduce:animate-none' />
+              <Skeleton className='h-3 w-5/6 motion-reduce:animate-none' />
+              <Skeleton className='h-3 w-2/3 motion-reduce:animate-none' />
+            </div>
+          </div>
+          <div className='space-y-3 border-t pt-5'>
+            <Skeleton className='h-3.5 w-36 motion-reduce:animate-none' />
+            <div className='space-y-2'>
+              <Skeleton className='h-3 w-full motion-reduce:animate-none' />
+              <Skeleton className='h-3 w-3/4 motion-reduce:animate-none' />
+            </div>
+          </div>
+        </div>
+      </section>
+    )
+  }
   return (
     <Collapsible defaultOpen asChild>
       <section
@@ -59,6 +131,22 @@ export function FindingGuidance({ finding }: { finding: Finding }) {
           </CollapsibleTrigger>
         </h2>
         <CollapsibleContent className='space-y-4 px-4 pb-4 text-sm leading-relaxed'>
+          {aiState === 'FAILED' && (
+            <div
+              role='status'
+              className='flex flex-wrap items-center justify-between gap-2'
+            >
+              <span>
+                AI recommendations are unavailable. Showing saved guidance.
+              </span>
+              {onRetryAi && (
+                <Button variant='outline' size='sm' onClick={onRetryAi}>
+                  Retry AI guidance
+                </Button>
+              )}
+            </div>
+          )}
+
           <section aria-labelledby='finding-problem' className='space-y-2'>
             <h3
               id='finding-problem'
