@@ -25,11 +25,11 @@ def source_tools(agent, is_root=None):
                 'repeat_request', 'list_sitemap', 'view_sitemap_entry', 'scope_rules',
                 'list_mcps', 'search_mcp_tools', 'get_mcp_tool_schema', 'describe_mcp', 'call_mcp'}
     root_tools = {'create_agent', 'view_agent_graph', 'wait_for_agents', 'send_message_to_agent',
-                  'stop_agent', 'record_coverage', 'update_coverage', 'list_coverage',
-                  'list_reports', 'get_report', 'list_notes', 'get_note', 'finish_scan'}
+                  'stop_agent', 'list_source_issues', 'record_coverage', 'update_coverage', 'list_coverage',
+                  'list_reports', 'get_report', 'list_notes', 'get_note', 'finish_scan', 'save_payment_risk_report'}
     specialist_tools = {'create_vulnerability_report', 'update_vulnerability_report',
                         'list_reports', 'get_report', 'record_coverage', 'update_coverage',
-                        'list_coverage', 'agent_finish', 'list_source_files', 'read_source_file', 'search_source', 'report_source_issue'}
+                        'list_coverage', 'agent_finish', 'list_source_issues', 'list_source_files', 'read_source_file', 'search_source', 'report_source_issue'}
     tools = []
     for original in agent.tools:
         name = getattr(original, 'name', '')
@@ -84,21 +84,37 @@ def install(engine, factory=None, inspection=None):
         from pathlib import Path
         from strix.agents.prompt import render_scope_prompt
         review = (Path(__file__).with_name('review.md')).read_text()
+        payment_profile = os.environ.get('PREFLYT_STRIX_REVIEW_PROFILE') in ['payment-risk-v1','general-and-payment-risk-v1']
+        if payment_profile:
+            review += '\n\n' + Path(__file__).with_name('payment-risk.md').read_text()
+            if os.environ.get('PREFLYT_STRIX_REVIEW_PROFILE') == 'general-and-payment-risk-v1':
+                review += '\nRun general security and payment risk analysis together in this single coordinated review. Include general authentication, authorization, injection, data exposure and input-handling flows, not only payment flows. Both scopes share the same source snapshot, read evidence and source-issue ledger. Call list_source_issues before filing; reuse an existing issue ID when the same defect is already saved. Reconcile overlapping concerns into one finding, not a copy for each scope. The structured report must include every saved issue, including general security concerns under application_security or another applicable domain.'
+            else:
+                review += '\nPrioritize payment-related paths and their security dependencies. Record unrelated general-security areas as follow-up rather than expanding this payment-only scope.'
         build = factory.build_strix_agent
         def bounded_build(**kwargs):
             is_root = kwargs.get('is_root', False)
             kwargs['instructions_override'] = source_prompt(is_root, review, instructions,
                 render_scope_prompt(kwargs.get('system_prompt_context')), children)
             agent=source_tools(build(**kwargs), is_root)
+            if payment_profile:
+                agent.tools=[tool for tool in agent.tools if tool.name not in ['create_vulnerability_report','update_vulnerability_report']]
             if inspection is not None:
                 import json
                 for tool in agent.tools:
-                    if tool.name not in ['record_coverage','update_coverage','create_vulnerability_report','update_vulnerability_report']:
+                    if tool.name not in ['record_coverage','update_coverage','create_vulnerability_report','update_vulnerability_report','finish_scan']:
                         continue
                     invoke=tool.on_invoke_tool
                     async def guarded(ctx, arguments, invoke=invoke, name=tool.name):
                         try:values=json.loads(arguments)
                         except (ValueError,TypeError):return json.dumps({'success':False,'error':'Use valid JSON tool arguments.'})
+                        if name == 'finish_scan' and payment_profile:
+                            from payment_risk import save_report
+                            path=inspection.audit_path.with_name('payment-risk-report.json')
+                            if not path.is_file():
+                                return json.dumps({'success':False,'error':'Save the structured payment risk report before finishing. Record unfinished areas as needs_follow_up.'})
+                            checked=save_report(inspection,json.loads(path.read_text()))
+                            if not checked['success']:return json.dumps(checked)
                         error=inspection.guard(ctx.context.get('agent_id'),name,values)
                         if error:return json.dumps({'success':False,'error':error})
                         return await invoke(ctx,arguments)

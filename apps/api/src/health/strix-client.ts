@@ -117,6 +117,7 @@ export class StrixClient {
     model: string;
     apiType: string;
     modelToken: string;
+    reviewProfile?: 'general' | 'payment-risk-v1' | 'general-and-payment-risk-v1';
     maxModelCalls?: number;
     maxSpecialists?: 1 | 2;
     callbackOrigin: string;

@@ -1,0 +1,8 @@
+{
+  "type": "feature",
+  "title": "Payment Risk Review",
+  "description": "Select general security review, Payment Risk Review or both in Assessment options. Both reviews share one source snapshot and a findings list. The payment profile produces eight report sections, recorded outcomes for six payment scenarios, calculated risk scores and proposed regression tests. Source-backed issues remain Needs review until independently verified; this beta profile does not execute live penetration tests.",
+  "upgrade": "Recreate the API, worker and web services together. When using the optional local Strix controller, restart it with the updated source-review tools before selecting Payment Risk Review. No database migration or new setting is required for this profile.",
+  "migrations": [],
+  "configuration": []
+}

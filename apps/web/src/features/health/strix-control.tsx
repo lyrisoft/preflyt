@@ -7,6 +7,8 @@ import {
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuTrigger,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
 import { StatusBadge } from '@/components/status-badge'
 import { healthRequest } from './health-api'
@@ -18,7 +20,13 @@ export function StrixControl({
   checked,
   onCheckedChange,
   children,
+  reviewProfile = 'general',
+  onReviewProfileChange,
 }: {
+  reviewProfile?: 'general' | 'payment-risk-v1' | 'general-and-payment-risk-v1'
+  onReviewProfileChange?: (
+    profile: 'general' | 'payment-risk-v1' | 'general-and-payment-risk-v1'
+  ) => void
   repositoryId: string
   scopeKey?: string
   disabled: boolean
@@ -30,10 +38,11 @@ export function StrixControl({
   const capability = useQuery({
     queryKey: ['health-strix', repositoryId, scopeKey],
     queryFn: ({ signal }) =>
-      healthRequest<{ available: boolean; reason: string }>(
-        `repositories/${repositoryId}/health/strix`,
-        signal
-      ),
+      healthRequest<{
+        available: boolean
+        reason: string
+        reviewProfiles?: string[]
+      }>(`repositories/${repositoryId}/health/strix`, signal),
     retry: false,
     staleTime: 30000,
   })
@@ -81,6 +90,69 @@ export function StrixControl({
             Include AI security review
             <StatusBadge tone='warning'>beta</StatusBadge>
           </DropdownMenuCheckboxItem>
+          {onReviewProfileChange && capability.data?.available && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel>AI reviews</DropdownMenuLabel>
+              <DropdownMenuCheckboxItem
+                checked={checked && reviewProfile !== 'payment-risk-v1'}
+                disabled={
+                  checked &&
+                  reviewProfile === 'payment-risk-v1' &&
+                  !capability.data?.reviewProfiles?.includes(
+                    'general-and-payment-risk-v1'
+                  )
+                }
+                onCheckedChange={(value) => {
+                  if (value) {
+                    onReviewProfileChange(
+                      checked && reviewProfile === 'payment-risk-v1'
+                        ? 'general-and-payment-risk-v1'
+                        : 'general'
+                    )
+                    onCheckedChange(true)
+                  } else if (reviewProfile === 'general-and-payment-risk-v1')
+                    onReviewProfileChange('payment-risk-v1')
+                  else onCheckedChange(false)
+                }}
+                onSelect={(event) => event.preventDefault()}
+              >
+                General security review
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={checked && reviewProfile !== 'general'}
+                disabled={
+                  !capability.data?.reviewProfiles?.includes(
+                    'payment-risk-v1'
+                  ) ||
+                  (checked &&
+                    reviewProfile === 'general' &&
+                    !capability.data?.reviewProfiles?.includes(
+                      'general-and-payment-risk-v1'
+                    ))
+                }
+                onCheckedChange={(value) => {
+                  if (value) {
+                    onReviewProfileChange(
+                      checked && reviewProfile === 'general'
+                        ? 'general-and-payment-risk-v1'
+                        : 'payment-risk-v1'
+                    )
+                    onCheckedChange(true)
+                  } else if (reviewProfile === 'general-and-payment-risk-v1')
+                    onReviewProfileChange('general')
+                  else onCheckedChange(false)
+                }}
+                onSelect={(event) => event.preventDefault()}
+              >
+                Payment Risk Review
+              </DropdownMenuCheckboxItem>
+              <p className='px-2 ps-8 pb-2 text-xs text-muted-foreground'>
+                Select either or both. Both use one source snapshot and one
+                findings list.
+              </p>
+            </>
+          )}
           <p
             id={helpId}
             className='px-2 ps-8 pb-2 text-xs leading-relaxed text-muted-foreground'
