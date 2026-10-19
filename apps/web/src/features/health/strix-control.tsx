@@ -8,6 +8,7 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { StatusBadge } from '@/components/status-badge'
 import { healthRequest } from './health-api'
 
 export function StrixControl({
@@ -73,10 +74,12 @@ export function StrixControl({
             disabled={!capability.data?.available}
             onCheckedChange={(value) => onCheckedChange(value === true)}
             onSelect={(event) => event.preventDefault()}
+            aria-label='Include AI security review'
             aria-describedby={helpId}
             className='py-2'
           >
             Include AI security review
+            <StatusBadge tone='warning'>beta</StatusBadge>
           </DropdownMenuCheckboxItem>
           <p
             id={helpId}

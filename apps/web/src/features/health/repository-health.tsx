@@ -369,8 +369,9 @@ export function RepositoryHealth({
             <SurfaceIcon icon={Sparkles} tone='violet' />
           )}
           <div className='min-w-0 space-y-1'>
-            <p className='text-sm font-medium'>
-              AI security review: {healthLabel(aiReview.state)}
+            <p className='flex flex-wrap items-center gap-2 text-sm font-medium'>
+              <span>AI security review: {healthLabel(aiReview.state)}</span>
+              <StatusBadge tone='warning'>beta</StatusBadge>
             </p>
             <p className='text-xs text-muted-foreground'>
               {aiReview.state === 'SKIPPED'

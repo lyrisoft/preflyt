@@ -115,3 +115,14 @@ it('supports keyboard selection and returns focus to the options button', async 
   await userEvent.keyboard('{Escape}')
   await expect.element(options).toHaveFocus()
 })
+
+it('marks AI security review as beta using the shared badge without changing selection', async () => {
+  await show(true)
+  await page.getByRole('button', { name: 'Assessment options' }).click()
+  const option = page.getByRole('menuitemcheckbox', {
+    name: 'Include AI security review',
+    exact: true,
+  })
+  await expect.element(option.getByText('beta', { exact: true })).toBeVisible()
+  await expect.element(option).toHaveAttribute('aria-checked', 'false')
+})
