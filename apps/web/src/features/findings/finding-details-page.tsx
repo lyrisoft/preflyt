@@ -10,10 +10,14 @@ import { Main } from '@/components/layout/main'
 import { PageHeader } from '@/components/page-header'
 import { PageHelpDrawer } from '@/components/page-help-drawer'
 import { StatusBadge } from '@/components/status-badge'
-import type { HealthData } from '@/features/health/health-api'
+import type {
+  HealthAssessment,
+  HealthFinding,
+} from '@/features/health/health-api'
 import { HotspotReview } from '@/features/health/hotspot-review'
 import { useNavigationSession } from '@/features/workspace/navigation-session'
 import { DuplicateCodeComparison } from './duplicate-code-comparison'
+import { FindingAgentActions } from './finding-agent-actions'
 import { useFindingAiGuidance } from './finding-ai-api'
 import { findingRequest, useFindingSource } from './finding-api'
 import {
@@ -44,7 +48,7 @@ export function FindingDetailsPage({
   )
   if (search.origin === 'ai') params.set('origin', 'ai')
   const path = health
-    ? `github/repositories/${search.repository}/health?assessment=${search.health}`
+    ? `github/repositories/${search.repository}/health/${search.health}/findings/${findingId}`
     : `findings/${findingId}?${params}`
   const sourcePath = health
     ? `github/repositories/${search.repository}/health/${search.health}/findings/${findingId}/source`
@@ -67,7 +71,13 @@ export function FindingDetailsPage({
       signal,
     }): Promise<{ finding: Finding; canManage: boolean }> => {
       if (!health) return findingRequest(path, signal)
-      const data = await findingRequest<HealthData>(path, signal)
+      const data = await findingRequest<{
+        repository: string
+        assessment: Pick<
+          HealthAssessment,
+          'id' | 'sourceSha' | 'createdAt' | 'finishedAt'
+        > & { report: { findings: HealthFinding[] } }
+      }>(path, signal)
       const row = data.assessment
       const finding = row?.report?.findings.find(
         (f) => f.fingerprint === findingId
@@ -87,18 +97,23 @@ export function FindingDetailsPage({
           assessmentId: row.id,
           observedAt: row.finishedAt ?? row.createdAt,
           severity: finding.severity,
-          status: 'Reported',
+          status:
+            finding.evidence === 'AI_REPORTED' ? 'Needs review' : 'Reported',
           path: finding.path,
           line: finding.line,
           endLine: finding.endLine,
           ruleId: finding.ruleId,
           evidence: [finding.evidence],
-          verification: 'Verified analyzer receipt',
+          verification:
+            finding.evidence === 'AI_REPORTED'
+              ? 'Suggestions only'
+              : 'Verified analyzer receipt',
           occurrences: 1,
           category: finding.category,
           guidance: finding.guidance,
           referenceGuidance: finding.referenceGuidance,
           reportGuidance: finding.reportGuidance,
+          aiReview: finding.aiReview,
           relatedLocations: finding.relatedLocations,
         },
       }
@@ -107,7 +122,7 @@ export function FindingDetailsPage({
   const data = result.isError || session.isError ? undefined : result.data
   const finding = data?.finding
   const ai = useFindingAiGuidance(
-    finding && finding.origin !== 'ai'
+    finding && finding.origin !== 'ai' && !finding.aiReview
       ? {
           origin: health ? 'health' : 'ci',
           repositoryId: finding.repositoryId,
@@ -216,7 +231,8 @@ export function FindingDetailsPage({
                 </StatusBadge>
               )}
               <StatusBadge tone='neutral'>{finding.status}</StatusBadge>
-              {finding.origin === 'ai' && (
+              {(finding.origin === 'ai' ||
+                finding.evidence?.includes('AI_REPORTED')) && (
                 <StatusBadge tone='info'>Suggestions only</StatusBadge>
               )}
               {health && (
@@ -225,6 +241,13 @@ export function FindingDetailsPage({
             </div>
           )}
         </PageHeader>
+        {finding && (
+          <FindingAgentActions
+            key={`${path}:${session.data?.identityId}:${session.data?.organizationId}`}
+            finding={finding}
+            origin={health ? 'health' : (finding.origin ?? 'ci')}
+          />
+        )}
         {!valid || session.isError || result.isError ? (
           <Card>
             <CardHeader>

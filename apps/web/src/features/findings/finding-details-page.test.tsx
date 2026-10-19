@@ -13,6 +13,8 @@ const state = vi.hoisted(() => ({
   noLocation: false,
   retryable: false,
   health: false,
+  strix: false,
+  vaptAnalysis: false,
   healthBack: false,
   hotspot: false,
   guidance: false,
@@ -107,6 +109,8 @@ beforeEach(() => {
     noLocation: false,
     retryable: false,
     health: false,
+    strix: false,
+    vaptAnalysis: false,
     healthBack: false,
     hotspot: false,
     guidance: false,
@@ -122,6 +126,9 @@ beforeEach(() => {
   state.fetch
     .mockReset()
     .mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url.includes('/companions')) return Response.json([])
+      if (url.includes('/finding-agents'))
+        return Response.json({ canConnect: false, grants: [], evidence: [] })
       if (state.matchDenied && url.includes('/source?location='))
         return Response.json({ message: 'Access revoked' }, { status: 403 })
       if (state.fail)
@@ -222,7 +229,7 @@ beforeEach(() => {
         })
       if (url.includes('/assignees'))
         return Response.json([{ id: 'developer', label: 'developer' }])
-      if (url.includes('/health?'))
+      if (url.includes('/health/') && url.includes('/findings/'))
         return Response.json({
           repository: 'org/repo',
           assessment: {
@@ -232,6 +239,23 @@ beforeEach(() => {
             report: {
               findings: [
                 {
+                  aiReview: state.vaptAnalysis
+                    ? {
+                        version: 1,
+                        status: 'NEEDS_REVIEW',
+                        reasoning:
+                          'The caller-controlled record identifier reaches a tenant-unscoped lookup.',
+                        impact: 'Another tenant record could be exposed.',
+                        remediation:
+                          'Scope the lookup to the authenticated tenant.',
+                        preconditions:
+                          'Requires a valid session and a foreign record identifier.',
+                        verificationSteps:
+                          'Verify tenant A cannot read tenant B records.',
+                        counterevidence:
+                          'Route-level authentication is present.',
+                      }
+                    : undefined,
                   reportGuidance: finding().reportGuidance,
                   guidance: state.guidance
                     ? {
@@ -263,7 +287,7 @@ beforeEach(() => {
                   category: state.hotspot ? 'hotspot' : 'duplication',
                   ruleId: 'sql-injection',
                   checkId: 'security.sast',
-                  evidence: 'e'.repeat(64),
+                  evidence: state.strix ? 'AI_REPORTED' : 'e'.repeat(64),
                 },
               ],
             },
@@ -905,4 +929,46 @@ it('shows a matching-source permission error without displaying an unverified ex
     .element(page.getByRole('button', { name: 'Retry source', exact: true }))
     .toBeVisible()
   expect(document.querySelector('.cm-editor')).toBeNull()
+})
+
+it('labels Strix Health findings as AI suggestions without claiming verified evidence', async () => {
+  state.health = true
+  state.strix = true
+  await mount()
+  await expect
+    .element(page.getByText('Suggestions only', { exact: true }).first())
+    .toBeVisible()
+  await expect
+    .element(page.getByText('Needs review', { exact: true }))
+    .toBeVisible()
+})
+
+it('shows VAPT source code, highlighted lines and the complete saved analysis as Needs review', async () => {
+  state.health = true
+  state.strix = true
+  state.vaptAnalysis = true
+  await mount()
+  await expect
+    .element(page.getByText('Needs review', { exact: true }))
+    .toBeVisible()
+  await expect
+    .element(
+      page.getByText(
+        'The caller-controlled record identifier reaches a tenant-unscoped lookup.'
+      )
+    )
+    .toBeVisible()
+  await expect
+    .element(page.getByText('Scope the lookup to the authenticated tenant.'))
+    .toBeVisible()
+  await expect
+    .element(page.getByText('Verify tenant A cannot read tenant B records.'))
+    .toBeVisible()
+  await expect
+    .element(page.getByText('Route-level authentication is present.'))
+    .toBeVisible()
+  expect(document.querySelector('.cm-editor')?.textContent).toContain(
+    'database.execute(query)'
+  )
+  expect(document.querySelector('[data-reported-line=true]')).not.toBeNull()
 })
