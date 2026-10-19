@@ -1,0 +1,8 @@
+{
+  "type": "fix",
+  "title": "Simpler health summaries and payment reports",
+  "description": "Repository health keeps five summary cards, including verified test coverage, above Findings and Assessment history. The Assessment details section is removed. A separate Payment Risk Review tab appears only for saved payment reviews and opens its report directly. Finding filters are preserved when switching tabs.",
+  "upgrade": "Rebuild the web image. No database migration or configuration change is required.",
+  "migrations": [],
+  "configuration": []
+}

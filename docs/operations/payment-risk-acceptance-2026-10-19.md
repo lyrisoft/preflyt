@@ -57,16 +57,24 @@ Scoped implementation commits: `ba9cc62`, `7fcaed4`, `6394867`.
 
 ## Repository results usability follow-up
 
-- Consolidated the main results into one full-width Findings table. Reviewed
-  areas are coverage evidence, not additional vulnerability rows; their table,
-  payment report, test coverage and policy context are grouped under collapsed
-  Assessment details above Findings. Findings and Assessment history remain
-  separate tabs.
-- Labeled the overall table count as all categories and replaced the internal
-  AI check identifier with a readable source label. The Security metric and
-  chart still count Security only; the combined table includes all categories.
-- All 71 affected browser tests passed, including 320px layout, both themes,
-  disclosure behavior, exact report links, pagination and report loading/errors.
-- Web typecheck, affected lint and Compose web build passed. Verified the saved
-  maiguard-api report in the rebuilt browser UI and all ten services healthy.
-- No new paid scan was needed for this presentation change. No workflow ran.
+- One full-width Findings table is the default working view. Assessment history
+  stays separate. Removed the competing Assessment details section and tab.
+- Payment Risk Review has a separate tab only when a saved payment-risk report
+  exists for the selected assessment. Selecting it loads the report directly.
+  General AI reviews and repositories without payment reviews do not show it.
+- Security, Reliability, Maintainability, Duplication and Test coverage remain
+  visible summary cards. Coverage uses verified CI evidence; missing reports
+  show a dash and Coverage not received. Updating/failed/earlier-commit coverage
+  states and workflow links remain available.
+- Overall table counts identify the all-category scope; Security counts remain
+  Security only. AI findings use a readable source label.
+- Completed-review notifications now link to Findings for the exact repository
+  and saved AI review. Failed reviews link to the saved failure details. Model
+  configuration alerts retain their AI settings destinations.
+- Browser regressions cover preserved filters, non-payment assessments,
+  selection fallback, report loading/errors, both themes and 320px layout.
+  All 83 affected browser cases passed across the focused suites, including
+  summary alignment. Web typecheck, affected lint and Compose web build passed.
+  Verified the live notification-to-findings-to-source-details flow and direct
+  eight-section payment report. All ten local services remain healthy.
+  No new paid scan or GitHub workflow ran for this presentation change.

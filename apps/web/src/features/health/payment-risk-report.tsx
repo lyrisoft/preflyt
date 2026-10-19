@@ -65,12 +65,14 @@ export function PaymentRiskReport({
   repositoryId,
   assessmentId,
   scopeKey,
+  embedded = false,
 }: {
   repositoryId: string
   assessmentId: string
   scopeKey: string
+  embedded?: boolean
 }) {
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(embedded)
   const query = useQuery({
     queryKey: ['payment-risk-report', scopeKey, repositoryId, assessmentId],
     queryFn: ({ signal }) =>
@@ -165,14 +167,16 @@ export function PaymentRiskReport({
             </p>
           </div>
         </div>
-        <Button
-          variant='outline'
-          size='sm'
-          aria-expanded={open}
-          onClick={() => setOpen(!open)}
-        >
-          {open ? 'Hide report' : 'Open report'}
-        </Button>
+        {!embedded && (
+          <Button
+            variant='outline'
+            size='sm'
+            aria-expanded={open}
+            onClick={() => setOpen(!open)}
+          >
+            {open ? 'Hide report' : 'Open report'}
+          </Button>
+        )}
       </div>
       {open && (
         <div aria-live='polite'>
