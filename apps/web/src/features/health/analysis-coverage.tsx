@@ -1,5 +1,11 @@
 import { useState } from 'react'
-import { ChevronLeft, ChevronRight, RefreshCw, ScanLine } from 'lucide-react'
+import {
+  ChevronLeft,
+  ChevronRight,
+  RefreshCw,
+  ScanLine,
+  Sparkles,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -8,6 +14,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { AiLoadingIcon } from '@/components/ai-loading-icon'
 import { ResultTimestamp } from '@/components/result-timestamp'
 import { StatusBadge } from '@/components/status-badge'
 import { SurfaceIcon } from '@/components/surface-icon'
@@ -26,6 +33,7 @@ const pageSize = 4
 type Analysis = HealthReport['analyses'][number]
 
 function categoryForAnalysis(id: string): HealthCategory | null {
+  if (id === 'security.strix') return null
   if (id.startsWith('security.') || id === 'iac.policy') return 'security'
   if (id === 'quality.reliability') return 'reliability'
   if (id === 'quality.maintainability') return 'maintainability'
@@ -86,6 +94,9 @@ export function AnalysisCoverage({
   finishedAt,
   onRunCategory,
   runPending = false,
+  aiReview,
+  onRunAiSecurity,
+  aiRunPending = false,
 }: {
   report: HealthReport
   assessmentId: string
@@ -95,7 +106,14 @@ export function AnalysisCoverage({
   finishedAt?: string | null
   onRunCategory?: (category: HealthCategory) => void
   runPending?: boolean
+  aiReview?: HealthData['strixReview']
+  onRunAiSecurity?: () => void
+  aiRunPending?: boolean
 }) {
+  const aiActive =
+    aiRunPending ||
+    (!!aiReview && ['QUEUED', 'RUNNING'].includes(aiReview.state))
+  const aiState = aiReview?.state === 'QUEUED' ? 'Queued' : 'Running'
   const [pagination, setPagination] = useState({ assessmentId: '', page: 1 })
   const pages = Math.max(1, Math.ceil(report.analyses.length / pageSize))
   const currentPage = Math.min(
@@ -131,7 +149,9 @@ export function AnalysisCoverage({
               <dt className='text-muted-foreground'>Findings retained</dt>
               <dd className='mt-0.5 font-semibold tabular-nums'>
                 {report.mode === 'EXECUTED'
-                  ? report.findings.length.toLocaleString()
+                  ? (
+                      report.findingSummary?.total ?? report.findings.length
+                    ).toLocaleString()
                   : '—'}
               </dd>
             </div>
@@ -172,22 +192,28 @@ export function AnalysisCoverage({
                           {analysis.title}
                         </span>
                         <StatusBadge tone={healthTone(analysis.state)}>
-                          {healthLabel(analysis.state)}
+                          {analysis.id === 'security.strix' && aiActive
+                            ? aiState
+                            : healthLabel(analysis.state)}
                         </StatusBadge>
                       </span>
                       <span className='mt-2 line-clamp-2 text-xs leading-relaxed text-muted-foreground'>
-                        {outcomeSummary(analysis, report)}
+                        {analysis.id === 'security.strix' && aiActive
+                          ? 'AI security review is in progress.'
+                          : outcomeSummary(analysis, report)}
                       </span>
-                      <span className='mt-2 block text-xs text-muted-foreground'>
-                        Report completed{' '}
-                        <ResultTimestamp
-                          value={
-                            report.mode === 'EXECUTED' && analysis.reportHash
-                              ? finishedAt
-                              : null
-                          }
-                        />
-                      </span>
+                      {!(analysis.id === 'security.strix' && aiActive) && (
+                        <span className='mt-2 block text-xs text-muted-foreground'>
+                          Report completed{' '}
+                          <ResultTimestamp
+                            value={
+                              report.mode === 'EXECUTED' && analysis.reportHash
+                                ? finishedAt
+                                : null
+                            }
+                          />
+                        </span>
+                      )}
                       <span className='mt-auto inline-flex items-center gap-1 pt-3 text-xs font-medium text-foreground'>
                         Scope and evidence
                         <ChevronRight
@@ -270,9 +296,31 @@ export function AnalysisCoverage({
                         </div>
                       )}
                       <p>
-                        {healthReasons[analysis.reason] ??
-                          analysis.reason.replace(/_/g, ' ').toLowerCase()}
+                        {analysis.id === 'security.strix' && aiActive
+                          ? 'Reviewing repository source with the configured model.'
+                          : (healthReasons[analysis.reason] ??
+                            analysis.reason.replace(/_/g, ' ').toLowerCase())}
                       </p>
+                      {analysis.id === 'security.strix' && onRunAiSecurity && (
+                        <Button
+                          size='sm'
+                          variant='outline'
+                          disabled={runPending || aiActive}
+                          aria-busy={aiActive}
+                          onClick={onRunAiSecurity}
+                        >
+                          {aiActive ? (
+                            <AiLoadingIcon compact />
+                          ) : (
+                            <Sparkles aria-hidden='true' />
+                          )}
+                          {aiActive
+                            ? aiReview?.state === 'QUEUED'
+                              ? 'AI review queued…'
+                              : 'Reviewing security…'
+                            : 'Run AI security review'}
+                        </Button>
+                      )}
                       {(analysis.tool ||
                         analysis.reportHash ||
                         analysis.findingsRetained !== undefined) && (

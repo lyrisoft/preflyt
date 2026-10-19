@@ -27,7 +27,10 @@ import { PageHeader } from '@/components/page-header'
 import { PageHelpDrawer } from '@/components/page-help-drawer'
 import { useHealth } from '../health/health-api'
 import { healthHelp } from '../health/health-help-content'
-import { RepositoryHealth } from '../health/repository-health'
+import {
+  RepositoryHealth,
+  type HealthAiSecurityChoice,
+} from '../health/repository-health'
 import { canPerform, type ScopedSession } from '../workspace/scoped-access'
 import { BranchPicker } from './branch-picker'
 import { EvidenceDialog } from './evidence-dialog'
@@ -214,6 +217,8 @@ export function RepositoryProfilePage() {
     branch: string
   } | null>(null)
   const [filter, setFilter] = useState<ControlFilter>('all')
+  const [healthAiChoice, setHealthAiChoice] =
+    useState<HealthAiSecurityChoice | null>(null)
   const profileQuery = useQuery({
     queryKey: ['repository-profile', repositoryId],
     retry: false,
@@ -563,6 +568,10 @@ export function RepositoryProfilePage() {
                   defaultBranch={result.repository.defaultBranch}
                   assessmentId={health}
                   selectedBranch={healthBranch}
+                  aiSecurityOption={{
+                    choice: healthAiChoice,
+                    onChange: setHealthAiChoice,
+                  }}
                   onAssessmentQueued={(assessment) =>
                     navigate({
                       search: (old) => ({

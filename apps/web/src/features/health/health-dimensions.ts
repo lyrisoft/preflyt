@@ -11,9 +11,15 @@ export function healthDimensionValues(
       (a) =>
         ['PASS', 'FAIL'].includes(a.state) && a.findingsRetained !== undefined
     )
-    const found = report.findings.filter(
-      (f) => f.category === category && ids.includes(f.checkId)
-    ).length
+    const found = report.findingSummary
+      ? report.findingSummary.groups
+          .filter(
+            (g) => g.category === category && ids.includes(g.checkId ?? '')
+          )
+          .reduce((sum, g) => sum + g.count, 0)
+      : report.findings.filter(
+          (f) => f.category === category && ids.includes(f.checkId)
+        ).length
     if (!validated.length)
       return found ? `≥${found.toLocaleString()}` : 'Unavailable'
     const incomplete =

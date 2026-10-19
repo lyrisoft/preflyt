@@ -232,6 +232,7 @@ test('generated private routing handles actual deep links but not unknown public
     '/apps',
     '/repositories/42',
     '/findings/example',
+    '/review-areas/11111111-1111-4111-8111-111111111111/0',
     '/contributors/example',
     '/super-admin/login',
     '/settings/appearance',

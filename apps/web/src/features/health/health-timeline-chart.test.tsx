@@ -1,96 +1,65 @@
 import '@/styles/index.css'
 import { expect, it, vi } from 'vitest'
 import { render } from 'vitest-browser-react'
-import { page } from 'vitest/browser'
+import { page, userEvent } from 'vitest/browser'
+import type { HealthTimelinePoint } from './health-api'
 import { HealthTimelineChart } from './health-timeline-chart'
 
-it('uses full width and regular time labels around sparse scans without inventing assessments', async () => {
-  await page.viewport(1440, 900)
+const points: HealthTimelinePoint[] = Array.from({ length: 4 }, (_, i) => ({
+  id: `scan-${i}`,
+  sourceSha: String(i).repeat(40),
+  at: new Date(Date.UTC(2026, 9, 18, 18, i)).toISOString(),
+  findings: 100 + i,
+  partial: i === 2,
+  comparableFindings: null,
+  categories: {
+    security: {
+      findings: 10 + i,
+      partial: i === 2,
+      comparisonKey: i === 2 ? null : 'same',
+      bySeverity: { critical: 1, high: 3, medium: 2, low: 4 + i, unknown: 0 },
+    },
+    reliability:
+      i === 3
+        ? null
+        : {
+            findings: 2 + i,
+            partial: false,
+            comparisonKey: 'reliability',
+            bySeverity: { high: 2 + i },
+          },
+    maintainability: null,
+  },
+}))
+it('shows severity stacks for each category without joining scans', async () => {
   await render(
     <HealthTimelineChart
+      points={points}
       branch='main'
       onSelectReport={() => {}}
-      points={[
-        {
-          id: 'first',
-          sourceSha: 'a'.repeat(40),
-          at: '2026-10-15T23:47:00Z',
-          findings: 760,
-          partial: true,
-          comparableFindings: null,
-        },
-        {
-          id: 'last',
-          sourceSha: 'b'.repeat(40),
-          at: '2026-10-16T01:43:00Z',
-          findings: 760,
-          partial: true,
-          comparableFindings: null,
-        },
-      ]}
     />
   )
   await expect
-    .poll(() => {
-      const bars = [
-        ...document.querySelectorAll('.recharts-bar-rectangle path'),
-      ].map((bar) => bar.getBoundingClientRect())
-      const chart = document
-        .querySelector('.recharts-responsive-container')
-        ?.getBoundingClientRect()
-      return (
-        !!chart &&
-        chart.width > 1200 &&
-        bars.length === 2 &&
-        bars[0].left > chart.left + 70 &&
-        bars[1].right < chart.right - 70 &&
-        bars[1].left - bars[0].right < 200
-      )
-    })
-    .toBe(true)
-  const labels = [...document.querySelectorAll('svg text')].map(
-    (label) => label.textContent
-  )
-  expect(labels.length).toBeGreaterThan(3)
-  expect(labels.some((label) => label?.includes('12:00'))).toBe(true)
-  expect(labels.some((label) => label?.includes('04:00'))).toBe(true)
-  expect(labels.some((label) => label?.includes('23:47'))).toBe(false)
-  await page.screenshot({
-    path: '__screenshots__/preflyt-health-continuous-time.png',
-  })
+    .element(page.getByText('13', { exact: true }).first())
+    .toBeVisible()
+  await expect
+    .poll(() => document.querySelectorAll('[data-severity="critical"]').length)
+    .toBe(4)
+  expect(document.querySelector('.recharts-line-curve')).toBeNull()
+  await page.getByRole('tab', { name: 'Reliability' }).click()
+  await expect
+    .element(page.getByText('4', { exact: true }).first())
+    .toBeVisible()
+  await expect
+    .element(page.getByText('3 scans · Oldest to newest'))
+    .toBeVisible()
+  await page.getByRole('tab', { name: 'Maintainability' }).click()
+  await expect
+    .element(page.getByText('No recorded results to chart'))
+    .toBeVisible()
 })
-
-it('keeps partial observations visible and breaks comparison across an incompatible scan', async () => {
-  await page.viewport(1280, 800)
+it('opens the exact report with pointer and keyboard', async () => {
   const select = vi.fn()
-  const points = [
-    {
-      id: 'a',
-      sourceSha: 'a'.repeat(40),
-      at: '2026-10-14T10:00:00Z',
-      findings: 12,
-      partial: true,
-      comparableFindings: 3,
-      checkIds: ['quality.maintainability'],
-    },
-    {
-      id: 'b',
-      sourceSha: 'b'.repeat(40),
-      at: '2026-10-14T11:00:00Z',
-      findings: 20,
-      partial: true,
-      comparableFindings: null,
-    },
-    {
-      id: 'c',
-      sourceSha: 'c'.repeat(40),
-      at: '2026-10-14T12:00:00Z',
-      findings: 8,
-      partial: false,
-      comparableFindings: 2,
-      checkIds: ['quality.maintainability'],
-    },
-  ]
   await render(
     <HealthTimelineChart
       points={points}
@@ -98,59 +67,73 @@ it('keeps partial observations visible and breaks comparison across an incompati
       onSelectReport={select}
     />
   )
-  await expect
-    .element(
-      page.getByText(
-        '2 of 3 scans have incomplete coverage. Counts may increase when analysis completes.'
-      )
-    )
-    .toBeVisible()
-  await expect
-    .poll(() => document.querySelectorAll('.recharts-bar-rectangle').length)
-    .toBe(3)
-  // Two comparable points separated by an incompatible scope must not form a line.
-  expect(
-    document.querySelector('.recharts-line-curve')?.getAttribute('d')
-  ).not.toMatch(/[LC]/)
-  expect(
-    document
-      .querySelector('.recharts-line-curve')
-      ?.getAttribute('d')
-      ?.match(/M/g)
-  ).toHaveLength(2)
+  const dot = page
+    .getByRole('button', { name: /Open scan.*13 findings/ })
+    .first()
+  await dot.click()
+  expect(select).toHaveBeenLastCalledWith('scan-3')
+  dot.element().focus()
+  await userEvent.keyboard('{Enter}')
+  expect(select).toHaveBeenCalledTimes(2)
   await page.getByText('View chart data', { exact: true }).click()
+  await page
+    .getByRole('button', { name: /Open scan.*10 findings/ })
+    .last()
+    .click()
+  expect(select).toHaveBeenLastCalledWith('scan-0')
+})
+it('keeps zero separate from missing results', async () => {
+  const view = await render(
+    <HealthTimelineChart
+      points={[
+        {
+          ...points[0],
+          categories: {
+            security: { findings: 0, partial: false, comparisonKey: 'x' },
+          },
+        },
+      ]}
+      branch='main'
+      onSelectReport={() => {}}
+    />
+  )
   await expect
-    .element(page.getByRole('cell', { name: '-', exact: true }))
+    .element(page.getByRole('group', { name: /Security over/ }))
+    .toHaveAttribute(
+      'aria-label',
+      'Security over 1 scans. Finding counts: 0. Select a column to open its assessment.'
+    )
+  await view.unmount()
+  await render(
+    <HealthTimelineChart points={[]} branch='main' onSelectReport={() => {}} />
+  )
+  await expect
+    .element(page.getByText('No recorded results to chart'))
     .toBeVisible()
-  await page.getByRole('button', { name: 'Open health report bbbbbbb' }).click()
-  expect(select).toHaveBeenCalledWith('b')
-  await page.screenshot({
-    path: '__screenshots__/preflyt-partial-chart-desktop.png',
-  })
-  await page.viewport(320, 900)
-  await expect
-    .poll(() => {
-      const bars = [
-        ...document.querySelectorAll('.recharts-bar-rectangle path'),
-      ].map((bar) => bar.getBoundingClientRect())
-      return (
-        bars.length === 3 &&
-        bars.every((bar) => bar.right <= 320) &&
-        bars[1].right + 2 < bars[2].left
-      )
-    })
-    .toBe(true)
-  for (const theme of ['light', 'dark']) {
-    document.documentElement.classList.toggle('dark', theme === 'dark')
-    // Let the shared 280ms chart transition settle before visual capture.
-    await new Promise((resolve) => setTimeout(resolve, 400))
-    await page.screenshot({
-      path: `__screenshots__/preflyt-partial-chart-final-${theme}.png`,
-    })
-    expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(320)
-    await expect
-      .element(page.getByRole('region', { name: 'Findings over time' }))
-      .toBeVisible()
+})
+it('preserves category controls and report actions at 320px in both themes', async () => {
+  await render(
+    <div className='bg-background p-4 text-foreground'>
+      <HealthTimelineChart
+        points={points}
+        branch='main'
+        onSelectReport={() => {}}
+      />
+    </div>
+  )
+  for (const width of [1280, 320]) {
+    await page.viewport(width, 800)
+    for (const dark of [false, true]) {
+      document.documentElement.classList.toggle('dark', dark)
+      await new Promise((resolve) => setTimeout(resolve, 350))
+      await expect
+        .element(page.getByRole('tab', { name: 'Maintainability' }))
+        .toBeVisible()
+      expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width)
+      await page.screenshot({
+        path: `__screenshots__/preflyt-stacked-history-${width}-${dark ? 'dark' : 'light'}.png`,
+      })
+    }
   }
   document.documentElement.classList.remove('dark')
   await page.viewport(1280, 800)

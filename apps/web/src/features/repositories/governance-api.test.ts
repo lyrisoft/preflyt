@@ -122,3 +122,23 @@ it('preserves ordinary request errors without inventing blocker details', async 
     blockedRepositories: [],
   })
 })
+
+it('keeps exact field errors returned by API validation instead of a generic failure', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () =>
+      Response.json(
+        {
+          message: [
+            'Description: maximum 2,000 characters; received 2,001.',
+            'Instructions: maximum 24,000 characters; received 24,001.',
+          ],
+        },
+        { status: 400 }
+      )
+    )
+  )
+  await expect(governanceRequest('/ai/skills', {})).rejects.toThrow(
+    'Description: maximum 2,000 characters; received 2,001. Instructions: maximum 24,000 characters; received 24,001.'
+  )
+})

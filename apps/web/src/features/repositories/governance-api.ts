@@ -26,7 +26,7 @@ async function governanceResponse(
   })
   if (!response.ok) {
     const error = (await response.json().catch(() => null)) as {
-      message?: string
+      message?: string | string[]
       code?: string
       retryAt?: string
       retryAfterSeconds?: number
@@ -41,7 +41,10 @@ async function governanceResponse(
       new Error(
         typeof error?.message === 'string'
           ? error.message
-          : 'The request could not be completed. Refresh and try again.'
+          : Array.isArray(error?.message) &&
+              error.message.every((message) => typeof message === 'string')
+            ? error.message.join(' ')
+            : 'The request could not be completed. Refresh and try again.'
       ),
       {
         code: typeof error?.code === 'string' ? error.code : undefined,

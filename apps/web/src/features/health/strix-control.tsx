@@ -1,0 +1,95 @@
+import { useId, type ReactNode } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { ChevronDown } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { healthRequest } from './health-api'
+
+export function StrixControl({
+  repositoryId,
+  scopeKey,
+  disabled,
+  checked,
+  onCheckedChange,
+  children,
+}: {
+  repositoryId: string
+  scopeKey?: string
+  disabled: boolean
+  checked: boolean
+  onCheckedChange: (checked: boolean) => void
+  children: ReactNode
+}) {
+  const helpId = useId()
+  const capability = useQuery({
+    queryKey: ['health-strix', repositoryId, scopeKey],
+    queryFn: ({ signal }) =>
+      healthRequest<{ available: boolean; reason: string }>(
+        `repositories/${repositoryId}/health/strix`,
+        signal
+      ),
+    retry: false,
+    staleTime: 30000,
+  })
+  const unavailableReason = capability.isPending
+    ? 'Checking AI security review availability…'
+    : capability.isError
+      ? 'AI review availability could not be checked.'
+      : !capability.data?.available
+        ? capability.data?.reason
+        : undefined
+  return (
+    <div
+      role='group'
+      aria-label='Repository assessment actions'
+      className='inline-flex shrink-0 items-stretch rounded-md shadow-xs'
+    >
+      {children}
+      <DropdownMenu modal={false}>
+        <DropdownMenuTrigger asChild>
+          <Button
+            size='sm'
+            className='rounded-s-none border-s border-primary-foreground/20 px-2 shadow-none has-[>svg]:px-2 data-[state=open]:bg-primary/80 [&[data-state=open]>svg]:rotate-180'
+            disabled={disabled}
+            aria-label='Assessment options'
+          >
+            <ChevronDown
+              aria-hidden='true'
+              className='transition-transform duration-150 motion-reduce:transition-none'
+            />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align='end'
+          className='w-72 max-w-[calc(100vw-2rem)]'
+        >
+          <DropdownMenuCheckboxItem
+            checked={checked}
+            disabled={!capability.data?.available}
+            onCheckedChange={(value) => onCheckedChange(value === true)}
+            onSelect={(event) => event.preventDefault()}
+            aria-describedby={helpId}
+            className='py-2'
+          >
+            Include AI security review
+          </DropdownMenuCheckboxItem>
+          <p
+            id={helpId}
+            className='px-2 ps-8 pb-2 text-xs leading-relaxed text-muted-foreground'
+          >
+            {capability.isPending
+              ? 'Checking AI security review availability. Standard checks can still run.'
+              : unavailableReason
+                ? `${unavailableReason} AI review will be skipped; standard checks can still run.`
+                : 'Reviews the same commit with the configured AI model. Provider charges may apply.'}
+          </p>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  )
+}

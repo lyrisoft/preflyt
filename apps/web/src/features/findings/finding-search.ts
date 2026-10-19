@@ -1,9 +1,18 @@
 import { z } from 'zod'
 
 export const findingsSearch = z.object({
-  source: z.enum(['all', 'ci', 'health', 'ai']).optional().catch(undefined),
+  source: z
+    .enum(['all', 'ci', 'health', 'ai', 'vapt'])
+    .optional()
+    .catch(undefined),
   origin: z.enum(['health', 'ai']).optional().catch(undefined),
   health: z.string().uuid().optional().catch(undefined),
+  healthReports: z
+    .string()
+    .max(73)
+    .regex(/^[a-f0-9-]{36}(,[a-f0-9-]{36})?$/)
+    .optional()
+    .catch(undefined),
   category: z
     .enum([
       'all',

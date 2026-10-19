@@ -11,7 +11,19 @@ export type FindingGuidance = {
   reference?: string
 }
 
+export type VaptAnalysis = {
+  version: 1
+  status: 'NEEDS_REVIEW'
+  reasoning: string
+  impact: string
+  remediation: string
+  preconditions: string
+  verificationSteps: string
+  counterevidence: string
+}
+
 export type Finding = {
+  aiReview?: VaptAnalysis
   origin?: 'ci' | 'health' | 'ai'
   recommendation?: string
   impact?: string | null
