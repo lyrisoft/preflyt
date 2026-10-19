@@ -33,13 +33,16 @@ vi.mock('@tanstack/react-router', () => ({
     to,
     params,
     search,
+    className,
   }: {
     children: React.ReactNode
     to: string
+    className?: string
     params?: { findingId?: string; repositoryId?: string }
     search?: Record<string, string>
   }) => (
     <a
+      className={className}
       href={
         to
           .replace('$findingId', params?.findingId ?? '')
@@ -645,4 +648,61 @@ it('keeps the combined Security report scope and clears it when choosing another
   await page.getByRole('combobox', { name: 'Finding type' }).click()
   await page.getByRole('option', { name: 'Reliability', exact: true }).click()
   expect(state.key).not.toContain(reports)
+})
+
+it('keeps Details on one line for long findings and confines narrow layouts to the table scroller', async () => {
+  state.query = {
+    data: {
+      summary,
+      total: 1,
+      assessedRevisions: 1,
+      repositories: [],
+      pageSize: 10,
+      rows: [
+        {
+          id: 'f'.repeat(64),
+          origin: 'health',
+          healthFingerprint: 'f'.repeat(64),
+          health: '11111111-1111-4111-8111-111111111111',
+          title:
+            'Duplicate/replayed chargeback webhook re-runs refund reversal and overwrites REFUNDED funding with CHARGEBACK',
+          repositoryId: '1097527174',
+          repository: 'lyrisoft/maiguard-api',
+          sourceSha: 'a'.repeat(40),
+          assessmentId: '11111111-1111-4111-8111-111111111111',
+          observedAt: '2026-10-19T13:00:49Z',
+          category: 'security',
+          severity: 'high',
+          status: 'Needs review',
+          path: 'api/src/controllers/webhookController.js',
+          line: 25,
+          evidence: ['AI_REPORTED'],
+        },
+      ],
+    },
+    refetch: vi.fn(),
+  }
+  for (const width of [1440, 1100, 768, 320]) {
+    await page.viewport(width, 900)
+    const view = await render(<FindingsPage />)
+    const link = view.getByRole('link', { name: 'Details', exact: true })
+    await expect.element(link).toBeVisible()
+    const el = link.element()
+    expect(getComputedStyle(el).whiteSpace).toBe('nowrap')
+    expect(getComputedStyle(el).overflowWrap).toBe('normal')
+    const text = document.createRange()
+    text.selectNodeContents(el)
+    expect(text.getClientRects().length).toBe(1)
+    expect(el.getBoundingClientRect().width).toBeGreaterThanOrEqual(
+      text.getBoundingClientRect().width + 20
+    )
+    expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width)
+    await expect
+      .element(link)
+      .toHaveAttribute(
+        'href',
+        expect.stringContaining('health=11111111-1111-4111-8111-111111111111')
+      )
+    await view.unmount()
+  }
 })
