@@ -141,7 +141,7 @@ export class GitHubController {
     const scope = await this.access.repositoryScope(
       session.identityId,
       session.organizationId,
-      'repository.read',
+      session.role === 'ENGINEERING_LEAD' ? 'repository.manage' : 'repository.read',
       false,
     )
     return this.github.listRepositories(req.query.refresh === 'true',
@@ -158,7 +158,7 @@ export class GitHubController {
     const scope = await this.access.repositoryScope(
       session.identityId,
       session.organizationId,
-      'repository.read',
+      session.role === 'ENGINEERING_LEAD' ? 'repository.manage' : 'repository.read',
       false,
     )
     return this.github.repositoryOverview(scope.map((r) => r.githubId),
@@ -179,6 +179,7 @@ export class GitHubController {
       repositoryId,
       body.selected,
       req.headers.origin,
+      req.preflytSession!.organizationId!,
     )
     return { repositoryId, selected: body.selected, ...inspection }
   }

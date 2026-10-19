@@ -87,6 +87,7 @@ export const rolePermissions: Record<string, string[]> = {
     'contributors.policy_evidence.read',
   ],
   ENGINEERING_LEAD: [
+    'repository.connect', 'repository.manage', 'standards.manage', 'ai.skills.manage',
     'ai.skills.read', 'ai.review.run',
     'repository.read',
     'assessment.read',
@@ -178,7 +179,7 @@ export class AuthorizationService {
         ...(selected ? { selected: true } : {}),
         available: true,
         installation: { active: true, organizationId: member.organizationId },
-        ...(['OWNER', 'ADMIN'].includes(member.role)
+        ...(['OWNER', 'ADMIN'].includes(member.role) || (!selected && permission === 'repository.manage' && member.role === 'ENGINEERING_LEAD')
           ? {}
           : { repositoryGrants: { some: { membershipId: member.id } } }),
       },
@@ -196,7 +197,7 @@ export class AuthorizationService {
         [
           'organization.members.manage',
           'organization.settings.update',
-          'repository.connect',
+          'repository.connect', 'repository.manage',
           'policy.publish',
           'policy.exception.request', 'policy.exception.approve',
           'github.ruleset.manage',
@@ -226,7 +227,7 @@ export class AuthorizationService {
         ...(selected ? { selected: true } : {}),
         available: true,
         installation: { active: true, organizationId: member.organizationId },
-        ...(['OWNER', 'ADMIN'].includes(member.role)
+        ...(['OWNER', 'ADMIN'].includes(member.role) || (!selected && permission === 'repository.manage' && member.role === 'ENGINEERING_LEAD')
           ? {}
           : { repositoryGrants: { some: { membershipId: member.id } } }),
       },

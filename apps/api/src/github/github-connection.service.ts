@@ -282,9 +282,9 @@ export class GitHubConnectionService {
               },
             },
           });
-          if (!member?.active || !["OWNER", "ADMIN"].includes(member.role))
+          if (!member?.active || !["OWNER", "ADMIN", "ENGINEERING_LEAD"].includes(member.role))
             throw new ForbiddenException(
-              "An existing workspace admin must connect this installation",
+              "An existing workspace admin or Engineering Lead must connect this installation",
             );
         } else {
           if (session.identity.membership.role !== "SUPER_ADMIN")

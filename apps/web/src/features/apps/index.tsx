@@ -364,7 +364,7 @@ export function Apps() {
       if (!response.ok) {
         throw new Error(
           response.status === 403
-            ? 'Only a Preflyt Owner or Admin can change repository selection.'
+            ? 'You no longer have permission to select this repository. Refresh and check your workspace role.'
             : 'Could not update repository selection.'
         )
       }

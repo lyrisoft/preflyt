@@ -114,3 +114,20 @@ Channel APIs derive the organization from the active session and bind reads and 
 Channel recipients may be distribution lists or addresses without Preflyt identities. They receive generic sign-in links, not private repository evidence. Saving an address never creates a user, assigns a role or grants resource access. Channel audit entries exclude raw addresses. See [notifications operations](../operations/notifications.md).
 
 Policy exceptions reuse current repository grants and explicit `policy.exception.request` / `policy.exception.approve` permissions. Only Owners/Admins/Policy Managers may approve, and no actor may approve their own request, including a linked historical identity or local Super Admin. See [policy exception operations](../operations/policy-exceptions.md).
+
+## Engineering Lead and repository assignment edits
+
+Engineering Lead can connect/select repositories, create and edit AI skills, and
+create and edit organization standards. GitHub user rights, active installation
+scope and current workspace membership remain required. Inventory discovery does
+not grant assessment access. Explicitly selecting a repository creates an audited
+Preflyt grant for that Engineering Lead and allows its initial assessment; other
+repository evidence remains scoped to assigned grants. Developer is unchanged.
+Skill approval, policy publication, provider administration and member management
+remain separate permissions.
+
+When editing a member, an Owner/Admin can preserve or remove an existing grant
+that is no longer in their current repository picker. New grants must be currently
+authorized and belong to the same organization. Preserving a grant never bypasses
+GitHub, installation availability or current membership checks. The editor displays
+these existing unavailable assignments explicitly rather than silently deleting them.
