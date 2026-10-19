@@ -481,14 +481,6 @@ export class OrganizationController {
       false
     )
     if (
-      body.repositoryIds.some(
-        (id) => !allowedRepositories.some((r) => r.githubId.toString() === id)
-      )
-    )
-      throw new ForbiddenException(
-        'You can assign only repositories you are authorized to access'
-      )
-    if (
       !id &&
       !githubUser &&
       (await this.db.gitHubOrganizationLink.findUnique({
@@ -513,6 +505,17 @@ export class OrganizationController {
         : null
       if (id && !previous)
         throw new ForbiddenException('Membership is unavailable')
+      // Retaining or removing an existing grant is not a new assignment. A
+      // hidden/unavailable legacy grant must not block unrelated access edits.
+      const existingGrants = previous ? await tx.repositoryGrant.findMany({
+        where: { membershipId: previous.id },
+        select: { repository: { select: { githubId: true } } },
+      }) : []
+      const retainedIds = new Set(existingGrants.map(g => g.repository.githubId.toString()))
+      if (body.repositoryIds.some(repositoryId =>
+        !retainedIds.has(repositoryId) && !allowedRepositories.some(r => r.githubId.toString() === repositoryId)))
+        throw new ForbiddenException('You can add only repositories you are currently authorized to access. Refresh the repository list and try again.')
+
       if (previous?.identityId === req.preflytSession.identityId)
         throw new ForbiddenException(
           'Use another Owner to change your own access'

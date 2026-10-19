@@ -28,7 +28,18 @@ vi.mock('@tanstack/react-query', () => ({
 }))
 vi.mock('../workspace/navigation-session', () => ({
   useNavigationSession: () => ({
-    data: { role: state.role, identityId: 'owner', organizationId: 'org' },
+    data: {
+      role: state.role,
+      identityId: 'owner',
+      organizationId: 'org',
+      permissions: ['OWNER', 'ADMIN'].includes(state.role)
+        ? ['ai.skills.read', 'ai.skills.manage', 'ai.skills.approve']
+        : state.role === 'ENGINEERING_LEAD'
+          ? ['ai.skills.read', 'ai.skills.manage']
+          : ['SECURITY_ENGINEER', 'POLICY_MANAGER'].includes(state.role)
+            ? ['ai.skills.read', 'ai.skills.approve']
+            : ['ai.skills.read'],
+    },
   }),
   canAdminister: (role: string) => ['OWNER', 'ADMIN'].includes(role),
 }))
@@ -713,4 +724,20 @@ it('shows the exact invalid upload fields', async () => {
     .element(view.getByText(/Instructions: maximum 24,000/))
     .toBeVisible()
   expect(state.save).toHaveBeenCalledTimes(1)
+})
+
+it('lets Engineering Lead create a skill draft without exposing approval', async () => {
+  state.role = 'ENGINEERING_LEAD'
+  const view = await render(<SkillsCatalogue />)
+  await view.getByRole('tab', { name: 'Built-in skills' }).click()
+  await view
+    .getByRole('button', { name: 'View Security evidence review' })
+    .click()
+  await view.getByRole('button', { name: 'Create separate copy' }).click()
+  await view.getByRole('button', { name: 'Save draft' }).click()
+  expect(state.save).toHaveBeenCalledWith(
+    '/ai/skills',
+    expect.objectContaining({ name: template.name })
+  )
+  expect(view.container.textContent).not.toContain('Approve version')
 })

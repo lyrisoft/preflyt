@@ -197,7 +197,7 @@ export class GitHubService {
           identityId: transaction.identityId,
           organizationId: transaction.organizationId,
           active: true,
-          role: { in: ['OWNER', 'ADMIN'] },
+          role: { in: ['OWNER', 'ADMIN', 'ENGINEERING_LEAD'] },
         },
       })
       if (!member)
@@ -354,8 +354,8 @@ export class GitHubService {
       }
     }
 
-    // Organization administrators may see newly discovered repositories immediately.
-    return this.repositoryOverview(organizationAdmin ? undefined : scope, organizationId, organizationAdmin)
+    // Refreshing inventory never widens the caller's verified repository scope.
+    return this.repositoryOverview(scope, organizationId, organizationAdmin)
   }
 
   // Last-synced display data only. No upstream calls and no permission grants.
@@ -432,6 +432,7 @@ export class GitHubService {
     rawRepositoryId: string,
     selected: boolean,
     origin: string | undefined,
+    organizationId?: string,
   ) {
     this.assertOrigin(origin)
     const repositoryId = this.parseInstallationId(rawRepositoryId)
@@ -451,18 +452,31 @@ export class GitHubService {
         repositoryId,
       )
     }
-    const changed = await this.prisma.gitHubRepository.updateMany({
-      where: {
-        githubId: repositoryId,
-        installationId: repository.installationId,
-        installation: { active: true },
-      },
-      data: { selected },
-    })
-    if (changed.count !== 1)
-      throw new ForbiddenException(
-        'Repository access changed; reload repositories',
-      )
+    const updateSelection = async (tx: typeof this.prisma) => {
+      const member = organizationId ? await tx.organizationMembership.findUnique({
+        where: { organizationId_identityId: { organizationId, identityId } },
+      }) : null
+      if (organizationId && (!member?.active || !['OWNER', 'ADMIN', 'ENGINEERING_LEAD'].includes(member.role)))
+        throw new ForbiddenException('Repository management permission changed. Reload repositories.')
+      const changed = await tx.gitHubRepository.updateMany({
+        where: { githubId: repositoryId, installationId: repository.installationId,
+          available: true, installation: { active: true, ...(organizationId ? { organizationId } : {}) } },
+        data: { selected },
+      })
+      if (changed.count !== 1) throw new ForbiddenException('Repository access changed; reload repositories')
+      // Selecting a repository grants its Engineering Lead access to that
+      // repository only; it never makes the role organization-wide.
+      if (selected && member?.role === 'ENGINEERING_LEAD') {
+        await tx.repositoryGrant.upsert({
+          where: { membershipId_repositoryId: { membershipId: member.id, repositoryId: repository.id } },
+          create: { membershipId: member.id, repositoryId: repository.id }, update: {},
+        })
+        await tx.auditEvent.create({ data: { event: 'repository_selection_access_granted', actorId: identityId,
+          metadata: { organizationId, repositoryId: rawRepositoryId, membershipId: member.id } } })
+      }
+    }
+    if (organizationId) await this.prisma.$transaction(tx => updateSelection(tx as typeof this.prisma), { isolationLevel: 'Serializable' })
+    else await updateSelection(this.prisma)
     if (!selected) await this.prisma.contributorSyncState.updateMany({where:{repositoryId:repository.id},data:{state:'QUEUED',attempts:0,nextAttemptAt:new Date(),leaseToken:null,leaseUntil:null,failureCode:null}})
     await this.audit('github_repository_selection_changed', identityId, {
       repositoryId: repositoryId.toString(),

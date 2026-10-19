@@ -1,7 +1,7 @@
 import { notificationContent } from "./notification-content.js";
 import { aiNotificationTypes } from "./ai-notification.js";
 import { configurationValue } from "../configuration/runtime-configuration.js";
-import { validNotificationEmail } from "./notification-mail.js";
+import { personalNotificationEmail, requestNotificationEmail, verifyNotificationEmail, removeNotificationEmail } from './notification-email-address.js';
 import {
   BadRequestException,
   Inject,
@@ -11,7 +11,7 @@ import {
 import { PrismaService } from "../prisma/prisma.service.js";
 import { AuthorizationService } from "../auth/authorization.service.js";
 import type { AuthenticatedSession } from "../auth/session.guard.js";
-import type { Prisma } from "../generated/prisma/client.js";
+import type { Prisma, NotificationPreference } from "../generated/prisma/client.js";
 import {
   notificationsEnabled,
   governanceNotificationTypes,
@@ -273,15 +273,31 @@ export class NotificationsService {
       assessments: preference?.assessments ?? true,
       email: preference?.email ?? false,
       emailEnabled: configurationValue("NOTIFICATION_EMAIL_ENABLED") === "true",
-      emailAddressAvailable: validNotificationEmail(
-        (
-          await this.db.identity.findUnique({
-            where: { id: session.identityId },
-            select: { email: true },
-          })
-        )?.email,
-      ),
+      ...await this.emailAddressPreference(session, preference),
     };
+  }
+  private async emailAddressPreference(session: AuthenticatedSession, preference: NotificationPreference | null) {
+    const identity=await this.db.identity.findUnique({where:{id:session.identityId},select:{email:true}})
+    const emailAddress=personalNotificationEmail(preference,identity?.email)
+    const delivery = preference?.emailVerificationHash ? await this.db.notificationEmailVerificationDelivery.findFirst({where:{identityId:session.identityId,organizationId:session.organizationId!,tokenHash:preference.emailVerificationHash},orderBy:{createdAt:'desc'},select:{state:true}}) : null
+    return { emailAddressAvailable:!!emailAddress, emailAddress,
+      verificationDeliveryState:delivery?.state ?? null,
+      verificationRequestedAt:preference?.emailVerificationSentAt ?? null,
+      personalEmail:preference?.notificationEmail ?? null,
+      pendingEmail:preference?.pendingEmail ?? null,
+      verificationExpiresAt:preference?.emailVerificationExpiresAt ?? null }
+  }
+  async requestEmail(session:AuthenticatedSession,email:unknown) {
+    await this.authorization.requireOrganization(session,'assessment.read',true)
+    return requestNotificationEmail(this.db,{identityId:session.identityId,organizationId:session.organizationId!},email)
+  }
+  async verifyEmail(session:AuthenticatedSession,code:unknown) {
+    await this.authorization.requireOrganization(session,'assessment.read',true)
+    return verifyNotificationEmail(this.db,{identityId:session.identityId,organizationId:session.organizationId!},code)
+  }
+  async removeEmail(session:AuthenticatedSession) {
+    await this.authorization.requireOrganization(session,'assessment.read',true)
+    return removeNotificationEmail(this.db,{identityId:session.identityId,organizationId:session.organizationId!})
   }
   async savePreferences(
     session: AuthenticatedSession,
@@ -300,6 +316,12 @@ export class NotificationsService {
       organizationId: session.organizationId!,
     };
     return this.db.$transaction(async (tx) => {
+      if (email === true) {
+        await tx.$queryRaw`SELECT "identityId" FROM "NotificationPreference" WHERE "identityId" = ${key.identityId} AND "organizationId" = ${key.organizationId} FOR UPDATE`;
+        const current = await tx.notificationPreference.findUnique({where:{identityId_organizationId:key}});
+        const identity = await tx.identity.findUnique({where:{id:session.identityId},select:{email:true}});
+        if (!personalNotificationEmail(current, identity?.email)) throw new BadRequestException('Verify a notification email before enabling personal email alerts.');
+      }
       await tx.notificationPreference.upsert({
         where: { identityId_organizationId: key },
         create: {

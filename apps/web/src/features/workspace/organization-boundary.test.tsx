@@ -137,7 +137,7 @@ it('retries a failed session check without calling it missing setup', async () =
 })
 
 it('retains organization pages and their permission checks, including legacy workspaces', async () => {
-  session = { organizationId: 'legacy-org', permissions: [] }
+  session = { organizationId: 'legacy-org', permissions: ['team.read'] }
   const view = await render(subject())
   await expect
     .element(
@@ -212,3 +212,15 @@ it.each([false, true])(
     expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(320)
   }
 )
+
+it('does not mount a forbidden page or start its scoped requests for a direct URL', async () => {
+  state.pathname = '/access-control'
+  session = { organizationId: 'org', role: 'OWNER', permissions: [] }
+  const view = await render(subject())
+  await expect
+    .element(
+      view.getByRole('heading', { name: 'You do not have access to this page' })
+    )
+    .toBeVisible()
+  expect(scopedRequest).not.toHaveBeenCalled()
+})

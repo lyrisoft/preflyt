@@ -3,7 +3,7 @@ import { isAiNotification } from "./ai-notification.js";
 import { isGovernanceNotification } from "./notification-event.js";
 import type { PrismaService } from "../prisma/prisma.service.js";
 import type { AuthorizationService } from "../auth/authorization.service.js";
-import { validNotificationEmail } from "./notification-mail.js";
+import { personalNotificationEmail } from "./notification-email-address.js";
 export async function deliverNotificationEmail(
   db: PrismaService,
   authorization: AuthorizationService,
@@ -44,10 +44,11 @@ export async function deliverNotificationEmail(
     const identity = await db.identity.findUnique({
       where: { id: identityId },
     });
+    const emailAddress=personalNotificationEmail(preference,identity?.email);
     if (
       !preference?.email ||
       (!isMandatoryNotification(event.type) && !preference.assessments) ||
-      !validNotificationEmail(identity?.email)
+      !emailAddress
     ) {
       await db.notificationEmailDelivery.update({
         where: { id },
@@ -77,8 +78,14 @@ export async function deliverNotificationEmail(
       event.repositoryGithubId,
       isGovernanceNotification(event.type) ? "policy.read" : "assessment.read",
     );
+    const currentPreference=await db.notificationPreference.findUnique({where:{identityId_organizationId:{identityId,organizationId:event.organizationId}}});
+    const currentIdentity=await db.identity.findUnique({where:{id:identityId}});
+    if (!currentPreference?.email || (!isMandatoryNotification(event.type) && !currentPreference.assessments) || personalNotificationEmail(currentPreference,currentIdentity?.email) !== emailAddress) {
+      await db.notificationEmailDelivery.update({where:{id},data:{state:'SKIPPED',failureCode:'RECIPIENT_CHANGED',leaseUntil:null}});
+      return;
+    }
     // No repository names, SHAs, findings or report contents leave the application.
-    await mail.send(identity.email, delivery.id, 'PERSONAL', event.type);
+    await mail.send(emailAddress!, delivery.id, 'PERSONAL', event.type);
     accepted = true;
     await db.$transaction(async (tx) => {
       await tx.notificationEmailDelivery.update({

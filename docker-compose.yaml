@@ -159,6 +159,99 @@ services:
     # The actual repository scanner containers still run with --network=none.
     networks: [health_engine, health_service, health_build]
 
+  # Opt-in source-only AI review. Uses a separate nested engine, never the host socket.
+  strix-engine:
+    profiles: [ai-security]
+    image: docker:29.8.2-dind@sha256:1e08cdb63405ca788aea94ef35b792d1e299607c667d33d7bcbcae1fd2611ced
+    privileged: true
+    restart: unless-stopped
+    environment:
+      DOCKER_TLS_CERTDIR: /certs
+      DOCKER_TLS_SAN: DNS:strix-engine
+    volumes:
+      - strix_engine_data:/var/lib/docker
+      - strix_engine_certs:/certs
+    healthcheck:
+      test: [CMD, docker, --host=tcp://127.0.0.1:2376, --tlsverify, --tlscacert=/certs/client/ca.pem, --tlscert=/certs/client/cert.pem, --tlskey=/certs/client/key.pem, info]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 15s
+    mem_limit: 6g
+    cpus: 2.0
+    pids_limit: 2048
+    networks: [strix_engine, strix_pull]
+
+  strix-init:
+    profiles: [ai-security]
+    image: ${PREFLYT_IMAGE_REGISTRY:-preflyt-local}/preflyt-strix-runner:${PREFLYT_VERSION:-development}
+    build:
+      context: .
+      dockerfile: deploy/strix.Dockerfile
+      target: runtime
+    user: '0:0'
+    command: [python, compose_init.py]
+    depends_on:
+      strix-engine:
+        condition: service_healthy
+    restart: 'no'
+    network_mode: none
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    cap_add: [CHOWN, FOWNER, DAC_OVERRIDE]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 128m
+    pids_limit: 32
+    volumes:
+      - strix_engine_certs:/engine-certs:ro
+      - strix_engine_client:/run/docker-tls
+      - strix_state:/var/lib/preflyt/strix
+      - strix_connection:/run/preflyt-strix
+
+  strix-runner:
+    profiles: [ai-security]
+    image: ${PREFLYT_IMAGE_REGISTRY:-preflyt-local}/preflyt-strix-runner:${PREFLYT_VERSION:-development}
+    build:
+      context: .
+      dockerfile: deploy/strix.Dockerfile
+      target: runtime
+    command: [python, runner.py, --state, /var/lib/preflyt/strix, --host, 0.0.0.0, --origin, 'https://strix-runner:3012', --connection-file, /run/preflyt-strix/connection.json]
+    user: '1000:1000'
+    environment:
+      DOCKER_HOST: tcp://strix-engine:2376
+      DOCKER_TLS_VERIFY: '1'
+      DOCKER_CERT_PATH: /run/docker-tls
+      PREFLYT_API_ORIGIN: http://api:3000
+      PREFLYT_STRIX_SANDBOX_IMAGE: ${PREFLYT_IMAGE_REGISTRY:-preflyt-local}/preflyt-strix-sandbox:${PREFLYT_VERSION:-development}
+      HOME: /tmp
+    depends_on:
+      strix-init:
+        condition: service_completed_successfully
+      strix-engine:
+        condition: service_healthy
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 45s
+    read_only: true
+    tmpfs: ['/tmp:rw,nosuid,nodev,size=268435456']
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 2g
+    cpus: 2.0
+    pids_limit: 256
+    volumes:
+      - strix_engine_client:/run/docker-tls:ro
+      - strix_state:/var/lib/preflyt/strix
+      - strix_connection:/run/preflyt-strix
+    healthcheck:
+      test: [CMD, python, readiness.py]
+      interval: 15s
+      timeout: 10s
+      retries: 4
+      start_period: 15m
+    networks: [strix_engine, strix_service]
+
   api:
     image: ${PREFLYT_IMAGE_REGISTRY:-preflyt-local}/preflyt-api:${PREFLYT_VERSION:-development}
     build:
@@ -179,6 +272,8 @@ services:
       API_HOST: 0.0.0.0
       API_PORT: '3000'
       HEALTH_SCANNER_CONNECTION_FILE: /run/preflyt-health/connection.json
+      STRIX_CONNECTION_FILE: /run/preflyt-strix/connection.json
+      STRIX_CALLBACK_ORIGIN: http://api:3000
       REDIS_URL: ${REDIS_URL:-redis://cache:6379/0}
       REDIS_CACHE_PREFIX: ${REDIS_CACHE_PREFIX:-preflyt:production:cache}
       RETENTION_CLEANUP_ENABLED: ${RETENTION_CLEANUP_ENABLED:-true}
@@ -251,7 +346,8 @@ services:
     cpus: 1.0
     volumes:
       - health_connection:/run/preflyt-health:ro
-    networks: [backend, egress, health_service]
+      - strix_connection:/run/preflyt-strix:ro
+    networks: [backend, egress, health_service, strix_service]
 
   worker:
     image: ${PREFLYT_IMAGE_REGISTRY:-preflyt-local}/preflyt-api:${PREFLYT_VERSION:-development}
@@ -266,6 +362,8 @@ services:
       <<: *otel
       NODE_ENV: production
       HEALTH_SCANNER_CONNECTION_FILE: /run/preflyt-health/connection.json
+      STRIX_CONNECTION_FILE: /run/preflyt-strix/connection.json
+      STRIX_CALLBACK_ORIGIN: http://api:3000
       HEALTH_SOURCE_DIRECTORY: /var/lib/preflyt-health-sources
       DATABASE_URL: postgresql://preflyt_app:${DATABASE_APP_PASSWORD:?Set DATABASE_APP_PASSWORD}@db:5432/${PREFLYT_DATABASE:-preflyt}
       AI_CONFIGURATION_ENABLED: ${AI_CONFIGURATION_ENABLED:-false}
@@ -338,8 +436,9 @@ services:
     cpus: 1.0
     volumes:
       - health_connection:/run/preflyt-health:ro
+      - strix_connection:/run/preflyt-strix:ro
       - health_sources:/var/lib/preflyt-health-sources
-    networks: [backend, egress, health_service]
+    networks: [backend, egress, health_service, strix_service]
 
   cache:
     image: valkey/valkey:7.2-alpine@sha256:c6c2f0020be34bbf684a53a0ef716ab16ff70295186d4d9f2518435beb7afbff
@@ -426,6 +525,11 @@ services:
     networks: [backend, ingress]
 
 volumes:
+  strix_engine_data:
+  strix_engine_certs:
+  strix_engine_client:
+  strix_state:
+  strix_connection:
   health_sources:
   health_engine_data:
   health_engine_certs:
@@ -437,6 +541,11 @@ volumes:
   queue_data:
 
 networks:
+  strix_engine:
+    internal: true
+  strix_service:
+    internal: true
+  strix_pull:
   health_engine:
     internal: true
   health_service:

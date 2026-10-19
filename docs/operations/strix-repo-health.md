@@ -2,7 +2,7 @@
 
 # Local Strix scanner in Repo Health
 
-Status: local opt-in prototype. No CI integration, PR comments, merge checks or
+Status: beta source-only review, with local development and optional production Compose packaging. See [production setup](strix-production-compose.md). No CI integration, PR comments, merge checks or
 remote writes are enabled by this feature. Strix source is pinned to
 `a0f8ea2cd379c4bf56e665d3db2ba8a4f7c0683c` (package version 1.7.0).
 

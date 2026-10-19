@@ -59,7 +59,7 @@ export class RepositoryHealthService {
   return this.strix?.available(session,githubId) ?? {available:false,reason:'Strix runner is not configured.'}
  }
  async start(session: AuthenticatedSession, githubId: string, input: { branch?: string; requestKey?: string; includeCoverage?: boolean; includeAiSecurity?: boolean; category?: HealthCategory; scanner?: 'strix'; reviewProfile?: 'general' | 'payment-risk-v1' | 'general-and-payment-risk-v1' } = {}, initial = false) {
-  const repo = await this.access.requireRepository(session, githubId, 'execution.run')
+  const repo = await this.access.requireRepository(session, githubId, initial ? 'repository.manage' : 'execution.run')
   if(input.includeAiSecurity!==undefined && typeof input.includeAiSecurity!=='boolean') throw new BadRequestException('Choose whether to include the AI security review')
   const reviewProfile=input.reviewProfile??'general'
   if(!['general','payment-risk-v1','general-and-payment-risk-v1'].includes(reviewProfile) || (reviewProfile!=='general' && (initial || (!input.includeAiSecurity && !input.scanner)))) throw new BadRequestException('Choose a review profile for an AI security review')

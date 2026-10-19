@@ -54,7 +54,7 @@ Focused integration tests cover the actual assessment producer, duplicate/concur
 
 As Super Admin, enable email notifications and configure SMTP host, port (default 587), sender and any required credentials in **Settings → Configuration**. These credentials are encrypted in the database and masked in the browser. Keep `WEB_ORIGIN` in deployment configuration; production requires HTTPS. Workspace notifications must also be enabled. Restart both API and worker after SMTP connection changes; the email switch itself refreshes live.
 
-SMTP requires TLS. Development can use `SMTP_ALLOW_INSECURE_LOCAL=true` only with a loopback SMTP server; production ignores this exception. Personal email requires each user to enable **Email updates** in inbox preferences and have a valid sign-in email address. Organization channels do not depend on personal preferences or a sign-in email address; an Owner or Admin explicitly saves their recipients as described below. GitHub-backed personal recipients and administrators requesting tests require the worker's GitHub App and encrypted-user-token configuration for fresh authorization checks.
+SMTP requires TLS. Development can use `SMTP_ALLOW_INSECURE_LOCAL=true` only with a loopback SMTP server; production ignores this exception. Personal email requires each user to enable **Personal email notifications** in notification settings and have either a verified notification address or a valid existing sign-in email address. Organization channels do not depend on personal preferences or a sign-in email address; an Owner or Admin explicitly saves their recipients as described below. GitHub-backed personal recipients and administrators requesting tests require the worker's GitHub App and encrypted-user-token configuration for fresh authorization checks.
 
 Emails contain only a generic link to `/notifications`, with no repository names, SHAs or report details. Opening the inbox still requires current authorization. SMTP acceptance is recorded as **Email sent**; it does not prove arrival in the recipient's mailbox.
 
@@ -135,3 +135,52 @@ A Super Admin recovery account without an email address cannot receive personal 
 ### Email presentation
 
 Personal alerts, organization alerts and channel tests share a minimal HTML template: Preflyt branding, a short message and one **View notifications** button. Every message also includes a plain-text alternative. The link uses the deployment’s `WEB_ORIGIN`; email contains no repository names, findings or review contents, and no remote images or tracking pixels. Restart the worker after deploying template changes.
+
+
+## Personal notification addresses
+
+Under Settings → Notifications, users can enter an email address and request a
+verification code. The code is valid for 15 minutes with at most five attempts.
+Requests have a one-minute cooldown and a limit of three per user/workspace per
+hour. The API acknowledges a saved delivery request with HTTP 202 and does not
+wait for SMTP. The verification modal opens after that acknowledgment and shows
+queued, sent or unsuccessful delivery. Resending creates a new code and cancels
+pending delivery of the previous code.
+
+PostgreSQL stores the verification hash and a short-lived encrypted delivery
+payload. Encryption uses the existing `CONFIGURATION_ENCRYPTION_KEY` with an
+OTP-specific authenticated context bound to the delivery, user, workspace and
+hash. API and worker need the same key. Codes and addresses are never included
+in Redis job payloads; codes are not returned by the API or written into audit
+metadata. The existing email worker and SMTP connection deliver the message.
+Pending requests survive worker or Redis restarts. Delivery has up to five
+attempts with retry delays of 5, 10, 20 and 40 seconds, subject to worker reconciliation.
+The 15-minute expiry starts when requested, including queue time. Expired,
+replaced, removed and verified requests are not retried. Each attempt checks fresh
+workspace permission and current verification state. Encrypted payloads are
+cleared on terminal outcomes; completed delivery records are retained for up to
+30 days while the worker runs. SMTP acceptance is not proof of inbox delivery;
+a worker crash after acceptance can still cause a duplicate message on retry.
+
+Verification saves the personal destination and enables email alerts in that
+workspace. It never changes sign-in identities or links accounts by email. An
+existing verified destination stays active until a replacement is verified.
+Removing the destination clears pending verification and turns off personal email
+alerts in the workspace. Existing sign-in email fallback remains supported for
+users who later opt in again. SMTP delivery already in flight cannot be recalled.
+
+The current inbox recipient rules still apply. Setting an email does not subscribe
+a user to unauthorized repositories or bypass notification preferences. The worker
+rechecks membership, repository authorization and the current destination before
+sending generic notification links. Organization channels are separate.
+
+Apply `20261019163000_personal_notification_email` and
+`20261019170000_notification_verification_outbox` before recreating API, worker
+and web. Both are additive and were applied to the local development database on
+19 October 2026. Regenerate Prisma and deploy matching API/worker versions; the
+existing SMTP settings, queue and deployment encryption key are reused. Focused API and browser regressions passed after the user authorized testing.
+The local API and worker were rebuilt together; an actual queued verification
+email was accepted by SMTP on its first attempt. This confirms transport
+acceptance, not delivery to the inbox. See
+[the access and notification audit](access-and-notifications-audit-2026-10-19.md)
+for checks and deployment limits.

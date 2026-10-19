@@ -56,6 +56,7 @@ import { Main } from '@/components/layout/main'
 import { PageHeader } from '@/components/page-header'
 import { PageHelpDrawer } from '@/components/page-help-drawer'
 import { StatusBadge } from '@/components/status-badge'
+import { AddRepository } from '@/features/repositories/add-repository'
 import { TechIcon } from '@/features/repositories/tech-icon'
 import { useNavigationSession } from '@/features/workspace/navigation-session'
 import { useHealthPortfolio } from '../health/health-api'
@@ -277,18 +278,30 @@ export function Apps() {
   const [selectionFilter, setSelectionFilter] = useState('all')
   const [visibilityFilter, setVisibilityFilter] = useState('all')
   const [hasLoaded, setHasLoaded] = useState(false)
-  const [repositories, setRepositories] = useState<Repository[]>([])
-  const [installations, setInstallations] = useState<Installation[]>([])
+  const inventoryScope = `${session.data?.identityId ?? ''}:${session.data?.organizationId ?? ''}`
+  const [loadedScope, setLoadedScope] = useState('')
+  const [repositoryInventory, setRepositories] = useState<Repository[]>([])
+  const repositories =
+    loadedScope === inventoryScope
+      ? repositoryInventory.filter((repository) =>
+          canPerform(session.data, 'repository.read', repository.githubId)
+        )
+      : []
+  const [installationInventory, setInstallations] = useState<Installation[]>([])
+  const installations =
+    loadedScope === inventoryScope ? installationInventory : []
   const [loading, setLoading] = useState(true)
   const [savingRepository, setSavingRepository] = useState<string | null>(null)
   const [error, setError] = useState('')
 
-  async function loadRepositories() {
+  async function loadRepositories(
+    refresh = canPerform(session.data, 'repository.connect')
+  ) {
     setLoading(true)
     setError('')
     try {
       const response = await fetch(
-        `${API_BASE_URL}/github/repositories?refresh=true`,
+        `${API_BASE_URL}/github/repositories${refresh ? '?refresh=true' : ''}`,
         { credentials: 'include' }
       )
       if (!response.ok) throw new Error('Could not load GitHub repositories.')
@@ -298,6 +311,7 @@ export function Apps() {
       }
       setRepositories(result.repositories)
       setInstallations(result.installations)
+      setLoadedScope(inventoryScope)
       setHasLoaded(true)
       if (canPerform(session.data, 'assessment.read'))
         void healthQuery.refetch()
@@ -327,6 +341,7 @@ export function Apps() {
         if (active) {
           setRepositories(result.repositories)
           setInstallations(result.installations)
+          setLoadedScope(inventoryScope)
           setHasLoaded(true)
         }
       } catch (cause) {
@@ -345,7 +360,7 @@ export function Apps() {
     return () => {
       active = false
     }
-  }, [])
+  }, [inventoryScope])
 
   async function setSelected(repository: Repository, selected: boolean) {
     if (!canManage || savingRepository) return
@@ -364,7 +379,7 @@ export function Apps() {
       if (!response.ok) {
         throw new Error(
           response.status === 403
-            ? 'Only a Preflyt Owner or Admin can change repository selection.'
+            ? 'You no longer have permission to select this repository. Refresh and check your workspace role.'
             : 'Could not update repository selection.'
         )
       }
@@ -543,7 +558,10 @@ export function Apps() {
             actions={
               <>
                 {canManage && (
-                  <Button asChild>
+                  <AddRepository onAdded={() => loadRepositories(false)} />
+                )}
+                {canManage && (
+                  <Button variant='outline' asChild>
                     <a href={`${API_BASE_URL}/github/connection`}>
                       <Plug aria-hidden='true' /> Connect GitHub App
                     </a>

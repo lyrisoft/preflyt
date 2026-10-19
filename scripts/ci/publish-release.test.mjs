@@ -59,3 +59,13 @@ test('published images embed planned version and exact source commit',()=>{
   assert.equal(target.args.PREFLYT_BUILD_VERSION,'v0.1.3');assert.equal(target.args.PREFLYT_BUILD_SHA,env.GITHUB_SHA);
  }
 });
+test('Strix runner and sandbox build separately with pinned version tags for both architectures', () => {
+  for (const arch of ['amd64','arm64']) {
+    let config;
+    publishRelease('build', {...env,BUILD_GROUP:'strix',ARCH:arch},args=>args.includes('inspect')?missing():'',(_,contents)=>{config=JSON.parse(contents)});
+    assert.deepEqual(Object.keys(config.target),['preflyt-strix-runner','preflyt-strix-sandbox']);
+    assert.equal(config.target['preflyt-strix-runner'].dockerfile,'deploy/strix.Dockerfile');
+    assert.equal(config.target['preflyt-strix-sandbox'].dockerfile,'tools/strix-runner/sandbox.Dockerfile');
+    for (const target of Object.values(config.target)) assert.deepEqual(target.platforms,[`linux/${arch}`]);
+  }
+});

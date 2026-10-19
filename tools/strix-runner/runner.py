@@ -29,6 +29,9 @@ def valid_repository(value):
     # Preflyt API checks connection, organization, permissions and model consent.
     return isinstance(value,str) and re.fullmatch(r'[1-9][0-9]{0,15}',value) is not None
 
+def valid_sandbox_image(value):
+    return isinstance(value,str) and re.fullmatch(r'[a-z0-9][a-z0-9./:_-]+(?:@sha256:[a-f0-9]{64}|:v[0-9]+\.[0-9]+\.[0-9]+|:sha-[a-f0-9]{40})',value) is not None
+
 def reviewed_completion(exit_code,status,inspection):
     return (exit_code in [0,2] and status=='completed' and
             type(inspection.get('filesRead')) is int and inspection['filesRead']>0)
@@ -294,6 +297,9 @@ def main():
     parser=argparse.ArgumentParser()
     parser.add_argument('--state',default='apps/api/.preflyt/strix')
     parser.add_argument('--port',type=int,default=3012)
+    parser.add_argument('--host',default='127.0.0.1')
+    parser.add_argument('--origin',default=None)
+    parser.add_argument('--connection-file',default=None)
     args=parser.parse_args()
     os.umask(0o077)
     if importlib.metadata.version('strix-agent')!=VERSION:raise SystemExit('Install the pinned Strix runner environment first.')
@@ -305,16 +311,25 @@ def main():
     KEY=(STATE/'key').read_text() if (STATE/'key').is_file() else secrets.token_hex(32)
     (STATE/'key').write_text(KEY);(STATE/'key').chmod(0o600)
     cert=STATE/'cert.pem';key=STATE/'tls-key.pem'
-    if not cert.is_file():
-        subprocess.run(['openssl','req','-x509','-newkey','ec','-pkeyopt','ec_paramgen_curve:P-256','-nodes','-keyout',str(key),'-out',str(cert),'-days','30','-subj','/CN=localhost','-addext','subjectAltName=DNS:localhost,IP:127.0.0.1'],check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+    if not cert.is_file() or subprocess.run(['openssl','x509','-checkend','604800','-noout','-in',str(cert)],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode != 0:
+        subprocess.run(['openssl','req','-x509','-newkey','ec','-pkeyopt','ec_paramgen_curve:P-256','-nodes','-keyout',str(key),'-out',str(cert),'-days','365','-subj','/CN=localhost','-addext','subjectAltName=DNS:localhost,IP:127.0.0.1,DNS:strix-runner'],check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
     if not os.environ.get('DOCKER_HOST'):
         os.environ['DOCKER_HOST']=subprocess.check_output(['docker','context','inspect','--format','{{.Endpoints.docker.Host}}'],text=True).strip()
     client=docker_client()
-    # Build once from an explicit immutable upstream sandbox reference.
-    base=os.environ.get('STRIX_SANDBOX_BASE','')
-    if '@sha256:' not in base:raise SystemExit('Set STRIX_SANDBOX_BASE to the reviewed upstream sandbox image digest.')
-    built=subprocess.check_output(['docker','build','--pull=false','--quiet','--file',str(ROOT/'sandbox.Dockerfile'),'--build-arg','STRIX_SANDBOX_BASE='+base,'--tag','preflyt-strix-sandbox:local',str(ROOT)],text=True,timeout=180)
-    IMAGE=client.images.get(built.strip().splitlines()[-1]).id
+    # Production pulls a versioned release image into its dedicated engine.
+    # Local development retains the reviewed wrapper build from an immutable base.
+    prebuilt=os.environ.get('PREFLYT_STRIX_SANDBOX_IMAGE')
+    if prebuilt:
+        if not valid_sandbox_image(prebuilt):
+            raise SystemExit('Use an immutable digest or versioned release sandbox image.')
+        try:prepared=client.images.get(prebuilt)
+        except __import__('docker').errors.ImageNotFound:prepared=client.images.pull(prebuilt)
+        IMAGE=prepared.id
+    else:
+        base=os.environ.get('STRIX_SANDBOX_BASE','')
+        if '@sha256:' not in base:raise SystemExit('Set STRIX_SANDBOX_BASE to the reviewed upstream sandbox image digest.')
+        built=subprocess.check_output(['docker','build','--pull=false','--quiet','--file',str(ROOT/'sandbox.Dockerfile'),'--build-arg','STRIX_SANDBOX_BASE='+base,'--tag','preflyt-strix-sandbox:local',str(ROOT)],text=True,timeout=180)
+        IMAGE=client.images.get(built.strip().splitlines()[-1]).id
     NETWORK='preflyt-strix-isolated'
     try:network=client.networks.get(NETWORK)
     except Exception:network=client.networks.create(NETWORK,driver='bridge',internal=True)
@@ -341,9 +356,13 @@ def main():
             JOBS[directory.name]={'result':result}
             shutil.rmtree(directory)
     context=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER);context.load_cert_chain(cert,key)
-    server=ThreadingHTTPServer(('127.0.0.1',args.port),Handler);server.socket=context.wrap_socket(server.socket,server_side=True)
-    write_json(STATE/'connection.json',{'origin':f'https://127.0.0.1:{server.server_port}','apiKey':KEY,'ca':cert.read_text()})
-    print('Strix local runner ready for connected repositories authorized by Preflyt.',flush=True)
+    if args.host not in ['127.0.0.1','0.0.0.0']:raise SystemExit('Invalid controller listen address.')
+    origin=args.origin or f'https://127.0.0.1:{args.port}'
+    if origin not in [f'https://127.0.0.1:{args.port}',f'https://strix-runner:{args.port}']:raise SystemExit('Invalid controller origin.')
+    server=ThreadingHTTPServer((args.host,args.port),Handler);server.socket=context.wrap_socket(server.socket,server_side=True)
+    connection=Path(args.connection_file) if args.connection_file else STATE/'connection.json'
+    write_json(connection,{'origin':origin,'apiKey':KEY,'ca':cert.read_text()})
+    print('Strix runner ready for connected repositories authorized by Preflyt.',flush=True)
     def shutdown(signum,frame):
         with LOCK:
             processes=[value.get('process') for value in JOBS.values()]

@@ -42,7 +42,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [api, web]
+        group: [api, web, strix]
         platform:
           - arch: amd64
             runner: ubuntu-24.04
@@ -56,8 +56,8 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24.4.1
-      - name: Ensure API build disk headroom
-        if: matrix.group == 'api' && matrix.platform.arch == 'amd64'
+      - name: Ensure scanner build disk headroom
+        if: matrix.group != 'web' && matrix.platform.arch == 'amd64'
         run: node scripts/ci/prepare-image-build.mjs
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0

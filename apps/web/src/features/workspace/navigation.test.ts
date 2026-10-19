@@ -1,11 +1,52 @@
 import { describe, expect, it } from 'vitest'
 import { sidebarData } from '../../components/layout/data/sidebar-data'
-import { authorizedNavigation, primaryDestination } from './navigation-policy'
+import {
+  authorizedNavigation,
+  canViewDestination,
+  primaryDestination,
+} from './navigation-policy'
 import { workspaceSearchSchema } from './search-schema'
 
+const allPermissions = [
+  'assessment.read',
+  'repository.read',
+  'contributors.read',
+  'policy.read',
+  'ai.provider.manage',
+  'ai.skills.read',
+  'team.read',
+  'organization.members.manage',
+  'audit.read',
+]
+const sessionFor = (role?: string) => ({
+  role,
+  organizationId: 'org',
+  permissions: ['OWNER', 'ADMIN'].includes(role ?? '')
+    ? allPermissions
+    : role === 'AUDITOR'
+      ? [
+          'repository.read',
+          'assessment.read',
+          'contributors.read',
+          'policy.read',
+          'ai.skills.read',
+          'team.read',
+          'audit.read',
+        ]
+      : ['VIEWER', 'DEVELOPER', 'ENGINEERING_LEAD'].includes(role ?? '')
+        ? [
+            'repository.read',
+            'assessment.read',
+            'contributors.read',
+            'policy.read',
+            'ai.skills.read',
+            'team.read',
+          ]
+        : [],
+})
 const titles = (role?: string) =>
-  authorizedNavigation(sidebarData.navGroups, role).flatMap((group) =>
-    group.items.map((item) => item.title)
+  authorizedNavigation(sidebarData.navGroups, sessionFor(role)).flatMap(
+    (group) => group.items.map((item) => item.title)
   )
 describe('enterprise navigation permissions and scope', () => {
   it('keeps the familiar sidebar groups and all direct destinations for administrators', () => {
@@ -15,7 +56,7 @@ describe('enterprise navigation permissions and scope', () => {
       'Intelligence',
       'Administration',
     ])
-    for (const role of ['OWNER', 'ADMIN', 'SUPER_ADMIN']) {
+    for (const role of ['OWNER', 'ADMIN']) {
       expect(titles(role)).toEqual([
         'Overview',
         'Repositories',
@@ -44,8 +85,11 @@ describe('enterprise navigation permissions and scope', () => {
       expect(titles(role)).not.toContain('Access Control')
       expect(titles(role)).not.toContain('Audit log')
       expect(titles(role)).toContain('Settings')
-      expect(titles(role)).toContain('Integrations')
-      expect(titles(role)).toContain('Skills')
+      expect(titles(role)).not.toContain('AI Intelligence')
+      if (role === 'VIEWER' || role === 'DEVELOPER') {
+        expect(titles(role)).toContain('Integrations')
+        expect(titles(role)).toContain('Skills')
+      } else expect(titles(role)).not.toContain('Skills')
     }
   })
   it('highlights each page under its direct sidebar entry', () => {
@@ -107,9 +151,9 @@ it('includes the Audit log for Auditors without granting Access Control', () => 
   expect(titles('AUDITOR')).toContain('Audit log')
   expect(titles('AUDITOR')).not.toContain('Access Control')
   expect(
-    authorizedNavigation(sidebarData.navGroups, undefined, true).flatMap((g) =>
-      g.items.map((i) => i.title)
-    )
+    authorizedNavigation(sidebarData.navGroups, {
+      platformAdmin: true,
+    }).flatMap((g) => g.items.map((i) => i.title))
   ).not.toContain('Audit log')
 })
 
@@ -122,4 +166,45 @@ it('marks only AI Intelligence and Skills as beta, leaving Merge Protection unba
     items.find((item) => item.title === 'Merge Protection')?.badge
   ).toBeUndefined()
   expect(items.some((item) => item.badge === 'Preview')).toBe(false)
+})
+
+it('uses permissions rather than privileged role names and removes empty groups', () => {
+  expect(titles('SUPER_ADMIN')).toEqual(['Settings'])
+  const groups = authorizedNavigation(sidebarData.navGroups, {
+    organizationId: 'org',
+    role: 'OWNER',
+    permissions: [],
+  })
+  expect(groups.map((g) => g.title)).toEqual(['Administration'])
+  expect(groups[0].items.map((i) => i.title)).toEqual(['Settings'])
+  expect(
+    canViewDestination(
+      { organizationId: 'org', permissions: ['ai.skills.manage'] },
+      '/skills'
+    )
+  ).toBe(true)
+  expect(
+    canViewDestination(
+      { organizationId: 'org', role: 'OWNER', permissions: [] },
+      '/skills'
+    )
+  ).toBe(false)
+})
+it('applies the same policy to deep links and permission changes', () => {
+  const session = {
+    organizationId: 'org',
+    permissions: ['organization.members.manage'],
+  }
+  expect(canViewDestination(session, '/access-control?tab=people')).toBe(true)
+  session.permissions = []
+  expect(canViewDestination(session, '/access-control?tab=people')).toBe(false)
+  expect(canViewDestination(session, '/intelligence/model')).toBe(false)
+  expect(canViewDestination(session, '/settings/account')).toBe(true)
+})
+
+it('does not open repository details outside the user grants', () => {
+  const session={organizationId:'org',permissions:['repository.read'],repositoryGrants:['11']}
+  expect(canViewDestination(session,'/repositories/11')).toBe(true)
+  expect(canViewDestination(session,'/repositories/12')).toBe(false)
+  expect(canViewDestination({...session,organizationWide:true},'/repositories/12')).toBe(true)
 })

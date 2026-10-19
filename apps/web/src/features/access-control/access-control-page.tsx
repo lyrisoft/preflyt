@@ -132,7 +132,7 @@ const roleDescription: Record<string, string> = {
   SECURITY_ENGINEER:
     'Review security evidence, manage imported reports and read policies.',
   ENGINEERING_LEAD:
-    'Run and review assessments, read policies and contributor evidence.',
+    'Add repositories, create skills, standards and policy drafts, and run and review assessments. Skill approval and policy publication need separate permissions.',
   DEVELOPER: 'Run assessments and review results for assigned repositories.',
   AUDITOR:
     'Read audit history, assessments, policies and contributor evidence. No changes.',
@@ -300,6 +300,10 @@ export function AccessControlPage() {
   )
   const roles = access.data?.roles ?? []
   const administrative = ['OWNER', 'ADMIN'].includes(role)
+  const unavailableRepositoryIds = (editing?.repositoryIds ?? []).filter(
+    (id) =>
+      !access.data?.repositories.some((repository) => repository.id === id)
+  )
   const assignable = roles.filter(
     (r) => session.data?.role === 'OWNER' || !['OWNER', 'ADMIN'].includes(r.id)
   )
@@ -1276,6 +1280,34 @@ export function AccessControlPage() {
                         {repo.fullName}
                       </label>
                     ))}
+                    {unavailableRepositoryIds.length > 0 && (
+                      <div className='space-y-3 border-t pt-3'>
+                        <p className='text-xs leading-relaxed text-muted-foreground'>
+                          These existing assignments are outside your current
+                          repository list. Keep them selected to preserve
+                          access, or clear them to remove it. They do not bypass
+                          GitHub access checks.
+                        </p>
+                        {unavailableRepositoryIds.map((id) => (
+                          <label
+                            key={id}
+                            className='flex items-center gap-2 text-sm'
+                          >
+                            <Checkbox
+                              checked={repoIds.includes(id)}
+                              onCheckedChange={(checked) =>
+                                setRepos((ids) =>
+                                  checked === true
+                                    ? [...ids, id]
+                                    : ids.filter((value) => value !== id)
+                                )
+                              }
+                            />
+                            Repository {id} (currently unavailable)
+                          </label>
+                        ))}
+                      </div>
+                    )}
                     {!access.data?.repositories.length && (
                       <p className='text-xs text-muted-foreground'>
                         Connect repositories before assigning repository access.

@@ -1,0 +1,8 @@
+{
+  "type": "fix",
+  "title": "Engineering Lead authoring and reliable repository assignments",
+  "description": "Engineering Lead can connect and select authorized repositories and create skills and standards. Selecting a repository grants access only to that repository; Developer permissions, approval requirements and administrative powers are unchanged. Admins can retain or remove existing unavailable assignments without blocking other edits, while new assignments still require current access. The access editor makes these retained assignments visible.",
+  "upgrade": "Recreate API, worker and web. Role permissions are evaluated on the next request; no database migration is required.",
+  "migrations": [],
+  "configuration": []
+}

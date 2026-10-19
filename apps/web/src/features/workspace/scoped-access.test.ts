@@ -50,11 +50,10 @@ it('keeps contributor filters and detail tabs deep-linkable with safe defaults',
 })
 
 it('keeps platform operations accessible without granting organization administration', () => {
-  const items = authorizedNavigation(
-    sidebarData.navGroups,
-    'VIEWER',
-    true
-  ).flatMap((g) => g.items)
+  const items = authorizedNavigation(sidebarData.navGroups, {
+    role: 'VIEWER',
+    platformAdmin: true,
+  }).flatMap((g) => g.items)
   expect(items.map((i) => i.title)).toContain('Access Control')
   expect(items.map((i) => i.title)).toContain('Settings')
 })

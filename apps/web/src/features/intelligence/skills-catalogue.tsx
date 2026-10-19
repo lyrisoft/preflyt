@@ -35,10 +35,8 @@ import { AiIndicator } from '@/components/ai-indicator'
 import { StatusBadge } from '@/components/status-badge'
 import { SurfaceIcon } from '@/components/surface-icon'
 import { governanceRequest } from '../repositories/governance-api'
-import {
-  useNavigationSession,
-  canAdminister,
-} from '../workspace/navigation-session'
+import { useNavigationSession } from '../workspace/navigation-session'
+import { canPerform } from '../workspace/scoped-access'
 import { SkillUpload, MarkdownInstructions } from './skill-markdown'
 import {
   downloadSkillMarkdown,
@@ -79,10 +77,8 @@ type Template = Omit<
 export function SkillsCatalogue() {
   const retireTrigger = useRef<HTMLButtonElement>(null)
   const session = useNavigationSession(),
-    manage = canAdminister(session.data?.role),
-    approve =
-      manage ||
-      ['POLICY_MANAGER', 'SECURITY_ENGINEER'].includes(session.data?.role ?? '')
+    manage = canPerform(session.data, 'ai.skills.manage'),
+    approve = canPerform(session.data, 'ai.skills.approve')
   const key = [
       'review-skills',
       session.data?.identityId,
