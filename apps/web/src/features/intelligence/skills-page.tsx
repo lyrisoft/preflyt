@@ -26,7 +26,7 @@ const help = [
   {
     title: 'Create and approve',
     content:
-      'Built-in skills provide Markdown review steps for existing engineering checks. Filter by skill or check, preview the instructions, then Use skill to create or reopen the organization draft. Owners and Admins can save drafts. Review the instructions, source and license before approving the version, then enable it. Editing creates a new draft version. Policy Managers and Security Engineers can approve versions but cannot enable them.',
+      'Built-in skills provide Markdown review steps for existing engineering checks. Filter by skill or check, preview the instructions, then Use skill to create or reopen the organization draft. Owners, Admins and Engineering Leads can save drafts. Review the instructions, source and license before approving the version, then enable it. Editing creates a new draft version. Policy Managers and Security Engineers can approve versions but cannot enable them.',
   },
   {
     title: 'Assign and run',

@@ -131,3 +131,25 @@ that is no longer in their current repository picker. New grants must be current
 authorized and belong to the same organization. Preserving a grant never bypasses
 GitHub, installation availability or current membership checks. The editor displays
 these existing unavailable assignments explicitly rather than silently deleting them.
+
+Navigation and command search use the current API session permissions, rather than
+role-name assumptions, to omit inaccessible destinations and empty groups. Direct
+links to forbidden workspace pages show an access message without mounting the
+page's requests; repository detail URLs also check assigned scope. Readable pages
+remain visible even when creation or approval is unavailable. Personal settings
+and explicit deployment-admin recovery remain accessible. These visibility rules
+are usability controls; API authorization remains authoritative on every request.
+Skills creation/upload/editing follows `ai.skills.manage`; approval follows the
+separate `ai.skills.approve` permission, including for Engineering Lead.
+
+Engineering Lead also has `policy.draft` for assigned repositories, allowing policy
+creation and draft edits. This does not grant `policy.publish`, exception approval
+or GitHub enforcement permissions. Publication and activation retain their existing
+independent authorization and approval checks.
+
+The default repository inventory and overview return only readable repositories,
+including for Engineering Lead. Charts, counts and links use that same scope;
+refresh never discards the verified user scope. Adding repositories is an explicit
+manager action. Its separate discovery endpoint returns only repository ID/name
+metadata available through the caller's GitHub/installations, without profile or
+assessment data. Adoption records a grant before reports become accessible.

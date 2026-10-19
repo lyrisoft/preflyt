@@ -354,8 +354,8 @@ export class GitHubService {
       }
     }
 
-    // Organization administrators may see newly discovered repositories immediately.
-    return this.repositoryOverview(organizationAdmin ? undefined : scope, organizationId, organizationAdmin)
+    // Refreshing inventory never widens the caller's verified repository scope.
+    return this.repositoryOverview(scope, organizationId, organizationAdmin)
   }
 
   // Last-synced display data only. No upstream calls and no permission grants.

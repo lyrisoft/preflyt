@@ -8,7 +8,7 @@ import { sidebarData } from '@/components/layout/data/sidebar-data'
 import { Main } from '@/components/layout/main'
 import { PageHeader } from '@/components/page-header'
 import { WorkspaceStart } from '@/features/dashboard/workspace-start'
-import { primaryDestination } from './navigation-policy'
+import { canViewDestination, primaryDestination } from './navigation-policy'
 import { useNavigationSession } from './navigation-session'
 
 /** Do not mount organization-scoped pages until a workspace is selected. */
@@ -24,6 +24,25 @@ export function OrganizationBoundary({ children }: { children: ReactNode }) {
     ) ||
     (destination === '/access-control' && session.data?.platformAdmin)
 
+  if (
+    session.isSuccess &&
+    session.data.organizationId &&
+    !canViewDestination(session.data, pathname)
+  ) {
+    return (
+      <>
+        <AppHeader breadcrumbs={[{ label: 'Page unavailable' }]} />
+        <Main className='space-y-6'>
+          <PageHeader
+            title='You do not have access to this page'
+            section='Workspace'
+            description='Ask your workspace administrator if you need access.'
+            icon={Building2}
+          />
+        </Main>
+      </>
+    )
+  }
   if (independent || (session.isSuccess && session.data.organizationId))
     return children
 

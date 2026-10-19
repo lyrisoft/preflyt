@@ -1,0 +1,8 @@
+{
+  "type": "fix",
+  "title": "Repository lists match actual access",
+  "description": "Repository inventory, counts, charts and links show only repositories the current user can read. Refresh retains verified scope, and changing identity or workspace hides the previous inventory. Engineering Leads use a separate Add repository action to discover and adopt authorized repositories before opening their reports.",
+  "upgrade": "Recreate API and web. No migration or configuration change is required.",
+  "migrations": [],
+  "configuration": []
+}

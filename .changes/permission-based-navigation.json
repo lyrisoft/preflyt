@@ -1,0 +1,8 @@
+{
+  "type": "fix",
+  "title": "Show navigation and skill actions by current permissions",
+  "description": "Sidebar and command search omit destinations the signed-in user cannot view and hide empty groups. Direct forbidden page links show an access message without mounting page requests. Repository details respect assigned scope. Skill creation, upload and editing follow the actual authoring permission, including Engineering Lead, while approval remains a separate permission. Personal settings and explicit deployment recovery remain accessible.",
+  "upgrade": "Rebuild the web service; server-side authorization remains enforced independently.",
+  "migrations": [],
+  "configuration": []
+}
