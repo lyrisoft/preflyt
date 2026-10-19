@@ -44,7 +44,10 @@ class PaymentRiskTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             inspection=SourceInspection(Path(directory)/'source-inspection.json')
             inspection.audit_path.with_name('source-issues.json').write_text(json.dumps([{'id':'issue-1'}]))
-            self.assertFalse(save_report(inspection,fixture())['success'])
+            rejected = save_report(inspection,fixture())
+            self.assertFalse(rejected['success'])
+            self.assertIn('reference was not observed: payments.py:1-2', rejected['detail'])
+            self.assertIn('observedSourceRanges', rejected['detail'])
             inspection.reads={'specialist':{'payments.py':[(1,2)]}}
             self.assertTrue(save_report(inspection,fixture())['success'])
             saved=inspection.audit_path.with_name('payment-risk-report.json')
