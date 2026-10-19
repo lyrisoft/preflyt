@@ -27,6 +27,7 @@ import {
   MaxLength,
   Min,
 } from "class-validator";
+import { Transform } from "class-transformer";
 import type { Request } from "express";
 import { AuthService } from "../auth/auth.service.js";
 import {
@@ -35,13 +36,40 @@ import {
 } from "../auth/session.guard.js";
 import { ReviewSkillsService } from "./review-skills.service.js";
 import { SkillReviewService } from "./skill-review.service.js";
+import { skillLimits, skillLengthMessage } from "./review-skills.js";
+import { skillMarkdownMaxBytes } from "./skill-markdown.js";
 type R = Request & { preflytSession: AuthenticatedSession };
 class SkillDto {
-  @IsOptional() @IsArray() @ArrayMaxSize(20) @IsString({ each: true }) languages?: string[];
-  @IsOptional() @IsArray() @ArrayMaxSize(20) @IsString({ each: true }) frameworks?: string[];
-  @IsString() @MaxLength(100) name!: string;
-  @IsString() @MaxLength(400) description!: string;
-  @IsString() @MaxLength(6000) instructions!: string;
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsString({ each: true })
+  languages?: string[];
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsString({ each: true })
+  frameworks?: string[];
+  @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
+  @IsString()
+  @MaxLength(skillLimits.name, {
+    message: (args) => skillLengthMessage("Name", skillLimits.name, args.value),
+  })
+  name!: string;
+  @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
+  @IsString()
+  @MaxLength(skillLimits.description, {
+    message: (args) =>
+      skillLengthMessage("Description", skillLimits.description, args.value),
+  })
+  description!: string;
+  @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
+  @IsString()
+  @MaxLength(skillLimits.instructions, {
+    message: (args) =>
+      skillLengthMessage("Instructions", skillLimits.instructions, args.value),
+  })
+  instructions!: string;
   @IsArray()
   @ArrayMinSize(1)
   @ArrayMaxSize(6)
@@ -56,8 +84,20 @@ class SkillDto {
   @ArrayUnique()
   @Matches(/^[1-9]\d{0,15}$/, { each: true })
   repositories!: string[];
-  @IsString() @MaxLength(300) source!: string;
-  @IsString() @MaxLength(100) license!: string;
+  @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
+  @IsString()
+  @MaxLength(skillLimits.source, {
+    message: (args) =>
+      skillLengthMessage("Source", skillLimits.source, args.value),
+  })
+  source!: string;
+  @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
+  @IsString()
+  @MaxLength(skillLimits.license, {
+    message: (args) =>
+      skillLengthMessage("License", skillLimits.license, args.value),
+  })
+  license!: string;
   @IsOptional() @IsUUID() skillKey?: string;
   @IsInt() @Min(0) @Max(199) expectedVersion!: number;
 }
@@ -68,7 +108,11 @@ class UpstreamDto {
   @IsString() @MaxLength(80) licensePath!: string;
 }
 class MarkdownDto {
-  @IsString() @MaxLength(32768) markdown!: string;
+  @IsString()
+  @MaxLength(skillMarkdownMaxBytes, {
+    message: "File: maximum 128 KiB of Markdown text.",
+  })
+  markdown!: string;
 }
 class ActionDto {
   @Matches(/^[a-f0-9]{64}$/) expectedDigest!: string;
@@ -94,9 +138,12 @@ export class ReviewSkillsController {
   @Get() @Header("Cache-Control", "no-store") list(@Req() req: R) {
     return this.skills.list(req.preflytSession);
   }
-  @Post("upstream") @Header("Cache-Control","no-store") upstream(@Req() req:R,@Body() body:UpstreamDto) {
+  @Post("upstream") @Header("Cache-Control", "no-store") upstream(
+    @Req() req: R,
+    @Body() body: UpstreamDto,
+  ) {
     this.auth.assertOrigin(req.headers.origin);
-    return this.skills.upstream(req.preflytSession,body);
+    return this.skills.upstream(req.preflytSession, body);
   }
   @Post("parse") @Header("Cache-Control", "no-store") parse(
     @Req() req: R,
@@ -181,10 +228,10 @@ export class SkillReviewController {
       { includeSource: body.includeSource ?? false },
     );
   }
-  @Post(':id/retry') @Header('Cache-Control', 'no-store') retry(
+  @Post(":id/retry") @Header("Cache-Control", "no-store") retry(
     @Req() req: R,
-    @Param('repositoryId') repo: string,
-    @Param('id') id: string,
+    @Param("repositoryId") repo: string,
+    @Param("id") id: string,
   ) {
     this.auth.assertOrigin(req.headers.origin);
     return this.reviews.retry(req.preflytSession, repo, id);

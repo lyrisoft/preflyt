@@ -11,7 +11,7 @@ const help = [
   {
     title: 'Markdown skill files',
     content:
-      'Write instructions in Markdown and use Preview to review them. Upload SKILL.md to open an editable draft; uploading does not save, approve or enable it. The UTF-8 file must be at most 32 KiB, with name and description in a YAML header and up to 6,000 instruction characters below it. Optional header fields are source, license, stages, repositories, languages and frameworks. Enter the source and license before saving. Download SKILL.md exports the selected database version. Existing policies keep their approved version and digest; file changes require a new draft and approval. Preview does not run HTML or load linked images.',
+      'Write instructions in Markdown and use Preview to review them. Upload SKILL.md to open an editable draft; uploading does not save, approve or enable it. The UTF-8 file must be at most 128 KiB. Its YAML header must include a name and a description of up to 2,000 characters; Markdown instructions below the header can contain up to 24,000 characters. Optional header fields are source, license, stages, repositories, languages and frameworks. Enter the source and license before saving. Download SKILL.md exports the selected database version. Existing policies keep their approved version and digest; file changes require a new draft and approval. Preview does not run HTML or load linked images.',
   },
   {
     title: 'Third-party imports',
