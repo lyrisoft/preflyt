@@ -1,0 +1,8 @@
+{
+  "type": "improvement",
+  "title": "A clearer introduction to Preflyt",
+  "description": "The homepage explains Preflyt as open source code quality and security for GitHub, with concrete examples of repository checks, findings investigation and pull request requirements. The three-step workflow appears before detailed features. Documentation and search descriptions use the same wording.",
+  "upgrade": "none",
+  "migrations": [],
+  "configuration": []
+}

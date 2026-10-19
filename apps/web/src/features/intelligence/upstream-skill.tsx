@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { Download, FolderGit2 } from 'lucide-react'
+import { Download, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -77,7 +77,7 @@ export function UpstreamSkill({
         <DialogContent className='flex max-h-[85svh] flex-col sm:max-w-4xl'>
           <DialogHeader>
             <DialogTitle className='flex items-center gap-3'>
-              <SurfaceIcon icon={FolderGit2} tone='violet' size='sm' />
+              <SurfaceIcon icon={Sparkles} tone='violet' size='sm' />
               Review a skill from GitHub
             </DialogTitle>
             <DialogDescription>

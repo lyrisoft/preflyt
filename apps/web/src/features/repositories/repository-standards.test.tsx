@@ -146,6 +146,56 @@ it('preserves saved historical versions and sends the selection concurrency toke
     })
   await view.unmount()
 })
+
+it('keeps saved standards and AI review counts readable on a phone', async () => {
+  await page.viewport(320, 900)
+  state.data.catalogue = [
+    {
+      ...pack('security'),
+      title: 'Application Security',
+      aiChecks: [
+        {
+          id: 'ai-security',
+          title: 'Security evidence review',
+          kind: 'AI_REVIEW',
+          mode: 'ADVISORY',
+          skillId: 'skill',
+          skillVersion: 1,
+          skillDigest: 'b'.repeat(64),
+          stages: ['repository'],
+        },
+      ],
+    },
+  ]
+  state.data.selection = {
+    id: 'saved',
+    revision: 1,
+    profile: 'RECOMMENDED',
+    packs: [{ id: 'security', version: '1.0.0' }],
+    sourceSha: null,
+    createdAt: '2026-10-19T00:00:00Z',
+  }
+  const view = await mount()
+  await expect
+    .element(
+      view.getByRole('button', { name: /Application Security.*1 AI review/ })
+    )
+    .toBeVisible()
+  await expect
+    .poll(() => document.documentElement.scrollWidth)
+    .toBeLessThanOrEqual(320)
+  await view
+    .getByRole('button', { name: /Application Security.*1 AI review/ })
+    .click()
+  await expect
+    .element(
+      view.getByRole('heading', { name: 'Application Security', exact: true })
+    )
+    .toBeVisible()
+  await expect
+    .element(view.getByRole('img', { name: 'AI-assisted' }))
+    .toBeVisible()
+})
 it('keeps rejected saves visible for recovery and prevents more than five standards', async () => {
   state.data.catalogue = Array.from({ length: 6 }, (_, i) => pack(String(i)))
   state.data.recommendations = []

@@ -1,0 +1,8 @@
+{
+  "type": "improvement",
+  "title": "Sparkle icons distinguish AI reviews",
+  "description": "Standards, skills, policy checks and review selectors use the shared sparkle icon to identify AI assistance. Ordinary CI checks keep their existing markers, and AI output remains advisory. Review counts use the correct singular or plural label.",
+  "upgrade": "none",
+  "migrations": [],
+  "configuration": []
+}

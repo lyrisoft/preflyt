@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { Sparkles, Play, RefreshCw } from 'lucide-react'
+import { Sparkles, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
@@ -13,6 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { AiIndicator } from '@/components/ai-indicator'
 import { ResultTimestamp } from '@/components/result-timestamp'
 import { StatusBadge } from '@/components/status-badge'
 import { SurfaceIcon } from '@/components/surface-icon'
@@ -199,7 +200,8 @@ export function SkillReviewPanel({
           <article key={r.id} className='space-y-3 border-t pt-5'>
             <div className='flex flex-wrap items-center justify-between gap-3'>
               <div>
-                <h4 className='text-base font-semibold'>
+                <h4 className='flex items-center gap-2 text-base font-semibold'>
+                  <AiIndicator />
                   {r.state === 'SUCCEEDED'
                     ? `${r.result?.findings.length ?? 0} suggestion${r.result?.findings.length === 1 ? '' : 's'}`
                     : 'Review progress'}
@@ -242,6 +244,7 @@ export function SkillReviewPanel({
                 disabled={busy}
                 onClick={() => void action(`/${r.id}/retry`, {})}
               >
+                <AiIndicator decorative />
                 Retry AI review
               </Button>
             )}
@@ -440,6 +443,7 @@ export function SkillReviewPanel({
                         )
                       }
                     />
+                    <AiIndicator decorative />
                     {s.title} · skill v{s.skillVersion}
                     {!s.available
                       ? ` · ${s.selection?.reason ?? 'Unavailable'}`
@@ -482,7 +486,7 @@ export function SkillReviewPanel({
                     })
                   }
                 >
-                  <Play className='size-3.5' aria-hidden='true' />
+                  <AiIndicator decorative />
                   Run review
                 </Button>
               </div>

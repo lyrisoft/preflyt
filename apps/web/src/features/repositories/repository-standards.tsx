@@ -16,6 +16,7 @@ import {
   SheetTrigger,
 } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
+import { AiIndicator } from '@/components/ai-indicator'
 import { SurfaceIcon } from '@/components/surface-icon'
 import { RelativeTime } from './relative-time'
 import { useStandards, type Pack } from './repository-queries'
@@ -33,9 +34,12 @@ function SavedStandard({ pack }: { pack: Pack }) {
           <span className='flex shrink-0 items-center gap-2 text-xs text-muted-foreground'>
             v{pack.version} · {pack.rules.length}{' '}
             {pack.rules.length === 1 ? 'check' : 'checks'}
-            {pack.aiChecks?.length
-              ? ` · ${pack.aiChecks.length} AI Reviews`
-              : ''}
+            {!!pack.aiChecks?.length && (
+              <span className='inline-flex items-center gap-1.5'>
+                · <AiIndicator decorative /> {pack.aiChecks.length} AI{' '}
+                {pack.aiChecks.length === 1 ? 'review' : 'reviews'}
+              </span>
+            )}
             <ChevronRight className='size-4' aria-hidden='true' />
           </span>
         </button>
@@ -46,9 +50,12 @@ function SavedStandard({ pack }: { pack: Pack }) {
           <SheetDescription>
             v{pack.version} · {pack.rules.length}{' '}
             {pack.rules.length === 1 ? 'check' : 'checks'}
-            {pack.aiChecks?.length
-              ? ` · ${pack.aiChecks.length} AI Reviews`
-              : ''}
+            {!!pack.aiChecks?.length && (
+              <span className='inline-flex items-center gap-1.5'>
+                · <AiIndicator decorative /> {pack.aiChecks.length} AI{' '}
+                {pack.aiChecks.length === 1 ? 'review' : 'reviews'}
+              </span>
+            )}
           </SheetDescription>
         </SheetHeader>
         <div className='min-h-0 flex-1 space-y-4 overflow-y-auto p-4 text-sm'>
@@ -73,8 +80,12 @@ function SavedStandard({ pack }: { pack: Pack }) {
           {!!pack.aiChecks?.length && (
             <ul className='space-y-2'>
               {pack.aiChecks.map((review) => (
-                <li key={review.id}>
-                  {review.title}{' '}
+                <li
+                  key={review.id}
+                  className='flex flex-wrap items-center gap-2'
+                >
+                  <AiIndicator />
+                  <span>{review.title}</span>
                   <span className='text-xs text-muted-foreground'>
                     Skill v{review.skillVersion} · suggestions only
                   </span>

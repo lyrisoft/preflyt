@@ -13,22 +13,22 @@ const features = [
     label: 'Repository health',
     title: (
       <>
-        Understand your code.
+        Find security risks.
         <br />
-        Keep the context.
+        Check code quality.
       </>
     ),
     href: '/product/repository-health',
     description:
-      'Understand repository health through reported findings, comparable assessments and the source at the original commit. See what ran, what was measured and what needs your attention.',
+      'Scan for exposed secrets, vulnerable dependencies and supported code issues. Track findings over time and inspect the source at the commit that was scanned.',
     items: [
       {
-        title: 'Findings at the commit',
-        text: 'Investigate reported issues with their rule, file and original revision.',
+        title: 'Security and code quality checks',
+        text: 'See reported issues and which parts of your repository were analyzed.',
       },
       {
-        title: 'Comparable reports',
-        text: 'Follow the trend when analyzer and scope evidence can be compared.',
+        title: 'Findings over time',
+        text: 'Compare scans when they cover the same checks and scope.',
       },
       {
         title: 'Clear analysis limits',
@@ -41,21 +41,21 @@ const features = [
     label: 'Findings',
     title: (
       <>
-        See the issue. <br />
-        Find the next step.
+        See the affected code. <br />
+        Know what to fix.
       </>
     ),
     href: '/product/repository-health',
     description:
-      'Investigate reported issues across your repositories. Read severity and check breakdowns, filter the finding list and keep missing or unverified results visible alongside the evidence.',
+      'Investigate issues across your repositories in one findings list. Review severity, affected lines and available remediation guidance, with analysis gaps kept visible.',
     items: [
       {
-        title: 'Severity and check charts',
-        text: 'Understand the recorded distribution before investigating an issue.',
+        title: 'Filter and prioritize',
+        text: 'Narrow the list by repository, severity and finding source.',
       },
       {
         title: 'Findings at the source',
-        text: 'Follow a finding to its rule, file and assessed revision.',
+        text: 'Open the affected code at the commit that was scanned.',
       },
       {
         title: 'Missing evidence',
@@ -68,8 +68,8 @@ const features = [
     label: 'Contributors',
     title: (
       <>
-        Follow the work. <br />
-        Keep the context.
+        See who contributed. <br />
+        Follow their activity.
       </>
     ),
     href: '/product',
@@ -81,8 +81,8 @@ const features = [
         text: 'Read activity in the selected period and repository scope.',
       },
       {
-        title: 'PR revision evidence',
-        text: 'Distinguish a recorded snapshot from a pull request without a matching one.',
+        title: 'Pull request assessments',
+        text: 'See which pull requests have a saved assessment for their commit.',
       },
       {
         title: 'Contributor directory',
@@ -95,13 +95,14 @@ const features = [
     label: 'Standards & evidence',
     title: (
       <>
-        Your requirements.
-        <br />A traceable result.
+        Set your requirements.
+        <br />
+        Check each change.
       </>
     ),
     href: '/product/standards-and-evidence',
     description:
-      'Bring versioned engineering requirements and verified CI results into one review. Every result stays bound to the policy and commit; missing evidence remains incomplete.',
+      'Choose the tests, scans and engineering checks your team requires. Preflyt checks results from your CI workflow against those requirements for the same commit. Missing required results stay incomplete.',
     items: [
       {
         title: 'Versioned standards',
@@ -122,9 +123,9 @@ const features = [
     label: 'Merge Protection',
     title: (
       <>
-        A clearer review.
+        Require passing checks.
         <br />
-        Before the merge.
+        Before merging.
       </>
     ),
     href: '/product/merge-protection',
@@ -153,22 +154,21 @@ export function MarketingHomepage() {
         <section className='reference-hero container'>
           <div className='hero-copy'>
             <span className='reference-label'>
-              Self-hosted. Apache-2.0. Built for GitHub.
+              For engineering teams · Self-hosted · Apache-2.0
             </span>
             <h1>
-              Open source
+              Open source code quality
               <br />
-              engineering assurance.
+              and security for GitHub.
             </h1>
             <p>
-              Know what passed and what needs attention. Bring repository
-              health, approved engineering standards and verified CI evidence
-              into one self-hosted workspace.
+              Preflyt scans your repositories for security and code quality
+              issues. See the affected code, understand what to fix, and check
+              pull requests against your team's requirements.
             </p>
             <div className='reference-actions'>
               <a href={docs} className='button'>
-                Community install guide{' '}
-                <ArrowRight size={15} aria-hidden='true' />
+                Install Preflyt <ArrowRight size={15} aria-hidden='true' />
               </a>
               <a
                 href='https://github.com/lyrisoft/preflyt'
@@ -221,6 +221,7 @@ export function MarketingHomepage() {
           </div>
           <HeroArtwork />
         </section>
+        <HowItWorks />
         <EngineeringFigures />
         <div className='reference-foundation'>
           <div className='container'>
@@ -311,58 +312,6 @@ export function MarketingHomepage() {
             </TabsContent>
           </Tabs>
         </section>
-        <section className='reference-process container' id='how-it-works'>
-          <SectionIllustration variant='process' />
-          <div>
-            <p className='reference-label'>Fits the way you build</p>
-            <h2>Start with one repository.</h2>
-            <a className='text-link' href={docs}>
-              Follow the getting-started guide{' '}
-              <ArrowUpRight size={15} aria-hidden='true' />
-            </a>
-          </div>
-          <ol>
-            <li>
-              <span>01</span>
-              <div>
-                <h3>Install Community Edition</h3>
-                <p>
-                  Start the Docker Compose stack and create your admin account.
-                </p>
-              </div>
-            </li>
-            <li>
-              <span>02</span>
-              <div>
-                <h3>Connect your GitHub App</h3>
-                <p>
-                  Choose repositories during installation in GitHub. They load
-                  into Preflyt while you stay signed in as your admin.
-                </p>
-              </div>
-            </li>
-            <li>
-              <span>03</span>
-              <div>
-                <h3>Read your first Health report</h3>
-                <p>
-                  Review findings, affected code and analysis limits. The
-                  bundled scanner runs supported checks without CI setup.
-                </p>
-              </div>
-            </li>
-            <li>
-              <span>04</span>
-              <div>
-                <h3>Add standards and PR feedback</h3>
-                <p>
-                  When you are ready, choose standards, publish a branch policy
-                  and connect your CI results with the Preflyt Action.
-                </p>
-              </div>
-            </li>
-          </ol>
-        </section>
         <section className='reference-hosting container' id='self-hosting'>
           <SectionIllustration variant='hosting' />
           <Layers size={26} aria-hidden='true' />
@@ -381,8 +330,9 @@ export function MarketingHomepage() {
             </p>
             <p>
               Start with Docker Compose and the bundled Health scanner. AI
-              reviews are optional: connect your own provider when you need
-              suggestions. Core checks work without a paid model.
+              security review is optional and in beta: connect your own provider
+              for source code review suggestions. Core checks work without a
+              paid model.
             </p>
             <p>
               <strong>Managed Cloud is planned.</strong> A future paid service
@@ -468,6 +418,55 @@ export function MarketingHomepage() {
         <MarketingClosing title='Bring clarity to the next change.' />
       </main>
     </MarketingLayout>
+  )
+}
+function HowItWorks() {
+  return (
+    <section className='reference-process container' id='how-it-works'>
+      <SectionIllustration variant='process' />
+      <div>
+        <p className='reference-label'>How Preflyt works</p>
+        <h2>From a repository to your next fix.</h2>
+        <a className='text-link' href={docs}>
+          Follow the setup guide <ArrowUpRight size={15} aria-hidden='true' />
+        </a>
+      </div>
+      <ol>
+        <li>
+          <span>01</span>
+          <div>
+            <h3>Choose repositories to scan</h3>
+            <p>
+              Install Preflyt on your infrastructure, connect your GitHub App
+              and select repositories. Preflyt runs supported security and code
+              quality checks without CI setup.
+            </p>
+          </div>
+        </li>
+        <li>
+          <span>02</span>
+          <div>
+            <h3>Investigate issues in the code</h3>
+            <p>
+              Open a finding to inspect the affected lines, why it matters and
+              available fix guidance. Each report shows what was checked and any
+              analysis limits.
+            </p>
+          </div>
+        </li>
+        <li>
+          <span>03</span>
+          <div>
+            <h3>Set checks for pull requests</h3>
+            <p>
+              Choose your team's requirements and connect test and scan results
+              from CI. Configure GitHub to require the Preflyt check before
+              merging.
+            </p>
+          </div>
+        </li>
+      </ol>
+    </section>
   )
 }
 function HeroArtwork() {

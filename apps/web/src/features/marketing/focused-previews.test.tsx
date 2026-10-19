@@ -27,7 +27,13 @@ it.each([320, 768, 1440])(
     const view = await render(<MarketingHomepage />)
     await expect
       .element(view.getByRole('heading', { level: 1 }))
-      .toHaveTextContent(/Open source\s*engineering assurance\./)
+      .toHaveTextContent(/Open source code quality\s*and security for GitHub\./)
+    await expect
+      .element(view.getByRole('link', { name: 'Install Preflyt', exact: true }))
+      .toHaveAttribute(
+        'href',
+        'https://docs.preflytlabs.com/getting-started/quick-start'
+      )
     await expect
       .poll(() => document.documentElement.scrollWidth)
       .toBeLessThanOrEqual(window.innerWidth)
@@ -92,7 +98,10 @@ it('shows populated repository evidence and lets visitors investigate demo findi
     .element(view.getByRole('region', { name: 'Findings over time' }))
     .toBeVisible()
   await view.getByText('View chart data', { exact: true }).click()
-  await view.getByRole('button', { name: 'Open health report 1ed530b' }).click()
+  await view
+    .getByRole('button', { name: /Open scan.*12 findings/ })
+    .last()
+    .click()
   await expect
     .element(view.getByRole('status'))
     .toHaveTextContent('12 findings')

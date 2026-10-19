@@ -1,19 +1,6 @@
 import { useRef, useState, type FormEvent } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import {
-  BookOpen,
-  Download,
-  FileText,
-  FlaskConical,
-  Layers,
-  Loader2,
-  Plus,
-  Save,
-  Pencil,
-  ServerCog,
-  ShieldCheck,
-  Workflow,
-} from 'lucide-react'
+import { Download, Loader2, Plus, Save, Pencil, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   AlertDialog,
@@ -44,6 +31,7 @@ import {
 import { Table } from '@/components/ui/table'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
+import { AiIndicator } from '@/components/ai-indicator'
 import { StatusBadge } from '@/components/status-badge'
 import { SurfaceIcon } from '@/components/surface-icon'
 import { governanceRequest } from '../repositories/governance-api'
@@ -87,15 +75,6 @@ type Template = Omit<
   purpose?: 'workflow_edit'
   version?: number
 }
-const categoryIcon = (category?: string) =>
-  ({
-    'Application Security': ShieldCheck,
-    'Baseline Engineering': BookOpen,
-    'Testing and Quality': FlaskConical,
-    'Backend Services': ServerCog,
-    'Infrastructure as Code': Layers,
-    'GitHub Actions': Workflow,
-  })[category ?? ''] ?? FileText
 
 export function SkillsCatalogue() {
   const retireTrigger = useRef<HTMLButtonElement>(null)
@@ -213,7 +192,7 @@ export function SkillsCatalogue() {
     <section className='space-y-6'>
       <div className='flex flex-wrap items-center justify-between gap-3'>
         <div className='flex items-center gap-3'>
-          <SurfaceIcon icon={BookOpen} tone='violet' size='sm' />
+          <SurfaceIcon icon={Sparkles} tone='violet' size='sm' />
           <h2 className='text-base font-semibold'>Skills</h2>
         </div>
         {manage && (
@@ -290,10 +269,7 @@ export function SkillsCatalogue() {
                     .map((t) => (
                       <Card key={t.id ?? t.name} className='min-w-0 gap-3'>
                         <CardHeader className='flex flex-row items-start gap-3'>
-                          <SurfaceIcon
-                            icon={categoryIcon(t.category)}
-                            tone='violet'
-                          />
+                          <SurfaceIcon icon={Sparkles} tone='violet' />
                           <div className='min-w-0 flex-1 space-y-1'>
                             <h3 className='text-sm leading-snug font-semibold'>
                               {t.name}
@@ -411,7 +387,7 @@ export function SkillsCatalogue() {
                           <td className='px-4 py-3'>
                             <div className='flex items-center gap-3'>
                               <SurfaceIcon
-                                icon={FileText}
+                                icon={Sparkles}
                                 tone='violet'
                                 size='sm'
                               />
@@ -485,7 +461,10 @@ export function SkillsCatalogue() {
       >
         <DialogContent className='flex max-h-[85svh] flex-col sm:max-w-3xl'>
           <DialogHeader>
-            <DialogTitle>{preview?.name}</DialogTitle>
+            <DialogTitle className='flex items-center gap-2'>
+              <AiIndicator decorative />
+              {preview?.name}
+            </DialogTitle>
           </DialogHeader>
           {preview?.purpose === 'workflow_edit' && (
             <p className='text-xs text-muted-foreground'>
@@ -563,7 +542,8 @@ export function SkillsCatalogue() {
             }}
           >
             <SheetHeader>
-              <SheetTitle>
+              <SheetTitle className='flex items-center gap-2'>
+                <AiIndicator decorative />
                 {selected?.name} · v{selected?.version}
               </SheetTitle>
               <SheetDescription>Read-only review instructions</SheetDescription>
@@ -793,7 +773,8 @@ export function SkillsCatalogue() {
       >
         <DialogContent className='flex max-h-[90svh] flex-col overflow-hidden sm:max-w-5xl'>
           <DialogHeader>
-            <DialogTitle>
+            <DialogTitle className='flex items-center gap-2'>
+              <AiIndicator decorative />
               {editing && 'version' in editing
                 ? 'Create new skill version'
                 : 'Create review skill'}

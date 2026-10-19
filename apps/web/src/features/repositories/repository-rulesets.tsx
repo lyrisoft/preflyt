@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { ArrowUpRight, RefreshCw, ShieldCheck } from 'lucide-react'
-import { API_BASE_URL } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -17,9 +16,12 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { StatusBadge } from '@/components/status-badge'
 import { SurfaceIcon } from '@/components/surface-icon'
+import { governanceRequest } from './governance-api'
 import { RulesetDeployments } from './ruleset-deployments'
 import { RulesetDrafts } from './ruleset-drafts'
 import { RulesetInsights } from './ruleset-insights'
+import { workflowRefreshInterval } from './workflow-refresh-polling'
+import { WorkflowRequestError } from './workflow-request-error'
 
 type Summary = {
   id: number
@@ -45,25 +47,7 @@ type Detail = Summary & {
   }[]
 }
 async function read<T>(path: string, signal: AbortSignal): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    credentials: 'include',
-    cache: 'no-store',
-    signal,
-  })
-  if (!response.ok) {
-    const error = (await response.json().catch(() => null)) as {
-      code?: string
-      retryAfterSeconds?: number
-    } | null
-    throw new Error(
-      response.status === 403
-        ? 'You do not have access to these rulesets, or GitHub access has changed.'
-        : response.status === 429 || error?.code === 'GITHUB_RATE_LIMITED'
-          ? `GitHub is limiting requests. Try again${error?.retryAfterSeconds ? ` in ${error.retryAfterSeconds} seconds` : ' shortly'}.`
-          : 'Rulesets could not be loaded. Check GitHub access and plan support, then try again.'
-    )
-  }
-  return response.json() as Promise<T>
+  return governanceRequest<T>(path, undefined, signal)
 }
 const tone = {
   active: 'success',
@@ -100,11 +84,12 @@ export function RulesetDetail({
     gcTime: 30 * 60_000,
     refetchOnWindowFocus: true,
     refetchInterval: (query) => {
-      if (query.state.status === 'error') return 60_000
+      if (query.state.status === 'error')
+        return workflowRefreshInterval(query.state.error)
       const fetchedAt = Date.parse(query.state.data?.fetchedAt ?? '')
       // Schedule from GitHub fetch time, not the time this tab read the cache.
       return Number.isFinite(fetchedAt)
-        ? Math.max(1_000, 5 * 60_000 - (Date.now() - fetchedAt))
+        ? Math.max(5_000, 5 * 60_000 - (Date.now() - fetchedAt))
         : 5 * 60_000
     },
     retry: false,
@@ -135,15 +120,13 @@ export function RulesetDetail({
           <CardContent className='space-y-4'>
             {detail.isPending && <Skeleton className='h-48' />}
             {detail.isError && (
-              <div role='alert' className='space-y-3'>
-                <p className='text-sm'>{detail.error.message}</p>
-                <Button
-                  variant='outline'
-                  size='sm'
-                  onClick={() => void detail.refetch()}
-                >
-                  Try again
-                </Button>
+              <div className='flex flex-wrap items-start gap-3'>
+                <WorkflowRequestError
+                  error={detail.error}
+                  retry={() => void detail.refetch()}
+                  automatic
+                  checking={detail.isFetching}
+                />
               </div>
             )}
             {ruleset && (
@@ -276,9 +259,16 @@ export function RepositoryRulesets({
   const [view, setView] = useState<string>(initialView)
   const [pageSize, setPageSize] = useState(10)
   const [page, setPage] = useState(1)
+  const queryKey = ['github-rulesets', actorId, repositoryId, page, pageSize]
+  const scope = JSON.stringify(queryKey)
+  const [refreshSnapshot, setRefreshSnapshot] = useState<{
+    scope: string
+    fetchedAt: string
+    startedAt: number
+  } | null>(null)
   const queryClient = useQueryClient()
   const query = useQuery({
-    queryKey: ['github-rulesets', actorId, repositoryId, page, pageSize],
+    queryKey,
     queryFn: ({ signal }) =>
       read<RulesetList>(
         `/github/repositories/${repositoryId}/rulesets?page=${page}&pageSize=${pageSize}`,
@@ -289,33 +279,53 @@ export function RepositoryRulesets({
     gcTime: 30 * 60_000,
     refetchOnWindowFocus: true,
     refetchInterval: (query) => {
-      if (query.state.status === 'error') return 60_000
+      if (query.state.status === 'error')
+        return workflowRefreshInterval(query.state.error)
+      if (
+        refreshSnapshot?.scope === scope &&
+        query.state.data?.fetchedAt === refreshSnapshot.fetchedAt
+      )
+        return Date.now() - refreshSnapshot.startedAt < 120_000 ? 5_000 : 60_000
       const fetchedAt = Date.parse(query.state.data?.fetchedAt ?? '')
       // Schedule from GitHub fetch time, not the time this tab read the cache.
       return Number.isFinite(fetchedAt)
-        ? Math.max(1_000, 5 * 60_000 - (Date.now() - fetchedAt))
+        ? Math.max(5_000, 5 * 60_000 - (Date.now() - fetchedAt))
         : 5 * 60_000
     },
     retry: false,
   })
   const refresh = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (request: { key: typeof queryKey; path: string }) => {
       await queryClient.cancelQueries({
-        queryKey: ['github-rulesets', actorId, repositoryId, page, pageSize],
+        queryKey: request.key,
         exact: true,
       })
-      return read<RulesetList>(
-        `/github/repositories/${repositoryId}/rulesets?page=${page}&pageSize=${pageSize}&refresh=true`,
-        new AbortController().signal
-      )
+      return read<RulesetList>(request.path, new AbortController().signal)
     },
-    onSuccess: (data) =>
-      queryClient.setQueryData(
-        ['github-rulesets', actorId, repositoryId, data.page],
-        data
-      ),
-    meta: { successMessage: 'GitHub rulesets refreshed.' },
+    onSuccess: (data, request) => {
+      queryClient.setQueryData(request.key, data)
+      setRefreshSnapshot({
+        scope: JSON.stringify(request.key),
+        fetchedAt: data.fetchedAt,
+        startedAt: Date.now(),
+      })
+    },
+    onError: (_error, request) =>
+      void queryClient.invalidateQueries({
+        queryKey: request.key,
+        exact: true,
+      }),
+    meta: { successMessage: 'GitHub ruleset refresh requested.' },
   })
+  const waitingForSnapshot =
+    refreshSnapshot?.scope === scope &&
+    query.data?.fetchedAt === refreshSnapshot.fetchedAt
+  const refreshDelayed =
+    waitingForSnapshot &&
+    refreshSnapshot !== null &&
+    query.dataUpdatedAt - refreshSnapshot.startedAt >= 120_000
+  const refreshing =
+    refresh.isPending || (waitingForSnapshot && !refreshDelayed)
   if (!canRead)
     return (
       <p role='alert' className='rounded-xl border p-4 text-sm'>
@@ -333,9 +343,7 @@ export function RepositoryRulesets({
         <Card className='gap-4'>
           <CardHeader className='flex flex-wrap items-center justify-between gap-3'>
             <div className='flex items-center gap-3'>
-              <span className='flex size-10 items-center justify-center rounded-xl bg-info/10 text-info'>
-                <ShieldCheck className='size-5' />
-              </span>
+              <SurfaceIcon icon={ShieldCheck} tone='blue' />
               <div>
                 <CardTitle>GitHub Rulesets</CardTitle>
                 {query.data && (
@@ -348,24 +356,46 @@ export function RepositoryRulesets({
             <Button
               variant='outline'
               size='sm'
-              disabled={query.isFetching || refresh.isPending}
-              onClick={() => refresh.mutate()}
+              disabled={query.isFetching || refreshing}
+              onClick={() =>
+                query.isError
+                  ? void query.refetch()
+                  : refresh.mutate({
+                      key: queryKey,
+                      path: `/github/repositories/${repositoryId}/rulesets?page=${page}&pageSize=${pageSize}&refresh=true`,
+                    })
+              }
             >
-              <RefreshCw className='size-4' />
+              <RefreshCw
+                className={`size-4 ${refreshing ? 'animate-spin motion-reduce:animate-none' : ''}`}
+              />
               Refresh
             </Button>
           </CardHeader>
           <CardContent className='space-y-4'>
             {query.isPending && <Skeleton className='h-48' />}
-            {query.isError && (
-              <p
-                role='alert'
-                className='rounded-lg border border-warning/20 bg-warning/5 p-4 text-sm'
-              >
-                {query.error.message}
+            {refreshing && !query.isError && (
+              <p role='status' className='text-sm text-muted-foreground'>
+                Updating GitHub rulesets…
               </p>
             )}
-            {query.data && (
+            {refreshDelayed && !query.isError && (
+              <p role='status' className='text-sm text-muted-foreground'>
+                GitHub is taking longer to refresh. Saved rulesets are shown.
+                You can request another refresh.
+              </p>
+            )}
+            {query.isError && (
+              <div className='flex flex-wrap items-start gap-3 rounded-lg border p-4'>
+                <WorkflowRequestError
+                  error={query.error}
+                  retry={() => void query.refetch()}
+                  automatic
+                  checking={query.isFetching}
+                />
+              </div>
+            )}
+            {query.data && !query.isError && (
               <>
                 <Table
                   pagination={{
