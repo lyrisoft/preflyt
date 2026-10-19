@@ -1,17 +1,16 @@
 # Preflyt product positioning
 
-Updated on 18 October 2026 for the approved Community Edition direction. This is the identity and copy guide; it does not add capabilities, clear release blockers or authorize publication.
+Updated on 19 October 2026 for clearer first-visit product explanations. This is the identity and copy guide; it does not add capabilities, clear release blockers or authorize publication.
 
 ## Identity
 
 - Category: **Engineering Assurance & Readiness Platform**.
-- Public descriptor now: **Engineering assurance for GitHub.**
-- Public descriptor after release clearance: **Open-source engineering assurance for GitHub.**
+- Public descriptor: **Open source code quality and security for GitHub.**
 - Tagline: **Engineering confidence before production.**
-- Website headline: **Know what passed. See what needs attention.**
-- Website explanation: **Bring repository health, engineering standards and verified CI results into one workspace. Understand the evidence behind every assessment.**
+- Website headline: **Open source code quality and security for GitHub.**
+- Website explanation: **Preflyt scans your repositories for security and code quality issues. See the affected code, understand what to fix, and check pull requests against your team's requirements.**
 
-Lead with the engineering question, then explain the product category. The headline describes what users can inspect; it does not promise passing results, complete coverage or production safety.
+Lead with the concrete product job and recognizable GitHub context. Keep the open source identity prominent. Explain scanning repositories, investigating findings and checking pull requests before using the internal category “engineering assurance.” The homepage introduces this three-step workflow before detailed features. The headline does not promise passing results, complete coverage or production safety.
 
 ## Community and Cloud
 
@@ -37,7 +36,7 @@ Existing Community AI configuration/budgets, core governance, access controls, e
 ### Calls to action and release state
 
 - Before public clearance: **Community install guide** links to the existing quick start, with a visible note that source and images currently require access. **View on GitHub** is secondary and does not imply anonymous repository access.
-- After public clearance: primary **Install Community Edition**, secondary **View on GitHub**. Remove access caveats only after anonymous source/image access and the documented install path are verified.
+- After public clearance: primary **Install Preflyt** links to the Community Edition installation guide; secondary **View on GitHub**. Remove access caveats only after anonymous source/image access and the documented install path are verified.
 - Keep **Sign in / Open workspace** separate from deployment. These actions open the current installation, not a managed Cloud account.
 - Community links point to contribution instructions, issues and security reporting. Add Discussions only after it is enabled and a maintainer is assigned. Do not invent a community size, star count, response-time promise or customer logo.
 
@@ -47,9 +46,9 @@ Use concrete verbs: connect, inspect, assess, verify, review, investigate. Expla
 
 The homepage should answer these questions in order:
 
-1. What does Preflyt help me understand? Outcome-led headline and a working product preview.
-2. What can I inspect? Health, findings and the evidence behind an assessment, with product visuals linked to capability explanations.
-3. How do I get a useful result? Install Compose → create the admin → connect/install the App and select repositories in GitHub → imported repositories receive Health assessments. Add standards, policies and CI afterward.
+1. What is Preflyt? An open source, self-hosted tool for code quality and security in GitHub repositories, with a working product preview.
+2. How does it help my team? Choose repositories to scan → investigate issues in the affected code → add requirements and CI results for pull request checks. Explain this before the detailed feature sections.
+3. What can I inspect? Health, findings and the results behind an assessment, with product visuals linked to capability explanations. The setup guide covers Compose installation, the admin account, GitHub App connection and repository selection. AI review remains optional.
 4. What do I operate and pay for? Community scope, Apache-2.0, optional BYOK AI, current access requirements and planned managed Cloud.
 5. How can I participate? Specific contribution opportunities and the DCO guide.
 

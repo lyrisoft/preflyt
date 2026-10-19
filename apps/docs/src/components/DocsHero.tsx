@@ -6,14 +6,14 @@ export default function DocsHero() {
   const {next, prefix, imageTag} = useInstallationVersion()
   return (
     <div className='pf-hero'>
-      <p className='pf-eyebrow'>Self-hosted. Apache-2.0. Built for GitHub.</p>
+      <p className='pf-eyebrow'>For engineering teams · Self-hosted · Apache-2.0</p>
       <h1 className='pf-hero__title'>
-        Open source engineering assurance.
+        Open source code quality and security for GitHub.
       </h1>
       <p className='pf-hero__lead'>
-        Know what passed and what needs attention. Bring repository health,
-        approved engineering standards and verified CI evidence into one
-        self-hosted workspace.
+        Preflyt scans your repositories for security and code quality issues.
+        See the affected code, understand what to fix, and check pull requests
+        against your team's requirements.
       </p>
       <div className='pf-hero__actions'>
         <Link
