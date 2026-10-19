@@ -203,3 +203,62 @@ it('links an exception notice to repository policies without requiring a publica
   expect(html).toContain('Policy exception approved')
   expect(html).toContain('&quot;repository&quot;:&quot;51&quot;')
 })
+
+it('opens the exact saved AI review findings instead of model connections', () => {
+  const html = renderToStaticMarkup(
+    <NotificationItem
+      item={{
+        ...item,
+        type: 'AI_SECURITY_REVIEW_COMPLETED',
+        healthAssessmentId: '11111111-1111-4111-8111-111111111111',
+        actionLabel: 'View AI security report',
+      }}
+      busy={false}
+      onRead={() => undefined}
+    />
+  )
+  expect(html).toContain('href="/findings"')
+  expect(html).toContain(
+    '&quot;health&quot;:&quot;11111111-1111-4111-8111-111111111111&quot;'
+  )
+  expect(html).toContain('&quot;repository&quot;:&quot;81818&quot;')
+  expect(html).toContain('&quot;source&quot;:&quot;health&quot;')
+  expect(html).toContain('&quot;category&quot;:&quot;security&quot;')
+  expect(html).toContain('View review findings')
+  expect(html).not.toContain('/intelligence')
+})
+
+it.each(['AI_SECURITY_REVIEW_FAILED', 'AI_SECURITY_REVIEW_COMPLETED'])(
+  'keeps %s on repository health when the saved review is unavailable',
+  (type) => {
+    const html = renderToStaticMarkup(
+      <NotificationItem
+        item={{ ...item, type }}
+        busy={false}
+        onRead={() => undefined}
+      />
+    )
+    expect(html).toContain('href="/repositories/$repositoryId"')
+    expect(html).toContain('&quot;tab&quot;:&quot;health&quot;')
+    expect(html).not.toContain('/intelligence')
+  }
+)
+
+it('opens a failed AI review at its exact assessment to show the failure reason', () => {
+  const html = renderToStaticMarkup(
+    <NotificationItem
+      item={{
+        ...item,
+        type: 'AI_SECURITY_REVIEW_FAILED',
+        healthAssessmentId: 'review-failed',
+        title: 'AI security review could not finish',
+      }}
+      busy={false}
+      onRead={() => undefined}
+    />
+  )
+  expect(html).toContain('href="/repositories/$repositoryId"')
+  expect(html).toContain('&quot;tab&quot;:&quot;health&quot;')
+  expect(html).toContain('&quot;health&quot;:&quot;review-failed&quot;')
+  expect(html).not.toContain('/intelligence')
+})
