@@ -312,7 +312,9 @@ export class PipelineWorkflowAiService {
             },
           });
         },
-        { jsonOutput: true },
+        { jsonOutput: true, usageContext: { db: this.db,
+          repositoryId: (await this.access.requireRepository(session, repositoryId, "ai.review.run")).id,
+          workload: "WORKFLOW", sourceId: requestId } },
       );
       const current = await this.model(session, repositoryId);
       await this.access.requireRepository(

@@ -432,7 +432,7 @@ export class FindingAiGuidanceService {
                 data: { usage: json(usage) },
               });
             },
-            { jsonOutput: true },
+            { jsonOutput: true, usageContext: { db: this.db, repositoryId: row.repositoryId, workload: "FINDING_GUIDANCE", sourceId: row.id } },
           );
           selected = provider;
           break;

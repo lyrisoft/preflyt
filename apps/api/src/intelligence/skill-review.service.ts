@@ -1241,6 +1241,7 @@ export class SkillReviewService {
                 data: { usage },
               });
             },
+            { db: this.db, repositoryId: job.repositoryId, workload: "AI_REVIEW", sourceId: job.id },
           );
           providerId = provider.id;
           break;

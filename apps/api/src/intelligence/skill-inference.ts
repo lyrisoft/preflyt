@@ -1,4 +1,5 @@
 import type { AiProviderConnection } from "../generated/prisma/client.js";
+import { trackModelUsage, type ModelUsageContext } from "./model-usage.js";
 import {
   aiApiBaseUrl,
   aiCredentialEndpointDigest,
@@ -8,7 +9,7 @@ import {
 import { aiHttpRequest, AiTransportError } from "./ai-http.js";
 import type { ReviewContext } from "./review-skills.js";
 import { reviewPrompt, validateSkillOutput, ReviewOutputError, type ReviewOutputFailure } from "./review-skills.js";
-// Fixed provider response bound; users do not configure token limits or prices.
+// Fixed response ceiling for advisory review requests; VAPT has separate allowances.
 export const aiResponseTokenLimit = 8192;
 
 /** Safe response diagnostics; never retain provider bodies or credentials. */
@@ -41,6 +42,7 @@ export async function runSkillInference(
   maxOutputTokens: number,
   signal: AbortSignal,
   onUsage?: (usage: ProviderUsage) => Promise<void>,
+  usageContext?: ModelUsageContext,
 ) {
   return runPromptInference(
     provider,
@@ -62,7 +64,7 @@ export async function runSkillInference(
       }
     },
     onUsage,
-    { jsonOutput: true, jsonSchema: {
+    { usageContext, jsonOutput: true, maxBodyBytes: 384 * 1024, jsonSchema: {
       type: "object", additionalProperties: false,
       required: ["assessmentHash", "sourceSha", "findings"],
       properties: {
@@ -93,7 +95,20 @@ export async function runPromptInference<T>(
   signal: AbortSignal,
   validate: (raw: string, credential?: string) => T,
   onUsage?: (usage: ProviderUsage) => Promise<void>,
-  options?: { jsonOutput?: boolean; jsonSchema?: Record<string, unknown> },
+  options?: { jsonOutput?: boolean; jsonSchema?: Record<string, unknown>; maxBodyBytes?: number; usageContext?: ModelUsageContext },
+): Promise<T> {
+  return trackModelUsage(options?.usageContext, provider, onUsage, (report) =>
+    performPromptInference(provider, prompt, maxOutputTokens, signal, validate, report, options),
+  );
+}
+async function performPromptInference<T>(
+  provider: AiProviderConnection,
+  prompt: { system: string; user: string },
+  maxOutputTokens: number,
+  signal: AbortSignal,
+  validate: (raw: string, credential?: string) => T,
+  onUsage?: (usage: ProviderUsage) => Promise<void>,
+  options?: { jsonOutput?: boolean; jsonSchema?: Record<string, unknown>; maxBodyBytes?: number },
 ): Promise<T> {
   const endpoint = providerEndpoint(provider);
   if (!endpoint) throw new Error("Connection unavailable");
@@ -169,7 +184,7 @@ export async function runPromptInference<T>(
     response = await aiHttpRequest(
       new URL(aiApiBaseUrl(endpoint) + path),
       endpoint.locality,
-      { headers, body: JSON.stringify(body), signal },
+      { headers, body: JSON.stringify(body), signal, ...(options?.maxBodyBytes ? { maxBodyBytes: options.maxBodyBytes } : {}) },
     );
   } catch (error) {
     // The inference deadline is a transport failure; caller cancellation and access
@@ -253,9 +268,13 @@ export function providerUsage(
     Number.isSafeInteger(v) && (v as number) >= 0 && (v as number) <= 100000000
       ? (v as number)
       : null;
+  const sumCounts = (values: unknown[]) => {
+    const counts = values.map(count);
+    return counts.includes(null) ? null : count(counts.reduce<number>((sum, value) => sum + (value ?? 0), 0));
+  };
   const inputTokens = count(
     preset === "anthropic"
-      ? value.usage?.input_tokens
+      ? sumCounts([value.usage?.input_tokens, value.usage?.cache_read_input_tokens ?? 0, value.usage?.cache_creation_input_tokens ?? 0])
       : preset === "gemini"
         ? value.usageMetadata?.promptTokenCount
         : value.usage?.prompt_tokens,
@@ -274,11 +293,10 @@ export function providerUsage(
         );
   const cachedTokens = count(
     preset === "anthropic"
-      ? (value.usage?.cache_read_input_tokens ?? 0) +
-          (value.usage?.cache_creation_input_tokens ?? 0)
+      ? (value.usage?.cache_read_input_tokens ?? 0)
       : preset === "gemini"
         ? (value.usageMetadata?.cachedContentTokenCount ?? 0)
-        : (value.usage?.prompt_tokens_details?.cached_tokens ?? 0),
+        : (value.usage?.prompt_tokens_details?.cached_tokens ?? value.usage?.prompt_cache_hit_tokens ?? 0),
   );
   return {
     inputTokens,

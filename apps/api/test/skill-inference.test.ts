@@ -453,3 +453,18 @@ it.each([
     expect(JSON.stringify(e)).not.toContain(content)
   }
 })
+
+it('sends three maximum-length Unicode skills completely within the bounded review request', async () => {
+  const endpoint = { id: 'provider', name: 'Fixture', baseUrl: 'https://gateway.example.invalid/v1', locality: 'hosted' as const, requiresKey: true, models: ['fixture'] };
+  const provider = { id: 'provider', organizationId: 'org', endpoint, modelId: 'fixture', encryptedCredential: encryptAiCredential('org', 'provider', 'fixture-key', aiCredentialEndpointDigest(endpoint)) } as any;
+  transport.mockResolvedValue(new Response(JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content: output } }] })));
+  const instructions = '界'.repeat(23990) + 'LAST CHECK';
+  await runSkillInference(provider, ['skill', 'skill2', 'skill3'].map(id => ({ id, version: 1, instructions })), context, 1000, AbortSignal.timeout(1000));
+  const options = transport.mock.lastCall![2];
+  expect(options.maxBodyBytes).toBe(384 * 1024);
+  expect(Buffer.byteLength(options.body)).toBeGreaterThan(65536);
+  expect(Buffer.byteLength(options.body)).toBeLessThan(options.maxBodyBytes);
+  const prompt = JSON.parse(JSON.parse(options.body).messages[1].content);
+  expect(prompt.SKILLS).toHaveLength(3);
+  for (const skill of prompt.SKILLS) expect(skill.instructions).toBe(instructions);
+});
