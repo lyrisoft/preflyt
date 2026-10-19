@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Header, Inject, Param, Post, Query, Req, UseGuards } from '@nestjs/common'
+import { Body, Controller, Get, Header, HttpCode, Inject, Param, Post, Query, Req, UseGuards } from '@nestjs/common'
 import type { Request } from 'express'
 import { AuthService } from '../auth/auth.service.js'
 import { SessionGuard, type AuthenticatedSession } from '../auth/session.guard.js'
@@ -17,6 +17,12 @@ export class NotificationsController {
   preferences(@Req() req: SessionRequest) { return this.inbox.preferences(req.preflytSession) }
   @Post('preferences') @Header('Cache-Control', 'no-store')
   savePreferences(@Req() req: SessionRequest, @Body() body: { assessments?: unknown; email?: unknown }) { this.auth.assertOrigin(req.headers.origin); return this.inbox.savePreferences(req.preflytSession, body?.assessments, body?.email) }
+  @Post('email-address') @HttpCode(202) @Header('Cache-Control', 'no-store')
+  requestEmail(@Req() req: SessionRequest, @Body() body: { email?: unknown }) { this.auth.assertOrigin(req.headers.origin); return this.inbox.requestEmail(req.preflytSession,body?.email) }
+  @Post('email-address/verify') @Header('Cache-Control', 'no-store')
+  verifyEmail(@Req() req: SessionRequest, @Body() body: { code?: unknown }) { this.auth.assertOrigin(req.headers.origin); return this.inbox.verifyEmail(req.preflytSession,body?.code) }
+  @Post('email-address/remove') @Header('Cache-Control', 'no-store')
+  removeEmail(@Req() req: SessionRequest) { this.auth.assertOrigin(req.headers.origin); return this.inbox.removeEmail(req.preflytSession) }
   @Get() @Header('Cache-Control', 'no-store')
   list(@Req() req: SessionRequest, @Query() filters: InboxFilters) { return this.inbox.list(req.preflytSession, filters) }
   @Post('read-all') @Header('Cache-Control', 'no-store')

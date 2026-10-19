@@ -16,7 +16,7 @@ import {
 } from "./configuration-catalogue.js";
 import { applyConfiguration, suspendConfigurationCapabilities } from "./runtime-configuration.js";
 const aad = Buffer.from("preflyt.deployment-configuration.v1:primary");
-function key() {
+export function configurationEncryptionKey() {
   const text = process.env.CONFIGURATION_ENCRYPTION_KEY ?? "";
   const value = Buffer.from(text, "base64");
   if (
@@ -35,7 +35,7 @@ function key() {
 export function encryptConfigurationSecrets(values: Record<string, string>) {
   if (!Object.values(values).some(Boolean)) return null;
   const nonce = randomBytes(12),
-    cipher = createCipheriv("aes-256-gcm", key(), nonce);
+    cipher = createCipheriv("aes-256-gcm", configurationEncryptionKey(), nonce);
   cipher.setAAD(aad);
   const data = Buffer.concat([
     cipher.update(JSON.stringify(values)),
@@ -62,7 +62,7 @@ export function decryptConfigurationSecrets(envelope: string | null) {
     const nonce = Buffer.from(parts[1]!, "base64url"),
       tag = Buffer.from(parts[2]!, "base64url");
     if (nonce.length !== 12 || tag.length !== 16) throw new Error();
-    const cipher = createDecipheriv("aes-256-gcm", key(), nonce, { authTagLength: 16 });
+    const cipher = createDecipheriv("aes-256-gcm", configurationEncryptionKey(), nonce, { authTagLength: 16 });
     cipher.setAAD(aad);
     cipher.setAuthTag(tag);
     const values = JSON.parse(

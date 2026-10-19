@@ -66,3 +66,16 @@ it('rejects unsafe link schemes and normalizes the notification URL', () => {
   expect(notificationEmailTemplate('https://preflyt.example.test:443/path?q=unused', 'TEST').html)
     .toContain('href="https://preflyt.example.test/notifications"')
 })
+
+it('sends a bounded verification code through SMTP with stable retry identity', async () => {
+  const sender = await smtp()
+  await sender.sendVerification('owner@example.test', 'verification-1', '12345678')
+  await sender.sendVerification('owner@example.test', 'verification-1', '12345678')
+  expect(messages).toHaveLength(2)
+  expect(messages[0]).toContain('12345678')
+  expect(messages[0]).toContain('15 minutes after your request')
+  expect(messages[0]).toContain('multipart/alternative')
+  expect(messages[0].match(/Message-ID: (.*)/)?.[1]).toBe(messages[1].match(/Message-ID: (.*)/)?.[1])
+  await expect(sender.sendVerification('owner@example.test', 'verification-2', '<script>')).rejects.toThrow('INVALID_VERIFICATION_CODE')
+  expect(messages).toHaveLength(2)
+})

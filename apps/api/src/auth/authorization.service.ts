@@ -388,6 +388,10 @@ export class AuthorizationService {
     // The connection service verifies the live admin/session scope. It also
     // supports a deployment admin creating the first workspace after ownership proof.
     if (path === '/github/connection' && request.method === 'GET') return false
+    if (request.method === 'POST' && /^\/notifications\/email-address(?:\/(verify|remove))?$/.test(path)) {
+      await this.requireOrganization(session,'assessment.read',true)
+      return true
+    }
     if (path === '/notifications/channels' || /^\/notifications\/channels\/[a-zA-Z0-9-]{1,80}(?:\/test)?$/.test(path)) {
       await this.requireOrganization(session, 'notifications.manage', request.method !== 'GET')
       return true
