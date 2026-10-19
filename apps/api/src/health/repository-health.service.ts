@@ -154,7 +154,7 @@ export class RepositoryHealthService {
   const aiReviewId=(latest?.plan as any)?.aiReviewId as string|undefined
   // Current branch activity must not be hidden by the previous report's commit or child ID.
   const activeStrix = !id ? await this.db.repositoryHealthAssessment.findFirst({omit:{report:true},where:{repositoryId:repo.id,organizationId:session.organizationId!,branch:requestedBranch??'',strixRun:{isNot:null},state:{in:activeStates}},orderBy:[{createdAt:'desc'},{id:'desc'}]}) : null
-  const strixRow = activeStrix ?? ((latest?.plan as any)?.kind==='STRIX_HEALTH' ? latest : await this.db.repositoryHealthAssessment.findFirst({omit:{report:true},where:{repositoryId:repo.id,organizationId:session.organizationId!,...(aiReviewId?{id:aiReviewId}:{branch:requestedBranch??'',parentId:null,strixRun:{isNot:null},...(chosen?.sourceSha?{sourceSha:chosen.sourceSha}:{})})},orderBy:[{createdAt:'desc'},{id:'desc'}]}))
+  const strixRow = activeStrix ?? ((latest?.plan as any)?.kind==='STRIX_HEALTH' ? latest : await this.db.repositoryHealthAssessment.findFirst({omit:{report:true},where:{repositoryId:repo.id,organizationId:session.organizationId!,...(id && aiReviewId?{id:aiReviewId}:{branch:requestedBranch??'',strixRun:{isNot:null},...(chosen?.sourceSha?{sourceSha:chosen.sourceSha}:{}),...(id && latest?{createdAt:{lte:latest.createdAt}}:{})})},orderBy:[{createdAt:'desc'},{id:'desc'}]}))
   // An in-flight/failed attempt does not erase the last completed result. Historical report links stay exact.
   if (chosen && chosen.state !== 'COMPLETED' && (!id || activeStates.includes(chosen.state))) {
    const previous = await this.db.repositoryHealthAssessment.findFirst({omit:{report:true},where: {repositoryId: repo.id,
