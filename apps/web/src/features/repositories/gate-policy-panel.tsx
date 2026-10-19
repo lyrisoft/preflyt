@@ -53,6 +53,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { AiIndicator } from '@/components/ai-indicator'
 import { StatusBadge } from '@/components/status-badge'
 import { SurfaceIcon } from '@/components/surface-icon'
 import { engineeringPath, engineeringRead } from './engineering-queries'
@@ -593,9 +594,16 @@ export function GatePolicyPanel({
                           </span>
                           <span className='text-xs text-muted-foreground'>
                             {pack.rules.length} checks
-                            {pack.aiChecks?.length
-                              ? ` · ${pack.aiChecks.length} AI reviews`
-                              : ''}
+                            {!!pack.aiChecks?.length && (
+                              <span className='inline-flex items-center gap-1.5'>
+                                {' '}
+                                · <AiIndicator decorative />{' '}
+                                {pack.aiChecks.length} AI{' '}
+                                {pack.aiChecks.length === 1
+                                  ? 'review'
+                                  : 'reviews'}
+                              </span>
+                            )}
                           </span>
                         </span>
                       </label>
@@ -836,7 +844,8 @@ export function GatePolicyPanel({
                 </section>
                 {!!selected.definition.aiChecks?.length && (
                   <section className='space-y-3'>
-                    <h3 className='text-sm font-semibold'>
+                    <h3 className='flex items-center gap-2 text-sm font-semibold'>
+                      <AiIndicator decorative />
                       AI Reviews · suggestions only
                     </h3>
                     {selected.definition.aiChecks.map((check) => (
@@ -845,7 +854,10 @@ export function GatePolicyPanel({
                         className='rounded-lg border p-3 text-sm'
                       >
                         <div className='flex items-center justify-between gap-3'>
-                          <span className='font-medium'>{check.title}</span>
+                          <span className='flex items-center gap-2 font-medium'>
+                            <AiIndicator />
+                            {check.title}
+                          </span>
                           <StatusBadge tone='info'>
                             Suggestions only
                           </StatusBadge>

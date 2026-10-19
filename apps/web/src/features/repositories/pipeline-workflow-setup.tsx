@@ -35,6 +35,7 @@ import {
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
+import { AiIndicator } from '@/components/ai-indicator'
 import { ResultTimestamp } from '@/components/result-timestamp'
 import { StatusBadge } from '@/components/status-badge'
 import { SurfaceIcon } from '@/components/surface-icon'
@@ -588,7 +589,10 @@ function StandaloneWorkflowSetup({
                 </div>
                 {proposal && (
                   <div className='space-y-2 border-b p-3 text-sm'>
-                    <p className='font-medium'>AI proposal</p>
+                    <p className='flex items-center gap-2 font-medium'>
+                      <AiIndicator decorative />
+                      AI proposal
+                    </p>
                     <p>{proposal.summary}</p>
                     {proposal.skill && (
                       <p className='text-xs text-muted-foreground'>

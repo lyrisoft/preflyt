@@ -118,6 +118,49 @@ it('preselects baseline checks and saves through the real form contract', async 
       },
     ])
 })
+it('marks AI review items with sparkles while keeping CI checks distinct', async () => {
+  state.query.data = {
+    builtIn: [
+      {
+        ...pack,
+        aiChecks: [
+          {
+            id: 'ai-security',
+            title: 'Security evidence review',
+            skillId: 'skill',
+            skillVersion: 1,
+            skillDigest: 'b'.repeat(64),
+            kind: 'AI_REVIEW',
+            mode: 'ADVISORY',
+            stages: ['pull_request'],
+          },
+        ],
+      },
+    ],
+    versions: [],
+  }
+  const view = await render(<OrganizationStandardsLibrary />)
+  await view.getByRole('tab', { name: 'Built-in standards' }).click()
+  await view.getByRole('button', { name: /2 checks.*1 AI review/ }).click()
+  await expect
+    .element(
+      view.getByRole('heading', {
+        name: 'AI-assisted Security evidence review',
+      })
+    )
+    .toBeVisible()
+  await expect
+    .element(
+      view.getByRole('heading', { name: 'CI configuration', exact: true })
+    )
+    .toBeVisible()
+  expect(
+    view
+      .getByRole('heading', { name: 'CI configuration', exact: true })
+      .element()
+      .querySelector('[data-slot="ai-indicator"]')
+  ).toBeNull()
+})
 it('shows errors and prevents editing for a read-only user', () => {
   state.allowed = false
   let html = renderToStaticMarkup(<OrganizationStandardsLibrary />)
