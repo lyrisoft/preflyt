@@ -167,8 +167,11 @@ export class FindingsService {
       await this.registerIndex(session.organizationId!,selected,options);
       const reference = await this.prepareIndex(session,selected,options);
       const result=await new FindingIndex(this.db).list(reference,session.organizationId!,{category,severity,search,triage,kind,page,pageSize},aiOnly);
+      const member=await this.access.requireOrganization(session,'assessment.read');
+      const currentScope=await this.access.repositoryScope(session.identityId,session.organizationId,'assessment.read');
+      if(selected.some(repo=>!currentScope.some(r=>r.id===repo.id)))throw new ForbiddenException('Repository access changed. Refresh Findings.');
       await this.applyReviews(session, result.rows);
-      return {...result,canManage:!!rolePermissions[session.role]?.includes('findings.manage'),repositories:scope.map(repo=>({githubId:String(repo.githubId),fullName:repo.fullName}))};
+      return {...result,canManage:!!rolePermissions[member?.role??session.role]?.includes('findings.manage'),repositories:currentScope.map(repo=>({githubId:String(repo.githubId),fullName:repo.fullName}))};
     }
     if (kind === 'ai' || source === 'ai') {
       const result = await this.aiFindings(session, selected, scope, { page, pageSize, search, severity, category, triage, assessment, lookupId });
@@ -445,7 +448,7 @@ export class FindingsService {
       else unique.set(row.id, row);
     }
     return {rows:[...unique.values()],truncated:records.length>200 || healthHeaders.length>200 || !!ai?.truncated || new Set(artifactRefs).size>100 || detailTruncated,
-      assessedRevisions:new Set([...latest.keys(),...latestHealth.keys(),...(ai?.rows.map(row=>`${selected.find(repo=>String(repo.githubId)===row.repositoryId)?.id}:${row.sourceSha}`)??[])]).size,
+      assessedRevisions:new Set([...latest.keys(),...[...latestHealth.values()].map(saved=>`${saved.repositoryId}:${saved.sourceSha}`),...(ai?.rows.map(row=>`${selected.find(repo=>String(repo.githubId)===row.repositoryId)?.id}:${row.sourceSha}`)??[])]).size,
       incompleteHealth,inspectionOnly:source==='health' && latestHealth.size>0 && [...latestHealth.values()].every(saved=>(saved.report as unknown as HealthReport).mode==='INSPECTION_ONLY')};
   }
 
@@ -526,7 +529,7 @@ export class FindingsService {
         ]);
         const locks:[string,string[]][]=[['CommitAssessment',[...new Set([...ci.map(row=>row.id),...ai.map(row=>row.assessmentId)])]],['RepositoryHealthAssessment',health.map(row=>row.id)],['AiSkillReview',ai.map(row=>row.id)]];
         for(const [table,keys] of locks)if(keys.length)await tx.$queryRaw(Prisma.sql`SELECT id FROM ${Prisma.raw('"'+table+'"')} WHERE id IN (${Prisma.join(keys)}) ORDER BY id FOR SHARE`);
-        const key=digest({version:2,organizationId:session.organizationId,scope:selected.map(repo=>[repo.id,String(repo.githubId),repo.fullName,String(repo.installationId)]),options:{source:options.source,includeAi:aiOnly || (options.source==='all' && options.kind!=='gaps'),health:options.health,healthReports:options.healthReports,assessment:options.assessment,lookupHealth:!!options.lookupId},
+        const key=digest({version:3,organizationId:session.organizationId,scope:selected.map(repo=>[repo.id,String(repo.githubId),repo.fullName,String(repo.installationId)]),options:{source:options.source,includeAi:aiOnly || (options.source==='all' && options.kind!=='gaps'),health:options.health,healthReports:options.healthReports,assessment:options.assessment,lookupHealth:!!options.lookupId},
           ci:ci.map(row=>[row.id,String(row.findingReadRevision)]),health:health.map(row=>[row.id,String(row.findingReadRevision)]),ai:ai.map(row=>[row.id,String(row.findingReadRevision),row.assessmentId,String(row.assessmentRevision)])});
         return read(tx,key);
       },{isolationLevel:'RepeatableRead',timeout:15000});

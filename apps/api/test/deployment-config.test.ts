@@ -32,7 +32,7 @@ it('starts Health automatically with a separate TLS engine and HTTP-only applica
   for (const name of ['api', 'worker']) {
     const service = config.services[name]
     expect(service.depends_on['health-scanner'].condition).toBe('service_healthy')
-    expect(service.volumes).toEqual(['health_connection:/run/preflyt-health:ro'])
+    expect(service.volumes).toEqual(['health_connection:/run/preflyt-health:ro', ...(name === 'worker' ? ['health_sources:/var/lib/preflyt-health-sources'] : [])])
     expect(service.networks).toContain('health_service')
     expect(service.networks).not.toContain('health_engine')
     expect(service.environment.HEALTH_SCANNER_CONNECTION_FILE).toBe('/run/preflyt-health/connection.json')
