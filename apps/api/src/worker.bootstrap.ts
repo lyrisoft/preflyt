@@ -27,6 +27,7 @@ import { GitHubIdentityProvider } from './auth/github-identity-provider.js'
 import { GitHubUserAccessService } from './auth/github-user-access.service.js'
 import { NotificationMailer, emailNotificationsEnabled } from './notifications/notification-mail.js'
 import { deliverNotificationChannelEmail } from './notifications/notification-channel-delivery.js'
+import { dispatchVerificationEmails, deliverVerificationEmail } from './notifications/notification-verification-delivery.js'
 import { deliverNotificationEmail } from './notifications/notification-email-delivery.js'
 import { dispatchNotifications, dispatchNotificationEmails, dispatchNotificationChannelEmails, recordDeliveryFailure } from './notifications/notification-queue.js'
 import { deliverNotification } from './notifications/notification-delivery.js'
@@ -144,11 +145,18 @@ async function start() {
   const emailWorker = new Worker('notification-email', async (job) => {
     if (typeof job.data?.deliveryId !== 'string' || !/^[a-zA-Z0-9-]{1,80}$/.test(job.data.deliveryId)) throw new Error('Invalid email delivery job')
     if (job.data.channel !== undefined && job.data.channel !== true) throw new Error('Invalid notification email job')
-    if (!notificationsEnabled() || !emailNotificationsEnabled()) return
+    if (job.data.verification !== undefined && job.data.verification !== true) throw new Error('Invalid verification email job')
+    if (job.data.channel && job.data.verification) throw new Error('Ambiguous email delivery job')
+    if (!emailNotificationsEnabled()) return
+    if (job.data.verification === true) {
+      await deliverVerificationEmail(prisma, emailAuthorization, mail, job.data.deliveryId)
+      return
+    }
+    if (!notificationsEnabled()) return
     await telemetryOperation('preflyt.notification.email', { 'notification.delivery.id': job.data.deliveryId }, () => job.data.channel === true
       ? deliverNotificationChannelEmail(prisma, emailAuthorization, mail, job.data.deliveryId)
       : deliverNotificationEmail(prisma, emailAuthorization, mail, job.data.deliveryId))
-  }, { ...consumerConfig, connection: consumer, concurrency: 2, autorun: notificationsEnabled() && emailNotificationsEnabled() })
+  }, { ...consumerConfig, connection: consumer, concurrency: 2, autorun: emailNotificationsEnabled() })
   const findingSources = new FindingSourceStore(prisma, githubProvider)
   let sourceRun: Promise<void> | undefined
   const assessments = new AssessmentService(prisma)
@@ -234,13 +242,14 @@ async function start() {
       // Configuration switches apply to consumers already running, too.
       for (const [worker, enabled] of [
         [notificationWorker, notificationsEnabled()],
-        [emailWorker, notificationsEnabled() && emailNotificationsEnabled()],
+        [emailWorker, emailNotificationsEnabled()],
       ] as const) {
         if (enabled) {
           if (!worker.isRunning()) void worker.run().catch(warn)
           else if (worker.isPaused()) await worker.resume()
         } else if (worker.isRunning() && !worker.isPaused()) await worker.pause(true)
       }
+      if (emailNotificationsEnabled()) await dispatchVerificationEmails(prisma, emailQueue)
       if (notificationsEnabled()) {
         await dispatchNotifications(prisma, notificationQueue)
         if (emailNotificationsEnabled()) {

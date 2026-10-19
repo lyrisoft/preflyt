@@ -1,0 +1,11 @@
+{
+  "type": "feature",
+  "title": "Verified personal notification email",
+  "description": "Users can add, verify, replace or remove their notification email in workspace notification settings without changing sign-in identities. Codes expire after 15 minutes, with resend and attempt limits. Verification enables personal email notifications for that workspace. Existing account email destinations remain supported; SMTP configuration and current repository access are required for delivery. Email contents remain generic links to Preflyt. Verification uses a compact modal; delivery is queued immediately and retried in the background without waiting for SMTP.",
+  "upgrade": "Back up the database, apply both additive personal email and verification outbox migrations, regenerate Prisma and recreate matching API, worker and web versions. Existing SMTP settings, queue and CONFIGURATION_ENCRYPTION_KEY are reused; API and worker need the same encryption key.",
+  "migrations": [
+    "apps/api/prisma/migrations/20261019163000_personal_notification_email/migration.sql",
+    "apps/api/prisma/migrations/20261019170000_notification_verification_outbox/migration.sql"
+  ],
+  "configuration": []
+}
