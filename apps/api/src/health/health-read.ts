@@ -81,7 +81,7 @@ export function healthFindingsFilters(input: {page?: string; pageSize?: string; 
 
 export async function healthFindingsPage(db: PrismaService, organizationId: string, id: string | string[], filters: ReturnType<typeof healthFindingsFilters>) {
  const {page, pageSize, search, severity} = filters
- const [result] = await db.$queryRaw<Array<{rows: HealthFinding[]; total: number; unfilteredTotal:number}>>(Prisma.sql`
+ const [result] = await db.$queryRaw<Array<{rows: (HealthFinding & {assessmentId:string;assessedAt:string|null})[]; total: number; unfilteredTotal:number}>>(Prisma.sql`
   WITH available AS (
    SELECT f, position, h.id AS "assessmentId", h."finishedAt" FROM "RepositoryHealthAssessment" h,
     LATERAL jsonb_array_elements(COALESCE(h.report->'findings', '[]'::jsonb)) WITH ORDINALITY AS entries(f, position)

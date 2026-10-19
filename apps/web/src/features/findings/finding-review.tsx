@@ -61,6 +61,7 @@ export function FindingReview({
       await Promise.all([
         query.refetch(),
         client.invalidateQueries({ queryKey: ['findings'] }),
+        client.invalidateQueries({ queryKey: ['health-findings'] }),
         client.invalidateQueries({ queryKey: ['finding-detail'] }),
         client.invalidateQueries({ queryKey: ['payment-risk-report'] }),
       ])

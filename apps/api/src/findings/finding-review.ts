@@ -5,8 +5,8 @@ export const findingClassifications = ['POTENTIAL', 'LIKELY', 'CONFIRMED', 'FALS
 export type FindingClassification = typeof findingClassifications[number];
 // Human conclusions belong to this exact saved assessment and commit. They are
 // deliberately separate from cross-scan ignores and workflow assignments.
-export function findingReviewId(organizationId: string, row: {id?: string; fingerprint?: string; repositoryId: string; assessmentId: string; sourceSha: string; origin?: string}) {
-  return digest({ organizationId, repository: row.repositoryId, assessment: row.assessmentId, sourceSha: row.sourceSha, origin: row.origin ?? 'ci', finding: row.id ?? row.fingerprint });
+export function findingReviewId(organizationId: string, row: {id?: string; fingerprint?: string; healthFingerprint?: string; repositoryId: string; assessmentId: string; sourceSha: string; origin?: string}) {
+  return digest({ organizationId, repository: row.repositoryId, assessment: row.assessmentId, sourceSha: row.sourceSha, origin: row.origin ?? 'ci', finding: row.origin === 'health' ? row.healthFingerprint ?? row.fingerprint ?? row.id : row.id ?? row.fingerprint });
 }
 export function validateFindingReview(input: unknown) {
   const value = input as Record<string, unknown> | null;

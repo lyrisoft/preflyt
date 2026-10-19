@@ -9,6 +9,7 @@ import { useNavigationSession } from '@/features/workspace/navigation-session'
 import { freshnessTiming } from './freshness-timing'
 
 export type HealthFinding = {
+  review?: Finding['review']
   assessmentId?: string
   assessedAt?: string | null
   aiReview?: Finding['aiReview']

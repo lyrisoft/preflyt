@@ -51,7 +51,7 @@ it('cannot cross repository, organization, membership or source revision boundar
 })
 it('overlays current decisions on a page without altering the saved status or hiding findings',async()=>{
  await service.setReview(session,id,query,{classification:'FALSE_POSITIVE',reason:'Fixture payment guard rules out the issue',expectedRevision:0})
- const rows=[{...row,id,repositoryId:'11',assessmentId:query.assessment,sourceSha:'a'.repeat(40),origin:'health',status:'Needs review'}]
+ const rows=[{...row,id:'e'.repeat(64),healthFingerprint:id,repositoryId:'11',assessmentId:query.assessment,sourceSha:'a'.repeat(40),origin:'health',status:'Needs review'}]
  await (service as any).applyReviews(session,rows)
  expect(rows[0].review).toMatchObject({classification:'FALSE_POSITIVE'})
  expect(rows[0].review).not.toHaveProperty('reason')
@@ -71,6 +71,9 @@ it('payment report reads overlay human decisions without rewriting model conclus
  const saved=await fixture.prisma.repositoryHealthAssessment.findUniqueOrThrow({where:{id:query.assessment}})
  expect((saved.report as any).paymentRiskReport).toEqual(report)
  expect((await health.findingDetail(session,'11',query.assessment,id)).review).toMatchObject({classification:'FALSE_POSITIVE'})
+ const page=await health.findings(session,'11',query.assessment,{})
+ expect(page.rows[0].review).toMatchObject({classification:'FALSE_POSITIVE'})
+ expect(page.rows[0].review).not.toHaveProperty('reason')
  await expect(health.paymentRiskReport({...session,organizationId:'other'},'11',query.assessment)).rejects.toThrow()
 })
 

@@ -2014,3 +2014,31 @@ it('aligns Test coverage with the other summary card titles and values on deskto
   await view.unmount()
   await page.viewport(1280, 800)
 })
+
+it('shows saved human classifications in repository findings instead of a stale Needs review badge', async () => {
+  const respond = state.fetch.getMockImplementation()!
+  state.fetch.mockImplementation(async (input, init) => {
+    const response = await respond(input, init)
+    if (!/\/health\/[^/]+\/findings\?/.test(String(input))) return response
+    const body = await response.json()
+    return Response.json({
+      ...body,
+      rows: body.rows.map((row: unknown) => ({
+        ...(row as object),
+        evidence: 'AI_REPORTED',
+        review: {
+          classification: 'CONFIRMED',
+          updatedAt: new Date().toISOString(),
+        },
+      })),
+    })
+  })
+  const view = await mount()
+  await expect
+    .element(page.getByText('Confirmed', { exact: true }).first())
+    .toBeVisible()
+  await expect
+    .element(page.getByText('Needs review', { exact: true }))
+    .not.toBeInTheDocument()
+  await view.unmount()
+})

@@ -47,6 +47,7 @@ import { ResultTimestamp } from '@/components/result-timestamp'
 import { StatusBadge } from '@/components/status-badge'
 import { SurfaceIcon } from '@/components/surface-icon'
 import { TablePagination } from '@/components/table-pagination'
+import { classificationLabels } from '@/features/findings/finding-classification'
 import { BranchPicker } from '@/features/repositories/branch-picker'
 import { useNavigationSession } from '@/features/workspace/navigation-session'
 import { canPerform } from '@/features/workspace/scoped-access'
@@ -1134,9 +1135,12 @@ export function RepositoryHealth({
                                         ? 'AI security review'
                                         : (f.ruleId ?? f.checkId)}
                                     </p>
-                                    {f.evidence === 'AI_REPORTED' && (
-                                      <StatusBadge tone='warning' compact>
-                                        Needs review
+                                    {(f.review?.classification ||
+                                      f.evidence === 'AI_REPORTED') && (
+                                      <StatusBadge tone='neutral' compact>
+                                        {classificationLabels[
+                                          f.review?.classification ?? ''
+                                        ] ?? 'Needs review'}
                                       </StatusBadge>
                                     )}
                                   </TableCell>
