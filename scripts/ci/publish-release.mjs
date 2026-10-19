@@ -7,6 +7,8 @@ export const images = {
   'preflyt-api-migration': ['deploy/api.Dockerfile', 'migration'],
   'preflyt-native-controller': ['deploy/api.Dockerfile', 'native-docker-controller'],
   'preflyt-health-scanner': ['deploy/api.Dockerfile', 'health-scanner'],
+  'preflyt-strix-runner': ['deploy/strix.Dockerfile', 'runtime'],
+  'preflyt-strix-sandbox': ['tools/strix-runner/sandbox.Dockerfile', undefined],
   'preflyt-web': ['deploy/web.Dockerfile', 'runtime'],
 };
 export function publishRelease(mode, env, docker = (args) => execFileSync('docker', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }), write = writeFileSync) {
@@ -21,10 +23,11 @@ export function publishRelease(mode, env, docker = (args) => execFileSync('docke
     }
   };
   if (mode === 'build') {
-    if (!['amd64', 'arm64'].includes(arch) || !['api', 'web'].includes(group) || !temp) throw new Error('Invalid native build target');
+    if (!['amd64', 'arm64'].includes(arch) || !['api', 'web', 'strix'].includes(group) || !temp) throw new Error('Invalid native build target');
     const targets = {};
     for (const [image, [dockerfile, stage]] of Object.entries(images)) {
-      if ((image === 'preflyt-web') !== (group === 'web') || exists(tag(image, `-${arch}`))) continue;
+      const imageGroup = image.startsWith('preflyt-strix-') ? 'strix' : image === 'preflyt-web' ? 'web' : 'api';
+      if (imageGroup !== group || exists(tag(image, `-${arch}`))) continue;
       targets[image] = {
         context: '.', dockerfile, target: stage, platforms: [`linux/${arch}`],
         attest: [{ type: 'sbom' }, { type: 'provenance', mode: 'max' }],

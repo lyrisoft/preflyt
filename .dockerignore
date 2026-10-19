@@ -38,3 +38,6 @@ docs/deployment/*
 **/*.log
 **/*.env
 **/docker-tls
+
+**/__pycache__
+**/*.pyc

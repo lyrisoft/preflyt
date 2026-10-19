@@ -177,3 +177,32 @@ docker compose -f compose.yaml -f native-runner.compose.yaml config --quiet
 ```
 
 The selector chooses the Docker backend for API and worker with admission disabled. Deploy the existing dedicated controller separately; the application never receives an engine socket or engine TLS files. Supply the actual reviewed Docker approval, public reviewer keys, analyzer reviews and application-side controller key through the existing deployment configuration. Keep controller signing keys outside API/worker. This configuration does not qualify a runtime or run connected-repository code.
+
+## Optional AI security and payment review
+
+Use a release containing `preflyt-strix-runner` and `preflyt-strix-sandbox`. Add
+`COMPOSE_PROFILES=ai-security` to your `.env`, then run:
+
+```sh
+docker compose pull
+docker compose up -d --wait --wait-timeout 1800
+docker compose logs --tail 50 strix-runner
+```
+
+General Security Review and Payment Risk Review use the same source-only runner.
+No host Python or development bridge is required. The profile starts a separate
+TLS-protected Docker-in-Docker engine and a non-root controller, with no host socket
+or published controller ports. Reserve additional capacity: 16 GiB Docker memory,
+8 CPUs and 60 GiB free disk are starting budgets for the combined stack. The first
+start also downloads the matching sandbox image into its isolated engine.
+
+Enable AI configuration and reviews in **Settings → Configuration**. In AI
+Intelligence, test the model route and permit source sharing. Select the
+wanted review profiles explicitly when assessing a repository. Starting the Compose
+services does not run a review. Results remain beta AI suggestions requiring human
+validation; these profiles do not test live payment systems or decide merge access.
+Keep API, worker, controller and sandbox on the same published release. Preserve
+the Strix state and connection volumes across upgrades. Restart the controller
+before its persisted one-year TLS certificate expires; startup renews certificates
+with fewer than seven days remaining. Interrupted reviews fail and need an explicit
+new run. Omit the profile to use standard checks alone.

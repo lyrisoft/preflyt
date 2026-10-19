@@ -2,6 +2,8 @@
 
 Payment Risk Review is an opt-in, source-only profile of the existing beta AI security review. In a repository, open **Assessment options**, check **Payment Risk Review** (and **General security review** when wanted), then **Reassess**. The choice also applies to **Run security** when offered in the security report. It uses the connected security-review model, the existing request/token limits, and the same authorized source snapshot as standard checks. Selecting the profile does not start a scan by itself.
 
+Production installs use the same `ai-security` Compose profile and versioned Strix runner/sandbox images as General Security Review; no separate payment runner is required. See [production setup](strix-production-compose.md).
+
 ## Saved report
 
 The versioned `payment-risk-v1` contract requires:
@@ -39,7 +41,7 @@ A structurally complete report can still have limited security coverage. It rema
 
 Automated coverage includes report shape/scoring, missing scenarios/sections, invented IDs and paths, unread-source rejection, finish-scan gating, late issue detection, profile request isolation, repository access, compact summaries, saved report/finding linkage and on-demand UI loading/error recovery. Fixtures are synthetic and tests do not call an external model.
 
-A paid-model acceptance run producing a saved payment report is still required before treating GitHub issue #146 as fully qualified. Live exploitation, regulatory certification and automatic independent confirmation are outside this source-only profile. Keep the issue open until its agreed acceptance evidence is reviewed.
+A saved paid-model acceptance run is recorded in [the 19 October acceptance evidence](payment-risk-acceptance-2026-10-19.md). Production packaging checks do not replace provider-specific or deployment-specific qualification. Live exploitation, regulatory certification and automatic independent confirmation are outside this source-only profile. Issue closure must follow its agreed acceptance evidence, not container health alone.
 
 ## Human validation
 
