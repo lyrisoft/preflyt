@@ -115,3 +115,125 @@ it('supports keyboard selection and returns focus to the options button', async 
   await userEvent.keyboard('{Escape}')
   await expect.element(options).toHaveFocus()
 })
+
+it('marks AI security review as beta using the shared badge without changing selection', async () => {
+  await show(true)
+  await page.getByRole('button', { name: 'Assessment options' }).click()
+  const option = page.getByRole('menuitemcheckbox', {
+    name: 'Include AI security review',
+    exact: true,
+  })
+  await expect.element(option.getByText('beta', { exact: true })).toBeVisible()
+  await expect.element(option).toHaveAttribute('aria-checked', 'false')
+})
+
+it('selects the payment profile and includes AI review without a separate action', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () =>
+      Response.json({
+        available: true,
+        reason: 'Model ready.',
+        reviewProfiles: ['general', 'payment-risk-v1'],
+      })
+    )
+  )
+  const change = vi.fn(),
+    include = vi.fn()
+  await render(
+    <QueryClientProvider client={new QueryClient()}>
+      <StrixControl
+        repositoryId='51'
+        disabled={false}
+        checked={false}
+        onCheckedChange={include}
+        reviewProfile='general'
+        onReviewProfileChange={change}
+      >
+        <Button>Reassess</Button>
+      </StrixControl>
+    </QueryClientProvider>
+  )
+  await page.getByRole('button', { name: 'Assessment options' }).click()
+  await page
+    .getByRole('menuitemcheckbox', { name: 'Payment Risk Review', exact: true })
+    .click()
+  expect(change).toHaveBeenCalledWith('payment-risk-v1')
+  expect(include).toHaveBeenCalledWith(true)
+})
+
+it('selects both reviews, removes either independently and turns AI off when neither is selected', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () =>
+      Response.json({
+        available: true,
+        reason: 'Model ready.',
+        reviewProfiles: [
+          'general',
+          'payment-risk-v1',
+          'general-and-payment-risk-v1',
+        ],
+      })
+    )
+  )
+  const changes = vi.fn()
+  function Options() {
+    const [checked, setChecked] = useState(true)
+    const [profile, setProfile] = useState<
+      'general' | 'payment-risk-v1' | 'general-and-payment-risk-v1'
+    >('general')
+    return (
+      <StrixControl
+        repositoryId='51'
+        disabled={false}
+        checked={checked}
+        onCheckedChange={setChecked}
+        reviewProfile={profile}
+        onReviewProfileChange={(p) => {
+          setProfile(p)
+          changes(p)
+        }}
+      >
+        <Button>Reassess</Button>
+      </StrixControl>
+    )
+  }
+  await render(
+    <QueryClientProvider client={new QueryClient()}>
+      <Options />
+    </QueryClientProvider>
+  )
+  await page.getByRole('button', { name: 'Assessment options' }).click()
+  const general = page.getByRole('menuitemcheckbox', {
+    name: 'General security review',
+    exact: true,
+  })
+  const payment = page.getByRole('menuitemcheckbox', {
+    name: 'Payment Risk Review',
+    exact: true,
+  })
+  const ai = page.getByRole('menuitemcheckbox', {
+    name: 'Include AI security review',
+    exact: true,
+  })
+  await payment.click()
+  await expect.element(general).toBeChecked()
+  await expect.element(payment).toBeChecked()
+  expect(changes).toHaveBeenLastCalledWith('general-and-payment-risk-v1')
+  await general.click()
+  await expect.element(general).not.toBeChecked()
+  await expect.element(payment).toBeChecked()
+  await general.click()
+  await payment.click()
+  await expect.element(general).toBeChecked()
+  await expect.element(payment).not.toBeChecked()
+  await general.click()
+  await expect.element(ai).not.toBeChecked()
+  await expect.element(general).not.toBeChecked()
+  await expect.element(payment).not.toBeChecked()
+  await payment.click()
+  await expect.element(ai).toBeChecked()
+  await expect.element(payment).toBeChecked()
+  await expect.element(general).not.toBeChecked()
+})

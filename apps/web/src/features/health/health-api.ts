@@ -40,6 +40,7 @@ export type OverallHealth = {
   reasons: string[]
 }
 export type HealthReport = {
+  paymentRiskSummary?: { profile: 'payment-risk-v1'; findings: number }
   findingSummary?: {
     total: number
     unsuppressed: number
@@ -152,6 +153,7 @@ export type HealthReport = {
   }
 }
 export type HealthAssessment = {
+  reviewProfile?: 'general' | 'payment-risk-v1' | 'general-and-payment-risk-v1'
   parentId?: string | null
   includeAiSecurity?: boolean
   aiReviewId?: string | null
@@ -500,6 +502,8 @@ export const healthReasons: Record<string, string> = {
     'The AI security review reached its model-request limit before it could finish.',
   AI_REVIEW_REPORTED:
     'Strix review finished. Findings are AI suggestions; coverage remains limited.',
+  PAYMENT_RISK_REPORT_INCOMPLETE:
+    'The payment review did not produce a complete, source-backed report.',
   STRIX_REVIEW_INCOMPLETE:
     'Strix stopped before completing the requested review.',
 
@@ -607,6 +611,8 @@ export function healthFailure(reason: string | null, canRetry = true) {
       'An organization administrator can raise the output-token limit in AI Intelligence → Security review limits. Then start a new review.',
     STRIX_REQUEST_LIMIT_REACHED:
       'An organization administrator can raise the model-request limit in AI Intelligence → Security review limits. Then start a new review.',
+    PAYMENT_RISK_REPORT_INCOMPLETE:
+      'Open any retained findings, then start a new Payment Risk Review to complete the missing report sections.',
     STRIX_REVIEW_INCOMPLETE:
       'Select Include AI security review in Assessment options, then Reassess to start another review. If it fails again, give your administrator the assessment ID.',
     STRIX_REVIEW_UNAVAILABLE:

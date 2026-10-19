@@ -8,7 +8,7 @@ export async function healthSummaries(db: PrismaService, organizationId: string,
  if (!ids.length) return new Map<string, HealthReport | null>()
  const rows = await db.$queryRaw<Array<{id: string; report: HealthReport | null}>>(Prisma.sql`
   SELECT h.id, CASE WHEN jsonb_typeof(h.report) = 'object' THEN
-   (h.report - 'findings') || jsonb_build_object('findings', '[]'::jsonb, 'findingSummary',
+   (h.report - 'findings' - 'paymentRiskReport') || jsonb_build_object('findings', '[]'::jsonb, 'findingSummary',
     jsonb_build_object('total', s.total, 'unsuppressed', s.unsuppressed, 'analyzerHigh', s.high,
      'groups', COALESCE(g.groups, '[]'::jsonb))) ELSE NULL END AS report
   FROM "RepositoryHealthAssessment" h

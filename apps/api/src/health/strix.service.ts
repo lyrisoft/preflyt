@@ -95,6 +95,7 @@ export class HealthStrixService {
         };
       return {
         available: true,
+        reviewProfiles: Array.isArray(pkg.reviewProfiles) ? pkg.reviewProfiles.filter((profile:unknown)=>['general','payment-risk-v1','general-and-payment-risk-v1'].includes(profile as string)) as string[] : ['general'],
         reason:
           "Runs an optional AI security review using the security testing model. Suggestions do not change CI or merge evaluation.",
       };
@@ -368,6 +369,7 @@ export class HealthStrixService {
             source: source.source,
             model: prefix + "/" + provider.modelId.replace(/^models\//, ""),
             apiType: "chat_completions",
+            reviewProfile: (row.plan as any)?.reviewProfile ?? 'general',
             maxModelCalls: run.maxModelCalls,
             maxSpecialists: endpoint.locality === "local" ? 1 : 2,
             modelToken: this.client.token(connection, row.id),
@@ -405,13 +407,14 @@ export class HealthStrixService {
         result,
         source.source,
         (row.plan as any).excludedFiles ?? 0,
+        (row.plan as any)?.reviewProfile ?? 'general',
       );
       return {
         state: result.state === "COMPLETED" ? "COMPLETED" : "FAILED",
         report,
         sourceBundle:source.source,
         reason:
-          result.state === "COMPLETED" ? undefined : "STRIX_REVIEW_INCOMPLETE",
+          result.state === "COMPLETED" ? undefined : result.reason === "PAYMENT_RISK_REPORT_INCOMPLETE" ? "PAYMENT_RISK_REPORT_INCOMPLETE" : "STRIX_REVIEW_INCOMPLETE",
       };
     } catch (error) {
       if (
@@ -430,7 +433,7 @@ export class HealthStrixService {
       const reason =
         error instanceof ForbiddenException
           ? "ACCESS_REVOKED"
-          : "STRIX_REVIEW_UNAVAILABLE";
+          : error instanceof Error && ["PAYMENT_RISK_REPORT_INVALID","PAYMENT_RISK_REPORT_INCOMPLETE"].includes(error.message) ? "PAYMENT_RISK_REPORT_INCOMPLETE" : "STRIX_REVIEW_UNAVAILABLE";
       return stop(reason);
     }
   }

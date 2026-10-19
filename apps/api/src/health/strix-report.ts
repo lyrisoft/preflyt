@@ -1,3 +1,4 @@
+import { paymentRiskReport } from './payment-risk-report.js';
 import { digest } from "../assessments/assessment-digest.js";
 import {
   safeSourcePath,
@@ -34,6 +35,7 @@ export type StrixResult = {
   sourceModified?: boolean;
   findings?: unknown[];
   coverage?: unknown;
+  paymentRiskReport?: unknown;
   reason?: string;
 };
 function sourceCoverage(value: unknown): SourceReviewCoverage {
@@ -102,6 +104,7 @@ export function strixReport(
   result: StrixResult,
   source: NativeSourceBundle,
   excludedFiles: number,
+  reviewProfile: 'general' | 'payment-risk-v1' | 'general-and-payment-risk-v1' = 'general',
 ): HealthReport {
   if (
     result.version !== 1 ||
@@ -119,6 +122,7 @@ export function strixReport(
   );
   const findings: HealthFinding[] = [];
   const seen = new Set<string>();
+  const issueMap = new Map<string,HealthFinding>();
   let omitted = 0;
   for (const raw of result.findings) {
     const f = raw as any;
@@ -200,8 +204,24 @@ export function strixReport(
           }
         : {}),
     });
+    if(typeof f.id==='string' && aiReview) issueMap.set(f.id,findings[findings.length-1]!);
   }
+  let paymentReport: ReturnType<typeof paymentRiskReport> | undefined;
+  if(reviewProfile!=='general' && result.paymentRiskReport!==undefined) {
+    paymentReport=paymentRiskReport(result.paymentRiskReport,source,issueMap);
+    // The matrix owns advisory severity for the payment profile; never trust a model-provided score.
+    for(const item of paymentReport.findings) {
+      const finding=findings.find(f=>f.fingerprint===item.issueId)!;
+      finding.severity=item.severity;
+      if(finding.aiReview) {
+        finding.aiReview.reasoning += `\n\nPayment risk: ${item.classification.toLowerCase()}. ${item.function} in ${item.service}. Likelihood ${item.likelihood}/5 × impact ${item.impact}/5 = ${item.score}/25.\nAttack scenario: ${item.attackScenario}`;
+        finding.aiReview.verificationSteps += `\n\nProposed regression case: ${paymentReport.qaRegressionCases.find(c=>c.issueId===item.issueId)!.test}`;
+      }
+    }
+  }
+  if(reviewProfile!=='general' && result.state==='COMPLETED' && !paymentReport) throw new Error('PAYMENT_RISK_REPORT_INCOMPLETE');
   return {
+    ...(paymentReport ? {paymentRiskReport:paymentReport,paymentRiskSummary:{profile:'payment-risk-v1' as const,findings:paymentReport.findings.length}} : {}),
     sourceReviewCoverage: sourceCoverage(result.coverage),
     version: 1,
     selection: "security",

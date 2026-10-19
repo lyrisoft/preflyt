@@ -44,13 +44,35 @@ it.each([['development', 'development'], ['production', 'main']])('publishes %s 
   expect(publish.jobs.build.steps.some((step: any) => step.run?.includes('publish-release.mjs build'))).toBe(true)
   expect(publish.jobs.publish.steps.some((step: any) => step.run === 'node scripts/ci/publish-release.mjs manifest')).toBe(true)
   if (environment === 'production') {
+    const preflight = publish.jobs.branch.steps.findIndex((step: any) => step.run === 'node apps/docs/scripts/check-env-reference.mjs')
+    const plan = publish.jobs.branch.steps.findIndex((step: any) => step.run === 'node scripts/ci/plan-release.mjs')
+    expect(preflight).toBeGreaterThan(0)
+    expect(plan).toBeGreaterThan(preflight)
     expect(publish.jobs.release.needs).toEqual(['branch', 'publish'])
     expect(publish.jobs.release.steps.at(-1).env.PREFLYT_BUILD_VERSION).toBe('${{ needs.branch.outputs.version }}')
+    expect(publish.jobs.branch.outputs.notes_sha256).toBe('${{ steps.version.outputs.notes_sha256 }}')
+    expect(publish.jobs.release.steps.at(-1).env.PREFLYT_RELEASE_NOTES_SHA256).toBe('${{ needs.branch.outputs.notes_sha256 }}')
+    for (const job of [publish.jobs.branch, publish.jobs.release]) {
+      expect(job.steps.find((step: any) => step.uses?.startsWith('actions/checkout@')).with['fetch-depth']).toBe(0)
+    }
     expect(publish.jobs.release.if).toContain("github.event_name == 'workflow_dispatch'")
     expect(publish.jobs.release.if).toContain("github.ref == 'refs/heads/main'")
     expect(publish.jobs.release.permissions).toEqual({ contents: 'write', packages: 'write' })
     expect(publish.jobs.release.steps.at(-1).run).toBe('node scripts/ci/create-release.mjs')
   } else expect(publish.jobs.release).toBeUndefined()
+})
+it('checks the documentation reference before planning main image publication', () => {
+  const publish = workflow('publish-images.yml')
+  const steps = publish.jobs.inputs.steps
+  const preflight = steps.findIndex((step: any) => step.run === 'node apps/docs/scripts/check-env-reference.mjs')
+  expect(preflight).toBeGreaterThan(0)
+  expect(steps[preflight].if).toBe("github.ref == 'refs/heads/main'")
+  expect(steps.findIndex((step: any) => step.run === 'node scripts/ci/plan-release.mjs')).toBeGreaterThan(preflight)
+  expect(publish.jobs.release.steps.at(-1).env.PREFLYT_RELEASE_NOTES_SHA256).toBe('${{ needs.inputs.outputs.notes_sha256 }}')
+  expect(publish.jobs.inputs.outputs.notes_sha256).toBe('${{ steps.version.outputs.notes_sha256 }}')
+  for (const job of [publish.jobs.inputs, publish.jobs.release]) {
+    expect(job.steps.find((step: any) => step.uses?.startsWith('actions/checkout@')).with['fetch-depth']).toBe(0)
+  }
 })
 it('retains explicit manual regression, native fixtures and Compose acceptance separately from publishing', () => {
   const native = workflow('publish-native.yml')

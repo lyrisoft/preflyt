@@ -237,6 +237,46 @@ See [branch CI details](../../docs/deployment/branch-ci.md) for coverage/evidenc
 contracts and [the repository launch runbook](../../docs/operations/community-repository-launch.md)
 for the separate public-release requirements.
 
+### Writing release notes
+
+Each feature, improvement, fix or documentation change includes a reviewed
+`.changes/a-short-description.json` file. See [the format and preview commands](../../.changes/README.md).
+Authors describe the user outcome, important limits and upgrade actions while
+reviewing the code. New releases do not require a hand-written versioned Markdown
+summary. Do not derive product claims from promotion PR titles or commit messages.
+
+The manual main publisher plans its version, selects the newest earlier published
+stable release with a valid image-readiness marker, and assembles new change files
+from that exact Git range. Both planning and publication use full Git history.
+Missing fragments, invalid fields, changed/deleted previously released fragments,
+and migration/configuration changes without file-linked upgrade explanations fail
+before builds start. Known configuration paths are documented in `.changes/README.md`;
+reviewers still need to explain compatibility requirements in other code.
+
+Generated **What's new**, **Improvements and fixes**, and **Upgrade notes** appear
+in the planning job's summary. The notes hash passes to the release job, which
+recomputes it before changing image tags. Drift stops publication. Keep consumed
+change files in place; comparing with the last published release prevents repeats,
+including after failed builds or reserved tags. No automated commits or new hosted
+workflow triggers are introduced.
+
+After verifying the images, the publisher adds image tags, architectures, the
+source commit, full changelog and readiness marker under **Technical details**.
+Do not put that marker in change files. The in-app viewer keeps the final section
+in its image/build disclosure and still supports old automatically generated notes.
+
+Main image publishers also run the documentation environment-reference check
+before version planning, so an undocumented setting fails before image builds
+consume runner time. The full documentation build still runs after publication.
+
+Rerunning publication preserves an existing published release description.
+Corrections to an existing release are a separate, explicitly authorized notes-only
+edit: render the reviewed Markdown with `renderReleaseNotes` from
+`scripts/ci/release-notes.mjs`, using the **existing** tag's verified source commit
+and previous stable tag. Pass the saved result with `gh release edit --notes-file`.
+Preserve the existing readiness marker exactly; do not qualify another commit or
+rebuild images just to correct prose.
+
 ### Installed version and in-app release notices
 
 The production publisher plans its stable version before building and passes that version plus the source commit into API/web images. Publication refuses to continue if the planned version has changed. Development and local images are labeled Development.

@@ -37,7 +37,7 @@ const activeStates = ['QUEUED', 'RUNNING']
 const json = (value: unknown) => value as Prisma.InputJsonValue
 const sessionFor = (row: { actorId: string; organizationId: string }): AuthenticatedSession => ({ authenticated: true, identityId: row.actorId, organizationId: row.organizationId, subject: 'repository-health', email: null, role: 'WORKER' })
 const validRetryAt = (value: unknown): string | null => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(value) && Number.isFinite(Date.parse(value)) ? new Date(value).toISOString() : null
-const dto = (row: RepositoryHealthAssessment, includeReport = true) => ({ overallHealth:overallHealth(row.report as HealthReport|null,row.state), id: row.id, parentId:row.parentId??null, includeAiSecurity:(row.plan as any)?.includeAiSecurity===true, aiReviewId:(row.plan as any)?.aiReviewId??null, scanner: (row.plan as any)?.requestedScanner ?? null, branch: row.branch, state: row.state, sourceSha: row.sourceSha, progress: row.state === 'RUNNING' ? ((row.plan as any)?.stage ?? (row.sourceSha ? 'FETCHING_SOURCE' : 'INSPECTING')) : null, category: (row.plan as any)?.requestedCategory ?? null, includeCoverage: row.includeCoverage, report: includeReport && row.report ? row.report as unknown as HealthReport : null, retryAt:validRetryAt((row.plan as any)?.failure?.retryAt), reason: row.reason, cancelled: !!row.cancelledAt, createdAt: row.createdAt, startedAt: row.startedAt, finishedAt: row.finishedAt })
+const dto = (row: RepositoryHealthAssessment, includeReport = true) => ({ overallHealth:overallHealth(row.report as HealthReport|null,row.state), id: row.id, parentId:row.parentId??null, includeAiSecurity:(row.plan as any)?.includeAiSecurity===true, aiReviewId:(row.plan as any)?.aiReviewId??null, reviewProfile:(row.plan as any)?.reviewProfile??'general', scanner: (row.plan as any)?.requestedScanner ?? null, branch: row.branch, state: row.state, sourceSha: row.sourceSha, progress: row.state === 'RUNNING' ? ((row.plan as any)?.stage ?? (row.sourceSha ? 'FETCHING_SOURCE' : 'INSPECTING')) : null, category: (row.plan as any)?.requestedCategory ?? null, includeCoverage: row.includeCoverage, report: includeReport && row.report ? row.report as unknown as HealthReport : null, retryAt:validRetryAt((row.plan as any)?.failure?.retryAt), reason: row.reason, cancelled: !!row.cancelledAt, createdAt: row.createdAt, startedAt: row.startedAt, finishedAt: row.finishedAt })
 const markSelection = (report: HealthReport, category?: HealthCategory) => {
  if (category) {
   report.selection = category
@@ -57,9 +57,11 @@ export class RepositoryHealthService {
   await this.access.requireRepository(session,githubId,'assessment.read')
   return this.strix?.available(session,githubId) ?? {available:false,reason:'Strix runner is not configured.'}
  }
- async start(session: AuthenticatedSession, githubId: string, input: { branch?: string; requestKey?: string; includeCoverage?: boolean; includeAiSecurity?: boolean; category?: HealthCategory; scanner?: 'strix' } = {}, initial = false) {
+ async start(session: AuthenticatedSession, githubId: string, input: { branch?: string; requestKey?: string; includeCoverage?: boolean; includeAiSecurity?: boolean; category?: HealthCategory; scanner?: 'strix'; reviewProfile?: 'general' | 'payment-risk-v1' | 'general-and-payment-risk-v1' } = {}, initial = false) {
   const repo = await this.access.requireRepository(session, githubId, 'execution.run')
   if(input.includeAiSecurity!==undefined && typeof input.includeAiSecurity!=='boolean') throw new BadRequestException('Choose whether to include the AI security review')
+  const reviewProfile=input.reviewProfile??'general'
+  if(!['general','payment-risk-v1','general-and-payment-risk-v1'].includes(reviewProfile) || (reviewProfile!=='general' && (initial || (!input.includeAiSecurity && !input.scanner)))) throw new BadRequestException('Choose a review profile for an AI security review')
   const includeAiSecurity=!initial && input.includeAiSecurity===true
   const combinedAiReviewId=includeAiSecurity?randomUUID():undefined
   let combinedToken:string|undefined
@@ -68,7 +70,8 @@ export class RepositoryHealthService {
   if(includeAiSecurity && this.strix) {
    try {
     combinedSelection=await this.strix.selection(session,githubId)
-    if(!(await this.strix.available(session,githubId)).available) combinedSelection=null
+    const readiness=await this.strix.available(session,githubId)
+    if(!readiness.available || (reviewProfile!=='general' && !readiness.reviewProfiles?.includes(reviewProfile))) combinedSelection=null
     if(combinedSelection) combinedToken=this.strix.client.token(await this.strix.client.connection(),combinedAiReviewId!)
    } catch { combinedSelection=null /* An unavailable AI route must never block standard checks. */ }
   }
@@ -77,6 +80,7 @@ export class RepositoryHealthService {
   const strixSelection=input.scanner && this.strix ? await this.strix.selection(session,githubId) : null
   if(input.scanner) {
    if(!this.strix || !(await this.strix.available(session,githubId)).available) throw new BadRequestException('Strix is not ready. Check the repository model and dedicated runner.')
+   if(reviewProfile!=='general' && !(await this.strix.available(session,githubId)).reviewProfiles?.includes(reviewProfile)) throw new BadRequestException('Update the AI review runner to use Payment Risk Review')
    input={...input,category:'security'}
   }
   if(input.includeCoverage !== undefined && typeof input.includeCoverage !== 'boolean') throw new BadRequestException('Coverage requires an explicit boolean choice')
@@ -98,26 +102,27 @@ export class RepositoryHealthService {
     const key = initial ? 'initial:' + target.revision : input.requestKey!
     const duplicate = await tx.repositoryHealthAssessment.findUnique({ where: { repositoryId_requestKey: { repositoryId: repo.id, requestKey: key } } })
     if (duplicate) {
+     if(((duplicate.plan as any)?.reviewProfile??'general')!==reviewProfile) throw new ConflictException('This request key belongs to a different review profile')
      if(((duplicate.plan as any)?.includeAiSecurity===true)!==includeAiSecurity) throw new ConflictException('This request key belongs to a different assessment scope')
      if (((duplicate.plan as any)?.requestedScanner??null)!==(input.scanner??null) || duplicate.includeCoverage !== includeCoverage || ((duplicate.plan as any)?.requestedCategory ?? null) !== (input.category ?? null) || duplicate.branch !== branch || duplicate.organizationId !== session.organizationId || (!initial && duplicate.actorId !== session.identityId)) throw new ConflictException('This request key belongs to a different assessment scope')
      return dto(duplicate)
     }
     const pending = await tx.repositoryHealthAssessment.findFirst({ where: { repositoryId: repo.id, branch, parentId:null, ...(input.scanner?{strixRun:{isNot:null}}:{strixRun:{is:null}}), state: { in: activeStates }, cancelledAt: null }, orderBy: { createdAt: 'desc' } })
-    if (pending) {if(((pending.plan as any)?.includeAiSecurity===true)!==includeAiSecurity || ((pending.plan as any)?.requestedScanner??null)!==(input.scanner??null) || pending.includeCoverage!==includeCoverage || ((pending.plan as any)?.requestedCategory ?? null)!==(input.category??null)) throw new ConflictException('An assessment with a different scanner or category is already running');return dto(pending)}
+    if (pending) {if(((pending.plan as any)?.reviewProfile??'general')!==reviewProfile) throw new ConflictException('An assessment with a different review profile is already running');if(((pending.plan as any)?.includeAiSecurity===true)!==includeAiSecurity || ((pending.plan as any)?.requestedScanner??null)!==(input.scanner??null) || pending.includeCoverage!==includeCoverage || ((pending.plan as any)?.requestedCategory ?? null)!==(input.category??null)) throw new ConflictException('An assessment with a different scanner or category is already running');return dto(pending)}
     const count = await tx.repositoryHealthAssessment.count({ where: { repositoryId: repo.id, parentId:null, createdAt: { gte: new Date(Date.now() - 3600000) } } })
     const recent = await tx.repositoryHealthAssessment.findFirst({ where: { repositoryId: repo.id, parentId:null, branch, createdAt: { gte: new Date(Date.now() - 60000) } } })
     if (count >= 10 || (!initial && !input.category && recent)) throw new ConflictException('Wait a minute before reassessing; at most 10 assessments per repository per hour')
     const aiReviewId=combinedAiReviewId
     const row = await tx.repositoryHealthAssessment.create({ data: { repositoryId: repo.id, organizationId: session.organizationId!, actorId: session.identityId,
-     branch, includeCoverage, plan: includeAiSecurity ? json({includeAiSecurity:true,aiReviewId}) : input.scanner ? json({kind:'STRIX_HEALTH',stage:'INSPECTING',requestedCategory:'security',requestedScanner:'strix'}) : input.category ? json({requestedCategory:input.category}) : undefined, targetRevision: target.revision, requestKey: key } })
+     branch, includeCoverage, plan: includeAiSecurity ? json({includeAiSecurity:true,aiReviewId,reviewProfile}) : input.scanner ? json({kind:'STRIX_HEALTH',stage:'INSPECTING',requestedCategory:'security',requestedScanner:'strix',reviewProfile}) : input.category ? json({requestedCategory:input.category}) : undefined, targetRevision: target.revision, requestKey: key } })
     if(strixSelection) await this.strix!.initialize(tx,row,strixSelection)
     if(aiReviewId) {
      const child=await tx.repositoryHealthAssessment.create({data:{id:aiReviewId,parentId:row.id,repositoryId:repo.id,organizationId:session.organizationId!,actorId:session.identityId,branch,includeCoverage:false,targetRevision:target.revision,requestKey:key+':ai-security',
       state:combinedSelection?'QUEUED':'SKIPPED',reason:combinedSelection?null:'AI_SECURITY_UNAVAILABLE',finishedAt:combinedSelection?null:new Date(),
-      plan:json({kind:'STRIX_HEALTH',stage:'WAITING_SOURCE',requestedCategory:'security',requestedScanner:'strix'})}})
+      plan:json({kind:'STRIX_HEALTH',stage:'WAITING_SOURCE',requestedCategory:'security',requestedScanner:'strix',reviewProfile})}})
      if(combinedSelection) await this.strix!.initialize(tx,child,combinedSelection,combinedToken)
     }
-    await tx.auditEvent.create({ data: { event: 'repository.health.requested', actorId: session.identityId, metadata: { repositoryId: githubId, branch, category: input.category??'all', assessmentId: row.id, includeAiSecurity, aiReviewId: aiReviewId??null, aiReviewState: aiReviewId?(combinedSelection?'QUEUED':'SKIPPED'):'NOT_REQUESTED' } } })
+    await tx.auditEvent.create({ data: { event: 'repository.health.requested', actorId: session.identityId, metadata: { repositoryId: githubId, branch, category: input.category??'all', assessmentId: row.id, includeAiSecurity, reviewProfile, aiReviewId: aiReviewId??null, aiReviewState: aiReviewId?(combinedSelection?'QUEUED':'SKIPPED'):'NOT_REQUESTED' } } })
     return dto(row)
    }, { isolationLevel: 'Serializable' })
   } catch (error) { if (attempt < 2 && ['P2034', 'P2002'].includes((error as any)?.code)) continue; throw error }
@@ -315,6 +320,16 @@ export class RepositoryHealthService {
   })
   return { cancelled: true }
  }
+ async paymentRiskReport(session:AuthenticatedSession,githubId:string,id:string) {
+  const repo=await this.access.requireRepository(session,githubId,'assessment.read')
+  if(!/^[a-f0-9-]{36}$/.test(id)) throw new BadRequestException('Choose a valid assessment')
+  const rows=await this.db.$queryRaw<Array<{report:unknown;sourceSha:string;branch:string}>>(Prisma.sql`
+   SELECT report->'paymentRiskReport' AS report, "sourceSha", branch FROM "RepositoryHealthAssessment"
+   WHERE id=${id} AND "repositoryId"=${repo.id} AND "organizationId"=${session.organizationId!}`)
+  await this.access.requireRepository(session,githubId,'assessment.read')
+  if(!rows[0]?.report) throw new NotFoundException('No completed payment risk report is available for this assessment')
+  return {assessmentId:id,repository:repo.fullName,...rows[0]}
+ }
  async hotspotReview(session: AuthenticatedSession, githubId:string, id:string, fingerprint:string) {
   const repo=await this.access.requireRepository(session,githubId,'assessment.read')
   if(!/^[a-f0-9-]{36}$/.test(id)||!/^[a-f0-9]{64}$/.test(fingerprint)) throw new BadRequestException('Choose a valid hotspot')
@@ -466,7 +481,7 @@ export class RepositoryHealthService {
     if (requestedCategory && !analyses.length) throw new Error('NO_APPLICABLE_ANALYSIS')
     const { planHash, ...frozenPlan } = plan
     if((row.plan as any)?.includeAiSecurity) {
-     Object.assign(frozenPlan,{includeAiSecurity:true,aiReviewId:(row.plan as any).aiReviewId})
+     Object.assign(frozenPlan,{includeAiSecurity:true,aiReviewId:(row.plan as any).aiReviewId,reviewProfile:(row.plan as any).reviewProfile??'general'})
      const child=await this.db.repositoryHealthAssessment.findUnique({where:{id:(row.plan as any).aiReviewId}})
      if(child && activeStates.includes(child.state)) {
       try {

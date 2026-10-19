@@ -90,6 +90,11 @@ class SourceInspection:
         rows=json.loads(path.read_text()) if path.is_file() else []
         row={'title':values['title'],'severity':values['severity'],'code_locations':[loc],
              'review_status':'NEEDS_REVIEW','source_analysis':{k:values[k] for k in fields if k!='title'},'id':issue_id}
+        # A shared ledger prevents the two scopes from saving the same source issue twice.
+        normalize=lambda title:' '.join(title.casefold().split())
+        existing=next((r for r in rows if r.get('code_locations')==[loc] and normalize(r.get('title',''))==normalize(values['title'])),None)
+        if existing:
+            return {'success':True,'issue_id':existing['id'],'status':'NEEDS_REVIEW','message':'This source issue is already saved. Reuse its ID in the report.'}
         rows=[r for r in rows if r['id']!=issue_id]
         if len(rows)>=50:return {'success':False,'error':'Issue limit reached. Finish the review and record remaining scope gaps.'}
         rows.append(row);temp=path.with_suffix('.tmp');temp.write_text(json.dumps(rows));temp.chmod(0o600);temp.replace(path)
@@ -149,5 +154,25 @@ def register(factory):
         """Save an unverified source-backed security concern in Preflyt Findings. Cite real lines you read. Explain data flow, missing control, impact, assumptions, protections, a concrete fix and verification steps. No executed exploit is required or claimed. Unread/unlocated concerns remain coverage gaps."""
         return json.dumps(inspection.report_issue(ctx.context['agent_id'],locals()))
 
-    factory.register_agent_tools(list_source_files,read_source_file,search_source,report_source_issue)
+    @function_tool
+    async def list_source_issues(ctx:RunContextWrapper)->str:
+        """List shared source issue IDs, titles and locations. Check this ledger before reporting an overlapping concern; reuse an existing ID for the same defect."""
+        path=inspection.audit_path.with_name('source-issues.json')
+        rows=json.loads(path.read_text()) if path.is_file() else []
+        return json.dumps({'issues':[{key:row[key] for key in ['id','title','code_locations']} for row in rows]})
+
+    @function_tool
+    async def save_payment_risk_report(ctx:RunContextWrapper, report_json:str)->str:
+        """Save the coordinator's complete Payment Risk Review v1 JSON. Required before finish_scan for payment-risk-v1. See trusted profile instructions for all eight report sections, domain/scenario keys and source evidence requirements."""
+        import os
+        from payment_risk import save_report
+        if os.environ.get('PREFLYT_STRIX_REVIEW_PROFILE') not in ['payment-risk-v1','general-and-payment-risk-v1'] or ctx.context.get('parent_id') is not None:
+            return json.dumps({'success':False,'error':'Only the payment review coordinator can save this report.'})
+        if len(report_json.encode()) > 240000:
+            return json.dumps({'success':False,'error':'Report exceeds 240 KB.'})
+        try: raw=json.loads(report_json)
+        except ValueError:return json.dumps({'success':False,'error':'Provide valid JSON.'})
+        return json.dumps(save_report(inspection,raw))
+
+    factory.register_agent_tools(list_source_files,read_source_file,search_source,report_source_issue,list_source_issues,save_payment_risk_report)
     return inspection

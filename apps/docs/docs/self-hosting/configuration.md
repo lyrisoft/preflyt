@@ -75,6 +75,7 @@ Defaults are what Preflyt uses when you do not set a value. A blank default mean
 | Variable | Default | Description |
 | --- | --- | --- |
 | `WEB_ORIGIN` | `https://preflyt.example.com` | Public origin, no trailing slash or path. Production requires HTTPS. |
+| `PREFLYT_PUBLIC_API_URL` | unset | Public API base URL, for example `https://preflyt.example.com/api`, without credentials, query strings or fragments. Hosted coding-agent and companion connections use this environment value, falling back to `WEB_ORIGIN` plus `/api` when unset. Set it on the API and worker if the external API address differs. It also seeds the public API URL in Settings → Configuration on first start; CI workflow setup uses that saved setting and requires a public HTTPS address. Later environment edits do not replace the saved setting. |
 | `PREFLYT_HTTP_PORT` | `8080` | Loopback port the web service publishes. |
 | `PREFLYT_IMAGE_REGISTRY` | `ghcr.io/lyrisoft` | Where the images are pulled from. |
 | `PREFLYT_VERSION` | | **Required.** An existing stable version (`vX.Y.Z`) or development tag (`sha-` plus the 40-character commit ID). |

@@ -71,12 +71,23 @@ class SourceInspectionTests(unittest.IsolatedAsyncioTestCase):
         await self.inspection.execute(self.ctx,{'operation':'read','path':'auth.py','start_line':1,'end_line':2})
         self.assertTrue(self.inspection.report_issue('reviewer',args)['success'])
         stored=json.loads(self.inspection.audit_path.with_name('source-issues.json').read_text())
+        duplicate=self.inspection.report_issue('reviewer',{**args,'title':'  OWNERSHIP   IS NOT ENFORCED '})
+        self.assertEqual(duplicate['issue_id'],stored[0]['id'])
+        self.assertEqual(len(json.loads(self.inspection.audit_path.with_name('source-issues.json').read_text())),1)
         self.assertEqual(stored[0]['review_status'],'NEEDS_REVIEW')
         self.assertEqual(stored[0]['source_analysis']['reasoning'],args['reasoning'])
         self.assertNotIn('return user.owner',json.dumps(stored))
         for patch in [{'reasoning':''},{'remediation':'x'*8001},{'path':'../secret.py'},{'reasoning':'password: sensitive12345'}]:
             self.assertFalse(self.inspection.report_issue('reviewer',{**args,**patch})['success'])
         self.assertFalse(self.inspection.report_issue('different-agent',args)['success'])
+        self.inspection.reads['payment-specialist']=self.inspection.reads['reviewer']
+        duplicate=self.inspection.report_issue('payment-specialist',args)
+        self.assertEqual(duplicate['issue_id'],stored[0]['id'])
+        ledger=self.inspection.audit_path.with_name('source-issues.json')
+        self.assertEqual(len(json.loads(ledger.read_text())),1)
+        distinct=self.inspection.report_issue('payment-specialist',{**args,'title':'A different security defect at the same location'})
+        self.assertNotEqual(distinct['issue_id'],stored[0]['id'])
+        self.assertEqual(len(json.loads(ledger.read_text())),2)
 
     async def test_traversal_symlinks_and_oversized_ranges_do_not_count_as_reads(self):
         outside=Path(self.temp.name)/'private.txt';outside.write_text('PRIVATE')

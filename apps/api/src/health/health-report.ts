@@ -1,3 +1,4 @@
+import type { PaymentRiskReport } from './payment-risk-report.js'
 import {type ScanError, validFileAnalysis, fileAnalysisRules, type FileAnalysis} from './health-file-analysis.js'
 import { healthAnalysisComplete } from './health-analysis-completion.js'
 import type { HealthPolicyContext } from './health-policy-context.js'
@@ -27,6 +28,8 @@ export type SourceReviewCoverage = {
  caveats: string[];
 }
 export type HealthReport = {
+ paymentRiskReport?: PaymentRiskReport;
+ paymentRiskSummary?: {profile:'payment-risk-v1';findings:number};
  findingSummary?: { total: number; unsuppressed: number; analyzerHigh: number; groups: Array<{category: string | null; checkId: string | null; severity?: string | null; count: number}> };
  sourceReviewCoverage?: SourceReviewCoverage;
  selection?: 'all' | 'security' | 'reliability' | 'maintainability' | 'duplication' | 'coverage';

@@ -1,0 +1,8 @@
+{
+  "type": "improvement",
+  "title": "Automatic release summaries",
+  "description": "Release notes now collect reviewed change summaries since the previous published release and group features, fixes and upgrade instructions. Image tags, platforms and the full changelog follow the product changes, with build details expandable in the app. Publishing remains a manual action.",
+  "upgrade": "none",
+  "migrations": [],
+  "configuration": []
+}
