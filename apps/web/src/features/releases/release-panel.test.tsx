@@ -357,6 +357,40 @@ Upgrade guide: https://docs.preflytlabs.com/self-hosting/community-edition
     .toBeVisible()
 })
 
+it('shows curated changes and upgrade requirements while keeping image metadata collapsed', async () => {
+  const note = {
+    ...state.notes[0],
+    body: "Review findings in one place.\n\n## What's new\n\n- Connect a coding agent.\n\n## Improvements and fixes\n\n- Clearer skill validation.\n\n## Upgrade notes\n\nDatabase migrations are required. Follow the [Compose upgrade guide](https://docs.preflytlabs.com/self-hosting/upgrades-and-backups).\n\n## Technical details\n\n- `ghcr.io/lyrisoft/preflyt-api:v0.2.0`\n\n<!-- preflyt-release-ready:v1 sha=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa -->",
+  }
+  state = { ...state, latest: note, notes: [note] }
+  await mount()
+  await page
+    .getByRole('button', { name: "What's new — v0.1.2 — Update available" })
+    .click()
+  await expect.element(page.getByText('Connect a coding agent.')).toBeVisible()
+  await expect
+    .element(
+      page.getByText('Database migrations are required.', { exact: false })
+    )
+    .toBeVisible()
+  await expect
+    .element(page.getByRole('link', { name: 'Compose upgrade guide' }))
+    .toHaveAttribute(
+      'href',
+      'https://docs.preflytlabs.com/self-hosting/upgrades-and-backups'
+    )
+  await expect
+    .element(page.getByText('ghcr.io/lyrisoft/preflyt-api:v0.2.0'))
+    .not.toBeVisible()
+  await page.getByText('Image and build details', { exact: true }).click()
+  await expect
+    .element(page.getByText('ghcr.io/lyrisoft/preflyt-api:v0.2.0'))
+    .toBeVisible()
+  expect(document.querySelector('[role=dialog]')?.textContent).not.toContain(
+    'preflyt-release-ready'
+  )
+})
+
 it('preserves fetched notes if refreshing the cached information fails', async () => {
   await mount()
   await expect
