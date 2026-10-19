@@ -1,0 +1,8 @@
+{
+  "type": "fix",
+  "title": "PR reviews follow commits instead of model changes",
+  "description": "Changing a model no longer automatically reruns an unchanged PR review or posts another comment. Existing review attempts are recognized across model changes, including older saved reviews. New PR commits and explicit review requests or retries can still run with the current model.",
+  "upgrade": "Recreate the API and worker services together. Existing review history is preserved and requires no migration.",
+  "migrations": [],
+  "configuration": []
+}
