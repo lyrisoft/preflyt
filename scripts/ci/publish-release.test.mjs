@@ -12,6 +12,7 @@ test('API, migration, controller and Health scanner share the native build stage
   assert.match(config.target['preflyt-health-scanner']['cache-to'][0], /mode=min,/);
   assert.match(config.target['preflyt-api']['cache-to'][0], /mode=max,/);
   for (const target of Object.values(config.target)) {
+    assert.equal(target.context, '.');
     assert.equal(target.dockerfile, 'deploy/api.Dockerfile');
     assert.deepEqual(target.platforms, ['linux/arm64']);
     assert.deepEqual(target.attest, [{ type: 'sbom' }, { type: 'provenance', mode: 'max' }]);
@@ -25,6 +26,7 @@ test('web builds independently and existing immutable architecture images are ne
   let config;
   publishRelease('build', { ...env, BUILD_GROUP: 'web', ARCH: 'amd64' }, args => args.includes('inspect') ? missing() : '', (_, contents) => { config = JSON.parse(contents); });
   assert.deepEqual(Object.keys(config.target), ['preflyt-web']);
+  assert.equal(config.target['preflyt-web'].context, '.');
   assert.deepEqual(config.target['preflyt-web'].attest, [{ type: 'sbom' }, { type: 'provenance', mode: 'max' }]);
   publishRelease('build', env, args => { assert.ok(args.includes('inspect')); return ''; }, () => assert.fail('should not rebuild existing images'));
 });
@@ -65,7 +67,8 @@ test('Strix runner and sandbox build separately with pinned version tags for bot
     publishRelease('build', {...env,BUILD_GROUP:'strix',ARCH:arch},args=>args.includes('inspect')?missing():'',(_,contents)=>{config=JSON.parse(contents)});
     assert.deepEqual(Object.keys(config.target),['preflyt-strix-runner','preflyt-strix-sandbox']);
     assert.equal(config.target['preflyt-strix-runner'].dockerfile,'deploy/strix.Dockerfile');
-    assert.equal(config.target['preflyt-strix-sandbox'].dockerfile,'tools/strix-runner/sandbox.Dockerfile');
+    assert.equal(config.target['preflyt-strix-sandbox'].dockerfile,'sandbox.Dockerfile');
+    assert.equal(config.target['preflyt-strix-sandbox'].context,'tools/strix-runner');
     for (const target of Object.values(config.target)) assert.deepEqual(target.platforms,[`linux/${arch}`]);
   }
 });
