@@ -1,0 +1,7 @@
+-c constraints.txt
+# Exact source inspected for this adapter; do not replace with an unpinned latest build.
+strix-agent @ git+https://github.com/usestrix/strix.git@a0f8ea2cd379c4bf56e665d3db2ba8a4f7c0683c
+
+# Adapter protocol tested against these SDK/model transport versions.
+openai-agents[litellm]==0.19.4
+litellm==1.106.0

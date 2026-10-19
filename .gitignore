@@ -47,3 +47,6 @@ docs/deployment/native-runner/coverage/*
 !docs/deployment/native-runner/coverage/install-result.mjs
 !docs/deployment/native-runner/coverage/repository-run.mjs
 !docs/deployment/native-runner/coverage/lcov.mjs
+
+# Optional local Strix runner verification output
+tools/strix-runner/__pycache__/

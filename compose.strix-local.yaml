@@ -1,0 +1,77 @@
+# Docker Desktop development only. Start the authorized host controller with
+# PREFLYT_API_ORIGIN=http://127.0.0.1:3001 ./scripts/strix-local.sh.
+# TLS is forwarded unchanged; the API and worker receive no Docker access.
+x-strix-bridge: &strix-bridge
+  image: ${PREFLYT_IMAGE_REGISTRY:-preflyt-local}/preflyt-api:${PREFLYT_VERSION:-development}
+  command: [node, /opt/preflyt/strix-local-bridge.mjs]
+  user: '1000:1000'
+  init: true
+  restart: unless-stopped
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  mem_limit: 96m
+  pids_limit: 32
+  volumes:
+    - ./scripts/deploy/strix-local-bridge.mjs:/opt/preflyt/strix-local-bridge.mjs:ro
+  healthcheck:
+    test: [CMD, node, -e, 'const s=require("net").connect(3012,"127.0.0.1",()=>{s.end();process.exit(0)});s.on("error",()=>process.exit(1));setTimeout(()=>process.exit(1),2000).unref()']
+    interval: 10s
+    timeout: 3s
+    retries: 3
+
+services:
+  strix-connection-init:
+    image: ${PREFLYT_IMAGE_REGISTRY:-preflyt-local}/preflyt-api:${PREFLYT_VERSION:-development}
+    user: '0:0'
+    command:
+      - node
+      - -e
+      - 'const fs=require("fs");fs.copyFileSync("/input/connection.json","/connection/connection.json");fs.chownSync("/connection/connection.json",1000,1000);fs.chmodSync("/connection/connection.json",0o600)'
+    restart: 'no'
+    read_only: true
+    network_mode: none
+    cap_drop: [ALL]
+    cap_add: [CHOWN, FOWNER, DAC_OVERRIDE]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 96m
+    pids_limit: 32
+    volumes:
+      - ./apps/api/.preflyt/strix/connection.json:/input/connection.json:ro
+      - strix_connection:/connection
+  api:
+    ports: ['127.0.0.1:3001:3000']
+    extra_hosts: ['host.docker.internal:host-gateway']
+    environment:
+      STRIX_CONNECTION_FILE: /run/preflyt-strix/connection.json
+      STRIX_CALLBACK_ORIGIN: http://127.0.0.1:3001
+    volumes:
+      - strix_connection:/run/preflyt-strix:ro
+    depends_on:
+      strix-connection-init:
+        condition: service_completed_successfully
+  worker:
+    extra_hosts: ['host.docker.internal:host-gateway']
+    environment:
+      STRIX_CONNECTION_FILE: /run/preflyt-strix/connection.json
+      STRIX_CALLBACK_ORIGIN: http://127.0.0.1:3001
+    volumes:
+      - strix_connection:/run/preflyt-strix:ro
+    depends_on:
+      strix-connection-init:
+        condition: service_completed_successfully
+  strix-api-bridge:
+    <<: *strix-bridge
+    network_mode: service:api
+    depends_on:
+      api:
+        condition: service_started
+  strix-worker-bridge:
+    <<: *strix-bridge
+    network_mode: service:worker
+    depends_on:
+      worker:
+        condition: service_started
+
+volumes:
+  strix_connection:
