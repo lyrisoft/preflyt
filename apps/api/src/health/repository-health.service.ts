@@ -1,3 +1,4 @@
+import { findingReviewId } from '../findings/finding-review.js'
 import { securityFindingsSummary } from './security-findings-summary.js'
 import { findingReferenceGuidance } from './finding-guidance.js'
 import { reportedLocation } from '../findings/reported-location.js'
@@ -207,8 +208,9 @@ export class RepositoryHealthService {
   if(!assessment?.sourceSha) throw new NotFoundException('This finding is unavailable in the selected health report')
   const finding=await healthFinding(this.db,session.organizationId!,id,fingerprint)
   if(!finding) throw new NotFoundException('This finding is unavailable in the selected health report')
+  const review=await this.db.findingReview.findFirst({where:{id:findingReviewId(session.organizationId!,{id:fingerprint,repositoryId:githubId,assessmentId:id,sourceSha:assessment.sourceSha,origin:'health'}),organizationId:session.organizationId!}})
   await this.access.requireRepository(session,githubId,'assessment.read')
-  return {repository:repo.fullName,assessment:{...assessment,report:{findings:[{...finding,referenceGuidance:findingReferenceGuidance(finding.ruleId)}]}}}
+  return {repository:repo.fullName,review,assessment:{...assessment,report:{findings:[{...finding,referenceGuidance:findingReferenceGuidance(finding.ruleId)}]}}}
  }
  async findings(session:AuthenticatedSession,githubId:string,id:string,input:Parameters<typeof healthFindingsFilters>[0]) {
   const repo=await this.access.requireRepository(session,githubId,'assessment.read')
@@ -328,7 +330,16 @@ export class RepositoryHealthService {
    WHERE id=${id} AND "repositoryId"=${repo.id} AND "organizationId"=${session.organizationId!}`)
   await this.access.requireRepository(session,githubId,'assessment.read')
   if(!rows[0]?.report) throw new NotFoundException('No completed payment risk report is available for this assessment')
-  return {assessmentId:id,repository:repo.fullName,...rows[0]}
+  const report=rows[0].report as {findings:Array<{issueId:string;classification:string;review?:unknown;modelClassification?:string}>}
+  const decisions=await this.db.findingReview.findMany({where:{organizationId:session.organizationId!,repositoryGithubId:githubId,assessmentId:id,sourceSha:rows[0].sourceSha}})
+  const byId=new Map(decisions.map(d=>[d.id,d]))
+  for(const finding of report.findings){
+   const review=byId.get(findingReviewId(session.organizationId!,{id:finding.issueId,repositoryId:githubId,assessmentId:id,sourceSha:rows[0].sourceSha,origin:'health'}))
+   finding.modelClassification=finding.classification
+   if(review){finding.classification=review.classification;finding.review=review}
+  }
+  await this.access.requireRepository(session,githubId,'assessment.read')
+  return {assessmentId:id,repository:repo.fullName,...rows[0],report}
  }
  async hotspotReview(session: AuthenticatedSession, githubId:string, id:string, fingerprint:string) {
   const repo=await this.access.requireRepository(session,githubId,'assessment.read')

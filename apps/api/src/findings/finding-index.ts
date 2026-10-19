@@ -66,6 +66,7 @@ export class FindingIndex {
       await this.db.findingIndexRow.createMany({
         data: rows.slice(offset, offset + 100).map((row, n) => {
           const {
+            review: _review,
             guidance: _g,
             reportGuidance: _r,
             referenceGuidance: _ref,

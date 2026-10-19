@@ -1803,3 +1803,21 @@ model FindingIndexTarget {
  @@index([nextRunAt])
  @@index([organizationId])
 }
+
+// Human validation is commit/assessment bound; never rewrites a scan or gate.
+model FindingReview {
+  id                 String   @id
+  organizationId     String
+  repositoryGithubId String
+  assessmentId       String
+  sourceSha          String
+  findingId          String
+  classification     String
+  reason             String
+  revision           Int      @default(1)
+  updatedById        String
+  updatedAt          DateTime @updatedAt
+  createdAt          DateTime @default(now())
+
+  @@index([organizationId, repositoryGithubId, assessmentId, sourceSha])
+}

@@ -54,7 +54,7 @@ export function FindingIgnore({
     queryFn: ({ signal }) => findingRequest<Decision>(path, signal),
   })
   const save = useMutation({
-    meta: { successMessage: 'Finding review decision saved' },
+    meta: { successMessage: 'Finding visibility saved' },
     mutationFn: async ({
       state,
       expiresAt,
@@ -99,7 +99,7 @@ export function FindingIgnore({
         <div className='flex min-w-0 items-center gap-3'>
           <SurfaceIcon icon={ClipboardCheck} tone='blue' />
           <CardTitle asChild>
-            <h2 id={`${id}-title`}>Finding review</h2>
+            <h2 id={`${id}-title`}>Finding visibility</h2>
           </CardTitle>
         </div>
         {data && (
