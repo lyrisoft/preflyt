@@ -13,6 +13,7 @@ jobs:
     timeout-minutes: 2
     outputs:
       version: ${{ steps.version.outputs.version }}
+      notes_sha256: ${{ steps.version.outputs.notes_sha256 }}
     steps:
       - name: Validate manual publication target
         env:
@@ -22,6 +23,9 @@ jobs:
         with:
           persist-credentials: false
           ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Check configuration reference before building images
+        run: node apps/docs/scripts/check-env-reference.mjs
       - name: Plan installed release version
         id: version
         env:
@@ -106,6 +110,7 @@ jobs:
         with:
           persist-credentials: false
           ref: ${{ github.sha }}
+          fetch-depth: 0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24.4.1
@@ -119,6 +124,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PREFLYT_BUILD_VERSION: ${{ needs.branch.outputs.version }}
+          PREFLYT_RELEASE_NOTES_SHA256: ${{ needs.branch.outputs.notes_sha256 }}
         run: node scripts/ci/create-release.mjs
 
   documentation:

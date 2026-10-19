@@ -1,3 +1,4 @@
+import {readFileSync} from 'node:fs';
 import "reflect-metadata";
 import { beforeAll, beforeEach, afterAll, expect, it, vi } from "vitest";
 import { randomUUID, generateKeyPairSync } from "node:crypto";
@@ -1029,3 +1030,62 @@ it('saves unverified VAPT issues in Findings with complete analysis and immediat
  const outsider={...owner,organizationId:randomUUID()};
  await expect(service.source(outsider,'51',queued.id,finding.fingerprint)).rejects.toThrow();
 });
+
+it('pins the payment profile, isolates request keys and rejects reports across organizations', async () => {
+  client.call.mockResolvedValueOnce({version:1,toolVersion:'1.7.0',available:true,reviewProfiles:['general','payment-risk-v1']})
+  client.call.mockResolvedValueOnce({version:1,toolVersion:'1.7.0',available:true,reviewProfiles:['general','payment-risk-v1']})
+  const requestKey=randomUUID()
+  const queued=await service.start(owner,'51',{requestKey,scanner:'strix',reviewProfile:'payment-risk-v1'})
+  expect(queued.reviewProfile).toBe('payment-risk-v1')
+  await expect(service.start(owner,'51',{requestKey,scanner:'strix'})).rejects.toThrow('different review profile')
+  await expect(service.start(owner,'51',{requestKey:randomUUID(),reviewProfile:'payment-risk-v1'})).rejects.toThrow('Choose a review profile')
+  await expect(service.paymentRiskReport(owner,'51',queued.id)).rejects.toThrow('No completed payment risk report')
+  await fixture.prisma.repositoryHealthAssessment.update({where:{id:queued.id},data:{report:{version:1,paymentRiskReport:{version:1,profile:'payment-risk-v1',executiveSummary:'Fixture payment report.'}}}})
+  expect((await service.paymentRiskReport(owner,'51',queued.id)).report).toMatchObject({profile:'payment-risk-v1'})
+  await expect(service.paymentRiskReport({...owner,organizationId:randomUUID()},'51',queued.id)).rejects.toThrow()
+})
+
+
+it('saves a complete payment report, serves compact health summaries and exposes its linked finding', async () => {
+  client.call.mockResolvedValueOnce({version:1,toolVersion:'1.7.0',available:true,reviewProfiles:['general','payment-risk-v1']})
+  client.call.mockResolvedValueOnce({version:1,toolVersion:'1.7.0',available:true,reviewProfiles:['general','payment-risk-v1']})
+  const queued=await service.start(owner,'51',{requestKey:randomUUID(),scanner:'strix',reviewProfile:'payment-risk-v1'})
+  await service.process(queued.id)
+  expect(client.admit).toHaveBeenLastCalledWith(expect.objectContaining({reviewProfile:'payment-risk-v1',source:expect.objectContaining({sourceSha:sha})}))
+  const paymentReport=JSON.parse(readFileSync(new URL('../../../tools/strix-runner/fixtures/payment-risk-v1.json',import.meta.url),'utf8'))
+  for(const rows of [paymentReport.systemInventory,paymentReport.domains,paymentReport.paymentRiskRegister,paymentReport.attackScenarios])for(const row of rows)for(const ref of row.references){ref.path='app.ts';ref.startLine=1;ref.endLine=1}
+  client.status.mockResolvedValueOnce({version:1,assessmentId:queued.id,sourceHash,state:'COMPLETED',toolVersion:'1.7.0',cleanupConfirmed:true,paymentRiskReport:paymentReport,findings:[{
+    id:'issue-1',title:'Fixture payment concern',severity:'low',review_status:'NEEDS_REVIEW',code_locations:[{file:'app.ts',start_line:1,end_line:1}],source_analysis:{reasoning:'The fixture illustrates a missing guard.',impact:'A transfer may cross ownership boundaries.',remediation:'Validate ownership.',preconditions:'A caller can reach the handler.',verification_steps:'Verify with separate owners.',counterevidence:'Inspect inherited guards before confirming.'}
+  }]})
+  await fixture.prisma.repositoryHealthAssessment.update({where:{id:queued.id},data:{leaseUntil:null}})
+  await service.process(queued.id)
+  const saved=await fixture.prisma.repositoryHealthAssessment.findUniqueOrThrow({where:{id:queued.id}})
+  expect(saved.state).toBe('COMPLETED')
+  const report=(await service.paymentRiskReport(owner,'51',queued.id)).report as any
+  expect(report.findings[0]).toMatchObject({severity:'critical',score:20})
+  const view=await service.get(owner,'51')
+  expect(view.strixReview?.report?.paymentRiskSummary).toMatchObject({findings:1})
+  expect(view.strixReview?.report?.paymentRiskReport).toBeUndefined()
+  const detail=await service.findingDetail(owner,'51',queued.id,report.findings[0].issueId)
+  expect(JSON.stringify(detail)).toContain('NEEDS_REVIEW')
+})
+
+it('queues both AI scopes as one child and fetches their source only once',async()=>{
+ const {scanner}=await combined()
+ client.call.mockResolvedValueOnce({version:1,toolVersion:'1.7.0',available:true,reviewProfiles:['general','payment-risk-v1','general-and-payment-risk-v1']})
+ const requestKey=randomUUID()
+ const queued=await service.start(owner,'51',{requestKey,includeAiSecurity:true,reviewProfile:'general-and-payment-risk-v1'})
+ expect(queued.reviewProfile).toBe('general-and-payment-risk-v1')
+ expect(await fixture.prisma.repositoryHealthAssessment.count({where:{parentId:queued.id}})).toBe(1)
+ await service.process(queued.id)
+ await service.process(queued.aiReviewId!)
+ expect(client.admit).toHaveBeenCalledOnce()
+ const request=client.admit.mock.calls[0]![0]
+ const staticSource=scanner.call.mock.calls.find((call:any[])=>call[0]==='admit')?.[2]
+ expect(request.reviewProfile).toBe('general-and-payment-risk-v1')
+ expect(request.source.sourceHash).toBe(staticSource.sourceHash)
+ expect(github.readRepositorySnapshot).toHaveBeenCalledOnce()
+ expect(github.readHealthScanSource).not.toHaveBeenCalled()
+ client.call.mockResolvedValueOnce({version:1,toolVersion:'1.7.0',available:true,reviewProfiles:['general','payment-risk-v1']})
+ await expect(service.start(owner,'51',{requestKey,includeAiSecurity:true,reviewProfile:'payment-risk-v1'})).rejects.toThrow('different review profile')
+})

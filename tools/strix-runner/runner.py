@@ -176,6 +176,7 @@ def run_job(job,body):
             'STRIX_RUNTIME_BACKEND':'preflyt','STRIX_TELEMETRY':'false','LLM_DISABLE_STREAMING':'true',
             'PREFLYT_STRIX_SANDBOX_IMAGE':IMAGE,'STRIX_IMAGE':IMAGE,'PREFLYT_STRIX_NETWORK':NETWORK,'PREFLYT_STRIX_ASSESSMENT':job,
             'STRIX_MAX_CONTEXT_IMAGES':'0','PREFLYT_STRIX_MAX_REQUESTS':str(body.get('maxModelCalls',80)),
+            'PREFLYT_STRIX_REVIEW_PROFILE':body.get('reviewProfile','general'),
             'PREFLYT_STRIX_MAX_SPECIALISTS':str(min(body.get('maxSpecialists',2),int(os.environ.get('PREFLYT_STRIX_MAX_SPECIALISTS','2')))),
             'STRIX_TOOL_OUTPUT_MAX_TOKENS':'2000','STRIX_TOOL_OUTPUT_MAX_LINES':'150','STRIX_TOOL_OUTPUT_MAX_BYTES':'12000'})
         command=[sys.executable,str(ROOT/'scan.py'),'-n','--target',str(source),'--scope-mode','full','--scan-mode','standard',
@@ -200,6 +201,12 @@ def run_job(job,body):
             result['exitCode']=process.returncode
         status,findings,coverage=collect(work)
         result['findings']=findings
+        if body.get('reviewProfile') in ['payment-risk-v1','general-and-payment-risk-v1']:
+            report_path=work/'payment-risk-report.json'
+            if not report_path.is_file() or report_path.stat().st_size > 240000:
+                result['reason']='PAYMENT_RISK_REPORT_INCOMPLETE'
+            else:
+                result['paymentRiskReport']=json.loads(report_path.read_text())
         if coverage is not None:result['coverage']=coverage
         audit=work/'source-inspection.json'
         inspection=json.loads(audit.read_text()) if audit.is_file() else {}
@@ -240,7 +247,7 @@ class Handler(BaseHTTPRequestHandler):
             if length<=0 or length>MAX_BYTES:raise ValueError()
             body=json.loads(self.rfile.read(length))
             if self.path=='/capabilities':
-                self.reply(200,{'version':1,'toolVersion':VERSION,'available':valid_repository(body.get('repositoryId')),'mode':'local-authorized-source-copy'});return
+                self.reply(200,{'version':1,'toolVersion':VERSION,'available':valid_repository(body.get('repositoryId')),'mode':'local-authorized-source-copy','reviewProfiles':['general','payment-risk-v1','general-and-payment-risk-v1']});return
             job=body.get('assessmentId','')
             if not isinstance(job,str) or not ID.fullmatch(job):raise ValueError()
             if self.path=='/status':
@@ -262,6 +269,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply(200,result or {'state':'RUNNING','cleanupConfirmed':record is None and clean_containers(job)});return
             if self.path!='/admit' or not valid_repository(body.get('repositoryId')) or body.get('callbackOrigin')!=API_ORIGIN or not re.fullmatch('[a-f0-9]{64}',body.get('modelToken','')):
                 self.reply(403,{'error':'REPOSITORY_OR_SCOPE_NOT_ALLOWED'});return
+            if body.get('reviewProfile','general') not in ['general','payment-risk-v1','general-and-payment-risk-v1']:raise ValueError()
             source=body.get('source',{})
             if source.get('repositoryId')!=body['repositoryId'] or not re.fullmatch('[a-f0-9]{64}',source.get('sourceHash','')) or not re.fullmatch('[a-f0-9]{40}',source.get('sourceSha','')):raise ValueError()
             with LOCK:

@@ -60,11 +60,12 @@ const reviewTasks = (checks: AiCheck[], skills: AiReviewSkill[]) =>
       checkTitle: check.title,
     };
   });
+// Scheduling identity belongs to the PR head, not mutable inference configuration.
 const automaticReviewKey = (organizationId: string, repositoryId: string,
-  automatic: NonNullable<Snapshot['automatic']>, routeRevision: number, checks: AiCheck[]) => digest({
-  organizationId, repositoryId, number: automatic.number, context: automatic.context,
-  policyHash: automatic.policyHash, routeRevision,
-  ...(automatic.repositoryRevision !== undefined ? { repositoryRevision: automatic.repositoryRevision } : {}), checks,
+  automatic: NonNullable<Snapshot['automatic']>, checks: AiCheck[]) => digest({
+  version: 2, organizationId, repositoryId, number: automatic.number,
+  sourceSha: automatic.context.head.sha,
+  checkIds: checks.map(check => check.id).sort(),
 });
 export const skillReviewsEnabled = aiReviewsEnabled;
 type Snapshot = {
@@ -537,9 +538,9 @@ export class SkillReviewService {
     if (!route?.enabled) throw new ConflictException('Choose an enabled model in Model Router');
     let automatic = snapshot.automatic;
     if (automatic) {
-      let key = automaticReviewKey(session.organizationId!, repo.id, automatic, route.revision, snapshot.checks);
-      if (route.id !== snapshot.route.id && route.revision === snapshot.route.revision)
-        key = digest({ automaticKey: key, routeId: route.id });
+      let key = automaticReviewKey(session.organizationId!, repo.id, automatic, snapshot.checks);
+      if (route.id !== snapshot.route.id || route.revision !== snapshot.route.revision)
+        key = digest({ kind: 'EXPLICIT_PR_RETRY', reviewId: review.id, automaticKey: key, routeId: route.id, routeRevision: route.revision });
       if (route.id === snapshot.route.id && route.revision === snapshot.route.revision) {
         const providers = await this.db.aiProviderConnection.findMany({ where: {
           organizationId: session.organizationId!, id: { in: [route.primaryId, route.fallbackId].filter((id): id is string => !!id) },
@@ -835,6 +836,20 @@ export class SkillReviewService {
       !organizationId
     )
       return;
+    // Include legacy automatic keys and manual reviews. A model, skill, policy,
+    // base-branch or preference change must not re-enqueue this unchanged PR head.
+    // Keep failed/cancelled attempts here too: they require an explicit retry.
+    const priorReview = await this.db.aiSkillReview.findFirst({
+      where: {
+        organizationId, repositoryId: pr.repositoryId, stage: 'pull_request',
+        assessment: {
+          repositoryId: pr.repositoryId, sourceSha: context.head.sha,
+          request: { path: ['pullRequest', 'number'], equals: pr.number },
+        },
+      },
+      select: { id: true },
+    });
+    if (priorReview) return;
     const route = await effectiveAiRoute(
       this.db,
       organizationId,
@@ -958,7 +973,7 @@ export class SkillReviewService {
         key: automaticReviewKey(organizationId, pr.repositoryId, {
           key: '', number: pr.number, context, policyId: policy.id, policyHash: policy.definitionHash,
           ...(scoped ? { repositoryRevision: config!.revision } : {}),
-        }, route.revision, selected),
+        }, selected),
         ...(scoped ? { repositoryRevision: config!.revision } : {}),
         policyId: policy.id,
         policyHash: policy.definitionHash,

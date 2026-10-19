@@ -11,6 +11,7 @@ class HealthRequest {
  @IsOptional() @IsBoolean() includeCoverage?: boolean
  @IsOptional() @IsBoolean() includeAiSecurity?: boolean
  @IsOptional() @IsIn(['security','reliability','maintainability','duplication','coverage']) category?: HealthCategory
+ @IsOptional() @IsIn(['general','payment-risk-v1','general-and-payment-risk-v1']) reviewProfile?: 'general' | 'payment-risk-v1' | 'general-and-payment-risk-v1'
  @IsOptional() @IsIn(['strix']) scanner?: 'strix'
  @IsUUID('4') requestKey!: string
 }
@@ -35,6 +36,8 @@ export class RepositoryHealthController {
  start(@Req() req: SessionRequest, @Param('repositoryId') repo: string, @Body(new ValidationPipe({whitelist: true, forbidNonWhitelisted: true, transform: true, expectedType: HealthRequest})) input: HealthRequest) { this.auth.assertOrigin(req.headers.origin); return this.health.start(req.preflytSession!,repo,input) }
  @Post('repositories/:repositoryId/health/:id/cancel')
  cancel(@Req() req: SessionRequest, @Param('repositoryId') repo: string, @Param('id') id: string) { this.auth.assertOrigin(req.headers.origin); return this.health.cancel(req.preflytSession!,repo,id) }
+ @Get('repositories/:repositoryId/health/:id/payment-risk-report') @Header('Cache-Control','no-store')
+ paymentRiskReport(@Req() req:SessionRequest,@Param('repositoryId') repo:string,@Param('id') id:string) {return this.health.paymentRiskReport(req.preflytSession!,repo,id)}
  @Get('repositories/:repositoryId/health/:id/findings') @Header('Cache-Control','no-store')
  findings(@Req() req:SessionRequest,@Param('repositoryId') repo:string,@Param('id') id:string,@Query() query:{page?:string;pageSize?:string;q?:string;severity?:string;reports?:string}) {return this.health.findings(req.preflytSession!,repo,id,query)}
  @Get('repositories/:repositoryId/health/:id/hotspots/:fingerprint/review') @Header('Cache-Control','no-store')

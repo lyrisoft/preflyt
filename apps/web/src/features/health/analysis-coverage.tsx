@@ -188,8 +188,11 @@ export function AnalysisCoverage({
                   >
                     <summary className='flex flex-1 cursor-pointer list-none flex-col rounded-xl p-4 outline-offset-2 group-open:flex-none focus-visible:outline-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden'>
                       <span className='flex flex-wrap items-start justify-between gap-2'>
-                        <span className='text-sm font-medium'>
-                          {analysis.title}
+                        <span className='flex flex-wrap items-center gap-2 text-sm font-medium'>
+                          <span>{analysis.title}</span>
+                          {analysis.id === 'security.strix' && (
+                            <StatusBadge tone='warning'>beta</StatusBadge>
+                          )}
                         </span>
                         <StatusBadge tone={healthTone(analysis.state)}>
                           {analysis.id === 'security.strix' && aiActive

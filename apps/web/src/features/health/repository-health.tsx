@@ -71,6 +71,7 @@ import { healthDimensionValues } from './health-dimensions'
 import { HealthHelp } from './health-help'
 import { HealthPolicyEvidence } from './health-policy-evidence'
 import { HealthTimelineChart } from './health-timeline-chart'
+import { PaymentRiskReport } from './payment-risk-report'
 import { SourceReviewCoverage } from './source-review-coverage'
 import { StrixControl } from './strix-control'
 import { useFreshnessExpired } from './use-freshness-expired'
@@ -121,6 +122,12 @@ export function RepositoryHealth({
   const aiScope = `${session.data?.organizationId}:${session.data?.identityId}:${repositoryId}`
   const [localAiChoice, setLocalAiChoice] =
     useState<HealthAiSecurityChoice | null>(null)
+  const [profileChoice, setProfileChoice] = useState<{
+    scope: string
+    profile: 'general' | 'payment-risk-v1' | 'general-and-payment-risk-v1'
+  } | null>(null)
+  const reviewProfile =
+    profileChoice?.scope === aiScope ? profileChoice.profile : 'general'
   const aiChoice = aiSecurityOption ? aiSecurityOption.choice : localAiChoice
   const query = useHealth(
     repositoryId,
@@ -182,6 +189,8 @@ export function RepositoryHealth({
       category?: HealthCategory
       scanner?: 'strix'
       includeAiSecurity?: boolean
+      reviewProfile?:
+        'general' | 'payment-risk-v1' | 'general-and-payment-risk-v1'
     }) => {
       const assessment = await healthRequest<HealthAssessment>(
         `repositories/${repositoryId}/health`,
@@ -369,8 +378,9 @@ export function RepositoryHealth({
             <SurfaceIcon icon={Sparkles} tone='violet' />
           )}
           <div className='min-w-0 space-y-1'>
-            <p className='text-sm font-medium'>
-              AI security review: {healthLabel(aiReview.state)}
+            <p className='flex flex-wrap items-center gap-2 text-sm font-medium'>
+              <span>AI security review: {healthLabel(aiReview.state)}</span>
+              <StatusBadge tone='warning'>beta</StatusBadge>
             </p>
             <p className='text-xs text-muted-foreground'>
               {aiReview.state === 'SKIPPED'
@@ -477,6 +487,10 @@ export function RepositoryHealth({
                   repositoryId={repositoryId}
                   scopeKey={aiScope}
                   checked={includeAiSecurity}
+                  reviewProfile={reviewProfile}
+                  onReviewProfileChange={(profile) =>
+                    setProfileChoice({ scope: aiScope, profile })
+                  }
                   onCheckedChange={(checked) => {
                     const choice = { scope: aiScope, checked }
                     if (aiSecurityOption) aiSecurityOption.onChange(choice)
@@ -513,7 +527,11 @@ export function RepositoryHealth({
                         chosenBranch === (latest?.branch ?? data?.branch))
                     }
                     onClick={() =>
-                      start.mutate({ branch: chosenBranch, includeAiSecurity })
+                      start.mutate({
+                        branch: chosenBranch,
+                        includeAiSecurity,
+                        ...(includeAiSecurity ? { reviewProfile } : {}),
+                      })
                     }
                   >
                     {aiRunning || aiQueuing ? (
@@ -878,6 +896,14 @@ export function RepositoryHealth({
               View standard checks
             </Button>
           )}
+          {aiReview?.report?.paymentRiskSummary && !aiRunning && (
+            <PaymentRiskReport
+              key={`payment-${aiReview.id}`}
+              repositoryId={repositoryId}
+              assessmentId={aiReview.id}
+              scopeKey={aiScope}
+            />
+          )}
           {report && !active && (
             <SourceReviewCoverage
               key={`source-${row.id}`}
@@ -973,7 +999,11 @@ export function RepositoryHealth({
               onRunAiSecurity={
                 allowed && chosenBranch
                   ? () =>
-                      start.mutate({ branch: chosenBranch, scanner: 'strix' })
+                      start.mutate({
+                        branch: chosenBranch,
+                        scanner: 'strix',
+                        reviewProfile,
+                      })
                   : undefined
               }
               aiRunPending={aiRunning || aiQueuing}

@@ -22,6 +22,7 @@ function fixture() {
     repository: { githubId: 51n, installationId: 50n, installation: { organizationId: 'org' },
       readinessAutomation: { aiReviews: true, aiReviewsEnabledAt: new Date(0), actorId: 'actor', revision: 2 } } }
   const db = {
+    aiSkillReview: { findFirst: vi.fn().mockResolvedValue(null) },
     pipelineRunSubmission: { findUnique: vi.fn().mockResolvedValue({ ...verified, prNumber: 7, state: 'COMPLETE' }),
       findFirst: vi.fn().mockResolvedValue({ assessmentId: 'assessment' }) },
     repositoryPullRequest: { findFirst: vi.fn().mockResolvedValue(pr), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
@@ -105,4 +106,30 @@ it('retains the one-minute recovery cooldown for ordinary automatic admission', 
   f.db.repositoryPullRequest.findFirst.mockResolvedValue(null as any)
   await f.service.dispatchAutomatic()
   expect(f.db.repositoryPullRequest.findFirst.mock.calls[0][0].where.OR).toHaveLength(2)
+})
+
+
+it.each(['SUCCEEDED','UNAVAILABLE','QUEUED','RUNNING','CANCELLED'])('does not redispatch an existing %s review after model or policy changes', async state => {
+  const f=fixture()
+  f.db.aiSkillReview.findFirst.mockResolvedValue({id:'legacy-review',state} as any)
+  mocks.route.mockResolvedValue({enabled:true,automaticReviews:true,allowSource:true,revision:99,primaryId:'replacement'})
+  await f.service.dispatchVerifiedPipeline('submission')
+  expect(f.db.aiSkillReview.findFirst).toHaveBeenCalledWith(expect.objectContaining({where:expect.objectContaining({organizationId:'org',repositoryId:'repo',stage:'pull_request',assessment:{repositoryId:'repo',sourceSha:verified.sourceSha,request:{path:['pullRequest','number'],equals:7}}})}))
+  expect(f.request).not.toHaveBeenCalled()
+  expect(f.eligibility).not.toHaveBeenCalled()
+})
+it('keeps scheduling keys stable across configuration and base-branch changes but distinguishes new PR commits',async()=>{
+ const f=fixture()
+ await f.service.dispatchVerifiedPipeline('submission')
+ const first=f.request.mock.calls[0]![4]!.automatic!.key
+ mocks.route.mockResolvedValue({enabled:true,automaticReviews:true,allowSource:true,revision:99,primaryId:'replacement'})
+ f.pr.repository.readinessAutomation.revision=8
+ f.pr.context={...context,base:{...context.base,sha:'d'.repeat(40)}}
+ f.db.commitAssessment.findFirst.mockResolvedValue({id:'assessment',plan:{},request:{pullRequest:f.pr.context}})
+ await f.service.dispatchAutomatic()
+ expect(f.request.mock.calls[1]![4]!.automatic!.key).toBe(first)
+ f.pr.context={...f.pr.context,head:{...context.head,sha:'c'.repeat(40)}}
+ f.db.commitAssessment.findFirst.mockResolvedValue({id:'new-assessment',plan:{},request:{pullRequest:f.pr.context}})
+ await f.service.dispatchAutomatic()
+ expect(f.request.mock.calls[2]![4]!.automatic!.key).not.toBe(first)
 })

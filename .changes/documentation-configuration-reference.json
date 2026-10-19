@@ -1,0 +1,8 @@
+{
+  "type": "fix",
+  "title": "Documentation publication",
+  "description": "The configuration reference now documents PREFLYT_PUBLIC_API_URL, fixing the missing-variable error that stopped documentation builds. Main image publishers check the reference before building images, so missing documentation is caught earlier.",
+  "upgrade": "none",
+  "migrations": [],
+  "configuration": []
+}

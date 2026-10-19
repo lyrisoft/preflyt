@@ -1,0 +1,8 @@
+{
+  "type": "improvement",
+  "title": "REPLACE_ME",
+  "description": "REPLACE_ME: Explain the user problem and resulting behavior.",
+  "upgrade": "REPLACE_ME: Explain required actions, or use the exact value none.",
+  "migrations": [],
+  "configuration": []
+}

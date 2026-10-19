@@ -1,0 +1,394 @@
+{
+  "version": 1,
+  "profile": "payment-risk-v1",
+  "executiveSummary": "A payment ownership concern needs independent review.",
+  "systemInventory": [
+    {
+      "service": "Payments API",
+      "description": "Accepts payout requests and calls the provider.",
+      "references": [
+        {
+          "path": "payments.py",
+          "startLine": 1,
+          "endLine": 2
+        }
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "issueId": "issue-1",
+      "category": "payment_security",
+      "service": "Payments API",
+      "function": "pay",
+      "classification": "LIKELY",
+      "likelihood": 4,
+      "impact": 5,
+      "attackScenario": "A caller may supply another merchant identifier."
+    }
+  ],
+  "domains": [
+    {
+      "outcome": "reviewed",
+      "reason": "Inspected ownership validation in the payment handler.",
+      "issueIds": [
+        "issue-1"
+      ],
+      "references": [
+        {
+          "path": "payments.py",
+          "startLine": 1,
+          "endLine": 2
+        }
+      ],
+      "domain": "discovery"
+    },
+    {
+      "outcome": "reviewed",
+      "reason": "Inspected ownership validation in the payment handler.",
+      "issueIds": [
+        "issue-1"
+      ],
+      "references": [
+        {
+          "path": "payments.py",
+          "startLine": 1,
+          "endLine": 2
+        }
+      ],
+      "domain": "application_security"
+    },
+    {
+      "outcome": "reviewed",
+      "reason": "Inspected ownership validation in the payment handler.",
+      "issueIds": [
+        "issue-1"
+      ],
+      "references": [
+        {
+          "path": "payments.py",
+          "startLine": 1,
+          "endLine": 2
+        }
+      ],
+      "domain": "payment_security"
+    },
+    {
+      "outcome": "reviewed",
+      "reason": "Inspected ownership validation in the payment handler.",
+      "issueIds": [
+        "issue-1"
+      ],
+      "references": [
+        {
+          "path": "payments.py",
+          "startLine": 1,
+          "endLine": 2
+        }
+      ],
+      "domain": "financial_integrity"
+    },
+    {
+      "outcome": "reviewed",
+      "reason": "Inspected ownership validation in the payment handler.",
+      "issueIds": [
+        "issue-1"
+      ],
+      "references": [
+        {
+          "path": "payments.py",
+          "startLine": 1,
+          "endLine": 2
+        }
+      ],
+      "domain": "infrastructure"
+    },
+    {
+      "outcome": "reviewed",
+      "reason": "Inspected ownership validation in the payment handler.",
+      "issueIds": [
+        "issue-1"
+      ],
+      "references": [
+        {
+          "path": "payments.py",
+          "startLine": 1,
+          "endLine": 2
+        }
+      ],
+      "domain": "data_compliance"
+    },
+    {
+      "outcome": "reviewed",
+      "reason": "Inspected ownership validation in the payment handler.",
+      "issueIds": [
+        "issue-1"
+      ],
+      "references": [
+        {
+          "path": "payments.py",
+          "startLine": 1,
+          "endLine": 2
+        }
+      ],
+      "domain": "fraud_abuse"
+    },
+    {
+      "outcome": "reviewed",
+      "reason": "Inspected ownership validation in the payment handler.",
+      "issueIds": [
+        "issue-1"
+      ],
+      "references": [
+        {
+          "path": "payments.py",
+          "startLine": 1,
+          "endLine": 2
+        }
+      ],
+      "domain": "risk_reporting"
+    }
+  ],
+  "paymentRiskRegister": [
+    {
+      "outcome": "reviewed",
+      "reason": "Inspected ownership validation in the payment handler.",
+      "issueIds": [
+        "issue-1"
+      ],
+      "references": [
+        {
+          "path": "payments.py",
+          "startLine": 1,
+          "endLine": 2
+        }
+      ],
+      "area": "money_movement"
+    },
+    {
+      "outcome": "reviewed",
+      "reason": "Inspected ownership validation in the payment handler.",
+      "issueIds": [
+        "issue-1"
+      ],
+      "references": [
+        {
+          "path": "payments.py",
+          "startLine": 1,
+          "endLine": 2
+        }
+      ],
+      "area": "ledger"
+    },
+    {
+      "outcome": "reviewed",
+      "reason": "Inspected ownership validation in the payment handler.",
+      "issueIds": [
+        "issue-1"
+      ],
+      "references": [
+        {
+          "path": "payments.py",
+          "startLine": 1,
+          "endLine": 2
+        }
+      ],
+      "area": "payout"
+    },
+    {
+      "outcome": "reviewed",
+      "reason": "Inspected ownership validation in the payment handler.",
+      "issueIds": [
+        "issue-1"
+      ],
+      "references": [
+        {
+          "path": "payments.py",
+          "startLine": 1,
+          "endLine": 2
+        }
+      ],
+      "area": "refund"
+    },
+    {
+      "outcome": "reviewed",
+      "reason": "Inspected ownership validation in the payment handler.",
+      "issueIds": [
+        "issue-1"
+      ],
+      "references": [
+        {
+          "path": "payments.py",
+          "startLine": 1,
+          "endLine": 2
+        }
+      ],
+      "area": "settlement"
+    },
+    {
+      "outcome": "reviewed",
+      "reason": "Inspected ownership validation in the payment handler.",
+      "issueIds": [
+        "issue-1"
+      ],
+      "references": [
+        {
+          "path": "payments.py",
+          "startLine": 1,
+          "endLine": 2
+        }
+      ],
+      "area": "reconciliation"
+    },
+    {
+      "outcome": "reviewed",
+      "reason": "Inspected ownership validation in the payment handler.",
+      "issueIds": [
+        "issue-1"
+      ],
+      "references": [
+        {
+          "path": "payments.py",
+          "startLine": 1,
+          "endLine": 2
+        }
+      ],
+      "area": "fx"
+    }
+  ],
+  "attackScenarios": [
+    {
+      "outcome": "reviewed",
+      "reason": "Inspected ownership validation in the payment handler.",
+      "issueIds": [
+        "issue-1"
+      ],
+      "references": [
+        {
+          "path": "payments.py",
+          "startLine": 1,
+          "endLine": 2
+        }
+      ],
+      "scenario": "provider_timeout_retry"
+    },
+    {
+      "outcome": "reviewed",
+      "reason": "Inspected ownership validation in the payment handler.",
+      "issueIds": [
+        "issue-1"
+      ],
+      "references": [
+        {
+          "path": "payments.py",
+          "startLine": 1,
+          "endLine": 2
+        }
+      ],
+      "scenario": "duplicate_webhooks"
+    },
+    {
+      "outcome": "reviewed",
+      "reason": "Inspected ownership validation in the payment handler.",
+      "issueIds": [
+        "issue-1"
+      ],
+      "references": [
+        {
+          "path": "payments.py",
+          "startLine": 1,
+          "endLine": 2
+        }
+      ],
+      "scenario": "concurrent_payouts"
+    },
+    {
+      "outcome": "reviewed",
+      "reason": "Inspected ownership validation in the payment handler.",
+      "issueIds": [
+        "issue-1"
+      ],
+      "references": [
+        {
+          "path": "payments.py",
+          "startLine": 1,
+          "endLine": 2
+        }
+      ],
+      "scenario": "status_manipulation"
+    },
+    {
+      "outcome": "reviewed",
+      "reason": "Inspected ownership validation in the payment handler.",
+      "issueIds": [
+        "issue-1"
+      ],
+      "references": [
+        {
+          "path": "payments.py",
+          "startLine": 1,
+          "endLine": 2
+        }
+      ],
+      "scenario": "amount_manipulation"
+    },
+    {
+      "outcome": "reviewed",
+      "reason": "Inspected ownership validation in the payment handler.",
+      "issueIds": [
+        "issue-1"
+      ],
+      "references": [
+        {
+          "path": "payments.py",
+          "startLine": 1,
+          "endLine": 2
+        }
+      ],
+      "scenario": "partial_failure"
+    }
+  ],
+  "remediationPlan": [
+    {
+      "timeframe": "immediate",
+      "actions": "Add ownership validation and an authorization regression test.",
+      "issueIds": [
+        "issue-1"
+      ]
+    },
+    {
+      "timeframe": "7_days",
+      "actions": "Add ownership validation and an authorization regression test.",
+      "issueIds": [
+        "issue-1"
+      ]
+    },
+    {
+      "timeframe": "30_days",
+      "actions": "Add ownership validation and an authorization regression test.",
+      "issueIds": [
+        "issue-1"
+      ]
+    },
+    {
+      "timeframe": "long_term",
+      "actions": "Add ownership validation and an authorization regression test.",
+      "issueIds": [
+        "issue-1"
+      ]
+    }
+  ],
+  "qaRegressionCases": [
+    {
+      "issueId": "issue-1",
+      "test": "Create two merchants; request a payout as the other owner and assert denial and unchanged balances."
+    }
+  ],
+  "finalRiskSummary": {
+    "summary": "Ownership needs review.",
+    "topIssueIds": [
+      "issue-1"
+    ],
+    "immediateActions": "Verify the handler before applying the proposed fix."
+  }
+}
