@@ -940,7 +940,7 @@ it('merges assessment controls and the chart in one compact panel above metrics 
     document.documentElement.classList.toggle('dark', dark)
     const view = await mount('development')
     await expect
-      .element(page.getByText('Analyses completed', { exact: true }))
+      .element(page.getByRole('link', { name: 'View security findings' }))
       .toBeVisible()
     const panel = document.querySelector(
       '[aria-label="Repository health summary"]'
@@ -968,7 +968,7 @@ it('renders report metrics without waiting for branch freshness and suppresses s
   )
   const view = await mount('development')
   await expect
-    .element(page.getByText('Analyses completed', { exact: true }))
+    .element(page.getByRole('link', { name: 'View security findings' }))
     .toBeVisible()
   await expect
     .element(page.getByText('Checking freshness…', { exact: true }))
@@ -993,7 +993,7 @@ it('renders report metrics without waiting for branch freshness and suppresses s
     .element(page.getByRole('alert'))
     .toHaveTextContent('Repository access is unavailable')
   await expect
-    .element(page.getByText('Analyses completed', { exact: true }))
+    .element(page.getByRole('link', { name: 'View security findings' }))
     .not.toBeInTheDocument()
   await view.unmount()
 })
@@ -1023,6 +1023,7 @@ it('hides report data if the independent freshness check reveals revoked access'
 it('shows measured duplication and its actual denominator alongside analysis coverage', async () => {
   state.duplication = true
   await mount()
+  await page.getByText('Assessment details', { exact: true }).click()
   await expect
     .element(page.getByText('20.0% duplicated', { exact: false }))
     .toBeVisible()
@@ -1039,6 +1040,7 @@ it('shows measured duplication and its actual denominator alongside analysis cov
 it('shows automated hotspot findings separately from optional review counts', async () => {
   state.hotspots = true
   await mount()
+  await page.getByText('Assessment details', { exact: true }).click()
   await expect
     .element(
       page.getByRole('link', { name: 'View security hotspots findings' })
@@ -1098,6 +1100,7 @@ it('runs tests alone and keeps the older security result linked to the same comm
     },
   }
   await mount()
+  await page.getByText('Assessment details', { exact: true }).click()
   await expect
     .element(
       page.getByText('This assessment ran tests and coverage only.', {
@@ -1160,6 +1163,7 @@ it('explains missing CI coverage with a setup link and no fabricated zero', asyn
 it('shows actual measured coverage with test counts and the loaded-file scope', async () => {
   state.coverage = true
   await mount()
+  await page.getByText('Assessment details', { exact: true }).click()
   await expect
     .element(page.getByText('60.0% covered', { exact: false }))
     .toBeVisible()
@@ -1175,6 +1179,7 @@ it('shows actual measured coverage with test counts and the loaded-file scope', 
 
 it('shows the saved analyzer scope alongside the coverage outcome', async () => {
   await mount()
+  await page.getByText('Assessment details', { exact: true }).click()
   await page.getByText('Static security analysis', { exact: true }).click()
   await expect
     .element(
@@ -1189,6 +1194,7 @@ it('aligns analysis cards in the same row when their summaries have different le
   state.duplication = true
   state.scanErrors = true
   await mount()
+  await page.getByText('Assessment details', { exact: true }).click()
   await expect.element(page.getByLabelText('Analysis coverage')).toBeVisible()
   const cards = document.querySelectorAll(
     '[aria-label="Analysis coverage"] details.group'
@@ -1209,6 +1215,7 @@ it('aligns analysis cards in the same row when their summaries have different le
 it('shows historical policy evidence separately and links to the original CI assessment', async () => {
   state.policy = true
   await mount()
+  await page.getByText('Assessment details', { exact: true }).click()
   await expect
     .element(page.getByText('Policy revision 3 · 2 requirements'))
     .toBeVisible()
@@ -1230,6 +1237,7 @@ it('shows historical policy evidence separately and links to the original CI ass
 it('shows measured per-analyzer file counts without claiming inventory files were scanned', async () => {
   state.measuredFiles = true
   await mount()
+  await page.getByText('Assessment details', { exact: true }).click()
   await expect
     .element(page.getByText('2 / 3 candidate files analyzed', { exact: true }))
     .toBeVisible()
@@ -1294,6 +1302,7 @@ it('shows retained counts with a Partial scan badge instead of a comparison symb
 
 it('links the five metric cards to their exact report and category', async () => {
   await mount()
+  await page.getByText('Assessment details', { exact: true }).click()
   for (const label of [
     'security',
     'reliability',
@@ -1332,6 +1341,7 @@ it('links the five metric cards to their exact report and category', async () =>
 it('paginates analyzer outcomes and keeps the detailed scope collapsed until opened', async () => {
   state.manyAnalyses = true
   await mount()
+  await page.getByText('Assessment details', { exact: true }).click()
   const coverage = page.getByLabelText('Analysis coverage')
   await expect.element(coverage.getByText('8 / 8')).toBeVisible()
   await expect
@@ -1376,6 +1386,7 @@ it('paginates analyzer outcomes and keeps the detailed scope collapsed until ope
 
 it('explains why security findings can coexist with unavailable metrics', async () => {
   await mount()
+  await page.getByText('Assessment details', { exact: true }).click()
   await expect
     .element(page.getByText('Retained findings in the analyzed scope'))
     .toBeVisible()
@@ -1513,6 +1524,7 @@ for (const [stage, label] of [
 it('shows safe scanner failure locations in the existing evidence details', async () => {
   state.scanErrors = true
   await mount()
+  await page.getByText('Assessment details', { exact: true }).click()
   await page.getByText('Scope and evidence', { exact: true }).first().click()
   await expect
     .element(page.getByText('src/large.ts: Timeout', { exact: true }))
@@ -1887,6 +1899,7 @@ it('shows the active standalone AI review instead of the previous cancelled revi
 it('runs VAPT from the AI analysis card instead of standard security checks', async () => {
   state.aiAnalysis = true
   await mount()
+  await page.getByText('Assessment details', { exact: true }).click()
   await page.getByText('Strix security review', { exact: true }).click()
   await page
     .getByRole('button', { name: 'Run AI security review', exact: true })
@@ -1908,6 +1921,7 @@ it('shows a running AI analysis with a spinning button instead of Not run', asyn
   state.aiAnalysis = true
   state.aiReview = { ...row(), id: 'active-ai', state: 'RUNNING', report: null }
   await mount()
+  await page.getByText('Assessment details', { exact: true }).click()
   await page.getByText('Strix security review', { exact: true }).click()
   const button = page
     .getByRole('button', { name: 'Reviewing security…', exact: true })
@@ -2093,4 +2107,23 @@ it('includes the AI issue in the repository findings count, filter results and e
       )
     )
     .toBe(true)
+})
+
+it('prioritizes one Findings table and keeps supporting evidence behind Assessment details', async () => {
+  const view = await mount()
+  const details = page.getByLabelText('Assessment details', { exact: true })
+  await expect.element(page.getByLabelText('Repository findings')).toBeVisible()
+  await expect
+    .element(page.getByLabelText('Analysis coverage'))
+    .not.toBeVisible()
+  expect(details.element().hasAttribute('open')).toBe(false)
+  await page.getByText('Assessment details', { exact: true }).click()
+  await expect.element(page.getByLabelText('Analysis coverage')).toBeVisible()
+  await expect.element(page.getByLabelText('Repository findings')).toBeVisible()
+  await page.getByText('Assessment details', { exact: true }).click()
+  await expect
+    .element(page.getByLabelText('Analysis coverage'))
+    .not.toBeVisible()
+  await expect.element(page.getByLabelText('Repository findings')).toBeVisible()
+  await view.unmount()
 })

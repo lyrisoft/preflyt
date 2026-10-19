@@ -1,0 +1,8 @@
+{
+  "type": "fix",
+  "title": "One primary repository findings view",
+  "description": "Repository health now presents one full-width Findings table. Reviewed areas, payment reports, test coverage and policy evidence are grouped under collapsed Assessment details. Counts identify the all-category scope, and AI findings use a readable source label. Existing report links, filters, pagination and assessment history remain available.",
+  "upgrade": "Rebuild the web image. No database migration or configuration change is required.",
+  "migrations": [],
+  "configuration": []
+}

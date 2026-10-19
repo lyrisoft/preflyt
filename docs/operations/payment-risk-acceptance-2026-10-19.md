@@ -54,3 +54,19 @@ production-readiness or legal-compliance conclusion is established.
   and verified all ten Compose services healthy. No GitHub workflow was dispatched.
 
 Scoped implementation commits: `ba9cc62`, `7fcaed4`, `6394867`.
+
+## Repository results usability follow-up
+
+- Consolidated the main results into one full-width Findings table. Reviewed
+  areas are coverage evidence, not additional vulnerability rows; their table,
+  payment report, test coverage and policy context are grouped under collapsed
+  Assessment details above Findings. Findings and Assessment history remain
+  separate tabs.
+- Labeled the overall table count as all categories and replaced the internal
+  AI check identifier with a readable source label. The Security metric and
+  chart still count Security only; the combined table includes all categories.
+- All 71 affected browser tests passed, including 320px layout, both themes,
+  disclosure behavior, exact report links, pagination and report loading/errors.
+- Web typecheck, affected lint and Compose web build passed. Verified the saved
+  maiguard-api report in the rebuilt browser UI and all ten services healthy.
+- No new paid scan was needed for this presentation change. No workflow ran.

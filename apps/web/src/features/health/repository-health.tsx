@@ -15,6 +15,7 @@ import {
   GitCommitHorizontal,
   LoaderCircle,
   AlertCircle,
+  ChevronDown,
 } from 'lucide-react'
 import type { SurfaceTone } from '@/lib/surface-tones'
 import { Button } from '@/components/ui/button'
@@ -826,16 +827,6 @@ export function RepositoryHealth({
           {start.error?.message ?? cancel.error?.message}
         </p>
       )}
-      {data && (
-        <BranchCoverageCard
-          repositoryId={repositoryId}
-          assessmentId={row?.id}
-          coverage={data.branchCoverage}
-          exact={data.ciCoverage}
-          branch={chosenBranch}
-          healthSha={row?.sourceSha ?? null}
-        />
-      )}
       {query.isError && data && (
         <p role='alert' className='text-sm text-muted-foreground'>
           The latest report could not be loaded. Showing the last saved result.
@@ -895,22 +886,6 @@ export function RepositoryHealth({
             >
               View standard checks
             </Button>
-          )}
-          {aiReview?.report?.paymentRiskSummary && !aiRunning && (
-            <PaymentRiskReport
-              key={`payment-${aiReview.id}`}
-              repositoryId={repositoryId}
-              assessmentId={aiReview.id}
-              scopeKey={aiScope}
-            />
-          )}
-          {report && !active && (
-            <SourceReviewCoverage
-              key={`source-${row.id}`}
-              report={report}
-              repositoryId={repositoryId}
-              assessmentId={row.id}
-            />
           )}
           {report && !active && (
             <div className='grid gap-4 sm:grid-cols-2 xl:grid-cols-4'>
@@ -981,36 +956,107 @@ export function RepositoryHealth({
             </div>
           )}
           {report && !active && (
-            <AnalysisCoverage
-              key={row.id}
-              report={report}
-              assessmentId={row.id}
-              assessmentReason={row.reason}
-              hotspotReview={data?.hotspotReview}
-              headCheckedAt={headCheckedAt}
-              finishedAt={row.finishedAt}
-              onRunCategory={
-                allowed && chosenBranch
-                  ? (category) =>
-                      start.mutate({ branch: chosenBranch, category })
-                  : undefined
-              }
-              aiReview={aiReview}
-              onRunAiSecurity={
-                allowed && chosenBranch
-                  ? () =>
-                      start.mutate({
-                        branch: chosenBranch,
-                        scanner: 'strix',
-                        reviewProfile,
-                      })
-                  : undefined
-              }
-              aiRunPending={aiRunning || aiQueuing}
-              runPending={start.isPending}
-            />
+            <details
+              className='group rounded-xl border'
+              aria-label='Assessment details'
+            >
+              <summary className='flex cursor-pointer list-none items-center gap-3 rounded-xl p-4 focus-visible:outline-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden'>
+                <SurfaceIcon icon={FileSearch} tone='blue' size='sm' />
+                <span className='min-w-0 flex-1'>
+                  <span className='block text-sm font-semibold'>
+                    Assessment details
+                  </span>
+                  <span className='block text-xs text-muted-foreground'>
+                    Reviewed areas, payment report, test coverage and policy
+                    evidence
+                  </span>
+                </span>
+                <ChevronDown
+                  aria-hidden='true'
+                  className='size-4 shrink-0 transition-transform group-open:rotate-180'
+                />
+              </summary>
+              <div className='space-y-4 border-t p-4'>
+                {aiReview?.report?.paymentRiskSummary && !aiRunning && (
+                  <PaymentRiskReport
+                    key={`payment-${aiReview.id}`}
+                    repositoryId={repositoryId}
+                    assessmentId={aiReview.id}
+                    scopeKey={aiScope}
+                  />
+                )}
+                {report && !active && (
+                  <SourceReviewCoverage
+                    key={`source-${row.id}`}
+                    report={report}
+                    repositoryId={repositoryId}
+                    assessmentId={row.id}
+                  />
+                )}
+                {data && (
+                  <BranchCoverageCard
+                    repositoryId={repositoryId}
+                    assessmentId={row?.id}
+                    coverage={data.branchCoverage}
+                    exact={data.ciCoverage}
+                    branch={chosenBranch}
+                    healthSha={row?.sourceSha ?? null}
+                  />
+                )}
+                {report && !active && (
+                  <AnalysisCoverage
+                    key={row.id}
+                    report={report}
+                    assessmentId={row.id}
+                    assessmentReason={row.reason}
+                    hotspotReview={data?.hotspotReview}
+                    headCheckedAt={headCheckedAt}
+                    finishedAt={row.finishedAt}
+                    onRunCategory={
+                      allowed && chosenBranch
+                        ? (category) =>
+                            start.mutate({ branch: chosenBranch, category })
+                        : undefined
+                    }
+                    aiReview={aiReview}
+                    onRunAiSecurity={
+                      allowed && chosenBranch
+                        ? () =>
+                            start.mutate({
+                              branch: chosenBranch,
+                              scanner: 'strix',
+                              reviewProfile,
+                            })
+                        : undefined
+                    }
+                    aiRunPending={aiRunning || aiQueuing}
+                    runPending={start.isPending}
+                  />
+                )}
+                <div className='min-w-0 space-y-5'>
+                  {report && !active && (
+                    <HealthPolicyEvidence
+                      report={report}
+                      repositoryId={repositoryId}
+                    />
+                  )}
+                  <p className='px-1 text-xs leading-relaxed text-muted-foreground'>
+                    For ongoing PR feedback,{' '}
+                    <Link
+                      className='inline-flex items-center gap-1 font-medium text-foreground hover:underline'
+                      to='/policies'
+                      search={{ repository: repositoryId }}
+                    >
+                      configure continuous checks{' '}
+                      <ArrowUpRight className='size-3' />
+                    </Link>
+                    .
+                  </p>
+                </div>
+              </div>
+            </details>
           )}
-          <div className='grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_350px]'>
+          <div className='min-w-0'>
             <div className='min-w-0'>
               <Tabs
                 value={report && !active ? detailTab : 'history'}
@@ -1046,13 +1092,13 @@ export function RepositoryHealth({
                           </div>
                           {findingsAvailable && (
                             <span className='text-xs text-muted-foreground'>
-                              {findingCount} reported
+                              {findingCount} across all categories
                             </span>
                           )}
                         </div>
                         <CardDescription>
-                          Open an issue to inspect its rule and exact source
-                          location.
+                          All finding categories from the selected reports. Open
+                          a finding for source code, reasoning and remediation.
                         </CardDescription>
                         {!!healthFindingCount(report) && (
                           <div className='flex flex-wrap gap-2'>
@@ -1158,7 +1204,12 @@ export function RepositoryHealth({
                                         : ''}
                                     </p>
                                     <p className='mt-1 text-xs text-muted-foreground'>
-                                      {f.ruleId ?? f.checkId}
+                                      {f.category.charAt(0).toUpperCase() +
+                                        f.category.slice(1)}{' '}
+                                      ·{' '}
+                                      {f.evidence === 'AI_REPORTED'
+                                        ? 'AI security review'
+                                        : (f.ruleId ?? f.checkId)}
                                     </p>
                                     {f.evidence === 'AI_REPORTED' && (
                                       <StatusBadge tone='warning' compact>
@@ -1349,26 +1400,6 @@ export function RepositoryHealth({
                 </TabsContent>
               </Tabs>
             </div>
-            <aside className='min-w-0 space-y-5' aria-label='Analysis details'>
-              {report && !active && (
-                <HealthPolicyEvidence
-                  report={report}
-                  repositoryId={repositoryId}
-                />
-              )}
-              <p className='px-1 text-xs leading-relaxed text-muted-foreground'>
-                For ongoing PR feedback,{' '}
-                <Link
-                  className='inline-flex items-center gap-1 font-medium text-foreground hover:underline'
-                  to='/policies'
-                  search={{ repository: repositoryId }}
-                >
-                  configure continuous checks{' '}
-                  <ArrowUpRight className='size-3' />
-                </Link>
-                .
-              </p>
-            </aside>
           </div>
         </>
       )}
