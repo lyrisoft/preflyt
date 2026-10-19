@@ -1,3 +1,5 @@
+import { HealthSourceStore } from './health/health-source-store.js'
+import { HealthStrixService } from './health/strix.service.js'
 import { BranchCiService } from './health/branch-ci.service.js'
 import { RetentionService } from './retention/retention.service.js'
 import { ContributorSyncService } from './contributors/contributor-sync.service.js'
@@ -153,7 +155,8 @@ async function start() {
   const aiReviews = new SkillReviewService(prisma, emailAuthorization, assessments, new AiConfigurationService(prisma, emailAuthorization), githubProvider)
   let aiReviewRun: Promise<void> | undefined
   const native = new NativeDispatchService(prisma, emailAuthorization, githubProvider, new NativeStatusService(emailAuthorization), new NativeResultService(prisma, emailAuthorization, assessments))
-  const health = new RepositoryHealthService(prisma, emailAuthorization, githubProvider, new NativeStatusService(emailAuthorization), findingSources, new HealthScannerClient())
+  const healthSourceStore=new HealthSourceStore()
+  const health = new RepositoryHealthService(prisma, emailAuthorization, githubProvider, new NativeStatusService(emailAuthorization), findingSources, new HealthScannerClient(), new HealthStrixService(prisma, emailAuthorization, githubProvider, undefined, healthSourceStore), healthSourceStore)
   const findingAi = new FindingAiGuidanceService(prisma, emailAuthorization, new FindingsService(prisma, emailAuthorization, findingSources), health, findingSources, new AiConfigurationService(prisma, emailAuthorization))
   let findingAiRun: Promise<void> | undefined
   const healthQueue = new Queue('repository-health', { ...producerConfig, connection: producer })

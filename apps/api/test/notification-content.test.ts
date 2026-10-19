@@ -87,3 +87,11 @@ describe("informative notifications", () => {
     ).toBe("Preflyt email channel test");
   });
 });
+
+it('describes AI security completion as advisory without relabeling standard checks',()=>{
+ const completed=notificationContent('AI_SECURITY_REVIEW_COMPLETED');
+ expect(completed.title).toBe('AI security review completed');
+ expect(completed.message).toContain('Suggestions require validation');
+ expect(completed.message).toContain('do not change standard check results');
+ expect(notificationContent('AI_SECURITY_REVIEW_FAILED').message).toContain('Standard checks have their own result');
+});

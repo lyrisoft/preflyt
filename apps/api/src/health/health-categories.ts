@@ -1,4 +1,4 @@
-import { healthAnalyses, type HealthReport } from './health-report.js'
+import { healthAnalyses, healthFindingCount, type HealthReport } from './health-report.js'
 import type { RepositorySnapshot } from '../github/repository-profile.js'
 import { applicableHealthAnalyses } from './health-report.js'
 
@@ -22,7 +22,7 @@ export function healthCategoryMetric(report: HealthReport, category: HealthCateg
  const ids = new Set<string>(healthAnalyses.filter(a => a.category === category).map(a => a.id))
  const analyses = report.analyses.filter(a => ids.has(a.id))
  const validated = analyses.filter(a => ['PASS', 'FAIL'].includes(a.state) && a.findingsRetained !== undefined)
- const count = report.findings.filter(f => f.category === category && ids.has(f.checkId)).length
+ const count = healthFindingCount(report, category, [...ids])
  const incomplete = validated.length !== analyses.length || validated.some(a => a.findingsReported !== undefined && a.findingsReported > (a.findingsRetained ?? 0))
  return validated.length && !incomplete ? count.toLocaleString() : count ? `≥${count.toLocaleString()}` : 'Unavailable'
 }

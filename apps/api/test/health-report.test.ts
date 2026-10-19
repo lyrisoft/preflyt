@@ -151,3 +151,36 @@ it('plots retained partial observations without comparing mismatched coverage or
  expect(points.map(p=>[p.id,p.findings,p.partial,p.comparableFindings])).toEqual([['a',1,true,null],['b',1,true,null],['c',0,true,null]])
  expect(comparableHealthTrend(report,{...report,comparisonKey:'other'})).toBeNull()
 })
+
+it('labels the actual scan scope so the history can separate full, category and AI runs',()=>{
+ const base:any={mode:'EXECUTED',completeness:'COMPLETE',findings:[],analyses:[]}
+ const row=(id:string,report:any)=>({id,report,state:'COMPLETED',sourceSha:'a'.repeat(40),finishedAt:new Date(0)})
+ const points=healthTimeline(base,[row('all',base),row('security',{...base,selection:'security'}),row('ai',{...base,selection:'security',analyses:[{id:'security.strix'}]})])
+ expect(Object.fromEntries(points.map(p=>[p.id,p.scope]))).toEqual({all:'all',security:'security',ai:'ai'})
+})
+
+it('provides category history counts without turning missing checks into zero or joining different coverage',()=>{
+ const report:any={mode:'EXECUTED',completeness:'PARTIAL',comparisonKey:'plan',inspection:{complete:true},findingComparison:{version:1,key:'scope',checkIds:['quality.reliability']},findingSummary:{total:3,groups:[{category:'reliability',checkId:'quality.reliability',count:3}]},findings:[],analyses:[{id:'quality.reliability',state:'FAIL',reportHash:'a',findingsRetained:3,findingsReported:3,tool:'tool',configHash:'cfg'}]};
+ const row=(id:string,r:any)=>({id,state:'COMPLETED',sourceSha:'a'.repeat(40),finishedAt:new Date(0),report:r});
+ const [point]=healthTimeline(report,[row('one',report)]);
+ expect(point.categories.security).toBeNull();
+ expect(point.categories.reliability).toMatchObject({findings:3,partial:false});
+ expect(point.categories.reliability?.comparisonKey).toBeTruthy();
+ const [changed]=healthTimeline(report,[row('two',{...report,findingComparison:{...report.findingComparison,key:'other'}})]);
+ expect(changed.categories.reliability?.comparisonKey).not.toBe(point.categories.reliability?.comparisonKey);
+ const [partial]=healthTimeline(report,[row('partial',{...report,analyses:[{...report.analyses[0],state:'INCOMPLETE'}]})]);
+ expect(partial.categories.reliability).toMatchObject({findings:3,partial:true,comparisonKey:null});
+});
+
+it('stacks real severities and combines only same-commit AI findings available at each point',()=>{
+ const sha='a'.repeat(40);
+ const make=(ai:boolean,severity:string,count:number)=>({mode:'EXECUTED',completeness:'PARTIAL',selection:'security',comparisonKey:'plan',inspection:{complete:true},analyses:[{id:ai?'security.strix':'security.sast',state:'INCOMPLETE',reportHash:'hash',findingsRetained:count,findingsReported:count}],findings:[],findingSummary:{total:count,groups:[{category:'security',checkId:ai?'security.strix':'security.sast',severity,count}]}} as any);
+ const scanner=make(false,'high',230),ai=make(true,'critical',1);
+ const row=(id:string,report:any,at:number,sourceSha=sha,state='COMPLETED')=>({id,report,sourceSha,state,finishedAt:new Date(at)});
+ const points=healthTimeline(scanner,[row('scanner',scanner,1),row('ai',ai,2),row('rescan',make(false,'high',200),3),row('other',ai,4,'b'.repeat(40)),row('failed-retained',make(true,'medium',2),5,sha,'FAILED')]);
+ expect(points.map(p=>p.categories.security?.findings)).toEqual([230,231,201,1,202]);
+ expect(points[0].categories.security?.bySeverity).toMatchObject({high:230,critical:0});
+ expect(points[1].categories.security?.bySeverity).toMatchObject({high:230,critical:1});
+ expect(points[4].categories.security?.bySeverity).toMatchObject({high:200,medium:2,critical:0});
+ for(const point of points)expect(Object.values(point.categories.security!.bySeverity).reduce((a,b)=>a+b,0)).toBe(point.categories.security!.findings);
+});
