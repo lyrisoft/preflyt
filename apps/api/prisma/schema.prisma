@@ -3,6 +3,38 @@ generator client {
   output   = "../src/generated/prisma"
 }
 
+// External agents can read and append evidence for one exact finding only.
+model FindingAgentGrant {
+  id String @id @default(uuid())
+  tokenHash String @unique
+  oauthConnectionId String?
+  identityId String
+  organizationId String
+  repositoryGithubId String
+  origin String
+  assessmentId String
+  findingId String
+  sourceSha String
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  revokedAt DateTime?
+  evidence FindingAgentEvidence[]
+  @@index([organizationId, identityId, findingId])
+  @@unique([oauthConnectionId, repositoryGithubId, origin, assessmentId, findingId], map: "FindingAgentGrant_oauth_scope_key")
+}
+
+model FindingAgentEvidence {
+  id String @id @default(uuid())
+  grantId String
+  grant FindingAgentGrant @relation(fields: [grantId], references: [id], onDelete: Cascade)
+  requestKey String
+  kind String
+  content Json
+  contentHash String
+  createdAt DateTime @default(now())
+  @@unique([grantId, requestKey])
+}
+
 datasource db {
   provider = "postgresql"
 }
@@ -447,6 +479,8 @@ model Organization {
   aiProviders AiProviderConnection[]
   aiFindingGuidance AiFindingGuidance[]
   aiRoutes AiStageRoute[]
+  aiVaptSettings AiVaptSettings?
+  aiModelUsage AiModelUsage[]
   reviewSkills AiReviewSkill[]
   skillReviews AiSkillReview[]
   teams PreflytTeam[]
@@ -980,6 +1014,38 @@ model AiStageRoute {
   @@unique([organizationId, stage])
 }
 
+model AiVaptSettings {
+  organizationId String @id
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  maxInputTokens Int @default(4000000)
+  maxOutputTokens Int @default(131072)
+  maxModelCalls Int @default(80)
+  revision Int @default(1)
+  updatedById String
+  updatedAt DateTime @updatedAt
+}
+
+// One outbound inference attempt. No prompts, responses, endpoint URLs or keys.
+model AiModelUsage {
+  id String @id @default(uuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  providerId String
+  providerRevision Int
+  modelId String
+  repositoryId String
+  workload String
+  sourceId String
+  state String @default("RUNNING")
+  inputTokens Int?
+  outputTokens Int?
+  cachedTokens Int?
+  createdAt DateTime @default(now())
+  finishedAt DateTime?
+  @@index([organizationId, providerId, createdAt])
+  @@index([organizationId, workload, sourceId])
+}
+
 model AiReviewSkill {
   languages String[] @default([])
   frameworks String[] @default([])
@@ -1268,6 +1334,7 @@ model GitHubAppManifestTransaction {
 
 // Repository health is independent of policy selections and CI gate evidence.
 model RepositoryHealthTarget {
+  includeAiSecurity Boolean @default(false)
   testSettings Json?
   repositoryId String @id
   repository GitHubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
@@ -1281,6 +1348,10 @@ model RepositoryHealthTarget {
   updatedAt DateTime @updatedAt
 }
 model RepositoryHealthAssessment {
+  parentId String?
+  parent RepositoryHealthAssessment? @relation("HealthAssessmentGroup", fields: [parentId], references: [id], onDelete: Cascade)
+  children RepositoryHealthAssessment[] @relation("HealthAssessmentGroup")
+  strixRun RepositoryHealthStrixRun?
   findingReadRevision BigInt @default(dbgenerated("nextval('preflyt_finding_read_revision'::regclass)")) @ignore
   testSettings Json?
   id String @id @default(uuid())
@@ -1309,7 +1380,32 @@ model RepositoryHealthAssessment {
   @@unique([repositoryId, requestKey])
   @@index([repositoryId, branch, createdAt, id])
   @@index([organizationId, state, leaseUntil])
+  @@index([parentId])
   hotspotReviews RepositoryHealthHotspotReview[]
+}
+
+// Optional Repo Health agentic scanner. No CI or merge-gate evidence is created.
+model RepositoryHealthStrixRun {
+  assessmentId String @id
+  assessment RepositoryHealthAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  providerId String
+  providerRevision Int
+  routeId String
+  routeRevision Int
+  endpointDigest String
+  tokenHash String
+  maxInputTokens Int @default(4000000)
+  maxOutputTokens Int @default(131072)
+  maxModelCalls Int @default(80)
+  modelCalls Int @default(0)
+  inputTokens Int @default(0)
+  outputTokens Int @default(0)
+  inFlight Int @default(0)
+  dispatchedAt DateTime?
+  finishedAt DateTime?
+  failureCode String?
+  createdAt DateTime @default(now())
+  @@index([providerId, createdAt])
 }
 
 // Verified, redacted source display snapshots. Never part of assessment/gate evidence.
@@ -1554,4 +1650,156 @@ model RepositoryHealthRefresh {
   nextAttemptAt DateTime @default(now())
   @@id([repositoryId, branch])
   @@index([nextAttemptAt])
+}
+
+// One-time browser approval for an installed, public OAuth client (PKCE S256).
+model CompanionAuthorization {
+  id String @id @default(uuid())
+  challenge String
+  state String
+  redirectUri String
+  resource String
+  name String
+  agents Json
+  repositories Json
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  codeHash String? @unique
+  identityId String?
+  organizationId String?
+  approvedRepositories Json?
+  consumedAt DateTime?
+}
+model CompanionConnection {
+  id String @id @default(uuid())
+  identityId String
+  organizationId String
+  name String
+  agents Json
+  repositories Json
+  accessHash String @unique
+  refreshHash String @unique
+  accessExpiresAt DateTime
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  revokedAt DateTime?
+  jobs CompanionJob[]
+  @@index([identityId, organizationId])
+}
+model CompanionJob {
+  id String @id @default(uuid())
+  connectionId String
+  connection CompanionConnection @relation(fields:[connectionId], references:[id], onDelete:Cascade)
+  requestKey String
+  scope Json
+  sourceSha String
+  agent String
+  mode String
+  state String @default("QUEUED")
+  grantId String?
+  failure String?
+  createdAt DateTime @default(now())
+  startedAt DateTime?
+  finishedAt DateTime?
+  leaseUntil DateTime?
+  cancelRequested Boolean @default(false)
+  @@unique([connectionId, requestKey])
+  @@index([connectionId, state])
+}
+
+model McpOAuthClient {
+  id String @id @default(uuid())
+  name String
+  redirectUris Json
+  createdAt DateTime @default(now())
+}
+model McpOAuthAuthorization {
+  id String @id @default(uuid())
+  clientId String
+  redirectUri String
+  resource String
+  challenge String
+  state String
+  scopes String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  codeHash String? @unique
+  identityId String?
+  organizationId String?
+  repositories Json?
+  consumedAt DateTime?
+}
+model McpOAuthConnection {
+  id String @id @default(uuid())
+  clientId String
+  clientName String
+  identityId String
+  organizationId String
+  repositories Json
+  scopes String
+  resource String
+  accessHash String @unique
+  refreshHash String @unique
+  accessExpiresAt DateTime
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  lastUsedAt DateTime @default(now())
+  revokedAt DateTime?
+  @@index([identityId, organizationId])
+}
+
+// Revision-bound read models only; source reports remain authoritative.
+model FindingIndexSnapshot {
+  id String @id
+  organizationId String
+  scopeKey String
+  metadata Json
+  createdAt DateTime @default(now())
+  rows FindingIndexRow[]
+  summaries FindingIndexSummary[]
+  @@index([organizationId, scopeKey, createdAt])
+}
+model FindingIndexRow {
+  snapshotId String
+  id String
+  ordinal Int
+  repositoryId String
+  sourceSha String
+  origin String
+  category String
+  categories String[]
+  severity String
+  status String
+  ruleId String?
+  checkTitle String?
+  pullRequest Int?
+  ignoreId String
+  searchText String
+  data Json
+  snapshot FindingIndexSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  @@id([snapshotId, id])
+  @@index([snapshotId, ordinal])
+  @@index([snapshotId, severity, category])
+}
+model FindingIndexSummary {
+  snapshotId String
+  filterKey String
+  data Json
+  createdAt DateTime @default(now())
+  snapshot FindingIndexSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  @@id([snapshotId, filterKey])
+}
+
+// Durable preparation recipes. Access is checked separately for every read.
+model FindingIndexTarget {
+ id String @id
+ organizationId String
+ repositoryIds String[]
+ options Json
+ generation Int @default(0)
+ nextRunAt DateTime @default(now())
+ lastPreparedAt DateTime?
+ @@index([nextRunAt])
+ @@index([organizationId])
 }
