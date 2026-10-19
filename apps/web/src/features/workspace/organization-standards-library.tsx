@@ -36,6 +36,7 @@ import {
   SheetDescription,
 } from '@/components/ui/sheet'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { AiIndicator } from '@/components/ai-indicator'
 import { PageHelpDrawer } from '@/components/page-help-drawer'
 import { StatusBadge } from '@/components/status-badge'
 import { governanceRequest } from '../repositories/governance-api'
@@ -369,7 +370,10 @@ export function OrganizationStandardsLibrary({
                 className='space-y-2 rounded-lg border p-4'
               >
                 <div className='flex items-center justify-between gap-3'>
-                  <h3 className='text-sm font-semibold'>{check.title}</h3>
+                  <h3 className='flex items-center gap-2 text-sm font-semibold'>
+                    <AiIndicator />
+                    {check.title}
+                  </h3>
                   <StatusBadge tone='info'>Suggestions only</StatusBadge>
                 </div>
                 <p className='text-xs text-muted-foreground'>
@@ -572,6 +576,7 @@ function StandardEditor({
                     </span>
                   </TabsTrigger>
                   <TabsTrigger value='ai' aria-label='AI Reviews'>
+                    <AiIndicator decorative />
                     AI Reviews{' '}
                     <span aria-hidden className='text-xs text-muted-foreground'>
                       {aiChecks.length}
@@ -606,6 +611,7 @@ function StandardEditor({
                         }
                       }}
                     >
+                      <AiIndicator decorative />
                       Add AI Review
                     </Button>
                     <Button
@@ -930,7 +936,10 @@ function StandardEditor({
                       >
                         <div className='flex items-end gap-3'>
                           <label className='flex min-w-0 flex-1 flex-col gap-2.5 text-[13px] font-medium'>
-                            <span>Skill</span>
+                            <span className='flex items-center gap-2'>
+                              <AiIndicator />
+                              Skill
+                            </span>
                             <Select
                               required
                               disabled={busy}
@@ -1186,7 +1195,12 @@ export function StandardLibraryCard({
           onClick={onDetails}
         >
           {pack.rules.length} checks
-          {pack.aiChecks?.length ? ` · ${pack.aiChecks.length} AI reviews` : ''}
+          {!!pack.aiChecks?.length && (
+            <span className='inline-flex items-center gap-1.5'>
+              · <AiIndicator decorative /> {pack.aiChecks.length} AI{' '}
+              {pack.aiChecks.length === 1 ? 'review' : 'reviews'}
+            </span>
+          )}
           <ChevronRight className='size-3.5' aria-hidden />
         </Button>
         <div className='flex flex-wrap gap-1'>

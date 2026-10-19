@@ -43,6 +43,8 @@ import {
 import { StatusBadge } from '@/components/status-badge'
 import { SurfaceIcon } from '@/components/surface-icon'
 import { governanceRequest } from './governance-api'
+import { workflowRefreshInterval } from './workflow-refresh-polling'
+import { WorkflowRequestError } from './workflow-request-error'
 
 type Suite = {
   id: number
@@ -199,6 +201,7 @@ export function RulesetInsights({
         signal
       ),
     retry: false,
+    refetchInterval: (query) => workflowRefreshInterval(query.state.error),
   })
   const data = query.isError ? undefined : query.data
   const hourly = period === 'hour' || period === 'day'
@@ -371,17 +374,13 @@ export function RulesetInsights({
           <CardContent className='space-y-4'>
             {query.isPending && <Skeleton className='h-72' />}
             {query.isError && (
-              <div role='alert' className='space-y-3'>
-                <p className='text-sm text-destructive'>
-                  {query.error.message}
-                </p>
-                <Button
-                  variant='outline'
-                  size='sm'
-                  onClick={() => void query.refetch()}
-                >
-                  Try again
-                </Button>
+              <div className='flex flex-wrap items-start gap-3'>
+                <WorkflowRequestError
+                  error={query.error}
+                  retry={() => void query.refetch()}
+                  automatic
+                  checking={query.isFetching}
+                />
               </div>
             )}
             {data && (

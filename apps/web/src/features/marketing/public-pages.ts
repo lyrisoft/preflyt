@@ -2,9 +2,9 @@
 export const publicPages = [
   {
     path: '/',
-    title: 'Preflyt | Open source engineering assurance for GitHub',
+    title: 'Preflyt | Open source code quality and security for GitHub',
     description:
-      'Open source engineering assurance for GitHub. Self-host repository health, engineering standards and verified CI evidence in one Apache-2.0 workspace.',
+      'Open source code quality and security for GitHub. Find issues, inspect affected code and check pull requests against your team’s requirements. Self-hosted, Apache-2.0.',
     manifest: 'src/routes/index.tsx?tsr-split=component',
   },
   {
