@@ -9,6 +9,7 @@ export const aiReviewsEnabled = () => aiConfigurationEnabled() && configurationV
 export const aiStages = [
   "laptop",
   "repository",
+  "vapt",
   "pull_request",
   "qa",
   "performance",

@@ -20,7 +20,7 @@ Public descriptor: Engineering assurance for GitHub. After public release cleara
 
 Community Edition is free and self-hosted under Apache-2.0, without an artificial repository cap. Managed Cloud is planned for later. Public source/image access and release qualification are still pending; do not imply an available hosted service or anonymous installation.
 
-Planned repository-aware AI reviews (issue #97 / P4.RI), including searchable repository indexing and outside-diff code retrieval, are Cloud-only and belong in separate private Cloud code. Community retains its existing profiles, Health/source evidence and optional BYOK diff reviews.
+Edition decision, 18 October 2026: repository-aware security reviews and their P4.RI code-context foundation are planned for open-source Community Edition. The opt-in local Strix Repo Health prototype is documented in [its runbook](docs/operations/strix-repo-health.md); runtime qualification remains pending. Managed remediation and draft fix PRs retain their separate Cloud scope.
 
 Canonical positioning: [Product positioning](docs/product/product-positioning.md).
 

@@ -10,7 +10,7 @@ export function overallHealth(report: HealthReport|null|undefined, state: string
  if(!report) return result('INCOMPLETE',['No usable analysis report.'])
  const rules=report.policyContext?.healthRules??[]
  const knownFailures:string[]=[]
- if(report.findings.some(f=>!f.suppressed&&['critical','high'].includes(f.severity))) knownFailures.push('Critical or high findings reported.')
+ if(report.findingSummary ? report.findingSummary.analyzerHigh>0 : report.findings.some(f=>f.evidence!=='AI_REPORTED'&&!f.suppressed&&['critical','high'].includes(f.severity))) knownFailures.push('Critical or high findings reported.')
  for(const rule of rules.filter(rule=>rule.required)) {
   const failures=report.analyses.filter(a=>a.id===rule.id&&a.state==='FAIL').length
   if(failures>rule.maxFailedChecks) knownFailures.push(`Required ${rule.id} analysis failed its policy limit.`)
@@ -27,6 +27,6 @@ export function overallHealth(report: HealthReport|null|undefined, state: string
  }
  for(const rule of rules.filter(rule=>rule.required)) if(!report.analyses.some(a=>a.id===rule.id&&['PASS','FAIL'].includes(a.state))) missing.push(`Required ${rule.id} analysis is missing.`)
  if(missing.length) return result('INCOMPLETE',[...new Set(missing)])
- if(report.findings.some(f=>!f.suppressed)||report.analyses.some(a=>a.state==='FAIL')) return result('NEEDS_ATTENTION',['Advisory findings or failed advisory analyses need attention.'])
+ if((report.findingSummary ? report.findingSummary.unsuppressed>0 : report.findings.some(f=>!f.suppressed))||report.analyses.some(a=>a.state==='FAIL')) return result('NEEDS_ATTENTION',['Advisory findings or failed advisory analyses need attention.'])
  return result('HEALTHY',['All applicable analyses meet their recorded requirements.'])
 }

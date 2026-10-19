@@ -1,12 +1,16 @@
+import { securityFindingsSummary } from './security-findings-summary.js'
+import { findingReferenceGuidance } from './finding-guidance.js'
 import { reportedLocation } from '../findings/reported-location.js'
 import { readPageSize } from '../pagination.js'
 import { HealthGitSourceError } from './health-git-source.js'
 import { branchCoverage } from './branch-coverage.js'
 import { verifiedHealthCiCoverage } from './health-ci-coverage.js'
-import { findingReferenceGuidance } from './finding-guidance.js'
+import { healthSummaries, healthTrend, healthHotspots, healthFinding, healthFindingsPage, healthFindingsFilters } from './health-read.js'
 import { overallHealth } from './health-overall.js'
 import { healthPolicyContext } from './health-policy-context.js'
-import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common'
+import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException, Optional } from '@nestjs/common'
+import { HealthStrixService } from './strix.service.js'
+import { HealthSourceStore } from './health-source-store.js'
 import { FindingSourceStore } from '../findings/finding-source-store.service.js'
 import { queueFindingSources } from '../findings/finding-source-store.js'
 import { randomUUID } from 'node:crypto'
@@ -27,13 +31,13 @@ import { nativeRequestIntegrity } from '../execution/native-request-integrity.js
 import { digest } from '../assessments/assessment-digest.js'
 import { notificationsEnabled } from '../notifications/notification-event.js'
 import { Prisma, type RepositoryHealthAssessment } from '../generated/prisma/client.js'
-import { healthReport, comparableHealthTrend, healthTimeline, type HealthReport, healthAssessmentResult } from './health-report.js'
+import { healthReport, healthTimeline, healthFindingCount, type HealthReport, healthAssessmentResult } from './health-report.js'
 import { healthCategories, healthCategoryMetric, selectedHealthAnalyses, type HealthCategory } from './health-categories.js'
 const activeStates = ['QUEUED', 'RUNNING']
 const json = (value: unknown) => value as Prisma.InputJsonValue
 const sessionFor = (row: { actorId: string; organizationId: string }): AuthenticatedSession => ({ authenticated: true, identityId: row.actorId, organizationId: row.organizationId, subject: 'repository-health', email: null, role: 'WORKER' })
 const validRetryAt = (value: unknown): string | null => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(value) && Number.isFinite(Date.parse(value)) ? new Date(value).toISOString() : null
-const dto = (row: RepositoryHealthAssessment, includeReport = true) => ({ overallHealth:overallHealth(row.report as HealthReport|null,row.state), id: row.id, branch: row.branch, state: row.state, sourceSha: row.sourceSha, progress: row.state === 'RUNNING' ? ((row.plan as any)?.stage ?? (row.sourceSha ? 'FETCHING_SOURCE' : 'INSPECTING')) : null, category: (row.plan as any)?.requestedCategory ?? null, includeCoverage: row.includeCoverage, report: includeReport && row.report ? { ...(row.report as unknown as HealthReport), findings: (row.report as unknown as HealthReport).findings.map(f => ({...f,referenceGuidance:findingReferenceGuidance(f.ruleId)})) } : null, retryAt:validRetryAt((row.plan as any)?.failure?.retryAt), reason: row.reason, cancelled: !!row.cancelledAt, createdAt: row.createdAt, startedAt: row.startedAt, finishedAt: row.finishedAt })
+const dto = (row: RepositoryHealthAssessment, includeReport = true) => ({ overallHealth:overallHealth(row.report as HealthReport|null,row.state), id: row.id, parentId:row.parentId??null, includeAiSecurity:(row.plan as any)?.includeAiSecurity===true, aiReviewId:(row.plan as any)?.aiReviewId??null, scanner: (row.plan as any)?.requestedScanner ?? null, branch: row.branch, state: row.state, sourceSha: row.sourceSha, progress: row.state === 'RUNNING' ? ((row.plan as any)?.stage ?? (row.sourceSha ? 'FETCHING_SOURCE' : 'INSPECTING')) : null, category: (row.plan as any)?.requestedCategory ?? null, includeCoverage: row.includeCoverage, report: includeReport && row.report ? row.report as unknown as HealthReport : null, retryAt:validRetryAt((row.plan as any)?.failure?.retryAt), reason: row.reason, cancelled: !!row.cancelledAt, createdAt: row.createdAt, startedAt: row.startedAt, finishedAt: row.finishedAt })
 const markSelection = (report: HealthReport, category?: HealthCategory) => {
  if (category) {
   report.selection = category
@@ -46,9 +50,35 @@ const markSelection = (report: HealthReport, category?: HealthCategory) => {
 export class RepositoryHealthService {
  constructor(@Inject(PrismaService) private db: PrismaService, @Inject(AuthorizationService) private access: AuthorizationService,
   @Inject(GitHubProviderService) private github: GitHubProviderService, @Inject(NativeStatusService) private runtime: NativeStatusService, @Inject(FindingSourceStore) private sources: FindingSourceStore,
-  @Inject(HealthScannerClient) private scanner?: HealthScannerClient) {}
- async start(session: AuthenticatedSession, githubId: string, input: { branch?: string; requestKey?: string; includeCoverage?: boolean; category?: HealthCategory } = {}, initial = false) {
+  @Inject(HealthScannerClient) private scanner?: HealthScannerClient,
+  @Optional() @Inject(HealthStrixService) private strix?: HealthStrixService,
+  @Optional() @Inject(HealthSourceStore) private sourceStore: HealthSourceStore = new HealthSourceStore()) {}
+ async strixAvailability(session:AuthenticatedSession,githubId:string) {
+  await this.access.requireRepository(session,githubId,'assessment.read')
+  return this.strix?.available(session,githubId) ?? {available:false,reason:'Strix runner is not configured.'}
+ }
+ async start(session: AuthenticatedSession, githubId: string, input: { branch?: string; requestKey?: string; includeCoverage?: boolean; includeAiSecurity?: boolean; category?: HealthCategory; scanner?: 'strix' } = {}, initial = false) {
   const repo = await this.access.requireRepository(session, githubId, 'execution.run')
+  if(input.includeAiSecurity!==undefined && typeof input.includeAiSecurity!=='boolean') throw new BadRequestException('Choose whether to include the AI security review')
+  const includeAiSecurity=!initial && input.includeAiSecurity===true
+  const combinedAiReviewId=includeAiSecurity?randomUUID():undefined
+  let combinedToken:string|undefined
+  if(includeAiSecurity && (input.scanner || input.category)) throw new BadRequestException('Include AI security review with a full repository assessment')
+  let combinedSelection: Awaited<ReturnType<HealthStrixService['selection']>> | null = null
+  if(includeAiSecurity && this.strix) {
+   try {
+    combinedSelection=await this.strix.selection(session,githubId)
+    if(!(await this.strix.available(session,githubId)).available) combinedSelection=null
+    if(combinedSelection) combinedToken=this.strix.client.token(await this.strix.client.connection(),combinedAiReviewId!)
+   } catch { combinedSelection=null /* An unavailable AI route must never block standard checks. */ }
+  }
+  if(input.scanner!==undefined && input.scanner!=='strix') throw new BadRequestException('Choose a supported scanner')
+  if(input.scanner && input.category && input.category!=='security') throw new BadRequestException('Strix runs only in Repository Health security')
+  const strixSelection=input.scanner && this.strix ? await this.strix.selection(session,githubId) : null
+  if(input.scanner) {
+   if(!this.strix || !(await this.strix.available(session,githubId)).available) throw new BadRequestException('Strix is not ready. Check the repository model and dedicated runner.')
+   input={...input,category:'security'}
+  }
   if(input.includeCoverage !== undefined && typeof input.includeCoverage !== 'boolean') throw new BadRequestException('Coverage requires an explicit boolean choice')
   if (input.category && !healthCategories.includes(input.category)) throw new BadRequestException('Choose a supported Health category')
   if (input.category === 'coverage' || input.includeCoverage === true) throw new BadRequestException('Repository Health does not run tests. Submit test results and coverage from CI.')
@@ -61,23 +91,33 @@ export class RepositoryHealthService {
     await tx.$executeRaw`SELECT "id" FROM "GitHubRepository" WHERE "id" = ${repo.id} FOR UPDATE`
     await new AuthorizationService(tx as PrismaService).requireRepository(session, githubId, 'execution.run')
     const old = await tx.repositoryHealthTarget.findUnique({ where: { repositoryId: repo.id } })
-    const target = old?.branch === branch ? old : await tx.repositoryHealthTarget.upsert({ where: { repositoryId: repo.id },
+    let target = old?.branch === branch ? old : await tx.repositoryHealthTarget.upsert({ where: { repositoryId: repo.id },
      create: { repositoryId: repo.id, organizationId: session.organizationId!, actorId: session.identityId, branch },
      update: { branch, revision: { increment: 1 }, actorId: session.identityId, headSha: null, headCheckedAt: null } })
+    if(input.includeAiSecurity!==undefined && !initial) target=await tx.repositoryHealthTarget.update({where:{repositoryId:repo.id},data:{includeAiSecurity}})
     const key = initial ? 'initial:' + target.revision : input.requestKey!
     const duplicate = await tx.repositoryHealthAssessment.findUnique({ where: { repositoryId_requestKey: { repositoryId: repo.id, requestKey: key } } })
     if (duplicate) {
-     if (duplicate.includeCoverage !== includeCoverage || ((duplicate.plan as any)?.requestedCategory ?? null) !== (input.category ?? null) || duplicate.branch !== branch || duplicate.organizationId !== session.organizationId || (!initial && duplicate.actorId !== session.identityId)) throw new ConflictException('This request key belongs to a different assessment scope')
+     if(((duplicate.plan as any)?.includeAiSecurity===true)!==includeAiSecurity) throw new ConflictException('This request key belongs to a different assessment scope')
+     if (((duplicate.plan as any)?.requestedScanner??null)!==(input.scanner??null) || duplicate.includeCoverage !== includeCoverage || ((duplicate.plan as any)?.requestedCategory ?? null) !== (input.category ?? null) || duplicate.branch !== branch || duplicate.organizationId !== session.organizationId || (!initial && duplicate.actorId !== session.identityId)) throw new ConflictException('This request key belongs to a different assessment scope')
      return dto(duplicate)
     }
-    const pending = await tx.repositoryHealthAssessment.findFirst({ where: { repositoryId: repo.id, branch, state: { in: activeStates }, cancelledAt: null }, orderBy: { createdAt: 'desc' } })
-    if (pending) {if(pending.includeCoverage!==includeCoverage || ((pending.plan as any)?.requestedCategory ?? null)!==(input.category??null)) throw new ConflictException('An assessment with a different category is already running');return dto(pending)}
-    const count = await tx.repositoryHealthAssessment.count({ where: { repositoryId: repo.id, createdAt: { gte: new Date(Date.now() - 3600000) } } })
-    const recent = await tx.repositoryHealthAssessment.findFirst({ where: { repositoryId: repo.id, branch, createdAt: { gte: new Date(Date.now() - 60000) } } })
+    const pending = await tx.repositoryHealthAssessment.findFirst({ where: { repositoryId: repo.id, branch, parentId:null, ...(input.scanner?{strixRun:{isNot:null}}:{strixRun:{is:null}}), state: { in: activeStates }, cancelledAt: null }, orderBy: { createdAt: 'desc' } })
+    if (pending) {if(((pending.plan as any)?.includeAiSecurity===true)!==includeAiSecurity || ((pending.plan as any)?.requestedScanner??null)!==(input.scanner??null) || pending.includeCoverage!==includeCoverage || ((pending.plan as any)?.requestedCategory ?? null)!==(input.category??null)) throw new ConflictException('An assessment with a different scanner or category is already running');return dto(pending)}
+    const count = await tx.repositoryHealthAssessment.count({ where: { repositoryId: repo.id, parentId:null, createdAt: { gte: new Date(Date.now() - 3600000) } } })
+    const recent = await tx.repositoryHealthAssessment.findFirst({ where: { repositoryId: repo.id, parentId:null, branch, createdAt: { gte: new Date(Date.now() - 60000) } } })
     if (count >= 10 || (!initial && !input.category && recent)) throw new ConflictException('Wait a minute before reassessing; at most 10 assessments per repository per hour')
+    const aiReviewId=combinedAiReviewId
     const row = await tx.repositoryHealthAssessment.create({ data: { repositoryId: repo.id, organizationId: session.organizationId!, actorId: session.identityId,
-     branch, includeCoverage, plan: input.category ? json({requestedCategory:input.category}) : undefined, targetRevision: target.revision, requestKey: key } })
-    await tx.auditEvent.create({ data: { event: 'repository.health.requested', actorId: session.identityId, metadata: { repositoryId: githubId, branch, category: input.category??'all', assessmentId: row.id } } })
+     branch, includeCoverage, plan: includeAiSecurity ? json({includeAiSecurity:true,aiReviewId}) : input.scanner ? json({kind:'STRIX_HEALTH',stage:'INSPECTING',requestedCategory:'security',requestedScanner:'strix'}) : input.category ? json({requestedCategory:input.category}) : undefined, targetRevision: target.revision, requestKey: key } })
+    if(strixSelection) await this.strix!.initialize(tx,row,strixSelection)
+    if(aiReviewId) {
+     const child=await tx.repositoryHealthAssessment.create({data:{id:aiReviewId,parentId:row.id,repositoryId:repo.id,organizationId:session.organizationId!,actorId:session.identityId,branch,includeCoverage:false,targetRevision:target.revision,requestKey:key+':ai-security',
+      state:combinedSelection?'QUEUED':'SKIPPED',reason:combinedSelection?null:'AI_SECURITY_UNAVAILABLE',finishedAt:combinedSelection?null:new Date(),
+      plan:json({kind:'STRIX_HEALTH',stage:'WAITING_SOURCE',requestedCategory:'security',requestedScanner:'strix'})}})
+     if(combinedSelection) await this.strix!.initialize(tx,child,combinedSelection,combinedToken)
+    }
+    await tx.auditEvent.create({ data: { event: 'repository.health.requested', actorId: session.identityId, metadata: { repositoryId: githubId, branch, category: input.category??'all', assessmentId: row.id, includeAiSecurity, aiReviewId: aiReviewId??null, aiReviewState: aiReviewId?(combinedSelection?'QUEUED':'SKIPPED'):'NOT_REQUESTED' } } })
     return dto(row)
    }, { isolationLevel: 'Serializable' })
   } catch (error) { if (attempt < 2 && ['P2034', 'P2002'].includes((error as any)?.code)) continue; throw error }
@@ -100,39 +140,51 @@ export class RepositoryHealthService {
   const reportScope = id
    ? { id, ...(selectedBranch !== undefined ? { branch: selectedBranch } : {}) }
    : { branch: requestedBranch ?? '' }
-  let row = await this.db.repositoryHealthAssessment.findFirst({
-   where: { repositoryId: repo.id, organizationId: session.organizationId!, ...reportScope },
-   orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+  let chosen = await this.db.repositoryHealthAssessment.findFirst({
+   where: { repositoryId: repo.id, organizationId: session.organizationId!, ...reportScope, ...(!id ? {parentId:null,strixRun:{is:null}} : {}) },
+   orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], omit:{report:true},
   })
-  const latestAttempt = row
+  const latest = chosen
+  const aiReviewId=(latest?.plan as any)?.aiReviewId as string|undefined
+  // Current branch activity must not be hidden by the previous report's commit or child ID.
+  const activeStrix = !id ? await this.db.repositoryHealthAssessment.findFirst({omit:{report:true},where:{repositoryId:repo.id,organizationId:session.organizationId!,branch:requestedBranch??'',strixRun:{isNot:null},state:{in:activeStates}},orderBy:[{createdAt:'desc'},{id:'desc'}]}) : null
+  const strixRow = activeStrix ?? ((latest?.plan as any)?.kind==='STRIX_HEALTH' ? latest : await this.db.repositoryHealthAssessment.findFirst({omit:{report:true},where:{repositoryId:repo.id,organizationId:session.organizationId!,...(aiReviewId?{id:aiReviewId}:{branch:requestedBranch??'',parentId:null,strixRun:{isNot:null},...(chosen?.sourceSha?{sourceSha:chosen.sourceSha}:{})})},orderBy:[{createdAt:'desc'},{id:'desc'}]}))
   // An in-flight/failed attempt does not erase the last completed result. Historical report links stay exact.
-  if (row && row.state !== 'COMPLETED' && (!id || activeStates.includes(row.state))) {
-   const previous = await this.db.repositoryHealthAssessment.findFirst({where: {repositoryId: repo.id,
-    organizationId: session.organizationId!, branch: row.branch, state: 'COMPLETED', report: {not: Prisma.DbNull}}, orderBy: [{createdAt: 'desc'}, {id: 'desc'}]})
-   if (previous) row = previous
+  if (chosen && chosen.state !== 'COMPLETED' && (!id || activeStates.includes(chosen.state))) {
+   const previous = await this.db.repositoryHealthAssessment.findFirst({omit:{report:true},where: {repositoryId: repo.id,
+    organizationId: session.organizationId!, branch: chosen.branch, strixRun: (chosen.plan as any)?.kind==='STRIX_HEALTH' ? {isNot:null} : {is:null}, state: 'COMPLETED', report: {not: Prisma.DbNull}}, orderBy: [{createdAt: 'desc'}, {id: 'desc'}]})
+   if (previous) chosen = previous
   }
-  const branch = selectedBranch ?? row?.branch ?? requestedBranch
+  const branch = selectedBranch ?? chosen?.branch ?? requestedBranch
   const checkedAt = target?.branch === branch ? target?.headCheckedAt : null
   const recent = checkedAt && Date.now() - checkedAt.getTime() <= 60000
   const head = recent ? target?.headSha : null
-  const freshness = row && row.branch === target?.branch && head && row.sourceSha ? head === row.sourceSha ? 'CURRENT' : 'STALE' : 'UNVERIFIED'
-  const [history, total] = await Promise.all([
-   this.db.repositoryHealthAssessment.findMany({ where: { repositoryId: repo.id, organizationId: session.organizationId!, branch: row?.branch ?? branch ?? '' }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: pageSize, skip: (page - 1) * pageSize }),
-   this.db.repositoryHealthAssessment.count({ where: { repositoryId: repo.id, organizationId: session.organizationId!, branch: row?.branch ?? branch ?? '' } })])
-  // Chart data is independent of the history page and bounded to the latest 30 reports at this revision.
-  const timelineRows = row?.report ? await this.db.repositoryHealthAssessment.findMany({
-   where: { repositoryId: repo.id, organizationId: session.organizationId!, branch: row.branch, createdAt: { lte: row.createdAt } },
-   orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 30,
-   select: { id: true, state: true, sourceSha: true, finishedAt: true, report: true }
-  }) : []
-  const timeline = healthTimeline(row?.report as HealthReport | null, timelineRows.map(h => ({ ...h, report: h.report as HealthReport | null })))
-  const prior = row && await this.db.repositoryHealthAssessment.findFirst({ where: { repositoryId: repo.id, branch: row.branch, state: 'COMPLETED', createdAt: { lt: row.createdAt } }, orderBy: { createdAt: 'desc' } })
-  const hotspotFindings=(row?.report as HealthReport|null)?.findings.filter(f=>f.category==='hotspot')??[]
+  const freshness = chosen && chosen.branch === target?.branch && head && chosen.sourceSha ? head === chosen.sourceSha ? 'CURRENT' : 'STALE' : 'UNVERIFIED'
+  const [historyRows, total, timelineRows, priorRow, categoryRows] = await Promise.all([
+   this.db.repositoryHealthAssessment.findMany({where:{repositoryId:repo.id,organizationId:session.organizationId!,parentId:null,branch:chosen?.branch??branch??''},orderBy:[{createdAt:'desc'},{id:'desc'}],take:pageSize,skip:(page-1)*pageSize,omit:{report:true}}),
+   this.db.repositoryHealthAssessment.count({where:{repositoryId:repo.id,organizationId:session.organizationId!,parentId:null,branch:chosen?.branch??branch??''}}),
+   chosen ? this.db.repositoryHealthAssessment.findMany({where:{repositoryId:repo.id,organizationId:session.organizationId!,branch:chosen.branch,createdAt:{lte:chosen.createdAt}},orderBy:[{createdAt:'desc'},{id:'desc'}],take:30,select:{id:true,state:true,sourceSha:true,finishedAt:true}}) : [],
+   chosen ? this.db.repositoryHealthAssessment.findFirst({where:{repositoryId:repo.id,organizationId:session.organizationId!,branch:chosen.branch,strixRun:(chosen.plan as any)?.kind==='STRIX_HEALTH'?{isNot:null}:{is:null},state:'COMPLETED',createdAt:{lt:chosen.createdAt}},orderBy:{createdAt:'desc'},select:{id:true}}) : null,
+   chosen?.sourceSha ? this.db.repositoryHealthAssessment.findMany({where:{repositoryId:repo.id,organizationId:session.organizationId!,branch:chosen.branch,sourceSha:chosen.sourceSha,...(id && chosen.finishedAt ? {finishedAt:{lte:chosen.finishedAt}} : {}),state:{in:['COMPLETED','FAILED']}},orderBy:[{createdAt:'desc'},{id:'desc'}],take:40,select:{id:true,state:true,sourceSha:true,finishedAt:true}}) : [],
+  ])
+  const summaries=await healthSummaries(this.db,session.organizationId!,[...historyRows,...timelineRows,...categoryRows,...[chosen,latest,strixRow,priorRow].filter((r):r is NonNullable<typeof r>=>!!r)].map(r=>r.id))
+  const withReport=<T extends {id:string}>(item:T)=>({...item,report:summaries.get(item.id)??null})
+  const row=chosen?withReport(chosen):null
+  const latestAttempt=latest?withReport(latest):null
+  const history=historyRows.map(withReport)
+  const timeline=healthTimeline(row?.report??null,[...new Map([...timelineRows,...categoryRows].map(item=>[item.id,item])).values()].map(item=>withReport(item)))
+  const [trend,hotspotFindings]=await Promise.all([
+   row?healthTrend(this.db,session.organizationId!,row,priorRow?withReport(priorRow):null):null,
+   row?healthHotspots(this.db,session.organizationId!,row.id):[],
+  ])
   const reviews=row && hotspotFindings.length ? await this.db.repositoryHealthHotspotReview.findMany({where:{organizationId:session.organizationId!,repositoryId:repo.id,assessmentId:row.id,sourceSha:row.sourceSha!,id:{in:hotspotFindings.map(f=>hotspotDispositionId(row.id,f.fingerprint))}}}) : []
-  const categoryRows = row?.sourceSha ? await this.db.repositoryHealthAssessment.findMany({where:{repositoryId:repo.id,organizationId:session.organizationId!,branch:row.branch,sourceSha:row.sourceSha,state:'COMPLETED'},orderBy:[{createdAt:'desc'},{id:'desc'}],take:40,select:{id:true,finishedAt:true,report:true}}) : []
   const categoryResults = Object.fromEntries(healthCategories.map(category=>{
-   const source=categoryRows.find(candidate=>{const report=candidate.report as HealthReport|null;return report?.mode==='EXECUTED' && (!report.selection||report.selection==='all'||report.selection===category) && report.analyses.some(a=>category==='security'?['secrets.scan','security.sast','security.dependencies','iac.policy'].includes(a.id):a.id===({reliability:'quality.reliability',maintainability:'quality.maintainability',duplication:'quality.duplication',coverage:'tests.coverage'} as Record<string,string>)[category])})
-   return [category,source?{assessmentId:source.id,finishedAt:source.finishedAt,value:healthCategoryMetric(source.report as HealthReport,category)}:null]
+   const source=categoryRows.map(item=>withReport(item)).find(candidate=>{const report=candidate.report;return candidate.state==='COMPLETED' && report?.mode==='EXECUTED' && (!report.selection||report.selection==='all'||report.selection===category) && report.analyses.some(a=>category==='security'?['secrets.scan','security.sast','security.dependencies','iac.policy'].includes(a.id):a.id===({reliability:'quality.reliability',maintainability:'quality.maintainability',duplication:'quality.duplication',coverage:'tests.coverage'} as Record<string,string>)[category])})
+   if(category==='security') {
+    const ai=categoryRows.map(item=>withReport(item)).find(candidate=>candidate.report?.analyses.some(a=>a.id==='security.strix') && (candidate.state==='COMPLETED'||healthFindingCount(candidate.report)>0))
+    return [category,securityFindingsSummary(source,ai)]
+   }
+   return [category,source?{assessmentId:source.id,finishedAt:source.finishedAt,value:healthCategoryMetric(source.report!,category)}:null]
   }))
   await this.access.requireRepository(session, githubId, 'assessment.read')
   const ciCoverage=await verifiedHealthCiCoverage(this.db,repo,row?.sourceSha??null)
@@ -140,8 +192,32 @@ export class RepositoryHealthService {
   const coverage = await branchCoverage(this.db, repo, session.organizationId!, branch ?? null, row?.sourceSha ?? null, ciCoverage)
   const refreshRequest = await this.db.repositoryHealthRefresh.findUnique({where: {repositoryId_branch: {repositoryId: repo.id, branch: branch ?? ''}}})
   await this.access.requireRepository(session, githubId, 'assessment.read')
-  return {ciCoverage, branchCoverage: coverage, refreshPending: !!refreshRequest, latestAttempt: latestAttempt && dto(latestAttempt, false), categoryResults, hotspotReview:row?hotspotSummary(row.report as HealthReport|null,reviews,row.id):null, repository: repo.fullName, branch, assessment: row ? dto(row) : null, freshness, checkedAt, history: history.map(h => ({ ...dto(h, false), report: undefined })), total, page, timeline,
-   trend: row?.report ? comparableHealthTrend(row.report as HealthReport, prior?.report as HealthReport | null) : null }
+  return {assessmentOptions:{includeAiSecurity:target?.includeAiSecurity??false}, strixReview:strixRow?dto(withReport(strixRow)):null, ciCoverage, branchCoverage: coverage, refreshPending: !!refreshRequest, latestAttempt: latestAttempt && dto(latestAttempt, false), categoryResults, hotspotReview:row?hotspotSummary(row.report,reviews,row.id,hotspotFindings):null, repository: repo.fullName, branch, assessment: row ? dto(row) : null, freshness, checkedAt, history: history.map(h => ({ ...dto(h, false), report: undefined })), total, page, timeline,
+   trend }
+ }
+ async findingDetail(session:AuthenticatedSession,githubId:string,id:string,fingerprint:string) {
+  const repo=await this.access.requireRepository(session,githubId,'assessment.read')
+  if(!/^[a-f0-9-]{36}$/.test(id) || !/^[a-f0-9]{64}$/.test(fingerprint)) throw new BadRequestException('Choose a valid finding')
+  const assessment=await this.db.repositoryHealthAssessment.findFirst({where:{id,repositoryId:repo.id,organizationId:session.organizationId!},select:{id:true,sourceSha:true,createdAt:true,finishedAt:true}})
+  if(!assessment?.sourceSha) throw new NotFoundException('This finding is unavailable in the selected health report')
+  const finding=await healthFinding(this.db,session.organizationId!,id,fingerprint)
+  if(!finding) throw new NotFoundException('This finding is unavailable in the selected health report')
+  await this.access.requireRepository(session,githubId,'assessment.read')
+  return {repository:repo.fullName,assessment:{...assessment,report:{findings:[{...finding,referenceGuidance:findingReferenceGuidance(finding.ruleId)}]}}}
+ }
+ async findings(session:AuthenticatedSession,githubId:string,id:string,input:Parameters<typeof healthFindingsFilters>[0]) {
+  const repo=await this.access.requireRepository(session,githubId,'assessment.read')
+  if(!/^[a-f0-9-]{36}$/.test(id)) throw new BadRequestException('Choose a valid health assessment')
+  const filters=healthFindingsFilters(input)
+  const assessment=await this.db.repositoryHealthAssessment.findFirst({where:{id,repositoryId:repo.id,organizationId:session.organizationId!},select:{id:true,sourceSha:true,branch:true}})
+  if(!assessment) throw new NotFoundException('Health assessment is unavailable')
+  const ids=filters.reports??[id]
+  if(!ids.includes(id))throw new BadRequestException('Findings reports must include the displayed assessment')
+  const permitted=await this.db.repositoryHealthAssessment.count({where:{id:{in:ids},repositoryId:repo.id,organizationId:session.organizationId!,branch:assessment.branch,sourceSha:assessment.sourceSha}})
+  if(permitted!==ids.length)throw new NotFoundException('Findings reports are unavailable for this repository and commit')
+  const result=await healthFindingsPage(this.db,session.organizationId!,ids,filters)
+  await this.access.requireRepository(session,githubId,'assessment.read')
+  return {...result,assessmentId:id,sourceSha:assessment.sourceSha}
  }
  /** Upstream head verification is separate from loading immutable saved reports. */
  async freshness(session: AuthenticatedSession, githubId: string, id: string) {
@@ -180,7 +256,8 @@ export class RepositoryHealthService {
   const heads = repos.length ? await this.db.$queryRaw<{id:string;repositoryId:string}[]>(Prisma.sql`
     SELECT latest.id, wanted."repositoryId" FROM (VALUES ${Prisma.join(repos.map(repo => Prisma.sql`(${repo.id}, ${repo.healthTarget?.branch ?? repo.defaultBranch ?? ''})`))}) wanted("repositoryId", branch)
     CROSS JOIN LATERAL (SELECT id FROM "RepositoryHealthAssessment" h
-      WHERE h."repositoryId"=wanted."repositoryId" AND h.branch=wanted.branch AND h."organizationId"=${session.organizationId!}
+      WHERE h."repositoryId"=wanted."repositoryId" AND h.branch=wanted.branch AND h."organizationId"=${session.organizationId!} AND h."parentId" IS NULL
+      AND NOT EXISTS (SELECT 1 FROM "RepositoryHealthStrixRun" s WHERE s."assessmentId"=h.id)
       ORDER BY h."createdAt" DESC,h.id DESC LIMIT 1) latest`) : []
   const reports = await this.db.repositoryHealthAssessment.findMany({where:{id:{in:heads.map(row=>row.id)},organizationId:session.organizationId!}})
   const byRepository = new Map(reports.map(row=>[row.repositoryId,row]))
@@ -224,6 +301,10 @@ export class RepositoryHealthService {
    await new AuthorizationService(tx as PrismaService).requireRepository(session, githubId, 'execution.run')
    const row = await tx.repositoryHealthAssessment.findFirst({ where: { id, repositoryId: repo.id, organizationId: session.organizationId! } })
    if (!row) throw new NotFoundException('Health assessment is unavailable')
+   if(!row.parentId) {
+    await tx.repositoryHealthAssessment.updateMany({where:{parentId:row.id,state:'QUEUED'},data:{cancelledAt:new Date(),leaseUntil:null}})
+    await tx.repositoryHealthAssessment.updateMany({where:{parentId:row.id,state:'RUNNING'},data:{cancelledAt:new Date()}})
+   }
    if (!activeStates.includes(row.state)) return
    await tx.repositoryHealthAssessment.updateMany({ where: { id, state: row.state }, data: { cancelledAt: new Date(), ...(row.state==='QUEUED'?{leaseUntil:null}:{}) } })
    if (row.nativeRequestId) {
@@ -283,6 +364,7 @@ export class RepositoryHealthService {
  }
  /** Durable inbox recovery. BullMQ transports IDs only; PostgreSQL owns immutable job scope. */
  async pending() {
+  await this.sourceStore.prune().catch(()=>{})
   await this.refreshBranches()
   return this.db.repositoryHealthAssessment.findMany({ where: { state: { in: activeStates }, OR: [{ leaseUntil: null }, { leaseUntil: { lte: new Date() } }] }, select: { id: true }, orderBy: { createdAt: 'asc' }, take: 20 })
  }
@@ -300,9 +382,9 @@ export class RepositoryHealthService {
    if (!actor) {
     await this.db.repositoryHealthRefresh.deleteMany({where: {repositoryId: request.repositoryId, branch: request.branch, revision: request.revision}}); continue
    }
-   const active = await this.db.repositoryHealthAssessment.findFirst({where: {repositoryId: repo.id, state: {in: activeStates}}})
+   const active = await this.db.repositoryHealthAssessment.findFirst({where: {repositoryId: repo.id, parentId:null, strixRun:{is:null}, state: {in: activeStates}}})
    if (active) continue
-   const latest = await this.db.repositoryHealthAssessment.findFirst({where: {repositoryId: repo.id, branch: request.branch, state: 'COMPLETED'}, orderBy: {createdAt: 'desc'}})
+   const latest = await this.db.repositoryHealthAssessment.findFirst({where: {repositoryId: repo.id, branch: request.branch, parentId:null, strixRun:{is:null}, state: 'COMPLETED'}, orderBy: {createdAt: 'desc'}})
    if (latest?.sourceSha !== request.sourceSha) {
     try {
      const queued = await this.start(sessionFor(actor), repo.githubId.toString(), {branch: request.branch, requestKey: randomUUID()})
@@ -324,8 +406,13 @@ export class RepositoryHealthService {
    const row = await tx.repositoryHealthAssessment.findUnique({ where: { id } })
    if (!row || !activeStates.includes(row.state) || row.leaseUntil && row.leaseUntil > now) return null
    if (row.state === 'QUEUED') {
-    const running = await tx.repositoryHealthAssessment.findMany({ where: { state: 'RUNNING' }, select: { organizationId: true }, take: 3 })
-    if (running.length >= 2 || running.some(r => r.organizationId === row.organizationId)) return null
+    if(row.parentId && !row.cancelledAt) {
+     const parent=await tx.repositoryHealthAssessment.findUnique({where:{id:row.parentId}})
+     if(parent && activeStates.includes(parent.state) && !(parent.plan as any)?.sharedSource) return null
+    }
+    const running = await tx.repositoryHealthAssessment.findMany({ where: { state: 'RUNNING' }, select: { organizationId: true, plan:true }, take: 3 })
+    const ai=(row.plan as any)?.kind==='STRIX_HEALTH'
+    if (running.length >= 2 || running.some(r => r.organizationId === row.organizationId && ((r.plan as any)?.kind==='STRIX_HEALTH')===ai)) return null
    }
    const changed = await tx.repositoryHealthAssessment.updateMany({ where: { id, state: row.state, leaseUntil: row.leaseUntil },
     data: { state: 'RUNNING', reason:null, plan:json({...row.plan as any,failure:undefined}), startedAt: row.startedAt ?? now, leaseToken: token, leaseUntil: new Date(Date.now()+120000), attempts: { increment: 1 } } })
@@ -336,6 +423,25 @@ export class RepositoryHealthService {
   let fetchedSource: Awaited<ReturnType<GitHubProviderService['readHealthScanSource']>> | undefined
   const session = sessionFor(row)
   try {
+   if((row.plan as any)?.kind==='STRIX_HEALTH') {
+    if(!this.strix) {await this.finish(row,token,'FAILED',row.report as HealthReport|null,'STRIX_RUNNER_UNAVAILABLE');return}
+    const result=await this.strix.process(row,token)
+    if(result.state==='QUEUED') {
+     const current=await this.db.repositoryHealthAssessment.findUniqueOrThrow({where:{id}})
+     const waiting=await this.db.repositoryHealthAssessment.updateMany({
+      where:{id,state:'RUNNING',leaseToken:token,cancelledAt:null},
+      data:{state:'QUEUED',reason:result.reason??null,leaseToken:null,leaseUntil:new Date(Date.now()+15000),plan:json({...current.plan as any,stage:'WAITING_SCANNER'})}
+     })
+     if(!waiting.count) await this.defer(id,token)
+    }
+    else if(result.state==='RUNNING') await this.defer(id,token)
+    else {
+     row=await this.db.repositoryHealthAssessment.findUniqueOrThrow({where:{id}})
+     await this.finish(row,token,result.state,result.report??row.report as HealthReport|null,result.reason??null)
+     if(result.sourceBundle && result.report?.findings.length) await this.sources.captureSnapshot(row.repositoryId,result.sourceBundle,result.report.findings).catch(()=>console.warn(JSON.stringify({event:'health.source_capture_deferred',assessmentId:row.id})))
+    }
+    return
+   }
    const repo = await this.access.requireRepository(session, (await this.db.gitHubRepository.findUniqueOrThrow({ where: { id: row.repositoryId } })).githubId.toString(), 'execution.run')
    if (row.cancelledAt) {
     if ((row.plan as any)?.kind==='AUTOMATIC_HEALTH' && (row.plan as any)?.expected) { await this.automaticScan(row,token,session,repo); return }
@@ -350,7 +456,7 @@ export class RepositoryHealthService {
    if (!row.sourceSha) {
     // A bounded Git fetch may outlive the ordinary worker lease.
     await this.db.repositoryHealthAssessment.updateMany({where:{id,leaseToken:token},data:{leaseUntil:new Date(Date.now()+12*60000)}})
-    const snapshot = await this.github.readRepositorySnapshot(repo.installationId, repo.githubId, row.branch, !!this.scanner)
+    const snapshot = await this.github.readRepositorySnapshot(repo.installationId, repo.githubId, row.branch, !!this.scanner || (row.plan as any)?.includeAiSecurity===true)
     fetchedSource = snapshot.scanSource
     await this.access.requireRepository(session, repo.githubId.toString(), 'execution.run')
     const requestedCategory=(row.plan as any)?.requestedCategory as HealthCategory|undefined
@@ -359,6 +465,18 @@ export class RepositoryHealthService {
      selectionId: 'health:' + row.id, rules: analyses.map(a => ({ id: a.id, title: a.title, required: false, capability: 'execution' })) })
     if (requestedCategory && !analyses.length) throw new Error('NO_APPLICABLE_ANALYSIS')
     const { planHash, ...frozenPlan } = plan
+    if((row.plan as any)?.includeAiSecurity) {
+     Object.assign(frozenPlan,{includeAiSecurity:true,aiReviewId:(row.plan as any).aiReviewId})
+     const child=await this.db.repositoryHealthAssessment.findUnique({where:{id:(row.plan as any).aiReviewId}})
+     if(child && activeStates.includes(child.state)) {
+      try {
+       fetchedSource??=await this.github.readHealthScanSource(repo.installationId,repo.githubId,snapshot.sourceSha,AbortSignal.timeout(600000),false)
+       if(fetchedSource.source.repositoryId!==repo.githubId.toString() || fetchedSource.source.sourceSha!==snapshot.sourceSha) throw new Error('HEALTH_SHARED_SOURCE_UNAVAILABLE')
+       const sharedSource=await this.sourceStore.save({...row,sourceSha:snapshot.sourceSha},fetchedSource)
+       Object.assign(frozenPlan,{sharedSource})
+      } catch { Object.assign(frozenPlan,{aiSourceUnavailable:true}) }
+     }
+    }
     if(requestedCategory) (frozenPlan as any).requestedCategory=requestedCategory
     const inspection = { complete: snapshot.complete && profile.complete, fileCount: snapshot.files.length, languages: profile.signals.find(s => s.id === 'languages')?.observations ?? [] }
     const report = markSelection(healthReport(inspection, analyses.map(a => ({ id: a.id, title: a.title, state: 'UNAVAILABLE', reason: this.scanner?'SCANNER_PENDING':plan.steps.find(s => s.ruleId === a.id)?.reason ?? 'ADAPTER_UNAVAILABLE' }))),requestedCategory)
@@ -366,6 +484,10 @@ export class RepositoryHealthService {
     await this.db.$transaction(async tx => {
      const updated = await tx.repositoryHealthAssessment.updateMany({ where: { id, leaseToken: token, state: 'RUNNING', cancelledAt: null, sourceSha: null }, data: { sourceSha: snapshot.sourceSha, plan: json(frozenPlan), report: json(report) } })
      if (!updated.count) throw new ConflictException('Health attempt changed')
+     if((frozenPlan as any).aiSourceUnavailable) {
+      await tx.repositoryHealthAssessment.updateMany({where:{parentId:row.id,state:{in:activeStates}},data:{state:'SKIPPED',reason:'HEALTH_SHARED_SOURCE_UNAVAILABLE',finishedAt:new Date()}})
+      await tx.repositoryHealthStrixRun.updateMany({where:{assessmentId:(row.plan as any).aiReviewId,finishedAt:null},data:{finishedAt:new Date(),failureCode:'HEALTH_SHARED_SOURCE_UNAVAILABLE'}})
+     }
      const saved = await tx.repositoryProfile.create({ data: { repositoryId: repo.id, sourceSha: snapshot.sourceSha, treeSha: snapshot.treeSha, branch: snapshot.branch, fullName: snapshot.fullName, version: profile.version, complete: profile.complete, report: json(profile) } })
      await tx.repositoryHealthAssessment.update({ where: { id }, data: { profileId: saved.id } })
      await tx.repositoryHealthTarget.updateMany({ where: { repositoryId: repo.id, revision: row.targetRevision, branch: row.branch }, data: { headSha: snapshot.sourceSha, headCheckedAt: new Date() } })
@@ -416,6 +538,7 @@ export class RepositoryHealthService {
    if (!receipt) report.analyses = report.analyses.map(a => ({ ...a, state: 'UNAVAILABLE', reason: a.reason==='SUPPORTED_TESTS_REQUIRED' ? a.reason : native.reason ?? 'RECEIPT_UNVERIFIED' }))
    await this.finish(row,token,receipt && !receipt.cancelled && receipt.checks.every(c => c.cleanupConfirmed && c.state !== 'INCOMPLETE') ? 'COMPLETED' : 'FAILED', report, receipt ? null : native.reason ?? 'RECEIPT_UNVERIFIED')
   } catch (error) {
+   if ((row.plan as any)?.kind==='STRIX_HEALTH') { await this.defer(id,token); return }
    if (this.scanner && (row.plan as any)?.kind==='AUTOMATIC_HEALTH' && (row.plan as any)?.expected) {
     // Access revocation also stops the exact admitted job; never fetch more source.
     try {
@@ -447,7 +570,7 @@ export class RepositoryHealthService {
     await this.db.repositoryHealthAssessment.updateMany({where:{id:row.id,leaseToken:token,cancelledAt:null},data:{leaseUntil:new Date(Date.now()+12*60000)}})
     preparingSource=true
     console.info(JSON.stringify({event:'health.worker.fetching_source',assessmentId:row.id}))
-    source=fetchedSource??await this.github.readHealthScanSource(repo.installationId,repo.githubId,row.sourceSha,AbortSignal.timeout(600000),false)
+    source=fetchedSource??(saved.sharedSource?await this.sourceStore.read(row):undefined)??await this.github.readHealthScanSource(repo.installationId,repo.githubId,row.sourceSha,AbortSignal.timeout(600000),false)
     await this.access.requireRepository(session,repo.githubId.toString(),'execution.run')
     preparingSource=false
     pkg=await this.scanner.package(row.organizationId)
@@ -471,7 +594,7 @@ export class RepositoryHealthService {
      row=await this.db.repositoryHealthAssessment.findUniqueOrThrow({where:{id:row.id}})
     }
     await this.db.repositoryHealthAssessment.updateMany({where:{id:row.id,leaseToken:token,cancelledAt:null},data:{leaseUntil:new Date(Date.now()+12*60000)}})
-    source ??= await this.github.readHealthScanSource(repo.installationId,repo.githubId,row.sourceSha,AbortSignal.timeout(600000),false)
+    source ??= saved.sharedSource?await this.sourceStore.read(row):await this.github.readHealthScanSource(repo.installationId,repo.githubId,row.sourceSha,AbortSignal.timeout(600000),false)
     await this.access.requireRepository(session,repo.githubId.toString(),'execution.run')
     const live=await this.db.repositoryHealthAssessment.findUniqueOrThrow({where:{id:row.id}})
     if (live.cancelledAt || live.leaseToken!==token || source.source.sourceHash!==expected.sourceHash) throw new Error('Health scope changed')
@@ -504,7 +627,7 @@ export class RepositoryHealthService {
     await this.defer(row.id,token);return
    }
    const response=(error as any)?.getResponse?.()
-   const reason=error instanceof HealthGitSourceError?error.code:(error as any)?.status===403?'ACCESS_REVOKED':response?.code==='GITHUB_RATE_LIMITED'?'GITHUB_RATE_LIMITED':preparingSource?'SOURCE_ACCESS_UNAVAILABLE':'SCANNER_UNAVAILABLE'
+   const reason=(error as Error)?.message==='HEALTH_SHARED_SOURCE_UNAVAILABLE'?'HEALTH_SHARED_SOURCE_UNAVAILABLE':error instanceof HealthGitSourceError?error.code:(error as any)?.status===403?'ACCESS_REVOKED':response?.code==='GITHUB_RATE_LIMITED'?'GITHUB_RATE_LIMITED':preparingSource?'SOURCE_ACCESS_UNAVAILABLE':'SCANNER_UNAVAILABLE'
    const report=row.report as HealthReport
    const next=markSelection(healthReport(report.inspection,report.analyses.map(a=>({...a,reason}))),report.selection==='all'?undefined:report.selection)
    next.policyContext=report.policyContext
@@ -532,14 +655,23 @@ export class RepositoryHealthService {
     await tx.repositoryHealthAssessment.updateMany({ where: { id: row.id, state: 'RUNNING', leaseToken: token }, data: { leaseToken: null, leaseUntil: new Date(Date.now()+5000) } })
     return
    }
+   // Commit the terminal scanner marker with its report, audit and notification.
+   // A rollback leaves both records recoverable from the runner's durable receipt.
+   if ((row.plan as any)?.kind==='STRIX_HEALTH') await tx.repositoryHealthStrixRun.update({
+    where:{assessmentId:row.id},data:{finishedAt:new Date(),failureCode:state==='COMPLETED'?null:reason}
+   })
    if (row.sourceSha && report?.findings.length) await queueFindingSources(tx, row.repositoryId, row.sourceSha, report.findings, 5)
    await tx.auditEvent.create({ data: { event: 'repository.health.finished', actorId: row.actorId, metadata: { assessmentId: row.id, state, reason, sourceSha: row.sourceSha } } })
-   if (!notificationsEnabled() || state === 'CANCELLED') return
+   if (!notificationsEnabled() || state === 'CANCELLED' || state === 'SKIPPED') return
    const repo = await tx.gitHubRepository.findUniqueOrThrow({ where: { id: row.repositoryId } })
-   const type = state === 'FAILED' ? 'HEALTH_ASSESSMENT_FAILED' : report?.completeness === 'COMPLETE' ? 'HEALTH_ASSESSMENT_COMPLETED' : 'HEALTH_ASSESSMENT_PARTIAL'
+   const ai=(row.plan as any)?.kind==='STRIX_HEALTH'
+   const type = ai ? (state==='FAILED'?'AI_SECURITY_REVIEW_FAILED':'AI_SECURITY_REVIEW_COMPLETED') : state === 'FAILED' ? 'HEALTH_ASSESSMENT_FAILED' : report?.completeness === 'COMPLETE' ? 'HEALTH_ASSESSMENT_COMPLETED' : 'HEALTH_ASSESSMENT_PARTIAL'
    await tx.notificationEvent.createMany({ data: [{ healthAssessmentId: row.id, branchRef: row.branch, organizationId: row.organizationId,
     repositoryId: row.repositoryId, repositoryGithubId: repo.githubId.toString(), repositoryName: repo.fullName, sourceSha: row.sourceSha, actorId: row.actorId, type,
-    severity: state === 'FAILED' ? 'error' : report?.completeness === 'PARTIAL' ? 'warning' : 'info' }], skipDuplicates: true })
+    severity: state === 'FAILED' ? 'error' : !ai && report?.completeness === 'PARTIAL' ? 'warning' : 'info' }], skipDuplicates: true })
   })
+  const owner=row.parentId??row.id
+  const remaining=await this.db.repositoryHealthAssessment.count({where:{OR:[{id:owner},{parentId:owner}],state:{in:activeStates}}})
+  if(!remaining) await this.sourceStore.remove(owner).catch(()=>{})
  }
 }

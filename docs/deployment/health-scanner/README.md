@@ -94,7 +94,7 @@ links and submodules are excluded and counted in the report. Source export has
 bounded file/byte limits; limits or unavailable source never become passing checks.
 Every signed result binds organization, repository, exact commit, source hash,
 scanner package and job. Private source is deleted after completion/cancellation;
-the application retains reports and redacted finding locations. Completed source-free scanner journals are retained for seven days; active jobs and pending cleanup are never pruned.
+the application retains reports and redacted finding locations. When a manual assessment includes AI security review, the trusted worker also keeps an encrypted, revision-bound source snapshot in its private `health_sources` volume. Both scanners reuse that snapshot; it is removed when both finish, with a four-hour expiry for abandoned snapshots. The API and scanner services do not mount that volume. Completed source-free scanner journals are retained for seven days; active jobs and pending cleanup are never pruned.
 
 Dependency images refresh automatically when the vendor database approaches its
 24-hour limit. New packages are applied only while idle. Refresh failure leaves

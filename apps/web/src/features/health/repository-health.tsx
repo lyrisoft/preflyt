@@ -5,6 +5,7 @@ import {
   GitBranch,
   RefreshCw,
   ShieldCheck,
+  Sparkles,
   FileSearch,
   Bug,
   Wrench,
@@ -42,9 +43,11 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { AiLoadingIcon } from '@/components/ai-loading-icon'
 import { ResultTimestamp } from '@/components/result-timestamp'
 import { StatusBadge } from '@/components/status-badge'
 import { SurfaceIcon } from '@/components/surface-icon'
+import { TablePagination } from '@/components/table-pagination'
 import { BranchPicker } from '@/features/repositories/branch-picker'
 import { useNavigationSession } from '@/features/workspace/navigation-session'
 import { canPerform } from '@/features/workspace/scoped-access'
@@ -58,6 +61,8 @@ import {
   healthFailure,
   healthReasons,
   useHealth,
+  useHealthFindings,
+  healthFindingCount,
   useHealthFreshness,
   type HealthAssessment,
   type HealthCategory,
@@ -66,8 +71,12 @@ import { healthDimensionValues } from './health-dimensions'
 import { HealthHelp } from './health-help'
 import { HealthPolicyEvidence } from './health-policy-evidence'
 import { HealthTimelineChart } from './health-timeline-chart'
+import { SourceReviewCoverage } from './source-review-coverage'
+import { StrixControl } from './strix-control'
+import { useFreshnessExpired } from './use-freshness-expired'
 
 const pageSize = 10
+export type HealthAiSecurityChoice = { scope: string; checked: boolean }
 
 function findingMetricDescription(value: string) {
   if (value === 'Unavailable') return 'No verified finding count yet'
@@ -84,6 +93,7 @@ export function RepositoryHealth({
   assessmentId,
   selectedBranch,
   onAssessmentQueued,
+  aiSecurityOption,
 }: {
   repositoryId: string
   name: string
@@ -91,6 +101,10 @@ export function RepositoryHealth({
   assessmentId?: string
   selectedBranch?: string
   onAssessmentQueued?: (assessment: HealthAssessment) => void | Promise<unknown>
+  aiSecurityOption?: {
+    choice: HealthAiSecurityChoice | null
+    onChange: (choice: HealthAiSecurityChoice) => void
+  }
 }) {
   const session = useNavigationSession(),
     cache = useQueryClient()
@@ -101,7 +115,13 @@ export function RepositoryHealth({
   const [branch, setBranch] = useState(''),
     [search, setSearch] = useState(''),
     [severity, setSeverity] = useState('all')
+  const [findingsPageState, setFindingsPage] = useState({ scope: '', page: 1 })
+  const [findingsPageSize, setFindingsPageSize] = useState(10)
   const [detailTab, setDetailTab] = useState<'findings' | 'history'>('findings')
+  const aiScope = `${session.data?.organizationId}:${session.data?.identityId}:${repositoryId}`
+  const [localAiChoice, setLocalAiChoice] =
+    useState<HealthAiSecurityChoice | null>(null)
+  const aiChoice = aiSecurityOption ? aiSecurityOption.choice : localAiChoice
   const query = useHealth(
     repositoryId,
     selectedReport,
@@ -121,15 +141,22 @@ export function RepositoryHealth({
     freshnessQuery.error instanceof HealthRequestError &&
     [401, 403].includes(freshnessQuery.error.status)
   const data = freshnessDenied ? undefined : loaded
+  const includeAiSecurity =
+    aiChoice?.scope === aiScope
+      ? aiChoice.checked
+      : (data?.assessmentOptions?.includeAiSecurity ?? false)
   const row = data?.assessment,
     report = row?.report
   const checked = freshnessQuery.isError ? undefined : freshnessQuery.data
+  const freshnessExpired = useFreshnessExpired(checked?.checkedAt)
   const recent = (at: string | null | undefined, loadedAt: number) =>
     !!at && loadedAt - new Date(at).getTime() <= 60000
   const freshness =
     query.isError ||
     freshnessQuery.isError ||
-    (!!checked && freshnessQuery.isStale)
+    (!!checked &&
+      (freshnessExpired ||
+        !recent(checked.checkedAt, freshnessQuery.dataUpdatedAt)))
       ? 'UNVERIFIED'
       : checked?.assessmentId === row?.id &&
           checked?.sourceSha === row?.sourceSha &&
@@ -145,6 +172,7 @@ export function RepositoryHealth({
   const allowed = canPerform(session.data, 'execution.run', repositoryId)
   const refresh = async () => {
     await cache.invalidateQueries({ queryKey: ['repository-health'] })
+    await cache.invalidateQueries({ queryKey: ['health-findings'] })
     await cache.invalidateQueries({ queryKey: ['health-portfolio'] })
     await cache.invalidateQueries({ queryKey: ['health-freshness'] })
   }
@@ -152,12 +180,25 @@ export function RepositoryHealth({
     mutationFn: async (value: {
       branch: string
       category?: HealthCategory
+      scanner?: 'strix'
+      includeAiSecurity?: boolean
     }) => {
-      return healthRequest<HealthAssessment>(
+      const assessment = await healthRequest<HealthAssessment>(
         `repositories/${repositoryId}/health`,
         undefined,
         { ...value, requestKey: crypto.randomUUID() }
       )
+      if (
+        value.includeAiSecurity &&
+        (!assessment.includeAiSecurity || !assessment.aiReviewId)
+      ) {
+        await refresh()
+        throw new HealthRequestError(
+          502,
+          'The server did not confirm the requested AI security review. Standard checks may already be running. Refresh the report before trying again.'
+        )
+      }
+      return assessment
     },
     onSuccess: async (assessment) => {
       setSelectedReport(undefined)
@@ -167,13 +208,14 @@ export function RepositoryHealth({
     },
   })
   const cancel = useMutation({
-    mutationFn: () =>
+    mutationFn: (assessmentId?: string) =>
       healthRequest(
-        `repositories/${repositoryId}/health/${(data?.latestAttempt ?? row)!.id}/cancel`,
+        `repositories/${repositoryId}/health/${assessmentId ?? (data?.latestAttempt ?? row)!.id}/cancel`,
         undefined,
         {}
       ),
     onSuccess: refresh,
+    meta: { successMessage: 'Review cancellation requested.' },
   })
   const active = !!row && ['QUEUED', 'RUNNING'].includes(row.state)
   const latest = data?.latestAttempt ?? row
@@ -182,14 +224,65 @@ export function RepositoryHealth({
     (!!latest && ['QUEUED', 'RUNNING'].includes(latest.state))
   const chosenBranch =
     selectedBranch ?? (branch || data?.branch || defaultBranch || '')
-  const rows =
-    report?.findings.filter(
-      (f) =>
-        (severity === 'all' || severity === f.severity) &&
-        `${f.title} ${f.path ?? ''} ${f.ruleId ?? ''}`
-          .toLowerCase()
-          .includes(search.toLowerCase())
+  const aiReview =
+    latest?.scanner === 'strix' &&
+    latest.branch === chosenBranch &&
+    ['QUEUED', 'RUNNING'].includes(latest.state)
+      ? latest
+      : data?.strixReview
+  const aiIssueCount = aiReview?.report
+    ? healthFindingCount(aiReview.report)
+    : 0
+  const aiRunning =
+    !!aiReview &&
+    aiReview.branch === chosenBranch &&
+    ['QUEUED', 'RUNNING'].includes(aiReview.state)
+  const aiQueuing =
+    start.isPending &&
+    (start.variables?.scanner === 'strix' ||
+      start.variables?.includeAiSecurity === true)
+  const securitySources = data?.categoryResults?.security
+  const relatedAi =
+    securitySources?.assessmentIds?.filter(
+      (id) => id !== securitySources.assessmentId
     ) ?? []
+  const findingsReports = row
+    ? [
+        ...new Set([
+          row.id,
+          ...(report?.analyses.some((a) => a.id === 'security.strix')
+            ? (securitySources?.assessmentIds ?? [])
+            : relatedAi),
+        ]),
+      ].join(',')
+    : undefined
+  const findingsScope = `${aiScope}:${findingsReports}:${search}:${severity}:${findingsPageSize}`
+  const findingsPage =
+    findingsPageState.scope === findingsScope ? findingsPageState.page : 1
+  const findingsQuery = useHealthFindings(
+    repositoryId,
+    row?.id,
+    findingsPage,
+    findingsPageSize,
+    search,
+    severity,
+    !!data &&
+      !query.isError &&
+      !freshnessDenied &&
+      detailTab === 'findings' &&
+      !active &&
+      report?.mode === 'EXECUTED',
+    findingsReports
+  )
+  const findingCount =
+    findingsQuery.data?.unfilteredTotal ??
+    (report
+      ? healthFindingCount(report) +
+        (relatedAi.some((id) => id !== row?.id)
+          ? (securitySources?.aiFindings ?? 0)
+          : 0)
+      : 0)
+  const rows = findingsQuery.isError ? [] : (findingsQuery.data?.rows ?? [])
   const historyPages = Math.max(1, Math.ceil((data?.total ?? 0) / pageSize))
   const findingsAvailable =
     report?.mode === 'EXECUTED' &&
@@ -213,6 +306,7 @@ export function RepositoryHealth({
           ? 'Unavailable'
           : fallback),
       assessmentId: source?.assessmentId ?? row?.id,
+      assessmentIds: source?.assessmentIds,
       finishedAt:
         source?.finishedAt ??
         (report?.selection === category || !report?.selection
@@ -262,14 +356,92 @@ export function RepositoryHealth({
         },
       ]
     : []
+  const aiStatus =
+    aiReview && aiReview.state !== 'COMPLETED' ? (
+      <div
+        className='flex flex-col items-stretch gap-3 rounded-lg border p-3'
+        aria-label='Strix review status'
+      >
+        <div className='flex min-w-0 items-start gap-2'>
+          {['QUEUED', 'RUNNING'].includes(aiReview.state) ? (
+            <AiLoadingIcon />
+          ) : (
+            <SurfaceIcon icon={Sparkles} tone='violet' />
+          )}
+          <div className='min-w-0 space-y-1'>
+            <p className='text-sm font-medium'>
+              AI security review: {healthLabel(aiReview.state)}
+            </p>
+            <p className='text-xs text-muted-foreground'>
+              {aiReview.state === 'SKIPPED'
+                ? 'AI security review was skipped. Standard checks run independently.'
+                : aiReview.report &&
+                    !['QUEUED', 'RUNNING'].includes(aiReview.state) &&
+                    (aiReview.state === 'COMPLETED' ||
+                      healthFindingCount(aiReview.report) > 0)
+                  ? `${aiIssueCount} ${aiIssueCount === 1 ? 'issue' : 'issues'} at ${aiReview.sourceSha?.slice(0, 7)}. ${aiIssueCount ? 'Needs review.' : 'Source review only.'}`
+                  : ['QUEUED', 'RUNNING'].includes(aiReview.state)
+                    ? aiReview.cancelled
+                      ? 'Cancellation requested. Waiting for runner cleanup.'
+                      : aiReview.state === 'QUEUED'
+                        ? 'Waiting to start the source review.'
+                        : 'Reviewing repository source with the configured model.'
+                    : 'No completed AI security report is available.'}
+              {aiReview.reason
+                ? ` ${healthFailure(aiReview.reason).message}`
+                : ''}
+            </p>
+          </div>
+        </div>
+        {aiReview.report &&
+          !['QUEUED', 'RUNNING'].includes(aiReview.state) &&
+          (healthFindingCount(aiReview.report) > 0 ? (
+            <Button size='sm' variant='outline' asChild>
+              <Link
+                to='/findings'
+                search={{
+                  source: 'health',
+                  origin: 'health',
+                  repository: repositoryId,
+                  health: aiReview.id,
+                  kind: 'findings',
+                  category: 'security',
+                  page: 1,
+                }}
+              >
+                View AI security findings
+              </Link>
+            </Button>
+          ) : (
+            <Button
+              size='sm'
+              variant='outline'
+              onClick={() => setSelectedReport(aiReview!.id)}
+            >
+              View AI security report
+            </Button>
+          ))}
+        {allowed && ['QUEUED', 'RUNNING'].includes(aiReview.state) && (
+          <Button
+            size='sm'
+            variant='outline'
+            disabled={cancel.isPending || aiReview.cancelled}
+            onClick={() => cancel.mutate(aiReview!.id)}
+          >
+            Cancel AI security review
+          </Button>
+        )}
+      </div>
+    ) : null
   return (
     <div className='space-y-5'>
+      {(!report || active) && aiStatus}
       <Card
         className='gap-0 overflow-hidden py-0'
         aria-label='Repository health summary'
       >
-        <div className='flex flex-wrap items-center justify-between gap-4 p-4'>
-          <div className='flex items-center gap-3'>
+        <div className='flex flex-col gap-4 p-4 lg:flex-row lg:items-center lg:justify-between'>
+          <div className='flex min-w-0 items-center gap-3'>
             <SurfaceIcon icon={ShieldCheck} tone='teal' />
             <div>
               <h2 className='text-base font-semibold'>Repository health</h2>
@@ -278,7 +450,7 @@ export function RepositoryHealth({
               </p>
             </div>
           </div>
-          <div className='flex flex-wrap items-center gap-2'>
+          <div className='flex min-w-0 flex-wrap items-center gap-2 lg:flex-1 lg:justify-end'>
             {allowed && (
               <>
                 {selectedBranch === undefined && (
@@ -301,30 +473,69 @@ export function RepositoryHealth({
                     }}
                   />
                 )}
-                <Button
-                  size='sm'
+                <StrixControl
+                  repositoryId={repositoryId}
+                  scopeKey={aiScope}
+                  checked={includeAiSecurity}
+                  onCheckedChange={(checked) => {
+                    const choice = { scope: aiScope, checked }
+                    if (aiSecurityOption) aiSecurityOption.onChange(choice)
+                    else setLocalAiChoice(choice)
+                  }}
                   disabled={
-                    !chosenBranch ||
                     query.isPending ||
                     query.isError ||
                     freshnessDenied ||
-                    start.isPending ||
-                    (updating &&
-                      chosenBranch === (latest?.branch ?? data?.branch))
+                    updating ||
+                    (!!aiReview &&
+                      ['QUEUED', 'RUNNING'].includes(aiReview.state))
                   }
-                  onClick={() => start.mutate({ branch: chosenBranch })}
                 >
-                  {start.isPending ? (
-                    <LoaderCircle className='motion-safe:animate-spin' />
-                  ) : (
-                    <RefreshCw />
-                  )}
-                  {start.isPending
-                    ? 'Queuing…'
-                    : row
-                      ? 'Reassess'
-                      : 'Assess repository'}
-                </Button>
+                  <Button
+                    size='sm'
+                    className='rounded-e-none shadow-none'
+                    aria-busy={aiRunning || aiQueuing || start.isPending}
+                    title={
+                      includeAiSecurity
+                        ? 'Includes AI security review when available'
+                        : 'Run standard repository checks'
+                    }
+                    disabled={
+                      !chosenBranch ||
+                      query.isPending ||
+                      query.isError ||
+                      freshnessDenied ||
+                      start.isPending ||
+                      (!!aiReview &&
+                        aiReview.branch === chosenBranch &&
+                        ['QUEUED', 'RUNNING'].includes(aiReview.state)) ||
+                      (updating &&
+                        chosenBranch === (latest?.branch ?? data?.branch))
+                    }
+                    onClick={() =>
+                      start.mutate({ branch: chosenBranch, includeAiSecurity })
+                    }
+                  >
+                    {aiRunning || aiQueuing ? (
+                      <AiLoadingIcon compact />
+                    ) : start.isPending ? (
+                      <LoaderCircle className='motion-safe:animate-spin' />
+                    ) : includeAiSecurity ? (
+                      <Sparkles aria-hidden='true' />
+                    ) : (
+                      <RefreshCw aria-hidden='true' />
+                    )}
+                    {aiRunning
+                      ? aiReview?.state === 'QUEUED'
+                        ? 'AI review queued…'
+                        : 'Reviewing security…'
+                      : start.isPending
+                        ? 'Queuing…'
+                        : row
+                          ? 'Reassess'
+                          : 'Assess repository'}
+                  </Button>
+                </StrixControl>
               </>
             )}
             <Button
@@ -332,7 +543,13 @@ export function RepositoryHealth({
               size='icon'
               className='size-9'
               aria-label='Refresh health report'
-              onClick={() => void query.refetch()}
+              onClick={() => {
+                void query.refetch()
+                if (row?.id) void freshnessQuery.refetch()
+                void cache.invalidateQueries({
+                  queryKey: ['health-strix', repositoryId],
+                })
+              }}
             >
               <RefreshCw />
             </Button>
@@ -394,7 +611,7 @@ export function RepositoryHealth({
               <StatusBadge tone={healthTone(freshness)}>
                 {healthLabel(freshness)}
               </StatusBadge>
-              {freshnessQuery.isFetching && (
+              {freshnessQuery.isFetching && !freshnessQuery.data && (
                 <span role='status' className='text-xs text-muted-foreground'>
                   Checking freshness…
                 </span>
@@ -574,7 +791,9 @@ export function RepositoryHealth({
         )}
         {!query.isPending && !query.isError && row && !active && (
           <HealthTimelineChart
+            key={`${row.branch}:${row.scanner ?? 'standard'}`}
             embedded
+            aiReview={row.scanner === 'strix'}
             points={data!.timeline ?? []}
             branch={row.branch}
             onSelectReport={setSelectedReport}
@@ -650,28 +869,53 @@ export function RepositoryHealth({
               for the complete reports.
             </p>
           )}
+          {row?.parentId && (
+            <Button
+              size='sm'
+              variant='outline'
+              onClick={() => setSelectedReport(row.parentId!)}
+            >
+              View standard checks
+            </Button>
+          )}
+          {report && !active && (
+            <SourceReviewCoverage
+              key={`source-${row.id}`}
+              report={report}
+              repositoryId={repositoryId}
+              assessmentId={row.id}
+            />
+          )}
           {report && !active && (
             <div className='grid gap-4 sm:grid-cols-2 xl:grid-cols-4'>
               {metrics.map((metric) => (
-                <Link
+                <Card
                   key={metric.label}
-                  to='/findings'
-                  search={{
-                    origin: 'health',
-                    health: metric.assessmentId ?? row.id,
-                    repository: repositoryId,
-                    category: metric.category,
-                    kind: metric.category === 'coverage' ? 'gaps' : 'findings',
-                    page: 1,
-                  }}
-                  aria-label={
-                    metric.category === 'coverage'
-                      ? 'Open test coverage details'
-                      : `View ${metric.label.toLowerCase()} findings`
-                  }
-                  className='block h-full rounded-xl outline-offset-4 focus-visible:outline-2 focus-visible:outline-ring'
+                  className='h-full gap-0 overflow-hidden transition-colors hover:border-primary/40'
                 >
-                  <Card className='h-full gap-0 transition-colors hover:border-primary/40'>
+                  <Link
+                    to='/findings'
+                    search={{
+                      origin: 'health',
+                      ...(metric.assessmentIds?.length
+                        ? {
+                            source: 'health',
+                            healthReports: metric.assessmentIds.join(','),
+                          }
+                        : { health: metric.assessmentId ?? row.id }),
+                      repository: repositoryId,
+                      category: metric.category,
+                      kind:
+                        metric.category === 'coverage' ? 'gaps' : 'findings',
+                      page: 1,
+                    }}
+                    aria-label={
+                      metric.category === 'coverage'
+                        ? 'Open test coverage details'
+                        : `View ${metric.label.toLowerCase()} findings`
+                    }
+                    className='block flex-1 rounded-xl outline-offset-4 focus-visible:outline-2 focus-visible:outline-ring'
+                  >
                     <CardHeader className='flex flex-row items-center justify-between gap-3 pb-4'>
                       <CardTitle className='text-sm font-medium'>
                         {metric.label}
@@ -702,8 +946,11 @@ export function RepositoryHealth({
                         Assessed <ResultTimestamp value={metric.finishedAt} />
                       </p>
                     </CardContent>
-                  </Card>
-                </Link>
+                  </Link>
+                  {metric.category === 'security' && aiStatus && (
+                    <div className='px-4 pb-4'>{aiStatus}</div>
+                  )}
+                </Card>
               ))}
             </div>
           )}
@@ -722,6 +969,14 @@ export function RepositoryHealth({
                       start.mutate({ branch: chosenBranch, category })
                   : undefined
               }
+              aiReview={aiReview}
+              onRunAiSecurity={
+                allowed && chosenBranch
+                  ? () =>
+                      start.mutate({ branch: chosenBranch, scanner: 'strix' })
+                  : undefined
+              }
+              aiRunPending={aiRunning || aiQueuing}
               runPending={start.isPending}
             />
           )}
@@ -737,8 +992,7 @@ export function RepositoryHealth({
               >
                 <TabsList aria-label='Repository health details'>
                   <TabsTrigger value='findings' disabled={!report || active}>
-                    Findings{' '}
-                    {report && !active ? `(${report.findings.length})` : ''}
+                    Findings {report && !active ? `(${findingCount})` : ''}
                   </TabsTrigger>
                   <TabsTrigger value='history'>
                     Assessment history ({data!.total})
@@ -762,7 +1016,7 @@ export function RepositoryHealth({
                           </div>
                           {findingsAvailable && (
                             <span className='text-xs text-muted-foreground'>
-                              {report.findings.length} reported
+                              {findingCount} reported
                             </span>
                           )}
                         </div>
@@ -770,13 +1024,14 @@ export function RepositoryHealth({
                           Open an issue to inspect its rule and exact source
                           location.
                         </CardDescription>
-                        {!!report.findings.length && (
+                        {!!healthFindingCount(report) && (
                           <div className='flex flex-wrap gap-2'>
                             <Input
                               className='min-w-0 flex-1 sm:max-w-sm'
                               value={search}
                               placeholder='Search findings or files…'
                               aria-label='Search health findings'
+                              maxLength={200}
                               onChange={(e) => {
                                 setSearch(e.target.value)
                               }}
@@ -811,9 +1066,34 @@ export function RepositoryHealth({
                           </div>
                         )}
                       </CardHeader>
-                      {rows.length ? (
+                      {findingsQuery.isError ? (
+                        <div
+                          role='alert'
+                          className='space-y-3 border-t p-5 text-sm'
+                        >
+                          <p>{findingsQuery.error.message}</p>
+                          <Button
+                            variant='outline'
+                            size='sm'
+                            onClick={() => void findingsQuery.refetch()}
+                          >
+                            Retry loading findings
+                          </Button>
+                        </div>
+                      ) : findingsQuery.isFetching ? (
+                        <p
+                          role='status'
+                          className='flex items-center gap-2 border-t p-5 text-sm text-muted-foreground'
+                        >
+                          <LoaderCircle
+                            className='size-4 animate-spin motion-reduce:animate-none'
+                            aria-hidden='true'
+                          />
+                          Loading findings…
+                        </p>
+                      ) : rows.length ? (
                         <div className='overflow-x-auto border-t'>
-                          <Table>
+                          <Table pagination={false}>
                             <TableHeader>
                               <TableRow>
                                 <TableHead className='pl-5'>
@@ -835,7 +1115,7 @@ export function RepositoryHealth({
                                       search={{
                                         origin: 'health',
                                         repository: repositoryId,
-                                        health: row.id,
+                                        health: f.assessmentId ?? row.id,
                                       }}
                                       className='text-left text-sm font-medium hover:text-primary hover:underline focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-ring'
                                     >
@@ -850,6 +1130,11 @@ export function RepositoryHealth({
                                     <p className='mt-1 text-xs text-muted-foreground'>
                                       {f.ruleId ?? f.checkId}
                                     </p>
+                                    {f.evidence === 'AI_REPORTED' && (
+                                      <StatusBadge tone='warning' compact>
+                                        Needs review
+                                      </StatusBadge>
+                                    )}
                                   </TableCell>
                                   <TableCell className='pt-4 pr-5 align-top'>
                                     <StatusBadge tone={healthTone(f.severity)}>
@@ -858,7 +1143,7 @@ export function RepositoryHealth({
                                   </TableCell>
                                   <TableCell className='pt-4 align-top text-xs'>
                                     <ResultTimestamp
-                                      value={row.finishedAt}
+                                      value={f.assessedAt ?? row.finishedAt}
                                       stacked
                                     />
                                   </TableCell>
@@ -887,6 +1172,22 @@ export function RepositoryHealth({
                           </p>
                         </div>
                       )}
+                      {report.mode === 'EXECUTED' &&
+                        !findingsQuery.isError &&
+                        findingsQuery.data && (
+                          <TablePagination
+                            page={findingsPage}
+                            pageSize={findingsPageSize}
+                            total={findingsQuery.data.total}
+                            onPageChange={(next) =>
+                              setFindingsPage({
+                                scope: findingsScope,
+                                page: next,
+                              })
+                            }
+                            onPageSizeChange={setFindingsPageSize}
+                          />
+                        )}
                     </Card>
                   )}
                   {data!.trend && (
@@ -933,13 +1234,19 @@ export function RepositoryHealth({
                                     : 'Commit not pinned yet')}
                               </code>
                               <ResultTimestamp value={h.finishedAt} />
-                              {h.category && (
-                                <span>
-                                  {h.category === 'coverage'
-                                    ? 'Tests and coverage'
-                                    : h.category}{' '}
-                                  only
-                                </span>
+                              {h.includeAiSecurity ? (
+                                <span>AI review requested</span>
+                              ) : h.scanner === 'strix' ? (
+                                <span>AI security review</span>
+                              ) : (
+                                h.category && (
+                                  <span>
+                                    {h.category === 'coverage'
+                                      ? 'Tests and coverage'
+                                      : h.category}{' '}
+                                    only
+                                  </span>
+                                )
                               )}
                             </span>
                             {h.state === 'FAILED' && (

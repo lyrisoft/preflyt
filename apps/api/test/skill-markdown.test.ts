@@ -5,6 +5,7 @@ import {
 } from "../src/intelligence/skill-markdown.js";
 import {
   skillDigest,
+  validateSkill,
   skillTemplates,
 } from "../src/intelligence/review-skills.js";
 const minimal =
@@ -63,14 +64,44 @@ it.each([
   ).toThrow("valid YAML header");
 });
 it("bounds files by UTF-8 bytes and preserves instruction-only content", () => {
-  expect(() => parseSkillMarkdown(minimal + "🔎".repeat(8192))).toThrow(
-    "32 KiB",
+  expect(() => parseSkillMarkdown(minimal + "🔎".repeat(32768))).toThrow(
+    "128 KiB",
   );
-  expect(() => parseSkillMarkdown(minimal + "x".repeat(6000))).toThrow("6,000");
+  expect(() => parseSkillMarkdown(minimal + "x".repeat(24000))).toThrow(
+    "Instructions: maximum 24,000",
+  );
   expect(() => parseSkillMarkdown("# No header")).toThrow("YAML header");
   expect(() =>
     parseSkillMarkdown(
       minimal.replace("Cite evidence.", "Cite\u0000evidence."),
     ),
-  ).toThrow("valid skill");
+  ).toThrow("Instructions: unsupported control characters");
+});
+
+it("accepts longer descriptions and instructions without changing their content", () => {
+  const skill = {
+    ...skillTemplates[0]!,
+    description: "d".repeat(457),
+    instructions: "Review evidence.\n".repeat(800) + "END OF COMPLETE SKILL",
+  };
+  const parsed = parseSkillMarkdown(exportSkillMarkdown(skill));
+  expect(parsed.description).toBe(skill.description);
+  expect(parsed.instructions).toBe(skill.instructions);
+  expect(skillDigest(parsed)).toBe(skillDigest(skill));
+});
+it("reports all invalid fields with exact counts, without echoing their contents", () => {
+  const markdown = `---\nname: Review\ndescription: ${"d".repeat(2001)}\n---\n${"x".repeat(24001)}`;
+  expect(() => parseSkillMarkdown(markdown)).toThrow(
+    "Description: maximum 2,000 characters; received 2,001. Instructions: maximum 24,000 characters; received 24,001.",
+  );
+});
+it("round-trips skills at the new exact boundaries despite Markdown separator whitespace", () => {
+  const skill = {
+    ...skillTemplates[0]!,
+    description: "d".repeat(2000),
+    instructions: "x".repeat(24000),
+  };
+  expect(parseSkillMarkdown(exportSkillMarkdown(skill))).toEqual(
+    validateSkill(skill),
+  );
 });

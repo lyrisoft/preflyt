@@ -37,7 +37,7 @@ beforeAll(async()=>{
  fixture=await disposableDatabase('health')
  app=await NestFactory.create({module:class TestHealthModule{},controllers:[RepositoryHealthController],providers:[
   SessionGuard,{provide:AuthorizationService,useValue:new AuthorizationService(fixture.prisma)},
-  {provide:RepositoryHealthService,useFactory:()=>({hotspotReview:(...args:any[])=>service.hotspotReview(...args as [any,any,any,any]),saveHotspotReview:(...args:any[])=>service.saveHotspotReview(...args as [any,any,any,any,any]),get:(...args:any[])=>service.get(...args as [any,any,any,any,any]),freshness:(...args:any[])=>service.freshness(...args as [any,any,any]),start:(...args:any[])=>service.start(...args as [any,any,any]),cancel:(...args:any[])=>service.cancel(...args as [any,any,any]),source:(...args:any[])=>service.source(...args as [any,any,any,any]),portfolio:(...args:any[])=>service.portfolio(...args as [any,any,any,any,any])})},
+  {provide:RepositoryHealthService,useFactory:()=>({findings:(...args:any[])=>service.findings(...args as [any,any,any,any]),findingDetail:(...args:any[])=>service.findingDetail(...args as [any,any,any,any]),hotspotReview:(...args:any[])=>service.hotspotReview(...args as [any,any,any,any]),saveHotspotReview:(...args:any[])=>service.saveHotspotReview(...args as [any,any,any,any,any]),get:(...args:any[])=>service.get(...args as [any,any,any,any,any]),freshness:(...args:any[])=>service.freshness(...args as [any,any,any]),start:(...args:any[])=>service.start(...args as [any,any,any]),cancel:(...args:any[])=>service.cancel(...args as [any,any,any]),source:(...args:any[])=>service.source(...args as [any,any,any,any]),portfolio:(...args:any[])=>service.portfolio(...args as [any,any,any,any,any])})},
   {provide:AuthService,useValue:{sessionCookieName:'health.sid',currentSession:async(token:string)=>({owner,developer,outsider} as any)[token]??{authenticated:false},assertOrigin:(origin:string)=>{if(origin!=='http://localhost:5173')throw new ForbiddenException()}}}
  ]},{logger:false})
  app.use(cookieParser());await app.init()
@@ -58,6 +58,45 @@ beforeEach(async()=>{
  provider.savedDisplay.mockResolvedValue({head:sha,checkedAt:new Date().toISOString()});provider.verifyReadinessBranch.mockResolvedValue(sha);runtime.status.mockResolvedValue({executionAvailable:false,reason:'REVIEW_REQUIRED'})
  vi.stubEnv('NOTIFICATIONS_ENABLED','true');vi.stubEnv('NATIVE_TOOL_REVIEWS','[]')
  service=new RepositoryHealthService(db,new AuthorizationService(db),provider as any,runtime as any,new FindingSourceStore(db,provider as any))
+})
+it('pages findings in SQL, keeps summaries and comparisons complete, and loads guidance only for the opened finding',async()=>{
+ const db=fixture.prisma, first=await service.initial(owner.identityId,'51');await service.process(first.id)
+ const stored=await db.repositoryHealthAssessment.findUniqueOrThrow({where:{id:first.id}})
+ const findings=Array.from({length:125},(_,i)=>({fingerprint:i.toString(16).padStart(64,'0'),category:'reliability',checkId:'quality.reliability',evidence:'ANALYZER_REPORTED',severity:i%2?'high':'medium',title:i===64?'Literal %_needle':'Finding '+i,path:'file-'+i+'.ts',line:i+1,ruleId:'preflyt-js-async-promise-executor',suppressed:false,guidance:{version:1,source:'PREFLYT_RULE_GUIDANCE',why:'Saved explanation '+i,fix:'x'.repeat(5000)},reportGuidance:{version:1,source:'ANALYZER_REPORT',advice:'y'.repeat(2000)}}))
+ const report={...(stored.report as any),mode:'EXECUTED',completeness:'COMPLETE',comparisonKey:'same',analyses:[{id:'quality.reliability',title:'Reliability',state:'FAIL',reason:'FINDINGS_REPORTED',findingsRetained:125,findingsReported:125}],findings}
+ await db.repositoryHealthAssessment.update({where:{id:first.id},data:{report:{...report,findings:findings.slice(0,2)},createdAt:new Date(Date.now()-10000),finishedAt:new Date(Date.now()-10000)}})
+ const current=await db.repositoryHealthAssessment.create({data:{repositoryId:repoId,organizationId:owner.organizationId!,actorId:owner.identityId,branch:'development',targetRevision:1,requestKey:randomUUID(),sourceSha:sha,state:'COMPLETED',report,finishedAt:new Date()}})
+ const get=()=>request(app.getHttpServer()).get(`/github/repositories/51/health?assessment=${current.id}`).set('Cookie','health.sid=owner')
+ const response=await get();expect(response.status).toBe(200)
+ expect(response.body.assessment.report.findings).toEqual([])
+ expect(response.body.assessment.report.findingSummary.total).toBe(125)
+ expect(response.body.assessment.overallHealth.status).toBe('UNHEALTHY')
+ expect(response.body.categoryResults.reliability.value).toBe('125')
+ expect(response.body.timeline.map((p:any)=>p.findings)).toEqual([2,125])
+ expect(response.body.trend).toEqual({introduced:123,noLongerReported:0})
+ expect(Buffer.byteLength(response.text)).toBeLessThan(15000)
+ expect(response.text).not.toContain('Saved explanation')
+ const path=`/github/repositories/51/health/${current.id}/findings`
+ const read=(query='',actor='owner')=>request(app.getHttpServer()).get(path+query).set('Cookie','health.sid='+actor)
+ await request(app.getHttpServer()).get(path).expect(401)
+ const page=await read('?page=2&pageSize=25');expect(page.status).toBe(200)
+ expect(page.body).toMatchObject({total:125,page:2,pageSize:25,assessmentId:current.id,sourceSha:sha})
+ expect(page.body.rows.map((f:any)=>f.fingerprint)).toEqual(findings.slice(25,50).map(f=>f.fingerprint))
+ expect(page.text).not.toContain('guidance');expect(page.text).not.toContain('reportGuidance');expect(page.text).not.toContain('referenceGuidance')
+ const high=await read('?severity=high&pageSize=100');expect(high.body.total).toBe(62)
+ const literal=await read('?q=%25_needle');expect(literal.body.total).toBe(1);expect(literal.body.rows[0].fingerprint).toBe(findings[64].fingerprint)
+ const empty=await read('?page=100');expect(empty.body).toMatchObject({rows:[],total:125})
+ for(const query of ['?page=0','?pageSize=1000','?severity=invalid','?page=1.5','?q='+('x'.repeat(201))]) await read(query).expect(400)
+ await read('','outsider').expect(403)
+ const detail=await request(app.getHttpServer()).get(path+'/'+findings[64].fingerprint).set('Cookie','health.sid=developer').expect(200)
+ expect(detail.body.assessment.report.findings).toHaveLength(1)
+ expect(detail.body.assessment.report.findings[0]).toMatchObject({fingerprint:findings[64].fingerprint,guidance:{why:'Saved explanation 64'},referenceGuidance:{}})
+ expect(detail.text).not.toContain('Saved explanation 63')
+ await request(app.getHttpServer()).get(path+'/'+('f'.repeat(64))).set('Cookie','health.sid=owner').expect(404)
+ await request(app.getHttpServer()).get(path+'/'+findings[64].fingerprint).set('Cookie','health.sid=outsider').expect(403)
+ expect((await db.repositoryHealthAssessment.findUniqueOrThrow({where:{id:current.id}})).report).toEqual(report)
+ await db.repositoryGrant.deleteMany({where:{repositoryId:repoId}})
+ await read('','developer').expect(403)
 })
 it('displays compressed CI coverage through storage and Health only for its server-verified commit and attempt',async()=>{
  const db=fixture.prisma,scan=await service.initial(owner.identityId,'51')
@@ -118,7 +157,8 @@ it('automatically scans the selected repository without standards, CI or manual 
  await fixture.prisma.repositoryHealthAssessment.update({where:{id:scan.id},data:{leaseUntil:null}})
  await service.process(scan.id)
  const result=await service.get(owner,'51')
- expect(result.assessment).toMatchObject({state:'COMPLETED',report:{mode:'EXECUTED',findings:[expect.objectContaining({severity:'high',path:'app.ts',line:1})]}})
+ expect(result.assessment).toMatchObject({state:'COMPLETED',report:{mode:'EXECUTED',findings:[],findingSummary:{total:1}}})
+ expect((await service.findings(owner,'51',result.assessment!.id,{})).rows).toEqual([expect.objectContaining({severity:'high',path:'app.ts',line:1})])
  admitted=false
  scanner.call.mockClear()
  const security=await service.start(owner,'51',{requestKey:randomUUID(),category:'security'})
@@ -191,9 +231,9 @@ it.each(['secrets.scan','quality.reliability','quality.maintainability','quality
  expect(verifyNativeReceipt(signNativeReceipt({...receipt,checks:[{...receipt.checks[0],findings:[{...f,category:category==='security'?'reliability':'security'}]}]},key,pub),expected)).toBeNull()
  const sink=new NativeResultService(db,new AuthorizationService(db),{createNative:vi.fn()} as any)
  await sink.complete(native.id,signNativeReceipt(receipt,key,pub));await db.repositoryHealthAssessment.update({where:{id:first.id},data:{leaseUntil:null}});await service.process(first.id)
- const report=(await service.get(owner,'51')).assessment!;expect(report.report?.findings[0]).toMatchObject({path:'app.ts',line:1,category});expect(report.report?.completeness).toBe('PARTIAL');expect(await db.commitAssessment.count()).toBe(0);expect(await db.gitHubCheckPublication.count()).toBe(0)
+ const report=(await service.get(owner,'51')).assessment!;const finding=(await service.findings(owner,'51',report.id,{})).rows[0];expect(finding).toMatchObject({path:'app.ts',line:1,category});expect(report.report?.completeness).toBe('PARTIAL');expect(await db.commitAssessment.count()).toBe(0);expect(await db.gitHubCheckPublication.count()).toBe(0)
  if(ruleId==='quality.duplication') expect(report.report?.measurements?.duplication).toMatchObject({analyzedLines:100,duplicatedLines:20})
- if(ruleId==='secrets.scan') { provider.readHealthSource.mockResolvedValue('sensitive fixture\ncontext'); await service.source(owner,'51',first.id,report.report!.findings[0].fingerprint); await new FindingSourceStore(fixture.prisma,provider as any).reconcile(); const excerpt=await service.source(owner,'51',first.id,report.report!.findings[0].fingerprint);expect(excerpt.lines[0]?.text).toBe('[Potential credential redacted]');expect(provider.readHealthSource).toHaveBeenCalled() }
+ if(ruleId==='secrets.scan') { provider.readHealthSource.mockResolvedValue('sensitive fixture\ncontext'); await service.source(owner,'51',first.id,finding.fingerprint); await new FindingSourceStore(fixture.prisma,provider as any).reconcile(); const excerpt=await service.source(owner,'51',first.id,finding.fingerprint);expect(excerpt.lines[0]?.text).toBe('[Potential credential redacted]');expect(provider.readHealthSource).toHaveBeenCalled() }
  expect(await db.notificationEvent.count()).toBe(1)
 })
 
@@ -648,3 +688,44 @@ it('rejects tampered branch payloads, supplied invalid proofs and failed report 
   await db.repositoryBranchRun.deleteMany();await db.gatePolicyRevision.deleteMany();await db.readinessAutomation.deleteMany();await db.importedCiEvidence.deleteMany();await db.gitHubWebhookDelivery.deleteMany();
  }
 });
+
+it('preserves an explicit AI choice through HTTP validation and records a skipped AI review when no runner is configured',async()=>{
+ const response=await request(app.getHttpServer()).post('/github/repositories/51/health').set('Cookie','health.sid=owner').set('Origin','http://localhost:5173').send({branch:'development',requestKey:randomUUID(),includeAiSecurity:true}).expect(201)
+ expect(response.body.includeAiSecurity).toBe(true)
+ expect(response.body.aiReviewId).toBeTruthy()
+ const child=await fixture.prisma.repositoryHealthAssessment.findUniqueOrThrow({where:{id:response.body.aiReviewId}})
+ expect(child).toMatchObject({parentId:response.body.id,state:'SKIPPED',reason:'AI_SECURITY_UNAVAILABLE'})
+ const audit=await fixture.prisma.auditEvent.findFirstOrThrow({where:{event:'repository.health.requested',metadata:{path:['assessmentId'],equals:response.body.id}}})
+ expect(audit.metadata).toMatchObject({includeAiSecurity:true,aiReviewId:child.id,aiReviewState:'SKIPPED'})
+})
+
+it('merges same-commit AI security findings into Security without changing deterministic health',async()=>{
+ const db=fixture.prisma,first=await service.initial(owner.identityId,'51');await service.process(first.id)
+ const stored=await db.repositoryHealthAssessment.findUniqueOrThrow({where:{id:first.id}})
+ const finding={fingerprint:'c'.repeat(64),category:'security',checkId:'security.sast',evidence:'ANALYZER_REPORTED',severity:'high',title:'Scanner issue',path:'app.ts',line:1,ruleId:'fixture'}
+ const report={...(stored.report as any),mode:'EXECUTED',completeness:'COMPLETE',selection:'security',analyses:[{id:'security.sast',title:'SAST',state:'FAIL',reason:'FINDINGS_REPORTED',findingsRetained:1,findingsReported:1}],findings:[finding]}
+ await db.repositoryHealthAssessment.update({where:{id:first.id},data:{report}})
+ const makeAi=(branch:string,sourceSha:string)=>db.repositoryHealthAssessment.create({data:{repositoryId:repoId,organizationId:owner.organizationId!,actorId:owner.identityId,parentId:first.id,branch,targetRevision:1,requestKey:randomUUID(),sourceSha,state:'COMPLETED',finishedAt:new Date(),report:{...report,analyses:[{id:'security.strix',state:'FAIL',findingsRetained:1}],findings:[{...finding,fingerprint:'d'.repeat(64),checkId:'security.strix',evidence:'AI_REPORTED'}]}}})
+ const deterministicHealth=(await service.get(owner,'51',first.id)).assessment?.overallHealth
+ const ai=await makeAi('development',sha)
+ await makeAi('other',sha);await makeAi('development','b'.repeat(40))
+ const result=await service.get(owner,'51')
+ expect(result.categoryResults.security).toMatchObject({value:'2',standardFindings:1,aiFindings:1,assessmentIds:[first.id,ai.id]})
+ expect(result.assessment?.overallHealth).toEqual(deterministicHealth)
+ expect(result.assessment?.report?.findingSummary?.total).toBe(1)
+ expect(result.timeline.at(-1)?.categories.security).toMatchObject({findings:2,bySeverity:{high:2}})
+ const combined=await service.findings(owner,'51',first.id,{reports:[first.id,ai.id].join(','),pageSize:'10'})
+ expect(combined.total).toBe(2);expect(combined.unfilteredTotal).toBe(2)
+ expect(combined.rows).toEqual(expect.arrayContaining([expect.objectContaining({assessmentId:ai.id,evidence:'AI_REPORTED',fingerprint:'d'.repeat(64)})]))
+ const search=await service.findings(owner,'51',first.id,{reports:[first.id,ai.id].join(','),q:'does not exist'})
+ expect(search.total).toBe(0);expect(search.unfilteredTotal).toBe(2)
+ const wrong=await db.repositoryHealthAssessment.findFirstOrThrow({where:{branch:'other'}})
+ await expect(service.findings(owner,'51',first.id,{reports:[first.id,wrong.id].join(',')})).rejects.toThrow('unavailable')
+ await expect(service.findings(owner,'51',first.id,{reports:ai.id})).rejects.toThrow('include the displayed')
+
+ expect((await service.get(owner,'51',first.id)).categoryResults.security).toMatchObject({value:'1',aiFindings:0})
+ expect((await service.get(owner,'51',first.id)).timeline.some(p=>p.id===ai.id)).toBe(false)
+ const aiSaved=await db.repositoryHealthAssessment.findUniqueOrThrow({where:{id:ai.id}})
+ await db.repositoryHealthAssessment.update({where:{id:ai.id},data:{state:'FAILED',report:{...(aiSaved.report as any),completeness:'PARTIAL'}}})
+ expect((await service.get(owner,'51')).categoryResults.security).toMatchObject({value:'≥2',aiFindings:1,assessmentIds:[first.id,ai.id]})
+})

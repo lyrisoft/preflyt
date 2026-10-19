@@ -13,14 +13,14 @@ This is an optional Cloud workstream, not a new P0–P12 phase or a Community re
 | Findings, guidance and deterministic assessments | Existing Community capabilities; reuse their authorized evidence contracts. |
 | Advisory AI PR review | Existing; a review does not authorize a fix, execution or merge. |
 | Reviewed CI setup PR | Existing, user-triggered workflow setup; not a general code repair agent. |
-| Repository context outside the PR diff | Planned Cloud-only P4.RI / issue #97. |
+| Repository context outside the PR diff | Planned open-source P4.RI foundation / issue #97; edition revised 18 October 2026. |
 | Investigation → validated patch → draft fix PR | Planned Cloud capability described here; not shipped. |
 
 ## User workflow
 
 1. An administrator enables remediation for selected repositories and defines permissions, allowed paths, execution policy and spending limits. The default is disabled.
 2. A user selects **Investigate** on a finding, failed check or existing PR, including a Dependabot PR. Pin the repository ID, source commit, assessment and originating PR when applicable.
-3. Preflyt presents an evidence-linked explanation, uncertainty, affected files, proposed change and validation plan. Repository-wide context requires the separately authorized Cloud repository-intelligence capability.
+3. Preflyt presents an evidence-linked explanation, uncertainty, affected files, proposed change and validation plan. Repository-wide context requires the separately enabled repository-intelligence capability in Community Edition.
 4. An authorized user approves the bounded fix attempt. A separate isolated job proposes and validates the patch. Investigation approval alone does not grant repository write access.
 5. Preflyt shows the diff, original failure evidence, applicable standards and before/after check results. Missing results remain incomplete; failed reproduction or unavailable execution is stated explicitly.
 6. The user selects **Create draft PR** for that exact patch and target. A restricted Git writer creates a dedicated branch and one draft PR. It does not edit the originating Dependabot branch or push to a protected branch.

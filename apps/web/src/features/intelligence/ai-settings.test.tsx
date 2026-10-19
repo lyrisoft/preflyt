@@ -30,8 +30,18 @@ vi.mock('../repositories/governance-api', () => ({
   governanceRequest: (...args: unknown[]) => state.save(...args),
 }))
 vi.mock('@tanstack/react-router', () => ({
-  Link: ({ children, to }: { children: React.ReactNode; to: string }) => (
-    <a href={to}>{children}</a>
+  Link: ({
+    children,
+    to,
+    search,
+  }: {
+    children: React.ReactNode
+    to: string
+    search?: Record<string, string>
+  }) => (
+    <a href={to + (search ? '?' + new URLSearchParams(search) : '')}>
+      {children}
+    </a>
   ),
 }))
 vi.mock('@/components/layout/app-header', () => ({ AppHeader: () => null }))
@@ -46,6 +56,17 @@ const configuration = () => ({
   providers: [],
   routes: [],
   stages: ['pull_request'],
+  vaptLimits: {
+    maxInputTokens: 4000000,
+    maxOutputTokens: 131072,
+    maxModelCalls: 80,
+    revision: 3,
+  },
+  vaptLimitBounds: {
+    maxInputTokens: { min: 100000, max: 100000000 },
+    maxOutputTokens: { min: 8192, max: 2000000 },
+    maxModelCalls: { min: 1, max: 1000 },
+  },
   presets: [
     {
       id: 'openai',
@@ -75,6 +96,124 @@ it('keeps connections and routing separate without promising inference', () => {
   state.query = { data: { ...configuration(), executionAvailable: true } }
   expect(renderToStaticMarkup(<AiSettingsPage />)).toContain('Add model')
   expect(html).not.toContain('Explain findings')
+})
+it('links each connected model to its own details page', async () => {
+  const id = '11111111-1111-4111-8111-111111111111'
+  state.query = {
+    ...state.query,
+    data: {
+      ...configuration(),
+      providers: [
+        {
+          id,
+          name: 'My model',
+          modelId: 'model-api-id',
+          endpoint: { baseUrl: 'https://model.example.invalid' },
+          enabled: true,
+          approved: true,
+          testStatus: 'CONNECTED',
+        },
+      ],
+    },
+  }
+  const view = await render(<AiSettingsPage />)
+  await expect
+    .element(view.getByRole('link', { name: 'My model', exact: true }))
+    .toHaveAttribute('href', `/intelligence?model=${id}`)
+  expect(validateIntelligenceSearch({ model: id })).toEqual({
+    tab: 'connections',
+    model: id,
+  })
+})
+it('edits cumulative Security review limits independently of model routing and sends the saved revision', async () => {
+  const view = await render(<AiSettingsPage tab='vapt-limits' />)
+  await expect
+    .element(view.getByRole('form', { name: 'AI security review limits' }))
+    .toBeVisible()
+  await view
+    .getByRole('textbox', { name: 'Input tokens per review' })
+    .fill('12000000')
+  await view
+    .getByRole('textbox', { name: 'Output tokens per review' })
+    .fill('250000')
+  await view
+    .getByRole('textbox', { name: 'Model requests per review' })
+    .fill('150')
+  await view.getByRole('button', { name: 'Save review limits' }).click()
+  expect(state.save).toHaveBeenCalledWith('/ai/configuration/vapt-limits', {
+    maxInputTokens: 12000000,
+    maxOutputTokens: 250000,
+    maxModelCalls: 150,
+    expectedRevision: 3,
+  })
+  await expect
+    .element(view.getByText('Limits saved for new scans.'))
+    .toBeVisible()
+  expect(state.save).toHaveBeenCalledTimes(1)
+  expect(validateIntelligenceSearch({ tab: 'vapt-limits' })).toEqual({
+    tab: 'vapt-limits',
+  })
+})
+it('keeps edited Security review limits visible when another administrator has changed them', async () => {
+  state.save.mockRejectedValueOnce(
+    new Error('Security review limits changed. Refresh before saving.')
+  )
+  const view = await render(<AiSettingsPage tab='vapt-limits' />)
+  await view
+    .getByRole('textbox', { name: 'Input tokens per review' })
+    .fill('9000000')
+  await view.getByRole('button', { name: 'Save review limits' }).click()
+  await expect
+    .element(view.getByRole('alert'))
+    .toHaveTextContent('Security review limits changed. Refresh before saving.')
+  await expect
+    .element(view.getByRole('textbox', { name: 'Input tokens per review' }))
+    .toHaveValue('9,000,000')
+})
+it('accepts grouped numbers and rejects malformed or fractional limits', async () => {
+  const view = await render(<AiSettingsPage tab='vapt-limits' />)
+  await expect
+    .element(view.getByRole('textbox', { name: 'Input tokens per review' }))
+    .toHaveValue('4,000,000')
+  for (const value of ['1,50', '150.5']) {
+    await view
+      .getByRole('textbox', { name: 'Model requests per review' })
+      .fill(value)
+    await view.getByRole('button', { name: 'Save review limits' }).click()
+    expect(state.save).not.toHaveBeenCalled()
+  }
+  await view
+    .getByRole('textbox', { name: 'Model requests per review' })
+    .fill('150')
+  await view
+    .getByRole('textbox', { name: 'Input tokens per review' })
+    .fill('12,000,000')
+  await view.getByRole('button', { name: 'Save review limits' }).click()
+  expect(state.save).toHaveBeenCalledWith(
+    '/ai/configuration/vapt-limits',
+    expect.objectContaining({ maxInputTokens: 12000000, maxModelCalls: 150 })
+  )
+})
+it('prevents invalid Security review limits and keeps the form usable at 320px in both themes', async () => {
+  await page.viewport(320, 900)
+  const view = await render(<AiSettingsPage tab='vapt-limits' />)
+  try {
+    for (const theme of ['light', 'dark']) {
+      document.documentElement.classList.toggle('dark', theme === 'dark')
+      await expect
+        .element(view.getByRole('textbox', { name: 'Input tokens per review' }))
+        .toBeVisible()
+      expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(320)
+    }
+    await view
+      .getByRole('textbox', { name: 'Input tokens per review' })
+      .fill('0')
+    await view.getByRole('button', { name: 'Save review limits' }).click()
+    expect(state.save).not.toHaveBeenCalled()
+  } finally {
+    document.documentElement.classList.remove('dark')
+    await page.viewport(1280, 900)
+  }
 })
 it('shows built-in providers directly and opens setup with only model and key fields', async () => {
   const view = await render(<AiSettingsPage />)
@@ -691,4 +830,37 @@ it('shows beta beside both Intelligence and Skills page titles', async () => {
   await expect
     .element(skills.getByRole('heading', { name: 'Skills', exact: true }))
     .toBeVisible()
+})
+
+it('lets admins choose a dedicated VAPT model route independently of Repository reviews', async () => {
+  state.query = {
+    data: {
+      ...configuration(),
+      executionAvailable: true,
+      stages: ['repository', 'vapt'],
+    },
+  }
+  const view = await render(<AiSettingsPage tab='routing' />)
+  await view.getByText('Stage overrides (optional)', { exact: true }).click()
+  const row = view
+    .getByText('AI security review', { exact: true })
+    .element()
+    .closest('div.flex')!
+  expect(row.textContent).toContain('Uses default model')
+  const edit = Array.from(row.querySelectorAll('button')).find(
+    (b) => b.textContent === 'Edit'
+  )!
+  edit.click()
+  await expect
+    .element(
+      view.getByRole('heading', {
+        name: 'AI security review model routing',
+      })
+    )
+    .toBeVisible()
+  await view.getByRole('button', { name: 'Save settings', exact: true }).click()
+  expect(state.save).toHaveBeenCalledWith(
+    '/ai/configuration/routes/vapt',
+    expect.objectContaining({ expectedRevision: 0 })
+  )
 })

@@ -54,6 +54,7 @@ import {
 import { SkillUpload, MarkdownInstructions } from './skill-markdown'
 import {
   downloadSkillMarkdown,
+  skillLimits,
   type SkillDocument,
 } from './skill-markdown-file'
 import { UpstreamSkill } from './upstream-skill'
@@ -901,16 +902,20 @@ function SkillForm({
                 'description',
                 'Description',
                 'Explain failed checks and missing evidence',
-                400,
+                skillLimits.description,
               ],
               ['source', 'Source', 'Organization-authored instructions', 300],
               ['license', 'License', 'Organization-owned or MIT', 100],
             ] as const
           ).map(([key, label, placeholder, maxLength]) => (
-            <label key={key} className='block space-y-2 text-sm'>
-              <span>{label}</span>
+            <div key={key} className='space-y-2 text-sm'>
+              <label htmlFor={`skill-${key}`}>{label}</label>
               <Input
+                id={`skill-${key}`}
                 name={key}
+                aria-describedby={
+                  key === 'description' ? 'skill-description-count' : undefined
+                }
                 placeholder={placeholder}
                 required
                 maxLength={maxLength}
@@ -918,7 +923,16 @@ function SkillForm({
                 disabled={busy}
                 onChange={(e) => field(key, e.target.value)}
               />
-            </label>
+              {key === 'description' && (
+                <span
+                  id='skill-description-count'
+                  className='block text-xs text-muted-foreground'
+                >
+                  {draft.description.length.toLocaleString()}/
+                  {skillLimits.description.toLocaleString()} characters
+                </span>
+              )}
+            </div>
           ))}
           {(['languages', 'frameworks'] as const).map((key) => (
             <label key={key} className='block space-y-2 text-sm'>
@@ -1023,7 +1037,7 @@ function SkillForm({
                   '# Review instructions\n\n- Review the supplied evidence.\n- Cite the check behind each finding.'
                 }
                 className='min-h-72 flex-1 resize-none font-mono text-sm'
-                maxLength={6000}
+                maxLength={skillLimits.instructions}
                 value={draft.instructions}
                 disabled={busy}
                 onChange={(e) => field('instructions', e.target.value)}
@@ -1045,7 +1059,8 @@ function SkillForm({
             </TabsContent>
           </Tabs>
           <p className='text-right text-xs text-muted-foreground'>
-            {draft.instructions.length.toLocaleString()}/6,000 characters
+            {draft.instructions.length.toLocaleString()}/
+            {skillLimits.instructions.toLocaleString()} characters
           </p>
         </div>
       </div>

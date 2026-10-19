@@ -30,6 +30,7 @@ it('distinguishes available plans from future offerings', async () => {
 })
 
 it('keeps success, failure, pending and inactive states consistent', () => {
+  expect(statusTones.skipped).toBe('neutral')
   expect(statusTones.updating).toBe('info')
   expect(statusTones['update failed']).toBe('error')
   expect(statusTones['earlier commit']).toBe('warning')
@@ -38,6 +39,7 @@ it('keeps success, failure, pending and inactive states consistent', () => {
   expect(statusTones['inspection complete']).toBe('success')
   expect(statusTones.approved).toBe('success')
   expect(statusTones['model unavailable']).toBe('error')
+  expect(statusTones['not tested']).toBe('neutral')
   expect(statusTones['update available']).toBe('warning')
   expect(statusTones['sync needed']).toBe('warning')
   expect(statusTones.running).toBe('info')
@@ -54,6 +56,13 @@ it('keeps success, failure, pending and inactive states consistent', () => {
 })
 
 it('preserves finding trust and gap semantics', () => {
+  expect(statusTones['needs review']).toBe('warning')
+  expect(statusTones['finding reported']).toBe('info')
+  expect(statusTones['no issue reported']).toBe('neutral')
+  expect(statusTones['concern ruled out']).toBe('neutral')
+  expect(statusTones['outside scope']).toBe('neutral')
+  expect(statusTones['not applicable']).toBe('neutral')
+  expect(statusTones['external report']).toBe('info')
   expect(statusTones.ignored).toBe('neutral')
   expect(statusTones.open).toBe('neutral')
   expect(statusTones.reported).toBe('neutral')
@@ -318,4 +327,12 @@ it('renders beta release maturity as a small raised italic yellow badge', async 
       'min-h-0'
     )
   await expect.element(view.getByText('beta')).not.toHaveClass('text-info-text')
+})
+
+it('keeps companion availability separate from review results', () => {
+  expect(statusTones.online).toBe('success')
+  expect(statusTones.offline).toBe('neutral')
+  expect(statusTones.disconnected).toBe('neutral')
+  expect(statusTones.completed).toBe('success')
+  expect(statusTones.running).toBe('info')
 })

@@ -3,6 +3,8 @@ import { ConflictException, ForbiddenException, Inject, Injectable } from '@nest
 import { PrismaService } from '../prisma/prisma.service.js'
 import type { FindingSourceExcerpt, Prisma } from '../generated/prisma/client.js'
 import { GitHubProviderService } from '../github/github-provider.service.js'
+import { createHash } from 'node:crypto'
+import type { NativeSourceBundle } from '../execution/native-source.js'
 import { digest } from '../assessments/assessment-digest.js'
 import { redactHealthSource } from '../health/health-report.js'
 import { sourceExcerpt } from './source-excerpt.js'
@@ -83,6 +85,25 @@ export class FindingSourceStore {
     // Only redacted, bounded excerpts are stored. The first verified snapshot wins.
     await this.db.findingSourceExcerpt.updateMany({ where: { id: row.id, contentHash: null }, data: { content: content as Prisma.InputJsonValue, contentHash: digest(content), capturedAt: new Date() } })
     return this.decode(await this.db.findingSourceExcerpt.findUniqueOrThrow({ where: { id: row.id } }))
+  }
+  /** Capture from the exact assessed upload; avoid another GitHub download and source-queue delay. */
+  async captureSnapshot(repositoryId:string, source:NativeSourceBundle, findings:SourceLocation[]) {
+    for(const finding of findings.slice(0,500)) {
+      const location=sourceLocation(repositoryId,source.sourceSha,finding,5)
+      if(!location)continue
+      const row=await this.db.findingSourceExcerpt.findUnique({where:{id:location.id}})
+      if(!row || row.contentHash)continue
+      const repo=await this.activeRepository(row)
+      if(String(repo.githubId)!==source.repositoryId)throw new ConflictException('Source repository mismatch')
+      const file=source.files.find(file=>file.path===location.path)
+      if(!file)continue
+      const bytes=Buffer.from(file.content,'base64')
+      if(bytes.length>2*1024*1024 || createHash('sha256').update(bytes).digest('hex')!==file.sha256)throw new ConflictException('Source content mismatch')
+      const content=sourceExcerpt(bytes.toString('utf8'),location.line,location.endLine,5)
+      if(location.version===SECRET_SOURCE_EXCERPT_VERSION)for(const line of content.lines)if(location.line!==null && line.number>=location.line && line.number<=(location.endLine??location.line))line.text='[Potential credential redacted]'
+      await this.activeRepository(row)
+      await this.db.findingSourceExcerpt.updateMany({where:{id:row.id,contentHash:null},data:{content:content as Prisma.InputJsonValue,contentHash:digest(content),capturedAt:new Date()}})
+    }
   }
   async reconcile() {
     const pending = await this.db.findingSourceExcerpt.findMany({ where: { version: { in: [SOURCE_EXCERPT_VERSION, SECRET_SOURCE_EXCERPT_VERSION] }, contentHash: null, attempts: { lt: 3 }, retryAfter: { lte: new Date() }, repository: { selected: true, available: true, installation: { active: true } } }, orderBy: { createdAt: 'asc' }, take: 10 })

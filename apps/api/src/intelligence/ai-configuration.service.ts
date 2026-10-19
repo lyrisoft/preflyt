@@ -1,4 +1,11 @@
 import { effectiveAiRoute } from "./effective-ai-route.js";
+import { modelDetails } from "./ai-model-details.js";
+import {
+  defaultVaptLimits,
+  vaptLimitBounds,
+  validVaptLimits,
+  type VaptLimits,
+} from "./vapt-limits.js";
 import { randomUUID, createHash } from "node:crypto";
 import {
   BadRequestException,
@@ -108,6 +115,9 @@ export class AiConfigurationService {
     const routes = await this.db.aiStageRoute.findMany({
       where: { organizationId: member.organizationId },
     });
+    const limits = await this.db.aiVaptSettings.findUnique({
+      where: { organizationId: member.organizationId },
+    });
     await this.access.requireOrganization(session, "ai.usage.read");
     return {
       enabled: true,
@@ -116,7 +126,85 @@ export class AiConfigurationService {
       routes: routes.map(publicRoute),
       stages: aiStages,
       presets: aiProviderPresets,
+      vaptLimits: limits
+        ? {
+            maxInputTokens: limits.maxInputTokens,
+            maxOutputTokens: limits.maxOutputTokens,
+            maxModelCalls: limits.maxModelCalls,
+            revision: limits.revision,
+          }
+        : { ...defaultVaptLimits, revision: 0 },
+      vaptLimitBounds,
     };
+  }
+  async saveVaptLimits(
+    session: AuthenticatedSession,
+    input: VaptLimits & { expectedRevision: number },
+  ) {
+    this.available();
+    const member = await this.access.requireOrganization(
+      session,
+      "ai.routing.manage",
+      true,
+    );
+    if (
+      !validVaptLimits(input) ||
+      !Number.isSafeInteger(input.expectedRevision) ||
+      input.expectedRevision < 0
+    )
+      throw new BadRequestException(
+        "Choose whole-number AI security review limits within the allowed ranges.",
+      );
+    try {
+      const saved = await this.db.$transaction(
+        async (tx) => {
+          await new AuthorizationService(
+            tx as PrismaService,
+          ).requireOrganization(session, "ai.routing.manage");
+          const previous = await tx.aiVaptSettings.findUnique({
+            where: { organizationId: member.organizationId },
+          });
+          if ((previous?.revision ?? 0) !== input.expectedRevision)
+            throw new ConflictException(
+              "AI security review limits changed. Refresh before saving.",
+            );
+          const data = {
+            maxInputTokens: input.maxInputTokens,
+            maxOutputTokens: input.maxOutputTokens,
+            maxModelCalls: input.maxModelCalls,
+            revision: (previous?.revision ?? 0) + 1,
+            updatedById: session.identityId,
+          };
+          const result = await tx.aiVaptSettings.upsert({
+            where: { organizationId: member.organizationId },
+            create: { organizationId: member.organizationId, ...data },
+            update: data,
+          });
+          await tx.auditEvent.create({
+            data: {
+              event: "ai.vapt-limits.saved",
+              actorId: session.identityId,
+              metadata: { organizationId: member.organizationId, ...data },
+            },
+          });
+          return {
+            maxInputTokens: result.maxInputTokens,
+            maxOutputTokens: result.maxOutputTokens,
+            maxModelCalls: result.maxModelCalls,
+            revision: result.revision,
+          };
+        },
+        { isolationLevel: "Serializable" },
+      );
+      await this.access.requireOrganization(session, "ai.routing.manage", true);
+      return saved;
+    } catch (error) {
+      this.concurrent(error);
+    }
+  }
+  async modelDetails(session: AuthenticatedSession, id: string, days=30, page=1, pageSize=10) {
+    this.available();
+    return modelDetails(this.db, this.access, session, id, days, page, pageSize);
   }
   async saveProvider(
     session: AuthenticatedSession,

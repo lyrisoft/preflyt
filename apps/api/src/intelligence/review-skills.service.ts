@@ -1,4 +1,4 @@
-import { preflytCiSetupSkill } from './preflyt-ci-setup-skill.js';
+import { preflytCiSetupSkill } from "./preflyt-ci-setup-skill.js";
 import { readUpstreamSkill } from "./upstream-skill.js";
 import { createHash, randomUUID } from "node:crypto";
 import {
@@ -19,7 +19,11 @@ import {
   validateSkill,
   type SkillManifest,
 } from "./review-skills.js";
-import { parseSkillMarkdown, exportSkillMarkdown } from "./skill-markdown.js";
+import {
+  parseSkillMarkdown,
+  exportSkillMarkdown,
+  SkillImportValidationError,
+} from "./skill-markdown.js";
 @Injectable()
 export class ReviewSkillsService {
   constructor(
@@ -48,15 +52,25 @@ export class ReviewSkillsService {
       context: "assessment_evidence",
     };
   }
-  async upstream(session: AuthenticatedSession, input: Parameters<typeof readUpstreamSkill>[0]) {
+  async upstream(
+    session: AuthenticatedSession,
+    input: Parameters<typeof readUpstreamSkill>[0],
+  ) {
     this.available();
-    await this.access.requireOrganization(session,"ai.skills.manage",true);
+    await this.access.requireOrganization(session, "ai.skills.manage", true);
     try {
-      const result=await readUpstreamSkill(input);
-      for (const id of result.manifest.repositories) await this.access.requireRepository(session,id,"ai.skills.manage");
-      await this.access.requireOrganization(session,"ai.skills.manage");
+      const result = await readUpstreamSkill(input);
+      for (const id of result.manifest.repositories)
+        await this.access.requireRepository(session, id, "ai.skills.manage");
+      await this.access.requireOrganization(session, "ai.skills.manage");
       return result;
-    } catch { throw new BadRequestException("Could not inspect the pinned skill and license. Check the public repository, commit and file paths."); }
+    } catch (error) {
+      if (error instanceof SkillImportValidationError)
+        throw new BadRequestException(error.message);
+      throw new BadRequestException(
+        "Could not inspect the pinned skill and license. Check the public repository, commit and file paths.",
+      );
+    }
   }
   async parseMarkdown(session: AuthenticatedSession, markdown: string) {
     this.available();
@@ -77,7 +91,8 @@ export class ReviewSkillsService {
   async builtinMarkdown(session: AuthenticatedSession, id: string) {
     await this.access.requireOrganization(session, "ai.skills.read");
     const skill = [preflytCiSetupSkill, ...skillTemplates].find(
-      (template) => template.id === (id === "github-actions" ? "preflyt-ci-setup" : id),
+      (template) =>
+        template.id === (id === "github-actions" ? "preflyt-ci-setup" : id),
     );
     if (!skill) throw new NotFoundException("Built-in skill unavailable");
     return exportSkillMarkdown(skill);
@@ -133,9 +148,9 @@ export class ReviewSkillsService {
     let manifest: SkillManifest;
     try {
       manifest = validateSkill(input);
-    } catch {
+    } catch (error) {
       throw new BadRequestException(
-        "Enter valid review instructions and provenance",
+        error instanceof Error ? error.message : "Invalid skill fields.",
       );
     }
     for (const id of manifest.repositories)

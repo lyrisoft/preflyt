@@ -368,6 +368,10 @@ export class AuthorizationService {
       await this.requireOrganization(session, 'assessment.read')
       return true
     }
+    if (path === '/finding-agents' || path.startsWith('/finding-agents/') || path === '/companions' || path.startsWith('/companions/') || path === '/mcp-connections' || path.startsWith('/mcp-connections/')) {
+      await this.requireOrganization(session, 'assessment.read')
+      return true
+    }
     if (path === '/github/health' && request.method === 'GET') {
       await this.requireOrganization(session, 'assessment.read')
       return true

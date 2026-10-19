@@ -38,9 +38,11 @@ CMD ["node", "node_modules/prisma/build/index.js", "migrate", "deploy"]
 
 FROM runtime-base AS runtime
 RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
+RUN install -d -o node -g node -m 0700 /var/lib/preflyt-health-sources
 WORKDIR /app
 COPY --from=build --chown=node:node /opt/api/ ./
 COPY --from=build --chown=node:node /workspace/apps/api/dist ./dist
+COPY --chown=node:node apps/api/resources/preflyt-companion.mjs ./resources/preflyt-companion.mjs
 ARG PREFLYT_BUILD_VERSION=development
 ARG PREFLYT_BUILD_SHA=unknown
 ENV PREFLYT_BUILD_VERSION=$PREFLYT_BUILD_VERSION PREFLYT_BUILD_SHA=$PREFLYT_BUILD_SHA

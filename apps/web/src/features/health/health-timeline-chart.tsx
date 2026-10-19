@@ -1,43 +1,43 @@
 import { useState } from 'react'
-import { Activity } from 'lucide-react'
 import {
-  Bar,
-  Cell,
-  Line,
-  ComposedChart,
   CartesianGrid,
+  Bar,
+  BarChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from 'recharts'
-import { chartAnimation, chartTooltipAnimation } from '@/lib/chart-motion'
+import { Card, CardContent } from '@/components/ui/card'
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
-import { Table } from '@/components/ui/table'
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { StatusBadge } from '@/components/status-badge'
-import { SurfaceIcon } from '@/components/surface-icon'
 import type { HealthTimelinePoint } from './health-api'
 
-const utcDate = (value: number, locale?: string) =>
-  new Intl.DateTimeFormat(locale, {
-    month: 'short',
-    day: 'numeric',
-    timeZone: 'UTC',
-  }).format(new Date(value))
-const utcTime = (value: number, locale?: string) =>
-  new Intl.DateTimeFormat(locale, {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-    timeZone: 'UTC',
-  }).format(new Date(value))
-
+const names = {
+  all: 'All findings',
+  security: 'Security',
+  reliability: 'Reliability',
+  maintainability: 'Maintainability',
+}
+const severityOrder = ['low', 'medium', 'high', 'critical', 'unknown'] as const
+const colors: Record<string, string> = {
+  critical: 'var(--severity-critical-mark)',
+  high: 'var(--severity-high-mark)',
+  medium: 'var(--warning)',
+  low: 'var(--success)',
+  unknown: 'var(--muted-foreground)',
+}
+const severityName = (key: string) => key.charAt(0).toUpperCase() + key.slice(1)
+type Category = keyof typeof names
+const date = (at: string, locale?: string) =>
+  new Date(at).toLocaleDateString(locale, { month: 'short', day: 'numeric' })
 export function HealthTimelineChart({
   points,
   branch,
@@ -45,301 +45,360 @@ export function HealthTimelineChart({
   embedded = false,
   compact = false,
   locale,
+  aiReview = false,
 }: {
   embedded?: boolean
   compact?: boolean
   locale?: string
+  aiReview?: boolean
   points: HealthTimelinePoint[]
   branch: string
   onSelectReport: (id: string) => void
 }) {
-  // Recharts forwards `id` from data onto SVG marks. Reports can appear in
-  // multiple charts on a page, so keep their identifiers out of DOM IDs.
-  const data = points.map(({ id, ...point }) => ({
-    ...point,
-    reportId: id,
-    timestamp: new Date(point.at).getTime(),
-  }))
-  const scope = points.find((point) => point.checkIds?.length)?.checkIds
-  const partialCount = points.filter((point) => point.partial).length
-  const comparisonCount = points.filter(
-    (point) => point.comparableFindings !== null
-  ).length
-  const scopeNames: Record<string, string> = {
-    'security.sast': 'Static security',
-    'quality.reliability': 'Reliability',
-    'quality.maintainability': 'Maintainability',
-    'security.hotspots': 'Security hotspots',
-  }
-  const timestamps = data.map((point) => point.timestamp)
-  const firstTime = data.length ? Math.min(...timestamps) : 0
-  const lastTime = data.length ? Math.max(...timestamps) : 0
-  const hour = 3600000
-  const range = Math.max(24 * hour, (lastTime - firstTime) * 1.3)
-  const center = (firstTime + lastTime) / 2
-  const step =
-    [
-      hour,
-      4 * hour,
-      6 * hour,
-      12 * hour,
-      24 * hour,
-      7 * 24 * hour,
-      30 * 24 * hour,
-      90 * 24 * hour,
-      365 * 24 * hour,
-    ].find((value) => value >= range / 6) ?? Math.ceil(range / 6)
-  const startTime = Math.floor((center - range / 2) / step) * step
-  const endTime = Math.ceil((center + range / 2) / step) * step
-  const ticks = Array.from(
-    { length: Math.round((endTime - startTime) / step) + 1 },
-    (_, index) => startTime + index * step
+  const [category, setCategory] = useState<Category>('security')
+  const [window, setWindow] = useState('8')
+  const modern = points.some((p) => p.categories)
+  const selected: Category = modern ? category : 'all'
+  const ordered = [...points].sort(
+    (a, b) => Date.parse(a.at) - Date.parse(b.at) || a.id.localeCompare(b.id)
   )
-  const [chartWidth, setChartWidth] = useState(0)
-  const uniqueTimes = [...new Set(timestamps)].sort((a, b) => a - b)
-  const gaps = uniqueTimes
-    .slice(1)
-    .map((time, index) => time - uniqueTimes[index])
-  const barWidth =
-    gaps.length && chartWidth
-      ? Math.min(
-          28,
-          Math.max(
-            1,
-            (((chartWidth - 80) * Math.min(...gaps)) / (endTime - startTime)) *
-              0.7
-          )
-        )
-      : 28
-  const formatTick = (value: number) =>
-    step >= 86400000
-      ? utcDate(value, locale)
-      : `${utcDate(value, locale)} ${utcTime(value, locale)}`
+  const available = ordered.flatMap((point) => {
+    const value =
+      selected === 'all'
+        ? {
+            findings: point.findings,
+            partial: point.partial,
+            comparisonKey: null,
+          }
+        : point.categories?.[selected]
+    return value
+      ? [
+          {
+            ...point,
+            ...value,
+            bySeverity:
+              'bySeverity' in value && value.bySeverity
+                ? value.bySeverity
+                : { unknown: value.findings },
+          },
+        ]
+      : []
+  })
+  const visible =
+    window === 'all' ? available : available.slice(-Number(window))
+  const data = visible.map((p, index) => ({ ...p, index }))
+  const latest = data[data.length - 1]
+  const partial = data.filter((p) => p.partial).length
   const Container = embedded ? 'div' : Card
+  const label = (p: (typeof data)[number]) =>
+    `Open scan ${new Date(p.at).toLocaleString(locale)}, ${p.findings.toLocaleString(locale)} findings, ${p.partial ? 'Partial scan' : 'Recorded results'}, commit ${p.sourceSha.slice(0, 7)}`
   return (
     <Container
       className='min-w-0 gap-0 overflow-hidden py-0'
       role='region'
       aria-label='Findings over time'
     >
-      {!embedded && (
-        <CardHeader className='p-5 pb-4'>
-          <div className='flex items-center gap-3'>
-            <SurfaceIcon icon={Activity} tone='violet' />
-            <div>
-              <CardTitle>Findings over time</CardTitle>
-              <CardDescription className='mt-1'>
-                {branch} · saved assessments · UTC
-              </CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-      )}
-      <CardContent className={compact ? 'p-0' : embedded ? 'p-4' : 'px-5 pb-5'}>
-        {!!partialCount && (
-          <div className='mb-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground'>
-            <StatusBadge tone='warning'>Partial analysis</StatusBadge>
-            <span>
-              {partialCount} of {points.length} scans have incomplete coverage.
-              Counts may increase when analysis completes.
-            </span>
-          </div>
-        )}
-        {scope?.length && (
-          <p className='mb-3 text-xs text-muted-foreground'>
-            Compared rule packs:{' '}
-            {scope.map((id) => scopeNames[id] ?? id).join(', ')}. Comparison
-            line only; bars include all retained findings.
-          </p>
-        )}
-        {embedded && <h3 className='sr-only'>Findings over time</h3>}
-        <div
-          className={`relative min-w-0 ${data.length ? (compact ? 'h-36' : 'h-48 sm:h-52') : 'h-24'}`}
-          role='img'
-          aria-label={
-            data.length
-              ? `${data.length} assessments, ${partialCount} partial. Retained finding counts in chronological order: ${data.map((p) => p.findings).join(', ')}. Exact revisions and coverage are in View chart data.`
-              : 'Findings over time unavailable. No recorded finding counts are available.'
-          }
-        >
-          {!!data.length && (
-            <ResponsiveContainer
-              width='100%'
-              height='100%'
-              onResize={setChartWidth}
+      <CardContent className={compact ? 'p-0' : 'p-4'}>
+        <div className='mb-5 flex flex-wrap items-center justify-between gap-3'>
+          {modern ? (
+            <Tabs
+              value={category}
+              onValueChange={(v) => setCategory(v as Category)}
+              className='min-w-0'
             >
-              <ComposedChart
-                className='chart-motion'
-                data={data}
-                margin={{ top: 12, right: 12, left: -18, bottom: 4 }}
-                accessibilityLayer
+              <TabsList
+                aria-label='Finding category'
+                className='h-auto flex-wrap'
               >
-                <CartesianGrid vertical={false} stroke='var(--border)' />
-                <XAxis
-                  padding={{ left: 16, right: 16 }}
-                  type='number'
-                  scale='time'
-                  dataKey='timestamp'
-                  domain={[startTime, endTime]}
-                  ticks={ticks}
-                  tickFormatter={formatTick}
-                  tick={
-                    data.length
-                      ? { fill: 'var(--muted-foreground)', fontSize: 11 }
-                      : false
-                  }
-                  tickLine={false}
-                  axisLine={{ stroke: 'var(--border)' }}
-                  minTickGap={40}
-                  tickMargin={12}
-                />
-                <YAxis
-                  allowDecimals={false}
-                  domain={[0, 'auto']}
-                  tick={
-                    data.length
-                      ? { fill: 'var(--muted-foreground)', fontSize: 11 }
-                      : false
-                  }
-                  tickLine={false}
-                  axisLine={false}
-                />
-                <Tooltip
-                  {...chartTooltipAnimation}
-                  contentStyle={{
-                    background: 'var(--popover)',
-                    border: '1px solid var(--border)',
-                    borderRadius: 8,
-                    color: 'var(--popover-foreground)',
-                    fontSize: 12,
-                  }}
-                  labelFormatter={(_, payload) => {
-                    const point = payload?.[0]?.payload as
-                      (typeof data)[number] | undefined
-                    return point
-                      ? `${new Date(point.at).toLocaleString(locale, { timeZone: 'UTC' })} UTC · ${point.sourceSha.slice(0, 7)} · ${point.partial ? 'Partial analysis' : 'Complete analysis'}`
-                      : ''
-                  }}
-                  cursor={{ stroke: 'var(--chart-1)', strokeDasharray: '4 4' }}
-                />
-                <Bar
-                  dataKey='findings'
-                  name='Retained findings'
-                  maxBarSize={barWidth}
-                  radius={[3, 3, 0, 0]}
-                  minPointSize={2}
-                  {...chartAnimation}
-                >
-                  {data.map((point) => (
-                    <Cell
-                      key={point.reportId}
-                      fill={point.partial ? 'var(--warning)' : 'var(--chart-1)'}
-                    />
-                  ))}
-                </Bar>
-                {comparisonCount > 1 && (
-                  <Line
-                    type='linear'
-                    dataKey='comparableFindings'
-                    name='Equivalent coverage'
-                    stroke='var(--chart-1)'
-                    strokeWidth={2}
-                    connectNulls={false}
-                    dot={{ r: 3 }}
-                    activeDot={{ r: 5 }}
-                    {...chartAnimation}
-                  />
+                {(['security', 'reliability', 'maintainability'] as const).map(
+                  (key) => (
+                    <TabsTrigger className='text-xs' key={key} value={key}>
+                      {names[key]}
+                    </TabsTrigger>
+                  )
                 )}
-              </ComposedChart>
-            </ResponsiveContainer>
+              </TabsList>
+            </Tabs>
+          ) : (
+            <h3 className='text-sm font-semibold'>
+              {aiReview ? 'AI security findings' : 'Findings over time'}
+            </h3>
           )}
-          {!data.length && (
-            <div className='pointer-events-none absolute inset-0 flex flex-col items-center justify-center px-8 text-center'>
-              <p className='text-sm font-medium'>
-                Analysis history unavailable
-              </p>
-              <p className='mt-2 max-w-md text-xs leading-relaxed text-muted-foreground'>
-                Run an assessment to see available findings here. Partial
-                results will be shown as soon as a report is saved.
-              </p>
-            </div>
-          )}
+          <Select value={window} onValueChange={setWindow}>
+            <SelectTrigger
+              className='h-8 w-36 text-xs'
+              aria-label='History range'
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value='8'>Last 8 scans</SelectItem>
+              <SelectItem value='20'>Last 20 scans</SelectItem>
+              <SelectItem value='all'>Available history</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
-        {!compact && (
-          <div className='mt-4 flex flex-wrap items-center justify-between gap-x-6 gap-y-2 text-xs text-muted-foreground'>
-            <span className='inline-flex items-center gap-2'>
-              <span
-                className='size-2 rounded-full bg-chart-1'
-                aria-hidden='true'
-              />
-              Retained findings
-            </span>
-            <span>
-              Each bar is a saved scan. The line compares only equivalent
-              coverage.
-            </span>
-          </div>
-        )}
-        {!!data.length && (
-          <details className='mt-3 text-xs'>
-            <summary className='w-fit cursor-pointer rounded-sm text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring'>
-              View chart data
-            </summary>
-            <div className='mt-3 max-h-44 overflow-auto rounded-lg border'>
-              <Table className='w-full text-left'>
-                <caption className='sr-only'>
-                  Available health assessment counts and coverage in UTC
-                </caption>
-                <thead>
-                  <tr className='border-b bg-muted/30'>
-                    <th className='px-3 py-2'>Assessed (UTC)</th>
-                    <th className='px-3 py-2'>Commit</th>
-                    <th className='px-3 py-2'>Coverage</th>
-                    <th className='px-3 py-2 text-right'>Retained findings</th>
-                    <th className='px-3 py-2 text-right'>
-                      Comparable findings
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {points.map((point) => (
-                    <tr key={point.id} className='border-b last:border-0'>
-                      <td className='px-3 py-2'>
-                        {new Date(point.at).toLocaleString(locale, {
-                          timeZone: 'UTC',
-                        })}
-                      </td>
-                      <td className='px-3 py-2'>
-                        <button
-                          type='button'
-                          className='rounded-sm font-mono hover:underline focus-visible:outline-2 focus-visible:outline-ring'
-                          aria-label={`Open health report ${point.sourceSha.slice(0, 7)}`}
-                          onClick={() => onSelectReport(point.id)}
-                        >
-                          {point.sourceSha.slice(0, 7)}
-                        </button>
-                      </td>
-                      <td className='px-3 py-2 whitespace-nowrap'>
-                        {point.partial ? (
-                          <StatusBadge tone='warning'>
-                            Partial analysis
-                          </StatusBadge>
-                        ) : (
-                          'Complete analysis'
-                        )}
-                      </td>
-                      <td className='px-3 py-2 text-right tabular-nums'>
-                        {point.findings}
-                      </td>
-                      <td className='px-3 py-2 text-right tabular-nums'>
-                        {point.comparableFindings ?? '-'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </Table>
+        {latest ? (
+          <>
+            <div className='mb-4 flex flex-wrap items-end justify-between gap-2'>
+              <div>
+                <div className='text-xs text-muted-foreground'>
+                  Latest{' '}
+                  {selected === 'all'
+                    ? 'findings'
+                    : names[selected].toLowerCase() + ' findings'}
+                </div>
+                <div className='mt-1 flex items-center gap-3'>
+                  <strong className='text-3xl font-semibold tracking-tight tabular-nums'>
+                    {latest.findings.toLocaleString(locale)}
+                  </strong>
+                  {latest.partial && (
+                    <StatusBadge tone='warning'>Partial scan</StatusBadge>
+                  )}
+                </div>
+              </div>
+              <p className='text-xs text-muted-foreground'>
+                {branch} · {date(latest.at, locale)}
+              </p>
             </div>
-          </details>
+            <div
+              className='w-full min-w-0 overflow-x-auto text-xs'
+              role='group'
+              aria-label={`${names[selected]} over ${data.length} scans. Finding counts: ${data.map((p) => p.findings).join(', ')}. Select a column to open its assessment.`}
+            >
+              <div
+                className='h-60'
+                style={{ minWidth: Math.max(250, data.length * 64) }}
+              >
+                <ResponsiveContainer width='100%' height='100%'>
+                  <BarChart
+                    data={data}
+                    margin={{ top: 28, right: 16, bottom: 8, left: 0 }}
+                    maxBarSize={48}
+                    accessibilityLayer
+                  >
+                    <CartesianGrid
+                      vertical={false}
+                      stroke='var(--border)'
+                      strokeDasharray='3 4'
+                    />
+                    <XAxis
+                      dataKey='index'
+                      type='category'
+                      tickFormatter={(i) =>
+                        data.length &&
+                        date(data[0].at, locale) === date(latest.at, locale)
+                          ? new Date(data[Number(i)].at).toLocaleTimeString(
+                              locale,
+                              { hour: '2-digit', minute: '2-digit' }
+                            )
+                          : date(data[Number(i)].at, locale)
+                      }
+                      interval='preserveStartEnd'
+                      minTickGap={45}
+                      tickLine={false}
+                      axisLine={false}
+                      tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
+                      dy={8}
+                    />
+                    <YAxis
+                      width={42}
+                      allowDecimals={false}
+                      domain={[0, 'auto']}
+                      tickLine={false}
+                      axisLine={false}
+                      tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
+                    />
+                    <Tooltip
+                      cursor={{ fill: 'var(--muted)', opacity: 0.3 }}
+                      content={({ active, payload }) => {
+                        const p = payload?.[0]?.payload as
+                          typeof latest | undefined
+                        return active && p ? (
+                          <div className='rounded-md border bg-popover px-3 py-2 text-xs text-popover-foreground shadow-md'>
+                            <div className='font-medium'>
+                              {p.findings.toLocaleString(locale)} findings
+                            </div>
+                            <div className='mt-1 text-muted-foreground'>
+                              {new Date(p.at).toLocaleString(locale)}
+                            </div>
+                            <div className='my-2 space-y-1'>
+                              {[...severityOrder]
+                                .reverse()
+                                .filter((key) => p.bySeverity[key] > 0)
+                                .map((key) => (
+                                  <div
+                                    key={key}
+                                    className='flex justify-between gap-6'
+                                  >
+                                    <span>{severityName(key)}</span>
+                                    <span className='tabular-nums'>
+                                      {p.bySeverity[key]}
+                                    </span>
+                                  </div>
+                                ))}
+                            </div>
+                            <div className='mt-1'>
+                              {p.partial ? 'Partial scan · ' : ''}
+                              {p.sourceSha.slice(0, 7)}
+                            </div>
+                          </div>
+                        ) : null
+                      }}
+                    />
+                    <Bar
+                      dataKey='findings'
+                      name='Findings'
+                      isAnimationActive={false}
+                      shape={(props) => {
+                        const {
+                          x,
+                          y,
+                          width,
+                          height,
+                          payload: p,
+                        } = props as {
+                          x: number
+                          y: number
+                          width: number
+                          height: number
+                          payload: typeof latest
+                        }
+                        let bottom = y + height
+                        return (
+                          <g
+                            role='button'
+                            tabIndex={0}
+                            aria-label={label(p)}
+                            className='cursor-pointer focus-visible:outline-2 focus-visible:outline-ring'
+                            onClick={() => onSelectReport(p.id)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault()
+                                onSelectReport(p.id)
+                              }
+                            }}
+                          >
+                            <rect
+                              x={x}
+                              y={Math.min(y, y + height - 24)}
+                              width={width}
+                              height={Math.max(24, height)}
+                              fill='transparent'
+                            />
+                            {severityOrder.map((key) => {
+                              const count = p.bySeverity[key] ?? 0
+                              const h = p.findings
+                                ? (height * count) / p.findings
+                                : 0
+                              bottom -= h
+                              return count > 0 ? (
+                                <rect
+                                  key={key}
+                                  data-severity={key}
+                                  x={x}
+                                  y={bottom}
+                                  width={width}
+                                  height={h}
+                                  fill={colors[key]}
+                                />
+                              ) : null
+                            })}
+                            <text
+                              x={x + width / 2}
+                              y={y - 10}
+                              textAnchor='middle'
+                              fill='var(--foreground)'
+                              fontSize={12}
+                              className='tabular-nums'
+                            >
+                              {p.findings.toLocaleString(locale)}
+                            </text>
+                          </g>
+                        )
+                      }}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+            <div className='mt-3 flex flex-wrap justify-between gap-2 text-xs text-muted-foreground'>
+              <span>{data.length} scans · Oldest to newest</span>
+              <span>{partial > 0 ? `${partial} partial assessments` : ''}</span>
+            </div>
+            <div
+              className='mt-3 flex flex-wrap gap-x-5 gap-y-2 text-xs text-muted-foreground'
+              aria-label='Severity legend'
+            >
+              {[
+                'critical',
+                'high',
+                'medium',
+                'low',
+                ...(data.some((p) => p.bySeverity.unknown > 0)
+                  ? ['unknown']
+                  : []),
+              ].map((key) => (
+                <span key={key} className='flex items-center gap-2'>
+                  <span
+                    aria-hidden='true'
+                    className='size-2 rounded-sm'
+                    style={{ backgroundColor: colors[key] }}
+                  />
+                  {severityName(key)}
+                </span>
+              ))}
+            </div>
+            <details className='mt-3 text-xs'>
+              <summary className='w-fit cursor-pointer text-muted-foreground'>
+                View chart data
+              </summary>
+              <ul className='mt-2 divide-y'>
+                {data.map((p) => (
+                  <li key={p.id}>
+                    <button
+                      type='button'
+                      className='flex w-full flex-wrap justify-between gap-2 rounded px-2 py-2 text-left hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring'
+                      aria-label={label(p)}
+                      onClick={() => onSelectReport(p.id)}
+                    >
+                      <span>
+                        {new Date(p.at).toLocaleString(locale)} ·{' '}
+                        {p.sourceSha.slice(0, 7)}
+                      </span>
+                      <span>
+                        {p.findings.toLocaleString(locale)} findings
+                        {p.partial ? ' · Partial scan' : ''}
+                        <span className='block text-muted-foreground'>
+                          {[...severityOrder]
+                            .reverse()
+                            .filter((key) => p.bySeverity[key] > 0)
+                            .map(
+                              (key) =>
+                                `${severityName(key)}: ${p.bySeverity[key]}`
+                            )
+                            .join(' · ')}
+                        </span>
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          </>
+        ) : (
+          <div
+            className='flex h-24 flex-col items-center justify-center text-center'
+            role='img'
+            aria-label='Findings over time unavailable. No recorded finding counts are available.'
+          >
+            <p className='text-sm font-medium'>No recorded results to chart</p>
+            <p className='mt-2 text-xs text-muted-foreground'>
+              {points.length
+                ? `No ${names[selected].toLowerCase()} counts were saved for this branch.`
+                : 'Run an assessment to add this branch’s first scan.'}
+            </p>
+          </div>
         )}
       </CardContent>
     </Container>

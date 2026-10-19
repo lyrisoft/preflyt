@@ -36,7 +36,28 @@ it("never fabricates usage or negative token counts and retains cache counters",
         cache_read_input_tokens: 8,
       },
     }),
-  ).toEqual({ inputTokens: 10, outputTokens: 5, cachedTokens: 8 });
+  ).toEqual({ inputTokens: 18, outputTokens: 5, cachedTokens: 8 });
+});
+it("includes Anthropic cache writes in total input and DeepSeek cache hits in cached input", () => {
+  expect(
+    providerUsage("anthropic", {
+      usage: {
+        input_tokens: 10,
+        cache_read_input_tokens: 80,
+        cache_creation_input_tokens: 20,
+        output_tokens: 5,
+      },
+    }),
+  ).toEqual({ inputTokens: 110, outputTokens: 5, cachedTokens: 80 });
+  expect(
+    providerUsage("deepseek", {
+      usage: {
+        prompt_tokens: 100,
+        completion_tokens: 5,
+        prompt_cache_hit_tokens: 80,
+      },
+    }),
+  ).toEqual({ inputTokens: 100, outputTokens: 5, cachedTokens: 80 });
 });
 
 it("includes Gemini reasoning tokens and rejects invalid reported reasoning usage", () => {
