@@ -132,7 +132,7 @@ const roleDescription: Record<string, string> = {
   SECURITY_ENGINEER:
     'Review security evidence, manage imported reports and read policies.',
   ENGINEERING_LEAD:
-    'Add repositories, create skills and standards, and run and review assessments. Skill approval and policy publication need separate permissions.',
+    'Add repositories, create skills, standards and policy drafts, and run and review assessments. Skill approval and policy publication need separate permissions.',
   DEVELOPER: 'Run assessments and review results for assigned repositories.',
   AUDITOR:
     'Read audit history, assessments, policies and contributor evidence. No changes.',

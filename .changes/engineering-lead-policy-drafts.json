@@ -1,0 +1,8 @@
+{
+  "type": "fix",
+  "title": "Engineering Lead policy drafts",
+  "description": "Engineering Leads can create and edit policy drafts for assigned repositories. Policy approval, publication and merge enforcement remain separate permissions.",
+  "upgrade": "Recreate API and worker to apply the role catalogue update; permissions refresh on the next session request.",
+  "migrations": [],
+  "configuration": []
+}

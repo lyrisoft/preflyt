@@ -87,7 +87,7 @@ export const rolePermissions: Record<string, string[]> = {
     'contributors.policy_evidence.read',
   ],
   ENGINEERING_LEAD: [
-    'repository.connect', 'repository.manage', 'standards.manage', 'ai.skills.manage',
+    'repository.connect', 'repository.manage', 'standards.manage', 'ai.skills.manage', 'policy.draft',
     'ai.skills.read', 'ai.review.run',
     'repository.read',
     'assessment.read',
@@ -258,6 +258,10 @@ export class AuthorizationService {
   // SessionGuard calls this after live session validation, before any controller or cache lookup.
   async authorizeRequest(request: Request, session: AuthenticatedSession) {
     const path = request.path.replace(/\/$/, '')
+    if (path === '/github/repositories/available' && request.method === 'GET') {
+      await this.requireOrganization(session, 'repository.manage', true)
+      return true
+    }
     // The audit reader performs fresh organization and repository authorization.
     if ((path === '/installation-reporting' && request.method === 'GET') || (/^\/installation-reporting\/(preferences|acknowledge)$/.test(path) && request.method === 'POST')) return false
     if ((path === '/releases' && request.method === 'GET') || (/^\/releases\/(check|preferences|read)$/.test(path) && request.method === 'POST')) return false

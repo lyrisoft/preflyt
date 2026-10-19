@@ -85,13 +85,11 @@ export const sidebarData: SidebarData = {
           title: 'Access Control',
           url: '/access-control',
           icon: UsersRound,
-          adminOnly: true,
         },
         {
           title: 'Audit log',
           url: '/audit-log',
           icon: History,
-          roles: ['OWNER', 'ADMIN', 'AUDITOR', 'SUPER_ADMIN'],
         },
         {
           title: 'Settings',
