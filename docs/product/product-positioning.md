@@ -1,6 +1,6 @@
 # Preflyt product positioning
 
-Updated on 16 October 2026 for the approved Community Edition direction. This is the identity and copy guide; it does not add capabilities, clear release blockers or authorize publication.
+Updated on 18 October 2026 for the approved Community Edition direction. This is the identity and copy guide; it does not add capabilities, clear release blockers or authorize publication.
 
 ## Identity
 
@@ -30,7 +30,7 @@ Managed Cloud is a **planned** paid service for following through from findings 
 - Portfolio reporting and scheduled evidence packs, with original assessment links and explicit coverage gaps.
 - Managed AI and isolated scanner capacity, upgrades, monitoring, recoverable backups, team usage/spending controls, guided onboarding and priority support.
 
-**Repository context is Cloud-only:** planned searchable code indexing, embeddings and retrieval of related functions/tests/contracts outside the PR diff (issue #97 / P4.RI). Describe it as “Repository-aware AI reviews” and mark it coming soon. Keep this future implementation outside the Apache-licensed Community codebase. Community retains existing profile metadata, Health/source evidence and optional BYOK diff-based AI reviews.
+**Repository review edition decision, 18 October 2026:** repository-aware security analysis and its P4.RI context foundation belong in Apache-2.0 Community Edition. This supersedes the 16 October Cloud-only decision for that capability. The [Strix Repo Health integration](../operations/strix-repo-health.md) is a local opt-in prototype, not a production-qualified scanner or a public availability claim. Managed remediation and draft fix PRs remain separate planned Cloud capabilities.
 
 Existing Community AI configuration/budgets, core governance, access controls, email and audit history remain included. Cloud sells managed operations and coordinated automation; do not claim basic security, existing integrations or AI configuration are Cloud-only. AI cannot waive checks or authorize a merge. The pricing page may describe this planned scope with “Coming soon” and “Pricing at launch”; do not invent prices, a trial, an SLA, signup or cloud availability before the offer exists. Future Enterprise scope needs an explicit product decision and customer evidence.
 
