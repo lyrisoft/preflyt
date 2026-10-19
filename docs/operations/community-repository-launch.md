@@ -76,6 +76,6 @@ Repository transfer, package visibility, repository visibility and public releas
 are separate actions. This runbook authorizes none of them. Until the owner
 chooses a namespace, all working links continue to use `lyrisoft/preflyt`.
 
-## Future Cloud source boundary
+## Repository review and Cloud source boundaries
 
-Issue #97 / P4.RI repository indexing, embeddings and outside-diff retrieval are Cloud-only by owner decision on 16 October 2026. Keep implementation in a separate private Cloud repository/module (for example `preflytlabs/preflyt-cloud` after the organization is established). Public Community may expose reviewed integration contracts, but must not contain the commercial implementation behind an enablement flag. Apache notices and rights on already published Community code remain in force when Cloud builds on it. This decision does not create the Cloud repository or implement P4.RI.
+The owner revised the edition decision on 18 October 2026: repository-aware security reviews and their issue #97 / P4.RI context foundation belong in open-source Community Edition. The [Strix local prototype](strix-repo-health.md) is not a production-qualified release. Managed remediation and draft fix PR implementation remain in private Cloud code. Existing Apache notices and rights remain in force. No remote issue or repository settings are changed by these local documents.

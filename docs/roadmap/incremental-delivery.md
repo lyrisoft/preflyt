@@ -29,7 +29,7 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 | **P1** | **CI Evidence Assessments** | GitHub PR/CI + UI | Import check/test results, view revision-bound assessment without executing repo code |
 | **P2** | **Policy Quality Gates** | PR/CI + UI | Apply mandatory/advisory policy, publish exact-SHA status and clear PASS/WARN/BLOCK/INCOMPLETE |
 | **P3** | **Native Secure Validation** | PR + approved executor | Execute security/testing/IaC scans safely and enrich findings beyond imported evidence |
-| **P4** | **Advanced AI Engineering Intelligence** | SDLC assessments | Advanced model-routed investigations and recommendations; Cloud-only P4.RI repository-aware review follow-up; deterministic gates remain independent |
+| **P4** | **Advanced AI Engineering Intelligence** | SDLC assessments | Advanced model-routed investigations and recommendations; Community P4.RI repository-aware review follow-up; deterministic gates remain independent |
 | **P5** | **Repository Health Assessment** | Repository selection + Health UI | Automatically assess a selected branch, report actionable findings and freshness without requiring CI |
 | **P6** | **Developer Experience: CLI + IDE** | Laptop / VS Code | Shared local engine, CLI, policy sync, inline diagnostics, AI explanations and optional Git hooks |
 | **P7** | **QA Release Readiness** | QA/CI + UI | Import end-to-end/contract/regression evidence and validate release candidate readiness |
@@ -186,9 +186,9 @@ Phases below are **ordered release slices**, not promises of calendar duration. 
 
 <a id="p4ri--versioned-repository-intelligence-for-ai-pr-reviews-planned-additive-follow-up"></a>
 
-#### P4.RI — Versioned Repository Intelligence for AI PR reviews (Cloud-only planned follow-up)
+#### P4.RI — Versioned Repository Intelligence for AI PR reviews (Community planned follow-up)
 
-**Edition decision — 16 October 2026:** P4.RI.1–RI.4 are **Cloud-only**. The searchable code index, embeddings, revision-aware retrieval outside the diff and their lifecycle/inspection UI are excluded from Apache-2.0 Community Edition. Implement this future capability in separately controlled private Cloud code, not as published Community code behind a license flag. Shared interfaces may be added only through an explicit architecture review. Community keeps existing discovery/profile metadata, Health/source evidence, deterministic CI assurance and optional BYOK diff-based reviews. No existing Community capability is removed and phase order stays unchanged. Tracking issue: [#97](https://github.com/lyrisoft/preflyt/issues/97); its remote body still needs alignment when authorized.
+**Edition decision — 18 October 2026:** P4.RI and the repository-aware security-review foundation are planned for open-source Community Edition, superseding the 16 October Cloud-only decision for this capability. Extend the existing API, worker, storage and UI here. The [Strix Repo Health local prototype](../operations/strix-repo-health.md) adds an explicit advisory scanner action; its real-repository runtime qualification and complete contextual analysis remain pending. Existing Community behavior and P0–P12 order remain intact. Managed remediation/draft fix PRs retain their separate private Cloud scope. Tracking issue: [#97](https://github.com/lyrisoft/preflyt/issues/97); its remote body has not been changed by this work.
 
 **User value:** A developer receives an evidence-linked AI review informed by related functions, callers, tests, contracts, and configuration outside the changed PR lines. A repository owner can inspect whether searchable code context is indexed, current, incomplete, or unavailable. This **extends** the existing P0 repository discovery/health assessment and P4 review skills/worker, rather than introducing a second health assessment, a separate review pipeline, or a new top-level release phase.
 
@@ -325,8 +325,8 @@ These subphases map to the global deployment phases above and may be tracked as 
 | Stage | Usable first slice | Second slice | Third slice | Advanced slice |
 | --- | --- | --- | --- | --- |
 | Laptop | P6.1 shared engine + CLI | P6.2 organization policy sync | P6.3 VS Code diagnostics; P6.4 AI and PR status | P6.5 Git hooks/editor compatibility |
-| Repository | R1 discovery/profile (P0) | Automatic health assessment (P5.1) | Health dashboards and history (P5.2–P5.3) | Cloud-only P4.RI.1 versioned code index; scheduled drift / cross-repo standards (P12) |
-| PR/CI | P1 CI evidence viewer | P2 deterministic quality gate | P3 isolated scanner/test jobs | P4 AI review + Cloud-only P4.RI.2–RI.4 cross-file context |
+| Repository | R1 discovery/profile (P0) | Automatic health assessment (P5.1) | Health dashboards and history (P5.2–P5.3) | Community P4.RI.1 versioned code index; scheduled drift / cross-repo standards (P12) |
+| PR/CI | P1 CI evidence viewer | P2 deterministic quality gate | P3 isolated scanner/test jobs | P4 AI review + Community P4.RI.2–RI.4 cross-file context |
 | QA | Q1 imported suite/candidate report (P7) | Q2 contract/migration tests (P7) | Q3 QA quality gates/sign-off (P7) | Cross-service matrix later |
 | Performance | F1 import k6 reports (P8) | F2 smoke/load execution (P9) | F3 advanced workload profiles (P10) | F4 distributed/correlation (P12) |
 | Production | O1 incidents/deploy mapping (P11) | O2 correlation to missed checks (P11) | O3 policy proposal and approval (P11) | Outcome trends later |
@@ -378,7 +378,7 @@ flowchart TD
     P10 --> P12["P12 Provider / Scale Expansion"]
 ~~~
 
-AI is a core product capability introduced in P0/P1; inference is optional at runtime, and deterministic checks remain functional without model access. P4.RI is a Cloud-only optional repository-intelligence extension of P0/P4, not a prerequisite for P5–P12 or deterministic checks. P8 (import k6 results) can be prioritized soon after P2 because it needs **no managed load generator**. P9 requires separately verified target/runner safety; P3 real-repository execution approval is not bypassed by test infrastructure.
+AI is a core product capability introduced in P0/P1; inference is optional at runtime, and deterministic checks remain functional without model access. P4.RI is an optional Community repository-intelligence extension of P0/P4, not a prerequisite for P5–P12 or deterministic checks. P8 (import k6 results) can be prioritized soon after P2 because it needs **no managed load generator**. P9 requires separately verified target/runner safety; P3 real-repository execution approval is not bypassed by test infrastructure.
 
 P0 deployment is intentionally useful without a scanner, model or extensive policy framework. All subsequent releases **add** capability without requiring a full platform rewrite.
 

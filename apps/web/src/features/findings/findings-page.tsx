@@ -64,6 +64,7 @@ function FindingsWorkspace() {
     initial.source ?? (initial.origin === 'health' ? 'health' : 'all')
   )
   const [health, setHealth] = useState(initial.health)
+  const [healthReports, setHealthReports] = useState(initial.healthReports)
   const healthView = source === 'health' && !!health
   const [kind, setKind] = useState<string>(
     initial.kind === 'ai' ? 'findings' : (initial.kind ?? 'findings')
@@ -92,6 +93,7 @@ function FindingsWorkspace() {
       q,
       page,
       pageSize,
+      healthReports,
     ],
     enabled:
       session.isSuccess &&
@@ -100,7 +102,7 @@ function FindingsWorkspace() {
     gcTime: 0,
     queryFn: async ({ signal }): Promise<Results> => {
       const response = await fetch(
-        `${API_BASE_URL}/findings?${new URLSearchParams({ category, source, ...(source === 'health' && health ? { health } : {}), kind, repository, severity, triage: triageFilter, q, page: String(page), pageSize: String(pageSize) })}`,
+        `${API_BASE_URL}/findings?${new URLSearchParams({ category, source, ...(source === 'health' && health ? { health } : {}), ...(source === 'health' && healthReports ? { healthReports } : {}), kind, repository, severity, triage: triageFilter, q, page: String(page), pageSize: String(pageSize) })}`,
         { credentials: 'include', cache: 'no-store', signal }
       )
       if (!response.ok) {
@@ -122,7 +124,7 @@ function FindingsWorkspace() {
     <Main className='space-y-6'>
       <PageHeader
         title='Findings'
-        description='CI and repository health findings, plus advisory PR reviews.'
+        description='Findings from CI, repository checks and AI reviews.'
         section='Workspace'
         icon={ShieldAlert}
         tone='amber'
@@ -143,7 +145,7 @@ function FindingsWorkspace() {
                 {
                   title: 'Where findings come from',
                   content:
-                    'One Findings list includes CI, repository health and AI review findings. Use Source to focus on one source. AI findings retain their original assessment, commit, date and cited locations. They are advisory and never change check pass/fail results.',
+                    'One Findings list includes CI, repository health, AI security review and PR review findings. Use Source to focus on one source. AI findings retain their original assessment, commit, date and cited locations. They are advisory and never change check pass/fail results.',
                 },
                 {
                   title: 'Evidence and trust',
@@ -207,6 +209,7 @@ function FindingsWorkspace() {
                 setTriageFilter('all')
               }
               setHealth(undefined)
+              setHealthReports(undefined)
               setPage(1)
             }}
           >
@@ -220,7 +223,8 @@ function FindingsWorkspace() {
               <SelectItem value='all'>All sources</SelectItem>
               <SelectItem value='ci'>CI</SelectItem>
               <SelectItem value='health'>Repository health</SelectItem>
-              <SelectItem value='ai'>AI review</SelectItem>
+              <SelectItem value='vapt'>AI security review</SelectItem>
+              <SelectItem value='ai'>PR review</SelectItem>
             </SelectContent>
           </Select>
           <Select
@@ -228,6 +232,7 @@ function FindingsWorkspace() {
             disabled={aiView}
             onValueChange={(value) => {
               setCategory(value as typeof category)
+              if (value !== 'security') setHealthReports(undefined)
               setPage(1)
             }}
           >
@@ -305,6 +310,7 @@ function FindingsWorkspace() {
           onValueChange={(value) => {
             setRepository(value)
             setHealth(undefined)
+            setHealthReports(undefined)
             setPage(1)
           }}
         />
@@ -521,6 +527,7 @@ function FindingsWorkspace() {
                                 category,
                                 source,
                                 health: health ?? '',
+                                healthReports: healthReports ?? '',
                                 kind,
                                 repository,
                                 severity,
@@ -559,9 +566,11 @@ function FindingsWorkspace() {
                           </p>
                           <p className='mt-1 text-xs text-muted-foreground'>
                             {row.origin === 'ai'
-                              ? 'AI review'
+                              ? 'PR review'
                               : row.origin === 'health'
-                                ? 'Repository health'
+                                ? row.evidence?.includes('AI_REPORTED')
+                                  ? 'AI security review'
+                                  : 'Repository health'
                                 : 'CI'}
                           </p>
                         </td>
@@ -632,6 +641,7 @@ function FindingsWorkspace() {
                                   category,
                                   source,
                                   health: health ?? '',
+                                  healthReports: healthReports ?? '',
                                   kind,
                                   repository,
                                   severity,

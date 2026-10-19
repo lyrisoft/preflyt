@@ -1,6 +1,15 @@
 import z from 'zod'
 
 export const workspaceSearchSchema = z.object({
+  integration: z.enum(['github', 'mcp']).optional().catch(undefined),
+  companion: z.string().uuid().optional().catch(undefined),
+  oauth: z.string().uuid().optional().catch(undefined),
+  finding: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .optional()
+    .catch(undefined),
+  origin: z.enum(['ci', 'health', 'ai']).optional().catch(undefined),
   // TanStack's URL parser reads an unquoted numeric GitHub ID as a number.
   // Normalize it before validation so a native report link retains its scope.
   repository: z

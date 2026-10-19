@@ -24,6 +24,8 @@ import { PageHelpDrawer } from '@/components/page-help-drawer'
 import { RepositoryPicker } from '@/components/repository-picker'
 import { StatusBadge } from '@/components/status-badge'
 import { SurfaceIcon } from '@/components/surface-icon'
+import { CompanionIntegrations } from '@/features/companions/companion-integrations'
+import { useMcpConnections } from '@/features/companions/hosted-mcp-api'
 import { CheckPublications } from '@/features/repositories/check-publications'
 import { RepositoryActivityPanel } from '@/features/repositories/repository-activity-panel'
 import { RepositoryAssessments } from '@/features/repositories/repository-assessments'
@@ -76,7 +78,7 @@ const modules = {
     title: 'Integrations',
     section: 'Administration',
     icon: PlugZap,
-    description: 'Connect your GitHub App and manage repository access.',
+    description: 'Manage repository access and connect your coding agents.',
   },
 }
 type Repository = { githubId: string; fullName: string; selected: boolean }
@@ -97,8 +99,14 @@ async function read<T>(path: string, signal: AbortSignal): Promise<T> {
 
 export function WorkspaceModule({ module }: { module: Module }) {
   const [integration, setIntegration] = useState<IntegrationId | null>('github')
+  const mcpConnections = useMcpConnections(module === 'integrations')
   const config = modules[module]
   const search = useSearch({ strict: false }) as {
+    integration?: 'github' | 'mcp'
+    companion?: string
+    oauth?: string
+    finding?: string
+    origin?: 'health' | 'ci' | 'ai'
     repository?: string
     assessment?: string
     from?: 'quality-gates'
@@ -493,136 +501,169 @@ export function WorkspaceModule({ module }: { module: Module }) {
                 connected={inventory.data.installations.some(
                   (item) => item.active
                 )}
-                selected={integration}
-                onSelect={setIntegration}
+                mcpConnected={
+                  mcpConnections.data?.some(
+                    (c) => !c.revokedAt && new Date(c.expiresAt) > new Date()
+                  ) ?? false
+                }
+                selected={search.integration ?? integration}
+                onSelect={(id) => {
+                  setIntegration(id)
+                  void navigate({
+                    to: '/integrations',
+                    search: { integration: id },
+                  })
+                }}
               />
             )}
-            {module === 'integrations' && integration === 'github' && (
-              <Card className='gap-4 overflow-hidden border-chart-2/20'>
-                <CardHeader className='flex flex-wrap items-center justify-between gap-3'>
-                  <div className='flex items-center gap-3'>
-                    <span className='flex size-10 items-center justify-center rounded-lg bg-chart-2/10 text-chart-2'>
-                      <IconGithub className='size-5' aria-hidden='true' />
-                    </span>
-                    <div>
-                      <CardTitle asChild>
-                        <h2>GitHub connections</h2>
-                      </CardTitle>
-                      <p className='mt-1 text-xs text-muted-foreground'>
-                        Repository access through your GitHub App.
-                      </p>
-                    </div>
-                  </div>
-                  {canManage && (
-                    <Button size='sm' asChild>
-                      <a href={`${API_BASE_URL}/github/install`}>
-                        <Link2 className='size-3.5' aria-hidden='true' />
-                        Connect GitHub App
-                      </a>
-                    </Button>
-                  )}
-                </CardHeader>
-                <CardContent className='space-y-4'>
-                  <div className='grid grid-cols-2 gap-3'>
-                    <div className='rounded-lg border border-chart-2/15 bg-chart-2/5 px-4 py-3'>
-                      <p className='text-xs text-muted-foreground'>
-                        Active connections
-                      </p>
-                      <p className='mt-1 text-2xl font-semibold tabular-nums'>
-                        {
-                          inventory.data.installations.filter(
-                            (installation) => installation.active
-                          ).length
+            {module === 'integrations' &&
+              (search.integration ?? integration) === 'mcp' && (
+                <CompanionIntegrations
+                  key={`${session.data?.identityId}:${session.data?.organizationId}`}
+                  requestId={search.companion}
+                  oauthRequestId={search.oauth}
+                  manualScope={
+                    search.repository &&
+                    search.assessment &&
+                    search.finding &&
+                    search.origin
+                      ? {
+                          repositoryId: search.repository,
+                          assessmentId: search.assessment,
+                          findingId: search.finding,
+                          origin: search.origin,
                         }
-                        <span className='ml-2 text-xs font-normal text-muted-foreground'>
-                          of {inventory.data.installations.length}
-                        </span>
-                      </p>
-                    </div>
-                    <div className='rounded-lg border border-chart-1/15 bg-chart-1/5 px-4 py-3'>
-                      <p className='text-xs text-muted-foreground'>
-                        Selected repositories
-                      </p>
-                      <p className='mt-1 text-2xl font-semibold tabular-nums'>
-                        {repositories.length}
-                      </p>
-                    </div>
-                  </div>
-                  {inventory.data.installations.length === 0 ? (
-                    <div className='flex items-start gap-3 rounded-lg border bg-muted/10 px-4 py-4'>
-                      <IconGithub
-                        className='mt-0.5 size-5 shrink-0 text-muted-foreground'
-                        aria-hidden='true'
-                      />
+                      : undefined
+                  }
+                />
+              )}
+            {module === 'integrations' &&
+              (search.integration ?? integration) === 'github' && (
+                <Card className='gap-4 overflow-hidden border-chart-2/20'>
+                  <CardHeader className='flex flex-wrap items-center justify-between gap-3'>
+                    <div className='flex items-center gap-3'>
+                      <span className='flex size-10 items-center justify-center rounded-lg bg-chart-2/10 text-chart-2'>
+                        <IconGithub className='size-5' aria-hidden='true' />
+                      </span>
                       <div>
-                        <p className='text-sm font-medium'>Connect GitHub</p>
+                        <CardTitle asChild>
+                          <h2>GitHub connections</h2>
+                        </CardTitle>
                         <p className='mt-1 text-xs text-muted-foreground'>
-                          {canManage
-                            ? 'Connect the GitHub App, then select the repositories Preflyt can access.'
-                            : 'An Owner or Admin can connect the GitHub App and select repositories.'}
+                          Repository access through your GitHub App.
                         </p>
                       </div>
                     </div>
-                  ) : (
-                    <div className='grid gap-3 xl:grid-cols-2'>
-                      {inventory.data.installations.map((installation) => (
-                        <div
-                          key={installation.id}
-                          className='flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-background/50 p-4'
-                        >
-                          <div className='flex min-w-0 items-center gap-3'>
-                            <span className='flex size-9 shrink-0 items-center justify-center rounded-lg border bg-muted text-sm font-semibold'>
-                              {installation.accountLogin
-                                .slice(0, 2)
-                                .toUpperCase()}
-                            </span>
-                            <div className='min-w-0'>
-                              <p
-                                className='truncate text-sm font-semibold'
-                                title={installation.accountLogin}
-                              >
-                                {installation.accountLogin}
-                              </p>
-                              <p className='mt-1 text-xs text-muted-foreground'>
-                                {installation.active
-                                  ? 'Choose the repositories you want to review.'
-                                  : 'Restore GitHub App access to reconnect this account.'}
-                              </p>
-                              <details className='mt-1 text-xs text-muted-foreground'>
-                                <summary className='cursor-pointer'>
-                                  Connection details
-                                </summary>
-                                <span className='font-mono'>
-                                  Installation {installation.id}
-                                </span>
-                              </details>
-                            </div>
-                          </div>
-                          <StatusBadge
-                            tone={installation.active ? 'success' : 'warning'}
-                          >
-                            {installation.active ? 'Active' : 'Unavailable'}
-                          </StatusBadge>
-                          {canManage && (
-                            <Button size='sm' variant='outline' asChild>
-                              {installation.active ? (
-                                <Link to='/repositories'>
-                                  Manage repositories
-                                </Link>
-                              ) : (
-                                <a href={`${API_BASE_URL}/github/install`}>
-                                  Reconnect GitHub
-                                </a>
-                              )}
-                            </Button>
-                          )}
-                        </div>
-                      ))}
+                    {canManage && (
+                      <Button size='sm' asChild>
+                        <a href={`${API_BASE_URL}/github/install`}>
+                          <Link2 className='size-3.5' aria-hidden='true' />
+                          Connect GitHub App
+                        </a>
+                      </Button>
+                    )}
+                  </CardHeader>
+                  <CardContent className='space-y-4'>
+                    <div className='grid grid-cols-2 gap-3'>
+                      <div className='rounded-lg border border-chart-2/15 bg-chart-2/5 px-4 py-3'>
+                        <p className='text-xs text-muted-foreground'>
+                          Active connections
+                        </p>
+                        <p className='mt-1 text-2xl font-semibold tabular-nums'>
+                          {
+                            inventory.data.installations.filter(
+                              (installation) => installation.active
+                            ).length
+                          }
+                          <span className='ml-2 text-xs font-normal text-muted-foreground'>
+                            of {inventory.data.installations.length}
+                          </span>
+                        </p>
+                      </div>
+                      <div className='rounded-lg border border-chart-1/15 bg-chart-1/5 px-4 py-3'>
+                        <p className='text-xs text-muted-foreground'>
+                          Selected repositories
+                        </p>
+                        <p className='mt-1 text-2xl font-semibold tabular-nums'>
+                          {repositories.length}
+                        </p>
+                      </div>
                     </div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
+                    {inventory.data.installations.length === 0 ? (
+                      <div className='flex items-start gap-3 rounded-lg border bg-muted/10 px-4 py-4'>
+                        <IconGithub
+                          className='mt-0.5 size-5 shrink-0 text-muted-foreground'
+                          aria-hidden='true'
+                        />
+                        <div>
+                          <p className='text-sm font-medium'>Connect GitHub</p>
+                          <p className='mt-1 text-xs text-muted-foreground'>
+                            {canManage
+                              ? 'Connect the GitHub App, then select the repositories Preflyt can access.'
+                              : 'An Owner or Admin can connect the GitHub App and select repositories.'}
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className='grid gap-3 xl:grid-cols-2'>
+                        {inventory.data.installations.map((installation) => (
+                          <div
+                            key={installation.id}
+                            className='flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-background/50 p-4'
+                          >
+                            <div className='flex min-w-0 items-center gap-3'>
+                              <span className='flex size-9 shrink-0 items-center justify-center rounded-lg border bg-muted text-sm font-semibold'>
+                                {installation.accountLogin
+                                  .slice(0, 2)
+                                  .toUpperCase()}
+                              </span>
+                              <div className='min-w-0'>
+                                <p
+                                  className='truncate text-sm font-semibold'
+                                  title={installation.accountLogin}
+                                >
+                                  {installation.accountLogin}
+                                </p>
+                                <p className='mt-1 text-xs text-muted-foreground'>
+                                  {installation.active
+                                    ? 'Choose the repositories you want to review.'
+                                    : 'Restore GitHub App access to reconnect this account.'}
+                                </p>
+                                <details className='mt-1 text-xs text-muted-foreground'>
+                                  <summary className='cursor-pointer'>
+                                    Connection details
+                                  </summary>
+                                  <span className='font-mono'>
+                                    Installation {installation.id}
+                                  </span>
+                                </details>
+                              </div>
+                            </div>
+                            <StatusBadge
+                              tone={installation.active ? 'success' : 'warning'}
+                            >
+                              {installation.active ? 'Active' : 'Unavailable'}
+                            </StatusBadge>
+                            {canManage && (
+                              <Button size='sm' variant='outline' asChild>
+                                {installation.active ? (
+                                  <Link to='/repositories'>
+                                    Manage repositories
+                                  </Link>
+                                ) : (
+                                  <a href={`${API_BASE_URL}/github/install`}>
+                                    Reconnect GitHub
+                                  </a>
+                                )}
+                              </Button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
             {module !== 'integrations' &&
               (repositories.length === 0 ? (
                 <Card>

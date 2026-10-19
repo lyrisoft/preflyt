@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import {
   BrainCircuit,
+  Gauge,
   Cable,
   Loader2,
   Pencil,
@@ -47,6 +48,11 @@ import {
   canAdminister,
 } from '../workspace/navigation-session'
 import { isAiSettingsTab, type AiSettingsTab } from './intelligence-search'
+import {
+  VaptLimitsForm,
+  type VaptLimits,
+  type VaptLimitBounds,
+} from './vapt-limits-form'
 
 type Preset = {
   id: string
@@ -93,6 +99,8 @@ type Configuration = {
   routes: StageRoute[]
   stages: string[]
   presets?: Preset[]
+  vaptLimits?: VaptLimits
+  vaptLimitBounds?: VaptLimitBounds
 }
 const providerIcons = {
   // Simple Icons v14 OpenAI mark (CC0); removed from the current icon package.
@@ -139,6 +147,7 @@ const stageName = (stage: string) =>
     default: 'Default',
     laptop: 'Local development',
     repository: 'Repository',
+    vapt: 'AI security review',
     pull_request: 'Pull requests',
     qa: 'QA',
     performance: 'Performance',
@@ -167,6 +176,16 @@ const help = [
     title: 'Model router',
     content:
       'Choose one default model for AI reviews and workflow rewriting. Stage overrides are optional. Source sharing starts off. Saving a model tests its connection; configuration changes require another test. Connections do not expire after 24 hours. PR feedback is configured in Settings. Switching organizations separates connections and routes.',
+  },
+  {
+    title: 'Security review limits',
+    content:
+      'Set the AI allowance for each new security scan across your organization. Queued and running scans keep their original limits. Input tokens count code and context sent to the model, including repeated context, using a conservative estimate. Output tokens count model responses. Requests count calls to the model. These totals are separate from the model’s context window. Higher limits may increase provider charges. A scan that reaches a limit stops with incomplete coverage. Runner and provider limits, including the 30-minute timeout, still apply.',
+  },
+  {
+    title: 'Allowed security review limits',
+    content:
+      'Input: 100,000–100,000,000 tokens per scan. Output: 8,192–2,000,000 tokens per scan. Model requests: 1–1,000 per scan. The defaults are 4,000,000 input tokens, 131,072 output tokens and 80 requests.',
   },
   {
     title: 'Current availability',
@@ -308,7 +327,10 @@ function AiSettings({
           setError(
             `${testName(result?.status ?? 'UNAVAILABLE')}. Check the endpoint, model name and authentication settings, then try again.`
           )
-      } else setNotice('Saved.')
+      } else
+        setNotice(
+          path === '/vapt-limits' ? 'Limits saved for new scans.' : 'Saved.'
+        )
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unable to save. Try again.')
     } finally {
@@ -401,7 +423,7 @@ function AiSettings({
               onTabChange?.(value)
             }}
           >
-            <TabsList>
+            <TabsList className='h-auto flex-wrap'>
               <TabsTrigger value='connections'>
                 <Cable className='mr-2 size-4' />
                 Models
@@ -409,6 +431,10 @@ function AiSettings({
               <TabsTrigger value='routing'>
                 <RouteIcon className='mr-2 size-4' />
                 Model router
+              </TabsTrigger>
+              <TabsTrigger value='vapt-limits'>
+                <Gauge className='mr-2 size-4' />
+                Security review limits
               </TabsTrigger>
             </TabsList>
             <TabsContent value='connections' className='mt-5 space-y-6'>
@@ -536,7 +562,13 @@ function AiSettings({
                         <td className='px-4 py-4 font-medium'>
                           <span className='flex items-center gap-2.5'>
                             <ProviderIcon provider={p.endpoint?.preset} />
-                            {p.name}
+                            <Link
+                              to='/intelligence'
+                              search={{ model: p.id }}
+                              className='underline-offset-4 hover:underline'
+                            >
+                              {p.name}
+                            </Link>
                           </span>
                           <span
                             className='mt-1 block max-w-xs truncate text-xs font-normal text-muted-foreground'
@@ -690,6 +722,11 @@ function AiSettings({
                           <p className='text-sm font-medium'>
                             {stageName(stage)}
                           </p>
+                          {stage === 'vapt' && (
+                            <p className='max-w-md text-xs text-muted-foreground'>
+                              Vulnerability assessment and penetration testing.
+                            </p>
+                          )}
                           <p className='text-xs text-muted-foreground'>
                             {r
                               ? r.enabled
@@ -750,6 +787,21 @@ function AiSettings({
                   })}
                 </div>
               </details>
+            </TabsContent>
+            <TabsContent value='vapt-limits' className='mt-5'>
+              {data.vaptLimits && data.vaptLimitBounds ? (
+                <VaptLimitsForm
+                  key={data.vaptLimits.revision}
+                  limits={data.vaptLimits}
+                  bounds={data.vaptLimitBounds}
+                  busy={busy}
+                  save={(body) => void action('/vapt-limits', body)}
+                />
+              ) : (
+                <p role='alert' className='text-sm text-muted-foreground'>
+                  Security review limits are unavailable. Refresh and try again.
+                </p>
+              )}
             </TabsContent>
           </Tabs>
         </>

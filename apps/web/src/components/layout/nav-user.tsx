@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { ChevronsUpDown, LogOut } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Bug, ChevronsUpDown, Lightbulb, LogOut } from 'lucide-react'
 import { API_BASE_URL } from '@/lib/api'
 import useDialogState from '@/hooks/use-dialog-state'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -18,6 +18,8 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar'
 import { SignOutDialog } from '@/components/sign-out-dialog'
+import type { FeedbackKind } from '@/features/feedback/feedback-link'
+import { FeedbackPanel } from '@/features/feedback/feedback-panel'
 
 type NavUserProps = {
   user: {
@@ -35,6 +37,9 @@ type Session = {
 
 export function NavUser({ user }: NavUserProps) {
   const { isMobile } = useSidebar()
+  const accountTrigger = useRef<HTMLButtonElement>(null)
+  const [feedbackKind, setFeedbackKind] = useState<FeedbackKind>('bug')
+  const [feedbackOpen, setFeedbackOpen] = useState(false)
   const [session, setSession] = useState<Session | null>(null)
   useEffect(() => {
     const controller = new AbortController()
@@ -64,6 +69,8 @@ export function NavUser({ user }: NavUserProps) {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <SidebarMenuButton
+                ref={accountTrigger}
+                aria-label='Open account menu'
                 size='lg'
                 className='data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground'
               >
@@ -82,6 +89,9 @@ export function NavUser({ user }: NavUserProps) {
               side={isMobile ? 'bottom' : 'right'}
               align='end'
               sideOffset={4}
+              onCloseAutoFocus={(event) => {
+                if (feedbackOpen) event.preventDefault()
+              }}
             >
               <DropdownMenuLabel className='p-0 font-normal'>
                 <div className='flex items-center gap-2 px-1 py-1.5 text-start text-sm'>
@@ -98,8 +108,27 @@ export function NavUser({ user }: NavUserProps) {
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem
+                onSelect={() => {
+                  setFeedbackKind('bug')
+                  setFeedbackOpen(true)
+                }}
+              >
+                <Bug aria-hidden='true' />
+                Report a bug
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => {
+                  setFeedbackKind('suggestion')
+                  setFeedbackOpen(true)
+                }}
+              >
+                <Lightbulb aria-hidden='true' />
+                Suggest an improvement
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
                 variant='destructive'
-                onClick={() => setOpen(true)}
+                onSelect={() => setOpen(true)}
               >
                 <LogOut />
                 Sign out
@@ -109,6 +138,12 @@ export function NavUser({ user }: NavUserProps) {
         </SidebarMenuItem>
       </SidebarMenu>
 
+      <FeedbackPanel
+        kind={feedbackKind}
+        open={feedbackOpen}
+        onOpenChange={setFeedbackOpen}
+        onReturnFocus={() => accountTrigger.current?.focus()}
+      />
       <SignOutDialog open={!!open} onOpenChange={setOpen} />
     </>
   )

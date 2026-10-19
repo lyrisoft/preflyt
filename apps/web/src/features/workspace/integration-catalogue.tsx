@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ArrowUpRight } from 'lucide-react'
+import { ArrowUpRight, Plug } from 'lucide-react'
 import { IconGithub } from '@/assets/brand-icons'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
@@ -12,13 +12,15 @@ import {
 } from '@/components/ui/select'
 import { StatusBadge } from '@/components/status-badge'
 
-export type IntegrationId = 'github'
+export type IntegrationId = 'github' | 'mcp'
 export function IntegrationCatalogue({
   connected,
+  mcpConnected = false,
   selected,
   onSelect,
 }: {
   connected: boolean
+  mcpConnected?: boolean
   selected: IntegrationId | null
   onSelect: (id: IntegrationId) => void
 }) {
@@ -33,6 +35,16 @@ export function IntegrationCatalogue({
       status: connected ? 'Connected' : 'Not connected',
       tone: connected ? ('success' as const) : ('neutral' as const),
       color: 'bg-chart-1/10 text-chart-1',
+    },
+    {
+      id: 'mcp' as const,
+      name: 'MCP and coding agents',
+      description:
+        'Connect Codex or Claude Code to verify findings and prepare fixes.',
+      icon: Plug,
+      status: mcpConnected ? 'Connected' : 'Not connected',
+      tone: mcpConnected ? ('success' as const) : ('neutral' as const),
+      color: 'bg-chart-3/10 text-chart-3',
     },
   ]
   const visible = integrations.filter(
@@ -103,7 +115,9 @@ export function IntegrationCatalogue({
               {item.description}
             </span>
             <span className='mt-4 text-xs font-medium text-primary'>
-              {connected ? 'Manage connection' : 'Set up connection'}
+              {item.status === 'Connected'
+                ? 'Manage connection'
+                : 'Set up connection'}
             </span>
           </button>
         ))}

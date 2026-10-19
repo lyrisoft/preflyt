@@ -329,6 +329,7 @@ it('applies search and tab changes without changing findings query scope', async
     'unsafe query',
     1,
     10,
+    undefined,
   ])
   await view.getByRole('tab', { name: 'Missing or unverified results' }).click()
   expect(state.key).toEqual([
@@ -344,6 +345,7 @@ it('applies search and tab changes without changing findings query scope', async
     'unsafe query',
     1,
     10,
+    undefined,
   ])
 })
 
@@ -368,6 +370,11 @@ it('filters the shared list by source and finding type with keyboard controls', 
     .getByRole('option', { name: 'Repository health', exact: true })
     .click()
   expect(state.key[2]).toBe('health')
+  await view.getByRole('combobox', { name: 'Finding source' }).click()
+  await page
+    .getByRole('option', { name: 'AI security review', exact: true })
+    .click()
+  expect(state.key[2]).toBe('vapt')
   await view.getByRole('combobox', { name: 'Finding type' }).click()
   await page.getByRole('option', { name: 'Reliability', exact: true }).click()
   expect(state.key[1]).toBe('reliability')
@@ -577,4 +584,65 @@ it('searches repositories without changing findings until a repository is select
   await page.getByPlaceholder('Search repositories…').fill('')
   await page.getByRole('option', { name: 'All repositories' }).click()
   expect(state.key[6]).toBe('all')
+})
+
+it('distinguishes VAPT suggestions from standard repository health findings', async () => {
+  state.query = {
+    data: {
+      summary: { ...summary, reportedIssues: 1 },
+      rows: [
+        {
+          id: 'vapt-finding',
+          origin: 'health',
+          health: '11111111-1111-4111-8111-111111111111',
+          healthFingerprint: 'fingerprint',
+          title: 'Potential authorization gap',
+          category: 'security',
+          repositoryId: '51',
+          repository: 'fixture/repo',
+          sourceSha: 'a'.repeat(40),
+          assessmentId: '11111111-1111-4111-8111-111111111111',
+          observedAt: '2026-10-18T17:00:00Z',
+          severity: 'high',
+          status: 'AI suggestion',
+          evidence: ['AI_REPORTED'],
+          verification: 'Suggestions only',
+          occurrences: 1,
+        },
+      ],
+      total: 1,
+      assessedRevisions: 1,
+      repositories: [],
+      pageSize: 50,
+    },
+    refetch: vi.fn(),
+  }
+  await render(<FindingsPage />)
+  await expect
+    .element(
+      page.getByRole('cell', {
+        name: 'Security AI security review',
+        exact: true,
+      })
+    )
+    .toBeVisible()
+  await expect
+    .element(page.getByText('AI suggestion', { exact: true }))
+    .toBeVisible()
+})
+
+it('keeps the combined Security report scope and clears it when choosing another category', async () => {
+  const reports =
+    '11111111-1111-4111-8111-111111111111,22222222-2222-4222-8222-222222222222'
+  state.routeSearch = {
+    source: 'health',
+    category: 'security',
+    repository: '51',
+    healthReports: reports,
+  }
+  await render(<FindingsPage />)
+  expect(state.key).toContain(reports)
+  await page.getByRole('combobox', { name: 'Finding type' }).click()
+  await page.getByRole('option', { name: 'Reliability', exact: true }).click()
+  expect(state.key).not.toContain(reports)
 })

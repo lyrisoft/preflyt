@@ -64,7 +64,7 @@ it.each([
   { instructions: "" },
   { stages: ["unknown"] },
   { repositories: ["https://elsewhere"] },
-  { instructions: "a".repeat(6001) },
+  { instructions: "a".repeat(24001) },
   { license: "" },
 ])("rejects invalid manifests %j", (patch) => {
   expect(() => validateSkill({ ...skillTemplates[0]!, ...patch })).toThrow();
@@ -114,22 +114,93 @@ it("bounds structured review output", () => {
     validateSkillOutput("a".repeat(20001), context, ["skill"]),
   ).toThrow();
 });
-it('requires impact-based severity for new inference but preserves unrated historical output', () => {
-  expect(validateSkillOutput(output(), context, ['skill'])[0].severity).toBeUndefined()
-  expect(() => validateSkillOutput(output(), context, ['skill'], undefined, true)).toThrow()
-  for (const severity of ['critical', 'high', 'medium', 'low']) {
-    const raw = output({ findings: [{ ...finding, severity, impact: 'A missing report limits investigation of this commit.' }] })
-    expect(validateSkillOutput(raw, context, ['skill'], undefined, true)[0]).toMatchObject({ severity, impact: 'A missing report limits investigation of this commit.' })
+it("requires impact-based severity for new inference but preserves unrated historical output", () => {
+  expect(
+    validateSkillOutput(output(), context, ["skill"])[0].severity,
+  ).toBeUndefined();
+  expect(() =>
+    validateSkillOutput(output(), context, ["skill"], undefined, true),
+  ).toThrow();
+  for (const severity of ["critical", "high", "medium", "low"]) {
+    const raw = output({
+      findings: [
+        {
+          ...finding,
+          severity,
+          impact: "A missing report limits investigation of this commit.",
+        },
+      ],
+    });
+    expect(
+      validateSkillOutput(raw, context, ["skill"], undefined, true)[0],
+    ).toMatchObject({
+      severity,
+      impact: "A missing report limits investigation of this commit.",
+    });
   }
-  for (const fields of [{ severity: 'urgent', impact: 'Bounded impact.' }, { severity: 'low', impact: '' }, { severity: 'low' }, { impact: 'Bounded impact.' }]) {
-    expect(() => validateSkillOutput(output({ findings: [{ ...finding, ...fields }] }), context, ['skill'], undefined, true)).toThrow()
+  for (const fields of [
+    { severity: "urgent", impact: "Bounded impact." },
+    { severity: "low", impact: "" },
+    { severity: "low" },
+    { impact: "Bounded impact." },
+  ]) {
+    expect(() =>
+      validateSkillOutput(
+        output({ findings: [{ ...finding, ...fields }] }),
+        context,
+        ["skill"],
+        undefined,
+        true,
+      ),
+    ).toThrow();
   }
-})
+});
 
-it('allows ordinary risk-assessment and task-execution words without accepting actual API key tokens', () => {
-  const summary = 'The risk-assessment task-execution path can skip validation.'
-  expect(validateSkillOutput(output({ findings: [{ ...finding, summary }] }), context, ['skill'])).toHaveLength(1)
-  const fixtureToken = ['sk', 'fixture', 'secret', 'value'].join('-')
-  for (const token of [fixtureToken, `(${fixtureToken})`, `key: ${fixtureToken}`])
-    expect(() => validateSkillOutput(output({ findings: [{ ...finding, summary: token }] }), context, ['skill'])).toThrow()
-})
+it("allows ordinary risk-assessment and task-execution words without accepting actual API key tokens", () => {
+  const summary =
+    "The risk-assessment task-execution path can skip validation.";
+  expect(
+    validateSkillOutput(
+      output({ findings: [{ ...finding, summary }] }),
+      context,
+      ["skill"],
+    ),
+  ).toHaveLength(1);
+  const fixtureToken = ["sk", "fixture", "secret", "value"].join("-");
+  for (const token of [
+    fixtureToken,
+    `(${fixtureToken})`,
+    `key: ${fixtureToken}`,
+  ])
+    expect(() =>
+      validateSkillOutput(
+        output({ findings: [{ ...finding, summary: token }] }),
+        context,
+        ["skill"],
+      ),
+    ).toThrow();
+});
+
+it("passes full long skills into inference without truncating their final instructions", () => {
+  const instructions = "x".repeat(23970) + "CHECK THE FINAL EVIDENCE";
+  const prompt = reviewPrompt(
+    [{ id: "skill", version: 1, instructions }],
+    context,
+  );
+  expect(JSON.parse(prompt.user).SKILLS[0].instructions).toBe(instructions);
+});
+it.each([
+  [{ name: "" }, "Name is required"],
+  [{ stages: ["unknown"] }, "Stages: unsupported"],
+  [{ repositories: ["org/repo"] }, "Repositories must contain numeric"],
+  [{ languages: ["<script>"] }, "Languages:"],
+  [{ frameworks: "React" }, "Frameworks must be a list"],
+  [{ source: "s".repeat(301) }, "Source: maximum 300 characters; received 301"],
+])(
+  "identifies the failing field without showing invalid contents",
+  (patch, message) => {
+    expect(() =>
+      validateSkill({ ...skillTemplates[0]!, ...patch } as any),
+    ).toThrow(message as string);
+  },
+);

@@ -226,6 +226,7 @@ it("queues once, saves assessed-commit AI guidance, reuses the cache, and invali
     state: "SUCCEEDED",
   });
   expect(runPromptInference).toHaveBeenCalledTimes(1);
+  expect(vi.mocked(runPromptInference).mock.calls[0]?.[6]?.usageContext).toMatchObject({workload:'FINDING_GUIDANCE',repositoryId:repo.id});
   model = { ...model, route: { ...model.route, revision: 2 } };
   expect(await service.get(owner, scope)).toMatchObject({ state: "NONE" });
   expect(await fixture.prisma.aiFindingGuidance.count()).toBe(1);

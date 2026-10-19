@@ -1,4 +1,10 @@
+import { McpOAuthService } from '../mcp/mcp-oauth.service.js';
+import { McpDiscoveryController, McpOAuthController, McpConnectionsController } from '../mcp/mcp-oauth.controller.js';
+import { CompanionService } from '../companions/companion.service.js';
+import { CompanionController, CompanionOAuthController } from '../companions/companion.controller.js';
 import { HealthModule } from '../health/health.module.js';
+import { FindingAgentService } from '../findings/finding-agent.service.js';
+import { FindingAgentController, FindingMcpController } from '../findings/finding-agent.controller.js';
 import { FindingAiGuidanceService } from '../findings/finding-ai-guidance.service.js';
 import { FindingAiGuidanceController } from '../findings/finding-ai-guidance.controller.js';
 import { PolicyExceptionController } from './policy-exception.controller.js';
@@ -37,6 +43,8 @@ import { AssessmentService } from "./assessment.service.js";
 @Module({
   imports: [AuthModule, PrismaModule, GitHubProviderModule, FindingSourceStoreModule, HealthModule],
   controllers: [
+    McpDiscoveryController, McpOAuthController, McpConnectionsController,
+    FindingAgentController, FindingMcpController, CompanionController, CompanionOAuthController,
     PipelinePolicyController,
     PipelineGateController,
     PipelineSetupController,
@@ -54,6 +62,7 @@ import { AssessmentService } from "./assessment.service.js";
     PullRequestController,
   ],
   providers: [
+    FindingAgentService, CompanionService, McpOAuthService,
     PipelineWorkflowAiService,
     AiConfigurationService,
     PolicyExceptionService,

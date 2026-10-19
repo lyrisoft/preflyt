@@ -6,8 +6,12 @@ import type {
   FindingGuidance,
 } from '@/features/findings/finding-types'
 import { useNavigationSession } from '@/features/workspace/navigation-session'
+import { freshnessTiming } from './freshness-timing'
 
 export type HealthFinding = {
+  assessmentId?: string
+  assessedAt?: string | null
+  aiReview?: Finding['aiReview']
   reportGuidance?: Finding['reportGuidance']
   relatedLocations?: { path: string; line: number; endLine: number }[]
   referenceGuidance?: Finding['referenceGuidance']
@@ -36,6 +40,36 @@ export type OverallHealth = {
   reasons: string[]
 }
 export type HealthReport = {
+  findingSummary?: {
+    total: number
+    unsuppressed: number
+    analyzerHigh: number
+    groups: Array<{
+      category: string | null
+      checkId: string | null
+      count: number
+    }>
+  }
+
+  sourceReviewCoverage?: {
+    version: 1
+    scope: 'SOURCE_ONLY'
+    evidence: 'AI_REPORTED'
+    available: boolean
+    truncated: boolean
+    entries: Array<{
+      surface: string
+      riskArea: string
+      outcome:
+        | 'reported'
+        | 'no_issue_found'
+        | 'ruled_out'
+        | 'not_applicable'
+        | 'needs_follow_up'
+    }>
+    gaps: Array<{ surface: string; riskArea: string; detail: string }>
+    caveats: string[]
+  }
   selection?: 'all' | HealthCategory
   policyContext?: {
     version: 1
@@ -118,6 +152,10 @@ export type HealthReport = {
   }
 }
 export type HealthAssessment = {
+  parentId?: string | null
+  includeAiSecurity?: boolean
+  aiReviewId?: string | null
+  scanner?: 'strix' | null
   category?: HealthCategory | null
   retryAt?: string | null
   progress?: string | null
@@ -135,6 +173,18 @@ export type HealthAssessment = {
   finishedAt: string | null
 }
 export type HealthTimelinePoint = {
+  categories?: Partial<
+    Record<
+      'security' | 'reliability' | 'maintainability',
+      {
+        findings: number
+        partial: boolean
+        comparisonKey: string | null
+        bySeverity?: Record<string, number>
+      } | null
+    >
+  >
+  scope?: HealthCategory | 'all' | 'ai'
   partial: boolean
   comparableFindings: number | null
   checkIds?: string[]
@@ -144,6 +194,9 @@ export type HealthTimelinePoint = {
   findings: number
 }
 export type HealthData = {
+  strixReview?: HealthAssessment | null
+  assessmentOptions?: { includeAiSecurity: boolean }
+
   latestAttempt?: HealthAssessment | null
   refreshPending?: boolean
   branchCoverage?: {
@@ -164,7 +217,14 @@ export type HealthData = {
   categoryResults?: Partial<
     Record<
       HealthCategory,
-      { assessmentId: string; finishedAt: string | null; value: string } | null
+      {
+        assessmentId: string
+        assessmentIds?: string[]
+        aiFindings?: number
+        standardFindings?: number
+        finishedAt: string | null
+        value: string
+      } | null
     >
   >
   ciCoverage?: {
@@ -299,6 +359,52 @@ export async function healthRequest<T>(
   }
   return response.json() as Promise<T>
 }
+export function healthFindingCount(report: HealthReport) {
+  return report.findingSummary?.total ?? report.findings.length
+}
+export type HealthFindingsPage = {
+  unfilteredTotal?: number
+  assessmentId: string
+  sourceSha: string | null
+  rows: HealthFinding[]
+  total: number
+  page: number
+  pageSize: number
+}
+export function useHealthFindings(
+  repositoryId: string,
+  assessment: string | undefined,
+  page: number,
+  pageSize: number,
+  search: string,
+  severity: string,
+  enabled: boolean,
+  reports?: string
+) {
+  const session = useNavigationSession()
+  return useQuery({
+    queryKey: [
+      'health-findings',
+      reports,
+      session.data?.organizationId,
+      session.data?.identityId,
+      repositoryId,
+      assessment,
+      page,
+      pageSize,
+      search,
+      severity,
+    ],
+    enabled: enabled && !!assessment && session.isSuccess,
+    queryFn: ({ signal }) =>
+      healthRequest<HealthFindingsPage>(
+        `repositories/${repositoryId}/health/${assessment}/findings?${new URLSearchParams({ page: String(page), pageSize: String(pageSize), q: search, severity, ...(reports ? { reports } : {}) })}`,
+        signal
+      ),
+    retry: false,
+    staleTime: 10000,
+  })
+}
 export function useHealth(
   repositoryId: string,
   assessment?: string,
@@ -327,6 +433,7 @@ export function useHealth(
     staleTime: 10000,
     refetchInterval: (q) =>
       q.state.data?.refreshPending ||
+      ['QUEUED', 'RUNNING'].includes(q.state.data?.strixReview?.state ?? '') ||
       ['QUEUED', 'RUNNING'].includes(
         q.state.data?.latestAttempt?.state ??
           q.state.data?.assessment?.state ??
@@ -362,23 +469,10 @@ export function useHealthFreshness(repositoryId: string, assessment?: string) {
     retry: false,
     gcTime: 0,
     staleTime: (q) =>
-      q.state.data?.checkedAt
-        ? Math.max(
-            0,
-            new Date(q.state.data.checkedAt).getTime() +
-              60000 -
-              q.state.dataUpdatedAt
-          )
-        : 60000,
+      freshnessTiming(q.state.data?.checkedAt, q.state.dataUpdatedAt).staleTime,
     refetchInterval: (q) =>
-      q.state.data?.checkedAt
-        ? Math.max(
-            1000,
-            new Date(q.state.data.checkedAt).getTime() +
-              60000 -
-              q.state.dataUpdatedAt
-          )
-        : 60000,
+      freshnessTiming(q.state.data?.checkedAt, q.state.dataUpdatedAt)
+        .refetchInterval,
     queryFn: ({ signal }) =>
       healthRequest<HealthFreshness>(
         `repositories/${repositoryId}/health/freshness?assessment=${assessment}`,
@@ -387,6 +481,28 @@ export function useHealthFreshness(repositoryId: string, assessment?: string) {
   })
 }
 export const healthReasons: Record<string, string> = {
+  AI_SECURITY_UNAVAILABLE:
+    'AI security review was skipped because the model connection, source-sharing permission or scanner is unavailable. Standard checks can still run.',
+  HEALTH_SHARED_SOURCE_UNAVAILABLE:
+    'The saved source snapshot is unavailable. Start a new assessment to fetch and verify source again.',
+  STRIX_RUNNER_BUSY:
+    'Waiting for AI security review runner capacity. This assessment will retry automatically.',
+  STRIX_REVIEW_UNAVAILABLE:
+    'Strix review could not finish. Check the dedicated runner and repository model connection.',
+  STRIX_RUNNER_STATE_LOST:
+    'The runner lost this review. Start a new Strix review after checking the runner.',
+  STRIX_REVIEW_PENDING: 'Strix security review is running.',
+  STRIX_INPUT_LIMIT_REACHED:
+    'The AI security review reached its input-token limit before it could finish.',
+  STRIX_OUTPUT_LIMIT_REACHED:
+    'The AI security review reached its output-token limit before it could finish.',
+  STRIX_REQUEST_LIMIT_REACHED:
+    'The AI security review reached its model-request limit before it could finish.',
+  AI_REVIEW_REPORTED:
+    'Strix review finished. Findings are AI suggestions; coverage remains limited.',
+  STRIX_REVIEW_INCOMPLETE:
+    'Strix stopped before completing the requested review.',
+
   HEALTH_TEST_EXECUTION_REMOVED:
     'Repository Health no longer runs tests. Reassess for static analysis and submit test results and coverage from your CI workflow.',
   NO_APPLICABLE_ANALYSIS:
@@ -485,6 +601,18 @@ export const healthReasons: Record<string, string> = {
 /** Fixed user-facing failure descriptions; never expose provider exception text. */
 export function healthFailure(reason: string | null, canRetry = true) {
   const actions: Record<string, string> = {
+    STRIX_INPUT_LIMIT_REACHED:
+      'An organization administrator can raise the input-token limit in AI Intelligence → Security review limits. Then start a new review.',
+    STRIX_OUTPUT_LIMIT_REACHED:
+      'An organization administrator can raise the output-token limit in AI Intelligence → Security review limits. Then start a new review.',
+    STRIX_REQUEST_LIMIT_REACHED:
+      'An organization administrator can raise the model-request limit in AI Intelligence → Security review limits. Then start a new review.',
+    STRIX_REVIEW_INCOMPLETE:
+      'Select Include AI security review in Assessment options, then Reassess to start another review. If it fails again, give your administrator the assessment ID.',
+    STRIX_REVIEW_UNAVAILABLE:
+      'Check the security testing model and scanner, then select Include AI security review in Assessment options and Reassess.',
+    STRIX_RUNNER_STATE_LOST:
+      'The interrupted review will not restart automatically. Select Include AI security review in Assessment options, then Reassess to start a new review.',
     NO_APPLICABLE_ANALYSIS:
       'Choose a category that matches the repository files, or run a full assessment after adding the relevant files or test setup.',
     GIT_UNAVAILABLE:
@@ -536,6 +664,7 @@ export const healthLabel = (state: string) =>
     COMPLETED: 'Completed',
     FAILED: 'Failed',
     CANCELLED: 'Cancelled',
+    SKIPPED: 'Skipped',
     CURRENT: 'Current',
     STALE: 'Stale',
     UNVERIFIED: 'Freshness unverified',

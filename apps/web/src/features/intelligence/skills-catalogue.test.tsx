@@ -249,9 +249,9 @@ it('keeps unsaved text after a rejected file and cancels without saving', async 
   await view.getByRole('button', { name: 'Create separate copy' }).click()
   await userEvent.upload(
     view.getByLabelText('Replace from SKILL.md file'),
-    new File(['x'.repeat(32769)], 'SKILL.md')
+    new File(['x'.repeat(131073)], 'SKILL.md')
   )
-  await expect.element(view.getByRole('alert')).toHaveTextContent('32 KiB')
+  await expect.element(view.getByRole('alert')).toHaveTextContent('128 KiB')
   await expect
     .element(view.getByRole('textbox', { name: 'Instructions', exact: true }))
     .toHaveValue(template.instructions)
@@ -652,4 +652,65 @@ it('does not offer retirement to a reviewer without administration permission', 
     .element(page.getByRole('button', { name: 'Retire this version' }))
     .not.toBeInTheDocument()
   expect(state.save).not.toHaveBeenCalled()
+})
+
+it('loads and saves a long skill without truncating its instructions or description', async () => {
+  const imported = {
+    ...template,
+    description: 'd'.repeat(457),
+    instructions: 'Review evidence.\n'.repeat(800) + 'FINAL INSTRUCTION',
+    license: 'MIT',
+  }
+  state.save.mockResolvedValue(imported)
+  const view = await render(<SkillsCatalogue />)
+  await userEvent.upload(
+    view.getByLabelText('Upload SKILL.md file'),
+    new File(
+      [
+        '---\nname: Long review\ndescription: Review\n---\n' +
+          imported.instructions,
+      ],
+      'SKILL.md'
+    )
+  )
+  await expect
+    .element(view.getByRole('textbox', { name: 'Instructions', exact: true }))
+    .toHaveValue(imported.instructions)
+  await expect
+    .element(view.getByRole('textbox', { name: 'Description', exact: true }))
+    .toHaveValue(imported.description)
+  await expect.element(view.getByText(/24,000 characters/)).toBeVisible()
+  await expect
+    .element(view.getByRole('textbox', { name: 'Description', exact: true }))
+    .toHaveAttribute('maxlength', '2000')
+  await expect
+    .element(view.getByRole('textbox', { name: 'Instructions', exact: true }))
+    .toHaveAttribute('maxlength', '24000')
+  await view.getByRole('button', { name: 'Save draft' }).click()
+  expect(state.save).toHaveBeenLastCalledWith(
+    '/ai/skills',
+    expect.objectContaining({
+      instructions: imported.instructions,
+      description: imported.description,
+    })
+  )
+})
+it('shows the exact invalid upload fields', async () => {
+  state.save.mockRejectedValue(
+    new Error(
+      'Description: maximum 2,000 characters; received 2,001. Instructions: maximum 24,000 characters; received 24,001.'
+    )
+  )
+  const view = await render(<SkillsCatalogue />)
+  await userEvent.upload(
+    view.getByLabelText('Upload SKILL.md file'),
+    new File(['fixture'], 'SKILL.md')
+  )
+  await expect
+    .element(view.getByText(/Description: maximum 2,000/))
+    .toBeVisible()
+  await expect
+    .element(view.getByText(/Instructions: maximum 24,000/))
+    .toBeVisible()
+  expect(state.save).toHaveBeenCalledTimes(1)
 })

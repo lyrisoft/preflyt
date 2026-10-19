@@ -3,6 +3,8 @@ export const notificationCopy: Record<
   string,
   { title: string; message: string; actionLabel: string }
 > = {
+  AI_SECURITY_REVIEW_COMPLETED: { title: "AI security review completed", message: "Review the AI suggestions and reported coverage gaps for this commit. Suggestions require validation and do not change standard check results or merge permission.", actionLabel: "View AI security report" },
+  AI_SECURITY_REVIEW_FAILED: { title: "AI security review could not finish", message: "Open the review to check the failure reason before starting another assessment. Standard checks have their own result.", actionLabel: "Review AI security assessment" },
   HEALTH_ASSESSMENT_COMPLETED: { title: "Repository health assessment completed", message: "Review the revision report and any analyzer findings. This report does not grant merge permission.", actionLabel: "View health report" },
   HEALTH_ASSESSMENT_PARTIAL: { title: "Repository health assessment is incomplete", message: "Some analysis could not run or establish full coverage. Open Health to review the available findings, limits and next action.", actionLabel: "Review partial report" },
   HEALTH_ASSESSMENT_FAILED: { title: "Repository health assessment could not finish", message: "Source access or analysis could not be verified. Open Health to review the reason and reassess when it is resolved.", actionLabel: "Review health assessment" },

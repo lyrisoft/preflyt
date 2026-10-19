@@ -73,3 +73,10 @@ See [Access Control](access-control.md) for the full list.
 | Review workspace audit history | [Audit log](audit-log.md) |
 | Get alerts about results | [Notifications](notifications.md) |
 | See who works on what | [Contributors](contributors.md) |
+
+
+## Report a bug or suggest an improvement
+
+Open your account menu at the bottom of the sidebar, then choose **Report a bug** or **Suggest an improvement**. Complete the short form, then select **Continue on GitHub** to open the matching Preflyt issue template in a new tab. Sign in to GitHub, review the draft, complete any remaining template fields and submit it there. Opening the draft does not create an issue.
+
+The form includes the installed Preflyt version when available. It does not attach logs, source code, workspace names or page URLs. Issues in `lyrisoft/preflyt` are public: leave out credentials, customer information and private code or URLs. Use **Contact support privately** for security concerns. Drafts stay separate for bugs and suggestions while the app remains open; reloading the app clears them.

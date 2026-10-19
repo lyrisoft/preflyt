@@ -10,7 +10,9 @@ Health uses the existing API, integration worker, PostgreSQL and queue, plus a d
 4. Explicitly select a new accessible repository, or start Health on one previously selected. Upgrade does not scan historical selections automatically.
 5. Verify Queued → Running → saved report, branch/SHA, analysis limits, one completion notification and the Health deep link. No standards, policy or GitHub protection should change.
 
-The `repository-health` BullMQ queue transports only persisted assessment IDs. A five-second recovery loop reconstructs eligible jobs from PostgreSQL. A 120-second fenced lease prevents duplicate completion; active native results are polled through deferred five-second leases. Health admits at most two running assessments globally and one per organization. Manual admission allows ten assessments per repository per hour and one active assessment per repository. Full reassessments also have a one-minute branch cooldown; category runs do not. These are code limits for this increment, not user-facing configuration requirements.
+The `repository-health` BullMQ queue transports only persisted assessment IDs. A five-second recovery loop reconstructs eligible jobs from PostgreSQL. A 120-second fenced lease prevents duplicate completion; active native results are polled through deferred five-second leases. Health admits at most two running assessments globally, with one standard assessment and one optional AI review per organization. Manual admission allows ten assessment groups per repository per hour and one active assessment of each kind per repository. Full reassessments also have a one-minute branch cooldown; category runs do not. These are code limits for this increment, not user-facing configuration requirements.
+
+Manual **Assess/Reassess** can include a remembered **Include AI security review** option. An enabled, tested model connection and source-sharing consent are required for AI review. If unavailable, that review is skipped and standard checks continue. Automatic initial assessments and category-only runs use standard checks. Combined assessments pin and fetch source once and share a protected snapshot; reports remain separate and AI suggestions do not determine readiness or merge permission. Apply additive migrations `20261018150000_health_strix_scanner` and `20261018180000_unified_health_assessment` and regenerate Prisma when upgrading this flow. See [AI security review operations](strix-repo-health.md) for source retention and model setup.
 
 A 35-minute Health deadline requests cancellation of admitted native work. The existing native runtime has its own execution deadlines. Processing remains active until cleanup is acknowledged; it never claims a cancelled sandbox was removed merely because cancellation was requested. Turning off new native execution leaves cleanup reconciliation active.
 
@@ -99,3 +101,30 @@ CI generates JUnit and LCOV using its existing environment. Pipeline intake acce
 The companion Action has local unreleased `coverage-report` collection. A new release of that Action and deployment of these API changes are required before users can use it; v2.1.1 does not contain the new input. See the [user guide](../../apps/docs/docs/user-guide/repository-health.md) and [trusted signature setup](organization-signed-ci-reports.md). No push, release or workflow rerun was performed.
 
 The worker prints safe `health.worker.processing`, `health.worker.fetching_source` and `health.worker.progress` events with assessment IDs. Scanner failures print fixed safe reasons. These are server terminal/container logs, not browser console output. Do not restart an active worker just to obtain logs. Raw repository command output and credentials are not logged.
+
+### Bounded saved-report reads
+
+The repository Health endpoint returns report metadata and finding counts, rather
+than every finding. PostgreSQL projects compact category/check counts for history,
+charts and overall health. Trend differences compare exact saved fingerprints in
+the database under the existing comparison rules; counts never depend on the
+visible findings page. Saved reports and scanner evidence are unchanged.
+
+`GET /github/repositories/:repositoryId/health/:id/findings` accepts `page`,
+`pageSize` (10, 25, 50 or 100), `severity`, and literal text search `q` (up to 200
+characters). Filtering, counting and pagination run in the database in saved
+finding order. Rows contain finding/location metadata only. The separate
+`GET /github/repositories/:repositoryId/health/:id/findings/:fingerprint` returns
+one finding with saved analyzer advice and current Preflyt rule references when
+the user opens its details. Both reads enforce organization/repository access
+before and after reading. The existing source-view endpoint remains commit-bound.
+
+Local acceptance on 18 October 2026 passed 106 focused API checks and 80 browser
+checks, type checks, frontend lint and deployment smoke. Against the existing
+4,712-finding maiguard-api report, authenticated HTTP reads measured an 18,824-byte
+summary in 462 ms (warm retries 445/457 ms), a 3,506-byte first page in 56 ms, and
+a 2,355-byte single-finding detail in 46 ms. Summary plus first page totaled 22,330
+bytes, compared with the previous approximately 8.4 MB report response. These are
+local measurements, not a production latency guarantee. Live browser verification
+confirmed page two, search resetting to page one, and single-finding guidance.
+All nine Compose services were healthy after rebuilding API, worker and web.

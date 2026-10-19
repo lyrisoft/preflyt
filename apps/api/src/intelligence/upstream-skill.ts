@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
 import { aiHttpRequest } from "./ai-http.js";
-import { parseSkillMarkdown, skillMarkdownMaxBytes } from "./skill-markdown.js";
+import {
+  parseSkillMarkdown,
+  skillMarkdownMaxBytes,
+  SkillImportValidationError,
+} from "./skill-markdown.js";
 export async function readUpstreamSkill(input: {
   repository: string;
   commit: string;
@@ -37,7 +41,7 @@ export async function readUpstreamSkill(input: {
     if (!response.ok) throw new Error("Pinned upstream file unavailable");
     const bytes = new Uint8Array(await response.arrayBuffer());
     if (bytes.byteLength > skillMarkdownMaxBytes)
-      throw new Error("Upstream file exceeds 32 KiB");
+      throw new Error("Upstream file: maximum 128 KiB.");
     return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
   };
   const markdown = await read(path),
@@ -45,7 +49,14 @@ export async function readUpstreamSkill(input: {
   if (!licenseText.trim() || licenseText.length > 32000)
     throw new Error("Review a non-empty upstream license file");
   const sha256 = createHash("sha256").update(markdown).digest("hex");
-  const manifest = parseSkillMarkdown(markdown);
+  let manifest;
+  try {
+    manifest = parseSkillMarkdown(markdown);
+  } catch (error) {
+    throw new SkillImportValidationError(
+      error instanceof Error ? error.message : "Invalid SKILL.md fields.",
+    );
+  }
   return {
     manifest: {
       ...manifest,

@@ -220,6 +220,73 @@ const connected = async () => {
   await post(owner, `/providers/${p.id}/test`, {}).expect(201);
   return p;
 };
+it("serves model details only within authorized organization scope and validates usage filters", async () => {
+  const provider = await connected();
+  const details = await http(app.getHttpServer()).get(`${root}/providers/${provider.id}/usage`).set("Cookie", `ai.sid=${owner.identityId}`).expect(200);
+  expect(details.body.provider).toMatchObject({id:provider.id,modelId:'model-a'});
+  expect(details.body.totals).toMatchObject({requests:0,inputTokens:null,outputTokens:null});
+  expect(JSON.stringify(details.body)).not.toContain('fixture-key');
+  await http(app.getHttpServer()).get(`${root}/providers/${provider.id}/usage`).set("Cookie", `ai.sid=${developer.identityId}`).expect(403);
+  await http(app.getHttpServer()).get(`${root}/providers/${provider.id}/usage`).set("Cookie", `ai.sid=${outsider.identityId}`).expect(404);
+  await http(app.getHttpServer()).get(`${root}/providers/${provider.id}/usage?days=500`).set("Cookie", `ai.sid=${owner.identityId}`).expect(400);
+});
+it("saves organization-scoped VAPT limits with revision checks, audit and no inference", async () => {
+  const initial = (await get().expect(200)).body;
+  expect(initial.vaptLimits).toEqual({
+    maxInputTokens: 4000000,
+    maxOutputTokens: 131072,
+    maxModelCalls: 80,
+    revision: 0,
+  });
+  const limits = {
+    maxInputTokens: 12000000,
+    maxOutputTokens: 250000,
+    maxModelCalls: 150,
+    expectedRevision: 0,
+  };
+  await post(developer, "/vapt-limits", limits).expect(403);
+  await post(auditor, "/vapt-limits", limits).expect(403);
+  const saved = (await post(owner, "/vapt-limits", limits).expect(201)).body;
+  expect(saved).toEqual({
+    maxInputTokens: 12000000,
+    maxOutputTokens: 250000,
+    maxModelCalls: 150,
+    revision: 1,
+  });
+  expect((await get().expect(200)).body.vaptLimits).toEqual(saved);
+  expect((await get(outsider).expect(200)).body.vaptLimits.revision).toBe(0);
+  await post(owner, "/vapt-limits", limits).expect(409);
+  for (const patch of [
+    { maxInputTokens: 0 },
+    { maxInputTokens: 100000001 },
+    { maxOutputTokens: 8191 },
+    { maxOutputTokens: 2000001 },
+    { maxModelCalls: 1.5 },
+    { maxModelCalls: 1001 },
+    { maxModelCalls: "80" },
+    { organizationId: outsider.organizationId },
+  ])
+    await post(owner, "/vapt-limits", {
+      ...limits,
+      expectedRevision: 1,
+      ...patch,
+    }).expect(400);
+  await http(app.getHttpServer())
+    .post(root + "/vapt-limits")
+    .set("Cookie", `ai.sid=${owner.identityId}`)
+    .set("Origin", "https://wrong.invalid")
+    .send({ ...limits, expectedRevision: 1 })
+    .expect(403);
+  const audit = await db.auditEvent.findFirst({
+    where: { event: "ai.vapt-limits.saved", actorId: owner.identityId },
+  });
+  expect(audit?.metadata).toMatchObject({
+    organizationId: owner.organizationId,
+    maxInputTokens: 12000000,
+    revision: 1,
+  });
+  expect(fetchMock).not.toHaveBeenCalled();
+});
 it("encrypts keys and never returns them or writes them into audit metadata", async () => {
   const p = (await post(owner, "/providers", input).expect(201)).body;
   expect(p.apiKeySet).toBe(true);
@@ -763,7 +830,8 @@ async function reviewFixture(selectors: object = {}) {
                         evidenceRefs: ["check:0"],
                         summary: "Security scan evidence is missing.",
                         severity: "medium",
-                        impact: "Unscanned changes may contain security defects that the supplied evidence cannot identify.",
+                        impact:
+                          "Unscanned changes may contain security defects that the supplied evidence cannot identify.",
                         recommendation:
                           "Collect a verified scan for this commit.",
                       },
@@ -991,39 +1059,50 @@ it("gives the configured fallback a fresh deadline after a slow primary", async 
     route(f.provider.id, { fallbackId: fallback.id, expectedRevision: 1 }),
   ).expect(201);
   const job = (
-    await f.call("", { assessmentId: f.assessment.id, checkIds: [f.check.id] }).expect(201)
+    await f
+      .call("", { assessmentId: f.assessment.id, checkIds: [f.check.id] })
+      .expect(201)
   ).body;
   f.infer();
   const succeed = fetchMock.getMockImplementation()!;
   const originalTimeout = AbortSignal.timeout.bind(AbortSignal);
-  const deadline = vi.spyOn(AbortSignal, "timeout").mockImplementation((ms) =>
-    originalTimeout(ms === 60000 ? 500 : ms === 120000 ? 1000 : ms),
-  );
+  const deadline = vi
+    .spyOn(AbortSignal, "timeout")
+    .mockImplementation((ms) =>
+      originalTimeout(ms === 60000 ? 500 : ms === 120000 ? 1000 : ms),
+    );
   const delayed = (
     ms: number,
     signal: AbortSignal,
     response: () => Promise<Response>,
-  ) => new Promise<Response>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      signal.removeEventListener("abort", abort);
-      void response().then(resolve, reject);
-    }, ms);
-    const abort = () => {
-      clearTimeout(timer);
-      reject(signal.reason);
-    };
-    signal.addEventListener("abort", abort, { once: true });
-  });
+  ) =>
+    new Promise<Response>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        signal.removeEventListener("abort", abort);
+        void response().then(resolve, reject);
+      }, ms);
+      const abort = () => {
+        clearTimeout(timer);
+        reject(signal.reason);
+      };
+      signal.addEventListener("abort", abort, { once: true });
+    });
   fetchMock
     .mockImplementationOnce(async (_url, _locality, options) =>
-      delayed(350, options.signal, async () => new Response("", { status: 503 })),
+      delayed(
+        350,
+        options.signal,
+        async () => new Response("", { status: 503 }),
+      ),
     )
     .mockImplementation(async (...args) =>
       delayed(250, args[2].signal, async () => succeed(...args)),
     );
   try {
     await f.reviews.reconcile();
-    const stored = await db.aiSkillReview.findUniqueOrThrow({ where: { id: job.id } });
+    const stored = await db.aiSkillReview.findUniqueOrThrow({
+      where: { id: job.id },
+    });
     expect(stored.state).toBe("SUCCEEDED");
     expect(stored.providerId).toBe(fallback.id);
     expect(deadline).toHaveBeenCalledWith(120000);
@@ -1327,9 +1406,11 @@ async function prFixture(
                       {
                         checkId: data.SKILLS[0].id,
                         evidenceRefs: [data.DATA.source ? "diff:0" : "check:0"],
-                        summary: "Unvalidated input reaches the database query.",
+                        summary:
+                          "Unvalidated input reaches the database query.",
                         severity: "high",
-                        impact: "Attacker-controlled input could allow unauthorized access if the query does not enforce validation.",
+                        impact:
+                          "Attacker-controlled input could allow unauthorized access if the query does not enforce validation.",
                         recommendation: "Validate inputs before use.",
                       },
                     ],
@@ -1529,8 +1610,13 @@ it("exposes built-in defaults and downloads Markdown without creating or approvi
     .get("/ai/skills")
     .set("Cookie", `ai.sid=${owner.identityId}`)
     .expect(200);
-  expect(list.body.templates.map((template: any) => template.id).sort()).toEqual(
-    ["preflyt-ci-setup", ...skillTemplates.map((template) => template.id)].sort(),
+  expect(
+    list.body.templates.map((template: any) => template.id).sort(),
+  ).toEqual(
+    [
+      "preflyt-ci-setup",
+      ...skillTemplates.map((template) => template.id),
+    ].sort(),
   );
   const template = list.body.templates.find(
     (s: any) => s.id === "migration-safety",
@@ -1642,6 +1728,9 @@ it("stores provider usage even when model output is rejected and restricts usage
   expect(saved.usage).toEqual([
     expect.objectContaining({ inputTokens: 40, outputTokens: 20 }),
   ]);
+  const recorded = await db.aiModelUsage.findMany({where:{sourceId:job.id,workload:'AI_REVIEW'}});
+  expect(recorded).toHaveLength(1);
+  expect(recorded[0]).toMatchObject({inputTokens:40,outputTokens:20,state:'FAILED',modelId:'model-a'});
   expect(
     previewGate(
       await db.commitAssessment.findUniqueOrThrow({
@@ -2011,65 +2100,140 @@ it("inherits a shared model, respects disabled stage overrides and guards return
 
 it("retries a failed manual review without repeating a running or successful review", async () => {
   const f = await reviewFixture();
-  const input = {assessmentId: f.assessment.id, checkIds: [f.check.id]};
+  const input = { assessmentId: f.assessment.id, checkIds: [f.check.id] };
   const first = (await f.call("", input).expect(201)).body;
-  await db.aiSkillReview.update({where: {id: first.id}, data: {state: "UNAVAILABLE", failure: "Invalid response", finishedAt: new Date()}});
+  await db.aiSkillReview.update({
+    where: { id: first.id },
+    data: {
+      state: "UNAVAILABLE",
+      failure: "Invalid response",
+      finishedAt: new Date(),
+    },
+  });
   const retry = (await f.call("", input).expect(201)).body;
   expect(retry.id).toBe(first.id);
   expect(retry.state).toBe("QUEUED");
   f.infer();
   await f.reviews.reconcile();
-  expect((await db.aiSkillReview.findUniqueOrThrow({where: {id: first.id}})).state).toBe("SUCCEEDED");
+  expect(
+    (await db.aiSkillReview.findUniqueOrThrow({ where: { id: first.id } }))
+      .state,
+  ).toBe("SUCCEEDED");
   const duplicate = (await f.call("", input).expect(201)).body;
   expect(duplicate.id).toBe(first.id);
   expect(duplicate.state).toBe("SUCCEEDED");
 });
 
 async function scopedPrReviewFixture() {
-  const f = await prFixture({automatic: false});
+  const f = await prFixture({ automatic: false });
   const enabledAt = new Date();
-  await db.readinessAutomation.create({data: {repositoryId: f.repo.id, organizationId: owner.organizationId!, actorId: owner.identityId, enabled: true, aiReviews: true, aiReviewsEnabledAt: enabledAt}});
-  const run = await db.pipelineRunSubmission.create({data: {
-    id: randomUUID(), repositoryId: f.repo.id, organizationId: owner.organizationId!,
-    policyId: f.policy.id, policyHash: f.policy.definitionHash, sourceSha: f.context.head.sha,
-    workflowSha: f.context.head.sha, runId: '100', runAttempt: 1, prNumber: f.pr.number,
-    inputHash: digest({test:'scoped-pr'}), payload: {}, submittedById: owner.identityId,
-    state: 'PENDING', assessmentId: f.assessment.id, createdAt: new Date(enabledAt.getTime() + 1),
-  }});
-  const inline = vi.fn(async () => ({htmlUrl:'https://github.com/fixture/review/pull/1#pullrequestreview-1', reviewId:'1'}));
+  await db.readinessAutomation.create({
+    data: {
+      repositoryId: f.repo.id,
+      organizationId: owner.organizationId!,
+      actorId: owner.identityId,
+      enabled: true,
+      aiReviews: true,
+      aiReviewsEnabledAt: enabledAt,
+    },
+  });
+  const run = await db.pipelineRunSubmission.create({
+    data: {
+      id: randomUUID(),
+      repositoryId: f.repo.id,
+      organizationId: owner.organizationId!,
+      policyId: f.policy.id,
+      policyHash: f.policy.definitionHash,
+      sourceSha: f.context.head.sha,
+      workflowSha: f.context.head.sha,
+      runId: "100",
+      runAttempt: 1,
+      prNumber: f.pr.number,
+      inputHash: digest({ test: "scoped-pr" }),
+      payload: {},
+      submittedById: owner.identityId,
+      state: "PENDING",
+      assessmentId: f.assessment.id,
+      createdAt: new Date(enabledAt.getTime() + 1),
+    },
+  });
+  const inline = vi.fn(async () => ({
+    htmlUrl: "https://github.com/fixture/review/pull/1#pullrequestreview-1",
+    reviewId: "1",
+  }));
   (f.github as any).publishAiInlineReview = inline;
-  return {...f, run, inline};
+  return { ...f, run, inline };
 }
-it('reviews only an authorized repository after its verified PR run, then comments on the PR once', async () => {
-  vi.stubEnv('GITHUB_CHECK_PUBLICATION_ENABLED','true');
+it("reviews only an authorized repository after its verified PR run, then comments on the PR once", async () => {
+  vi.stubEnv("GITHUB_CHECK_PUBLICATION_ENABLED", "true");
   const f = await scopedPrReviewFixture();
   await f.reviews.dispatchAutomatic();
-  expect(await db.aiSkillReview.count({where:{assessmentId:f.assessment.id}})).toBe(0);
-  await db.pipelineRunSubmission.update({where:{id:f.run.id},data:{state:'COMPLETE'}});
-  await db.repositoryPullRequest.update({where:{id:f.pr.id},data:{aiReviewAttemptAt:null}});
+  expect(
+    await db.aiSkillReview.count({ where: { assessmentId: f.assessment.id } }),
+  ).toBe(0);
+  await db.pipelineRunSubmission.update({
+    where: { id: f.run.id },
+    data: { state: "COMPLETE" },
+  });
+  await db.repositoryPullRequest.update({
+    where: { id: f.pr.id },
+    data: { aiReviewAttemptAt: null },
+  });
   await f.reviews.dispatchAutomatic();
-  f.infer(); await f.reviews.reconcile(); await f.reviews.publishPendingSummary();
+  f.infer();
+  await f.reviews.reconcile();
+  await f.reviews.publishPendingSummary();
   expect(f.inline).toHaveBeenCalledOnce();
-  expect(f.inline.mock.lastCall).toEqual(expect.arrayContaining([expect.stringContaining('Advisory review for PR #1')]));
+  expect(f.inline.mock.lastCall).toEqual(
+    expect.arrayContaining([
+      expect.stringContaining("Advisory review for PR #1"),
+    ]),
+  );
   expect(f.github.publishAiReviewSummary).not.toHaveBeenCalled();
-  const job = await db.aiSkillReview.findFirstOrThrow({where:{assessmentId:f.assessment.id}});
-  expect(job).toMatchObject({state:'SUCCEEDED',feedbackState:'PUBLISHED'});
-  await db.repositoryPullRequest.update({where:{id:f.pr.id},data:{aiReviewAttemptAt:null}});
+  const job = await db.aiSkillReview.findFirstOrThrow({
+    where: { assessmentId: f.assessment.id },
+  });
+  expect(job).toMatchObject({ state: "SUCCEEDED", feedbackState: "PUBLISHED" });
+  await db.repositoryPullRequest.update({
+    where: { id: f.pr.id },
+    data: { aiReviewAttemptAt: null },
+  });
   await f.reviews.dispatchAutomatic();
-  expect(await db.aiSkillReview.count({where:{assessmentId:f.assessment.id}})).toBe(1);
+  expect(
+    await db.aiSkillReview.count({ where: { assessmentId: f.assessment.id } }),
+  ).toBe(1);
 });
-it('does not review historic PR runs or continue after repository AI authorization is revoked', async () => {
+it("does not review historic PR runs or continue after repository AI authorization is revoked", async () => {
   const f = await scopedPrReviewFixture();
-  await db.pipelineRunSubmission.update({where:{id:f.run.id},data:{state:'COMPLETE',createdAt:new Date(0)}});
+  await db.pipelineRunSubmission.update({
+    where: { id: f.run.id },
+    data: { state: "COMPLETE", createdAt: new Date(0) },
+  });
   await f.reviews.dispatchAutomatic();
-  expect(await db.aiSkillReview.count({where:{assessmentId:f.assessment.id}})).toBe(0);
-  await db.pipelineRunSubmission.update({where:{id:f.run.id},data:{createdAt:new Date()}});
-  await db.repositoryPullRequest.update({where:{id:f.pr.id},data:{aiReviewAttemptAt:null}});
+  expect(
+    await db.aiSkillReview.count({ where: { assessmentId: f.assessment.id } }),
+  ).toBe(0);
+  await db.pipelineRunSubmission.update({
+    where: { id: f.run.id },
+    data: { createdAt: new Date() },
+  });
+  await db.repositoryPullRequest.update({
+    where: { id: f.pr.id },
+    data: { aiReviewAttemptAt: null },
+  });
   await f.reviews.dispatchAutomatic();
-  await db.readinessAutomation.update({where:{repositoryId:f.repo.id},data:{aiReviews:false,revision:{increment:1}}});
-  fetchMock.mockClear(); f.infer(); await f.reviews.reconcile();
-  const job = await db.aiSkillReview.findFirstOrThrow({where:{assessmentId:f.assessment.id}});
-  expect(job.state).toBe('UNAVAILABLE'); expect(fetchMock).not.toHaveBeenCalled();
+  await db.readinessAutomation.update({
+    where: { repositoryId: f.repo.id },
+    data: { aiReviews: false, revision: { increment: 1 } },
+  });
+  fetchMock.mockClear();
+  f.infer();
+  await f.reviews.reconcile();
+  const job = await db.aiSkillReview.findFirstOrThrow({
+    where: { assessmentId: f.assessment.id },
+  });
+  expect(job.state).toBe("UNAVAILABLE");
+  expect(fetchMock).not.toHaveBeenCalled();
 });
 
 it("publishes only actionable findings and a short summary while retaining full assessment analysis", async () => {
@@ -2122,172 +2286,441 @@ it("publishes only actionable findings and a short summary while retaining full 
   ).toEqual(gate);
 });
 
-it('retries unavailable automatic PR reviews explicitly without rerunning checks or automatically repeating inference', async () => {
-  vi.stubEnv('GITHUB_CHECK_PUBLICATION_ENABLED', 'true');
+it("retries unavailable automatic PR reviews explicitly without rerunning checks or automatically repeating inference", async () => {
+  vi.stubEnv("GITHUB_CHECK_PUBLICATION_ENABLED", "true");
   const f = await scopedPrReviewFixture();
-  await db.pipelineRunSubmission.update({ where: { id: f.run.id }, data: { state: 'COMPLETE' } });
+  await db.pipelineRunSubmission.update({
+    where: { id: f.run.id },
+    data: { state: "COMPLETE" },
+  });
   await f.reviews.dispatchVerifiedPipeline(f.run.id);
-  const first = await db.aiSkillReview.findFirstOrThrow({ where: { assessmentId: f.assessment.id } });
-  await db.aiSkillReview.update({ where: { id: first.id }, data: { state: 'UNAVAILABLE', failure: 'API_KEY_OUTPUT', finishedAt: new Date() } });
+  const first = await db.aiSkillReview.findFirstOrThrow({
+    where: { assessmentId: f.assessment.id },
+  });
+  await db.aiSkillReview.update({
+    where: { id: first.id },
+    data: {
+      state: "UNAVAILABLE",
+      failure: "API_KEY_OUTPUT",
+      finishedAt: new Date(),
+    },
+  });
   fetchMock.mockClear();
-  await db.repositoryPullRequest.update({ where: { id: f.pr.id }, data: { aiReviewAttemptAt: null } });
+  await db.repositoryPullRequest.update({
+    where: { id: f.pr.id },
+    data: { aiReviewAttemptAt: null },
+  });
   await f.reviews.dispatchAutomatic();
   expect(fetchMock).not.toHaveBeenCalled();
-  expect((await db.aiSkillReview.findUniqueOrThrow({ where: { id: first.id } })).state).toBe('UNAVAILABLE');
-  const retry = await f.reviews.retry(owner, f.repo.githubId.toString(), first.id);
+  expect(
+    (await db.aiSkillReview.findUniqueOrThrow({ where: { id: first.id } }))
+      .state,
+  ).toBe("UNAVAILABLE");
+  const retry = await f.reviews.retry(
+    owner,
+    f.repo.githubId.toString(),
+    first.id,
+  );
   expect(retry.id).toBe(first.id);
-  expect(retry.state).toBe('QUEUED');
-  expect(retry.feedbackState).toBe('PENDING');
-  expect((await db.aiSkillReview.findUniqueOrThrow({ where: { id: first.id } })).automaticKey).toBe(first.automaticKey);
-  f.infer(); await f.reviews.reconcile(); await f.reviews.publishPendingSummary();
-  const saved = await db.aiSkillReview.findUniqueOrThrow({ where: { id: first.id } });
-  expect(saved.state).toBe('SUCCEEDED'); expect(saved.feedbackState).toBe('PUBLISHED');
+  expect(retry.state).toBe("QUEUED");
+  expect(retry.feedbackState).toBe("PENDING");
+  expect(
+    (await db.aiSkillReview.findUniqueOrThrow({ where: { id: first.id } }))
+      .automaticKey,
+  ).toBe(first.automaticKey);
+  f.infer();
+  await f.reviews.reconcile();
+  await f.reviews.publishPendingSummary();
+  const saved = await db.aiSkillReview.findUniqueOrThrow({
+    where: { id: first.id },
+  });
+  expect(saved.state).toBe("SUCCEEDED");
+  expect(saved.feedbackState).toBe("PUBLISHED");
   expect(f.inline).toHaveBeenCalledOnce();
-  expect((await db.pipelineRunSubmission.findUniqueOrThrow({ where: { id: f.run.id } })).runAttempt).toBe(1);
-  expect(previewGate(await db.commitAssessment.findUniqueOrThrow({ where: { id: f.assessment.id } }))).toEqual(previewGate(f.assessment));
+  expect(
+    (
+      await db.pipelineRunSubmission.findUniqueOrThrow({
+        where: { id: f.run.id },
+      })
+    ).runAttempt,
+  ).toBe(1);
+  expect(
+    previewGate(
+      await db.commitAssessment.findUniqueOrThrow({
+        where: { id: f.assessment.id },
+      }),
+    ),
+  ).toEqual(previewGate(f.assessment));
 });
-it('adopts the current model route on explicit AI retry while preserving the old failed review', async () => {
+it("adopts the current model route on explicit AI retry while preserving the old failed review", async () => {
   const f = await scopedPrReviewFixture();
-  await db.pipelineRunSubmission.update({ where: { id: f.run.id }, data: { state: 'COMPLETE' } });
+  await db.pipelineRunSubmission.update({
+    where: { id: f.run.id },
+    data: { state: "COMPLETE" },
+  });
   await f.reviews.dispatchVerifiedPipeline(f.run.id);
-  const first = await db.aiSkillReview.findFirstOrThrow({ where: { assessmentId: f.assessment.id } });
-  await db.aiSkillReview.update({ where: { id: first.id }, data: { state: 'UNAVAILABLE', failure: 'NETWORK' } });
-  const replacement = (await post(owner, '/providers', { ...input, name: 'Replacement model', modelId: 'model-b' }).expect(201)).body;
+  const first = await db.aiSkillReview.findFirstOrThrow({
+    where: { assessmentId: f.assessment.id },
+  });
+  await db.aiSkillReview.update({
+    where: { id: first.id },
+    data: { state: "UNAVAILABLE", failure: "NETWORK" },
+  });
+  const replacement = (
+    await post(owner, "/providers", {
+      ...input,
+      name: "Replacement model",
+      modelId: "model-b",
+    }).expect(201)
+  ).body;
   await post(owner, `/providers/${replacement.id}/test`, {}).expect(201);
-  await db.aiStageRoute.update({ where: { id: f.routeRow.id }, data: { primaryId: replacement.id, revision: { increment: 1 } } });
-  const retried = await f.reviews.retry(owner, f.repo.githubId.toString(), first.id);
+  await db.aiStageRoute.update({
+    where: { id: f.routeRow.id },
+    data: { primaryId: replacement.id, revision: { increment: 1 } },
+  });
+  const retried = await f.reviews.retry(
+    owner,
+    f.repo.githubId.toString(),
+    first.id,
+  );
   expect(retried.id).not.toBe(first.id);
-  const saved = await db.aiSkillReview.findUniqueOrThrow({ where: { id: retried.id } });
+  const saved = await db.aiSkillReview.findUniqueOrThrow({
+    where: { id: retried.id },
+  });
   expect((saved.snapshot as any).route.revision).toBe(f.routeRow.revision + 1);
   expect((saved.snapshot as any).providers[0].id).toBe(replacement.id);
   expect(saved.automaticKey).not.toBe(first.automaticKey);
-  expect((await db.aiSkillReview.findUniqueOrThrow({ where: { id: first.id } })).state).toBe('UNAVAILABLE');
+  expect(
+    (await db.aiSkillReview.findUniqueOrThrow({ where: { id: first.id } }))
+      .state,
+  ).toBe("UNAVAILABLE");
 });
-it('rechecks access and source authorization before retrying an automatic review', async () => {
+it("rechecks access and source authorization before retrying an automatic review", async () => {
   const f = await scopedPrReviewFixture();
-  await db.pipelineRunSubmission.update({ where: { id: f.run.id }, data: { state: 'COMPLETE' } });
+  await db.pipelineRunSubmission.update({
+    where: { id: f.run.id },
+    data: { state: "COMPLETE" },
+  });
   await f.reviews.dispatchVerifiedPipeline(f.run.id);
-  const first = await db.aiSkillReview.findFirstOrThrow({ where: { assessmentId: f.assessment.id } });
-  await db.aiSkillReview.update({ where: { id: first.id }, data: { state: 'UNAVAILABLE' } });
+  const first = await db.aiSkillReview.findFirstOrThrow({
+    where: { assessmentId: f.assessment.id },
+  });
+  await db.aiSkillReview.update({
+    where: { id: first.id },
+    data: { state: "UNAVAILABLE" },
+  });
   fetchMock.mockClear();
-  await expect(f.reviews.retry(outsider, f.repo.githubId.toString(), first.id)).rejects.toThrow();
-  await db.aiStageRoute.update({ where: { id: f.routeRow.id }, data: { allowSource: false, revision: { increment: 1 } } });
-  await expect(f.reviews.retry(owner, f.repo.githubId.toString(), first.id)).rejects.toThrow();
+  await expect(
+    f.reviews.retry(outsider, f.repo.githubId.toString(), first.id),
+  ).rejects.toThrow();
+  await db.aiStageRoute.update({
+    where: { id: f.routeRow.id },
+    data: { allowSource: false, revision: { increment: 1 } },
+  });
+  await expect(
+    f.reviews.retry(owner, f.repo.githubId.toString(), first.id),
+  ).rejects.toThrow();
   expect(fetchMock).not.toHaveBeenCalled();
-  expect((await db.aiSkillReview.findUniqueOrThrow({ where: { id: first.id } })).state).toBe('UNAVAILABLE');
+  expect(
+    (await db.aiSkillReview.findUniqueOrThrow({ where: { id: first.id } }))
+      .state,
+  ).toBe("UNAVAILABLE");
 });
-it('protects the explicit AI retry endpoint with origin and repository permissions', async () => {
+it("protects the explicit AI retry endpoint with origin and repository permissions", async () => {
   const f = await reviewFixture();
-  const first = (await f.call('', { assessmentId: f.assessment.id, checkIds: [f.check.id] }).expect(201)).body;
-  await db.aiSkillReview.update({ where: { id: first.id }, data: { state: 'UNAVAILABLE' } });
-  await http(app.getHttpServer()).post(f.base + `/${first.id}/retry`).set('Cookie', `ai.sid=${owner.identityId}`)
-    .set('Origin', 'https://attacker.example.invalid').send({}).expect(403);
+  const first = (
+    await f
+      .call("", { assessmentId: f.assessment.id, checkIds: [f.check.id] })
+      .expect(201)
+  ).body;
+  await db.aiSkillReview.update({
+    where: { id: first.id },
+    data: { state: "UNAVAILABLE" },
+  });
+  await http(app.getHttpServer())
+    .post(f.base + `/${first.id}/retry`)
+    .set("Cookie", `ai.sid=${owner.identityId}`)
+    .set("Origin", "https://attacker.example.invalid")
+    .send({})
+    .expect(403);
   await f.call(`/${first.id}/retry`, {}, auditor).expect(403);
   await f.call(`/${first.id}/retry`, {}, outsider).expect(403);
   const retry = (await f.call(`/${first.id}/retry`, {}).expect(201)).body;
-  expect(retry.id).toBe(first.id); expect(retry.state).toBe('QUEUED');
+  expect(retry.id).toBe(first.id);
+  expect(retry.state).toBe("QUEUED");
   await f.call(`/${first.id}/retry`, {}).expect(404);
 });
-it('persists a fixed rejection code while discarding unsafe output and leaving feedback unpublished', async () => {
+it("persists a fixed rejection code while discarding unsafe output and leaving feedback unpublished", async () => {
   const f = await reviewFixture();
-  const first = (await f.call('', { assessmentId: f.assessment.id, checkIds: [f.check.id] }).expect(201)).body;
-  const rejected = 'sk-rejected-fixture-content';
-  fetchMock.mockResolvedValue(new Response(JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content: rejected } }] })));
+  const first = (
+    await f
+      .call("", { assessmentId: f.assessment.id, checkIds: [f.check.id] })
+      .expect(201)
+  ).body;
+  const rejected = "sk-rejected-fixture-content";
+  fetchMock.mockResolvedValue(
+    new Response(
+      JSON.stringify({
+        choices: [{ finish_reason: "stop", message: { content: rejected } }],
+      }),
+    ),
+  );
   await f.reviews.reconcile();
-  const saved = await db.aiSkillReview.findUniqueOrThrow({ where: { id: first.id } });
-  expect(saved.state).toBe('UNAVAILABLE'); expect(saved.failure).toMatch(/^API_KEY_OUTPUT:/);
-  expect(saved.failure).not.toContain(rejected); expect(saved.result).toBeNull(); expect(saved.feedbackState).toBe('NOT_REQUESTED');
+  const saved = await db.aiSkillReview.findUniqueOrThrow({
+    where: { id: first.id },
+  });
+  expect(saved.state).toBe("UNAVAILABLE");
+  expect(saved.failure).toMatch(/^API_KEY_OUTPUT:/);
+  expect(saved.failure).not.toContain(rejected);
+  expect(saved.result).toBeNull();
+  expect(saved.feedbackState).toBe("NOT_REQUESTED");
 });
 
-it('does not retry automatic inference after its published policy has been withdrawn', async () => {
+it("does not retry automatic inference after its published policy has been withdrawn", async () => {
   const f = await scopedPrReviewFixture();
-  await db.pipelineRunSubmission.update({ where: { id: f.run.id }, data: { state: 'COMPLETE' } });
+  await db.pipelineRunSubmission.update({
+    where: { id: f.run.id },
+    data: { state: "COMPLETE" },
+  });
   await f.reviews.dispatchVerifiedPipeline(f.run.id);
-  const first = await db.aiSkillReview.findFirstOrThrow({ where: { assessmentId: f.assessment.id } });
-  await db.aiSkillReview.update({ where: { id: first.id }, data: { state: 'UNAVAILABLE' } });
-  await db.gatePolicyRevision.update({ where: { id: f.policy.id }, data: { state: 'DRAFT' } });
+  const first = await db.aiSkillReview.findFirstOrThrow({
+    where: { assessmentId: f.assessment.id },
+  });
+  await db.aiSkillReview.update({
+    where: { id: first.id },
+    data: { state: "UNAVAILABLE" },
+  });
+  await db.gatePolicyRevision.update({
+    where: { id: f.policy.id },
+    data: { state: "DRAFT" },
+  });
   fetchMock.mockClear();
-  await expect(f.reviews.retry(owner, f.repo.githubId.toString(), first.id)).rejects.toThrow();
+  await expect(
+    f.reviews.retry(owner, f.repo.githubId.toString(), first.id),
+  ).rejects.toThrow();
   expect(fetchMock).not.toHaveBeenCalled();
-  expect((await db.aiSkillReview.findUniqueOrThrow({ where: { id: first.id } })).state).toBe('UNAVAILABLE');
+  expect(
+    (await db.aiSkillReview.findUniqueOrThrow({ where: { id: first.id } }))
+      .state,
+  ).toBe("UNAVAILABLE");
 });
 
-it('adopts retested provider revisions on explicit retry even when the route revision is unchanged', async () => {
+it("adopts retested provider revisions on explicit retry even when the route revision is unchanged", async () => {
   const f = await scopedPrReviewFixture();
-  await db.pipelineRunSubmission.update({ where: { id: f.run.id }, data: { state: 'COMPLETE' } });
+  await db.pipelineRunSubmission.update({
+    where: { id: f.run.id },
+    data: { state: "COMPLETE" },
+  });
   await f.reviews.dispatchVerifiedPipeline(f.run.id);
-  const first = await db.aiSkillReview.findFirstOrThrow({ where: { assessmentId: f.assessment.id } });
+  const first = await db.aiSkillReview.findFirstOrThrow({
+    where: { assessmentId: f.assessment.id },
+  });
   const snapshot = first.snapshot as any;
-  await db.aiSkillReview.update({ where: { id: first.id }, data: { state: 'UNAVAILABLE' } });
+  await db.aiSkillReview.update({
+    where: { id: first.id },
+    data: { state: "UNAVAILABLE" },
+  });
   const pin = snapshot.providers[0];
-  await post(owner, `/providers/${pin.id}`, { ...input, apiKey: 'fixture-new', expectedRevision: pin.revision }).expect(201);
+  await post(owner, `/providers/${pin.id}`, {
+    ...input,
+    apiKey: "fixture-new",
+    expectedRevision: pin.revision,
+  }).expect(201);
   await post(owner, `/providers/${pin.id}/test`, {}).expect(201);
-  const retry = await f.reviews.retry(owner, f.repo.githubId.toString(), first.id);
+  const retry = await f.reviews.retry(
+    owner,
+    f.repo.githubId.toString(),
+    first.id,
+  );
   expect(retry.id).not.toBe(first.id);
-  const saved = await db.aiSkillReview.findUniqueOrThrow({ where: { id: retry.id } });
+  const saved = await db.aiSkillReview.findUniqueOrThrow({
+    where: { id: retry.id },
+  });
   expect((saved.snapshot as any).route.revision).toBe(snapshot.route.revision);
   expect((saved.snapshot as any).providers[0].revision).toBe(pin.revision + 1);
-  await db.aiSkillReview.update({ where: { id: saved.id }, data: { state: 'UNAVAILABLE' } });
-  const repeated = await f.reviews.retry(owner, f.repo.githubId.toString(), saved.id);
+  await db.aiSkillReview.update({
+    where: { id: saved.id },
+    data: { state: "UNAVAILABLE" },
+  });
+  const repeated = await f.reviews.retry(
+    owner,
+    f.repo.githubId.toString(),
+    saved.id,
+  );
   expect(repeated.id).toBe(saved.id);
-  expect(repeated.state).toBe('QUEUED');
+  expect(repeated.state).toBe("QUEUED");
 });
 
-it('retries with a replacement stage route even when its revision number matches the original route', async () => {
+it("retries with a replacement stage route even when its revision number matches the original route", async () => {
   const f = await scopedPrReviewFixture();
-  await db.pipelineRunSubmission.update({ where: { id: f.run.id }, data: { state: 'COMPLETE' } });
+  await db.pipelineRunSubmission.update({
+    where: { id: f.run.id },
+    data: { state: "COMPLETE" },
+  });
   await f.reviews.dispatchVerifiedPipeline(f.run.id);
-  const first = await db.aiSkillReview.findFirstOrThrow({ where: { assessmentId: f.assessment.id } });
-  await db.aiSkillReview.update({ where: { id: first.id }, data: { state: 'UNAVAILABLE' } });
-  const original = await db.aiStageRoute.findUniqueOrThrow({ where: { id: f.routeRow.id } });
+  const first = await db.aiSkillReview.findFirstOrThrow({
+    where: { assessmentId: f.assessment.id },
+  });
+  await db.aiSkillReview.update({
+    where: { id: first.id },
+    data: { state: "UNAVAILABLE" },
+  });
+  const original = await db.aiStageRoute.findUniqueOrThrow({
+    where: { id: f.routeRow.id },
+  });
   await db.aiStageRoute.delete({ where: { id: original.id } });
-  const replacement = await db.aiStageRoute.create({ data: { ...original, id: randomUUID() } });
-  const retry = await f.reviews.retry(owner, f.repo.githubId.toString(), first.id);
-  const saved = await db.aiSkillReview.findUniqueOrThrow({ where: { id: retry.id } });
+  const replacement = await db.aiStageRoute.create({
+    data: { ...original, id: randomUUID() },
+  });
+  const retry = await f.reviews.retry(
+    owner,
+    f.repo.githubId.toString(),
+    first.id,
+  );
+  const saved = await db.aiSkillReview.findUniqueOrThrow({
+    where: { id: retry.id },
+  });
   expect(saved.id).not.toBe(first.id);
-  expect((saved.snapshot as any).route).toEqual({ id: replacement.id, revision: original.revision });
+  expect((saved.snapshot as any).route).toEqual({
+    id: replacement.id,
+    revision: original.revision,
+  });
   expect(saved.automaticKey).not.toBe(first.automaticKey);
-  await db.aiSkillReview.update({ where: { id: saved.id }, data: { state: 'UNAVAILABLE' } });
-  expect((await f.reviews.retry(owner, f.repo.githubId.toString(), saved.id)).id).toBe(saved.id);
+  await db.aiSkillReview.update({
+    where: { id: saved.id },
+    data: { state: "UNAVAILABLE" },
+  });
+  expect(
+    (await f.reviews.retry(owner, f.repo.githubId.toString(), saved.id)).id,
+  ).toBe(saved.id);
 });
 
-it('keeps AI feedback queued without spending attempts when GitHub throttles publication', async () => {
+it("keeps AI feedback queued without spending attempts when GitHub throttles publication", async () => {
   vi.stubEnv("GITHUB_CHECK_PUBLICATION_ENABLED", "true");
-  const f = await prFixture({summary: true});
-  await f.reviews.dispatchAutomatic(); f.infer(); await f.reviews.reconcile();
-  const job = await db.aiSkillReview.findFirstOrThrow({where: {assessmentId: f.assessment.id}});
-  await db.aiSkillReview.update({where: {id: job.id}, data: {feedbackAttempts: 4}});
-  const {GitHubRateLimitError} = await import('../src/github/github-rate-limit.js');
-  f.github.publishAiReviewSummary.mockRejectedValueOnce(new GitHubRateLimitError(600000));
+  const f = await prFixture({ summary: true });
+  await f.reviews.dispatchAutomatic();
+  f.infer();
+  await f.reviews.reconcile();
+  const job = await db.aiSkillReview.findFirstOrThrow({
+    where: { assessmentId: f.assessment.id },
+  });
+  await db.aiSkillReview.update({
+    where: { id: job.id },
+    data: { feedbackAttempts: 4 },
+  });
+  const { GitHubRateLimitError } =
+    await import("../src/github/github-rate-limit.js");
+  f.github.publishAiReviewSummary.mockRejectedValueOnce(
+    new GitHubRateLimitError(600000),
+  );
   await f.reviews.publishPendingSummary();
-  const saved = await db.aiSkillReview.findUniqueOrThrow({where: {id: job.id}});
-  expect(saved.feedbackState).toBe('RETRY'); expect(saved.feedbackAttempts).toBe(4);
-  expect(saved.feedbackAttemptAt!.getTime() + 60000).toBeGreaterThan(Date.now() + 590000);
+  const saved = await db.aiSkillReview.findUniqueOrThrow({
+    where: { id: job.id },
+  });
+  expect(saved.feedbackState).toBe("RETRY");
+  expect(saved.feedbackAttempts).toBe(4);
+  expect(saved.feedbackAttemptAt!.getTime() + 60000).toBeGreaterThan(
+    Date.now() + 590000,
+  );
   await f.reviews.publishPendingSummary();
   expect(f.github.publishAiReviewSummary).toHaveBeenCalledTimes(1);
 });
 
-it('uses local authorization for review cancellation polling and fresh authorization at execution boundaries', async () => {
-  const permission = vi.fn().mockRejectedValue(new Error('stop after authorization'));
-  const review = new SkillReviewService(db, {requireRepository: permission} as any, {} as any, {} as any);
-  await expect((review as any).current(owner, '51', 'assessment', {}, true)).rejects.toThrow('stop after authorization');
-  expect(permission).toHaveBeenLastCalledWith(owner, '51', 'ai.review.run', true, false);
-  await expect((review as any).current(owner, '51', 'assessment', {})).rejects.toThrow('stop after authorization');
-  expect(permission).toHaveBeenLastCalledWith(owner, '51', 'ai.review.run', true, true);
+it("uses local authorization for review cancellation polling and fresh authorization at execution boundaries", async () => {
+  const permission = vi
+    .fn()
+    .mockRejectedValue(new Error("stop after authorization"));
+  const review = new SkillReviewService(
+    db,
+    { requireRepository: permission } as any,
+    {} as any,
+    {} as any,
+  );
+  await expect(
+    (review as any).current(owner, "51", "assessment", {}, true),
+  ).rejects.toThrow("stop after authorization");
+  expect(permission).toHaveBeenLastCalledWith(
+    owner,
+    "51",
+    "ai.review.run",
+    true,
+    false,
+  );
+  await expect(
+    (review as any).current(owner, "51", "assessment", {}),
+  ).rejects.toThrow("stop after authorization");
+  expect(permission).toHaveBeenLastCalledWith(
+    owner,
+    "51",
+    "ai.review.run",
+    true,
+    true,
+  );
 });
 
-it('keeps a throttled pre-inference review queued without calling the model', async () => {
-  const f = await prFixture({summary: true});
+it("keeps a throttled pre-inference review queued without calling the model", async () => {
+  const f = await prFixture({ summary: true });
   await f.reviews.dispatchAutomatic();
-  const {GitHubRateLimitError} = await import('../src/github/github-rate-limit.js');
-  const verify = vi.spyOn(f.reviews as any, 'verifyLivePr').mockRejectedValue(new GitHubRateLimitError(60000));
+  const { GitHubRateLimitError } =
+    await import("../src/github/github-rate-limit.js");
+  const verify = vi
+    .spyOn(f.reviews as any, "verifyLivePr")
+    .mockRejectedValue(new GitHubRateLimitError(60000));
   const calls = fetchMock.mock.calls.length;
   await f.reviews.reconcile();
-  const job = await db.aiSkillReview.findFirstOrThrow({where: {assessmentId: f.assessment.id}});
-  expect(job.state).toBe('QUEUED'); expect(job.startedAt).toBeNull(); expect(job.finishedAt).toBeNull();
+  const job = await db.aiSkillReview.findFirstOrThrow({
+    where: { assessmentId: f.assessment.id },
+  });
+  expect(job.state).toBe("QUEUED");
+  expect(job.startedAt).toBeNull();
+  expect(job.finishedAt).toBeNull();
   expect(job.nextAttemptAt.getTime()).toBeGreaterThan(Date.now() + 59000);
   expect(fetchMock.mock.calls.length).toBe(calls);
   verify.mockClear();
   await f.reviews.reconcile();
   expect(verify).not.toHaveBeenCalled();
+});
+
+it("offers VAPT routing with independent overrides and default inheritance", async () => {
+  const provider = await connected();
+  expect((await get().expect(200)).body.stages).toContain("vapt");
+  await post(
+    owner,
+    "/routes/default",
+    route(provider.id, { allowSource: true }),
+  ).expect(201);
+  expect(
+    (
+      await post(owner, "/preview", {
+        stage: "vapt",
+        containsSource: true,
+      }).expect(201)
+    ).body.providerId,
+  ).toBe(provider.id);
+  const saved = (
+    await post(
+      owner,
+      "/routes/vapt",
+      route(provider.id, { enabled: false }),
+    ).expect(201)
+  ).body;
+  expect(
+    (
+      await post(owner, "/preview", {
+        stage: "vapt",
+        containsSource: true,
+      }).expect(201)
+    ).body.reason,
+  ).toBe("ROUTE_DISABLED");
+  await post(owner, "/routes/vapt/inherit", {
+    expectedRevision: saved.revision,
+  }).expect(201);
+  expect(
+    (
+      await post(owner, "/preview", {
+        stage: "vapt",
+        containsSource: true,
+      }).expect(201)
+    ).body.providerId,
+  ).toBe(provider.id);
 });

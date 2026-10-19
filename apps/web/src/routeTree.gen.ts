@@ -53,6 +53,7 @@ import { Route as AuthenticatedSettingsAccountRouteImport } from './routes/_auth
 import { Route as AuthenticatedSettingsAppearanceRouteImport } from './routes/_authenticated/settings/appearance'
 import { Route as AuthenticatedSettingsDisplayRouteImport } from './routes/_authenticated/settings/display'
 import { Route as AuthenticatedSettingsNotificationsRouteImport } from './routes/_authenticated/settings/notifications'
+import { Route as AuthenticatedReviewAreasAssessmentIdAreaIdRouteImport } from './routes/_authenticated/review-areas/$assessmentId.$areaId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -293,6 +294,12 @@ const AuthenticatedSettingsNotificationsRoute =
     path: '/notifications',
     getParentRoute: () => AuthenticatedSettingsRouteRoute,
   } as any)
+const AuthenticatedReviewAreasAssessmentIdAreaIdRoute =
+  AuthenticatedReviewAreasAssessmentIdAreaIdRouteImport.update({
+    id: '/review-areas/$assessmentId/$areaId',
+    path: '/review-areas/$assessmentId/$areaId',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -338,6 +345,7 @@ export interface FileRoutesByFullPath {
   '/findings/': typeof AuthenticatedFindingsIndexRoute
   '/repositories/': typeof AuthenticatedRepositoriesIndexRoute
   '/settings/': typeof AuthenticatedSettingsIndexRoute
+  '/review-areas/$assessmentId/$areaId': typeof AuthenticatedReviewAreasAssessmentIdAreaIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -381,6 +389,7 @@ export interface FileRoutesByTo {
   '/findings': typeof AuthenticatedFindingsIndexRoute
   '/repositories': typeof AuthenticatedRepositoriesIndexRoute
   '/settings': typeof AuthenticatedSettingsIndexRoute
+  '/review-areas/$assessmentId/$areaId': typeof AuthenticatedReviewAreasAssessmentIdAreaIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -428,6 +437,7 @@ export interface FileRoutesById {
   '/_authenticated/findings/': typeof AuthenticatedFindingsIndexRoute
   '/_authenticated/repositories/': typeof AuthenticatedRepositoriesIndexRoute
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
+  '/_authenticated/review-areas/$assessmentId/$areaId': typeof AuthenticatedReviewAreasAssessmentIdAreaIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -475,6 +485,7 @@ export interface FileRouteTypes {
     | '/findings/'
     | '/repositories/'
     | '/settings/'
+    | '/review-areas/$assessmentId/$areaId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -518,6 +529,7 @@ export interface FileRouteTypes {
     | '/findings'
     | '/repositories'
     | '/settings'
+    | '/review-areas/$assessmentId/$areaId'
   id:
     | '__root__'
     | '/'
@@ -564,6 +576,7 @@ export interface FileRouteTypes {
     | '/_authenticated/findings/'
     | '/_authenticated/repositories/'
     | '/_authenticated/settings/'
+    | '/_authenticated/review-areas/$assessmentId/$areaId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -896,6 +909,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsNotificationsRouteImport
       parentRoute: typeof AuthenticatedSettingsRouteRoute
     }
+    '/_authenticated/review-areas/$assessmentId/$areaId': {
+      id: '/_authenticated/review-areas/$assessmentId/$areaId'
+      path: '/review-areas/$assessmentId/$areaId'
+      fullPath: '/review-areas/$assessmentId/$areaId'
+      preLoaderRoute: typeof AuthenticatedReviewAreasAssessmentIdAreaIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
   }
 }
 
@@ -958,6 +978,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAppsIndexRoute: typeof AuthenticatedAppsIndexRoute
   AuthenticatedContributorsIndexRoute: typeof AuthenticatedContributorsIndexRoute
   AuthenticatedRepositoriesIndexRoute: typeof AuthenticatedRepositoriesIndexRoute
+  AuthenticatedReviewAreasAssessmentIdAreaIdRoute: typeof AuthenticatedReviewAreasAssessmentIdAreaIdRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
@@ -984,6 +1005,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAppsIndexRoute: AuthenticatedAppsIndexRoute,
   AuthenticatedContributorsIndexRoute: AuthenticatedContributorsIndexRoute,
   AuthenticatedRepositoriesIndexRoute: AuthenticatedRepositoriesIndexRoute,
+  AuthenticatedReviewAreasAssessmentIdAreaIdRoute:
+    AuthenticatedReviewAreasAssessmentIdAreaIdRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =

@@ -1,4 +1,10 @@
 import { FindingSourceStoreModule } from '../findings/finding-source-store.module.js'
+import { HealthStrixService } from './strix.service.js'
+import { HealthSourceStore } from './health-source-store.js'
+import { StrixModelController } from './strix-model.controller.js'
+import { AuthorizationService } from '../auth/authorization.service.js'
+import { PrismaService } from '../prisma/prisma.service.js'
+import { GitHubProviderService } from '../github/github-provider.service.js'
 import { Module } from '@nestjs/common'
 import { AuthModule } from '../auth/auth.module.js'
 import { PrismaModule } from '../prisma/prisma.module.js'
@@ -7,5 +13,5 @@ import { NativeStatusService } from '../execution/native-status.service.js'
 import { HealthScannerClient } from './health-scanner-client.js'
 import { RepositoryHealthService } from './repository-health.service.js'
 import { RepositoryHealthController } from './repository-health.controller.js'
-@Module({ imports: [AuthModule, PrismaModule, GitHubProviderModule, FindingSourceStoreModule], controllers: [RepositoryHealthController], providers: [RepositoryHealthService, NativeStatusService, HealthScannerClient], exports: [RepositoryHealthService] })
+@Module({ imports: [AuthModule, PrismaModule, GitHubProviderModule, FindingSourceStoreModule], controllers: [RepositoryHealthController, StrixModelController], providers: [{provide:HealthSourceStore,useFactory:()=>new HealthSourceStore()}, {provide:HealthStrixService,useFactory:(db:PrismaService,access:AuthorizationService,github:GitHubProviderService,sourceStore:HealthSourceStore)=>new HealthStrixService(db,access,github,undefined,sourceStore),inject:[PrismaService,AuthorizationService,GitHubProviderService,HealthSourceStore]}, RepositoryHealthService, NativeStatusService, HealthScannerClient], exports: [RepositoryHealthService] })
 export class HealthModule {}

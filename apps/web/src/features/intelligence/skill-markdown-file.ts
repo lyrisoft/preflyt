@@ -3,6 +3,12 @@ import {
   governanceTextRequest,
 } from '../repositories/governance-api'
 
+export const skillLimits = {
+  description: 2000,
+  instructions: 24000,
+  fileBytes: 131072,
+} as const
+
 export type SkillDocument = {
   languages?: string[]
   frameworks?: string[]
@@ -15,8 +21,12 @@ export type SkillDocument = {
   license: string
 }
 export async function readSkillMarkdown(file: File, signal?: AbortSignal) {
-  if (!/\.md$/i.test(file.name) || file.size > 32768)
-    throw new Error('Choose a Markdown (.md) file no larger than 32 KiB')
+  if (!/\.md$/i.test(file.name))
+    throw new Error('File: choose a Markdown (.md) file.')
+  if (file.size > skillLimits.fileBytes)
+    throw new Error(
+      `File: maximum 131,072 bytes (128 KiB); received ${file.size.toLocaleString('en-US')}.`
+    )
   let markdown: string
   try {
     markdown = new TextDecoder('utf-8', { fatal: true }).decode(

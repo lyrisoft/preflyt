@@ -190,6 +190,7 @@ services:
       QUEUE_PREFIX: ${QUEUE_PREFIX:-preflyt:production:queue}
       DATABASE_URL: postgresql://preflyt_app:${DATABASE_APP_PASSWORD:?Set DATABASE_APP_PASSWORD}@db:5432/${PREFLYT_DATABASE:-preflyt}
       WEB_ORIGIN: ${WEB_ORIGIN:?Set WEB_ORIGIN}
+      PREFLYT_PUBLIC_API_URL: ${PREFLYT_PUBLIC_API_URL:-}
       COOKIE_SECURE: 'true'
       # Legacy application values below are imported once. Use Settings thereafter.
       OIDC_ISSUER: ${OIDC_ISSUER:-}
@@ -265,6 +266,7 @@ services:
       <<: *otel
       NODE_ENV: production
       HEALTH_SCANNER_CONNECTION_FILE: /run/preflyt-health/connection.json
+      HEALTH_SOURCE_DIRECTORY: /var/lib/preflyt-health-sources
       DATABASE_URL: postgresql://preflyt_app:${DATABASE_APP_PASSWORD:?Set DATABASE_APP_PASSWORD}@db:5432/${PREFLYT_DATABASE:-preflyt}
       AI_CONFIGURATION_ENABLED: ${AI_CONFIGURATION_ENABLED:-false}
       AI_REVIEWS_ENABLED: ${AI_REVIEWS_ENABLED:-false}
@@ -294,6 +296,7 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       WEB_ORIGIN: ${WEB_ORIGIN:?Set WEB_ORIGIN}
+      PREFLYT_PUBLIC_API_URL: ${PREFLYT_PUBLIC_API_URL:-}
       GITHUB_USER_TOKEN_ENCRYPTION_KEY: ${GITHUB_USER_TOKEN_ENCRYPTION_KEY:-}
       GITHUB_APP_ID: ${GITHUB_APP_ID:-}
       GITHUB_APP_PRIVATE_KEY: ${GITHUB_APP_PRIVATE_KEY:-}
@@ -335,6 +338,7 @@ services:
     cpus: 1.0
     volumes:
       - health_connection:/run/preflyt-health:ro
+      - health_sources:/var/lib/preflyt-health-sources
     networks: [backend, egress, health_service]
 
   cache:
@@ -422,6 +426,7 @@ services:
     networks: [backend, ingress]
 
 volumes:
+  health_sources:
   health_engine_data:
   health_engine_certs:
   health_engine_client:

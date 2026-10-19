@@ -12,9 +12,11 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
 import { Skeleton } from '@/components/ui/skeleton'
+import { AiLoadingIcon } from '@/components/ai-loading-icon'
 import { SurfaceIcon } from '@/components/surface-icon'
 import { findingGuidanceText } from './finding-guidance-text'
 import type { Finding } from './finding-types'
+import { VaptFindingAnalysis } from './vapt-finding-analysis'
 
 /** Saved explanations sit beside their source; generic advice never claims a diagnosed cause. */
 export function FindingGuidance({
@@ -26,6 +28,8 @@ export function FindingGuidance({
   aiState?: string
   onRetryAi?: () => void
 }) {
+  if (finding.aiReview)
+    return <VaptFindingAnalysis analysis={finding.aiReview} />
   const preparing = aiState === 'QUEUED' || aiState === 'RUNNING'
 
   const guide = finding.guidance
@@ -53,20 +57,7 @@ export function FindingGuidance({
           aria-live='polite'
           className='flex items-center gap-3'
         >
-          <span
-            aria-hidden='true'
-            className='relative inline-flex size-10 shrink-0 items-center justify-center'
-          >
-            <SurfaceIcon
-              icon={Sparkles}
-              tone='violet'
-              className='rounded-full border-transparent'
-            />
-            <span
-              data-slot='ai-loading-ring'
-              className='absolute inset-0 animate-spin rounded-full border-2 border-violet-500/20 border-t-violet-500 motion-reduce:animate-none dark:border-violet-400/20 dark:border-t-violet-400'
-            />
-          </span>
+          <AiLoadingIcon />
           <div className='min-w-0 space-y-1'>
             <h2 className='text-sm font-semibold'>
               {preparing ? 'Preparing AI guidance' : 'Loading guidance'}

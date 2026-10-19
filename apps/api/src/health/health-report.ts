@@ -18,8 +18,17 @@ export const healthAnalyses = [
  { id: 'security.hotspots', title: 'Security hotspot review', category: 'hotspot', scope: 'JavaScript and TypeScript createHash("md5") and Python hashlib.md5 calls. Other security-sensitive patterns are not covered by this Preflyt v1 pack.' },
  { id: 'tests.coverage', title: 'Test coverage', category: 'coverage', scope: 'Existing Vitest, Jest or Node test commands across configured packages. Coverage follows repository test configuration and excludes files absent from the measured reports.' },
 ] as const
-export type HealthFinding = ReportFinding & { checkId: string; evidence: 'ANALYZER_REPORTED'; guidance?: FindingGuidance; referenceGuidance?: FindingReferenceGuidance }
+export type VaptAnalysis = {version:1; status:'NEEDS_REVIEW'; reasoning:string; impact:string; remediation:string; preconditions:string; verificationSteps:string; counterevidence:string}
+export type HealthFinding = ReportFinding & { aiReview?:VaptAnalysis; checkId: string; evidence: 'ANALYZER_REPORTED' | 'AI_REPORTED'; guidance?: FindingGuidance; referenceGuidance?: FindingReferenceGuidance }
+export type SourceReviewCoverage = {
+ version: 1; scope: 'SOURCE_ONLY'; evidence: 'AI_REPORTED'; available: boolean; truncated: boolean;
+ entries: Array<{surface: string; riskArea: string; outcome: 'reported' | 'no_issue_found' | 'ruled_out' | 'not_applicable' | 'needs_follow_up'}>;
+ gaps: Array<{surface: string; riskArea: string; detail: string}>;
+ caveats: string[];
+}
 export type HealthReport = {
+ findingSummary?: { total: number; unsuppressed: number; analyzerHigh: number; groups: Array<{category: string | null; checkId: string | null; severity?: string | null; count: number}> };
+ sourceReviewCoverage?: SourceReviewCoverage;
  selection?: 'all' | 'security' | 'reliability' | 'maintainability' | 'duplication' | 'coverage';
  findingComparison?: { version: 1; key: string; checkIds: string[] };
  policyContext?: HealthPolicyContext;
@@ -99,8 +108,8 @@ export function healthReport(inspection: HealthReport['inspection'], analyses: H
    ...(coverage?[coverage.version===2?'Coverage combines reported lines from the configured test packages after successful execution at this commit. Repository-authored tests and coverage configuration define the measured scope; this is not independent proof of test adequacy.':'Coverage uses node-covered-lines-v1 for loaded source files during the recorded successful Node tests.']:['Coverage is supplied by verified CI reports for the assessed commit. Repository Health does not execute tests.']),
   ] }
 }
-function comparableFindingScope(current: HealthReport, prior: HealthReport) {
- if (current.mode !== 'EXECUTED' || prior.mode !== 'EXECUTED' || current.comparisonKey !== prior.comparisonKey) return null
+export function comparableFindingScope(current: HealthReport, prior: HealthReport) {
+ if (current.mode !== 'EXECUTED' || prior.mode !== 'EXECUTED' || current.comparisonKey !== prior.comparisonKey || (current.selection??'all')!==(prior.selection??'all')) return null
  if (current.findingComparison || prior.findingComparison) {
   const now = current.findingComparison, before = prior.findingComparison
   if (!now || !before || now.version !== 1 || before.version !== 1 || now.key !== before.key ||
@@ -132,21 +141,52 @@ export function redactHealthSource(text: string) {
  }).join('\n')
 }
 
+export function healthFindingCount(report: HealthReport, category?: string, checkIds?: string[]) {
+ if (report.findingSummary) return !category && !checkIds?.length ? report.findingSummary.total : report.findingSummary.groups.filter(g=>(!category || g.category===category) && (!checkIds?.length || checkIds.includes(g.checkId ?? ''))).reduce((sum,g)=>sum+g.count,0)
+ return report.findings.filter(f=>(!category || f.category===category) && (!checkIds?.length || checkIds.includes(f.checkId))).length
+}
+
 /** Plot available observations; only equivalent measured scopes receive a comparison value. */
 export function healthTimeline(current: HealthReport | null, records: Array<{
  id: string; state: string; sourceSha: string | null; finishedAt: Date | null; report: HealthReport | null
 }>) {
  if (!current) return []
- return records.filter(row => row.state === 'COMPLETED' && row.sourceSha && row.finishedAt && row.report?.mode === 'EXECUTED' && (!row.report.selection || row.report.selection === 'all') &&
-  (row.report.findings.length > 0 || row.report.completeness === 'COMPLETE' || row.report.analyses.some(analysis =>
+ const securityByCommit=new Map<string,{standard?:any;ai?:any}>();
+ const severities=['critical','high','medium','low','unknown'];
+ return records.filter(row => (row.state === 'COMPLETED' || (row.state==='FAILED' && row.report?.analyses.some(a=>a.id==='security.strix') && healthFindingCount(row.report)>0)) && row.sourceSha && row.finishedAt && row.report?.mode === 'EXECUTED' &&
+  (healthFindingCount(row.report) > 0 || row.report.completeness === 'COMPLETE' || row.report.analyses.some(analysis =>
    analysis.reportHash && Number.isSafeInteger(analysis.findingsRetained) && analysis.findingsRetained! >= 0)))
   .sort((a,b) => a.finishedAt!.getTime() - b.finishedAt!.getTime() || a.id.localeCompare(b.id))
   .map(row => {
-   const comparable = comparableHealthTrend(current, row.report!) !== null
-   return {id:row.id,sourceSha:row.sourceSha!,at:row.finishedAt!.toISOString(),findings:row.report!.findings.length,
+   const comparable = comparableFindingScope(current, row.report!) !== null
+   return {id:row.id,sourceSha:row.sourceSha!,at:row.finishedAt!.toISOString(),findings:healthFindingCount(row.report!),
+    categories:Object.fromEntries(['security','reliability','maintainability'].map(category=>{
+     const report=row.report!;
+     const checks=report.analyses.filter(a=>a.id==='security.strix' ? category==='security' : healthAnalyses.find(d=>d.id===a.id)?.category===category);
+     const checkIds=category==='security' ? ['secrets.scan','security.sast','security.dependencies','iac.policy','security.strix'] : checks.map(a=>a.id);
+     const count=healthFindingCount(report,category,checkIds);
+     const groups=report.findingSummary?.groups ?? report.findings.map(f=>({category:f.category,checkId:f.checkId,severity:f.severity,count:1}));
+     const bySeverity=Object.fromEntries(severities.map(severity=>[severity,groups.filter(g=>g.category===category && checkIds.includes(g.checkId??'') && (severities.includes(g.severity??'')?g.severity:'unknown')===severity).reduce((n,g)=>n+g.count,0)]));
+     const recorded=count>0 || checks.some(a=>a.reportHash && Number.isSafeInteger(a.findingsRetained));
+     const complete=recorded && report.inspection.complete && checks.length>0 && checks.every(a=>a.state!=='INCOMPLETE' && a.reportHash && a.findingsReported===a.findingsRetained);
+     const comparable=complete && !checks.some(a=>a.id==='security.strix') && (report.completeness==='COMPLETE' || checks.every(a=>report.findingComparison?.checkIds.includes(a.id)));
+     return [category,recorded ? {findings:count,bySeverity,partial:!complete,comparisonKey:comparable ? digest({category,key:report.findingComparison?.key ?? report.comparisonKey,checks:checks.map(a=>[a.id,a.tool,a.configHash]).sort()}) : null} : null];
+    })),
     partial:row.report!.completeness !== 'COMPLETE',
-    comparableFindings:comparable ? scopedFindings(row.report!,current.findingComparison?.checkIds ?? []).length : null,
+    scope:row.report!.analyses.some(a=>a.id==='security.strix') ? 'ai' : row.report!.selection ?? 'all',
+    comparableFindings:comparable ? healthFindingCount(row.report!,undefined,current.findingComparison?.checkIds) : null,
     ...(comparable && current.findingComparison ? {checkIds:current.findingComparison.checkIds} : {})}
+  }).map(point=>{
+   const value=point.categories.security;
+   if(!value)return point;
+   const sources=securityByCommit.get(point.sourceSha)??{};
+   if(point.scope==='ai')sources.ai=value;else sources.standard=value;
+   securityByCommit.set(point.sourceSha,sources);
+   const values=[sources.standard,sources.ai].filter(Boolean);
+   return {...point,categories:{...point.categories,security:{...value,
+    findings:values.reduce((n,v)=>n+v.findings,0),
+    bySeverity:Object.fromEntries(severities.map(severity=>[severity,values.reduce((n,v)=>n+(v.bySeverity[severity]??0),0)])),
+    partial:!sources.standard||values.some(v=>v.partial),comparisonKey:null}}};
   })
 }
 
@@ -156,6 +196,6 @@ export function healthAssessmentResult(report: HealthReport | null | undefined, 
  if(state!=='COMPLETED') return null
  if(report?.selection && report.selection !== 'all') return 'INCOMPLETE'
  if(!report || report.mode!=='EXECUTED' || report.completeness!=='COMPLETE' || !report.inspection?.complete || !report.analyses?.length) return 'INCOMPLETE'
- if(report.analyses.some(analysis=>analysis.state==='FAIL') || report.findings.length>0) return 'FAIL'
+ if(report.analyses.some(analysis=>analysis.state==='FAIL') || healthFindingCount(report)>0) return 'FAIL'
  return report.analyses.every(analysis=>analysis.state==='PASS' && analysis.findingsRetained===0 && analysis.findingsReported===0) ? 'PASS' : 'INCOMPLETE'
 }

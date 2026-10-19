@@ -6,6 +6,7 @@ import {
   Inject,
   Param,
   Post,
+  Query,
   Req,
   UseGuards,
 } from "@nestjs/common";
@@ -29,6 +30,22 @@ import {
   type AuthenticatedSession,
 } from "../auth/session.guard.js";
 import { AiConfigurationService } from "./ai-configuration.service.js";
+import { vaptLimitBounds } from "./vapt-limits.js";
+class VaptLimitsDto {
+  @IsInt()
+  @Min(vaptLimitBounds.maxInputTokens.min)
+  @Max(vaptLimitBounds.maxInputTokens.max)
+  maxInputTokens!: number;
+  @IsInt()
+  @Min(vaptLimitBounds.maxOutputTokens.min)
+  @Max(vaptLimitBounds.maxOutputTokens.max)
+  maxOutputTokens!: number;
+  @IsInt()
+  @Min(vaptLimitBounds.maxModelCalls.min)
+  @Max(vaptLimitBounds.maxModelCalls.max)
+  maxModelCalls!: number;
+  @IsInt() @Min(0) @Max(2147483646) expectedRevision!: number;
+}
 class ProviderDto {
   @IsOptional()
   @IsIn(["openai", "anthropic", "gemini", "deepseek"])
@@ -70,12 +87,25 @@ export class AiConfigurationController {
   @Get() @Header("Cache-Control", "no-store") list(@Req() req: R) {
     return this.ai.list(req.preflytSession);
   }
+  @Get("providers/:id/usage") @Header("Cache-Control", "no-store") usage(
+    @Param("id") id: string, @Req() req: R,
+    @Query("days") days="30", @Query("page") page="1", @Query("pageSize") pageSize="10",
+  ) {
+    return this.ai.modelDetails(req.preflytSession, id, Number(days), Number(page), Number(pageSize));
+  }
   @Post("providers") @Header("Cache-Control", "no-store") create(
     @Body() body: ProviderDto,
     @Req() req: R,
   ) {
     this.auth.assertOrigin(req.headers.origin);
     return this.ai.saveProvider(req.preflytSession, body);
+  }
+  @Post("vapt-limits") @Header("Cache-Control", "no-store") vaptLimits(
+    @Body() body: VaptLimitsDto,
+    @Req() req: R,
+  ) {
+    this.auth.assertOrigin(req.headers.origin);
+    return this.ai.saveVaptLimits(req.preflytSession, body);
   }
   @Post("providers/:id") @Header("Cache-Control", "no-store") edit(
     @Param("id") id: string,

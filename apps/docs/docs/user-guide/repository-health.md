@@ -9,6 +9,8 @@ description: Read branch analysis, exact-revision findings, limits and report hi
 
 Health assesses a selected branch without requiring CI. Explicit repository selection queues the first assessment; **Reassess** creates another revision report. The API and worker fetch the exact selected commit and coordinate work. The built-in scanner service runs applicable fixed Health analyzers in isolated containers. GitHub connection, repository selection and existing Preflyt permissions are the authorization; no additional approval, policy selection or CI workflow is required. Tests run in your existing CI environment. Health and test coverage load independently for the selected branch. Each result shows its own commit and date; coverage can be available before a Health scan finishes.
 
+To add a source-only AI security review, open the arrow beside **Assess repository** or **Reassess**, select **Include AI security review**, then click the main button. Preflyt remembers the choice for this repository. Both scanners use the same fetched commit, with separate progress and reports. AI review requires an enabled, tested model connection and permission to share source with that provider; provider charges may apply. If unavailable, AI review is skipped and standard checks continue. Automatic assessments run standard checks only. AI suggestions require validation and do not change overall Health or merge permission.
+
 <figure className="pf-guide-screenshot">
   <a href="/img/guides/repository-health.jpg" target="_blank" rel="noreferrer">
     <img src="/img/guides/repository-health.jpg" alt="A saved repository Health report with its branch, commit and recorded analysis scope. This capture shows a duplication-only report from v0.1.1." width="1728" height="906" loading="lazy" />
@@ -215,6 +217,11 @@ Valid findings retained from an incomplete analyzer still appear in dimension co
 
 
 ### Finding categories from Health cards
+
+The repository findings table loads one page at a time. Search and severity filters
+apply to all findings in the selected saved report, and changing either starts at
+the first page. Totals and charts still describe the whole recorded scope. Open a
+finding to load its saved explanation, advice and source details.
 
 Health shows five clickable cards: Security, Reliability, Maintainability, Duplication and Test coverage. Missing metrics consistently display **—**. Clicking a finding-count card opens **Findings** for the same repository and saved Health report, filtered to that category. The category selector can explore other findings within that report. Opening a finding retains its original commit and source viewer; Back to findings restores the category filter. Test coverage opens its dedicated detail view with verified CI coverage, test counts, timestamps and workflow logs. Inspection-only reports explicitly state that analysis has not run instead of showing zero-issue metrics.
 

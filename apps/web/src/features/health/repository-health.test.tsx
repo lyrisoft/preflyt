@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import '@/styles/index.css'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { render } from 'vitest-browser-react'
-import { page } from 'vitest/browser'
+import { page, userEvent } from 'vitest/browser'
 import { HealthCoverageDetails } from './health-coverage-details'
 import { RepositoryHealth } from './repository-health'
 
@@ -14,7 +14,13 @@ const state = vi.hoisted(() => ({
     state: string
     reason: string | null
     retryAt: string | null
+    scanner?: 'strix'
   },
+  aiAvailable: false,
+  aiAnalysis: false,
+  aiPreference: false,
+  omitAiConfirmation: false,
+  aiReview: null as Record<string, unknown> | null,
   mode: 'EXECUTED',
   state: 'COMPLETED',
   progress: 'SCANNING',
@@ -24,7 +30,14 @@ const state = vi.hoisted(() => ({
   category: null as 'coverage' | null,
   categoryResults: null as Record<
     string,
-    { assessmentId: string; finishedAt: string; value: string } | null
+    {
+      assessmentId: string
+      assessmentIds?: string[]
+      aiFindings?: number
+      standardFindings?: number
+      finishedAt: string
+      value: string
+    } | null
   > | null,
   retryAt: null as string | null,
   role: 'OWNER',
@@ -37,6 +50,7 @@ const state = vi.hoisted(() => ({
   measuredFiles: false,
   manyAnalyses: false,
   manyFindings: false,
+  findingsFail: false,
   manyHistory: false,
   scanning: true,
   readinessReason: 'READY',
@@ -237,6 +251,17 @@ const report = () => ({
       findingsRetained:
         state.mode === 'EXECUTED' ? (state.manyFindings ? 12 : 1) : undefined,
     },
+    ...(state.aiAnalysis
+      ? [
+          {
+            id: 'security.strix',
+            title: 'Strix security review',
+            state: 'UNAVAILABLE',
+            reason: 'STRIX_RUNNING',
+            scope: 'Source-only AI security review.',
+          },
+        ]
+      : []),
     ...(state.manyAnalyses
       ? Array.from({ length: 7 }, (_, index) => ({
           id: `fixture.extra-${index + 1}`,
@@ -306,6 +331,7 @@ const row = () => ({
   finishedAt: new Date().toISOString(),
 })
 beforeEach(() => {
+  state.aiAnalysis = false
   state.mode = 'EXECUTED'
   state.latestAttempt = null
   state.state = 'COMPLETED'
@@ -326,15 +352,70 @@ beforeEach(() => {
   state.measuredFiles = false
   state.manyAnalyses = false
   state.manyFindings = false
+  state.findingsFail = false
   state.manyHistory = false
   state.scanning = true
   state.readinessReason = 'READY'
   state.readinessFailure = false
   state.platformAdmin = false
+  state.aiAvailable = false
+  state.aiPreference = false
+  state.omitAiConfirmation = false
+  state.aiReview = null
   state.fetch.mockReset()
   state.fetch.mockImplementation(
     async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
+      if (/\/health\/[^/]+\/findings\?/.test(url)) {
+        if (state.findingsFail)
+          return Response.json(
+            { message: 'Findings unavailable' },
+            { status: 503 }
+          )
+        const params = new URL(url, 'http://localhost').searchParams
+        const selectedPage = Number(params.get('page') ?? 1)
+        const size = Number(params.get('pageSize') ?? 10)
+        const q = (params.get('q') ?? '').toLowerCase()
+        const severity = params.get('severity') ?? 'all'
+        const aiId = state.categoryResults?.security?.assessmentIds?.find(
+          (value) => value !== id
+        )
+        const aiRows =
+          aiId && params.get('reports')?.split(',').includes(aiId)
+            ? [
+                {
+                  ...report().findings[0],
+                  fingerprint: 'e'.repeat(64),
+                  assessmentId: aiId,
+                  assessedAt: '2026-10-12T10:00:00Z',
+                  evidence: 'AI_REPORTED',
+                  title: 'AI payment issue',
+                },
+              ]
+            : []
+        const available = [...report().findings, ...aiRows]
+        const matching = available.filter(
+          (f) =>
+            (severity === 'all' || f.severity === severity) &&
+            `${f.title} ${f.path} ${f.ruleId}`.toLowerCase().includes(q)
+        )
+        return Response.json({
+          assessmentId: id,
+          sourceSha: sha,
+          rows: matching.slice((selectedPage - 1) * size, selectedPage * size),
+          total: matching.length,
+          unfilteredTotal: available.length,
+          page: selectedPage,
+          pageSize: size,
+        })
+      }
+      if (url.includes('/health/strix'))
+        return Response.json({
+          available: state.aiAvailable,
+          reason: state.aiAvailable
+            ? 'AI review ready.'
+            : 'Connect a tested AI model.',
+        })
       if (url.includes('/health/test-apps'))
         return Response.json({
           complete: true,
@@ -360,9 +441,24 @@ beforeEach(() => {
               reason: state.readinessReason,
             })
       if (init?.method === 'POST')
-        return new Response(JSON.stringify({ ...row(), state: 'QUEUED' }), {
-          status: 201,
-        })
+        return new Response(
+          JSON.stringify({
+            ...row(),
+            state: 'QUEUED',
+            ...(state.omitAiConfirmation
+              ? {}
+              : {
+                  includeAiSecurity:
+                    JSON.parse(String(init.body)).includeAiSecurity === true,
+                  aiReviewId: JSON.parse(String(init.body)).includeAiSecurity
+                    ? 'ai-queued'
+                    : null,
+                }),
+          }),
+          {
+            status: 201,
+          }
+        )
       if (url.includes('/health/freshness?'))
         return Response.json({
           assessmentId: id,
@@ -434,8 +530,45 @@ beforeEach(() => {
       return new Response(
         JSON.stringify({
           branch: 'development',
-          assessment: row(),
+          assessment: {
+            ...row(),
+            report: state.noReport
+              ? null
+              : {
+                  ...report(),
+                  findings: [],
+                  findingSummary: {
+                    total: report().findings.length,
+                    unsuppressed: report().findings.length,
+                    analyzerHigh: report().findings.filter(
+                      (f) => f.severity === 'high'
+                    ).length,
+                    groups: report().findings.reduce<
+                      Array<{
+                        category: string
+                        checkId: string
+                        count: number
+                      }>
+                    >((groups, f) => {
+                      const group = groups.find(
+                        (g) =>
+                          g.category === f.category && g.checkId === f.checkId
+                      )
+                      if (group) group.count++
+                      else
+                        groups.push({
+                          category: f.category,
+                          checkId: f.checkId,
+                          count: 1,
+                        })
+                      return groups
+                    }, []),
+                  },
+                },
+          },
           latestAttempt: state.latestAttempt,
+          assessmentOptions: { includeAiSecurity: state.aiPreference },
+          strixReview: state.aiReview,
           ciCoverage: state.coverage
             ? {
                 state: 'VERIFIED',
@@ -721,17 +854,13 @@ it('shows partial observations above metrics above metrics and opens its exact h
   await mount()
   const chart = page.getByRole('region', { name: 'Findings over time' })
   await expect
-    .element(
-      chart.getByText(
-        'Compared rule packs: Reliability. Comparison line only; bars include all retained findings.'
-      )
-    )
+    .element(chart.getByText('Findings over time', { exact: true }))
     .toBeVisible()
   await expect
-    .element(chart.getByRole('img'))
+    .element(chart.getByRole('group', { name: /All findings over/ }))
     .toHaveAttribute(
       'aria-label',
-      '2 assessments, 1 partial. Retained finding counts in chronological order: 4, 1. Exact revisions and coverage are in View chart data.'
+      'All findings over 2 scans. Finding counts: 4, 1. Select a column to open its assessment.'
     )
   const chartElement = document.querySelector(
     '[aria-label="Findings over time"]'
@@ -746,9 +875,9 @@ it('shows partial observations above metrics above metrics and opens its exact h
     chartElement.compareDocumentPosition(metric) &
       Node.DOCUMENT_POSITION_FOLLOWING
   ).toBeTruthy()
-  await chart.getByText('View chart data', { exact: true }).click()
   await chart
-    .getByRole('button', { name: 'Open health report ddddddd', exact: true })
+    .getByRole('button', { name: /Open scan.*commit ddddddd/ })
+    .first()
     .click()
   await expect
     .poll(() =>
@@ -764,7 +893,7 @@ it('shows unavailable history without plotting incomplete analysis as zero', asy
   const chart = page.getByRole('region', { name: 'Findings over time' })
 
   await expect
-    .element(chart.getByText('Analysis history unavailable', { exact: true }))
+    .element(chart.getByText('No recorded results to chart', { exact: true }))
     .toBeVisible()
   await expect
     .element(chart.getByRole('img'))
@@ -1261,7 +1390,7 @@ it('explains why security findings can coexist with unavailable metrics', async 
     .toBeVisible()
 })
 
-it('shows no more than ten findings per page and paginates the recorded list', async () => {
+it('requests each findings page from the server instead of downloading the recorded list', async () => {
   state.manyFindings = true
   await mount()
   const findings = page.getByLabelText('Repository findings')
@@ -1277,6 +1406,23 @@ it('shows no more than ten findings per page and paginates the recorded list', a
   await expect
     .element(findings.getByText('Unsafe SQL expression'))
     .not.toBeInTheDocument()
+  expect(
+    state.fetch.mock.calls.some(([url]) =>
+      String(url).includes('/findings?page=2&pageSize=10')
+    )
+  ).toBe(true)
+  await findings
+    .getByRole('textbox', { name: 'Search health findings' })
+    .fill('Unsafe SQL')
+  await expect.element(findings.getByText('1–1 of 1')).toBeVisible()
+  await expect
+    .element(findings.getByText('Unsafe SQL expression'))
+    .toBeVisible()
+  expect(
+    state.fetch.mock.calls.some(([url]) =>
+      String(url).includes('/findings?page=1&pageSize=10&q=Unsafe+SQL')
+    )
+  ).toBe(true)
 })
 
 it('shows no more than ten history entries per page', async () => {
@@ -1300,6 +1446,24 @@ it('shows no more than ten history entries per page', async () => {
   await expect
     .element(history.getByText('0000001', { exact: true }))
     .not.toBeInTheDocument()
+})
+
+it('shows a findings request error with retry instead of presenting it as no findings', async () => {
+  state.findingsFail = true
+  await mount()
+  const findings = page.getByLabelText('Repository findings')
+  await expect
+    .element(findings.getByRole('alert'))
+    .toHaveTextContent('Findings unavailable')
+  await expect
+    .element(findings.getByText('Unsafe SQL expression'))
+    .not.toBeInTheDocument()
+  state.findingsFail = false
+  await findings.getByRole('button', { name: 'Retry loading findings' }).click()
+  await expect
+    .element(findings.getByText('Unsafe SQL expression'))
+    .toBeVisible()
+  await expect.element(findings.getByText('1–1 of 1')).toBeVisible()
 })
 
 it('keeps findings and assessment history in separate tabs', async () => {
@@ -1481,3 +1645,452 @@ for (const pendingState of ['RUNNING', 'FAILED']) {
     else await reassess.toBeDisabled()
   })
 }
+
+it('queues standard and optional AI security checks with one Reassess action', async () => {
+  state.aiAvailable = true
+  await mount()
+  await page.getByRole('button', { name: 'Assessment options' }).click()
+  await expect
+    .element(
+      page.getByRole('menuitemcheckbox', { name: 'Include AI security review' })
+    )
+    .toBeEnabled()
+  await page
+    .getByRole('menuitemcheckbox', { name: 'Include AI security review' })
+    .click()
+  await page.getByRole('button', { name: 'Assessment options' }).click()
+  await page.getByRole('button', { name: 'Reassess', exact: true }).click()
+  await expect
+    .poll(
+      () =>
+        state.fetch.mock.calls.filter(([, init]) => init?.method === 'POST')
+          .length
+    )
+    .toBe(1)
+  const body = JSON.parse(
+    state.fetch.mock.calls.find(([, init]) => init?.method === 'POST')![1].body
+  )
+  expect(body).toMatchObject({ branch: 'development', includeAiSecurity: true })
+  expect(body.scanner).toBeUndefined()
+  await expect
+    .element(page.getByRole('button', { name: 'Run VAPT assessment' }))
+    .not.toBeInTheDocument()
+})
+it('centers the stationary sparkle inside the AI review loading ring', async () => {
+  state.aiReview = {
+    ...row(),
+    id: 'ai-running',
+    state: 'RUNNING',
+    reason: null,
+    report: null,
+  }
+  await mount()
+  await expect
+    .element(page.getByText('AI security review: Running'))
+    .toBeVisible()
+  const banner = document.querySelector('[aria-label="Strix review status"]')!
+  const ring = banner.querySelector('[data-slot="ai-loading-ring"]')!
+  const sparkle = banner.querySelector('.lucide-sparkles')!
+  const ringRect = ring.getBoundingClientRect()
+  const sparkleRect = sparkle.getBoundingClientRect()
+  expect(
+    Math.abs(
+      (ringRect.left + ringRect.right) / 2 -
+        (sparkleRect.left + sparkleRect.right) / 2
+    )
+  ).toBeLessThan(1)
+  expect(
+    Math.abs(
+      (ringRect.top + ringRect.bottom) / 2 -
+        (sparkleRect.top + sparkleRect.bottom) / 2
+    )
+  ).toBeLessThan(1)
+  expect(getComputedStyle(sparkle).animationName).toBe('none')
+  expect(ringRect.width).toBeGreaterThan(sparkleRect.width)
+  expect(getComputedStyle(ring).animationName).not.toBe('none')
+})
+it('keeps Reassess usable without an AI model and explains a skipped review', async () => {
+  state.aiPreference = true
+  state.aiReview = {
+    ...row(),
+    id: 'ai-skipped',
+    state: 'SKIPPED',
+    reason: 'AI_SECURITY_UNAVAILABLE',
+    report: null,
+  }
+  await mount()
+  await page.getByRole('button', { name: 'Assessment options' }).click()
+  await expect
+    .element(
+      page.getByRole('menuitemcheckbox', { name: 'Include AI security review' })
+    )
+    .toBeDisabled()
+  await expect
+    .element(page.getByText('AI security review: Skipped'))
+    .toBeVisible()
+  await expect
+    .element(page.getByRole('button', { name: 'Reassess', exact: true }))
+    .toBeEnabled()
+  await page.getByRole('button', { name: 'Assessment options' }).click()
+  await page.getByRole('button', { name: 'Reassess', exact: true }).click()
+  await expect
+    .poll(
+      () =>
+        state.fetch.mock.calls.filter(([, init]) => init?.method === 'POST')
+          .length
+    )
+    .toBe(1)
+  expect(
+    JSON.parse(
+      state.fetch.mock.calls.find(([, init]) => init?.method === 'POST')![1]
+        .body
+    ).includeAiSecurity
+  ).toBe(true)
+})
+it('loads the repository AI preference without starting another request', async () => {
+  state.aiAvailable = true
+  state.aiPreference = true
+  await mount()
+  await page.getByRole('button', { name: 'Assessment options' }).click()
+  await expect
+    .element(
+      page.getByRole('menuitemcheckbox', { name: 'Include AI security review' })
+    )
+    .toBeChecked()
+  expect(
+    state.fetch.mock.calls.some(([, init]) => init?.method === 'POST')
+  ).toBe(false)
+})
+
+it('keeps the split assessment action compact in both themes and at 320px', async () => {
+  state.aiAvailable = true
+  state.aiPreference = true
+  await mount()
+  for (const width of [1280, 320]) {
+    await page.viewport(width, 800)
+    for (const dark of [false, true]) {
+      document.documentElement.classList.toggle('dark', dark)
+      const options = page.getByRole('button', { name: 'Assessment options' })
+      const primary = page.getByRole('button', {
+        name: 'Reassess',
+        exact: true,
+      })
+      await expect.element(primary).toBeVisible()
+      const mainRect = primary.element().getBoundingClientRect()
+      const arrowRect = options.element().getBoundingClientRect()
+      expect(Math.abs(mainRect.right - arrowRect.left)).toBeLessThan(1)
+      expect(mainRect.height).toBe(arrowRect.height)
+      await options.click()
+      await expect
+        .element(
+          page.getByRole('menuitemcheckbox', {
+            name: 'Include AI security review',
+          })
+        )
+        .toBeChecked()
+      expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width)
+      await new Promise((resolve) => setTimeout(resolve, 300))
+      await page.screenshot({
+        path: `__screenshots__/preflyt-health-split-${width}-${dark ? 'dark' : 'light'}.png`,
+      })
+      await userEvent.keyboard('{Escape}')
+      await expect
+        .element(
+          page.getByRole('menuitemcheckbox', {
+            name: 'Include AI security review',
+          })
+        )
+        .not.toBeInTheDocument()
+    }
+  }
+  document.documentElement.classList.remove('dark')
+  await page.viewport(1280, 800)
+})
+
+it('keeps AI selected when Reassess is clicked directly while its options menu is open', async () => {
+  state.aiAvailable = true
+  await mount()
+  await page.getByRole('button', { name: 'Assessment options' }).click()
+  await expect
+    .element(
+      page.getByRole('menuitemcheckbox', { name: 'Include AI security review' })
+    )
+    .toBeEnabled()
+  await page
+    .getByRole('menuitemcheckbox', { name: 'Include AI security review' })
+    .click()
+  await page.getByRole('button', { name: 'Reassess', exact: true }).click()
+  await expect
+    .poll(
+      () =>
+        state.fetch.mock.calls.filter(([, init]) => init?.method === 'POST')
+          .length
+    )
+    .toBe(1)
+  const body = JSON.parse(
+    state.fetch.mock.calls.find(([, init]) => init?.method === 'POST')![1].body
+  )
+  expect(body.includeAiSecurity).toBe(true)
+})
+
+it('shows an error when an AI-selected request is acknowledged as standard checks only', async () => {
+  state.aiAvailable = true
+  state.omitAiConfirmation = true
+  await mount()
+  await page.getByRole('button', { name: 'Assessment options' }).click()
+  await expect
+    .element(
+      page.getByRole('menuitemcheckbox', { name: 'Include AI security review' })
+    )
+    .toBeEnabled()
+  await page
+    .getByRole('menuitemcheckbox', { name: 'Include AI security review' })
+    .click()
+  await page.getByRole('button', { name: 'Reassess', exact: true }).click()
+  await expect
+    .element(
+      page.getByText(
+        /The server did not confirm the requested AI security review/
+      )
+    )
+    .toBeVisible()
+  expect(
+    state.fetch.mock.calls.filter(([, init]) => init?.method === 'POST')
+  ).toHaveLength(1)
+})
+
+it('shows the active standalone AI review instead of the previous cancelled review', async () => {
+  state.aiReview = { ...row(), id: 'old-ai', state: 'CANCELLED', report: null }
+  state.latestAttempt = {
+    id: 'new-ai',
+    branch: 'development',
+    scanner: 'strix',
+    state: 'QUEUED',
+    reason: null,
+    retryAt: null,
+  }
+  await mount()
+  await expect
+    .element(page.getByText('AI security review: Queued'))
+    .toBeVisible()
+  await expect
+    .element(page.getByText('AI security review: Cancelled'))
+    .not.toBeInTheDocument()
+  const button = page.getByRole('button', {
+    name: 'AI review queued…',
+    exact: true,
+  })
+  await expect.element(button).toBeDisabled()
+  const ring = button.element().querySelector('[data-slot="ai-loading-ring"]')!
+  expect(getComputedStyle(ring).animationName).not.toBe('none')
+})
+it('runs VAPT from the AI analysis card instead of standard security checks', async () => {
+  state.aiAnalysis = true
+  await mount()
+  await page.getByText('Strix security review', { exact: true }).click()
+  await page
+    .getByRole('button', { name: 'Run AI security review', exact: true })
+    .click()
+  await expect
+    .poll(
+      () =>
+        state.fetch.mock.calls.filter(([, init]) => init?.method === 'POST')
+          .length
+    )
+    .toBe(1)
+  const body = JSON.parse(
+    state.fetch.mock.calls.find(([, init]) => init?.method === 'POST')![1].body
+  )
+  expect(body).toMatchObject({ branch: 'development', scanner: 'strix' })
+  expect(body.category).toBeUndefined()
+})
+it('shows a running AI analysis with a spinning button instead of Not run', async () => {
+  state.aiAnalysis = true
+  state.aiReview = { ...row(), id: 'active-ai', state: 'RUNNING', report: null }
+  await mount()
+  await page.getByText('Strix security review', { exact: true }).click()
+  const button = page
+    .getByRole('button', { name: 'Reviewing security…', exact: true })
+    .last()
+  await expect.element(button).toBeDisabled()
+  expect(
+    getComputedStyle(
+      button.element().querySelector('[data-slot="ai-loading-ring"]')!
+    ).animationName
+  ).not.toBe('none')
+  const card = button.element().closest('details')!
+  expect(card.textContent).toContain('Running')
+  expect(card.textContent).not.toContain('Not run')
+  expect(card.textContent).not.toContain('Report completed')
+})
+
+it('keeps a valid freshness badge steady and hides checking text during background refresh', async () => {
+  const respond = state.fetch.getMockImplementation()!
+  let refreshing = false
+  let release!: (value: Response) => void
+  const pending = new Promise<Response>((resolve) => {
+    release = resolve
+  })
+  state.fetch.mockImplementation((url, init) =>
+    String(url).includes('/health/freshness?')
+      ? refreshing
+        ? pending
+        : Promise.resolve(
+            Response.json({
+              assessmentId: id,
+              sourceSha: sha,
+              branch: 'development',
+              freshness: 'CURRENT',
+              checkedAt: new Date().toISOString(),
+            })
+          )
+      : respond(url, init)
+  )
+  const view = await mount('development')
+  await expect.element(page.getByText('Current', { exact: true })).toBeVisible()
+  refreshing = true
+  await page
+    .getByRole('button', { name: 'Refresh health report', exact: true })
+    .click()
+  await expect
+    .poll(
+      () =>
+        state.fetch.mock.calls.filter(([url]) =>
+          String(url).includes('/health/freshness?')
+        ).length
+    )
+    .toBe(2)
+  await expect.element(page.getByText('Current', { exact: true })).toBeVisible()
+  await expect
+    .element(page.getByText('Checking freshness…', { exact: true }))
+    .not.toBeInTheDocument()
+  release(
+    Response.json({
+      assessmentId: id,
+      sourceSha: sha,
+      branch: 'development',
+      freshness: 'CURRENT',
+      checkedAt: new Date().toISOString(),
+    })
+  )
+  await expect.element(page.getByText('Current', { exact: true })).toBeVisible()
+  await view.unmount()
+})
+
+it('combines scanner and AI findings into one Security card and exact saved-report link', async () => {
+  const aiId = '22222222-2222-4222-8222-222222222222'
+  state.categoryResults = {
+    security: {
+      assessmentId: id,
+      assessmentIds: [id, aiId],
+      standardFindings: 230,
+      aiFindings: 1,
+      value: '231',
+      finishedAt: '2026-10-14T06:30:00Z',
+    },
+  }
+  state.aiReview = {
+    id: aiId,
+    state: 'COMPLETED',
+    sourceSha: sha,
+    report: report(),
+  }
+  await mount()
+  await expect.element(page.getByLabelText('Security: 231')).toBeVisible()
+  await expect
+    .element(page.getByText('230 scanner findings · 1 AI finding to review'))
+    .not.toBeInTheDocument()
+  const link = page.getByRole('link', { name: 'View security findings' })
+  await expect
+    .element(link)
+    .toHaveAttribute(
+      'href',
+      expect.stringContaining(
+        'healthReports=' + encodeURIComponent(id + ',' + aiId)
+      )
+    )
+  await expect
+    .element(link)
+    .toHaveAttribute('href', expect.stringContaining('source=health'))
+  await expect
+    .element(page.getByText('AI security review: Completed'))
+    .not.toBeInTheDocument()
+  await expect
+    .element(page.getByRole('link', { name: 'View AI security findings' }))
+    .not.toBeInTheDocument()
+})
+
+it('keeps running AI review status inside Security without overflow in either theme', async () => {
+  state.aiReview = {
+    ...row(),
+    id: 'ai-running',
+    state: 'RUNNING',
+    reason: null,
+    report: null,
+  }
+  await mount()
+  for (const width of [1280, 320]) {
+    await page.viewport(width, 900)
+    for (const dark of [false, true]) {
+      document.documentElement.classList.toggle('dark', dark)
+      const status = document.querySelector(
+        '[aria-label="Strix review status"]'
+      )!
+      expect(
+        status
+          .closest('[data-slot="card"]')
+          ?.querySelector('[aria-label="Security: 1"]')
+      ).not.toBeNull()
+      expect(status.scrollWidth).toBeLessThanOrEqual(status.clientWidth)
+      expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width)
+      await page.screenshot({
+        path: `__screenshots__/preflyt-combined-security-${width}-${dark ? 'dark' : 'light'}.png`,
+      })
+    }
+  }
+  document.documentElement.classList.remove('dark')
+  await page.viewport(1280, 800)
+})
+
+it('includes the AI issue in the repository findings count, filter results and exact report link', async () => {
+  const aiId = '33333333-3333-4333-8333-333333333333'
+  state.categoryResults = {
+    security: {
+      assessmentId: id,
+      assessmentIds: [id, aiId],
+      standardFindings: report().findings.length,
+      aiFindings: 1,
+      finishedAt: '2026-10-12T10:00:00Z',
+      value: String(report().findings.length + 1),
+    },
+  }
+  await mount()
+  await expect
+    .element(
+      page.getByRole('tab', {
+        name: `Findings (${report().findings.length + 1})`,
+        exact: true,
+      })
+    )
+    .toBeVisible()
+  await page
+    .getByRole('textbox', { name: 'Search health findings' })
+    .fill('AI payment')
+  const link = page.getByRole('link', { name: 'AI payment issue', exact: true })
+  await expect.element(link).toBeVisible()
+  await expect
+    .element(link)
+    .toHaveAttribute('href', expect.stringContaining(`health=${aiId}`))
+  await expect
+    .element(page.getByText('Needs review', { exact: true }).first())
+    .toBeVisible()
+  await expect
+    .poll(() =>
+      state.fetch.mock.calls.some(
+        ([url]) =>
+          String(url).includes('reports=') &&
+          decodeURIComponent(String(url)).includes(aiId)
+      )
+    )
+    .toBe(true)
+})

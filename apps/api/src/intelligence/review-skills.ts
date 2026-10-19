@@ -13,54 +13,101 @@ export type SkillManifest = {
   source: string;
   license: string;
 };
+export const skillLimits = {
+  name: 100,
+  description: 2000,
+  instructions: 24000,
+  source: 300,
+  license: 100,
+} as const;
+export function skillLengthMessage(label: string, max: number, value: unknown) {
+  return `${label}: maximum ${max.toLocaleString("en-US")} characters; received ${typeof value === "string" ? value.trim().length.toLocaleString("en-US") : "non-text input"}.`;
+}
+/** Messages identify fields and counts, never echo instruction or credential content. */
 export function validateSkill(input: SkillManifest): SkillManifest {
-  const text = (v: unknown, max: number) =>
-    typeof v === "string" &&
-    !!v.trim() &&
-    v.length <= max &&
-    !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(v);
-  if (
-    !text(input.name, 100) ||
-    !text(input.description, 400) ||
-    !text(input.instructions, 6000) ||
-    !text(input.source, 300) ||
-    !text(input.license, 100) ||
-    !Array.isArray(input.stages) ||
-    !input.stages.length ||
-    input.stages.length > 6 ||
-    input.stages.some(
-      (s) => !aiStages.includes(s as (typeof aiStages)[number]),
-    ) ||
-    new Set(input.stages).size !== input.stages.length ||
-    !Array.isArray(input.repositories) ||
-    input.repositories.length > 100 ||
-    input.repositories.some(
-      (id) => typeof id !== "string" || !/^[1-9]\d{0,15}$/.test(id),
-    ) ||
-    new Set(input.repositories).size !== input.repositories.length
-  )
-    throw new Error(
-      "Enter instructions, provenance and valid stage/repository assignments",
-    );
+  const errors: string[] = [];
+  const labels = {
+    name: "Name",
+    description: "Description",
+    instructions: "Instructions",
+    source: "Source",
+    license: "License",
+  };
+  for (const key of Object.keys(skillLimits) as (keyof typeof skillLimits)[]) {
+    const value = input[key];
+    if (typeof value !== "string") errors.push(`${labels[key]} must be text.`);
+    else if (!value.trim()) errors.push(`${labels[key]} is required.`);
+    else if (value.trim().length > skillLimits[key])
+      errors.push(skillLengthMessage(labels[key], skillLimits[key], value));
+    if (
+      typeof value === "string" &&
+      /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(value)
+    )
+      errors.push(`${labels[key]}: unsupported control characters.`);
+  }
+  if (!Array.isArray(input.stages) || !input.stages.length)
+    errors.push("Stages: choose at least one review stage.");
+  else {
+    if (input.stages.length > 6)
+      errors.push(
+        `Stages: maximum 6 entries; received ${input.stages.length}.`,
+      );
+    if (
+      input.stages.some(
+        (s) => !aiStages.includes(s as (typeof aiStages)[number]),
+      )
+    )
+      errors.push("Stages: unsupported review stage.");
+    if (new Set(input.stages).size !== input.stages.length)
+      errors.push("Stages: duplicate entries.");
+  }
+  if (!Array.isArray(input.repositories))
+    errors.push("Repositories must be a list of repository IDs.");
+  else {
+    if (input.repositories.length > 100)
+      errors.push(
+        `Repositories: maximum 100 entries; received ${input.repositories.length}.`,
+      );
+    if (
+      input.repositories.some(
+        (id) => typeof id !== "string" || !/^[1-9]\d{0,15}$/.test(id),
+      )
+    )
+      errors.push(
+        "Repositories must contain numeric repository IDs, not names or URLs.",
+      );
+    if (new Set(input.repositories).size !== input.repositories.length)
+      errors.push("Repositories: duplicate entries.");
+  }
   const selectors: Record<string, string[]> = {};
   for (const key of ["languages", "frameworks"] as const) {
-    const values = input[key] ?? [];
+    const values = input[key] ?? [],
+      label = key === "languages" ? "Languages" : "Frameworks";
+    if (!Array.isArray(values)) {
+      errors.push(`${label} must be a list of names.`);
+      continue;
+    }
+    if (values.length > 20)
+      errors.push(`${label}: maximum 20 entries; received ${values.length}.`);
     if (
-      !Array.isArray(values) ||
-      values.length > 20 ||
       values.some(
         (v) =>
           typeof v !== "string" ||
           !v.trim() ||
           !/^[a-zA-Z0-9+#. -]{1,60}$/.test(v),
       )
-    )
-      throw new Error("Enter up to 20 language or framework names");
+    ) {
+      errors.push(
+        `${label}: each name must contain 1–60 letters, numbers, spaces or + # . - characters.`,
+      );
+      continue;
+    }
     const normalized = [
       ...new Set(values.map((v) => v.trim().toLowerCase())),
     ].sort();
     if (normalized.length) selectors[key] = normalized;
   }
+  if (errors.length) throw new Error(errors.join(" "));
   return {
     ...selectors,
     name: input.name.trim(),

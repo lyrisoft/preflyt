@@ -1,7 +1,9 @@
 import { parseDocument, stringify } from "yaml";
 import { validateSkill, type SkillManifest } from "./review-skills.js";
 
-export const skillMarkdownMaxBytes = 32768;
+export class SkillImportValidationError extends Error {}
+
+export const skillMarkdownMaxBytes = 131072;
 const fields = new Set([
   "name",
   "description",
@@ -19,10 +21,16 @@ export function parseSkillMarkdown(markdown: string): SkillManifest {
     typeof markdown !== "string" ||
     Buffer.byteLength(markdown, "utf8") > skillMarkdownMaxBytes
   )
-    throw new Error("Choose a UTF-8 Markdown file no larger than 32 KiB");
+    throw new Error(
+      `File: maximum 131,072 bytes (128 KiB); received ${typeof markdown === "string" ? Buffer.byteLength(markdown, "utf8").toLocaleString("en-US") : "non-text input"}.`,
+    );
   const normalized = markdown.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n");
   const match = /^---\n([\s\S]*?)\n---(?:\n|$)([\s\S]*)$/.exec(normalized);
-  if (!match || match[1]!.length > 8192)
+  if (match && match[1]!.length > 8192)
+    throw new Error(
+      `YAML header: maximum 8,192 characters; received ${match[1]!.length.toLocaleString("en-US")}.`,
+    );
+  if (!match)
     throw new Error(
       "SKILL.md needs a YAML header with name and description, followed by Markdown instructions",
     );
@@ -43,44 +51,39 @@ export function parseSkillMarkdown(markdown: string): SkillManifest {
       "Use a valid YAML header without duplicate fields, aliases or custom tags",
     );
   }
-  if (Object.keys(metadata).some((key) => !fields.has(key)))
+  const unsupported = Object.keys(metadata).filter((key) => !fields.has(key));
+  if (unsupported.length)
     throw new Error(
       "SKILL.md supports name, description, source, license, stages, repositories, languages and frameworks. Remove unsupported header fields.",
     );
-  try {
-    const manifest = validateSkill({
-      languages: metadata.languages as string[] | undefined,
-      frameworks: metadata.frameworks as string[] | undefined,
-      name: metadata.name as string,
-      description: metadata.description as string,
-      instructions: match[2]!,
-      source:
-        metadata.source === undefined
-          ? "Uploaded SKILL.md"
-          : (metadata.source as string),
-      license:
-        metadata.license === undefined
-          ? "Not specified"
-          : (metadata.license as string),
-      stages:
-        metadata.stages === undefined
-          ? ["repository", "pull_request"]
-          : (metadata.stages as string[]),
-      repositories:
-        metadata.repositories === undefined
-          ? []
-          : (metadata.repositories as string[]),
-    });
-    // The editor requires an explicit license before saving an imported draft.
-    return {
-      ...manifest,
-      license: metadata.license === undefined ? "" : manifest.license,
-    };
-  } catch {
-    throw new Error(
-      "Enter a valid skill name, description and up to 6,000 instruction characters; check the source, license and repository fields",
-    );
-  }
+  const manifest = validateSkill({
+    languages: metadata.languages as string[] | undefined,
+    frameworks: metadata.frameworks as string[] | undefined,
+    name: metadata.name as string,
+    description: metadata.description as string,
+    instructions: match[2]!,
+    source:
+      metadata.source === undefined
+        ? "Uploaded SKILL.md"
+        : (metadata.source as string),
+    license:
+      metadata.license === undefined
+        ? "Not specified"
+        : (metadata.license as string),
+    stages:
+      metadata.stages === undefined
+        ? ["repository", "pull_request"]
+        : (metadata.stages as string[]),
+    repositories:
+      metadata.repositories === undefined
+        ? []
+        : (metadata.repositories as string[]),
+  });
+  // The editor requires an explicit license before saving an imported draft.
+  return {
+    ...manifest,
+    license: metadata.license === undefined ? "" : manifest.license,
+  };
 }
 
 export function exportSkillMarkdown(skill: SkillManifest) {

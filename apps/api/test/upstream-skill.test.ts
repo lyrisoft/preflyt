@@ -41,6 +41,6 @@ it("rejects unsupported executable metadata and oversized instructions", async (
     )
     .mockResolvedValueOnce(new Response("MIT"));
   await expect(readUpstreamSkill(input)).rejects.toThrow("unsupported");
-  request.mockReset().mockResolvedValueOnce(new Response("x".repeat(40000)));
-  await expect(readUpstreamSkill(input)).rejects.toThrow("32 KiB");
+  request.mockReset().mockResolvedValueOnce(new Response("x".repeat(131073)));
+  await expect(readUpstreamSkill(input)).rejects.toThrow("128 KiB");
 });
