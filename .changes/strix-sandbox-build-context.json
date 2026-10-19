@@ -1,0 +1,8 @@
+{
+  "type": "fix",
+  "title": "Correct Strix sandbox image build context",
+  "description": "Release and local qualification builds now use the Strix sandbox directory as its Docker build context so the entrypoint can be copied into the image. A sandbox-specific ignore file limits the context to the required entrypoint.",
+  "upgrade": "none",
+  "migrations": [],
+  "configuration": []
+}

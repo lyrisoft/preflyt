@@ -20,8 +20,8 @@ export function checkLocalImageSpace(hostBytes,dockerBytes) {
 export function localImageTargets(architecture,group,version='verify') {
  if(!['amd64','arm64'].includes(architecture)||!['api','web','native','strix'].includes(group)||!/^[-a-z0-9]+$/.test(version))throw new Error('Invalid local image selection')
  const catalog=group==='native'?nativeImages:Object.fromEntries(Object.entries(images).filter(([name])=>(name.startsWith('preflyt-strix-')?'strix':name==='preflyt-web'?'web':'api')===group))
- return Object.fromEntries(Object.entries(catalog).map(([name,[file,target]])=>[name,{
-  context:group==='native'?'docs/deployment/native-runner':'.',
+ return Object.fromEntries(Object.entries(catalog).map(([name,[file,target,context='.']])=>[name,{
+  context:group==='native'?'docs/deployment/native-runner':context,
   dockerfile:file,...(target?{target}:{}),platforms:['linux/'+architecture],
   tags:[`preflyt-local/${name}:${version}-${architecture}`],
   ...(['preflyt-health-scanner','preflyt-native-trivy-offline'].includes(name)?{args:{PREFLYT_DATABASE_EPOCH:new Date().toISOString().slice(0,10)}}:{}),
