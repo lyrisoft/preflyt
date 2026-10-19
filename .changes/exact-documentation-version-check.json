@@ -1,0 +1,8 @@
+{
+  "type": "fix",
+  "title": "Documentation version checks",
+  "description": "The documentation publisher compares complete badge versions and labels. Releases such as v0.1.11 are no longer mistaken for the outdated v0.1.1 badge, while genuinely mismatched badges still block publication.",
+  "upgrade": "none",
+  "migrations": [],
+  "configuration": []
+}

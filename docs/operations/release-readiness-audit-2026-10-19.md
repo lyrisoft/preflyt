@@ -43,3 +43,23 @@ This is a source and regression audit, not independent penetration testing or a
 new live model acceptance run. Payment Risk Review remains beta and source-only,
 with the limits recorded in the earlier audit and release notes. This pass does
 not update the user's running production installation or apply migrations there.
+
+## Publication follow-up: exact documentation badge versions
+
+Production run `39241990919` built and published all five v0.1.11 images for both
+architectures and published the generated release notes from main commit
+`1cda0d181ef7e316bf312f3fc78609c4cee36078`. An independent registry read verified
+that each version tag matches that commit's manifest and contains both platforms.
+
+The synchronized documentation site built successfully but its final guard failed:
+the literal substring `Preflyt-v0.1.1` also matched the valid v0.1.10/v0.1.11 badge
+URLs. The guard now compares complete badge versions and their visible labels
+against the selected documentation version. Two regression tests cover multi-digit
+patches, genuinely stale images/labels, mixed badges and Next.
+
+The correction passed the complete release-synchronized documentation build in a
+disposable local checkout, including v0.1.2 through v0.1.11 and Next, asset checks,
+frozen downloads and installation examples. The ten workflow-contract tests and
+eleven release-change tests also passed again. Documentation can be republished
+from corrected main for v0.1.11 without rebuilding or changing the application
+images, source tag or existing release description.

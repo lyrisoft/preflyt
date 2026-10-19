@@ -5,6 +5,7 @@ import {resolve} from 'node:path'
 import {tmpdir} from 'node:os'
 import {execFileSync} from 'node:child_process'
 import {fileURLToPath} from 'node:url'
+import {assertLandingVersion} from './landing-version.mjs'
 const root = fileURLToPath(new URL('..', import.meta.url))
 const release = JSON.parse(readFileSync(resolve(root, '../../release.json')))
 const text = html => html.replace(/<[^>]*>/g, '').replace(/<!--.*?-->/gs, '').replace(/&quot;/g, '"').replace(/&#x27;|&#39;/g, "'").replace(/&amp;/g, '&')
@@ -14,8 +15,7 @@ for (const [version, prefix, tag] of [...versions.map(version => [version, versi
   const home = readPage(prefix ? `${prefix.slice(0, -1)}.html` : 'index.html')
   const footer = [...home.matchAll(/<footer[\s\S]*?<\/footer>/g)].at(-1)?.[0] ?? ''
   assert(footer.includes(`/${prefix}self-hosting/docker-compose`), 'Footer must preserve the selected version')
-  assert(home.includes(version === 'next' ? 'Preflyt Next (unreleased)' : `Preflyt ${tag}`), 'Landing badge must match selected docs')
-  assert(!home.includes('Preflyt-v0.1.1'), 'Outdated badge must not return')
+  assertLandingVersion(home, version)
   for (const page of ['getting-started/quick-start', 'self-hosting/docker-compose']) {
     const html = readPage(`${prefix}${page}.html`)
     const body = text(html)
