@@ -46,7 +46,8 @@ class BudgetTests(unittest.IsolatedAsyncioTestCase):
         engine = SimpleNamespace(start_child_agent=child, run_strix_scan=run)
         with patch.dict(os.environ, {'PREFLYT_STRIX_MAX_REQUESTS':'80'}):
             install(engine)
-        request = dict(parent_ctx={'agent_id':'root','parent_id':None},task='Review source auth',parent_history=['large shared history'])
+        hooks = SimpleNamespace(_max_turns=32)
+        request = dict(hooks=hooks,parent_ctx={'agent_id':'root','parent_id':None},task='Review source auth',parent_history=['large shared history'])
         results = await asyncio.gather(*(engine.start_child_agent(**request) for _ in range(4)))
         self.assertEqual(sum(r['success'] for r in results),2)
         self.assertEqual(child.await_count,2)
@@ -55,9 +56,32 @@ class BudgetTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('needs_follow_up',child.call_args.kwargs['task'])
         self.assertFalse((await engine.start_child_agent(**{**request,'parent_ctx':{'parent_id':'root'}}))['success'])
         self.assertEqual(await engine.run_strix_scan(max_turns=40,scan_config={'source':'same'},image='pinned'), 'finished')
-        self.assertEqual(run.call_args.kwargs['max_turns'],16)
+        self.assertEqual(run.call_args.kwargs['max_turns'],32)
+        self.assertEqual(child.call_args.kwargs['max_turns'],16)
+        self.assertEqual(child.call_args.kwargs['hooks']._max_turns,16)
+        self.assertEqual(hooks._max_turns,32)
+        self.assertIsNot(child.call_args.kwargs['hooks'],hooks)
+        self.assertIn('Reserve the final six turns',child.call_args.kwargs['task'])
+        self.assertLess(run.call_args.kwargs['max_turns'] + child.await_count * child.call_args.kwargs['max_turns'],80)
         self.assertEqual(run.call_args.kwargs['scan_config'],{'source':'same'})
         self.assertIn('finish_scan',run.call_args.kwargs['root_instructions_override'])
+
+    async def test_payment_profiles_reserve_complementary_coverage_and_report_budget(self):
+        for profile in ['payment-risk-v1','general-and-payment-risk-v1']:
+            child = AsyncMock(return_value={'success': True})
+            run = AsyncMock()
+            engine = SimpleNamespace(start_child_agent=child, run_strix_scan=run)
+            with patch.dict(os.environ, {'PREFLYT_STRIX_MAX_REQUESTS':'80','PREFLYT_STRIX_REVIEW_PROFILE':profile,'PREFLYT_STRIX_MAX_SPECIALISTS':'2'}):
+                install(engine)
+            request = dict(parent_ctx={'agent_id':'root','parent_id':None},task='Review payments',hooks=SimpleNamespace(_max_turns=16))
+            self.assertTrue((await engine.start_child_agent(**request))['success'])
+            self.assertTrue((await engine.start_child_agent(**request))['success'])
+            self.assertFalse((await engine.start_child_agent(**request))['success'])
+            self.assertEqual(child.call_args.kwargs['max_turns'],28)
+            self.assertEqual(child.call_args.kwargs['hooks']._max_turns,28)
+            await engine.run_strix_scan()
+            self.assertEqual(run.call_args.kwargs['max_turns'],16)
+            self.assertLess(2*28+16,80)
 
     async def test_engine_failure_is_not_converted_to_success(self):
         engine=SimpleNamespace(start_child_agent=AsyncMock(),run_strix_scan=AsyncMock(side_effect=RuntimeError('failed')))

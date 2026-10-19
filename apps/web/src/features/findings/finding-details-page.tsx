@@ -20,12 +20,14 @@ import { DuplicateCodeComparison } from './duplicate-code-comparison'
 import { FindingAgentActions } from './finding-agent-actions'
 import { useFindingAiGuidance } from './finding-ai-api'
 import { findingRequest, useFindingSource } from './finding-api'
+import { findingStatus } from './finding-classification'
 import {
   FindingContext,
   FindingEvidence,
   FindingTriage,
 } from './finding-detail-sections'
 import { FindingIgnore } from './finding-ignore'
+import { FindingReview } from './finding-review'
 import { findingsSearch, type findingDetailSearch } from './finding-search'
 import { FindingSourceViewer } from './finding-source'
 import { severityTone, type Finding } from './finding-types'
@@ -73,6 +75,7 @@ export function FindingDetailsPage({
       if (!health) return findingRequest(path, signal)
       const data = await findingRequest<{
         repository: string
+        review?: Finding['review']
         assessment: Pick<
           HealthAssessment,
           'id' | 'sourceSha' | 'createdAt' | 'finishedAt'
@@ -90,6 +93,7 @@ export function FindingDetailsPage({
         canManage: false,
         finding: {
           id: findingId,
+          review: data.review,
           title: finding.title,
           repositoryId: search.repository!,
           repository: data.repository,
@@ -230,7 +234,7 @@ export function FindingDetailsPage({
                   {finding.severity}
                 </StatusBadge>
               )}
-              <StatusBadge tone='neutral'>{finding.status}</StatusBadge>
+              <StatusBadge tone='neutral'>{findingStatus(finding)}</StatusBadge>
               {(finding.origin === 'ai' ||
                 finding.evidence?.includes('AI_REPORTED')) && (
                 <StatusBadge tone='info'>Suggestions only</StatusBadge>
@@ -370,11 +374,23 @@ export function FindingDetailsPage({
                     </div>
                   </CardContent>
                 </Card>
-                <FindingIgnore
-                  key={sourcePath}
+                <FindingReview
+                  key={`review:${sourcePath}`}
                   scope={`${session.data?.organizationId}:${session.data?.identityId}`}
-                  path={`findings/${findingId}/ignore?${health ? new URLSearchParams({ origin: 'health', repository: search.repository!, assessment: search.health! }) : params}`}
+                  path={`findings/${findingId}/review?${health ? new URLSearchParams({ origin: 'health', repository: search.repository!, assessment: search.health! }) : params}`}
                 />
+                <details className='rounded-xl border p-4'>
+                  <summary className='cursor-pointer text-sm font-medium'>
+                    Hide or reopen matching findings
+                  </summary>
+                  <div className='mt-4'>
+                    <FindingIgnore
+                      key={sourcePath}
+                      scope={`${session.data?.organizationId}:${session.data?.identityId}`}
+                      path={`findings/${findingId}/ignore?${health ? new URLSearchParams({ origin: 'health', repository: search.repository!, assessment: search.health! }) : params}`}
+                    />
+                  </div>
+                </details>
                 {health && finding.category === 'hotspot' && (
                   <HotspotReview
                     repositoryId={finding.repositoryId}

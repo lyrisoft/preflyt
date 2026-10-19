@@ -32,7 +32,7 @@ it('starts Health automatically with a separate TLS engine and HTTP-only applica
   for (const name of ['api', 'worker']) {
     const service = config.services[name]
     expect(service.depends_on['health-scanner'].condition).toBe('service_healthy')
-    expect(service.volumes).toEqual(['health_connection:/run/preflyt-health:ro'])
+    expect(service.volumes).toEqual(['health_connection:/run/preflyt-health:ro', 'strix_connection:/run/preflyt-strix:ro', ...(name === 'worker' ? ['health_sources:/var/lib/preflyt-health-sources'] : [])])
     expect(service.networks).toContain('health_service')
     expect(service.networks).not.toContain('health_engine')
     expect(service.environment.HEALTH_SCANNER_CONNECTION_FILE).toBe('/run/preflyt-health/connection.json')
@@ -88,4 +88,37 @@ it('keeps development deployment smoke checks and full main release qualificatio
  for(const name of ['Verify login, origin checks and protected routes','Verify scanner readiness'])expect(steps.find((step:any)=>step.name===name).if).toBeUndefined()
  for(const name of ['Verify all Health analyzers, signed findings and source cleanup','Verify migration replay and protected backup restore'])expect(steps.find((step:any)=>step.name===name).if).toBe("github.ref == 'refs/heads/main'")
  expect(readFileSync(resolve(root,'deploy/api.Dockerfile'),'utf8')).toContain('HEALTH_SCANNER_BUNDLES_DIRECTORY=/opt/preflyt/scanner-bundles')
+})
+
+it('ships opt-in Strix with an isolated engine and no engine authority in application services',()=>{
+ const engine=config.services['strix-engine'],runner=config.services['strix-runner'],init=config.services['strix-init']
+ for(const service of [engine,runner,init]){
+  expect(service.profiles).toEqual(['ai-security'])
+  expect(service.ports).toBeUndefined()
+  expect(JSON.stringify(service)).not.toMatch(/docker.sock|DATABASE_URL|GITHUB_APP_PRIVATE_KEY|AI_PROVIDER_ENCRYPTION_KEY/)
+ }
+ expect(engine.privileged).toBe(true)
+ expect(engine.environment.DOCKER_TLS_CERTDIR).toBe('/certs')
+ expect(runner.user).toBe('1000:1000');expect(runner.read_only).toBe(true)
+ expect(runner.tmpfs).toEqual(['/tmp:rw,nosuid,nodev,size=268435456'])
+ expect(runner.cap_drop).toEqual(['ALL']);expect(runner.security_opt).toEqual(['no-new-privileges:true'])
+ expect(runner.environment.DOCKER_TLS_VERIFY).toBe('1')
+ expect(runner.environment.PREFLYT_API_ORIGIN).toBe('http://api:3000')
+ expect(runner.networks).not.toContain('egress')
+ expect(runner.healthcheck.test).toEqual(['CMD','python','readiness.py'])
+ expect(runner.depends_on['strix-init'].condition).toBe('service_completed_successfully')
+ expect(runner.volumes).not.toContain('strix_engine_certs:/certs')
+ expect(init.network_mode).toBe('none')
+ for(const name of ['api','worker']){
+  expect(config.services[name].volumes).toContain('strix_connection:/run/preflyt-strix:ro')
+  expect(config.services[name].networks).toContain('strix_service')
+  expect(config.services[name].networks).not.toContain('strix_engine')
+  expect(config.services[name].environment.STRIX_CALLBACK_ORIGIN).toBe('http://api:3000')
+ }
+ expect(config.networks.strix_engine.internal).toBe(true)
+ expect(config.networks.strix_service.internal).toBe(true)
+ for(const name of ['publish-development.yml','publish-production.yml']){
+  const workflow=parse(readFileSync(resolve(root,'.github/workflows',name),'utf8'))
+  expect(workflow.jobs.build.strategy.matrix.group).toContain('strix')
+ }
 })

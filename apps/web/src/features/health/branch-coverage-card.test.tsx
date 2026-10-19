@@ -108,3 +108,35 @@ it('does not display a percentage from an unverified report', async () => {
     .element(view.getByText('50.0%', { exact: true }))
     .not.toBeInTheDocument()
 })
+
+it.each([true, false])(
+  'shows compact test coverage beside the summary metrics without inventing missing coverage: %s',
+  async (verified) => {
+    const view = await render(
+      <BranchCoverageCard
+        compact
+        branch='main'
+        healthSha={sha}
+        exact={verified ? result : undefined}
+      />
+    )
+    await expect
+      .element(view.getByText('Test coverage', { exact: true }))
+      .toBeVisible()
+    await expect
+      .element(view.getByText(verified ? '50.0%' : '—', { exact: true }))
+      .toBeVisible()
+    await expect
+      .element(
+        view.getByText(
+          verified ? 'Verified CI coverage' : 'Coverage not received',
+          { exact: true }
+        )
+      )
+      .toBeVisible()
+    if (!verified)
+      await expect
+        .element(view.getByText('0.0%', { exact: true }))
+        .not.toBeInTheDocument()
+  }
+)

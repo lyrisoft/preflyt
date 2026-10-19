@@ -1,0 +1,11 @@
+{
+  "type": "feature",
+  "title": "Production Compose AI security and payment reviews",
+  "description": "The optional ai-security Compose profile runs the shared General Security Review and Payment Risk Review controller with a dedicated TLS engine. Matching Strix controller and sandbox images are published for AMD64 and ARM64, with standalone installation instructions. No host Python or development bridge is required; provider credentials stay in Preflyt and reviews remain source-only beta suggestions.",
+  "upgrade": "Choose a newly published release containing both Strix images, apply normal application migrations, set COMPOSE_PROFILES=ai-security, pull and recreate services. Preserve Strix state/connection volumes and use matching controller, sandbox, API and worker versions. The optional profile needs additional host resources and a privileged dedicated nested Docker engine; it never mounts the host Docker socket. See docs/operations/strix-production-compose.md. Image publication does not restart existing servers.",
+  "migrations": [],
+  "configuration": [
+    "docker-compose.yaml",
+    ".env.example"
+  ]
+}

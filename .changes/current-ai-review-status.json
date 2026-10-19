@@ -1,0 +1,8 @@
+{
+  "type": "fix",
+  "title": "Show the latest AI security review status",
+  "description": "The current repository view now follows the newest AI security review for the same commit instead of remaining attached to an older failed child review. Historical assessment links retain their original linked result.",
+  "upgrade": "none",
+  "migrations": [],
+  "configuration": []
+}

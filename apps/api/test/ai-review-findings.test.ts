@@ -1,4 +1,5 @@
-import { expect, it, vi } from "vitest";
+import { disposableDatabase } from './disposable-database.js';
+import { beforeAll, beforeEach, afterAll, expect, it, vi } from "vitest";
 import { digest } from "../src/assessments/assessment-digest.js";
 import {
   aiReviewFindingRows,
@@ -7,6 +8,12 @@ import {
 import { SkillReviewService } from "../src/intelligence/skill-review.service.js";
 import { FindingsService } from "../src/findings/findings.service.js";
 
+// Keep provider/review fixtures deterministic, but exercise the real SQL index
+// rather than emulating its query language in the projection tests.
+let indexFixture: Awaited<ReturnType<typeof disposableDatabase>>;
+beforeAll(async()=>{indexFixture=await disposableDatabase('aiprojection')});
+beforeEach(async()=>{await indexFixture.reset()});
+afterAll(async()=>{await indexFixture?.close()});
 const sha = "a".repeat(40);
 const pr = {
   version: 1,
@@ -84,11 +91,21 @@ function fixture() {
       findMany: vi.fn().mockResolvedValue([review]),
       findUnique: vi.fn().mockResolvedValue(review),
     },
+    findingReview: { findMany: vi.fn().mockResolvedValue([]) },
+    findingIndexSnapshot: indexFixture.prisma.findingIndexSnapshot,
+    findingIndexRow: indexFixture.prisma.findingIndexRow,
+    findingIndexSummary: indexFixture.prisma.findingIndexSummary,
+    findingIndexTarget: indexFixture.prisma.findingIndexTarget,
     findingIgnore: { findMany: vi.fn().mockResolvedValue([]) },
     findingDisposition: { findMany: vi.fn().mockResolvedValue([]) },
   };
   db.$transaction=vi.fn(async (read:any)=>read(db));
   db.$queryRaw=vi.fn(async (query:any)=>{
+    if(query.sql.includes('"FindingIndex')){
+      await indexFixture.prisma.findingDisposition.deleteMany();
+      for(const row of await db.findingDisposition.findMany())await indexFixture.prisma.findingDisposition.create({data:{organizationId:'org',repositoryGithubId:'51',assessmentId:'assessment',updatedById:'actor',...row}});
+      return indexFixture.prisma.$queryRaw(query);
+    }
     if(query.sql.includes('FOR SHARE'))return [];
     if(query.sql.includes('FROM "AiSkillReview" r'))return [{id:review.id,findingReadRevision:BigInt('0x'+digest(review).slice(0,12)),assessmentId:assessment.id,assessmentRevision:BigInt('0x'+digest(assessment).slice(0,12))}];
     return [];
@@ -378,3 +395,10 @@ it('includes AI findings in the default list alongside CI and Health without cha
   expect((await f.service.list(f.session, { source: 'ci' })).rows).toEqual([])
   expect((await f.service.list(f.session, { source: 'ai', kind: 'gaps' })).rows).toEqual([])
 })
+
+it('rejects access revoked while the SQL findings index is being read', async () => {
+  const f = fixture();
+  f.access.repositoryScope.mockResolvedValueOnce([f.repo]).mockResolvedValueOnce([]);
+  await expect(f.service.list(f.session, { source: 'ai' })).rejects.toThrow('Repository access changed');
+  expect(f.access.repositoryScope).toHaveBeenCalledTimes(2);
+});

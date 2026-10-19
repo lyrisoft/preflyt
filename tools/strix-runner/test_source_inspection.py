@@ -25,6 +25,25 @@ class SourceInspectionTests(unittest.IsolatedAsyncioTestCase):
             return SimpleNamespace(ok=lambda:result.returncode==0,stdout=result.stdout)
         self.ctx=SimpleNamespace(context={'agent_id':'reviewer','sandbox_session':SimpleNamespace(exec=execute)})
 
+    async def test_batched_reads_share_sandbox_evidence_checks_and_bound_work(self):
+        result=await self.inspection.read_many(self.ctx,[{'path':'auth.py','start_line':1,'end_line':1},{'path':'auth.py','start_line':2,'end_line':2}])
+        self.assertTrue(result['success'])
+        self.assertTrue(all(row['success'] for row in result['files']))
+        self.assertEqual(self.inspection.summary()['readOperations'],2)
+        before=self.calls
+        for requests in [[],[{}],[{'path':'auth.py','start_line':True,'end_line':2}], [{'path':'auth.py','start_line':1,'end_line':120}]*3]:
+            self.assertFalse((await self.inspection.read_many(self.ctx,requests))['success'])
+        self.assertEqual(self.calls,before)
+        result=await self.inspection.read_many(self.ctx,[{'path':'../outside','start_line':1,'end_line':2}])
+        self.assertFalse(result['files'][0]['success'])
+        self.assertEqual(self.inspection.summary()['readOperations'],2)
+
+    def test_observed_ranges_are_deduplicated_bounded_and_never_invented_from_listing(self):
+        self.assertEqual(self.inspection.observed_ranges(), {'observedSourceRanges': [], 'sourceRangesTruncated': False})
+        self.inspection.reads = {'one': {'auth.py': [(1,2),(1,2)]}, 'two': {'auth.py': [(1,2),(3,4)]}}
+        self.assertEqual(self.inspection.observed_ranges(1), {'observedSourceRanges':[{'path':'auth.py','startLine':1,'endLine':2}], 'sourceRangesTruncated':True})
+        self.assertEqual(len(self.inspection.observed_ranges()['observedSourceRanges']), 2)
+
     async def test_listing_and_searching_cannot_establish_reviewed_coverage(self):
         listed=await self.inspection.execute(self.ctx,{'operation':'list','query':'auth','offset':0})
         self.assertEqual(listed['matches'],['auth.py'])

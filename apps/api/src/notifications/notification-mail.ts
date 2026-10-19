@@ -23,6 +23,17 @@ export function emailNotificationsConfigured() {
 export class NotificationMailer {
   private transport?: Transporter
   async send(to: string, deliveryId: string, kind: NotificationEmailKind = 'PERSONAL', eventType?: string) {
+    return this.sendMessage(to, deliveryId, notificationEmailTemplate(resolveWebOrigin(), kind, eventType))
+  }
+  async sendVerification(to: string, deliveryId: string, code: string) {
+    if (!/^\d{8}$/.test(code)) throw new Error('INVALID_VERIFICATION_CODE')
+    return this.sendMessage(to, deliveryId, {
+      subject: 'Verify your Preflyt notification email',
+      text: `Your Preflyt verification code is ${code}. It expires 15 minutes after your request. Enter it in your notification settings. If you did not request this, ignore this email.`,
+      html: `<p>Your Preflyt verification code is <strong>${code}</strong>.</p><p>It expires 15 minutes after your request. Enter it in your notification settings. If you did not request this, ignore this email.</p>`,
+    })
+  }
+  private async sendMessage(to: string, deliveryId: string, content: ReturnType<typeof notificationEmailTemplate>) {
     const from = configurationValue('SMTP_FROM')
     const host = configurationValue('SMTP_HOST')
     const port = Number(configurationValue('SMTP_PORT') ?? 587)
@@ -38,7 +49,7 @@ export class NotificationMailer {
       logger: false, debug: false, disableFileAccess: true, disableUrlAccess: true,
     })
     const result = await this.transport.sendMail({ from, to,
-      ...notificationEmailTemplate(origin, kind, eventType),
+      ...content,
       messageId: `<${createHash('sha256').update(deliveryId).digest('hex')}@preflyt.local>`,
     })
     if (!result.accepted?.length || result.rejected?.length) throw new Error('SMTP_RECIPIENT_REJECTED')

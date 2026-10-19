@@ -940,7 +940,7 @@ it('merges assessment controls and the chart in one compact panel above metrics 
     document.documentElement.classList.toggle('dark', dark)
     const view = await mount('development')
     await expect
-      .element(page.getByText('Analyses completed', { exact: true }))
+      .element(page.getByRole('link', { name: 'View security findings' }))
       .toBeVisible()
     const panel = document.querySelector(
       '[aria-label="Repository health summary"]'
@@ -968,7 +968,7 @@ it('renders report metrics without waiting for branch freshness and suppresses s
   )
   const view = await mount('development')
   await expect
-    .element(page.getByText('Analyses completed', { exact: true }))
+    .element(page.getByRole('link', { name: 'View security findings' }))
     .toBeVisible()
   await expect
     .element(page.getByText('Checking freshness…', { exact: true }))
@@ -993,7 +993,7 @@ it('renders report metrics without waiting for branch freshness and suppresses s
     .element(page.getByRole('alert'))
     .toHaveTextContent('Repository access is unavailable')
   await expect
-    .element(page.getByText('Analyses completed', { exact: true }))
+    .element(page.getByRole('link', { name: 'View security findings' }))
     .not.toBeInTheDocument()
   await view.unmount()
 })
@@ -1012,7 +1012,7 @@ it('hides report data if the independent freshness check reveals revoked access'
     .element(page.getByRole('alert'))
     .toHaveTextContent('Repository access is unavailable')
   await expect
-    .element(page.getByText('Analyses completed', { exact: true }))
+    .element(page.getByRole('link', { name: 'View security findings' }))
     .not.toBeInTheDocument()
   await expect
     .element(page.getByRole('button', { name: 'Assess repository' }))
@@ -1020,53 +1020,11 @@ it('hides report data if the independent freshness check reveals revoked access'
   await view.unmount()
 })
 
-it('shows measured duplication and its actual denominator alongside analysis coverage', async () => {
-  state.duplication = true
-  await mount()
-  await expect
-    .element(page.getByText('20.0% duplicated', { exact: false }))
-    .toBeVisible()
-  await page.getByText('Duplicated code', { exact: true }).click()
-  await expect
-    .element(
-      page.getByText(
-        '20 of 100 analyzed lines · 2 files. Overlapping blocks count once.'
-      )
-    )
-    .toBeVisible()
-})
-
-it('shows automated hotspot findings separately from optional review counts', async () => {
-  state.hotspots = true
-  await mount()
-  await expect
-    .element(
-      page.getByRole('link', { name: 'View security hotspots findings' })
-    )
-    .not.toBeInTheDocument()
-  await page.getByText('Security hotspot review', { exact: true }).click()
-  await expect
-    .element(page.getByText('Optional review · 1 / 2 reviewed'))
-    .toBeVisible()
-  await expect
-    .element(
-      page.getByText('50.0% reviewed. Decisions apply to this commit only.')
-    )
-    .toBeVisible()
-})
-
 it('uses automatic test discovery on reassessment without asking for individual tests', async () => {
   await mount()
   await expect
     .element(page.getByRole('checkbox', { name: 'Run tests for coverage' }))
     .not.toBeInTheDocument()
-  await expect
-    .poll(() =>
-      document.querySelector<HTMLParagraphElement>(
-        '[aria-label="Test coverage: Unavailable"]'
-      )
-    )
-    .not.toBeNull()
   await page.getByRole('button', { name: 'Reassess', exact: true }).click()
   await expect
     .poll(() =>
@@ -1112,9 +1070,6 @@ it('runs tests alone and keeps the older security result linked to the same comm
   await expect
     .element(page.getByRole('button', { name: 'Run test coverage' }))
     .not.toBeInTheDocument()
-  await expect
-    .element(page.getByRole('link', { name: 'Open test coverage details' }))
-    .toHaveAttribute('href', expect.stringContaining('category=coverage'))
 })
 it('shows verified CI coverage and test counts without execution or settings actions', async () => {
   state.coverage = true
@@ -1157,91 +1112,6 @@ it('explains missing CI coverage with a setup link and no fabricated zero', asyn
     )
   await expect.element(page.getByText('—', { exact: true })).toBeVisible()
 })
-it('shows actual measured coverage with test counts and the loaded-file scope', async () => {
-  state.coverage = true
-  await mount()
-  await expect
-    .element(page.getByText('60.0% covered', { exact: false }))
-    .toBeVisible()
-  await page.getByText('Optional test coverage', { exact: true }).click()
-  await expect
-    .element(
-      page.getByText(
-        '6 of 10 measured lines · 2 tests passed. Loaded source files only; unimported files are excluded.'
-      )
-    )
-    .toBeVisible()
-})
-
-it('shows the saved analyzer scope alongside the coverage outcome', async () => {
-  await mount()
-  await page.getByText('Static security analysis', { exact: true }).click()
-  await expect
-    .element(
-      page.getByText(
-        'JavaScript, TypeScript and Python only: eval and exec calls.'
-      )
-    )
-    .toBeVisible()
-})
-it('aligns analysis cards in the same row when their summaries have different lengths', async () => {
-  await page.viewport(1280, 900)
-  state.duplication = true
-  state.scanErrors = true
-  await mount()
-  await expect.element(page.getByLabelText('Analysis coverage')).toBeVisible()
-  const cards = document.querySelectorAll(
-    '[aria-label="Analysis coverage"] details.group'
-  )
-  expect(cards).toHaveLength(2)
-  expect(cards[0].getBoundingClientRect().bottom).toBeCloseTo(
-    cards[1].getBoundingClientRect().bottom,
-    0
-  )
-  const firstAction = cards[0].querySelector('summary > span:last-child')!
-  const secondAction = cards[1].querySelector('summary > span:last-child')!
-  expect(firstAction.getBoundingClientRect().top).toBeCloseTo(
-    secondAction.getBoundingClientRect().top,
-    0
-  )
-})
-
-it('shows historical policy evidence separately and links to the original CI assessment', async () => {
-  state.policy = true
-  await mount()
-  await expect
-    .element(page.getByText('Policy revision 3 · 2 requirements'))
-    .toBeVisible()
-  await expect.element(page.getByText('1 / 2 evaluated')).toBeVisible()
-  await expect
-    .element(page.getByText('1 passing · 0 blocked · 1 incomplete'))
-    .toBeVisible()
-  await expect
-    .element(page.getByRole('link', { name: 'View policy assessment' }))
-    .toHaveAttribute(
-      'href',
-      '/repositories/51?tab=assessments&assessment=ci-report'
-    )
-  await expect
-    .element(page.getByText('Separate from file analysis.', { exact: false }))
-    .toBeVisible()
-})
-
-it('shows measured per-analyzer file counts without claiming inventory files were scanned', async () => {
-  state.measuredFiles = true
-  await mount()
-  await expect
-    .element(page.getByText('2 / 3 candidate files analyzed', { exact: true }))
-    .toBeVisible()
-  await page.getByText('Static security analysis', { exact: true }).click()
-  await expect
-    .element(page.getByText('1 not analyzed.', { exact: false }))
-    .toBeVisible()
-  await expect
-    .element(page.getByText('Files discovered', { exact: true }))
-    .toBeVisible()
-})
-
 it('uses a consistent dash for all missing dimension metrics', async () => {
   state.mode = 'INSPECTION_ONLY'
   await mount()
@@ -1266,13 +1136,6 @@ it('uses a consistent dash for all missing dimension metrics', async () => {
       )
       .toBeVisible()
   }
-  await expect
-    .poll(() =>
-      document.querySelector<HTMLParagraphElement>(
-        '[aria-label="Test coverage: Unavailable"]'
-      )
-    )
-    .not.toBeNull()
 })
 
 it('shows retained counts with a Partial scan badge instead of a comparison symbol', async () => {
@@ -1329,51 +1192,6 @@ it('links the five metric cards to their exact report and category', async () =>
   }
 })
 
-it('paginates analyzer outcomes and keeps the detailed scope collapsed until opened', async () => {
-  state.manyAnalyses = true
-  await mount()
-  const coverage = page.getByLabelText('Analysis coverage')
-  await expect.element(coverage.getByText('8 / 8')).toBeVisible()
-  await expect
-    .element(coverage.getByText('1', { exact: true }).first())
-    .toBeVisible()
-  await expect
-    .element(coverage.getByText('1–4 of 8 analyzers · page 1 of 2'))
-    .toBeVisible()
-  await expect
-    .element(coverage.getByText('Extra check 3', { exact: true }))
-    .toBeVisible()
-  await expect
-    .element(coverage.getByText('Extra check 4', { exact: true }))
-    .not.toBeInTheDocument()
-  await expect
-    .element(
-      coverage.getByText(
-        'JavaScript, TypeScript and Python only: eval and exec calls.'
-      )
-    )
-    .not.toBeVisible()
-  await coverage.getByRole('button', { name: 'Next' }).click()
-  await expect
-    .element(coverage.getByText('5–8 of 8 analyzers · page 2 of 2'))
-    .toBeVisible()
-  await expect
-    .element(coverage.getByText('Extra check 7', { exact: true }))
-    .toBeVisible()
-  await expect
-    .element(coverage.getByText('Static security analysis', { exact: true }))
-    .not.toBeInTheDocument()
-  await coverage.getByRole('button', { name: 'Previous' }).click()
-  await coverage.getByText('Static security analysis', { exact: true }).click()
-  await expect
-    .element(
-      coverage.getByText(
-        'JavaScript, TypeScript and Python only: eval and exec calls.'
-      )
-    )
-    .toBeVisible()
-})
-
 it('explains why security findings can coexist with unavailable metrics', async () => {
   await mount()
   await expect
@@ -1384,9 +1202,6 @@ it('explains why security findings can coexist with unavailable metrics', async 
     .toBeVisible()
   await expect
     .element(page.getByText('No verified duplication measurement'))
-    .toBeVisible()
-  await expect
-    .element(page.getByText('Coverage not received', { exact: true }))
     .toBeVisible()
 })
 
@@ -1509,15 +1324,6 @@ for (const [stage, label] of [
       .not.toBeInTheDocument()
   })
 }
-
-it('shows safe scanner failure locations in the existing evidence details', async () => {
-  state.scanErrors = true
-  await mount()
-  await page.getByText('Scope and evidence', { exact: true }).first().click()
-  await expect
-    .element(page.getByText('src/large.ts: Timeout', { exact: true }))
-    .toBeVisible()
-})
 
 it('explains a pre-scan GitHub rate-limit failure without needing a report, including history and retry time', async () => {
   state.state = 'FAILED'
@@ -1884,46 +1690,6 @@ it('shows the active standalone AI review instead of the previous cancelled revi
   const ring = button.element().querySelector('[data-slot="ai-loading-ring"]')!
   expect(getComputedStyle(ring).animationName).not.toBe('none')
 })
-it('runs VAPT from the AI analysis card instead of standard security checks', async () => {
-  state.aiAnalysis = true
-  await mount()
-  await page.getByText('Strix security review', { exact: true }).click()
-  await page
-    .getByRole('button', { name: 'Run AI security review', exact: true })
-    .click()
-  await expect
-    .poll(
-      () =>
-        state.fetch.mock.calls.filter(([, init]) => init?.method === 'POST')
-          .length
-    )
-    .toBe(1)
-  const body = JSON.parse(
-    state.fetch.mock.calls.find(([, init]) => init?.method === 'POST')![1].body
-  )
-  expect(body).toMatchObject({ branch: 'development', scanner: 'strix' })
-  expect(body.category).toBeUndefined()
-})
-it('shows a running AI analysis with a spinning button instead of Not run', async () => {
-  state.aiAnalysis = true
-  state.aiReview = { ...row(), id: 'active-ai', state: 'RUNNING', report: null }
-  await mount()
-  await page.getByText('Strix security review', { exact: true }).click()
-  const button = page
-    .getByRole('button', { name: 'Reviewing security…', exact: true })
-    .last()
-  await expect.element(button).toBeDisabled()
-  expect(
-    getComputedStyle(
-      button.element().querySelector('[data-slot="ai-loading-ring"]')!
-    ).animationName
-  ).not.toBe('none')
-  const card = button.element().closest('details')!
-  expect(card.textContent).toContain('Running')
-  expect(card.textContent).not.toContain('Not run')
-  expect(card.textContent).not.toContain('Report completed')
-})
-
 it('keeps a valid freshness badge steady and hides checking text during background refresh', async () => {
   const respond = state.fetch.getMockImplementation()!
   let refreshing = false
@@ -2093,4 +1859,186 @@ it('includes the AI issue in the repository findings count, filter results and e
       )
     )
     .toBe(true)
+})
+
+it('uses Findings and Assessment history without an Assessment details section or tab', async () => {
+  const view = await mount()
+  await expect.element(page.getByLabelText('Repository findings')).toBeVisible()
+  await expect
+    .element(page.getByText('Assessment details', { exact: true }))
+    .not.toBeInTheDocument()
+  await expect
+    .element(page.getByLabelText('Analysis coverage'))
+    .not.toBeInTheDocument()
+  await page
+    .getByRole('textbox', { name: 'Search health findings' })
+    .fill('Unsafe SQL')
+  await page.getByRole('tab', { name: /^Assessment history/ }).click()
+  await expect
+    .element(page.getByLabelText('Assessment history', { exact: true }))
+    .toBeVisible()
+  await expect
+    .element(page.getByLabelText('Repository findings'))
+    .not.toBeInTheDocument()
+  await page.getByRole('tab', { name: /^Findings/ }).click()
+  await expect
+    .element(page.getByRole('textbox', { name: 'Search health findings' }))
+    .toHaveValue('Unsafe SQL')
+  await view.unmount()
+})
+
+it.each([false, true])(
+  'shows Payment Risk Review only when that assessment has a saved payment report: %s',
+  async (payment) => {
+    state.aiReview = {
+      ...row(),
+      id: '22222222-2222-4222-8222-222222222222',
+      state: 'COMPLETED',
+      report: {
+        ...report(),
+        ...(payment ? { paymentRiskSummary: { findingCount: 1 } } : {}),
+      },
+    }
+    const view = await mount()
+    const tab = page.getByRole('tab', {
+      name: 'Payment Risk Review',
+      exact: true,
+    })
+    await expect
+      .element(page.getByText('Assessment details', { exact: true }))
+      .not.toBeInTheDocument()
+    if (payment) {
+      await expect.element(tab).toBeVisible()
+      await tab.click()
+      await expect
+        .element(
+          page.getByLabelText('Payment Risk Review report', { exact: true })
+        )
+        .toBeVisible()
+      await expect
+        .element(page.getByLabelText('Repository findings'))
+        .not.toBeInTheDocument()
+      await page.getByRole('tab', { name: /^Findings/ }).click()
+      await expect
+        .element(
+          page.getByLabelText('Payment Risk Review report', { exact: true })
+        )
+        .not.toBeInTheDocument()
+    } else await expect.element(tab).not.toBeInTheDocument()
+    await view.unmount()
+  }
+)
+
+it('returns to Findings when the selected assessment no longer has a payment report', async () => {
+  state.aiReview = {
+    ...row(),
+    id: '22222222-2222-4222-8222-222222222222',
+    state: 'COMPLETED',
+    report: { ...report(), paymentRiskSummary: { findingCount: 1 } },
+  }
+  const view = await mount()
+  await page
+    .getByRole('tab', { name: 'Payment Risk Review', exact: true })
+    .click()
+  state.aiReview = {
+    ...row(),
+    id: '33333333-3333-4333-8333-333333333333',
+    state: 'COMPLETED',
+    report: report(),
+  }
+  await page
+    .getByRole('button', { name: 'Refresh health report', exact: true })
+    .click()
+  await expect
+    .element(
+      page.getByRole('tab', { name: 'Payment Risk Review', exact: true })
+    )
+    .not.toBeInTheDocument()
+  await expect
+    .element(page.getByRole('tab', { name: /^Findings/ }))
+    .toHaveAttribute('aria-selected', 'true')
+  await expect.element(page.getByLabelText('Repository findings')).toBeVisible()
+  await view.unmount()
+})
+
+it('keeps payment report navigation usable at 320px in both themes', async () => {
+  await page.viewport(320, 900)
+  state.aiReview = {
+    ...row(),
+    id: '22222222-2222-4222-8222-222222222222',
+    state: 'COMPLETED',
+    report: { ...report(), paymentRiskSummary: { findingCount: 1 } },
+  }
+  for (const dark of [false, true]) {
+    document.documentElement.classList.toggle('dark', dark)
+    const view = await mount()
+    await page
+      .getByRole('tab', { name: 'Payment Risk Review', exact: true })
+      .click()
+    await expect
+      .element(
+        page.getByLabelText('Payment Risk Review report', { exact: true })
+      )
+      .toBeVisible()
+    expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(320)
+    await page.getByRole('tab', { name: /^Assessment history/ }).click()
+    await expect
+      .element(page.getByLabelText('Assessment history', { exact: true }))
+      .toBeVisible()
+    expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(320)
+    await view.unmount()
+  }
+  document.documentElement.classList.remove('dark')
+  await page.viewport(1280, 800)
+})
+
+it('aligns Test coverage with the other summary card titles and values on desktop', async () => {
+  await page.viewport(1440, 900)
+  const view = await mount()
+  await expect
+    .element(page.getByLabelText('Test coverage: Unavailable', { exact: true }))
+    .toBeVisible()
+  const security = document.querySelector('[aria-label^="Security:"]')!
+  const coverage = document.querySelector('[aria-label^="Test coverage:"]')!
+  expect(security.getBoundingClientRect().top).toBeCloseTo(
+    coverage.getBoundingClientRect().top,
+    0
+  )
+  const titles = [security, coverage].map((el) =>
+    el.closest('[data-slot="card"]')!.querySelector('[data-slot="card-title"]')!
+  )
+  expect(titles[0].getBoundingClientRect().top).toBeCloseTo(
+    titles[1].getBoundingClientRect().top,
+    0
+  )
+  await view.unmount()
+  await page.viewport(1280, 800)
+})
+
+it('shows saved human classifications in repository findings instead of a stale Needs review badge', async () => {
+  const respond = state.fetch.getMockImplementation()!
+  state.fetch.mockImplementation(async (input, init) => {
+    const response = await respond(input, init)
+    if (!/\/health\/[^/]+\/findings\?/.test(String(input))) return response
+    const body = await response.json()
+    return Response.json({
+      ...body,
+      rows: body.rows.map((row: unknown) => ({
+        ...(row as object),
+        evidence: 'AI_REPORTED',
+        review: {
+          classification: 'CONFIRMED',
+          updatedAt: new Date().toISOString(),
+        },
+      })),
+    })
+  })
+  const view = await mount()
+  await expect
+    .element(page.getByText('Confirmed', { exact: true }).first())
+    .toBeVisible()
+  await expect
+    .element(page.getByText('Needs review', { exact: true }))
+    .not.toBeInTheDocument()
+  await view.unmount()
 })

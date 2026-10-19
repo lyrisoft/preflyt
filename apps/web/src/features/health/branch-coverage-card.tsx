@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router'
 import { TestTubeDiagonal } from 'lucide-react'
-import { Card, CardContent } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { StatusBadge } from '@/components/status-badge'
 import { SurfaceIcon } from '@/components/surface-icon'
 import type { HealthData } from './health-api'
@@ -37,6 +37,7 @@ export function BranchCoverageCard({
   healthSha,
   repositoryId,
   assessmentId,
+  compact = false,
 }: {
   coverage?: HealthData['branchCoverage']
   exact?: HealthData['ciCoverage']
@@ -44,6 +45,7 @@ export function BranchCoverageCard({
   healthSha: string | null
   repositoryId?: string
   assessmentId?: string
+  compact?: boolean
 }) {
   const result = coverage?.result ?? exact
   const latest = coverage?.latestAttempt
@@ -55,15 +57,42 @@ export function BranchCoverageCard({
   const measurement =
     result?.state === 'VERIFIED' ? result.measurement : undefined
   return (
-    <Card className='gap-0 py-0' aria-label='Branch test coverage'>
-      <CardContent className='flex flex-wrap items-start gap-4 p-4'>
-        <SurfaceIcon icon={TestTubeDiagonal} tone='teal' />
+    <Card
+      className={compact ? 'h-full gap-0 overflow-hidden' : 'gap-0 py-0'}
+      aria-label='Branch test coverage'
+    >
+      {compact && (
+        <CardHeader className='flex flex-row items-center justify-between gap-3 pb-4'>
+          <CardTitle className='text-sm font-medium'>Test coverage</CardTitle>
+          <SurfaceIcon icon={TestTubeDiagonal} tone='teal' />
+        </CardHeader>
+      )}
+      <CardContent
+        className={
+          compact
+            ? 'flex min-w-0 flex-1 flex-col gap-3 px-4'
+            : 'flex flex-wrap items-start gap-4 p-4'
+        }
+      >
+        {!compact && <SurfaceIcon icon={TestTubeDiagonal} tone='teal' />}
         <div className='min-w-0 flex-1 space-y-2'>
-          <div className='flex flex-wrap items-center gap-3'>
-            <h2 className='text-base font-semibold'>Test coverage</h2>
+          <div
+            className={
+              compact
+                ? 'flex flex-col items-start gap-2'
+                : 'flex flex-wrap items-center gap-3'
+            }
+          >
+            {!compact && (
+              <h2 className='text-base font-semibold'>Test coverage</h2>
+            )}
             <p
               aria-label={`Test coverage: ${measurement ? ((100 * measurement.coveredLines) / Math.max(1, measurement.analyzedLines)).toFixed(1) + '%' : 'Unavailable'}`}
-              className='text-xl font-semibold tabular-nums'
+              className={
+                compact
+                  ? 'text-2xl font-semibold tracking-tight tabular-nums'
+                  : 'text-xl font-semibold tabular-nums'
+              }
             >
               {measurement && measurement.analyzedLines > 0
                 ? `${((100 * measurement.coveredLines) / measurement.analyzedLines).toFixed(1)}%`
@@ -92,13 +121,26 @@ export function BranchCoverageCard({
               : ''}
           </p>
           {different && (
-            <p className='text-sm text-muted-foreground'>
+            <p
+              className={
+                compact
+                  ? 'text-xs text-muted-foreground'
+                  : 'text-sm text-muted-foreground'
+              }
+            >
               Coverage and Health describe different commits. Each result keeps
               its own source and date.
             </p>
           )}
           {pending && (
-            <p role='status' className='text-sm text-muted-foreground'>
+            <p
+              role='status'
+              className={
+                compact
+                  ? 'text-xs text-muted-foreground'
+                  : 'text-sm text-muted-foreground'
+              }
+            >
               Verifying the latest CI report.{' '}
               {measurement
                 ? 'Previous coverage stays visible.'
@@ -106,7 +148,13 @@ export function BranchCoverageCard({
             </p>
           )}
           {(latest?.failureCode || !measurement) && (
-            <p className='text-sm text-muted-foreground'>
+            <p
+              className={
+                compact
+                  ? 'text-xs text-muted-foreground'
+                  : 'text-sm text-muted-foreground'
+              }
+            >
               {reasons[
                 latest?.failureCode ??
                   result?.reason ??
@@ -122,7 +170,13 @@ export function BranchCoverageCard({
             </p>
           )}
         </div>
-        <div className='flex flex-wrap gap-4 text-sm'>
+        <div
+          className={
+            compact
+              ? 'flex flex-wrap gap-3 text-xs'
+              : 'flex flex-wrap gap-4 text-sm'
+          }
+        >
           {repositoryId && assessmentId && !different && (
             <Link
               className='underline underline-offset-4'

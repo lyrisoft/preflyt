@@ -87,6 +87,7 @@ export const rolePermissions: Record<string, string[]> = {
     'contributors.policy_evidence.read',
   ],
   ENGINEERING_LEAD: [
+    'repository.connect', 'repository.manage', 'standards.manage', 'ai.skills.manage', 'policy.draft',
     'ai.skills.read', 'ai.review.run',
     'repository.read',
     'assessment.read',
@@ -178,7 +179,7 @@ export class AuthorizationService {
         ...(selected ? { selected: true } : {}),
         available: true,
         installation: { active: true, organizationId: member.organizationId },
-        ...(['OWNER', 'ADMIN'].includes(member.role)
+        ...(['OWNER', 'ADMIN'].includes(member.role) || (!selected && permission === 'repository.manage' && member.role === 'ENGINEERING_LEAD')
           ? {}
           : { repositoryGrants: { some: { membershipId: member.id } } }),
       },
@@ -196,7 +197,7 @@ export class AuthorizationService {
         [
           'organization.members.manage',
           'organization.settings.update',
-          'repository.connect',
+          'repository.connect', 'repository.manage',
           'policy.publish',
           'policy.exception.request', 'policy.exception.approve',
           'github.ruleset.manage',
@@ -226,7 +227,7 @@ export class AuthorizationService {
         ...(selected ? { selected: true } : {}),
         available: true,
         installation: { active: true, organizationId: member.organizationId },
-        ...(['OWNER', 'ADMIN'].includes(member.role)
+        ...(['OWNER', 'ADMIN'].includes(member.role) || (!selected && permission === 'repository.manage' && member.role === 'ENGINEERING_LEAD')
           ? {}
           : { repositoryGrants: { some: { membershipId: member.id } } }),
       },
@@ -257,6 +258,10 @@ export class AuthorizationService {
   // SessionGuard calls this after live session validation, before any controller or cache lookup.
   async authorizeRequest(request: Request, session: AuthenticatedSession) {
     const path = request.path.replace(/\/$/, '')
+    if (path === '/github/repositories/available' && request.method === 'GET') {
+      await this.requireOrganization(session, 'repository.manage', true)
+      return true
+    }
     // The audit reader performs fresh organization and repository authorization.
     if ((path === '/installation-reporting' && request.method === 'GET') || (/^\/installation-reporting\/(preferences|acknowledge)$/.test(path) && request.method === 'POST')) return false
     if ((path === '/releases' && request.method === 'GET') || (/^\/releases\/(check|preferences|read)$/.test(path) && request.method === 'POST')) return false
@@ -383,6 +388,10 @@ export class AuthorizationService {
     // The connection service verifies the live admin/session scope. It also
     // supports a deployment admin creating the first workspace after ownership proof.
     if (path === '/github/connection' && request.method === 'GET') return false
+    if (request.method === 'POST' && /^\/notifications\/email-address(?:\/(verify|remove))?$/.test(path)) {
+      await this.requireOrganization(session,'assessment.read',true)
+      return true
+    }
     if (path === '/notifications/channels' || /^\/notifications\/channels\/[a-zA-Z0-9-]{1,80}(?:\/test)?$/.test(path)) {
       await this.requireOrganization(session, 'notifications.manage', request.method !== 'GET')
       return true
@@ -394,7 +403,7 @@ export class AuthorizationService {
       path === '/github/repositories' ||
       path === '/github/repositories/overview' ||
       path === '/github/dashboard' ||
-      (path === '/findings' || /^\/findings\/[a-f0-9]{64}(?:\/(triage|assignees|source|ignore))?$/.test(path)) ||
+      (path === '/findings' || /^\/findings\/[a-f0-9]{64}(?:\/(triage|assignees|source|ignore|review))?$/.test(path)) ||
       path.startsWith('/contributors') ||
       path.startsWith('/organizations') ||
       path === '/standards/catalogue'

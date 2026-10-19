@@ -16,6 +16,15 @@ export class FindingsController {
   detail(@Req() req: Request & { preflytSession: AuthenticatedSession }, @Param('id') id: string, @Query('assessment') assessment?: string, @Query('origin') origin?: string) {
     return this.findings.detail(req.preflytSession, id, assessment, origin)
   }
+  @Get(':id/review') @Header('Cache-Control', 'no-store')
+  review(@Req() req: Request & { preflytSession: AuthenticatedSession }, @Param('id') id: string, @Query() query: Record<string, unknown>) {
+    return this.findings.getReview(req.preflytSession, id, query)
+  }
+  @Post(':id/review') @Header('Cache-Control', 'no-store')
+  setReview(@Req() req: Request & { preflytSession: AuthenticatedSession }, @Param('id') id: string, @Query() query: Record<string, unknown>, @Body() body: unknown) {
+    this.auth.assertOrigin(req.headers.origin)
+    return this.findings.setReview(req.preflytSession, id, query, body)
+  }
   @Get(':id/ignore') @Header('Cache-Control', 'no-store')
   ignore(@Req() req: Request & { preflytSession: AuthenticatedSession }, @Param('id') id: string, @Query() query: Record<string, unknown>) {
     return this.findings.getIgnore(req.preflytSession, id, query)

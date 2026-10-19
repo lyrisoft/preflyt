@@ -132,6 +132,7 @@ beforeAll(async () => {
           provide: GitHubProviderService,
           useValue: {
             readHealthSource: readFindingSource,
+            verifyRepositoryAccess: vi.fn().mockResolvedValue(undefined),
             readContributorBackfill: async () => {
               await beforeBackfill()
               return {
@@ -938,4 +939,44 @@ it('authorizes finding ignore HTTP routes, preserves read-only access and enforc
  await actor(owner,`/findings/${fingerprint}/ignore?origin=health&repository=21&assessment=${other.id}`).expect(403)
  await db.gitHubRepository.update({where:{githubId:11n},data:{selected:false}})
  await actor(owner,path).expect(403)
+})
+
+it('allows an admin to preserve or remove existing unavailable assignments while rejecting new unavailable grants', async () => {
+  await db.organizationMembership.create({data:{organizationId:orgA,identityId:platform,role:'ADMIN'}})
+  await db.gitHubRepository.updateMany({where:{githubId:{in:[11n,12n]}},data:{available:false}})
+  const edit = (repositoryIds:string[]) => request(app.getHttpServer()).patch(`/organizations/members/${memberId}`)
+    .set('Cookie',`scope.sid=${platform}`).set('Origin',origin)
+    .send({subject:'developer',role:'DEVELOPER',active:true,repositoryIds})
+  await edit(['11']).expect(200)
+  await edit(['11','12']).expect(403)
+  expect(await db.repositoryGrant.count({where:{membershipId:memberId}})).toBe(1)
+  await edit([]).expect(200)
+  expect(await db.repositoryGrant.count({where:{membershipId:memberId}})).toBe(0)
+  await edit(['11']).expect(403)
+})
+it('lets Engineering Lead add repositories and author skills/standards without admin, approval or unassigned evidence rights', async () => {
+  await db.organizationMembership.update({where:{id:memberId},data:{role:'ENGINEERING_LEAD'}})
+  const session = {authenticated:true,identityId:developer,organizationId:orgA,role:'ENGINEERING_LEAD'} as any
+  const context = (await actor(developer,'/organizations/access').expect(200)).body
+  expect(context.permissions).toEqual(expect.arrayContaining(['repository.connect','repository.manage','ai.skills.manage','standards.manage','policy.draft']))
+  for(const permission of ['organization.members.manage','ai.skills.approve','policy.publish','ai.provider.manage'])
+    expect(context.permissions).not.toContain(permission)
+  for(const path of ['/ai/skills','/standards/library'])
+    await expect(access.authorizeRequest({method:'POST',path} as any,session)).resolves.toBe(true)
+  await actor(developer,'/github/repositories/12/events').expect(403)
+  expect((await actor(developer,'/github/repositories').expect(200)).body.repositories.map((r:any)=>r.githubId)).toEqual(['11'])
+  expect((await actor(developer,'/github/repositories/overview').expect(200)).body.repositories.map((r:any)=>r.githubId)).toEqual(['11'])
+  const available=(await actor(developer,'/github/repositories/available').expect(200)).body.repositories
+  expect(available).toEqual([{githubId:'12',fullName:'fixture/repo12'}])
+  await request(app.getHttpServer()).patch('/github/repositories/12/selection')
+    .set('Cookie',`scope.sid=${developer}`).set('Origin',origin).send({selected:true}).expect(200)
+  await actor(developer,'/github/repositories/12/events').expect(200)
+  expect((await actor(developer,'/github/repositories').expect(200)).body.repositories.map((r:any)=>r.githubId)).toEqual(['11','12'])
+  await request(app.getHttpServer()).patch('/github/repositories/21/selection')
+    .set('Cookie',`scope.sid=${developer}`).set('Origin',origin).send({selected:true}).expect(403)
+  expect(await db.auditEvent.count({where:{event:'repository_selection_access_granted'}})).toBe(1)
+  await db.organizationMembership.update({where:{id:memberId},data:{role:'DEVELOPER'}})
+  await actor(developer,'/github/repositories/available').expect(403)
+  await request(app.getHttpServer()).patch('/github/repositories/12/selection')
+    .set('Cookie',`scope.sid=${developer}`).set('Origin',origin).send({selected:false}).expect(403)
 })

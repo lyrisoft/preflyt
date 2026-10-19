@@ -735,12 +735,42 @@ model InboxNotification {
 }
 
 model NotificationPreference {
+  verificationDeliveries NotificationEmailVerificationDelivery[]
+  notificationEmail String?
+  emailVerifiedAt DateTime?
+  pendingEmail String?
+  emailVerificationHash String?
+  emailVerificationExpiresAt DateTime?
+  emailVerificationAttempts Int @default(0)
+  emailVerificationSentAt DateTime?
+  emailVerificationWindowAt DateTime?
+  emailVerificationSendCount Int @default(0)
   identityId String
   organizationId String
   assessments Boolean @default(true)
   email Boolean @default(false)
   updatedAt DateTime @updatedAt
   @@id([identityId, organizationId])
+}
+
+// Durable, short-lived outbox for verification email. Redis contains only the ID.
+model NotificationEmailVerificationDelivery {
+  id String @id @default(cuid())
+  identityId String
+  organizationId String
+  preference NotificationPreference @relation(fields: [identityId, organizationId], references: [identityId, organizationId], onDelete: Cascade, map: "NotificationVerification_preference_fkey")
+  tokenHash String
+  encryptedCode String?
+  expiresAt DateTime
+  state String @default("PENDING")
+  attempts Int @default(0)
+  nextAttemptAt DateTime @default(now())
+  leaseUntil DateTime?
+  sentAt DateTime?
+  failureCode String?
+  createdAt DateTime @default(now())
+  @@index([state, nextAttemptAt, leaseUntil], map: "NotificationVerification_pending_idx")
+  @@index([identityId, organizationId, tokenHash], map: "NotificationVerification_owner_token_idx")
 }
 
 model NotificationEmailDelivery {
@@ -1802,4 +1832,22 @@ model FindingIndexTarget {
  lastPreparedAt DateTime?
  @@index([nextRunAt])
  @@index([organizationId])
+}
+
+// Human validation is commit/assessment bound; never rewrites a scan or gate.
+model FindingReview {
+  id                 String   @id
+  organizationId     String
+  repositoryGithubId String
+  assessmentId       String
+  sourceSha          String
+  findingId          String
+  classification     String
+  reason             String
+  revision           Int      @default(1)
+  updatedById        String
+  updatedAt          DateTime @updatedAt
+  createdAt          DateTime @default(now())
+
+  @@index([organizationId, repositoryGithubId, assessmentId, sourceSha])
 }

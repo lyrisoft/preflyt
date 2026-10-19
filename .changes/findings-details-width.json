@@ -1,0 +1,8 @@
+{
+  "type": "fix",
+  "title": "Keep finding Details actions on one line",
+  "description": "The Findings Evidence column reserves space for its Details action, preventing the label from wrapping mid-word. Narrow layouts keep horizontal scrolling within the table, and finding destinations are preserved.",
+  "upgrade": "Rebuild the web image. No migration or configuration change is required.",
+  "migrations": [],
+  "configuration": []
+}

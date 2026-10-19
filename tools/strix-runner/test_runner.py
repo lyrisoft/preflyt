@@ -10,6 +10,12 @@ spec=importlib.util.spec_from_file_location('preflyt_runner',Path(__file__).with
 runner=importlib.util.module_from_spec(spec);spec.loader.exec_module(runner)
 
 class ContractTests(unittest.TestCase):
+    def test_release_sandbox_images_require_immutable_or_versioned_references(self):
+        for ref in ['ghcr.io/lyrisoft/preflyt-strix-sandbox:v0.1.11','ghcr.io/lyrisoft/preflyt-strix-sandbox:sha-'+'a'*40,'registry.test:5000/review/sandbox@sha256:'+'b'*64]:
+            self.assertTrue(runner.valid_sandbox_image(ref))
+        for ref in [None,'sandbox','sandbox:latest','sandbox:development','sandbox:v1','sandbox:sha-abcd']:
+            self.assertFalse(runner.valid_sandbox_image(ref))
+
     def test_model_completion_without_observed_source_reads_is_not_success(self):
         for inspection in [{},{'filesRead':0},{'filesRead':True}]:
             self.assertFalse(runner.reviewed_completion(0,'completed',inspection))

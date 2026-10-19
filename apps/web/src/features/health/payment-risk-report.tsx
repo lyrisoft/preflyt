@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { FileSearch, Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { StatusBadge } from '@/components/status-badge'
 import { SurfaceIcon } from '@/components/surface-icon'
 import { healthRequest } from './health-api'
 
@@ -28,6 +29,7 @@ type Report = {
     category: string
     service: string
     function: string
+    review?: { reason: string; updatedAt: string }
     classification: string
     likelihood: number
     impact: number
@@ -63,12 +65,14 @@ export function PaymentRiskReport({
   repositoryId,
   assessmentId,
   scopeKey,
+  embedded = false,
 }: {
   repositoryId: string
   assessmentId: string
   scopeKey: string
+  embedded?: boolean
 }) {
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(embedded)
   const query = useQuery({
     queryKey: ['payment-risk-report', scopeKey, repositoryId, assessmentId],
     queryFn: ({ signal }) =>
@@ -163,14 +167,16 @@ export function PaymentRiskReport({
             </p>
           </div>
         </div>
-        <Button
-          variant='outline'
-          size='sm'
-          aria-expanded={open}
-          onClick={() => setOpen(!open)}
-        >
-          {open ? 'Hide report' : 'Open report'}
-        </Button>
+        {!embedded && (
+          <Button
+            variant='outline'
+            size='sm'
+            aria-expanded={open}
+            onClick={() => setOpen(!open)}
+          >
+            {open ? 'Hide report' : 'Open report'}
+          </Button>
+        )}
       </div>
       {open && (
         <div aria-live='polite'>
@@ -224,8 +230,9 @@ export function PaymentRiskReport({
                 `3. Findings (${report.findings.length})`,
                 <>
                   <p className='mb-3 text-muted-foreground'>
-                    Likelihood × impact, each scored 1–5. All findings remain
-                    Needs review.
+                    Likelihood × impact, each scored 1–5. AI conclusions need
+                    independent review. Human decisions are shown when
+                    available.
                   </p>
                   {report.findings.map((f, i) => (
                     <article
@@ -233,6 +240,14 @@ export function PaymentRiskReport({
                       className='mb-4 rounded-lg border p-3'
                     >
                       {findingLink(f.issueId, `${i + 1}. ${f.title}`)}
+                      <StatusBadge tone='neutral' compact>
+                        {label(f.classification.toLowerCase())}
+                      </StatusBadge>
+                      {f.review && (
+                        <p className='mt-2 whitespace-pre-wrap'>
+                          {f.review.reason}
+                        </p>
+                      )}
                       <p className='mt-1 text-xs text-muted-foreground capitalize'>
                         {f.severity} · {f.likelihood} × {f.impact} = {f.score}
                         /25 · {label(f.classification.toLowerCase())}

@@ -15,14 +15,14 @@ branch. This guide does not authorize a push or public release.
 
 | Purpose | Workflow file / Actions name | Branch and inputs | What happens |
 | --- | --- | --- | --- |
-| Publish development application images after local testing | [publish-development.yml](publish-development.yml) — **Build and publish development** | Select `development`; other branches fail before building | Builds/publishes five GHCR application image packages for AMD64 and ARM64, with immutable `sha-<commit>` tags. No hosted tests or Compose acceptance. |
+| Publish development application images after local testing | [publish-development.yml](publish-development.yml) — **Build and publish development** | Select `development`; other branches fail before building | Builds/publishes seven GHCR application image packages for AMD64 and ARM64, with immutable `sha-<commit>` tags. No hosted tests or Compose acceptance. |
 | Publish a production version after local testing | [publish-production.yml](publish-production.yml) — **Build and publish production** | Select `main`; other branches fail before building | Builds/publishes the same images and creates versioned image tags plus a GitHub release. Reuses the commit's existing stable version or increments the latest patch version, then publishes matching versioned documentation. No hosted application tests or Compose acceptance. |
 | Run the appropriate branch checks explicitly | [verify.yml](verify.yml) — **Verify implementation** | `development` or `main` | Routes development to source/focused checks and main to full regression. Preflyt policy/gate stay disabled. |
 | Run development checks directly | [development-checks.yml](development-checks.yml) — **Development checks** | Normally `development` | Release/deployment automation tests, API unit tests with coverage, web lint, types/build and related browser tests. Does not run service-backed API integration tests. |
 | Run full API and browser regression on GitHub | [main-regression.yml](main-regression.yml) — **Main regression** | Normally `main`; can manually test another branch | Starts isolated PostgreSQL/Redis, builds API/web, runs full API and Chromium regression, and combines reports. This consumes hosted test minutes. |
 | Publish images **with** deployment qualification | [publish-images.yml](publish-images.yml) — **Publish and verify release images** | `development` or `main` | Older, more expensive path: change-scope planning, image builds, manifests, then Compose acceptance. Main creates its release only after acceptance. Development can skip image work when deployment inputs are unchanged. |
 | Verify the Compose installation | [compose-acceptance.yml](compose-acceptance.yml) — **Verify container deployment** | `development` or `main`; `published_images` defaults to `false` | `false` builds fixture images; `true` pulls already-published images for the exact execution SHA and checks revision labels. Both verify startup/login/protected routes/scanner readiness. Main additionally exercises Health analyzers and migration/backup/restore lifecycle checks. |
-| Publish standalone native scanner/tool images | [publish-native.yml](publish-native.yml) — **Publish native tools** | `development` or `main`; job skips other branches | Builds the six native tool variants as needed, runs fixture verification, then pushes verified images. Separate from the five application packages. Not a test-free publisher. |
+| Publish standalone native scanner/tool images | [publish-native.yml](publish-native.yml) — **Publish native tools** | `development` or `main`; job skips other branches | Builds the six native tool variants as needed, runs fixture verification, then pushes verified images. Separate from the seven application packages. Not a test-free publisher. |
 | Build and publish documentation | [docs.yml](docs.yml) — **Documentation** | Select `main` to deploy Pages; other branches build only | On main, synchronizes frozen documentation from published release tags, then type-checks/builds and deploys Pages. Optional `release_tag` selects the newest release to include; blank selects the newest published release. Other branches build the committed snapshots only. |
 | Check Community Edition metadata and docs | [community-checks.yml](community-checks.yml) — **Community readiness** | Select the branch to inspect | Checks required community/license/contact files, targeted security/license regressions, and docs types/build. Does not publish images or docs. |
 | Check contribution sign-offs | [dco.yml](dco.yml) — **Contribution sign-off** | Provide the `pull_request` number | Reads current PR metadata/commits and verifies author-matching DCO trailers. No contributor-code checkout. Does not review code or prove copyright ownership. |
@@ -32,8 +32,8 @@ older publisher for the same release unless you deliberately want its additional
 acceptance checks. Production publishers share a concurrency group to serialize
 version tagging, but that does not eliminate redundant work.
 
-The five application packages are `preflyt-api`, `preflyt-api-migration`,
-`preflyt-native-controller`, `preflyt-health-scanner` and `preflyt-web`. GHCR image
+The seven application packages are `preflyt-api`, `preflyt-api-migration`,
+`preflyt-native-controller`, `preflyt-health-scanner`, `preflyt-web`, `preflyt-strix-runner` and `preflyt-strix-sandbox`. GHCR image
 publication does **not** deploy servers or publish the private npm workspaces.
 The web package defaults to Community Edition app mode; these workflows do not
 produce the separate `VITE_WEBSITE_MODE=true` public website image.
@@ -55,7 +55,7 @@ gh workflow run dco.yml --ref main -f pull_request=123
 ```
 
 Run one publication command for the intended environment, not both by default. Main application publication also publishes matching versioned documentation after its release is ready; use the standalone docs workflow for documentation-only updates.
-Published-image acceptance requires all five `sha-<execution SHA>` images to exist;
+Published-image acceptance requires all seven `sha-<execution SHA>` images to exist;
 it does not fall back to another commit's images. Before publishing, complete the
 [local verification checklist](../../docs/deployment/branch-ci.md#before-every-publication)
 and use only [disposable test databases](../../docs/operations/test-database-safety.md).

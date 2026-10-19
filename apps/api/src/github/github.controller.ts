@@ -151,6 +151,23 @@ export class GitHubController {
     )
   }
 
+  @Get('repositories/available')
+  @UseGuards(SessionGuard)
+  async availableRepositories(@Req() req: AuthenticatedRequest) {
+    const session = req.preflytSession!
+    await this.access.requireOrganization(session, 'repository.manage', true)
+    const candidates = await this.access.repositoryScope(session.identityId, session.organizationId, 'repository.manage', false)
+    const readable = await this.access.repositoryScope(session.identityId, session.organizationId, 'repository.read', false)
+    const readableIds = new Set(readable.map(repository => repository.githubId.toString()))
+    // Explicit add flow: discovery metadata only, never profile/report data or links.
+    const repositories = candidates.filter(repository => !readableIds.has(repository.githubId.toString()))
+      .map(repository => ({ githubId: repository.githubId.toString(), fullName: repository.fullName }))
+    await this.access.requireOrganization(session, 'repository.manage')
+    const currentCandidates = await this.access.repositoryScope(session.identityId, session.organizationId, 'repository.manage', false)
+    const currentIds = new Set(currentCandidates.map(repository => repository.githubId.toString()))
+    return { repositories: repositories.filter(repository => currentIds.has(repository.githubId)) }
+  }
+
   @Get('repositories/overview')
   @UseGuards(SessionGuard)
   async overview(@Req() req: AuthenticatedRequest) {
@@ -179,6 +196,7 @@ export class GitHubController {
       repositoryId,
       body.selected,
       req.headers.origin,
+      req.preflytSession!.organizationId!,
     )
     return { repositoryId, selected: body.selected, ...inspection }
   }

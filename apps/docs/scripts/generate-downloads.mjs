@@ -91,6 +91,11 @@ for (const { key, value } of services.items.map((item) => ({ key: item.key.value
 
   // Local trial switch for the API and worker (production defaults otherwise).
   const environment = value.get('environment')
+  if (isMap(environment) && typeof environment.get('PREFLYT_STRIX_SANDBOX_IMAGE') === 'string') {
+    environment.set('PREFLYT_STRIX_SANDBOX_IMAGE', environment.get('PREFLYT_STRIX_SANDBOX_IMAGE')
+      .replace('${PREFLYT_IMAGE_REGISTRY:-preflyt-local}', `\${PREFLYT_IMAGE_REGISTRY:-${registry}}`)
+      .replace('${PREFLYT_VERSION:-development}', '${PREFLYT_VERSION:?Set PREFLYT_VERSION to a published release, vX.Y.Z or sha-<40-character commit ID>}'))
+  }
   if (isMap(environment) && (key === 'api' || key === 'worker')) {
     environment.set('NODE_ENV', '${PREFLYT_NODE_ENV:-production}')
     if (key === 'api') environment.set('COOKIE_SECURE', "${PREFLYT_COOKIE_SECURE:-true}")

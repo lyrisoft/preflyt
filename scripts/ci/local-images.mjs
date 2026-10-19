@@ -18,8 +18,8 @@ export function checkLocalImageSpace(hostBytes,dockerBytes) {
  for(const [name,bytes] of [['Host',hostBytes],['Docker',dockerBytes]])if(!Number.isFinite(bytes)||bytes<minimumLocalImageBytes)throw new Error(name+' filesystem has less than 12 GiB free; stopping before another image build')
 }
 export function localImageTargets(architecture,group,version='verify') {
- if(!['amd64','arm64'].includes(architecture)||!['api','web','native'].includes(group)||!/^[-a-z0-9]+$/.test(version))throw new Error('Invalid local image selection')
- const catalog=group==='native'?nativeImages:Object.fromEntries(Object.entries(images).filter(([name])=>(name==='preflyt-web')===(group==='web')))
+ if(!['amd64','arm64'].includes(architecture)||!['api','web','native','strix'].includes(group)||!/^[-a-z0-9]+$/.test(version))throw new Error('Invalid local image selection')
+ const catalog=group==='native'?nativeImages:Object.fromEntries(Object.entries(images).filter(([name])=>(name.startsWith('preflyt-strix-')?'strix':name==='preflyt-web'?'web':'api')===group))
  return Object.fromEntries(Object.entries(catalog).map(([name,[file,target]])=>[name,{
   context:group==='native'?'docs/deployment/native-runner':'.',
   dockerfile:file,...(target?{target}:{}),platforms:['linux/'+architecture],
@@ -29,7 +29,7 @@ export function localImageTargets(architecture,group,version='verify') {
  }]))
 }
 if(process.argv[1]===fileURLToPath(import.meta.url)) {
- const architectures=process.argv[2]?[process.argv[2]]:['amd64','arm64'],groups=process.argv[3]?[process.argv[3]]:['api','web','native']
+ const architectures=process.argv[2]?[process.argv[2]]:['amd64','arm64'],groups=process.argv[3]?[process.argv[3]]:['api','web','strix','native']
  for(const architecture of architectures)for(const group of groups)localImageTargets(architecture,group)
  const base=readFileSync('deploy/api.Dockerfile','utf8').match(/^FROM (node:[^\s]+@sha256:[a-f0-9]{64}) AS base$/m)?.[1]
  if(!base)throw new Error('A pinned Node base is required for the Docker filesystem preflight')

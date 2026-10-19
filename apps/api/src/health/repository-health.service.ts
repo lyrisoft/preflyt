@@ -1,3 +1,4 @@
+import { findingReviewId } from '../findings/finding-review.js'
 import { securityFindingsSummary } from './security-findings-summary.js'
 import { findingReferenceGuidance } from './finding-guidance.js'
 import { reportedLocation } from '../findings/reported-location.js'
@@ -58,7 +59,7 @@ export class RepositoryHealthService {
   return this.strix?.available(session,githubId) ?? {available:false,reason:'Strix runner is not configured.'}
  }
  async start(session: AuthenticatedSession, githubId: string, input: { branch?: string; requestKey?: string; includeCoverage?: boolean; includeAiSecurity?: boolean; category?: HealthCategory; scanner?: 'strix'; reviewProfile?: 'general' | 'payment-risk-v1' | 'general-and-payment-risk-v1' } = {}, initial = false) {
-  const repo = await this.access.requireRepository(session, githubId, 'execution.run')
+  const repo = await this.access.requireRepository(session, githubId, initial ? 'repository.manage' : 'execution.run')
   if(input.includeAiSecurity!==undefined && typeof input.includeAiSecurity!=='boolean') throw new BadRequestException('Choose whether to include the AI security review')
   const reviewProfile=input.reviewProfile??'general'
   if(!['general','payment-risk-v1','general-and-payment-risk-v1'].includes(reviewProfile) || (reviewProfile!=='general' && (initial || (!input.includeAiSecurity && !input.scanner)))) throw new BadRequestException('Choose a review profile for an AI security review')
@@ -153,7 +154,13 @@ export class RepositoryHealthService {
   const aiReviewId=(latest?.plan as any)?.aiReviewId as string|undefined
   // Current branch activity must not be hidden by the previous report's commit or child ID.
   const activeStrix = !id ? await this.db.repositoryHealthAssessment.findFirst({omit:{report:true},where:{repositoryId:repo.id,organizationId:session.organizationId!,branch:requestedBranch??'',strixRun:{isNot:null},state:{in:activeStates}},orderBy:[{createdAt:'desc'},{id:'desc'}]}) : null
-  const strixRow = activeStrix ?? ((latest?.plan as any)?.kind==='STRIX_HEALTH' ? latest : await this.db.repositoryHealthAssessment.findFirst({omit:{report:true},where:{repositoryId:repo.id,organizationId:session.organizationId!,...(aiReviewId?{id:aiReviewId}:{branch:requestedBranch??'',parentId:null,strixRun:{isNot:null},...(chosen?.sourceSha?{sourceSha:chosen.sourceSha}:{})})},orderBy:[{createdAt:'desc'},{id:'desc'}]}))
+  // A skipped/pre-admission child may have no runner row or source SHA. Keep
+  // that linked outcome eligible while allowing a newer same-commit run to win.
+  const reviewCandidates:Prisma.RepositoryHealthAssessmentWhereInput = id && aiReviewId ? {id:aiReviewId} : {OR:[
+   ...(aiReviewId?[{id:aiReviewId}]:[]),
+   {branch:requestedBranch??'',strixRun:{isNot:null},...(chosen?.sourceSha?{sourceSha:chosen.sourceSha}:{}),...(id && latest?{createdAt:{lte:latest.createdAt}}:{})}
+  ]}
+  const strixRow = activeStrix ?? ((latest?.plan as any)?.kind==='STRIX_HEALTH' ? latest : await this.db.repositoryHealthAssessment.findFirst({omit:{report:true},where:{repositoryId:repo.id,organizationId:session.organizationId!,...reviewCandidates},orderBy:[{createdAt:'desc'},{id:'desc'}]}))
   // An in-flight/failed attempt does not erase the last completed result. Historical report links stay exact.
   if (chosen && chosen.state !== 'COMPLETED' && (!id || activeStates.includes(chosen.state))) {
    const previous = await this.db.repositoryHealthAssessment.findFirst({omit:{report:true},where: {repositoryId: repo.id,
@@ -207,8 +214,9 @@ export class RepositoryHealthService {
   if(!assessment?.sourceSha) throw new NotFoundException('This finding is unavailable in the selected health report')
   const finding=await healthFinding(this.db,session.organizationId!,id,fingerprint)
   if(!finding) throw new NotFoundException('This finding is unavailable in the selected health report')
+  const review=await this.db.findingReview.findFirst({where:{id:findingReviewId(session.organizationId!,{id:fingerprint,repositoryId:githubId,assessmentId:id,sourceSha:assessment.sourceSha,origin:'health'}),organizationId:session.organizationId!}})
   await this.access.requireRepository(session,githubId,'assessment.read')
-  return {repository:repo.fullName,assessment:{...assessment,report:{findings:[{...finding,referenceGuidance:findingReferenceGuidance(finding.ruleId)}]}}}
+  return {repository:repo.fullName,review,assessment:{...assessment,report:{findings:[{...finding,referenceGuidance:findingReferenceGuidance(finding.ruleId)}]}}}
  }
  async findings(session:AuthenticatedSession,githubId:string,id:string,input:Parameters<typeof healthFindingsFilters>[0]) {
   const repo=await this.access.requireRepository(session,githubId,'assessment.read')
@@ -221,8 +229,11 @@ export class RepositoryHealthService {
   const permitted=await this.db.repositoryHealthAssessment.count({where:{id:{in:ids},repositoryId:repo.id,organizationId:session.organizationId!,branch:assessment.branch,sourceSha:assessment.sourceSha}})
   if(permitted!==ids.length)throw new NotFoundException('Findings reports are unavailable for this repository and commit')
   const result=await healthFindingsPage(this.db,session.organizationId!,ids,filters)
+  const decisions=result.rows.length && assessment.sourceSha ? await this.db.findingReview.findMany({where:{organizationId:session.organizationId!,id:{in:result.rows.map(f=>findingReviewId(session.organizationId!,{id:f.fingerprint,repositoryId:githubId,assessmentId:f.assessmentId??id,sourceSha:assessment.sourceSha!,origin:'health'}))}},select:{id:true,classification:true,updatedAt:true,revision:true}}) : []
+  const byReviewId=new Map(decisions.map(d=>[d.id,d]))
+  const rows=result.rows.map(f=>({...f,review:byReviewId.get(findingReviewId(session.organizationId!,{id:f.fingerprint,repositoryId:githubId,assessmentId:f.assessmentId??id,sourceSha:assessment.sourceSha!,origin:'health'}))??null}))
   await this.access.requireRepository(session,githubId,'assessment.read')
-  return {...result,assessmentId:id,sourceSha:assessment.sourceSha}
+  return {...result,rows,assessmentId:id,sourceSha:assessment.sourceSha}
  }
  /** Upstream head verification is separate from loading immutable saved reports. */
  async freshness(session: AuthenticatedSession, githubId: string, id: string) {
@@ -328,7 +339,16 @@ export class RepositoryHealthService {
    WHERE id=${id} AND "repositoryId"=${repo.id} AND "organizationId"=${session.organizationId!}`)
   await this.access.requireRepository(session,githubId,'assessment.read')
   if(!rows[0]?.report) throw new NotFoundException('No completed payment risk report is available for this assessment')
-  return {assessmentId:id,repository:repo.fullName,...rows[0]}
+  const report=rows[0].report as {findings:Array<{issueId:string;classification:string;review?:unknown;modelClassification?:string}>}
+  const decisions=rows[0].sourceSha ? await this.db.findingReview.findMany({where:{organizationId:session.organizationId!,repositoryGithubId:githubId,assessmentId:id,sourceSha:rows[0].sourceSha}}) : []
+  const byId=new Map(decisions.map(d=>[d.id,d]))
+  for(const finding of Array.isArray(report.findings)?report.findings:[]){
+   const review=byId.get(findingReviewId(session.organizationId!,{id:finding.issueId,repositoryId:githubId,assessmentId:id,sourceSha:rows[0].sourceSha,origin:'health'}))
+   finding.modelClassification=finding.classification
+   if(review){finding.classification=review.classification;finding.review=review}
+  }
+  await this.access.requireRepository(session,githubId,'assessment.read')
+  return {assessmentId:id,repository:repo.fullName,...rows[0],report}
  }
  async hotspotReview(session: AuthenticatedSession, githubId:string, id:string, fingerprint:string) {
   const repo=await this.access.requireRepository(session,githubId,'assessment.read')

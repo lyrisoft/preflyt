@@ -69,6 +69,7 @@ export type Finding = {
   evidence: string[]
   verification: string
   occurrences: number
+  review?: { classification: string; reason?: string; updatedAt: string } | null
   triage?: {
     state: string
     assigneeId: string | null
