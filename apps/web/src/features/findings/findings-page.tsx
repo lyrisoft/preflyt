@@ -32,6 +32,7 @@ import { StatusBadge } from '@/components/status-badge'
 import { SurfaceIcon } from '@/components/surface-icon'
 import { HealthCoverageDetails } from '@/features/health/health-coverage-details'
 import { useNavigationSession } from '@/features/workspace/navigation-session'
+import { classificationLabels, findingStatus } from './finding-classification'
 import { severityTone, triageLabels, type Finding } from './finding-types'
 import { FindingsOverview, type FindingsSummary } from './findings-summary'
 
@@ -494,7 +495,7 @@ function FindingsWorkspace() {
                       <th scope='col' className='p-4 whitespace-nowrap'>
                         Assessed at
                       </th>
-                      <th scope='col' className='p-4'>
+                      <th scope='col' className='w-px p-4 whitespace-nowrap'>
                         Evidence
                       </th>
                     </tr>
@@ -591,13 +592,20 @@ function FindingsWorkspace() {
                         </td>
                         <td className='p-4 whitespace-nowrap'>
                           <StatusBadge tone='neutral'>
-                            {row.status !== 'Ignored' &&
-                            row.origin === 'ai' &&
-                            row.triage?.state &&
-                            row.triage.state !== 'REPORTED'
-                              ? triageLabels[row.triage.state]
-                              : row.status}
+                            {findingStatus(row)}
                           </StatusBadge>
+                          {row.review?.classification &&
+                            row.status === 'Ignored' && (
+                              <div className='mt-2'>
+                                <StatusBadge tone='neutral'>
+                                  {
+                                    classificationLabels[
+                                      row.review.classification
+                                    ]
+                                  }
+                                </StatusBadge>
+                              </div>
+                            )}
                         </td>
                         <td className='p-4'>
                           <p>{row.repository}</p>
@@ -618,8 +626,13 @@ function FindingsWorkspace() {
                         <td className='p-4'>
                           <ResultTimestamp value={row.observedAt} stacked />
                         </td>
-                        <td className='p-4'>
-                          <Button size='sm' variant='outline' asChild>
+                        <td className='w-px p-4 whitespace-nowrap'>
+                          <Button
+                            size='sm'
+                            variant='outline'
+                            className='min-w-max [overflow-wrap:normal] whitespace-nowrap'
+                            asChild
+                          >
                             <Link
                               to='/findings/$findingId'
                               params={{

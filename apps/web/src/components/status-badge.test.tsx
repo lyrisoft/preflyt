@@ -336,3 +336,10 @@ it('keeps companion availability separate from review results', () => {
   expect(statusTones.completed).toBe('success')
   expect(statusTones.running).toBe('info')
 })
+
+it('distinguishes human finding classification from successful execution', () => {
+  expect(statusTones.confirmed).toBe('error')
+  expect(statusTones.potential).toBe('warning')
+  expect(statusTones.likely).toBe('warning')
+  expect(statusTones['false positive']).toBe('neutral')
+})

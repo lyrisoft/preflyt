@@ -1,0 +1,8 @@
+{
+  "type": "fix",
+  "title": "Reserve time to finish payment review reports",
+  "description": "Payment reviews now allocate more investigation time to complementary financial-flow and operational specialists while reserving coordinator reporting time. Specialist warnings match their actual turn limit. Coordinators can cite machine-observed source ranges, and rejected payment reports identify the invalid field so it can be corrected. The configured overall model-call limit and source-only execution boundaries are preserved. Related source ranges can be read in bounded batches.",
+  "upgrade": "Restart the trusted local Strix runner after updating its source. Existing scans are not resumed; start a new review after active work finishes.",
+  "migrations": [],
+  "configuration": []
+}

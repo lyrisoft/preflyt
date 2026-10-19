@@ -1,0 +1,8 @@
+{
+  "type": "fix",
+  "title": "Consistent finding classifications in repository health",
+  "description": "Repository finding rows show saved human classifications instead of continuing to display Needs review. Decisions remain bound to the exact assessment and commit; saved source reports are unchanged.",
+  "upgrade": "Rebuild API, worker and web with the FindingReview migration applied.",
+  "migrations": [],
+  "configuration": []
+}

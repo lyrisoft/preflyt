@@ -729,3 +729,21 @@ it('merges same-commit AI security findings into Security without changing deter
  await db.repositoryHealthAssessment.update({where:{id:ai.id},data:{state:'FAILED',report:{...(aiSaved.report as any),completeness:'PARTIAL'}}})
  expect((await service.get(owner,'51')).categoryResults.security).toMatchObject({value:'≥2',aiFindings:1,assessmentIds:[first.id,ai.id]})
 })
+
+it('shows the newer standalone AI review instead of a historical failed child, preserving exact historical links',async()=>{
+ const db=fixture.prisma
+ const standard=await service.initial(owner.identityId,'51');await service.process(standard.id)
+ const childId=randomUUID(),createdAt=new Date(Date.now()+1000)
+ await db.repositoryHealthAssessment.update({where:{id:standard.id},data:{plan:{includeAiSecurity:true,aiReviewId:childId}}})
+ const saved=await db.repositoryHealthAssessment.findUniqueOrThrow({where:{id:standard.id}})
+ const report={...(saved.report as object),mode:'EXECUTED',completeness:'PARTIAL',analyses:[{id:'security.strix',state:'INCOMPLETE',reason:'STRIX_REVIEW_INCOMPLETE'}],findings:[]}
+ const make=async(id:string,state:string,parentId:string|null,at:Date)=>{
+  const row=await db.repositoryHealthAssessment.create({data:{id,repositoryId:repoId,organizationId:owner.organizationId!,actorId:owner.identityId,branch:'development',targetRevision:1,requestKey:id,parentId,sourceSha:sha,state,createdAt:at,finishedAt:at,plan:{kind:'STRIX_HEALTH'},report}})
+  await db.repositoryHealthStrixRun.create({data:{assessmentId:id,providerId:'fixture',providerRevision:1,routeId:'fixture',routeRevision:1,endpointDigest:'fixture',tokenHash:'fixture',finishedAt:at}})
+  return row
+ }
+ await make(childId,'FAILED',standard.id,createdAt)
+ const newer=await make(randomUUID(),'COMPLETED',null,new Date(createdAt.getTime()+1000))
+ expect((await service.get(owner,'51')).strixReview).toMatchObject({id:newer.id,state:'COMPLETED'})
+ expect((await service.get(owner,'51',standard.id)).strixReview).toMatchObject({id:childId,state:'FAILED'})
+})

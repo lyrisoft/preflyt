@@ -394,7 +394,7 @@ export class AuthorizationService {
       path === '/github/repositories' ||
       path === '/github/repositories/overview' ||
       path === '/github/dashboard' ||
-      (path === '/findings' || /^\/findings\/[a-f0-9]{64}(?:\/(triage|assignees|source|ignore))?$/.test(path)) ||
+      (path === '/findings' || /^\/findings\/[a-f0-9]{64}(?:\/(triage|assignees|source|ignore|review))?$/.test(path)) ||
       path.startsWith('/contributors') ||
       path.startsWith('/organizations') ||
       path === '/standards/catalogue'

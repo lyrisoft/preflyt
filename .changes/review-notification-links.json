@@ -1,0 +1,8 @@
+{
+  "type": "fix",
+  "title": "AI review notifications open their saved results",
+  "description": "Completed AI security review notifications open Findings filtered to the exact repository and saved assessment. Failed reviews open their saved health assessment; only model configuration alerts open AI settings.",
+  "upgrade": "Rebuild the web image. No database migration or configuration change is required.",
+  "migrations": [],
+  "configuration": []
+}

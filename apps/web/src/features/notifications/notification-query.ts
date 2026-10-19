@@ -36,6 +36,8 @@ type InboxData = {
   repositories: { repositoryGithubId: string; repositoryName: string }[]
 }
 export const titles: Record<string, string> = {
+  AI_SECURITY_REVIEW_COMPLETED: 'AI security review completed',
+  AI_SECURITY_REVIEW_FAILED: 'AI security review could not finish',
   NATIVE_EXECUTION_FAILED: 'Check execution failed',
   AI_MODEL_UNAVAILABLE: 'Model requests keep failing',
   AI_REVIEW_BUDGET_REACHED: 'Previous AI review could not start',

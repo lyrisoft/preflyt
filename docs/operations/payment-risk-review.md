@@ -40,3 +40,20 @@ A structurally complete report can still have limited security coverage. It rema
 Automated coverage includes report shape/scoring, missing scenarios/sections, invented IDs and paths, unread-source rejection, finish-scan gating, late issue detection, profile request isolation, repository access, compact summaries, saved report/finding linkage and on-demand UI loading/error recovery. Fixtures are synthetic and tests do not call an external model.
 
 A paid-model acceptance run producing a saved payment report is still required before treating GitHub issue #146 as fully qualified. Live exploitation, regulatory certification and automatic independent confirmation are outside this source-only profile. Keep the issue open until its agreed acceptance evidence is reviewed.
+
+## Human validation
+
+Open a finding and use **Finding review** to record **Potential**, **Likely**,
+**Confirmed**, or **False positive**, with evidence and reasoning. Confirmed means
+an independent reviewer verified the issue; it is not awarded by the model.
+False positive means the reviewer ruled the issue out. The decision and its
+history apply only to that assessment and commit. Findings shows the decision
+alongside the workflow status. Payment report reads/downloads include the latest
+human decision and retain `modelClassification` separately. Saved assessment JSON
+is not edited, and no gate or PR readiness decision is changed.
+
+**Hide or reopen matching findings** is a separate, optional visibility action.
+It can suppress matching future occurrences; classification alone never hides a
+finding. Missing check results and missing evidence cannot be classified as
+vulnerabilities. Writes require current repository permission to manage findings,
+a reason, and an expected revision to prevent overwriting a concurrent review.

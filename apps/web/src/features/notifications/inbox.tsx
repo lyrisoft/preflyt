@@ -44,7 +44,28 @@ export function NotificationItem({
         aria-label={item.severity}
       />
       <div className='min-w-0 flex-1'>
-        {item.type.startsWith('AI_') ? (
+        {item.type === 'AI_SECURITY_REVIEW_COMPLETED' &&
+        item.healthAssessmentId ? (
+          <Link
+            to='/findings'
+            search={{
+              origin: 'health',
+              source: 'health',
+              health: item.healthAssessmentId,
+              repository: item.repositoryId,
+              category: 'security',
+              kind: 'findings',
+              page: 1,
+            }}
+            className='font-medium hover:underline'
+          >
+            {item.title ?? 'AI security review completed'}
+            <span className='mt-1 block text-xs font-normal text-primary'>
+              View review findings →
+            </span>
+          </Link>
+        ) : item.type === 'AI_MODEL_UNAVAILABLE' ||
+          item.type === 'AI_REVIEW_BUDGET_REACHED' ? (
           <Link
             to='/intelligence'
             search={{
@@ -102,7 +123,11 @@ export function NotificationItem({
             to='/repositories/$repositoryId'
             params={{ repositoryId: item.repositoryId }}
             search={{
-              tab: item.type.startsWith('HEALTH_') ? 'health' : 'assessments',
+              tab:
+                item.type.startsWith('HEALTH_') ||
+                item.type.startsWith('AI_SECURITY_REVIEW_')
+                  ? 'health'
+                  : 'assessments',
               health: item.healthAssessmentId ?? undefined,
               assessment: item.assessmentId ?? undefined,
             }}

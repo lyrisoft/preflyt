@@ -29,7 +29,7 @@ def source_tools(agent, is_root=None):
                   'list_reports', 'get_report', 'list_notes', 'get_note', 'finish_scan', 'save_payment_risk_report'}
     specialist_tools = {'create_vulnerability_report', 'update_vulnerability_report',
                         'list_reports', 'get_report', 'record_coverage', 'update_coverage',
-                        'list_coverage', 'agent_finish', 'list_source_issues', 'list_source_files', 'read_source_file', 'search_source', 'report_source_issue'}
+                        'list_coverage', 'agent_finish', 'list_source_issues', 'list_source_files', 'read_source_file', 'read_source_files', 'search_source', 'report_source_issue'}
     tools = []
     for original in agent.tools:
         name = getattr(original, 'name', '')
@@ -48,14 +48,25 @@ def source_tools(agent, is_root=None):
 
 
 def install(engine, factory=None, inspection=None):
-    children, turns = plan(int(os.environ.get('PREFLYT_STRIX_MAX_REQUESTS', '80')), int(os.environ.get('PREFLYT_STRIX_MAX_SPECIALISTS','2')))
+    max_requests = int(os.environ.get('PREFLYT_STRIX_MAX_REQUESTS', '80'))
+    specialist_limit = int(os.environ.get('PREFLYT_STRIX_MAX_SPECIALISTS','2'))
+    children, turns = plan(max_requests, specialist_limit)
+    reserve = max(4, min(16, max_requests // 4))
+    coordinator_turns = min(40, max(turns, max_requests - reserve - children * turns))
+    if os.environ.get('PREFLYT_STRIX_REVIEW_PROFILE') in ['payment-risk-v1','general-and-payment-risk-v1'] and max_requests >= 48 and specialist_limit == 2:
+        # Grounded citations make a 16-turn coordinator sufficient; devote the
+        # remaining allowance to complementary financial and operational traces.
+        coordinator_turns = 16
+        reserve = 8
+        turns = min(40, (max_requests - reserve - coordinator_turns) // children)
     start_child = engine.start_child_agent
     run_scan = engine.run_strix_scan
     started = 0
     instructions = (
         f'This source-only review has a bounded execution plan: at most {children} direct specialist agents, '
-        f'no nested delegation, and {turns} model turns per agent including report finalization. '
+        f'no nested delegation, {turns} turns per specialist and {coordinator_turns} coordinator turns including report finalization. '
         'Use two complementary scopes when available: authentication/authorization/input handling and payment/worker/business logic. '
+        'Use read_source_files to inspect related source ranges together and conserve model turns. '
         'Do not repeat deterministic secret, dependency or bulk static scans; prioritize source data-flow analysis. '
         'Keep reads focused and output short. Record coverage and unresolved surfaces incrementally using record_coverage. '
         'Stop expanding investigation before the turn warnings, save supported findings through the structured reporting tools, '
@@ -72,11 +83,21 @@ def install(engine, factory=None, inspection=None):
         # Reserve before awaiting: concurrent tool calls cannot exceed the cap.
         started += 1
         kwargs['parent_history'] = []
-        kwargs['task'] = kwargs['task'] + '\n\n' + instructions
+        kwargs['max_turns'] = turns
+        if kwargs.get('hooks') is not None:
+            # Strix 1.7 shares the coordinator hooks with children. Its turn
+            # warnings must use the child's hard limit, not the longer root limit.
+            kwargs['hooks'] = copy(kwargs['hooks'])
+            kwargs['hooks']._max_turns = turns
+        kwargs['task'] = kwargs['task'] + '\n\n' + instructions + (
+            f' Investigate for at most {max(2, turns-6)} turns, then stop reading new source. '
+            'Reserve the final six turns to save source-backed issues, record explicit follow-up gaps, '
+            'and call agent_finish. A hypothesis without enough evidence is a gap, not a finding.'
+        )
         return await start_child(**kwargs)
 
     async def bounded_run(**kwargs):
-        kwargs['max_turns'] = turns
+        kwargs['max_turns'] = coordinator_turns
         kwargs['root_instructions_override'] = (kwargs.get('root_instructions_override') or '') + '\n\n' + instructions
         return await run_scan(**kwargs)
 
@@ -90,12 +111,23 @@ def install(engine, factory=None, inspection=None):
             if os.environ.get('PREFLYT_STRIX_REVIEW_PROFILE') == 'general-and-payment-risk-v1':
                 review += '\nRun general security and payment risk analysis together in this single coordinated review. Include general authentication, authorization, injection, data exposure and input-handling flows, not only payment flows. Both scopes share the same source snapshot, read evidence and source-issue ledger. Call list_source_issues before filing; reuse an existing issue ID when the same defect is already saved. Reconcile overlapping concerns into one finding, not a copy for each scope. The structured report must include every saved issue, including general security concerns under application_security or another applicable domain.'
             else:
-                review += '\nPrioritize payment-related paths and their security dependencies. Record unrelated general-security areas as follow-up rather than expanding this payment-only scope.'
+                review += '\nPayment-only scope: prioritize payment initialization, confirmation, provider verification and webhook state changes, then amount/currency/tenant binding and idempotency. Assign those concrete financial flows to the financial specialist; do not spend its allowance on unrelated generic authentication modules. Record unrelated general-security areas as follow-up rather than expanding this scope.'
         build = factory.build_strix_agent
         def bounded_build(**kwargs):
             is_root = kwargs.get('is_root', False)
             kwargs['instructions_override'] = source_prompt(is_root, review, instructions,
                 render_scope_prompt(kwargs.get('system_prompt_context')), children)
+            if payment_profile and is_root:
+                kwargs['instructions_override'] += (('\nCreate two complementary payment specialists: ' if children == 2 else '\nAssign both complementary payment scopes to the single specialist: ') +
+                    'one FIRST locates and reads retry/status workers, payout/refund routes and their handlers and reconciliation/settlement jobs, then traces provider timeouts, concurrent payouts and status manipulation before inspecting other payment paths; '
+                    'the other FIRST reads deployment/CI configuration, sensitive-data handling and fraud/velocity/limit controls, then maps tenant authorization, webhook replay, amount/currency binding, ledger/FX and partial-failure behavior. '
+                    'Both must sample every assigned domain before deepening one flow. Batch related reads. Inspect real source for all six scenarios, not only the webhook happy path. '
+                    'A surface may be not_applicable only when source inventory supports that conclusion. '
+                    'Keep findings in the shared issue ledger and return exact observed ranges and scenario conclusions to the coordinator.')
+                kwargs['instructions_override'] += ('\nBefore composing the report, call list_source_issues for saved IDs and observedSourceRanges. '
+                    'Use only those exact or narrower ranges for inventory and outcome citations. '
+                    'If validation fails, fix the field identified in detail rather than rewriting or inventing findings. '
+                    'Once specialists finish or stop, do not keep waiting. Record honest coverage gaps and save the structured report, then finish_scan.')
             agent=source_tools(build(**kwargs), is_root)
             if payment_profile:
                 agent.tools=[tool for tool in agent.tools if tool.name not in ['create_vulnerability_report','update_vulnerability_report']]
@@ -147,7 +179,7 @@ def source_prompt(is_root, review, budget, verified_scope, specialist_count=2):
     )
     coordinator_scope = (
         'Create exactly one specialist for authentication, authorization, input handling, payments, workers and '
-        'business logic together. Local inference uses one specialist to avoid context switching. '
+        'business logic together. One focused specialist keeps the source trace and reporting together. '
         if specialist_count==1 else
         'Create a specialist for authentication, authorization and input handling. If budget allows, create '
         'one more for payments, workers and business logic. '

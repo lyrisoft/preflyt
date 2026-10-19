@@ -1,0 +1,8 @@
+{
+  "type": "feature",
+  "title": "Evidence-backed finding classifications",
+  "description": "Reviewers can classify a finding as Potential, Likely, Confirmed or False positive with required reasoning and an audit history. Decisions apply to the saved assessment and commit, appear in Findings and payment reports, and preserve the original AI conclusion. Hiding matching findings remains a separate optional action; review decisions do not change saved scans or merge checks.",
+  "upgrade": "Run database migrations before starting the updated API and worker. Migration 20261019123000_finding_review adds the FindingReview table and its scope index; it does not modify saved assessments. Rebuild API, worker and web images together.",
+  "migrations": ["apps/api/prisma/migrations/20261019123000_finding_review/migration.sql"],
+  "configuration": []
+}

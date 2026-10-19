@@ -1,3 +1,4 @@
+import { findingReviewId, validateFindingReview } from './finding-review.js';
 import { findingIgnoreId, ignoreState, validateIgnore } from './finding-ignore.js';
 import { FindingIndex } from './finding-index.js';
 import { FindingReadCache } from './finding-read-cache.js';
@@ -166,7 +167,11 @@ export class FindingsService {
       await this.registerIndex(session.organizationId!,selected,options);
       const reference = await this.prepareIndex(session,selected,options);
       const result=await new FindingIndex(this.db).list(reference,session.organizationId!,{category,severity,search,triage,kind,page,pageSize},aiOnly);
-      return {...result,canManage:!!rolePermissions[session.role]?.includes('findings.manage'),repositories:scope.map(repo=>({githubId:String(repo.githubId),fullName:repo.fullName}))};
+      const member=await this.access.requireOrganization(session,'assessment.read');
+      const currentScope=await this.access.repositoryScope(session.identityId,session.organizationId,'assessment.read');
+      if(selected.some(repo=>!currentScope.some(r=>r.id===repo.id)))throw new ForbiddenException('Repository access changed. Refresh Findings.');
+      await this.applyReviews(session, result.rows);
+      return {...result,canManage:!!rolePermissions[member?.role??session.role]?.includes('findings.manage'),repositories:currentScope.map(repo=>({githubId:String(repo.githubId),fullName:repo.fullName}))};
     }
     if (kind === 'ai' || source === 'ai') {
       const result = await this.aiFindings(session, selected, scope, { page, pageSize, search, severity, category, triage, assessment, lookupId });
@@ -443,7 +448,7 @@ export class FindingsService {
       else unique.set(row.id, row);
     }
     return {rows:[...unique.values()],truncated:records.length>200 || healthHeaders.length>200 || !!ai?.truncated || new Set(artifactRefs).size>100 || detailTruncated,
-      assessedRevisions:new Set([...latest.keys(),...latestHealth.keys(),...(ai?.rows.map(row=>`${selected.find(repo=>String(repo.githubId)===row.repositoryId)?.id}:${row.sourceSha}`)??[])]).size,
+      assessedRevisions:new Set([...latest.keys(),...[...latestHealth.values()].map(saved=>`${saved.repositoryId}:${saved.sourceSha}`),...(ai?.rows.map(row=>`${selected.find(repo=>String(repo.githubId)===row.repositoryId)?.id}:${row.sourceSha}`)??[])]).size,
       incompleteHealth,inspectionOnly:source==='health' && latestHealth.size>0 && [...latestHealth.values()].every(saved=>(saved.report as unknown as HealthReport).mode==='INSPECTION_ONLY')};
   }
 
@@ -524,7 +529,7 @@ export class FindingsService {
         ]);
         const locks:[string,string[]][]=[['CommitAssessment',[...new Set([...ci.map(row=>row.id),...ai.map(row=>row.assessmentId)])]],['RepositoryHealthAssessment',health.map(row=>row.id)],['AiSkillReview',ai.map(row=>row.id)]];
         for(const [table,keys] of locks)if(keys.length)await tx.$queryRaw(Prisma.sql`SELECT id FROM ${Prisma.raw('"'+table+'"')} WHERE id IN (${Prisma.join(keys)}) ORDER BY id FOR SHARE`);
-        const key=digest({version:2,organizationId:session.organizationId,scope:selected.map(repo=>[repo.id,String(repo.githubId),repo.fullName,String(repo.installationId)]),options:{source:options.source,includeAi:aiOnly || (options.source==='all' && options.kind!=='gaps'),health:options.health,healthReports:options.healthReports,assessment:options.assessment,lookupHealth:!!options.lookupId},
+        const key=digest({version:3,organizationId:session.organizationId,scope:selected.map(repo=>[repo.id,String(repo.githubId),repo.fullName,String(repo.installationId)]),options:{source:options.source,includeAi:aiOnly || (options.source==='all' && options.kind!=='gaps'),health:options.health,healthReports:options.healthReports,assessment:options.assessment,lookupHealth:!!options.lookupId},
           ci:ci.map(row=>[row.id,String(row.findingReadRevision)]),health:health.map(row=>[row.id,String(row.findingReadRevision)]),ai:ai.map(row=>[row.id,String(row.findingReadRevision),row.assessmentId,String(row.assessmentRevision)])});
         return read(tx,key);
       },{isolationLevel:'RepeatableRead',timeout:15000});
@@ -557,6 +562,7 @@ export class FindingsService {
     );
   }
   private async applyIgnores(session: AuthenticatedSession, rows: any[]) {
+    await this.applyReviews(session, rows);
     if (!rows.length) return;
     const saved = await this.db.findingIgnore.findMany({ where: { organizationId: session.organizationId!,
       id: { in: rows.map(row => findingIgnoreId(session.organizationId!, row)) } } });
@@ -575,6 +581,41 @@ export class FindingsService {
     const row = (saved?.report as unknown as HealthReport | null)?.findings.find(f => f.fingerprint === id);
     if (!row || !saved?.sourceSha) throw new NotFoundException('Finding is unavailable');
     return { ...row, origin: 'health', repositoryId: repository, assessmentId: assessment, sourceSha: saved.sourceSha };
+  }
+  private async applyReviews(session: AuthenticatedSession, rows: any[]) {
+    if (!rows.length) return;
+    const saved = await this.db.findingReview.findMany({where:{organizationId:session.organizationId!, id:{in:rows.map(row=>findingReviewId(session.organizationId!,row))}},select:{id:true,classification:true,updatedAt:true,revision:true}});
+    const byId = new Map(saved.map(row=>[row.id,row]));
+    for (const row of rows) row.review = byId.get(findingReviewId(session.organizationId!,row)) ?? null;
+  }
+  async getReview(session: AuthenticatedSession, id: string, query: Record<string, unknown>) {
+    const finding = await this.ignoreFinding(session,id,query);
+    const key = findingReviewId(session.organizationId!,finding);
+    const saved = await this.db.findingReview.findFirst({where:{id:key,organizationId:session.organizationId!}});
+    const history = await this.db.auditEvent.findMany({where:{event:'finding.classified',metadata:{path:['reviewId'],equals:key}},orderBy:{createdAt:'desc'},take:20,select:{createdAt:true,metadata:true}});
+    const member = await this.access.requireOrganization(session,'assessment.read',false);
+    await this.access.requireRepository(session,finding.repositoryId,'assessment.read');
+    return {classification:saved?.classification??null,reason:saved?.reason??'',revision:saved?.revision??0,
+      updatedAt:saved?.updatedAt??null,updatedById:saved?.updatedById??null,
+      canManage:!!rolePermissions[member.role]?.includes('findings.manage'),eligible:!['check','evidence'].includes(finding.category),
+      history:history.map(h=>({at:h.createdAt,...h.metadata as object}))};
+  }
+  async setReview(session: AuthenticatedSession, id: string, query: Record<string, unknown>, input: unknown) {
+    const {expectedRevision,...data}=validateFindingReview(input);
+    await this.access.requireOrganization(session,'findings.manage',true);
+    const finding=await this.ignoreFinding(session,id,query);
+    if (['check','evidence'].includes(finding.category)) throw new BadRequestException('Check results and missing evidence cannot be classified as vulnerabilities.');
+    const key=findingReviewId(session.organizationId!,finding);
+    return this.db.$transaction(async tx=>{
+      const repo=await new AuthorizationService(tx as PrismaService).requireRepository(session,finding.repositoryId,'findings.manage');
+      const values={...data,updatedById:session.identityId};
+      const changed=expectedRevision===0
+        ? await tx.findingReview.createMany({data:[{id:key,organizationId:session.organizationId!,repositoryGithubId:finding.repositoryId,assessmentId:finding.assessmentId,sourceSha:finding.sourceSha,findingId:id,...values}],skipDuplicates:true})
+        : await tx.findingReview.updateMany({where:{id:key,organizationId:session.organizationId!,revision:expectedRevision},data:{...values,revision:{increment:1}}});
+      if(!changed.count) throw new ConflictException('The review decision changed. Refresh and try again.');
+      await tx.auditEvent.create({data:{event:'finding.classified',actorId:session.identityId,metadata:{organizationId:session.organizationId!,repositoryId:repo.id,reviewId:key,findingId:id,assessmentId:finding.assessmentId,sourceSha:finding.sourceSha,...data,revision:expectedRevision+1}}});
+      return tx.findingReview.findUniqueOrThrow({where:{id:key}});
+    });
   }
   async getIgnore(session: AuthenticatedSession, id: string, query: Record<string, unknown>) {
     const finding = await this.ignoreFinding(session, id, query);

@@ -68,6 +68,23 @@ class SourceInspection:
                 self.audit_path.chmod(0o600)
         return value
 
+    async def read_many(self, ctx, requests):
+        if not isinstance(requests,list) or not 1 <= len(requests) <= 4:
+            return {'success':False,'error':'Read 1 to 4 source ranges per batch, at most 240 lines in total.'}
+        total=0
+        for request in requests:
+            if not isinstance(request,dict) or set(request) != {'path','start_line','end_line'} or not isinstance(request.get('path'),str):
+                return {'success':False,'error':'Use path, start_line and end_line for each range.'}
+            start,end=request['start_line'],request['end_line']
+            if type(start) is not int or type(end) is not int or start < 1 or end < start or end-start > 119:
+                return {'success':False,'error':'Read at most 120 lines per source range.'}
+            total += end-start+1
+        if total > 240:
+            return {'success':False,'error':'Read at most 240 source lines per batch.'}
+        # Each member uses the same sandbox, traversal/size checks and observed
+        # read ledger as a single-file read. No new execution permission exists.
+        return {'success':True,'files':[await self.execute(ctx,{'operation':'read',**request}) for request in requests]}
+
     def report_issue(self, agent_id, values):
         import hashlib,re
         fields={'title':200,'reasoning':12000,'impact':4000,'remediation':8000,
@@ -99,6 +116,12 @@ class SourceInspection:
         if len(rows)>=50:return {'success':False,'error':'Issue limit reached. Finish the review and record remaining scope gaps.'}
         rows.append(row);temp=path.with_suffix('.tmp');temp.write_text(json.dumps(rows));temp.chmod(0o600);temp.replace(path)
         return {'success':True,'issue_id':issue_id,'status':'NEEDS_REVIEW','message':'Source-backed issue saved for Findings. No exploit execution is claimed.'}
+
+    def observed_ranges(self, maximum=120):
+        observed = [{'path':path,'startLine':start,'endLine':end}
+                    for paths in self.reads.values() for path,ranges in paths.items() for start,end in ranges]
+        unique = list({(r['path'],r['startLine'],r['endLine']):r for r in observed}.values())
+        return {'observedSourceRanges':unique[:maximum], 'sourceRangesTruncated':len(unique)>maximum}
 
     def summary(self):
         return {'filesRead':len({path for paths in self.reads.values() for path in paths}),
@@ -142,6 +165,15 @@ def register(factory):
         return json.dumps(await inspection.execute(ctx,{'operation':'read','path':path,'start_line':start_line,'end_line':end_line}))
 
     @function_tool
+    async def read_source_files(ctx:RunContextWrapper, ranges_json:str)->str:
+        """Read 1 to 4 related source ranges in one turn. Pass a JSON array of {path,start_line,end_line}, at most 120 lines per range and 240 total. Every range uses the existing read-only source checks and evidence ledger."""
+        if len(ranges_json.encode()) > 4096:
+            return json.dumps({'success':False,'error':'Source range request is too large.'})
+        try: requests=json.loads(ranges_json)
+        except ValueError:return json.dumps({'success':False,'error':'Use a valid JSON array of source ranges.'})
+        return json.dumps(await inspection.read_many(ctx,requests))
+
+    @function_tool
     async def search_source(ctx:RunContextWrapper, query:str)->str:
         """Find up to 40 literal text matches in uploaded source. Read matching files before reporting conclusions."""
         return json.dumps(await inspection.execute(ctx,{'operation':'search','query':query}))
@@ -156,10 +188,11 @@ def register(factory):
 
     @function_tool
     async def list_source_issues(ctx:RunContextWrapper)->str:
-        """List shared source issue IDs, titles and locations. Check this ledger before reporting an overlapping concern; reuse an existing ID for the same defect."""
+        """List shared source issue IDs, titles, locations and machine-observed source ranges for report citations. Check this ledger before reporting an overlapping concern; reuse an existing ID for the same defect."""
         path=inspection.audit_path.with_name('source-issues.json')
         rows=json.loads(path.read_text()) if path.is_file() else []
-        return json.dumps({'issues':[{key:row[key] for key in ['id','title','code_locations']} for row in rows]})
+        return json.dumps({'issues':[{key:row[key] for key in ['id','title','code_locations']} for row in rows],
+                           **inspection.observed_ranges()})
 
     @function_tool
     async def save_payment_risk_report(ctx:RunContextWrapper, report_json:str)->str:
@@ -174,5 +207,5 @@ def register(factory):
         except ValueError:return json.dumps({'success':False,'error':'Provide valid JSON.'})
         return json.dumps(save_report(inspection,raw))
 
-    factory.register_agent_tools(list_source_files,read_source_file,search_source,report_source_issue,list_source_issues,save_payment_risk_report)
+    factory.register_agent_tools(list_source_files,read_source_file,read_source_files,search_source,report_source_issue,list_source_issues,save_payment_risk_report)
     return inspection

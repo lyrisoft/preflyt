@@ -9,7 +9,7 @@ afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
 })
-async function show() {
+async function show(embedded = false) {
   await render(
     <QueryClientProvider
       client={
@@ -17,6 +17,7 @@ async function show() {
       }
     >
       <PaymentRiskReport
+        embedded={embedded}
         repositoryId='51'
         assessmentId='fixture'
         scopeKey='organization:owner'
@@ -170,4 +171,40 @@ it('does not reuse another user scope report and hides cached data after access 
   await expect
     .element(page.getByText('Private owner report.'))
     .not.toBeInTheDocument()
+})
+
+it('opens an embedded payment report directly without a second Open report action', async () => {
+  const fetch = vi.fn(async () =>
+    Response.json({
+      branch: 'main',
+      sourceSha: 'a'.repeat(40),
+      report: {
+        executiveSummary: 'Inspect payment invariants.',
+        systemInventory: [],
+        findings: [],
+        domains: [],
+        paymentRiskRegister: [],
+        attackScenarios: [],
+        remediationPlan: [],
+        qaRegressionCases: [],
+        finalRiskSummary: {
+          summary: 'Further review needed.',
+          immediateActions: 'Inspect sources.',
+          topIssueIds: [],
+        },
+      },
+    })
+  )
+  vi.stubGlobal('fetch', fetch)
+  await show(true)
+  await expect
+    .element(page.getByRole('heading', { name: '1. Executive summary' }))
+    .toBeVisible()
+  await expect
+    .element(page.getByRole('button', { name: 'Open report' }))
+    .not.toBeInTheDocument()
+  await expect
+    .element(page.getByRole('button', { name: 'Hide report' }))
+    .not.toBeInTheDocument()
+  expect(fetch).toHaveBeenCalledTimes(1)
 })

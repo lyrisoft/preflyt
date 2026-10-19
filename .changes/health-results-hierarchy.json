@@ -1,0 +1,8 @@
+{
+  "type": "fix",
+  "title": "One primary repository findings view",
+  "description": "Repository health presents one full-width Findings table with clear category scope and readable AI source labels. Findings and Assessment history remain separate; subsequent layout refinements preserve these report links, filters and pagination.",
+  "upgrade": "Rebuild the web image. No database migration or configuration change is required.",
+  "migrations": [],
+  "configuration": []
+}

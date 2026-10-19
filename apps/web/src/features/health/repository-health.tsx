@@ -11,7 +11,6 @@ import {
   Wrench,
   Copy,
   Clock3,
-  ArrowUpRight,
   GitCommitHorizontal,
   LoaderCircle,
   AlertCircle,
@@ -48,10 +47,10 @@ import { ResultTimestamp } from '@/components/result-timestamp'
 import { StatusBadge } from '@/components/status-badge'
 import { SurfaceIcon } from '@/components/surface-icon'
 import { TablePagination } from '@/components/table-pagination'
+import { classificationLabels } from '@/features/findings/finding-classification'
 import { BranchPicker } from '@/features/repositories/branch-picker'
 import { useNavigationSession } from '@/features/workspace/navigation-session'
 import { canPerform } from '@/features/workspace/scoped-access'
-import { AnalysisCoverage } from './analysis-coverage'
 import { BranchCoverageCard } from './branch-coverage-card'
 import {
   healthRequest,
@@ -69,10 +68,8 @@ import {
 } from './health-api'
 import { healthDimensionValues } from './health-dimensions'
 import { HealthHelp } from './health-help'
-import { HealthPolicyEvidence } from './health-policy-evidence'
 import { HealthTimelineChart } from './health-timeline-chart'
 import { PaymentRiskReport } from './payment-risk-report'
-import { SourceReviewCoverage } from './source-review-coverage'
 import { StrixControl } from './strix-control'
 import { useFreshnessExpired } from './use-freshness-expired'
 
@@ -118,7 +115,9 @@ export function RepositoryHealth({
     [severity, setSeverity] = useState('all')
   const [findingsPageState, setFindingsPage] = useState({ scope: '', page: 1 })
   const [findingsPageSize, setFindingsPageSize] = useState(10)
-  const [detailTab, setDetailTab] = useState<'findings' | 'history'>('findings')
+  const [detailTab, setDetailTab] = useState<
+    'findings' | 'history' | 'payment'
+  >('findings')
   const aiScope = `${session.data?.organizationId}:${session.data?.identityId}:${repositoryId}`
   const [localAiChoice, setLocalAiChoice] =
     useState<HealthAiSecurityChoice | null>(null)
@@ -172,10 +171,6 @@ export function RepositoryHealth({
         : recent(data?.checkedAt, query.dataUpdatedAt)
           ? (data?.freshness ?? 'UNVERIFIED')
           : 'UNVERIFIED'
-  const headCheckedAt =
-    checked?.assessmentId === row?.id && checked?.sourceSha === row?.sourceSha
-      ? checked?.checkedAt
-      : data?.checkedAt
   const allowed = canPerform(session.data, 'execution.run', repositoryId)
   const refresh = async () => {
     await cache.invalidateQueries({ queryKey: ['repository-health'] })
@@ -250,6 +245,9 @@ export function RepositoryHealth({
     start.isPending &&
     (start.variables?.scanner === 'strix' ||
       start.variables?.includeAiSecurity === true)
+  const hasPaymentReport = !!aiReview?.report?.paymentRiskSummary && !aiRunning
+  const selectedDetailTab =
+    detailTab === 'payment' && !hasPaymentReport ? 'findings' : detailTab
   const securitySources = data?.categoryResults?.security
   const relatedAi =
     securitySources?.assessmentIds?.filter(
@@ -278,7 +276,7 @@ export function RepositoryHealth({
     !!data &&
       !query.isError &&
       !freshnessDenied &&
-      detailTab === 'findings' &&
+      selectedDetailTab === 'findings' &&
       !active &&
       report?.mode === 'EXECUTED',
     findingsReports
@@ -826,7 +824,7 @@ export function RepositoryHealth({
           {start.error?.message ?? cancel.error?.message}
         </p>
       )}
-      {data && (
+      {data && (!report || active) && (
         <BranchCoverageCard
           repositoryId={repositoryId}
           assessmentId={row?.id}
@@ -896,24 +894,8 @@ export function RepositoryHealth({
               View standard checks
             </Button>
           )}
-          {aiReview?.report?.paymentRiskSummary && !aiRunning && (
-            <PaymentRiskReport
-              key={`payment-${aiReview.id}`}
-              repositoryId={repositoryId}
-              assessmentId={aiReview.id}
-              scopeKey={aiScope}
-            />
-          )}
           {report && !active && (
-            <SourceReviewCoverage
-              key={`source-${row.id}`}
-              report={report}
-              repositoryId={repositoryId}
-              assessmentId={row.id}
-            />
-          )}
-          {report && !active && (
-            <div className='grid gap-4 sm:grid-cols-2 xl:grid-cols-4'>
+            <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5'>
               {metrics.map((metric) => (
                 <Card
                   key={metric.label}
@@ -978,44 +960,27 @@ export function RepositoryHealth({
                   )}
                 </Card>
               ))}
+              <BranchCoverageCard
+                compact
+                repositoryId={repositoryId}
+                assessmentId={row.id}
+                coverage={data?.branchCoverage}
+                exact={data?.ciCoverage}
+                branch={chosenBranch}
+                healthSha={row.sourceSha}
+              />
             </div>
           )}
-          {report && !active && (
-            <AnalysisCoverage
-              key={row.id}
-              report={report}
-              assessmentId={row.id}
-              assessmentReason={row.reason}
-              hotspotReview={data?.hotspotReview}
-              headCheckedAt={headCheckedAt}
-              finishedAt={row.finishedAt}
-              onRunCategory={
-                allowed && chosenBranch
-                  ? (category) =>
-                      start.mutate({ branch: chosenBranch, category })
-                  : undefined
-              }
-              aiReview={aiReview}
-              onRunAiSecurity={
-                allowed && chosenBranch
-                  ? () =>
-                      start.mutate({
-                        branch: chosenBranch,
-                        scanner: 'strix',
-                        reviewProfile,
-                      })
-                  : undefined
-              }
-              aiRunPending={aiRunning || aiQueuing}
-              runPending={start.isPending}
-            />
-          )}
-          <div className='grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_350px]'>
+          <div className='min-w-0'>
             <div className='min-w-0'>
               <Tabs
-                value={report && !active ? detailTab : 'history'}
+                value={report && !active ? selectedDetailTab : 'history'}
                 onValueChange={(value) => {
-                  if (value === 'findings' || value === 'history')
+                  if (
+                    value === 'findings' ||
+                    value === 'history' ||
+                    value === 'payment'
+                  )
                     setDetailTab(value)
                 }}
                 className='gap-4'
@@ -1027,6 +992,11 @@ export function RepositoryHealth({
                   <TabsTrigger value='history'>
                     Assessment history ({data!.total})
                   </TabsTrigger>
+                  {hasPaymentReport && (
+                    <TabsTrigger value='payment' disabled={!report || active}>
+                      Payment Risk Review
+                    </TabsTrigger>
+                  )}
                 </TabsList>
                 <TabsContent value='findings' className='space-y-5'>
                   {report && !active && (
@@ -1046,13 +1016,13 @@ export function RepositoryHealth({
                           </div>
                           {findingsAvailable && (
                             <span className='text-xs text-muted-foreground'>
-                              {findingCount} reported
+                              {findingCount} across all categories
                             </span>
                           )}
                         </div>
                         <CardDescription>
-                          Open an issue to inspect its rule and exact source
-                          location.
+                          All finding categories from the selected reports. Open
+                          a finding for source code, reasoning and remediation.
                         </CardDescription>
                         {!!healthFindingCount(report) && (
                           <div className='flex flex-wrap gap-2'>
@@ -1158,11 +1128,19 @@ export function RepositoryHealth({
                                         : ''}
                                     </p>
                                     <p className='mt-1 text-xs text-muted-foreground'>
-                                      {f.ruleId ?? f.checkId}
+                                      {f.category.charAt(0).toUpperCase() +
+                                        f.category.slice(1)}{' '}
+                                      ·{' '}
+                                      {f.evidence === 'AI_REPORTED'
+                                        ? 'AI security review'
+                                        : (f.ruleId ?? f.checkId)}
                                     </p>
-                                    {f.evidence === 'AI_REPORTED' && (
-                                      <StatusBadge tone='warning' compact>
-                                        Needs review
+                                    {(f.review?.classification ||
+                                      f.evidence === 'AI_REPORTED') && (
+                                      <StatusBadge tone='neutral' compact>
+                                        {classificationLabels[
+                                          f.review?.classification ?? ''
+                                        ] ?? 'Needs review'}
                                       </StatusBadge>
                                     )}
                                   </TableCell>
@@ -1229,6 +1207,17 @@ export function RepositoryHealth({
                       {data!.trend.noLongerReported} no longer reported compared
                       with the previous compatible complete report.
                     </p>
+                  )}
+                </TabsContent>
+                <TabsContent value='payment' className='space-y-4'>
+                  {hasPaymentReport && aiReview && (
+                    <PaymentRiskReport
+                      key={`payment-${aiReview.id}`}
+                      embedded
+                      repositoryId={repositoryId}
+                      assessmentId={aiReview.id}
+                      scopeKey={aiScope}
+                    />
                   )}
                 </TabsContent>
                 <TabsContent value='history'>
@@ -1349,26 +1338,6 @@ export function RepositoryHealth({
                 </TabsContent>
               </Tabs>
             </div>
-            <aside className='min-w-0 space-y-5' aria-label='Analysis details'>
-              {report && !active && (
-                <HealthPolicyEvidence
-                  report={report}
-                  repositoryId={repositoryId}
-                />
-              )}
-              <p className='px-1 text-xs leading-relaxed text-muted-foreground'>
-                For ongoing PR feedback,{' '}
-                <Link
-                  className='inline-flex items-center gap-1 font-medium text-foreground hover:underline'
-                  to='/policies'
-                  search={{ repository: repositoryId }}
-                >
-                  configure continuous checks{' '}
-                  <ArrowUpRight className='size-3' />
-                </Link>
-                .
-              </p>
-            </aside>
           </div>
         </>
       )}

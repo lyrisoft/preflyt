@@ -1,0 +1,8 @@
+{
+  "type": "fix",
+  "title": "Accurate findings summaries and current review outcomes",
+  "description": "Findings summaries count a commit once across static and AI results, and indexed reads recheck repository access. Repository health retains skipped or pre-admission AI review outcomes, while older payment reports remain readable.",
+  "upgrade": "Recreate the API and worker. Existing findings snapshots rebuild automatically once under the revised index key.",
+  "migrations": [],
+  "configuration": []
+}
