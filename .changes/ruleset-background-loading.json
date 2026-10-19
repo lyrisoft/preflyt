@@ -1,0 +1,8 @@
+{
+  "type": "fix",
+  "title": "Ruleset loading follows background refreshes",
+  "description": "Merge Protection distinguishes queued GitHub reads from failures and checks again at the server-provided retry time. Explicit refreshes update the correct repository page when the worker saves a newer snapshot. A refresh that takes longer than two minutes keeps saved rulesets visible, slows background checks and lets the user retry.",
+  "upgrade": "none",
+  "migrations": [],
+  "configuration": []
+}
