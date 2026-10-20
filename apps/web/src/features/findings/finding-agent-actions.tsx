@@ -11,7 +11,7 @@ import { SurfaceIcon } from '@/components/surface-icon'
 import { FindingCompanionActions } from '@/features/companions/finding-companion-actions'
 import { useMcpConnections } from '@/features/companions/hosted-mcp-api'
 import { useNavigationSession } from '@/features/workspace/navigation-session'
-import { agentLaunchUrl, connectedLaunchAgents } from './agent-launch'
+import { agentLaunchUrl, connectedMcpAgents } from './agent-launch'
 import { FindingAgentDialog } from './finding-agent-dialog'
 import type { Finding } from './finding-types'
 
@@ -93,10 +93,18 @@ export function FindingAgentActions({
     refetchInterval: 10000,
   })
   const connections = useMcpConnections(!manual)
-  const agents = connectedLaunchAgents(
+  const agents = connectedMcpAgents(
     Array.isArray(connections.data) ? connections.data : [],
-    scope.repositoryId
+    scope.repositoryId,
+    connections.dataUpdatedAt
   )
+  const nativeAgents = agents.filter(
+    (agent) => agent.launch && agent.repositoryApproved
+  )
+  const copyAgents = agents.filter(
+    (agent) => !agent.launch && agent.repositoryApproved
+  )
+  const needsAccess = agents.some((agent) => !agent.repositoryApproved)
   const launchTask = useQuery({
     queryKey: [
       'finding-agent-launch',
@@ -106,7 +114,7 @@ export function FindingAgentActions({
     ],
     queryFn: () =>
       call<{ prompt: string; repository: string }>(`/launch-task?${query}`),
-    enabled: !manual && agents.length > 0,
+    enabled: !manual && nativeAgents.length > 0,
     gcTime: 0,
     retry: false,
     refetchOnWindowFocus: false,
@@ -163,35 +171,87 @@ export function FindingAgentActions({
               </p>
             </div>
           </div>
-          <div className='flex flex-wrap gap-2'>
-            {agents.map((agent) =>
-              launchTask.data?.prompt ? (
-                <Button key={agent.id} variant='outline' size='sm' asChild>
-                  <a
-                    href={agentLaunchUrl(
-                      agent.id,
-                      launchTask.data.prompt,
-                      launchTask.data.repository
+          <div className='flex max-w-full min-w-0 flex-wrap gap-2'>
+            {!manual &&
+              agents.map((agent) =>
+                !agent.repositoryApproved ? (
+                  <Button
+                    key={agent.id}
+                    variant='outline'
+                    size='sm'
+                    asChild
+                    className='h-auto min-h-8 max-w-full whitespace-normal'
+                  >
+                    <a
+                      href='/integrations?integration=mcp'
+                      aria-label={`Manage ${agent.name} access`}
+                    >
+                      {agent.logo ? (
+                        <AgentLogo agent={agent.logo} className='size-4' />
+                      ) : (
+                        <Plug />
+                      )}
+                      <span className='min-w-0 [overflow-wrap:anywhere]'>
+                        Manage {agent.name} access
+                      </span>
+                    </a>
+                  </Button>
+                ) : !agent.launch ? (
+                  <Button
+                    key={agent.id}
+                    variant='outline'
+                    size='sm'
+                    className='h-auto min-h-8 max-w-full whitespace-normal'
+                    aria-label={`Copy task for ${agent.name}`}
+                    disabled={busy}
+                    onClick={() =>
+                      void run(async () => {
+                        const result = await call<{ task: string }>(
+                          `/task?${query}`
+                        )
+                        await copy(
+                          result.task,
+                          `Task copied for ${agent.name}. Paste it into the agent to start.`
+                        )
+                      })
+                    }
+                  >
+                    {agent.logo ? (
+                      <AgentLogo agent={agent.logo} className='size-4' />
+                    ) : (
+                      <Plug />
                     )}
+                    <span className='min-w-0 [overflow-wrap:anywhere]'>
+                      Copy task for {agent.name}
+                    </span>
+                  </Button>
+                ) : launchTask.data?.prompt ? (
+                  <Button key={agent.id} variant='outline' size='sm' asChild>
+                    <a
+                      href={agentLaunchUrl(
+                        agent.launch,
+                        launchTask.data.prompt,
+                        launchTask.data.repository
+                      )}
+                      aria-label={`Open in ${agent.name}`}
+                    >
+                      <AgentLogo agent={agent.launch} className='size-4' />
+                      Open in {agent.name}
+                    </a>
+                  </Button>
+                ) : (
+                  <Button
+                    key={agent.id}
+                    variant='outline'
+                    size='sm'
+                    disabled
                     aria-label={`Open in ${agent.name}`}
                   >
-                    <AgentLogo agent={agent.id} className='size-4' />
+                    <AgentLogo agent={agent.launch} className='size-4' />
                     Open in {agent.name}
-                  </a>
-                </Button>
-              ) : (
-                <Button
-                  key={agent.id}
-                  variant='outline'
-                  size='sm'
-                  disabled
-                  aria-label={`Open in ${agent.name}`}
-                >
-                  <AgentLogo agent={agent.id} className='size-4' />
-                  Open in {agent.name}
-                </Button>
-              )
-            )}
+                  </Button>
+                )
+              )}
             <Button
               variant='outline'
               size='sm'
@@ -223,9 +283,15 @@ export function FindingAgentActions({
         </div>
         {!manual && (
           <p className='text-xs text-muted-foreground'>
-            {agents.length
-              ? 'Opens your desktop app with the task filled in. Send it to start.'
-              : 'Connect a supported coding agent in Integrations, or copy the task into your agent.'}
+            {nativeAgents.length > 0 &&
+              'Opens your desktop app with the task filled in. Send it to start.'}
+            {nativeAgents.length > 0 && copyAgents.length > 0 && ' '}
+            {copyAgents.length > 0 &&
+              'Paste the copied task into the named agent and send it to start.'}
+            {needsAccess &&
+              ' Some agents need access to this repository. Reconnect them and select this repository.'}
+            {agents.length === 0 &&
+              'Copy the verification task into your coding agent. Manage its Preflyt access in Integrations.'}
           </p>
         )}
         {connections.isError && !manual && (

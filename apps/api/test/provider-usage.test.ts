@@ -2,6 +2,7 @@ import { it, expect } from "vitest";
 import { providerUsage } from "../src/intelligence/skill-inference.js";
 it.each([
   ["openai", { usage: { prompt_tokens: 10, completion_tokens: 5 } }],
+  ["openai", { object:'response', usage: { input_tokens: 10, output_tokens: 5 } }],
   ["anthropic", { usage: { input_tokens: 10, output_tokens: 5 } }],
   [
     "gemini",
@@ -18,6 +19,7 @@ it.each([
   },
 );
 it("never fabricates usage or negative token counts and retains cache counters", () => {
+  expect(providerUsage('openai',{object:'response',usage:{input_tokens:100,output_tokens:25,input_tokens_details:{cached_tokens:80},output_tokens_details:{reasoning_tokens:20}}})).toEqual({inputTokens:100,outputTokens:25,cachedTokens:80});
   expect(providerUsage(undefined, {})).toEqual({
     inputTokens: null,
     outputTokens: null,

@@ -122,3 +122,21 @@ it('ships opt-in Strix with an isolated engine and no engine authority in applic
   expect(workflow.jobs.build.strategy.matrix.group).toContain('strix')
  }
 })
+
+it('prepares the local sandbox before the isolated runner without giving the builder repository state or application secrets',()=>{
+ const local=parse(readFileSync(resolve(root,'compose.ai-security-local.yaml'),'utf8'))
+ const builder=local.services['strix-sandbox-init'],runner=local.services['strix-runner']
+ expect(builder.profiles).toEqual(['ai-security'])
+ expect(builder.user).toBe('1000:1000');expect(builder.read_only).toBe(true)
+ expect(builder.cap_drop).toEqual(['ALL'])
+ expect(builder.restart).toBe('no')
+ expect(builder.volumes).toEqual(['strix_engine_client:/run/docker-tls:ro'])
+ expect(JSON.stringify(builder)).not.toMatch(/docker.sock|strix_state|health_sources|DATABASE_URL|GITHUB_APP_PRIVATE_KEY|AI_PROVIDER_ENCRYPTION_KEY/)
+ expect(builder.depends_on['strix-init'].condition).toBe('service_completed_successfully')
+ expect(runner.depends_on['strix-sandbox-init'].condition).toBe('service_completed_successfully')
+ expect(runner.networks).toBeUndefined()
+ expect(config.services['strix-runner'].networks.every((name:string)=>config.networks[name].internal===true)).toBe(true)
+ const dockerfile=readFileSync(resolve(root,'deploy/strix.Dockerfile'),'utf8')
+ const stage=dockerfile.split('FROM docker-cli AS sandbox-builder\n')[1].split('\nFROM ')[0]
+ expect(stage.match(/^COPY .+$/gm)).toEqual(['COPY tools/strix-runner/sandbox.Dockerfile tools/strix-runner/sandbox-entrypoint.sh ./'])
+})

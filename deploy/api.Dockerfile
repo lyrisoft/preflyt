@@ -43,6 +43,9 @@ WORKDIR /app
 COPY --from=build --chown=node:node /opt/api/ ./
 COPY --from=build --chown=node:node /workspace/apps/api/dist ./dist
 COPY --chown=node:node apps/api/resources/preflyt-companion.mjs ./resources/preflyt-companion.mjs
+COPY --chown=node:node apps/api/resources/preflyt-deepseek-LICENSE.txt ./resources/preflyt-deepseek-LICENSE.txt
+COPY --chown=node:node apps/api/resources/report-fonts ./resources/report-fonts
+COPY --chown=node:node apps/api/resources/preflyt-logo-color.png ./resources/preflyt-logo-color.png
 ARG PREFLYT_BUILD_VERSION=development
 ARG PREFLYT_BUILD_SHA=unknown
 ENV PREFLYT_BUILD_VERSION=$PREFLYT_BUILD_VERSION PREFLYT_BUILD_SHA=$PREFLYT_BUILD_SHA

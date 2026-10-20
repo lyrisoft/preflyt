@@ -7,8 +7,9 @@ import {
 export function healthSourceFixture(
   sourceSha = "a".repeat(40),
   repositoryId = "51",
+  code = "export const handler=()=>true\n",
 ) {
-  const bytes = Buffer.from("export const handler=()=>true\n");
+  const bytes = Buffer.from(code);
   const blobSha = gitObjectHash("blob", bytes);
   const treeSha = gitObjectHash(
     "tree",

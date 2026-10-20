@@ -40,7 +40,7 @@ export function IntegrationCatalogue({
       id: 'mcp' as const,
       name: 'MCP and coding agents',
       description:
-        'Connect Codex or Claude Code to verify findings and prepare fixes.',
+        'Connect Codex, Claude Code or DeepSeek Harness to verify findings and prepare fixes.',
       icon: Plug,
       status: mcpConnected ? 'Connected' : 'Not connected',
       tone: mcpConnected ? ('success' as const) : ('neutral' as const),

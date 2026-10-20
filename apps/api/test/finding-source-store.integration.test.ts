@@ -4,6 +4,7 @@ import { disposableDatabase } from './disposable-database.js'
 import { FindingSourceStore } from '../src/findings/finding-source-store.service.js'
 import { FindingsService } from '../src/findings/findings.service.js'
 import { queueFindingSources, sourceLocation } from '../src/findings/finding-source-store.js'
+import { healthSourceFixture } from './health-source-fixture.js'
 import { AuthorizationService } from '../src/auth/authorization.service.js'
 import type { AuthenticatedSession } from '../src/auth/session.guard.js'
 let fixture: Awaited<ReturnType<typeof disposableDatabase>>, repositoryId: string, owner: AuthenticatedSession
@@ -23,7 +24,7 @@ beforeEach(async () => {
  store = new FindingSourceStore(db, provider as any)
 })
 async function capture(...args: Parameters<FindingSourceStore['read']>) {
- await store.read(...args)
+ await fixture.prisma.$transaction(tx=>queueFindingSources(tx,args[0],args[1],[args[2]],args[3]))
  await store.reconcile()
  return store.read(...args)
 }
@@ -82,6 +83,7 @@ it('keeps transient failure retryable and fails closed on altered stored excerpt
 it('still denies stored code after a user grant or repository access is revoked', async () => {
  const db = fixture.prisma, access = new AuthorizationService(db), service = new FindingsService(db, access, store)
  vi.spyOn(service as any, 'finding').mockResolvedValue({ ...location, repositoryId: '11', sourceSha: sha, category: 'security' })
+ await db.$transaction(tx=>queueFindingSources(tx,repositoryId,sha,[location]))
  await service.source(owner, 'f'.repeat(64))
  await store.reconcile()
  await db.organizationMembership.updateMany({ where: { identityId: owner.identityId }, data: { active: false } })
@@ -95,7 +97,7 @@ it('still denies stored code after a user grant or repository access is revoked'
 })
 it('does not retain source when repository access changes during capture', async () => {
  provider.readHealthSource.mockImplementationOnce(async () => { await fixture.prisma.gitHubRepository.update({ where: { id: repositoryId }, data: { available: false } }); return 'private source' })
- await store.read(repositoryId, sha, location)
+ await fixture.prisma.$transaction(tx=>queueFindingSources(tx,repositoryId,sha,[location]))
  await expect(store.reconcile()).rejects.toThrow('access')
  await expect(store.read(repositoryId, sha, location)).rejects.toThrow('access')
  expect((await fixture.prisma.findingSourceExcerpt.findFirstOrThrow()).content).toBeNull()
@@ -133,8 +135,44 @@ it('preserves the background capture allowance across rate limits and honors coo
  expect(provider.readHealthSource).toHaveBeenCalledTimes(5)
 })
 
-it('queues a cold source read without calling GitHub on the page request',async()=>{
+it('keeps a cold finding read read-only and directs missing snapshots to GitHub',async()=>{
  const result=await store.read(repositoryId,sha,location)
- expect(result.retryable).toBe(true);expect(provider.readHealthSource).not.toHaveBeenCalled()
- await store.reconcile();expect((await store.read(repositoryId,sha,location)).lines.length).toBeGreaterThan(0)
+ expect(result.retryable).toBe(false);expect(result.reason).toContain('Open the file on GitHub')
+ expect(await fixture.prisma.findingSourceExcerpt.count()).toBe(0)
+ await store.reconcile();expect(provider.readHealthSource).not.toHaveBeenCalled()
+})
+
+it('reuses an older saved context window without queuing another source fetch',async()=>{
+ const saved=await capture(repositoryId,sha,location,8)
+ expect(await store.read(repositoryId,sha,location)).toEqual(saved)
+ expect(await fixture.prisma.findingSourceExcerpt.count()).toBe(1)
+ expect(provider.readHealthSource).toHaveBeenCalledTimes(1)
+})
+
+it('saves every finding and related block from assessed source before publication, including findings after the first 500',async()=>{
+ const source=healthSourceFixture(sha,'11',Array.from({length:620},(_,i)=>`const value${i} = ${i}`).join('\n')).source
+ const findings=Array.from({length:550},(_,i)=>({...location,path:'app.ts',line:i+1,endLine:i+1}))
+ findings[0]={...findings[0],relatedLocations:[{path:'app.ts',line:600,endLine:600}]} as typeof findings[number]
+ const snapshots=await store.prepareSnapshots(repositoryId,source,findings)
+ await expect(fixture.prisma.$transaction(async tx=>{await store.saveSnapshots(tx,snapshots);throw new Error('rollback')})).rejects.toThrow('rollback')
+ expect(await fixture.prisma.findingSourceExcerpt.count()).toBe(0)
+ await store.captureSnapshot(repositoryId,source,findings)
+ expect(await fixture.prisma.findingSourceExcerpt.count({where:{contentHash:{not:null}}})).toBe(551)
+ provider.readHealthSource.mockRejectedValue(new Error('GitHub offline'))
+ expect((await store.read(repositoryId,sha,findings[549])).lines.some(line=>line.number===550)).toBe(true)
+ expect((await store.read(repositoryId,sha,{...findings[0],line:600,endLine:600})).lines.some(line=>line.number===600)).toBe(true)
+ expect(provider.readHealthSource).not.toHaveBeenCalled()
+})
+
+it('redacts assessed snapshots before storage, rejects changed bytes, and preserves the first snapshot',async()=>{
+ const source=healthSourceFixture(sha,'11','before();\nopaque-sensitive-value\napi_key="private-value"\nafter();').source
+ const secret={...location,path:'app.ts',checkId:'secrets.scan'}
+ await store.captureSnapshot(repositoryId,source,[secret])
+ const saved=await store.read(repositoryId,sha,secret)
+ expect(JSON.stringify(saved)).not.toContain('private-value')
+ expect(JSON.stringify(saved)).not.toContain('opaque-sensitive-value')
+ expect(saved.lines[1].text).toBe('[Potential credential redacted]')
+ await expect(store.captureSnapshot(repositoryId,{...source,files:[{...source.files[0],content:Buffer.from('changed').toString('base64')}]},[secret])).rejects.toThrow()
+ await store.captureSnapshot(repositoryId,source,[secret])
+ expect(await store.read(repositoryId,sha,secret)).toEqual(saved)
 })

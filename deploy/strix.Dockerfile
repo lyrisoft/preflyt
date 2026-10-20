@@ -9,6 +9,15 @@ ENV PATH=/usr/local/go/bin:$PATH
 COPY tools/strix-runner/requirements.txt tools/strix-runner/constraints.txt /requirements/
 RUN /opt/venv/bin/pip install --no-cache-dir -r /requirements/requirements.txt
 
+# Local Compose prepares the pinned sandbox before repository reviews can start.
+# This one-shot image contains only its fixed Dockerfile and entrypoint.
+FROM docker-cli AS sandbox-builder
+WORKDIR /sandbox
+COPY tools/strix-runner/sandbox.Dockerfile tools/strix-runner/sandbox-entrypoint.sh ./
+USER 1000:1000
+ENTRYPOINT ["docker"]
+CMD ["build", "--pull=false", "--file", "/sandbox/sandbox.Dockerfile", "--tag", "preflyt-local/preflyt-strix-sandbox:v1.7.0", "/sandbox"]
+
 FROM python:3.12.15-slim-bookworm@sha256:34386ef0cb081344d7ec1c103ba398e6e9f64e9ab3a1509accc92a4e24a07258 AS runtime
 RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates procps \
     && rm -rf /var/lib/apt/lists/* \

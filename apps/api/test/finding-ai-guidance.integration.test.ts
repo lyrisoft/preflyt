@@ -16,6 +16,7 @@ import type { AuthenticatedSession } from "../src/auth/session.guard.js";
 import { SessionGuard } from "../src/auth/session.guard.js";
 import { AuthService } from "../src/auth/auth.service.js";
 import { FindingAiGuidanceController } from "../src/findings/finding-ai-guidance.controller.js";
+import { RepositoryHealthService } from '../src/health/repository-health.service.js';
 
 vi.mock("../src/intelligence/skill-inference.js", async (importOriginal) => ({
   ...(await importOriginal<
@@ -202,7 +203,7 @@ it("falls back when AI is not configured and does not create a guidance row", as
   expect(await fixture.prisma.aiFindingGuidance.count()).toBe(0);
 });
 
-it("queues once, saves assessed-commit AI guidance, reuses the cache, and invalidates it on route revision", async () => {
+it("queues once and preserves saved recommendations across route changes and source or model outages", async () => {
   expect(await service.get(owner, scope)).toMatchObject({
     available: true,
     state: "NONE",
@@ -228,9 +229,30 @@ it("queues once, saves assessed-commit AI guidance, reuses the cache, and invali
   expect(runPromptInference).toHaveBeenCalledTimes(1);
   expect(vi.mocked(runPromptInference).mock.calls[0]?.[6]?.usageContext).toMatchObject({workload:'FINDING_GUIDANCE',repositoryId:repo.id});
   model = { ...model, route: { ...model.route, revision: 2 } };
-  expect(await service.get(owner, scope)).toMatchObject({ state: "NONE" });
+  expect(await service.get(owner, scope)).toMatchObject({ state: "SUCCEEDED" });
+  model=null;
+  (service as any).sources.read.mockRejectedValue(new Error('Source unavailable'));
+  expect(await service.get(owner,scope)).toMatchObject({state:'SUCCEEDED',result:{sourceSha:sha}});
+  expect(await service.request(owner,scope)).toMatchObject({state:'SUCCEEDED'});
+  expect(runPromptInference).toHaveBeenCalledTimes(1);
   expect(await fixture.prisma.aiFindingGuidance.count()).toBe(1);
 });
+
+it('resolves Health guidance from the exact saved finding rather than summary-only Health metrics',async()=>{
+ const db=fixture.prisma;
+ const report=await db.repositoryHealthAssessment.create({data:{repositoryId:repo.id,organizationId:owner.organizationId!,branch:'main',targetRevision:1,requestKey:'guidance-fixture',actorId:owner.identityId,state:'COMPLETED',sourceSha:sha,report:{findings:[{...finding,fingerprint,checkId:'security.sast',evidence:'ANALYZER_REPORTED'}]}}});
+ const access=new AuthorizationService(db);
+ const sources={read:vi.fn().mockResolvedValue(source)};
+ const health=new RepositoryHealthService(db,access,{} as any,{} as any,sources as any);
+ const exact=new FindingAiGuidanceService(db,access,{} as any,health,sources as any,{} as any);
+ vi.spyOn(exact as any,'model').mockResolvedValue(model);
+ const healthScope={...scope,origin:'health' as const,assessmentId:report.id};
+ expect(await exact.get(owner,healthScope)).toMatchObject({available:true,state:'NONE'});
+ await exact.request(owner,healthScope);
+ await exact.reconcile();
+ expect(await exact.get(owner,healthScope)).toMatchObject({state:'SUCCEEDED',result:{sourceSha:sha,evidenceLines:[11]}});
+ expect(vi.mocked(runPromptInference).mock.calls.at(-1)?.[6]?.jsonSchema).toMatchObject({type:'object',additionalProperties:false});
+})
 
 it("denies another organization and stops queued work after repository access is revoked", async () => {
   await expect(service.get(outsider, scope)).rejects.toThrow();

@@ -8,6 +8,7 @@ Apache-2.0 applies to original Preflyt code and documentation. It does not repla
 | Inline Tabler icons | [Web third-party notices](apps/web/THIRD_PARTY_NOTICES.md) |
 | SARIF schema | [Schema license](apps/api/src/github-events/sarif-schema.LICENSE.md) |
 | Azure Pipelines artwork | [Asset license](apps/web/src/features/auth/assets/azure-pipelines.LICENSE.txt) |
+| Noto Sans PDF report fonts | [SIL Open Font License](apps/api/resources/report-fonts/LICENSE); official [Noto font sources](https://github.com/notofonts/noto-fonts/tree/main/hinted/ttf/NotoSans), regular and bold fonts bundled for offline report rendering |
 | GitHub attestation test fixture | [Fixture license](apps/api/test/fixtures/attestation/LICENSE-gh.txt); test-only material |
 | JavaScript dependencies | Exact versions in `pnpm-lock.yaml`; upstream package licenses apply. The [web dependency inventory](docs/vendor/shadcn-admin-dependency-licenses.json) is historical and must be regenerated for a release. |
 | Container bases, scanner engines, rules and vulnerability databases | Exact inputs in `deploy/` and `docs/deployment/native-runner/`; see the [scanner license review](docs/operations/scanner-licensing.md) and [retained upstream texts/source index](docs/deployment/native-runner/licenses/SCANNER-SOURCES.md). Corresponding-source/data-provider clearance remains open. Engine licensing does not establish the license of every bundled rule/database. |

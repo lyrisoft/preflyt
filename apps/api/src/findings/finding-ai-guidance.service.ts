@@ -29,6 +29,7 @@ import { Prisma, type AiFindingGuidance } from "../generated/prisma/client.js";
 import {
   boundedFindingContext,
   findingAiPrompt,
+  findingAiResponseSchema,
   validateFindingAiResult,
   type FindingAiContext,
 } from "./finding-ai-prompt.js";
@@ -66,6 +67,9 @@ export class FindingAiGuidanceService {
       scope.repositoryId,
       "assessment.read",
     );
+    const health = scope.origin === 'health'
+      ? await this.health.findingDetail(session,scope.repositoryId,scope.assessmentId,scope.findingId)
+      : null;
     const finding =
       scope.origin === "ci"
         ? (
@@ -75,13 +79,7 @@ export class FindingAiGuidanceService {
               scope.assessmentId,
             )
           ).finding
-        : (
-            await this.health.get(
-              session,
-              scope.repositoryId,
-              scope.assessmentId,
-            )
-          ).assessment?.report?.findings.find(
+        : health?.assessment.report.findings.find(
             (f) => f.fingerprint === scope.findingId,
           );
     if (
@@ -92,15 +90,7 @@ export class FindingAiGuidanceService {
     const sourceSha =
       scope.origin === "ci"
         ? finding.sourceSha
-        : (
-            await this.db.repositoryHealthAssessment.findFirstOrThrow({
-              where: {
-                id: scope.assessmentId,
-                repositoryId: repo.id,
-                organizationId: session.organizationId!,
-              },
-            })
-          ).sourceSha;
+        : health?.assessment.sourceSha;
     if (!sourceSha)
       throw new ConflictException("Assessed source is unavailable");
     return { repo, finding, sourceSha };
@@ -180,7 +170,7 @@ export class FindingAiGuidanceService {
       repo.id,
       sourceSha,
       finding,
-      scope.origin === "health" ? 5 : 8,
+      5,
     );
     if (source.reason || !source.lines.length)
       return {
@@ -190,7 +180,7 @@ export class FindingAiGuidanceService {
         result: null,
         model: null,
         finishedAt: null,
-        reason: "Verified code is unavailable; analyzer guidance is shown.",
+        reason: "AI recommendations need a saved code excerpt. Showing saved rule guidance.",
       } as const;
     const context = boundedFindingContext(
       {
@@ -233,7 +223,22 @@ export class FindingAiGuidanceService {
     );
     return { available: true, canGenerate, repo, id, inputHash, snapshot };
   }
+  private async completed(session:AuthenticatedSession,scope:FindingAiScope) {
+    const {repo,finding,sourceSha}=await this.resolve(session,scope);
+    if(hiddenSource(finding))return null;
+    const row=await this.db.aiFindingGuidance.findFirst({where:{organizationId:session.organizationId!,repositoryId:repo.id,origin:scope.origin,assessmentId:scope.assessmentId,findingId:scope.findingId,sourceSha,state:'SUCCEEDED'},orderBy:[{finishedAt:'desc'},{createdAt:'desc'}]});
+    if(!row)return null;
+    const result=this.public(row);
+    const saved=row.snapshot as unknown as Snapshot;
+    if(digest(saved.scope)!==digest(scope) || saved.context.sourceSha!==sourceSha || saved.context.finding.path!==finding.path || saved.context.finding.line!==finding.line || saved.context.finding.endLine!==(finding.endLine??finding.line) || saved.context.finding.ruleId!==finding.ruleId || saved.context.finding.title!==finding.title)return null;
+    await this.access.requireRepository(session,scope.repositoryId,'assessment.read');
+    return {available:true,canGenerate:false,cacheKey:row.id,...result};
+  }
   async get(session: AuthenticatedSession, scope: FindingAiScope) {
+    // A completed recommendation belongs to this finding and assessed commit;
+    // reading it never depends on the current model route or another source read.
+    const completed=await this.completed(session,scope);
+    if(completed)return completed;
     const prepared = await this.prepare(session, scope);
     if (!prepared.available) return prepared;
     const row = await this.db.aiFindingGuidance.findFirst({
@@ -265,6 +270,8 @@ export class FindingAiGuidanceService {
       scope.repositoryId,
       "ai.review.run",
     );
+    const completed=await this.completed(session,scope);
+    if(completed)return completed;
     const prepared = await this.prepare(session, scope);
     if (!prepared.available) throw new ConflictException(prepared.reason);
     let row: AiFindingGuidance;
@@ -432,7 +439,7 @@ export class FindingAiGuidanceService {
                 data: { usage: json(usage) },
               });
             },
-            { jsonOutput: true, usageContext: { db: this.db, repositoryId: row.repositoryId, workload: "FINDING_GUIDANCE", sourceId: row.id } },
+            { jsonOutput: true, jsonSchema:findingAiResponseSchema(snapshot.context), usageContext: { db: this.db, repositoryId: row.repositoryId, workload: "FINDING_GUIDANCE", sourceId: row.id } },
           );
           selected = provider;
           break;

@@ -12,12 +12,14 @@ export function DuplicateCodeComparison({
   source,
   sourcePath,
   aiState,
+  aiReason,
   onRetryAi,
 }: {
   finding: Finding
   source: UseQueryResult<FindingSource, Error>
   sourcePath: string
   aiState?: ComponentProps<typeof FindingSourceViewer>['aiState']
+  aiReason?: string
   onRetryAi?: () => void
 }) {
   const [page, setPage] = useState(1)
@@ -153,6 +155,7 @@ export function DuplicateCodeComparison({
         <FindingGuidance
           finding={finding}
           aiState={aiState}
+          aiReason={aiReason}
           onRetryAi={onRetryAi}
         />
       </div>

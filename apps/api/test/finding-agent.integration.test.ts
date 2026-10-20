@@ -5,6 +5,7 @@ import {
   McpConnectionsController,
 } from "../src/mcp/mcp-oauth.controller.js";
 import { createHash, randomBytes } from "node:crypto";
+import { gunzipSync } from "node:zlib";
 import { CompanionService } from "../src/companions/companion.service.js";
 import {
   CompanionController,
@@ -730,22 +731,27 @@ it("accepts Codex native OAuth registration metadata", async () => {
     .expect(400);
 });
 
-async function hostedAuthorization(scopes = "findings:read findings:review") {
+async function hostedAuthorization(
+  scopes = "findings:read findings:review",
+  metadata: Record<string, unknown> = {},
+  redirect = "http://127.0.0.1:45678/callback",
+) {
   const oauth = app.get(McpOAuthService),
     verifier = randomBytes(32).toString("base64url");
   const registered = await request(app.getHttpServer())
     .post("/mcp-oauth/register")
     .send({
       client_name: "Native MCP fixture",
-      redirect_uris: ["http://127.0.0.1:45678/callback"],
+      redirect_uris: [redirect],
       token_endpoint_auth_method: "none",
       grant_types: ["authorization_code", "refresh_token"],
       response_types: ["code"],
+      ...metadata,
     })
     .expect(201);
   const q = {
     client_id: registered.body.client_id,
-    redirect_uri: "http://127.0.0.1:45678/callback",
+    redirect_uri: redirect,
     response_type: "code",
     code_challenge_method: "S256",
     code_challenge: createHash("sha256").update(verifier).digest("base64url"),
@@ -785,6 +791,76 @@ async function hostedAuthorization(scopes = "findings:read findings:review") {
   };
   return { oauth, q, id, exchange };
 }
+it("supports DeepSeek Harness bridge metadata, repository consent and token refresh", async () => {
+  // Public registration metadata sent by mcp-remote 0.1.38 with our setup's overrides.
+  const { oauth, exchange } = await hostedAuthorization(
+    undefined,
+    {
+      client_name: "DeepSeek Harness",
+      client_uri: "https://github.com/modelcontextprotocol/mcp-cli",
+      software_id: "2e6dc280-f3c3-4e01-99a7-8181dbd1d23d",
+      software_version: "0.1.38",
+      scope: "findings:read findings:review",
+    },
+    "http://127.0.0.1:45678/oauth/callback",
+  );
+  const issued = await request(app.getHttpServer())
+    .post("/mcp-oauth/token")
+    .type("form")
+    .send(exchange)
+    .expect(200);
+  const connection = await oauth.authenticate(
+    "Bearer " + issued.body.access_token,
+  );
+  expect(connection.connection.repositories).toEqual(["120"]);
+  const listed = await request(app.getHttpServer())
+    .get("/mcp-connections")
+    .expect(200);
+  expect(listed.body).toContainEqual(
+    expect.objectContaining({
+      clientName: "DeepSeek Harness",
+      repositories: ["120"],
+    }),
+  );
+  const refreshed = await request(app.getHttpServer())
+    .post("/mcp-oauth/token")
+    .type("form")
+    .send({
+      grant_type: "refresh_token",
+      client_id: exchange.client_id,
+      refresh_token: issued.body.refresh_token,
+      resource: oauth.resource(),
+    })
+    .expect(200);
+  expect(refreshed.body.scope).toBe("findings:read findings:review");
+  expect(refreshed.body.refresh_token).not.toBe(issued.body.refresh_token);
+});
+it("serves a credential-free DeepSeek installer bound to the configured API origin without browser authentication", async () => {
+  const result = await request(app.getHttpServer())
+    .get(
+      "/mcp-setup/deepseek/preflyt-connector-1.0.0.tgz?resource=https://untrusted.example/mcp",
+    )
+    .set("Host", "untrusted.example")
+    .buffer(true)
+    .parse((response, done) => {
+      const chunks: Buffer[] = [];
+      response.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+      response.on("end", () => done(null, Buffer.concat(chunks)));
+    })
+    .expect(200)
+    .expect("Content-Type", /application\/gzip/)
+    .expect("Cache-Control", "no-store");
+  const contents = gunzipSync(result.body).toString("utf8");
+  expect(contents).toContain(app.get(McpOAuthService).resource());
+  expect(contents).not.toMatch(
+    /untrusted\.example|Bearer |mca_|mcr_|COOKIE|DATABASE_URL/,
+  );
+  expect(contents).toContain('"mcp-remote": "0.1.38"');
+  expect(contents).toContain("command: process.execPath");
+  expect(contents).not.toContain("npx");
+  expect(await fixture.prisma.mcpOAuthConnection.count()).toBe(0);
+  expect(await fixture.prisma.findingAgentGrant.count()).toBe(0);
+});
 it("advertises standard hosted MCP discovery and OAuth challenge without browser credentials", async () => {
   const denied = await request(app.getHttpServer())
     .post("/mcp")

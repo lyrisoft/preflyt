@@ -22,10 +22,12 @@ import { VaptFindingAnalysis } from './vapt-finding-analysis'
 export function FindingGuidance({
   finding,
   aiState,
+  aiReason,
   onRetryAi,
 }: {
   finding: Finding
   aiState?: string
+  aiReason?: string
   onRetryAi?: () => void
 }) {
   if (finding.aiReview)
@@ -122,13 +124,14 @@ export function FindingGuidance({
           </CollapsibleTrigger>
         </h2>
         <CollapsibleContent className='space-y-4 px-4 pb-4 text-sm leading-relaxed'>
-          {aiState === 'FAILED' && (
+          {(aiState === 'FAILED' || aiState === 'UNAVAILABLE') && (
             <div
               role='status'
               className='flex flex-wrap items-center justify-between gap-2'
             >
               <span>
-                AI recommendations are unavailable. Showing saved guidance.
+                {aiReason ??
+                  'AI could not complete a recommendation. Showing saved rule guidance.'}
               </span>
               {onRetryAi && (
                 <Button variant='outline' size='sm' onClick={onRetryAi}>
