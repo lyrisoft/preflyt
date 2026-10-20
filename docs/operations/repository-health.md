@@ -128,3 +128,11 @@ bytes, compared with the previous approximately 8.4 MB report response. These ar
 local measurements, not a production latency guarantee. Live browser verification
 confirmed page two, search resetting to page one, and single-finding guidance.
 All nine Compose services were healthy after rebuilding API, worker and web.
+
+## Remediation over time
+
+The history chart plots the findings retained by each run, rather than a cumulative total. Complete comparable runs show scanner findings remaining, new identities, and identities no longer reported compared with the last complete run in the available history. Historical bars remain unchanged. Counts are tracked independently for Security, Reliability and Maintainability on the selected repository branch.
+
+Only completed reports with complete inspection, complete retained analyzer results, known tool/configuration identity, no suppressed results, and no recorded scan gaps can establish a remediation comparison. Coverage, check selection, tool, configuration or measured file-scope changes start a new baseline. Partial runs remain visible as dashed observed-count columns, but receive no remediation credit and do not replace the last complete baseline. A lower partial count can mean missing analysis.
+
+Security bars retain same-commit AI observations, but remediation counts compare scanner findings only. AI count changes and human review/ignore decisions do not establish scanner fixes. “No longer reported” describes the analyzer evidence within the compared scope; it does not independently validate a vulnerability fix, alter historical findings, or override merge checks. The comparison is limited to available history; monthly reporting is not included.

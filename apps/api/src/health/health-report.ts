@@ -126,7 +126,7 @@ function scopedFindings(report: HealthReport, scope: string[]) {
  return report.findings.filter(f => !scope.length || scope.includes(f.checkId))
 }
 export function comparableHealthTrend(current: HealthReport, prior?: HealthReport | null) {
- if (!prior) return null
+ if (!prior || current.completeness !== 'COMPLETE' || prior.completeness !== 'COMPLETE') return null
  const scope = comparableFindingScope(current, prior)
  if (scope === null) return null
  const now = new Set(scopedFindings(current,scope).map(f=>f.fingerprint)), before = new Set(scopedFindings(prior,scope).map(f=>f.fingerprint))

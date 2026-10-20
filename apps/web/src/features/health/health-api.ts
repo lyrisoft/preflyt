@@ -184,6 +184,15 @@ export type HealthTimelinePoint = {
         partial: boolean
         comparisonKey: string | null
         bySeverity?: Record<string, number>
+        remediation?: {
+          status:
+            'COMPARED' | 'BASELINE' | 'PARTIAL' | 'SCOPE_CHANGED' | 'AI_REVIEW'
+          previousAssessmentId?: string
+          previousSourceSha?: string
+          introduced?: number
+          noLongerReported?: number
+          remaining?: number
+        }
       } | null
     >
   >

@@ -18,6 +18,19 @@ const points: HealthTimelinePoint[] = Array.from({ length: 4 }, (_, i) => ({
       partial: i === 2,
       comparisonKey: i === 2 ? null : 'same',
       bySeverity: { critical: 1, high: 3, medium: 2, low: 4 + i, unknown: 0 },
+      remediation:
+        i === 2
+          ? { status: 'PARTIAL' }
+          : i === 0
+            ? { status: 'BASELINE' }
+            : {
+                status: 'COMPARED',
+                remaining: 10 + i,
+                introduced: 1,
+                noLongerReported: 0,
+                previousAssessmentId: `scan-${i - 1}`,
+                previousSourceSha: String(i - 1).repeat(40),
+              },
     },
     reliability:
       i === 3
@@ -111,6 +124,105 @@ it('keeps zero separate from missing results', async () => {
     .element(page.getByText('No recorded results to chart'))
     .toBeVisible()
 })
+it('shows remaining findings decreasing with comparable remediation and preserves exact report navigation', async () => {
+  const select = vi.fn()
+  const history = [12, 7, 0].map((count, i): HealthTimelinePoint => ({
+    ...points[i],
+    findings: count,
+    partial: false,
+    categories: {
+      security: {
+        findings: count,
+        partial: false,
+        comparisonKey: 'same',
+        bySeverity: { high: count },
+        remediation:
+          i === 0
+            ? { status: 'BASELINE' }
+            : {
+                status: 'COMPARED',
+                remaining: count,
+                introduced: 0,
+                noLongerReported: i === 1 ? 5 : 7,
+                previousAssessmentId: points[i - 1].id,
+                previousSourceSha: points[i - 1].sourceSha,
+              },
+      },
+    },
+  }))
+  await render(
+    <HealthTimelineChart
+      points={history}
+      branch='main'
+      onSelectReport={select}
+    />
+  )
+  await expect
+    .element(page.getByLabelText('Latest remediation'))
+    .toHaveTextContent(
+      '0 scanner findings remaining · 0 new · 7 no longer reported since 1111111'
+    )
+  await expect
+    .element(page.getByRole('group', { name: /Security over/ }))
+    .toHaveAttribute(
+      'aria-label',
+      expect.stringContaining('Finding counts: 12, 7, 0')
+    )
+  await page.getByText('View chart data', { exact: true }).click()
+  await expect
+    .element(
+      page.getByText(
+        /7 scanner findings remaining · 0 new · 5 no longer reported/
+      )
+    )
+    .toBeVisible()
+  await page
+    .getByRole('button', { name: /Open scan.*0 findings/ })
+    .last()
+    .click()
+  expect(select).toHaveBeenLastCalledWith('scan-2')
+})
+it.each(['PARTIAL', 'SCOPE_CHANGED', 'AI_REVIEW'] as const)(
+  'does not present %s counts as fixes',
+  async (status) => {
+    await render(
+      <HealthTimelineChart
+        points={[
+          {
+            ...points[0],
+            categories: {
+              security: {
+                findings: 0,
+                partial: status === 'PARTIAL',
+                comparisonKey: null,
+                remediation: { status },
+              },
+            },
+          },
+        ]}
+        branch='main'
+        onSelectReport={() => {}}
+      />
+    )
+    const notice = page.getByLabelText('Latest remediation')
+    await expect.element(notice).not.toHaveTextContent('no longer reported')
+    await expect
+      .element(notice)
+      .toHaveTextContent(
+        status === 'PARTIAL'
+          ? 'fixes are unverified'
+          : status === 'SCOPE_CHANGED'
+            ? 'no fixes are credited'
+            : 'do not verify fixes'
+      )
+    if (status === 'PARTIAL')
+      await expect
+        .element(
+          page.getByText(/A lower partial count may reflect missing analysis/)
+        )
+        .toBeVisible()
+  }
+)
 it('preserves category controls and report actions at 320px in both themes', async () => {
   await render(
     <div className='bg-background p-4 text-foreground'>

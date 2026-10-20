@@ -1,0 +1,8 @@
+{
+  "type": "feature",
+  "title": "Repository remediation tracking",
+  "description": "Repository Health charts show remaining scanner findings, new findings and findings no longer reported between complete comparable runs. Partial scans stay visible with dashed columns, receive no remediation credit, and do not replace the complete baseline. Coverage or configuration changes start a new baseline; AI count changes and manual review decisions do not establish scanner fixes.",
+  "upgrade": "none",
+  "migrations": [],
+  "configuration": []
+}
