@@ -36,6 +36,24 @@ const colors: Record<string, string> = {
 }
 const severityName = (key: string) => key.charAt(0).toUpperCase() + key.slice(1)
 type Category = keyof typeof names
+type Remediation = NonNullable<
+  NonNullable<HealthTimelinePoint['categories']>['security']
+>['remediation']
+function remediationText(value: Remediation, locale?: string) {
+  if (!value) return null
+  switch (value.status) {
+    case 'COMPARED':
+      return `${value.remaining?.toLocaleString(locale)} scanner findings remaining · ${value.introduced?.toLocaleString(locale)} new · ${value.noLongerReported?.toLocaleString(locale)} no longer reported since ${value.previousSourceSha?.slice(0, 7)}`
+    case 'PARTIAL':
+      return 'Partial scan: fixes are unverified. Missing results do not count as fixes.'
+    case 'SCOPE_CHANGED':
+      return 'Scan coverage or configuration changed. This run starts a new comparison baseline; no fixes are credited.'
+    case 'AI_REVIEW':
+      return 'AI review findings are advisory. Changes in AI counts do not verify fixes.'
+    case 'BASELINE':
+      return 'First complete scan in the available comparison history. The next comparable complete run can show remediation.'
+  }
+}
 const date = (at: string, locale?: string) =>
   new Date(at).toLocaleDateString(locale, { month: 'short', day: 'numeric' })
 export function HealthTimelineChart({
@@ -76,6 +94,7 @@ export function HealthTimelineChart({
           {
             ...point,
             ...value,
+            remediation: 'remediation' in value ? value.remediation : undefined,
             bySeverity:
               'bySeverity' in value && value.bySeverity
                 ? value.bySeverity
@@ -143,7 +162,7 @@ export function HealthTimelineChart({
             <div className='mb-4 flex flex-wrap items-end justify-between gap-2'>
               <div>
                 <div className='text-xs text-muted-foreground'>
-                  Latest{' '}
+                  {latest.partial ? 'Observed' : 'Remaining'}{' '}
                   {selected === 'all'
                     ? 'findings'
                     : names[selected].toLowerCase() + ' findings'}
@@ -161,6 +180,21 @@ export function HealthTimelineChart({
                 {branch} · {date(latest.at, locale)}
               </p>
             </div>
+            {remediationText(latest.remediation, locale) && (
+              <div
+                className='mb-4 space-y-1 text-xs'
+                aria-label='Latest remediation'
+              >
+                <p>{remediationText(latest.remediation, locale)}</p>
+                {latest.remediation?.status === 'COMPARED' && (
+                  <p className='text-muted-foreground'>
+                    Compared with the last complete scan using the same coverage
+                    and configuration. AI counts and manual review decisions do
+                    not count as scanner fixes.
+                  </p>
+                )}
+              </div>
+            )}
             <div
               className='w-full min-w-0 overflow-x-auto text-xs'
               role='group'
@@ -242,6 +276,9 @@ export function HealthTimelineChart({
                               {p.partial ? 'Partial scan · ' : ''}
                               {p.sourceSha.slice(0, 7)}
                             </div>
+                            <p className='mt-2 max-w-72 leading-relaxed'>
+                              {remediationText(p.remediation, locale)}
+                            </p>
                           </div>
                         ) : null
                       }}
@@ -301,9 +338,22 @@ export function HealthTimelineChart({
                                   width={width}
                                   height={h}
                                   fill={colors[key]}
+                                  fillOpacity={p.partial ? 0.6 : 1}
                                 />
                               ) : null
                             })}
+                            {p.partial && (
+                              <rect
+                                x={x}
+                                y={y}
+                                width={width}
+                                height={Math.max(2, height)}
+                                fill='none'
+                                stroke='var(--muted-foreground)'
+                                strokeDasharray='3 3'
+                                aria-hidden='true'
+                              />
+                            )}
                             <text
                               x={x + width / 2}
                               y={y - 10}
@@ -322,6 +372,12 @@ export function HealthTimelineChart({
                 </ResponsiveContainer>
               </div>
             </div>
+            {partial > 0 && (
+              <p className='mt-2 text-xs text-muted-foreground'>
+                Dashed columns show partial results. A lower partial count may
+                reflect missing analysis; it does not verify remediation.
+              </p>
+            )}
             <div className='mt-3 flex flex-wrap justify-between gap-2 text-xs text-muted-foreground'>
               <span>{data.length} scans · Oldest to newest</span>
               <span>{partial > 0 ? `${partial} partial assessments` : ''}</span>
@@ -378,6 +434,9 @@ export function HealthTimelineChart({
                                 `${severityName(key)}: ${p.bySeverity[key]}`
                             )
                             .join(' · ')}
+                        </span>
+                        <span className='mt-1 block text-muted-foreground'>
+                          {remediationText(p.remediation, locale)}
                         </span>
                       </span>
                     </button>

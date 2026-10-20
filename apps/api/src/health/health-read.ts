@@ -30,7 +30,7 @@ export async function healthSummaries(db: PrismaService, organizationId: string,
 }
 
 export async function healthTrend(db: PrismaService, organizationId: string, current: {id: string; report: HealthReport | null}, prior?: {id: string; report: HealthReport | null} | null) {
- if (!current.report || !prior?.report) return null
+ if (!current.report || !prior?.report || current.report.completeness !== 'COMPLETE' || prior.report.completeness !== 'COMPLETE') return null
  const scope = comparableFindingScope(current.report, prior.report)
  if (scope === null) return null
  const scopeFilter = scope.length ? Prisma.sql`AND f->>'checkId' IN (${Prisma.join(scope)})` : Prisma.empty

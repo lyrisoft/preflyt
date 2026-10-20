@@ -100,7 +100,7 @@ it('accepts only bounded duplication matches and removes them from other or secr
  for(const [secret,category] of [[true,'duplication'],[false,'security']] as const) expect(healthReceiptFindings(bytes.toString('base64'),hash,secret,category)![0]).not.toHaveProperty('relatedLocations')
 })
 
-it('compares fully retained measured rule packs without claiming complete engineering coverage',()=>{
+it('retains measured scope information but never credits partial scans with remediation',()=>{
  const finding=extract(sarif([result()]))![0]
  const check:any={ruleId:'security.sast',state:'FAIL',reason:'FINDINGS_REPORTED',coverage:'PARTIAL',cleanupConfirmed:true,
   summary:{results:1,suppressed:0},findings:[finding],reportHash:'a'.repeat(64),toolVersion:'1',configHash:'b'.repeat(64),
@@ -108,7 +108,7 @@ it('compares fully retained measured rule packs without claiming complete engine
  const make=(c:any)=>healthReport({complete:true,fileCount:3,languages:[]},[{id:c.ruleId,title:'SAST',state:'READY',reason:'READY'}],[c],'fixed-plan')
  const report=make(check),prior=make({...check,state:'PASS',summary:{results:0},findings:[]})
  expect(report.completeness).toBe('PARTIAL')
- expect(comparableHealthTrend(report,prior)).toEqual({introduced:1,noLongerReported:0,checkIds:['security.sast']})
+ expect(comparableHealthTrend(report,prior)).toBeNull()
  expect(healthTimeline(report,[{id:'previous',state:'COMPLETED',sourceSha:'a'.repeat(40),finishedAt:new Date(0),report:prior}])[0]).toMatchObject({findings:0,checkIds:['security.sast']})
  for(const patch of [{summary:{results:2}},{state:'INCOMPLETE'},{cleanupConfirmed:false},{fileAnalysis:{...check.fileAnalysis,skippedFiles:1,candidateFiles:2}},
   {fileAnalysis:undefined},{toolVersion:'2'},{configHash:'d'.repeat(64)},{fileAnalysis:{...check.fileAnalysis,pathsDigest:'d'.repeat(64)}}]) {
