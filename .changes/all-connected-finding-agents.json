@@ -1,0 +1,8 @@
+{
+  "type": "improvement",
+  "title": "Every connected MCP agent appears on findings",
+  "description": "Finding verification actions show every active MCP client, including DeepSeek Harness and custom clients. Codex and Claude retain supported desktop actions; other approved clients receive a named copy-task action. Agents without access to the current repository show Manage access. Disconnected and expired connections are excluded, duplicate connections are combined, and no repository permissions are granted automatically.",
+  "upgrade": "none",
+  "migrations": [],
+  "configuration": []
+}

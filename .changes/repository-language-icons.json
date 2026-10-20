@@ -1,0 +1,8 @@
+{
+  "type": "improvement",
+  "title": "Recognizable repository language icons",
+  "description": "Repository technology badges use CSS and HTML brand icons and dedicated SQL and Shell symbols instead of two-letter placeholders. Existing tooltips, accessible names and compact layouts are preserved.",
+  "upgrade": "none",
+  "migrations": [],
+  "configuration": []
+}

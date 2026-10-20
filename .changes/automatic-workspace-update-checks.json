@@ -1,0 +1,8 @@
+{
+  "type": "fix",
+  "title": "Update indicators refresh without opening release notes",
+  "description": "The workspace release query refreshes stale update information automatically on load, focus and its existing ten-minute polling interval. The version indicator can discover an available release without being clicked. Checks respect deployment automatic-update preferences, administrator permission, cached freshness and the shared server cooldown. Clicking the version still opens notes, and explicit manual checks remain available.",
+  "upgrade": "Recreate the web service. Existing deployment update preferences and server background checks are preserved.",
+  "migrations": [],
+  "configuration": []
+}

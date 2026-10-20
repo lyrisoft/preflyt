@@ -1,0 +1,8 @@
+{
+  "type": "fix",
+  "title": "Save finding code excerpts with assessed source",
+  "description": "Repository Health captures bounded, redacted finding excerpts from the exact verified scanner upload before publishing the report, including related locations and findings beyond the first 500. Opening a finding reads its saved excerpt instead of initiating another GitHub fetch. Existing context windows are reused; findings without saved code link to the full file on GitHub at the assessed commit. Report and snapshot persistence share a transaction and retain repository access checks.",
+  "upgrade": "Recreate matching API and worker services. New Health assessments save excerpts from assessed source; older findings without saved excerpts continue to link to GitHub.",
+  "migrations": [],
+  "configuration": []
+}

@@ -1,0 +1,8 @@
+{
+  "type": "fix",
+  "title": "Complete release descriptions and accurate image counts",
+  "description": "Release entries cover the AI provider fixes, saved source and recommendation behavior, DeepSeek setup, connected-agent actions, connection history, report exports, UI refinements and automatic update checks. Generated technical details calculate the number of published image packages instead of using the outdated five-image label.",
+  "upgrade": "none",
+  "migrations": [],
+  "configuration": []
+}

@@ -86,7 +86,30 @@ export function ReleasePanel() {
   const query = useQuery({
     queryKey,
     enabled: session.isSuccess,
-    queryFn: ({ signal }) => request<ReleaseStatus>('', undefined, signal),
+    queryFn: async ({ signal }) => {
+      const saved = await request<ReleaseStatus>('', undefined, signal)
+      const now = Date.now()
+      const stale =
+        !saved.checkedAt || now - Date.parse(saved.checkedAt) > 5 * 60 * 1000
+      const coolingDown =
+        !!saved.nextCheckAt && Date.parse(saved.nextCheckAt) > now
+      if (!saved.canCheck || !saved.enabled || !stale || coolingDown)
+        return saved
+      try {
+        return await request<ReleaseStatus>(
+          '/check',
+          { automatic: true },
+          signal
+        )
+      } catch (error) {
+        if (signal.aborted) throw error
+        return {
+          ...saved,
+          error:
+            'Automatic update check failed. Last saved release information is shown.',
+        }
+      }
+    },
     retry: false,
     refetchInterval: 10 * 60 * 1000,
   })
@@ -151,18 +174,7 @@ export function ReleasePanel() {
     if (!value) return
     setSelected('')
     setNow(Date.now())
-    // Opening the panel refreshes stale metadata only when automatic checks are enabled.
-    if (
-      data?.canCheck &&
-      data.enabled &&
-      (!data.nextCheckAt || Date.parse(data.nextCheckAt) <= Date.now()) &&
-      (!data.checkedAt ||
-        Date.now() - Date.parse(data.checkedAt) > 5 * 60 * 1000)
-    ) {
-      check.mutate(true)
-    } else {
-      void query.refetch()
-    }
+    void query.refetch()
   }
 
   return (
@@ -428,7 +440,7 @@ export function ReleasePanel() {
                 </summary>
                 <div className='mt-3 space-y-3'>
                   <label className='flex items-center justify-between gap-4'>
-                    <span>Check automatically every hour</span>
+                    <span>Check for updates automatically</span>
                     <Switch
                       checked={data.enabled}
                       disabled={preferences.isPending}
