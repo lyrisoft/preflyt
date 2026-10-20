@@ -1,4 +1,5 @@
 import type { PaymentRiskExport } from './payment-risk-export.js'
+import { healthRemediation } from './health-remediation.js'
 import { findingReviewId } from '../findings/finding-review.js'
 import { securityFindingsSummary } from './security-findings-summary.js'
 import { findingReferenceGuidance } from './finding-guidance.js'
@@ -185,7 +186,8 @@ export class RepositoryHealthService {
   const row=chosen?withReport(chosen):null
   const latestAttempt=latest?withReport(latest):null
   const history=historyRows.map(withReport)
-  const timeline=healthTimeline(row?.report??null,[...new Map([...timelineRows,...categoryRows].map(item=>[item.id,item])).values()].map(item=>withReport(item)))
+  const timelineRecords=[...new Map([...timelineRows,...categoryRows].map(item=>[item.id,item])).values()].map(item=>withReport(item))
+  const timeline=await healthRemediation(this.db,session.organizationId!,healthTimeline(row?.report??null,timelineRecords),timelineRecords)
   const [trend,hotspotFindings]=await Promise.all([
    row?healthTrend(this.db,session.organizationId!,row,priorRow?withReport(priorRow):null):null,
    row?healthHotspots(this.db,session.organizationId!,row.id):[],
