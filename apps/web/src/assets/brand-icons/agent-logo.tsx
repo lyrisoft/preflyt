@@ -1,4 +1,4 @@
-import { siClaude } from 'simple-icons'
+import { siClaude, siDeepseek } from 'simple-icons'
 
 // OpenAI mark: Simple Icons v14 (CC0), already used by Preflyt's provider selector.
 const openaiPath =
@@ -7,20 +7,22 @@ export function AgentLogo({
   agent,
   className = 'size-6',
 }: {
-  agent: 'codex' | 'claude'
+  agent: 'codex' | 'claude' | 'deepseek'
   className?: string
 }) {
+  const icon =
+    agent === 'deepseek' ? siDeepseek : agent === 'claude' ? siClaude : null
   return (
     <svg
       role='img'
-      aria-label={agent === 'codex' ? 'OpenAI logo' : 'Claude logo'}
+      aria-label={icon ? `${icon.title} logo` : 'OpenAI logo'}
       viewBox='0 0 24 24'
       focusable='false'
       className={`${className} shrink-0`}
       fill='currentColor'
-      style={agent === 'claude' ? { color: `#${siClaude.hex}` } : undefined}
+      style={icon ? { color: `#${icon.hex}` } : undefined}
     >
-      <path d={agent === 'codex' ? openaiPath : siClaude.path} />
+      <path d={icon?.path ?? openaiPath} />
     </svg>
   )
 }

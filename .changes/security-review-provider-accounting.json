@@ -1,0 +1,8 @@
+{
+  "type": "fix",
+  "title": "Accurate AI security review token accounting and failures",
+  "description": "Security reviews use native OpenAI Responses requests and supported protocols for Anthropic, Gemini, DeepSeek and local model endpoints. The broker reserves the bounded output requested and settles provider-reported usage instead of charging every call the maximum reservation. Explicit rejected requests release unused reservations; uncertain outcomes remain conservatively bounded. Access failures, rate limits, rejected requests and unavailable models have distinct reasons instead of being presented as token-limit exhaustion. Source-only restrictions and configured budgets remain enforced.",
+  "upgrade": "Recreate matching API and worker services. Interrupted reviews are not resumed; check the selected model connection and start a new review after active work has finished.",
+  "migrations": [],
+  "configuration": []
+}

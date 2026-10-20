@@ -11,7 +11,12 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { StatusBadge } from '@/components/status-badge'
 import { SurfaceIcon } from '@/components/surface-icon'
 import { useNavigationSession } from '@/features/workspace/navigation-session'
-import { mcpCall, useMcpConnections } from './hosted-mcp-api'
+import {
+  mcpCall,
+  useMcpConnections,
+  type McpConnection,
+} from './hosted-mcp-api'
+import { hostedMcpSetup, type McpClient } from './hosted-mcp-setup'
 
 type Consent = {
   id: string
@@ -24,7 +29,7 @@ type Consent = {
 export function HostedMcpIntegrations({ requestId }: { requestId?: string }) {
   const session = useNavigationSession(),
     connections = useMcpConnections(),
-    [agent, setAgent] = useState<'codex' | 'claude'>('codex'),
+    [agent, setAgent] = useState<McpClient>('codex'),
     [selected, setSelected] = useState<string[]>([]),
     [busy, setBusy] = useState(false),
     [error, setError] = useState<string | null>(null)
@@ -42,10 +47,12 @@ export function HostedMcpIntegrations({ requestId }: { requestId?: string }) {
     gcTime: 0,
   })
   const endpoint = `${new URL(API_BASE_URL, window.location.origin).href.replace(/\/$/, '')}/mcp`
-  const command =
-    agent === 'codex'
-      ? `codex mcp add preflyt --url ${endpoint}\ncodex mcp login preflyt`
-      : `claude mcp add --transport http --scope user preflyt ${endpoint}`
+  const setup = hostedMcpSetup(agent, endpoint)
+  const now = connections.dataUpdatedAt
+  const isActive = (c: McpConnection) =>
+    !c.revokedAt && new Date(c.expiresAt).getTime() > now
+  const activeConnections = connections.data?.filter(isActive) ?? []
+  const pastConnections = connections.data?.filter((c) => !isActive(c)) ?? []
   async function run(action: () => Promise<void>) {
     setBusy(true)
     setError(null)
@@ -75,6 +82,47 @@ export function HostedMcpIntegrations({ requestId }: { requestId?: string }) {
         )
       window.location.assign(target.href)
     })
+  }
+  function connectionRow(c: McpConnection) {
+    const active = isActive(c)
+    return (
+      <div
+        key={c.id}
+        className='flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4'
+      >
+        <div className='min-w-0'>
+          <div className='flex flex-wrap items-center gap-2'>
+            <p className='text-sm font-medium break-words'>{c.clientName}</p>
+            <StatusBadge tone='neutral'>
+              {c.revokedAt ? 'Disconnected' : active ? 'Connected' : 'Expired'}
+            </StatusBadge>
+          </div>
+          <p className='mt-1 text-xs text-muted-foreground'>
+            {c.repositories.length}{' '}
+            {active
+              ? `approved ${c.repositories.length === 1 ? 'repository' : 'repositories'}`
+              : `${c.repositories.length === 1 ? 'repository' : 'repositories'} previously approved`}{' '}
+            · Last used {new Date(c.lastUsedAt).toLocaleString()}
+          </p>
+        </div>
+        {!c.revokedAt && (
+          <Button
+            size='sm'
+            variant='destructive'
+            disabled={busy}
+            onClick={() =>
+              void run(async () => {
+                await mcpCall('/revoke', { id: c.id })
+                await connections.refetch()
+                toast.success('MCP connection disconnected.')
+              })
+            }
+          >
+            Disconnect agent
+          </Button>
+        )}
+      </div>
+    )
   }
   return (
     <section aria-label='Hosted MCP connection' className='space-y-5'>
@@ -177,11 +225,16 @@ export function HostedMcpIntegrations({ requestId }: { requestId?: string }) {
               </p>
             </div>
           </div>
-          <div className='grid gap-3 sm:grid-cols-2'>
+          <div className='grid gap-3 sm:grid-cols-3'>
             {(
               [
                 { id: 'codex', name: 'Codex', vendor: 'OpenAI' },
                 { id: 'claude', name: 'Claude Code', vendor: 'Anthropic' },
+                {
+                  id: 'deepseek',
+                  name: 'DeepSeek Harness',
+                  vendor: 'DeepSeek',
+                },
               ] as const
             ).map((a) => (
               <button
@@ -210,31 +263,70 @@ export function HostedMcpIntegrations({ requestId }: { requestId?: string }) {
               </button>
             ))}
           </div>
-          <div className='rounded-xl border'>
-            <div className='flex flex-wrap items-center justify-between gap-2 border-b px-4 py-2'>
-              <h3 className='text-sm font-medium'>One-time connection</h3>
-              <Button
-                size='sm'
-                variant='ghost'
-                disabled={busy}
-                onClick={() =>
-                  void run(async () => {
-                    await navigator.clipboard.writeText(command)
-                    toast.success('Connection command copied.')
-                  })
-                }
+          {agent === 'deepseek' && (
+            <ol className='list-decimal space-y-2 pl-5 text-sm text-muted-foreground'>
+              <li>Copy the install link below.</li>
+              <li>
+                In DeepSeek Harness, open{' '}
+                <strong className='font-medium text-foreground'>
+                  Plugins → Add plugin
+                </strong>
+                , paste the link, and choose{' '}
+                <strong className='font-medium text-foreground'>Install</strong>
+                , then{' '}
+                <strong className='font-medium text-foreground'>
+                  Enable now
+                </strong>
+                .
+              </li>
+              <li>
+                Approve repository access when Preflyt opens in your browser.
+              </li>
+            </ol>
+          )}
+          {setup.map((step) => (
+            <div key={step.title} className='min-w-0 rounded-xl border'>
+              <div className='flex flex-wrap items-center justify-between gap-2 border-b px-4 py-2'>
+                <h3 className='text-sm font-medium'>{step.title}</h3>
+                <Button
+                  size='sm'
+                  variant='ghost'
+                  disabled={busy}
+                  onClick={() =>
+                    void run(async () => {
+                      await navigator.clipboard.writeText(step.code)
+                      toast.success(
+                        agent === 'deepseek'
+                          ? 'DeepSeek install link copied.'
+                          : 'Connection command copied.'
+                      )
+                    })
+                  }
+                >
+                  <Copy />
+                  {step.copyLabel}
+                </Button>
+              </div>
+              <pre
+                className={cn(
+                  'p-4 text-xs',
+                  agent === 'deepseek'
+                    ? 'break-all whitespace-pre-wrap'
+                    : 'overflow-x-auto'
+                )}
               >
-                <Copy />
-                Copy command
-              </Button>
+                {step.code}
+              </pre>
             </div>
-            <pre className='overflow-x-auto p-4 text-xs'>{command}</pre>
-          </div>
+          ))}
           <p className='text-xs text-muted-foreground'>
-            {agent === 'claude'
-              ? 'Then run /mcp in Claude Code and choose Authenticate for Preflyt.'
-              : 'Your agent opens the Preflyt approval page.'}{' '}
-            Your agent stores and refreshes its credentials.
+            {agent === 'deepseek'
+              ? 'After connecting, copy a finding’s verification task into DeepSeek Harness. You can disconnect access below at any time.'
+              : agent === 'claude'
+                ? 'Then run /mcp in Claude Code and choose Authenticate for Preflyt.'
+                : 'Your agent opens the Preflyt approval page.'}
+            {agent !== 'deepseek' &&
+              ' Your agent stores and refreshes its credentials.'}
           </p>
           <div className='flex flex-wrap items-center gap-2 rounded-lg bg-muted/40 p-3'>
             <span className='text-xs font-medium'>Hosted MCP endpoint</span>
@@ -269,52 +361,22 @@ export function HostedMcpIntegrations({ requestId }: { requestId?: string }) {
               {connections.error.message}
             </p>
           )}
-          {connections.data?.length === 0 && (
+          {connections.data && activeConnections.length === 0 && (
             <p className='text-sm text-muted-foreground'>
-              No agents connected yet. Complete the one-time connection above.
+              No active agent connections. Connect an agent above.
             </p>
           )}
-          {connections.data?.map((c) => (
-            <div
-              key={c.id}
-              className='flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4'
-            >
-              <div className='min-w-0'>
-                <div className='flex flex-wrap items-center gap-2'>
-                  <p className='text-sm font-medium break-words'>
-                    {c.clientName}
-                  </p>
-                  <StatusBadge tone='neutral'>
-                    {c.revokedAt
-                      ? 'Disconnected'
-                      : new Date(c.expiresAt) <= new Date()
-                        ? 'Expired'
-                        : 'Connected'}
-                  </StatusBadge>
-                </div>
-                <p className='mt-1 text-xs text-muted-foreground'>
-                  {c.repositories.length} approved repositories · Last used{' '}
-                  {new Date(c.lastUsedAt).toLocaleString()}
-                </p>
+          {activeConnections.map(connectionRow)}
+          {pastConnections.length > 0 && (
+            <details className='rounded-lg border p-4'>
+              <summary className='cursor-pointer text-sm font-medium'>
+                Connection history ({pastConnections.length})
+              </summary>
+              <div className='mt-4 max-h-96 space-y-3 overflow-y-auto'>
+                {pastConnections.map(connectionRow)}
               </div>
-              {!c.revokedAt && (
-                <Button
-                  size='sm'
-                  variant='destructive'
-                  disabled={busy}
-                  onClick={() =>
-                    void run(async () => {
-                      await mcpCall('/revoke', { id: c.id })
-                      await connections.refetch()
-                      toast.success('MCP connection disconnected.')
-                    })
-                  }
-                >
-                  Disconnect agent
-                </Button>
-              )}
-            </div>
-          ))}
+            </details>
+          )}
         </CardContent>
       </Card>
       {error && (

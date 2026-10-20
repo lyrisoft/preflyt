@@ -1,0 +1,8 @@
+{
+  "type": "feature",
+  "title": "Payment Risk Review PDF and Markdown exports",
+  "description": "Download saved Payment Risk Reviews as PDF for reading or Markdown for prompting, replacing the JSON download button. Both formats retain all eight report sections, the exact assessed commit, source references, detailed reasoning, remediation, review limitations, current human decisions and original AI classifications. The PDF includes the supplied Preflyt logo, bundled fonts and page numbers. Downloads recheck repository access; internal JSON API consumers remain supported.",
+  "upgrade": "Recreate matching API and web services. API images must include the bundled logo and report fonts; the updated runtime image packages them automatically.",
+  "migrations": [],
+  "configuration": []
+}

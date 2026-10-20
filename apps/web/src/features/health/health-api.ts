@@ -504,6 +504,14 @@ export const healthReasons: Record<string, string> = {
   STRIX_RUNNER_STATE_LOST:
     'The runner lost this review. Start a new Strix review after checking the runner.',
   STRIX_REVIEW_PENDING: 'Strix security review is running.',
+  STRIX_MODEL_REQUEST_REJECTED:
+    'The model provider rejected the security review request before it could run.',
+  STRIX_MODEL_ACCESS_DENIED:
+    'The model provider denied access to the security review model.',
+  STRIX_MODEL_RATE_LIMITED:
+    'The model provider paused requests because its rate or account limit was reached.',
+  STRIX_MODEL_UNAVAILABLE:
+    'The security review model could not return a usable response.',
   STRIX_INPUT_LIMIT_REACHED:
     'The AI security review reached its input-token limit before it could finish.',
   STRIX_OUTPUT_LIMIT_REACHED:
@@ -615,6 +623,14 @@ export const healthReasons: Record<string, string> = {
 /** Fixed user-facing failure descriptions; never expose provider exception text. */
 export function healthFailure(reason: string | null, canRetry = true) {
   const actions: Record<string, string> = {
+    STRIX_MODEL_REQUEST_REJECTED:
+      'Ask your administrator to check the selected model and update Preflyt if needed, then start a new review. Raising the review token limit will not fix a rejected request.',
+    STRIX_MODEL_ACCESS_DENIED:
+      'An organization administrator can check the model connection, API key and model access in AI Intelligence. Test the connection before starting a new review.',
+    STRIX_MODEL_RATE_LIMITED:
+      'Check the model provider’s rate limits, account balance and quota. Wait until requests are available, then start a new review.',
+    STRIX_MODEL_UNAVAILABLE:
+      'Check the model connection and provider availability, then start a new review. The interrupted review will not restart automatically.',
     STRIX_INPUT_LIMIT_REACHED:
       'An organization administrator can raise the input-token limit in AI Intelligence → Security review limits. Then start a new review.',
     STRIX_OUTPUT_LIMIT_REACHED:

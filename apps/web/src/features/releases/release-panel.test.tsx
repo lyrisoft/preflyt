@@ -51,6 +51,10 @@ beforeEach(() => {
             { message: 'Service unavailable' },
             { status: 503 }
           )
+        if (url.endsWith('/check')) {
+          state = { ...state, checkedAt: new Date().toISOString() }
+          return Response.json(state)
+        }
         if (url.endsWith('/read')) {
           state = { ...state, unread: false }
           return Response.json({ read: true })
@@ -63,18 +67,13 @@ beforeEach(() => {
       })
   )
 })
-async function mount() {
+async function mount(
+  client = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  })
+) {
   return render(
-    <QueryClientProvider
-      client={
-        new QueryClient({
-          defaultOptions: {
-            queries: { retry: false },
-            mutations: { retry: false },
-          },
-        })
-      }
-    >
+    <QueryClientProvider client={client}>
       <ReleasePanel />
     </QueryClientProvider>
   )
@@ -115,7 +114,12 @@ it('shows installed version, opens notes, marks them read and preserves the upgr
   await expect.element(page.getByRole('dialog')).not.toBeInTheDocument()
 })
 it('limits upgrade notices and deployment preferences while allowing release notes for readers', async () => {
-  state = { ...state, canCheck: false, canConfigure: false }
+  state = {
+    ...state,
+    canCheck: false,
+    canConfigure: false,
+    checkedAt: new Date(0).toISOString(),
+  }
   await mount()
   await page
     .getByRole('button', { name: "What's new — v0.1.2 — Update available" })
@@ -144,7 +148,7 @@ it('supports manual checks and deployment preferences', async () => {
     .toBe(true)
   await page.getByText('Update preferences', { exact: true }).click()
   await page
-    .getByRole('switch', { name: 'Check automatically every hour' })
+    .getByRole('switch', { name: 'Check for updates automatically' })
     .click()
   await expect
     .poll(() =>
@@ -222,15 +226,12 @@ it('renders release notes at 320px and desktop in both themes', async () => {
   await page.viewport(1280, 800)
 })
 
-it('refreshes stale release information on open and selects the newly published release', async () => {
+it('checks stale release information at workspace startup without opening the panel', async () => {
   state = {
     ...state,
     checkedAt: new Date(Date.now() - 6 * 60 * 1000).toISOString(),
   }
   await mount()
-  await page
-    .getByRole('button', { name: "What's new — v0.1.2 — Update available" })
-    .click()
   await expect
     .poll(
       () => fetched.mock.calls.filter(([url]) => url.endsWith('/check')).length
@@ -238,6 +239,50 @@ it('refreshes stale release information on open and selects the newly published 
     .toBe(1)
   const call = fetched.mock.calls.find(([url]) => url.endsWith('/check'))!
   expect(JSON.parse(call[1]!.body as string)).toEqual({ automatic: true })
+})
+
+it('refreshes stale metadata during background query polling without opening the panel', async () => {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  })
+  await mount(client)
+  await expect
+    .element(
+      page.getByRole('button', {
+        name: "What's new — v0.1.2 — Update available",
+      })
+    )
+    .toBeVisible()
+  expect(fetched.mock.calls.some(([url]) => url.endsWith('/check'))).toBe(false)
+  state = { ...state, checkedAt: new Date(0).toISOString() }
+  await client.refetchQueries({ queryKey: ['releases', 'owner'] })
+  expect(
+    fetched.mock.calls.filter(([url]) => url.endsWith('/check'))
+  ).toHaveLength(1)
+  await expect.element(page.getByRole('dialog')).not.toBeInTheDocument()
+})
+it('keeps saved update information when the automatic check endpoint fails', async () => {
+  state = { ...state, checkedAt: new Date(0).toISOString() }
+  const fetchSaved = fetched.getMockImplementation()!
+  fetched.mockImplementation(async (url: string, init?: RequestInit) =>
+    url.endsWith('/check')
+      ? Response.json({ message: 'Unavailable' }, { status: 503 })
+      : fetchSaved(url, init)
+  )
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  })
+  await mount(client)
+  await expect
+    .element(
+      page.getByRole('button', {
+        name: "What's new — v0.1.2 — Update available",
+      })
+    )
+    .toBeVisible()
+  expect(
+    client.getQueryData<ReleaseStatus>(['releases', 'owner'])?.error
+  ).toContain('Last saved release information')
 })
 
 it('does not check GitHub automatically or manually during the shared cooldown', async () => {

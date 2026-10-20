@@ -1,11 +1,14 @@
+import { Database, Terminal, type LucideIcon } from 'lucide-react'
 import {
   siAngular,
   siC,
   siCplusplus,
+  siCss,
   siDotnet,
   siExpress,
   siFastify,
   siGo,
+  siHtml5,
   siJavascript,
   siKotlin,
   siNestjs,
@@ -38,6 +41,8 @@ const icons: Record<string, SimpleIcon> = {
   YAML: siYaml,
   TypeScript: siTypescript,
   JavaScript: siJavascript,
+  CSS: siCss,
+  HTML: siHtml5,
   Python: siPython,
   Go: siGo,
   Rust: siRust,
@@ -60,6 +65,11 @@ const icons: Record<string, SimpleIcon> = {
   Svelte: siSvelte,
 }
 
+const languageIcons: Record<string, LucideIcon> = {
+  SQL: Database,
+  Shell: Terminal,
+}
+
 /** Near-black brand marks would vanish in dark mode; they follow the text color. */
 function isNearBlack(hex: string) {
   const [r, g, b] = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16))
@@ -74,6 +84,7 @@ export function TechIcon({
   compact?: boolean
 }) {
   const icon = icons[name]
+  const LanguageIcon = languageIcons[name]
   const brand = icon && !isNearBlack(icon.hex) ? `#${icon.hex}` : undefined
   return (
     <Tooltip>
@@ -100,6 +111,11 @@ export function TechIcon({
             >
               <path d={icon.path} />
             </svg>
+          ) : LanguageIcon ? (
+            <LanguageIcon
+              aria-hidden='true'
+              className={compact ? 'size-3.5' : 'size-[18px]'}
+            />
           ) : (
             <span className='text-[11px] font-semibold'>
               {name.slice(0, 2)}

@@ -45,5 +45,5 @@ export function renderReleaseNotes({ notes, version, sha, repository, previousVe
   const changelog = previousVersion
     ? `[Full changelog](https://github.com/${repository}/compare/${previousVersion}...${version})`
     : `[Source code](https://github.com/${repository}/tree/${version})`;
-  return `${validateReleaseNotes(notes, version)}\n\n## Technical details\n\nAll five application images are available for **linux/amd64** and **linux/arm64**:\n\n${imageList}\n\nSource commit: [\`${sha.slice(0, 12)}\`](https://github.com/${repository}/commit/${sha}). The same images are also tagged \`sha-${sha}\`.\n\n${changelog}\n\n<!-- preflyt-release-ready:v1 sha=${sha} -->\n`;
+  return `${validateReleaseNotes(notes, version)}\n\n## Technical details\n\nAll ${Object.keys(images).length} application images are available for **linux/amd64** and **linux/arm64**:\n\n${imageList}\n\nSource commit: [\`${sha.slice(0, 12)}\`](https://github.com/${repository}/commit/${sha}). The same images are also tagged \`sha-${sha}\`.\n\n${changelog}\n\n<!-- preflyt-release-ready:v1 sha=${sha} -->\n`;
 }

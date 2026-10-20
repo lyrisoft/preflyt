@@ -14,7 +14,7 @@ import { RepositoryHealthService } from "../src/health/repository-health.service
 import { HealthStrixService } from "../src/health/strix.service.js";
 import { FindingsService } from "../src/findings/findings.service.js";
 import { FindingSourceStore } from "../src/findings/finding-source-store.service.js";
-import { endpointDigest } from "../src/intelligence/ai-configuration.js";
+import { endpointDigest, aiCredentialEndpointDigest, aiProviderPresets } from "../src/intelligence/ai-configuration.js";
 import { StrixRunnerBusyError } from "../src/health/strix-client.js";
 import { queueFindingSources } from "../src/findings/finding-source-store.js";
 vi.mock("../src/findings/finding-source-store.js", async (original) => ({
@@ -187,7 +187,7 @@ beforeEach(async () => {
     new HealthStrixService(db, access, github, client),
   );
 });
-it("snapshots configured limits for new scans and stops exhausted scans after confirmed cleanup", async () => {
+it.each(['STRIX_INPUT_LIMIT_REACHED','STRIX_MODEL_REQUEST_REJECTED'])("snapshots configured limits and saves %s only after confirmed cleanup", async (failureCode) => {
   await fixture.prisma.aiVaptSettings.create({
     data: {
       organizationId: owner.organizationId,
@@ -223,7 +223,7 @@ it("snapshots configured limits for new scans and stops exhausted scans after co
   ).toBe(9000000);
   await fixture.prisma.repositoryHealthStrixRun.update({
     where: { assessmentId: queued.id },
-    data: { failureCode: "STRIX_INPUT_LIMIT_REACHED" },
+    data: { failureCode },
   });
   client.cancel.mockResolvedValueOnce({ cleanupConfirmed: false });
   await fixture.prisma.repositoryHealthAssessment.update({
@@ -249,11 +249,11 @@ it("snapshots configured limits for new scans and stops exhausted scans after co
     });
   expect(stopped).toMatchObject({
     state: "FAILED",
-    reason: "STRIX_INPUT_LIMIT_REACHED",
+    reason: failureCode,
   });
   expect(stopped.finishedAt).toBeTruthy();
   expect(stopped.report).toMatchObject({
-    analyses: [{ state: "INCOMPLETE", reason: "STRIX_INPUT_LIMIT_REACHED" }],
+    analyses: [{ state: "INCOMPLETE", reason: failureCode }],
   });
   expect(client.cancel).toHaveBeenCalledTimes(2);
   expect(
@@ -263,6 +263,14 @@ it("snapshots configured limits for new scans and stops exhausted scans after co
       })
     ).finishedAt,
   ).toBeTruthy();
+});
+it.each(['openai','anthropic','gemini','deepseek'])('selects the native %s model protocol without changing the configured model',async(preset)=>{
+  const db=fixture.prisma,provider=await db.aiProviderConnection.findFirstOrThrow({where:{organizationId:owner.organizationId}});
+  const endpoint={...(provider.endpoint as any),preset,baseUrl:aiProviderPresets.find(p=>p.id===preset)!.baseUrl,locality:'hosted',requiresKey:true};
+  await db.aiProviderConnection.update({where:{id:provider.id},data:{endpoint,encryptedCredential:'encrypted-fixture',credentialEndpointDigest:aiCredentialEndpointDigest(endpoint),testedEndpointDigest:endpointDigest(endpoint)}});
+  const queued=await service.start(owner,'51',{requestKey:randomUUID(),scanner:'strix'});
+  await service.process(queued.id);
+  expect(client.admit).toHaveBeenCalledWith(expect.objectContaining({apiType:preset==='openai'?'responses':'chat_completions',model:(preset==='anthropic'?'anthropic':preset==='gemini'?'gemini':'openai')+'/fixture-model'}));
 });
 it("runs a revision-bound Strix scan from Health without CI, standards or native-scanner evidence", async () => {
   const queued = await service.start(owner, "51", {

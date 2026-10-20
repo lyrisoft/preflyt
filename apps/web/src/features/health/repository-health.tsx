@@ -365,11 +365,12 @@ export function RepositoryHealth({
     : []
   const aiStatus =
     aiReview && aiReview.state !== 'COMPLETED' ? (
-      <div
-        className='flex flex-col items-stretch gap-3 rounded-lg border p-3'
-        aria-label='Strix review status'
+      <Card
+        className='gap-3 p-4 sm:flex-row sm:items-center'
+        role='region'
+        aria-label='AI security review status'
       >
-        <div className='flex min-w-0 items-start gap-2'>
+        <div className='flex min-w-0 flex-1 items-start gap-3'>
           {['QUEUED', 'RUNNING'].includes(aiReview.state) ? (
             <AiLoadingIcon />
           ) : (
@@ -439,7 +440,7 @@ export function RepositoryHealth({
             Cancel AI security review
           </Button>
         )}
-      </div>
+      </Card>
     ) : null
   return (
     <div className='space-y-5'>
@@ -894,6 +895,7 @@ export function RepositoryHealth({
               View standard checks
             </Button>
           )}
+          {report && !active && aiStatus}
           {report && !active && (
             <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5'>
               {metrics.map((metric) => (
@@ -955,9 +957,6 @@ export function RepositoryHealth({
                       </p>
                     </CardContent>
                   </Link>
-                  {metric.category === 'security' && aiStatus && (
-                    <div className='px-4 pb-4'>{aiStatus}</div>
-                  )}
                 </Card>
               ))}
               <BranchCoverageCard

@@ -1,10 +1,11 @@
-import { Body, Controller, Get, Header, Inject, Param, Post, Query, Req, UseGuards, ValidationPipe } from '@nestjs/common'
+import { BadRequestException, Body, Controller, Get, Header, Inject, Param, Post, Query, Req, StreamableFile, UseGuards, ValidationPipe } from '@nestjs/common'
 import { IsBoolean, IsIn, IsInt, Min, Max, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator'
 import type { Request } from 'express'
 import { SessionGuard, type AuthenticatedSession } from '../auth/session.guard.js'
 import { AuthService } from '../auth/auth.service.js'
 import { RepositoryHealthService } from './repository-health.service.js'
 import type { HealthCategory } from './health-categories.js'
+import { paymentRiskMarkdown, paymentRiskPdf } from './payment-risk-export.js'
 type SessionRequest = Request & { preflytSession?: AuthenticatedSession }
 class HealthRequest {
  @IsOptional() @IsString() @MaxLength(244) branch?: string
@@ -37,7 +38,13 @@ export class RepositoryHealthController {
  @Post('repositories/:repositoryId/health/:id/cancel')
  cancel(@Req() req: SessionRequest, @Param('repositoryId') repo: string, @Param('id') id: string) { this.auth.assertOrigin(req.headers.origin); return this.health.cancel(req.preflytSession!,repo,id) }
  @Get('repositories/:repositoryId/health/:id/payment-risk-report') @Header('Cache-Control','no-store')
- paymentRiskReport(@Req() req:SessionRequest,@Param('repositoryId') repo:string,@Param('id') id:string) {return this.health.paymentRiskReport(req.preflytSession!,repo,id)}
+ async paymentRiskReport(@Req() req:SessionRequest,@Param('repositoryId') repo:string,@Param('id') id:string,@Query('format') format?:string) {
+  if(format!==undefined && !['md','pdf'].includes(format)) throw new BadRequestException('Choose Markdown or PDF')
+  const data=await this.health.paymentRiskReport(req.preflytSession!,repo,id)
+  if(!format)return data
+  const body=format==='md' ? Buffer.from(paymentRiskMarkdown(data),'utf8') : await paymentRiskPdf(data)
+  return new StreamableFile(body,{type:format==='md'?'text/markdown; charset=utf-8':'application/pdf',disposition:`attachment; filename="payment-risk-${id}.${format}"`})
+ }
  @Get('repositories/:repositoryId/health/:id/findings') @Header('Cache-Control','no-store')
  findings(@Req() req:SessionRequest,@Param('repositoryId') repo:string,@Param('id') id:string,@Query() query:{page?:string;pageSize?:string;q?:string;severity?:string;reports?:string}) {return this.health.findings(req.preflytSession!,repo,id,query)}
  @Get('repositories/:repositoryId/health/:id/hotspots/:fingerprint/review') @Header('Cache-Control','no-store')

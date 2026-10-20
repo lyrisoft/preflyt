@@ -102,6 +102,7 @@ test('curated notes lead with user changes and retain verified build details and
   assert.ok(body.indexOf('## Technical details') > body.indexOf('## Upgrade notes'));
   for (const image of Object.keys(images)) assert.ok(body.includes(`ghcr.io/lyrisoft/${image}:v0.1.10`));
   assert.ok(body.includes('linux/amd64') && body.includes('linux/arm64'));
+  assert.ok(body.includes(`All ${Object.keys(images).length} application images`));
   assert.match(body, /compare\/v0\.1\.9\.\.\.v0\.1\.10/);
   assert.equal(body.match(/preflyt-release-ready:v1/g).length, 1);
 });

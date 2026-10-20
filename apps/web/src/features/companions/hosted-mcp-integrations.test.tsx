@@ -2,9 +2,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import '@/styles/index.css'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { cleanup, render } from 'vitest-browser-react'
-import { page } from 'vitest/browser'
+import { page, userEvent } from 'vitest/browser'
+import { API_BASE_URL } from '@/lib/api'
 import { CompanionIntegrations } from './companion-integrations'
+import type { McpConnection } from './hosted-mcp-api'
 import { HostedMcpIntegrations } from './hosted-mcp-integrations'
+import { hostedMcpSetup } from './hosted-mcp-setup'
 
 vi.mock('@/features/workspace/navigation-session', () => ({
   useNavigationSession: () => ({
@@ -15,10 +18,34 @@ vi.mock('sonner', () => ({ toast: { success: vi.fn() } }))
 let fetchMock: ReturnType<typeof vi.fn>,
   clipboard: ReturnType<typeof vi.spyOn>,
   denied = false,
-  revoked = false
+  revoked = false,
+  hasActiveConnection = true,
+  connectionHistory: McpConnection[] = []
+const historyFixtures: McpConnection[] = [
+  {
+    id: 'old-deepseek',
+    clientName: 'Old DeepSeek connection',
+    repositories: ['120'],
+    scopes: 'findings:read findings:review',
+    expiresAt: '2099-01-01',
+    revokedAt: '2026-10-19',
+    lastUsedAt: '2026-10-19',
+  },
+  {
+    id: 'expired',
+    clientName: 'Expired agent connection',
+    repositories: ['120'],
+    scopes: 'findings:read',
+    expiresAt: '2020-01-01',
+    revokedAt: null,
+    lastUsedAt: '2020-01-01',
+  },
+]
 beforeEach(() => {
   denied = false
   revoked = false
+  hasActiveConnection = true
+  connectionHistory = []
   clipboard = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue()
   fetchMock = vi.fn(async (url: string) => {
     if (denied)
@@ -38,15 +65,20 @@ beforeEach(() => {
     }
     if (url.endsWith('/mcp-connections'))
       return Response.json([
-        {
-          id: 'connection',
-          clientName: 'Native MCP client',
-          repositories: ['120'],
-          scopes: 'findings:read findings:review',
-          expiresAt: '2099-01-01',
-          revokedAt: revoked ? '2026-10-19' : null,
-          lastUsedAt: '2026-10-19',
-        },
+        ...(hasActiveConnection
+          ? [
+              {
+                id: 'connection',
+                clientName: 'Native MCP client',
+                repositories: ['120'],
+                scopes: 'findings:read findings:review',
+                expiresAt: '2099-01-01',
+                revokedAt: revoked ? '2026-10-19' : null,
+                lastUsedAt: '2026-10-19',
+              },
+            ]
+          : []),
+        ...connectionHistory,
       ])
     return Response.json([])
   })
@@ -84,6 +116,9 @@ it('makes the hosted endpoint default and keeps the companion collapsed', async 
     .element(view.getByRole('img', { name: 'Claude logo' }))
     .toBeVisible()
   await expect
+    .element(view.getByRole('img', { name: 'DeepSeek logo' }))
+    .toBeVisible()
+  await expect
     .element(view.getByRole('link', { name: 'Download companion' }))
     .not.toBeInTheDocument()
   expect(view.container.textContent).not.toContain('PREFLYT_FINDING_TOKEN')
@@ -94,6 +129,49 @@ it('makes the hosted endpoint default and keeps the companion collapsed', async 
       })
     )
     .toBeVisible()
+})
+it('offers one DeepSeek install link with browser approval and no configuration editing', async () => {
+  const view = await mount(<HostedMcpIntegrations />)
+  await view
+    .getByRole('button', { name: 'DeepSeek Harness', exact: true })
+    .click()
+  await expect
+    .element(
+      view.getByRole('button', { name: 'DeepSeek Harness', exact: true })
+    )
+    .toHaveAttribute('aria-pressed', 'true')
+  const endpoint = `${new URL(API_BASE_URL, window.location.origin).href.replace(/\/$/, '')}/mcp`
+  const setup = hostedMcpSetup('deepseek', endpoint)
+  for (const step of setup) {
+    await view
+      .getByRole('button', { name: step.copyLabel, exact: true })
+      .click()
+  }
+  expect(clipboard.mock.calls.map(([value]: [string]) => value)).toEqual(
+    setup.map((s) => s.code)
+  )
+  expect(setup).toHaveLength(1)
+  expect(setup[0].code).toBe(
+    endpoint.replace(
+      /\/mcp$/,
+      '/mcp-setup/deepseek/preflyt-connector-1.0.0.tgz'
+    )
+  )
+  expect(view.container.textContent).not.toMatch(
+    /dsh plugin|npx|\.yml|transport:|Bearer|TOKEN/
+  )
+  await expect
+    .element(
+      view.getByText(
+        /Approve repository access when Preflyt opens in your browser/
+      )
+    )
+    .toBeVisible()
+  expect(
+    fetchMock.mock.calls.some(
+      ([url]) => url.endsWith('/approve') || url.endsWith('/register')
+    )
+  ).toBe(false)
 })
 it('copies native connection commands without private tokens or a downloaded script', async () => {
   const view = await mount(<HostedMcpIntegrations />)
@@ -133,8 +211,70 @@ it('disconnects a hosted connection and displays the result', async () => {
     .getByRole('button', { name: 'Disconnect agent', exact: true })
     .click()
   await expect
+    .element(
+      view.getByText('No active agent connections. Connect an agent above.')
+    )
+    .toBeVisible()
+  await expect
+    .element(view.getByText('Disconnected', { exact: true }))
+    .not.toBeVisible()
+  await view.getByText('Connection history (1)', { exact: true }).click()
+  await expect
     .element(view.getByText('Disconnected', { exact: true }))
     .toBeVisible()
+})
+it('keeps active connections visible and collapses disconnected and expired history', async () => {
+  connectionHistory = historyFixtures
+  const view = await mount(<HostedMcpIntegrations />)
+  await expect
+    .element(view.getByText('Native MCP client', { exact: true }))
+    .toBeVisible()
+  await expect
+    .element(view.getByText('Old DeepSeek connection', { exact: true }))
+    .not.toBeVisible()
+  await expect
+    .element(view.getByText('Expired agent connection', { exact: true }))
+    .not.toBeVisible()
+  const history = view.getByText('Connection history (2)', { exact: true })
+  await history.click()
+  await expect
+    .element(view.getByText('Old DeepSeek connection', { exact: true }))
+    .toBeVisible()
+  await expect.element(view.getByText('Expired', { exact: true })).toBeVisible()
+  await expect
+    .element(view.getByText('Disconnected', { exact: true }))
+    .toBeVisible()
+  await userEvent.keyboard('{Enter}')
+  await expect
+    .element(view.getByText('Old DeepSeek connection', { exact: true }))
+    .not.toBeVisible()
+  await expect
+    .element(view.getByText('Native MCP client', { exact: true }))
+    .toBeVisible()
+})
+it('keeps history available when there are no active connections', async () => {
+  hasActiveConnection = false
+  connectionHistory = historyFixtures
+  const view = await mount(<HostedMcpIntegrations />)
+  await expect
+    .element(
+      view.getByText('No active agent connections. Connect an agent above.')
+    )
+    .toBeVisible()
+  await view.getByText('Connection history (2)', { exact: true }).click()
+  await expect
+    .element(view.getByText('Old DeepSeek connection', { exact: true }))
+    .toBeVisible()
+})
+it('omits the history section when there are no past connections', async () => {
+  hasActiveConnection = false
+  const view = await mount(<HostedMcpIntegrations />)
+  await expect
+    .element(
+      view.getByText('No active agent connections. Connect an agent above.')
+    )
+    .toBeVisible()
+  expect(view.container.querySelector('details')).toBeNull()
 })
 it('shows a permission error without suggesting success', async () => {
   denied = true
@@ -150,11 +290,26 @@ for (const theme of ['light', 'dark'])
   it(`fits hosted setup at 320px in ${theme}`, async () => {
     await page.viewport(320, 900)
     document.documentElement.classList.toggle('dark', theme === 'dark')
+    connectionHistory = historyFixtures
     const view = await mount(<HostedMcpIntegrations />)
     await expect
       .element(
         view.getByRole('heading', { name: 'Connect your agent', exact: true })
       )
+      .toBeVisible()
+    expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(320)
+    await view
+      .getByRole('button', { name: 'DeepSeek Harness', exact: true })
+      .click()
+    await expect
+      .element(
+        view.getByRole('button', { name: 'Copy install link', exact: true })
+      )
+      .toBeVisible()
+    expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(320)
+    await view.getByText('Connection history (2)', { exact: true }).click()
+    await expect
+      .element(view.getByText('Old DeepSeek connection', { exact: true }))
       .toBeVisible()
     expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(320)
   })

@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { FileSearch, Download } from 'lucide-react'
+import { toast } from 'sonner'
+import { API_BASE_URL } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { StatusBadge } from '@/components/status-badge'
 import { SurfaceIcon } from '@/components/surface-icon'
@@ -73,6 +75,7 @@ export function PaymentRiskReport({
   embedded?: boolean
 }) {
   const [open, setOpen] = useState(embedded)
+  const [downloading, setDownloading] = useState<'md' | 'pdf' | null>(null)
   const query = useQuery({
     queryKey: ['payment-risk-report', scopeKey, repositoryId, assessmentId],
     queryFn: ({ signal }) =>
@@ -138,18 +141,42 @@ export function PaymentRiskReport({
       </div>
     </details>
   )
-  const download = () => {
-    if (!report) return
-    const blob = new Blob(
-      [JSON.stringify({ assessmentId, ...query.data }, null, 2)],
-      { type: 'application/json' }
-    )
-    const url = URL.createObjectURL(blob),
-      anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = `payment-risk-${assessmentId}.json`
-    anchor.click()
-    URL.revokeObjectURL(url)
+  const download = async (format: 'md' | 'pdf') => {
+    if (!report || downloading) return
+    setDownloading(format)
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/github/repositories/${encodeURIComponent(repositoryId)}/health/${encodeURIComponent(assessmentId)}/payment-risk-report?format=${format}`,
+        {
+          credentials: 'include',
+          cache: 'no-store',
+        }
+      )
+      if (!response.ok)
+        throw new Error(
+          response.status === 403
+            ? 'Repository access is unavailable or you do not have permission.'
+            : 'The report could not be downloaded. Try again.'
+        )
+      const expected = format === 'pdf' ? 'application/pdf' : 'text/markdown'
+      if (!response.headers.get('content-type')?.startsWith(expected))
+        throw new Error('The report format was not received. Try again.')
+      const url = URL.createObjectURL(await response.blob()),
+        anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = `payment-risk-${assessmentId}.${format}`
+      anchor.click()
+      // Keep the URL alive until the browser has started the download.
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : 'The report could not be downloaded. Try again.'
+      )
+    } finally {
+      setDownloading(null)
+    }
   }
   return (
     <section
@@ -205,10 +232,28 @@ export function PaymentRiskReport({
                 <p className='font-mono text-xs text-muted-foreground'>
                   {query.data?.branch} · {query.data?.sourceSha.slice(0, 12)}
                 </p>
-                <Button variant='outline' size='sm' onClick={download}>
-                  <Download />
-                  Download report
-                </Button>
+                <div className='flex flex-wrap gap-2'>
+                  <Button
+                    variant='outline'
+                    size='sm'
+                    disabled={!!downloading}
+                    onClick={() => void download('pdf')}
+                  >
+                    <Download />
+                    {downloading === 'pdf' ? 'Preparing PDF…' : 'Download PDF'}
+                  </Button>
+                  <Button
+                    variant='outline'
+                    size='sm'
+                    disabled={!!downloading}
+                    onClick={() => void download('md')}
+                  >
+                    <Download />
+                    {downloading === 'md'
+                      ? 'Preparing Markdown…'
+                      : 'Download Markdown'}
+                  </Button>
+                </div>
               </div>
               <div className='border-t px-5 py-4'>
                 <h4 className='text-sm font-semibold'>1. Executive summary</h4>

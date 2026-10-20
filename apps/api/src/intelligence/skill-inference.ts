@@ -272,12 +272,13 @@ export function providerUsage(
     const counts = values.map(count);
     return counts.includes(null) ? null : count(counts.reduce<number>((sum, value) => sum + (value ?? 0), 0));
   };
+  const responses = preset === 'openai' && value.object === 'response';
   const inputTokens = count(
     preset === "anthropic"
       ? sumCounts([value.usage?.input_tokens, value.usage?.cache_read_input_tokens ?? 0, value.usage?.cache_creation_input_tokens ?? 0])
       : preset === "gemini"
         ? value.usageMetadata?.promptTokenCount
-        : value.usage?.prompt_tokens,
+        : responses ? value.usage?.input_tokens : value.usage?.prompt_tokens,
   );
   const candidates = count(value.usageMetadata?.candidatesTokenCount);
   const thoughts = count(value.usageMetadata?.thoughtsTokenCount ?? 0);
@@ -289,14 +290,14 @@ export function providerUsage(
       : count(
           preset === "anthropic"
             ? value.usage?.output_tokens
-            : value.usage?.completion_tokens,
+            : responses ? value.usage?.output_tokens : value.usage?.completion_tokens,
         );
   const cachedTokens = count(
     preset === "anthropic"
       ? (value.usage?.cache_read_input_tokens ?? 0)
       : preset === "gemini"
         ? (value.usageMetadata?.cachedContentTokenCount ?? 0)
-        : (value.usage?.prompt_tokens_details?.cached_tokens ?? value.usage?.prompt_cache_hit_tokens ?? 0),
+        : responses ? (value.usage?.input_tokens_details?.cached_tokens ?? 0) : (value.usage?.prompt_tokens_details?.cached_tokens ?? value.usage?.prompt_cache_hit_tokens ?? 0),
   );
   return {
     inputTokens,
