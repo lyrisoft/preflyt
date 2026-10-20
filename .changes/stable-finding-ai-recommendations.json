@@ -1,0 +1,8 @@
+{
+  "type": "fix",
+  "title": "Reliable saved AI recommendations",
+  "description": "Completed recommendations remain readable for the same finding and assessed commit when model routes change or source/model services are unavailable. Health guidance resolves the exact saved finding rather than a summary-only report. Structured response schemas and clearer failure explanations distinguish unavailable code, invalid responses and truncated recommendations while retaining saved rule guidance.",
+  "upgrade": "Recreate matching API, worker and web services. Existing successful recommendations are reused when their finding and assessed-commit identity matches.",
+  "migrations": [],
+  "configuration": []
+}

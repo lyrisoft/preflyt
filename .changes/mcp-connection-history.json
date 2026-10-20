@@ -1,0 +1,8 @@
+{
+  "type": "improvement",
+  "title": "Less clutter from disconnected agents",
+  "description": "Integrations shows active agent connections first and moves disconnected or expired connections into collapsed, scrollable Connection history. Disconnecting updates the list after revocation succeeds. Historical grants and saved review evidence remain available; records are not deleted and access is not broadened.",
+  "upgrade": "none",
+  "migrations": [],
+  "configuration": []
+}

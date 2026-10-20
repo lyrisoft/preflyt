@@ -27,6 +27,7 @@ type GuidanceResponse = {
   model: string | null
   finishedAt: string | null
   failure?: string | null
+  reason?: string
 }
 
 async function request(scope: FindingAiScope, retry = false) {
@@ -111,6 +112,13 @@ export function useFindingAiGuidance(scope: FindingAiScope | null) {
     retryGeneration: () => mutate(query.data?.state === 'FAILED'),
     isGenerating: mutation.isPending,
     generationFailed: mutation.isError || query.isError,
+    reason:
+      query.data?.reason ??
+      (query.data?.failure === 'INVALID_RESPONSE'
+        ? 'The model did not return a valid recommendation. Showing saved rule guidance.'
+        : query.data?.failure === 'TRUNCATED'
+          ? 'The model response was cut off. Showing saved rule guidance.'
+          : undefined),
     isPreparing:
       !mutation.isError &&
       !query.isError &&

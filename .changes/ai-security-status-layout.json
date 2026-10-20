@@ -1,0 +1,8 @@
+{
+  "type": "improvement",
+  "title": "AI security review status has its own section",
+  "description": "Pending and failed AI review status appears in a separate section above repository summary cards rather than expanding the Security card. Existing report and cancellation actions remain available. Model failure messages explain the actual problem and next action without exposing private provider errors.",
+  "upgrade": "none",
+  "migrations": [],
+  "configuration": []
+}

@@ -1,17 +1,17 @@
 import { GitHubRateLimitError } from '../github/github-rate-limit.js'
 import { ConflictException, ForbiddenException, Inject, Injectable } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service.js'
-import type { FindingSourceExcerpt, Prisma } from '../generated/prisma/client.js'
+import { Prisma, type FindingSourceExcerpt } from '../generated/prisma/client.js'
 import { GitHubProviderService } from '../github/github-provider.service.js'
-import { createHash } from 'node:crypto'
-import type { NativeSourceBundle } from '../execution/native-source.js'
+import { verifyNativeSourceBundle, type NativeSourceBundle } from '../execution/native-source.js'
 import { digest } from '../assessments/assessment-digest.js'
 import { redactHealthSource } from '../health/health-report.js'
-import { sourceExcerpt } from './source-excerpt.js'
-import { sourceLocation, SOURCE_EXCERPT_VERSION, SECRET_SOURCE_EXCERPT_VERSION, type SourceLocation } from './finding-source-store.js'
+import { sourceExcerpt, sourceExcerptLines } from './source-excerpt.js'
+import { findingSourceLocations, FINDING_SOURCE_CONTEXT_LINES, sourceLocation, SOURCE_EXCERPT_VERSION, SECRET_SOURCE_EXCERPT_VERSION, type SourceLocation } from './finding-source-store.js'
 
 type Excerpt = ReturnType<typeof sourceExcerpt> & { retryable?: boolean }
-const unavailable = (): Excerpt => ({ lines: [], retryable: true, reason: 'Source could not be verified at this commit. Retry source later; the file may be unavailable, exceed excerpt limits, or require GitHub App access.', truncated: false })
+const unavailable = (): Excerpt => ({ lines: [], retryable: false, reason: 'No code excerpt was saved for this finding. Open the file on GitHub to view the code at the assessed commit.', truncated: false })
+export type FindingSourceSnapshot = NonNullable<ReturnType<typeof sourceLocation>> & {content:ReturnType<typeof sourceExcerpt>;contentHash:string}
 @Injectable()
 export class FindingSourceStore {
   private readonly reads = new Map<string, Promise<Excerpt>>()
@@ -24,18 +24,17 @@ export class FindingSourceStore {
       (value.reason !== null && typeof value.reason !== 'string') || typeof value.truncated !== 'boolean') throw new ConflictException('Saved source integrity check failed')
     return value
   }
-  async read(repositoryId: string, sourceSha: string, finding: SourceLocation, contextLines = 8): Promise<Excerpt> {
+  async read(repositoryId: string, sourceSha: string, finding: SourceLocation, contextLines = FINDING_SOURCE_CONTEXT_LINES): Promise<Excerpt> {
     const location = sourceLocation(repositoryId, sourceSha, finding, contextLines)
     if (!location) return unavailable()
-    let row = await this.db.findingSourceExcerpt.findUnique({ where: { id: location.id } })
-    if (!row) {
-      await this.db.findingSourceExcerpt.createMany({ data: [location], skipDuplicates: true })
-      row = await this.db.findingSourceExcerpt.findUniqueOrThrow({ where: { id: location.id } })
-    }
-    await this.activeRepository(row)
-    if (row.contentHash) return this.decode(row)
-    if (row.retryAfter > new Date()) return unavailable()
-    return {lines: [], retryable: true, reason: 'Source is queued for background capture. Retry shortly.', truncated: false}
+    await this.activeRepository(location)
+    const row = await this.db.findingSourceExcerpt.findUnique({ where: { id: location.id } })
+    if (row?.contentHash) return this.decode(row)
+    // Older imports used eight context lines. Reuse that saved block rather than
+    // scheduling another GitHub fetch for a different display window.
+    const alternate=sourceLocation(repositoryId,sourceSha,finding,contextLines===5?8:5)!
+    const saved=await this.db.findingSourceExcerpt.findUnique({where:{id:alternate.id}})
+    return saved?.contentHash?this.decode(saved):unavailable()
   }
   private capture(row: FindingSourceExcerpt, files = this.files): Promise<Excerpt> {
     const existing = this.reads.get(row.id)
@@ -44,7 +43,7 @@ export class FindingSourceStore {
     this.reads.set(row.id, read)
     return read
   }
-  private async activeRepository(row: FindingSourceExcerpt) {
+  private async activeRepository(row: Pick<FindingSourceExcerpt,'repositoryId'>) {
     const repo = await this.db.gitHubRepository.findFirst({ where: { id: row.repositoryId, selected: true, available: true, installation: { active: true } } })
     if (!repo) throw new ForbiddenException('Repository access is unavailable')
     return repo
@@ -86,24 +85,43 @@ export class FindingSourceStore {
     await this.db.findingSourceExcerpt.updateMany({ where: { id: row.id, contentHash: null }, data: { content: content as Prisma.InputJsonValue, contentHash: digest(content), capturedAt: new Date() } })
     return this.decode(await this.db.findingSourceExcerpt.findUniqueOrThrow({ where: { id: row.id } }))
   }
-  /** Capture from the exact assessed upload; avoid another GitHub download and source-queue delay. */
-  async captureSnapshot(repositoryId:string, source:NativeSourceBundle, findings:SourceLocation[]) {
-    for(const finding of findings.slice(0,500)) {
-      const location=sourceLocation(repositoryId,source.sourceSha,finding,5)
-      if(!location)continue
-      const row=await this.db.findingSourceExcerpt.findUnique({where:{id:location.id}})
-      if(!row || row.contentHash)continue
-      const repo=await this.activeRepository(row)
-      if(String(repo.githubId)!==source.repositoryId)throw new ConflictException('Source repository mismatch')
-      const file=source.files.find(file=>file.path===location.path)
+  /** Build display snapshots from the exact verified upload before publishing findings. */
+  async prepareSnapshots(repositoryId:string, source:NativeSourceBundle, findings:SourceLocation[]):Promise<FindingSourceSnapshot[]> {
+    const repo=await this.activeRepository({repositoryId})
+    if(String(repo.githubId)!==source.repositoryId)throw new ConflictException('Source repository mismatch')
+    const verified=verifyNativeSourceBundle(source)
+    const files=new Map(verified.files.map(file=>[file.path,file]))
+    const lines=new Map<string,string[]>()
+    const snapshots:FindingSourceSnapshot[]=[]
+    for(const location of findingSourceLocations(repositoryId,verified.sourceSha,findings)) {
+      const file=files.get(location.path)
       if(!file)continue
-      const bytes=Buffer.from(file.content,'base64')
-      if(bytes.length>2*1024*1024 || createHash('sha256').update(bytes).digest('hex')!==file.sha256)throw new ConflictException('Source content mismatch')
-      const content=sourceExcerpt(bytes.toString('utf8'),location.line,location.endLine,5)
+      if(!lines.has(file.path))lines.set(file.path,redactHealthSource(Buffer.from(file.content,'base64').toString('utf8')).split('\n'))
+      const content=sourceExcerptLines(lines.get(file.path)!,location.line,location.endLine,location.contextLines)
       if(location.version===SECRET_SOURCE_EXCERPT_VERSION)for(const line of content.lines)if(location.line!==null && line.number>=location.line && line.number<=(location.endLine??location.line))line.text='[Potential credential redacted]'
-      await this.activeRepository(row)
-      await this.db.findingSourceExcerpt.updateMany({where:{id:row.id,contentHash:null},data:{content:content as Prisma.InputJsonValue,contentHash:digest(content),capturedAt:new Date()}})
+      snapshots.push({...location,content,contentHash:digest(content)})
     }
+    await this.activeRepository({repositoryId})
+    return snapshots
+  }
+  /** A report and its bounded excerpts commit together; the first snapshot wins. */
+  async saveSnapshots(tx:Prisma.TransactionClient,snapshots:FindingSourceSnapshot[]) {
+    if(!snapshots.length)return
+    for(const repositoryId of new Set(snapshots.map(row=>row.repositoryId))) {
+      if(!await tx.gitHubRepository.findFirst({where:{id:repositoryId,selected:true,available:true,installation:{active:true}}}))throw new ForbiddenException('Repository access is unavailable')
+    }
+    for(let offset=0;offset<snapshots.length;offset+=100)await tx.$executeRaw(Prisma.sql`
+      INSERT INTO "FindingSourceExcerpt" (id,"repositoryId","sourceSha",path,line,"endLine","contextLines",version,content,"contentHash","capturedAt")
+      SELECT x.id,x."repositoryId",x."sourceSha",x.path,x.line,x."endLine",x."contextLines",x.version,x.content,x."contentHash",CURRENT_TIMESTAMP
+      FROM jsonb_to_recordset(${JSON.stringify(snapshots.slice(offset,offset+100))}::jsonb)
+        AS x(id text,"repositoryId" text,"sourceSha" text,path text,line integer,"endLine" integer,"contextLines" integer,version integer,content jsonb,"contentHash" text)
+      ON CONFLICT (id) DO UPDATE SET content=EXCLUDED.content,"contentHash"=EXCLUDED."contentHash","capturedAt"=EXCLUDED."capturedAt"
+      WHERE "FindingSourceExcerpt"."contentHash" IS NULL
+    `)
+  }
+  async captureSnapshot(repositoryId:string,source:NativeSourceBundle,findings:SourceLocation[]) {
+    const snapshots=await this.prepareSnapshots(repositoryId,source,findings)
+    await this.db.$transaction(tx=>this.saveSnapshots(tx,snapshots))
   }
   async reconcile() {
     const pending = await this.db.findingSourceExcerpt.findMany({ where: { version: { in: [SOURCE_EXCERPT_VERSION, SECRET_SOURCE_EXCERPT_VERSION] }, contentHash: null, attempts: { lt: 3 }, retryAfter: { lte: new Date() }, repository: { selected: true, available: true, installation: { active: true } } }, orderBy: { createdAt: 'asc' }, take: 10 })

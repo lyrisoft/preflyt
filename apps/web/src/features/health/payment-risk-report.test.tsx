@@ -1,14 +1,160 @@
 import { useState } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import '@/styles/index.css'
+import { toast } from 'sonner'
 import { afterEach, expect, it, vi } from 'vitest'
 import { cleanup, render } from 'vitest-browser-react'
 import { page } from 'vitest/browser'
 import { PaymentRiskReport } from './payment-risk-report'
 
-afterEach(() => {
+vi.mock('sonner', () => ({ toast: { error: vi.fn() } }))
+
+afterEach(async () => {
   cleanup()
+  vi.restoreAllMocks()
+  vi.clearAllMocks()
   vi.unstubAllGlobals()
+  document.documentElement.classList.remove('dark')
+  await page.viewport(1280, 800)
 })
+
+const savedReport = {
+  branch: 'main',
+  sourceSha: 'a'.repeat(40),
+  report: {
+    executiveSummary: 'Inspect payment controls.',
+    systemInventory: [],
+    findings: [],
+    domains: [],
+    paymentRiskRegister: [],
+    attackScenarios: [],
+    remediationPlan: [],
+    qaRegressionCases: [],
+    finalRiskSummary: {
+      summary: 'Review gaps.',
+      immediateActions: 'Inspect source.',
+      topIssueIds: [],
+    },
+  },
+}
+it('downloads PDF for reading and Markdown for prompting with a fresh authenticated request', async () => {
+  const blobs: Blob[] = [],
+    names: string[] = []
+  vi.spyOn(URL, 'createObjectURL').mockImplementation((blob) => {
+    blobs.push(blob as Blob)
+    return 'blob:report'
+  })
+  vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+    this: HTMLAnchorElement
+  ) {
+    names.push(this.download)
+  })
+  const fetch = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>(
+    async (url: string) =>
+      url.includes('?format=pdf')
+        ? new Response('%PDF-1.7\nfixture', {
+            headers: { 'content-type': 'application/pdf' },
+          })
+        : url.includes('?format=md')
+          ? new Response('# Payment Risk Review\nSaved source references.', {
+              headers: { 'content-type': 'text/markdown; charset=utf-8' },
+            })
+          : Response.json(savedReport)
+  )
+  vi.stubGlobal('fetch', fetch)
+  await show(true)
+  await page.getByRole('button', { name: 'Download PDF', exact: true }).click()
+  await vi.waitFor(() => expect(names).toEqual(['payment-risk-fixture.pdf']))
+  await page
+    .getByRole('button', { name: 'Download Markdown', exact: true })
+    .click()
+  await vi.waitFor(() =>
+    expect(names).toEqual([
+      'payment-risk-fixture.pdf',
+      'payment-risk-fixture.md',
+    ])
+  )
+  expect(blobs.map((b) => b.type)).toEqual([
+    'application/pdf',
+    'text/markdown; charset=utf-8',
+  ])
+  expect(await blobs[1].text()).toContain('# Payment Risk Review')
+  expect(await blobs[0].text()).toContain('%PDF-')
+  for (const call of fetch.mock.calls.filter(([url]) =>
+    url.includes('?format=')
+  ))
+    expect(call[1]).toMatchObject({ credentials: 'include', cache: 'no-store' })
+  await expect
+    .element(page.getByRole('button', { name: 'Download report', exact: true }))
+    .not.toBeInTheDocument()
+})
+it.each(['md', 'pdf'])(
+  'does not download %s when access is denied',
+  async (format) => {
+    const create = vi.spyOn(URL, 'createObjectURL')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) =>
+        url.includes('?format=')
+          ? new Response('', { status: 403 })
+          : Response.json(savedReport)
+      )
+    )
+    await show(true)
+    await page
+      .getByRole('button', {
+        name: format === 'md' ? 'Download Markdown' : 'Download PDF',
+        exact: true,
+      })
+      .click()
+    await vi.waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(
+        'Repository access is unavailable or you do not have permission.'
+      )
+    )
+    expect(create).not.toHaveBeenCalled()
+  }
+)
+it('rejects an unexpected response format without downloading a misleading file', async () => {
+  const create = vi.spyOn(URL, 'createObjectURL')
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: string) =>
+      url.includes('?format=')
+        ? new Response('<html>Sign in</html>', {
+            headers: { 'content-type': 'text/html' },
+          })
+        : Response.json(savedReport)
+    )
+  )
+  await show(true)
+  await page.getByRole('button', { name: 'Download PDF', exact: true }).click()
+  await vi.waitFor(() =>
+    expect(toast.error).toHaveBeenCalledWith(
+      'The report format was not received. Try again.'
+    )
+  )
+  expect(create).not.toHaveBeenCalled()
+})
+for (const theme of ['light', 'dark'])
+  it(`fits both report downloads at 320px in ${theme}`, async () => {
+    await page.viewport(320, 900)
+    document.documentElement.classList.toggle('dark', theme === 'dark')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => Response.json(savedReport))
+    )
+    await show(true)
+    await expect
+      .element(page.getByRole('button', { name: 'Download PDF', exact: true }))
+      .toBeVisible()
+    await expect
+      .element(
+        page.getByRole('button', { name: 'Download Markdown', exact: true })
+      )
+      .toBeVisible()
+    expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(320)
+  })
 async function show(embedded = false) {
   await render(
     <QueryClientProvider

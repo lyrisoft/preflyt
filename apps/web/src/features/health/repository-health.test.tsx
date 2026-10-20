@@ -1403,6 +1403,35 @@ it.each(['password=provider-secret', '__proto__', 'constructor'])(
   }
 )
 
+it('explains a model rejection without telling the user to raise the output-token limit', async () => {
+  state.state = 'FAILED'
+  state.noReport = true
+  state.unpinned = true
+  state.failureReason = 'STRIX_MODEL_REQUEST_REJECTED'
+  await mount()
+  const failure = page.getByRole('alert', { name: 'Assessment failure' })
+  await expect
+    .element(
+      failure.getByText(
+        'The model provider rejected the security review request before it could run.'
+      )
+    )
+    .toBeVisible()
+  await expect
+    .element(
+      failure.getByText(
+        'Ask your administrator to check the selected model and update Preflyt if needed, then start a new review. Raising the review token limit will not fix a rejected request.'
+      )
+    )
+    .toBeVisible()
+  expect(document.body.textContent).not.toContain(
+    'can raise the output-token limit'
+  )
+  await failure.getByText('Technical details').click()
+  await expect
+    .element(failure.getByText('Reason: STRIX_MODEL_REQUEST_REJECTED'))
+    .toBeVisible()
+})
 it('shows an automatic retry instead of a failure while GitHub requests are paused', async () => {
   state.state = 'QUEUED'
   state.failureReason = 'GITHUB_RATE_LIMITED'
@@ -1494,7 +1523,9 @@ it('centers the stationary sparkle inside the AI review loading ring', async () 
   await expect
     .element(page.getByText('AI security review: Running'))
     .toBeVisible()
-  const banner = document.querySelector('[aria-label="Strix review status"]')!
+  const banner = document.querySelector(
+    '[aria-label="AI security review status"]'
+  )!
   const ring = banner.querySelector('[data-slot="ai-loading-ring"]')!
   const sparkle = banner.querySelector('.lucide-sparkles')!
   const ringRect = ring.getBoundingClientRect()
@@ -1786,37 +1817,61 @@ it('combines scanner and AI findings into one Security card and exact saved-repo
     .not.toBeInTheDocument()
 })
 
-it('keeps running AI review status inside Security without overflow in either theme', async () => {
-  state.aiReview = {
-    ...row(),
-    id: 'ai-running',
-    state: 'RUNNING',
-    reason: null,
-    report: null,
-  }
-  await mount()
-  for (const width of [1280, 320]) {
-    await page.viewport(width, 900)
-    for (const dark of [false, true]) {
-      document.documentElement.classList.toggle('dark', dark)
-      const status = document.querySelector(
-        '[aria-label="Strix review status"]'
-      )!
-      expect(
-        status
-          .closest('[data-slot="card"]')
-          ?.querySelector('[aria-label="Security: 1"]')
-      ).not.toBeNull()
-      expect(status.scrollWidth).toBeLessThanOrEqual(status.clientWidth)
-      expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width)
-      await page.screenshot({
-        path: `__screenshots__/preflyt-combined-security-${width}-${dark ? 'dark' : 'light'}.png`,
-      })
+it.each(['RUNNING', 'FAILED'])(
+  'keeps %s AI review status above the summary cards without overflow in either theme',
+  async (reviewState) => {
+    state.aiReview = {
+      ...row(),
+      id: 'ai-review',
+      state: reviewState,
+      reason: reviewState === 'FAILED' ? 'STRIX_REVIEW_INCOMPLETE' : null,
+      report: reviewState === 'FAILED' ? report() : null,
     }
+    const view = await mount()
+    for (const width of [1440, 320]) {
+      await page.viewport(width, 900)
+      for (const dark of [false, true]) {
+        document.documentElement.classList.toggle('dark', dark)
+        await Promise.all(
+          document
+            .getAnimations()
+            .filter((animation) => animation instanceof CSSTransition)
+            .map((animation) => animation.finished.catch(() => undefined))
+        )
+        const status = page
+          .getByRole('region', { name: 'AI security review status' })
+          .element()
+        const security = page
+          .getByLabelText('Security: 1', { exact: true })
+          .element()
+          .closest('[data-slot="card"]')!
+        expect(status.contains(security)).toBe(false)
+        expect(status.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+          security.getBoundingClientRect().top
+        )
+        if (width === 1440) {
+          const coverage = page.getByLabelText('Branch test coverage').element()
+          expect(status.getBoundingClientRect().left).toBeCloseTo(
+            security.getBoundingClientRect().left,
+            0
+          )
+          expect(status.getBoundingClientRect().right).toBeCloseTo(
+            coverage.getBoundingClientRect().right,
+            0
+          )
+        }
+        expect(status.scrollWidth).toBeLessThanOrEqual(status.clientWidth)
+        expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width)
+        await page.screenshot({
+          path: `__screenshots__/preflyt-ai-review-${reviewState.toLowerCase()}-${width}-${dark ? 'dark' : 'light'}.png`,
+        })
+      }
+    }
+    document.documentElement.classList.remove('dark')
+    await view.unmount()
+    await page.viewport(1280, 800)
   }
-  document.documentElement.classList.remove('dark')
-  await page.viewport(1280, 800)
-})
+)
 
 it('includes the AI issue in the repository findings count, filter results and exact report link', async () => {
   const aiId = '33333333-3333-4333-8333-333333333333'

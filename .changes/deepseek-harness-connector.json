@@ -1,0 +1,8 @@
+{
+  "type": "feature",
+  "title": "DeepSeek Harness connection",
+  "description": "Connect DeepSeek Harness from Integrations using a ready-to-install Preflyt plugin link. The connector uses the desktop app runtime and a pinned OAuth bridge, then asks you to approve specific repositories. DeepSeek can read saved findings and source excerpts and submit attributed review evidence; it cannot change scan outcomes or merge decisions.",
+  "upgrade": "Recreate matching API, worker and web services. Install the Preflyt connector in DeepSeek Harness and approve only the repositories it needs.",
+  "migrations": [],
+  "configuration": []
+}

@@ -80,7 +80,7 @@ cache counts](https://api-docs.deepseek.com/api/create-chat-completion/), and
 ### VAPT scan limits
 
 Organization administrators configure cumulative allowances under **AI Intelligence
-→ VAPT limits**: input tokens (default 4,000,000; range 100,000–100,000,000),
+→ Security review limits**: input tokens (default 4,000,000; range 100,000–100,000,000),
 output tokens (default 131,072; range 8,192–2,000,000), and model requests (default
 80; range 1–1,000). Saving requires `ai.routing.manage`, uses revision checks and
 records `ai.vapt-limits.saved` in the audit log. Defaults apply until explicitly
@@ -89,9 +89,24 @@ saved. The API exposes these settings through `GET /ai/configuration` and
 
 Each new queued scan snapshots these allowances in its Strix run. Editing settings
 does not change active scans or model routing/source consent. The broker reserves
-estimated input and up to 8,192 output tokens before a request; repeated context
+estimated input and the bounded output requested (up to 8,192 tokens) before a request; repeated context
 counts again, so the input allowance is conservative. A request must fit the
 remaining allowance. Actual output usage releases unused output reservation.
+OpenAI reviews use the native Responses API so reasoning and function calls can
+run together without model-specific Chat Completions workarounds. Responses input,
+output (including reasoning) and cached-token usage are recorded in the same
+ledger as native Anthropic, Gemini, DeepSeek and compatible local usage. Smaller
+per-request output allowances are respected for every provider. OpenAI calls are
+stateless, allow only local function tools and text/history, and cannot retrieve
+stored conversations, files, prompts or hosted tools outside the source sandbox.
+
+An explicit provider rejection stops the review immediately with a model-request,
+access, rate-limit or availability reason. Rejected client requests release their
+unused input/output reservations. Unknown transport/server outcomes retain a
+conservative reservation and stop as model unavailable; retries cannot consume
+the whole review allowance and misreport that condition as output exhaustion.
+Audit records retain the HTTP status and fixed failure code, never raw provider
+messages, prompts or credentials. Existing failed assessments remain unchanged.
 Exhaustion blocks further inference with a non-retryable response and an explicit
 input, output or model-request failure code. The worker cancels the owned runner,
 waits for confirmed cleanup and saves the failed assessment. Concurrency-only
@@ -140,6 +155,43 @@ safety limits still apply: 30 minutes, 40 turns per agent and the engine's nomin
    remain distinct. Cancellation is available while a review is queued/running.
 
 ### Local Docker Desktop application stack
+
+To run the entire local review runtime with Compose, set these values in the
+protected root `.env`:
+
+```dotenv
+COMPOSE_FILE=docker-compose.yaml:compose.local.yaml:compose.external-db.yaml:compose.ai-security-local.yaml
+COMPOSE_PROFILES=ai-security
+```
+
+Keep `compose.external-db.yaml` only when using the existing dedicated Preflyt
+database; omit it for the bundled database. Keep the existing database connection
+and encryption keys when changing the runtime setup.
+
+```sh
+docker compose build strix-sandbox-init strix-runner
+docker compose up -d --wait --wait-timeout 1800
+docker compose exec -T strix-runner python readiness.py
+```
+
+Compose starts the Strix engine, storage initializer, sandbox builder and controller
+alongside the application and standard Health scanner. A one-shot builder with
+only the fixed sandbox Dockerfile and entrypoint prepares the pinned upstream
+toolkit inside its dedicated engine before the controller starts. The builder has
+registry access and no repository source or state mounted; the controller retains
+only its internal service and engine networks. Its image cache,
+TLS identity and state survive restarts. First setup downloads the toolkit; later
+starts reuse it. No host Python process or terminal is required. The API and
+worker use the internal runner address and callback; this setup must not include
+`compose.strix-local.yaml` or its host bridges. Starting these services does not
+start a repository review or call a model.
+
+For an existing host-bridge installation, stop and remove only
+`strix-api-bridge`, `strix-worker-bridge` and `strix-connection-init` using the
+old Compose configuration before switching `.env`. Keep all named volumes.
+The Compose controller replaces the shared connection file when it starts.
+
+#### Legacy host-controller bridge
 
 The optional `compose.strix-local.yaml` overlay connects the containerized API and
 worker to the same authorized host controller. It is a development bridge, not
@@ -263,6 +315,20 @@ The API and ordinary worker never run the Strix subprocess or receive Docker acc
   verified test or a secure area. Historical reports without a ledger remain readable.
 
 ## Opt-in source-fixture acceptance
+
+The narrower broker check uses two synthetic turns with the existing tested
+OpenAI security-review route. It verifies a real native function call, its
+follow-up response and exact output-token settlement in a disposable local
+database. It sends no connected source and caps each response at 1,024 tokens;
+normal model charges apply. From `apps/api`:
+
+```sh
+PREFLYT_STRIX_BROKER_ACCEPTANCE=1 node --env-file=.env --import tsx test/strix-broker-live.acceptance.ts
+```
+
+This is provider/broker acceptance, not a completed connected-repository review.
+The automated protocol matrix separately covers native OpenAI, Anthropic, Gemini,
+DeepSeek and compatible local reservation, rejection and cleanup behavior.
 
 From `apps/api`, after local setup:
 
@@ -491,4 +557,4 @@ execution and do not satisfy deterministic checks or establish complete coverage
 
 ### Combined Security findings card
 
-Repository Health shows one Security total: retained scanner findings plus retained AI security findings from the latest saved reports at the displayed branch and commit. The card opens both exact reports in Findings; it does not broaden the list to older commits or other repositories. AI findings remain Needs review. Partial reports keep the partial indicator, and AI output does not change deterministic health or merge decisions. Running and failed AI review controls are displayed within the Security card when saved metrics are available.
+Repository Health shows one Security total: retained scanner findings plus retained AI security findings from the latest saved reports at the displayed branch and commit. The card opens both exact reports in Findings; it does not broaden the list to older commits or other repositories. AI findings remain Needs review. Partial reports keep the partial indicator, and AI output does not change deterministic health or merge decisions. Running and failed AI review controls are displayed in a full-width section above the metric cards when saved metrics are available.

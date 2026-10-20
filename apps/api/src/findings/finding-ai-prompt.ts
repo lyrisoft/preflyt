@@ -38,6 +38,13 @@ export function findingAiPrompt(context: FindingAiContext) {
     user: JSON.stringify({ contextHash, ...context }),
   };
 }
+export function findingAiResponseSchema(context:FindingAiContext) {
+  return {type:'object',additionalProperties:false,required:['version','sourceSha','contextHash','problem','impact','solution','evidenceLines'],properties:{
+    version:{type:'integer',enum:[1]},sourceSha:{type:'string',enum:[context.sourceSha]},contextHash:{type:'string',enum:[digest(context)]},
+    problem:{type:'string',minLength:1,maxLength:180},impact:{type:'string',minLength:1,maxLength:200},solution:{type:'string',minLength:1,maxLength:240},
+    evidenceLines:{type:'array',minItems:1,maxItems:10,items:{type:'integer',enum:context.lines.map(line=>line.number)}},
+  }};
+}
 export function validateFindingAiResult(
   raw: string,
   context: FindingAiContext,

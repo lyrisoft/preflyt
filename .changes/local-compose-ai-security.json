@@ -1,0 +1,11 @@
+{
+  "type": "improvement",
+  "title": "Source-built local Compose starts the AI review sandbox",
+  "description": "Local Compose prepares the pinned Strix sandbox in the dedicated TLS engine before starting the runner, so the ai-security profile does not need a separate host runner or local registry. A restricted one-shot builder carries only fixed sandbox build files; repository source, application credentials and the host Docker socket remain excluded. Production deployment continues to use matching published runner and sandbox images.",
+  "upgrade": "For source-built local installations, add compose.ai-security-local.yaml to COMPOSE_FILE, enable COMPOSE_PROFILES=ai-security, and rebuild/recreate the stack. The .env.example change documents this local overlay. Published-image production installations keep the existing ai-security profile and should pull matching application, runner and sandbox images.",
+  "migrations": [],
+  "configuration": [
+    ".env.example",
+    "compose.ai-security-local.yaml"
+  ]
+}

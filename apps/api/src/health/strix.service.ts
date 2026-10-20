@@ -197,7 +197,7 @@ export class HealthStrixService {
       return {
         state: cancelled ? ("CANCELLED" as const) : ("FAILED" as const),
         reason,
-        ...(reason.endsWith("_LIMIT_REACHED") && row.report
+        ...((reason.endsWith("_LIMIT_REACHED") || reason.startsWith('STRIX_MODEL_')) && row.report
           ? {
               report: {
                 ...(row.report as unknown as HealthReport),
@@ -368,7 +368,7 @@ export class HealthStrixService {
             repositoryId: repo.githubId.toString(),
             source: source.source,
             model: prefix + "/" + provider.modelId.replace(/^models\//, ""),
-            apiType: "chat_completions",
+            apiType: endpoint.preset === 'openai' ? 'responses' : 'chat_completions',
             reviewProfile: (row.plan as any)?.reviewProfile ?? 'general',
             maxModelCalls: run.maxModelCalls,
             maxSpecialists: endpoint.locality === "local" ? 1 : 2,
@@ -505,13 +505,40 @@ export class HealthStrixService {
         )
       : undefined;
     const model = provider.modelId.replace(/^models\//, "");
-    if (endpoint.preset === "anthropic") {
+    const outputLimit = (value: unknown) =>
+      Number.isSafeInteger(value) && (value as number) > 0
+        ? Math.min(value as number, 8192)
+        : 8192;
+    if (endpoint.preset === 'openai' && operation.endsWith('/responses')) {
+      const textOnly = (content: any) => typeof content === 'string' ||
+        (Array.isArray(content) && content.every(part =>
+          ['input_text', 'output_text', 'refusal'].includes(part?.type) &&
+          typeof (part.text ?? part.refusal) === 'string'));
+      const sourceOnlyInput = body.input === undefined || typeof body.input === 'string' ||
+        (Array.isArray(body.input) && body.input.every((item: any) => {
+          if (item?.type === 'reasoning') return typeof item.encrypted_content === 'string';
+          if (item?.type === 'function_call') return typeof item.name === 'string' && typeof item.arguments === 'string';
+          if (item?.type === 'function_call_output') return textOnly(item.output);
+          return (item?.type === undefined || item.type === 'message') && textOnly(item?.content);
+        }));
+      if (body.model !== model || body.previous_response_id || body.conversation || body.prompt || !sourceOnlyInput ||
+        (body.tools !== undefined && (!Array.isArray(body.tools) || body.tools.some((tool: any) => tool?.type !== 'function'))))
+        throw new BadRequestException('Unsupported model operation');
+      path = '/responses';
+      if (key) headers.authorization = 'Bearer ' + key;
+      body.max_output_tokens = outputLimit(body.max_output_tokens);
+      // Keep history inside this assessment. No hosted tools, background work or
+      // stored provider conversations can bypass the source-only sandbox.
+      body.store = false;
+      body.background = false;
+      body.include = ['reasoning.encrypted_content'];
+    } else if (endpoint.preset === "anthropic") {
       if (!operation.endsWith("/messages") || body.model !== model)
         throw new BadRequestException("Unsupported model operation");
       path = "/messages";
       headers["anthropic-version"] = "2023-06-01";
       if (key) headers["x-api-key"] = key;
-      body.max_tokens = Math.min(Number(body.max_tokens) || 8192, 8192);
+      body.max_tokens = outputLimit(body.max_tokens);
     } else if (endpoint.preset === "gemini") {
       if (!operation.endsWith("/models/" + model + ":generateContent"))
         throw new BadRequestException("Unsupported model operation");
@@ -519,26 +546,32 @@ export class HealthStrixService {
       if (key) headers["x-goog-api-key"] = key;
       body.generationConfig = {
         ...body.generationConfig,
-        maxOutputTokens: 8192,
+        maxOutputTokens: outputLimit(body.generationConfig?.maxOutputTokens),
       };
     } else {
       if (!operation.endsWith("/chat/completions") || body.model !== model)
         throw new BadRequestException("Unsupported model operation");
       path = "/chat/completions";
       if (key) headers.authorization = "Bearer " + key;
+      const requestedOutput=body.max_completion_tokens??body.max_tokens;
       delete body.max_completion_tokens;
-      body.max_tokens = Math.min(Number(body.max_tokens) || 8192, 8192);
+      body.max_tokens = outputLimit(requestedOutput);
       // Ollama Gemma defaults to thinking, which can consume an entire bounded
       // response without a tool call. Use its supported direct-generation mode
       // for this source-review tool loop; hosted providers retain their settings.
       if (endpoint.locality === "local" && /^gemma4(?::|$)/.test(model))
         body.reasoning_effort = "none";
       if (endpoint.preset === "openai") {
+        body.max_completion_tokens = body.max_tokens;
         delete body.max_tokens;
-        body.max_completion_tokens = 8192;
       }
     }
     body.stream = false;
+    const reservedOutput = path === '/responses' ? body.max_output_tokens
+      : endpoint.preset === 'gemini' ? body.generationConfig.maxOutputTokens
+        : endpoint.preset === 'openai' ? body.max_completion_tokens : body.max_tokens;
+    if (Buffer.byteLength(JSON.stringify(body)) > 524288)
+      throw new BadRequestException('Strix model request exceeds its input limit');
     const estimatedInput = Math.ceil(
       Buffer.byteLength(JSON.stringify(body)) / 3,
     );
@@ -550,13 +583,13 @@ export class HealthStrixService {
         modelCalls: { lt: run.maxModelCalls },
         inFlight: { lt: 2 },
         inputTokens: { lte: run.maxInputTokens - estimatedInput },
-        outputTokens: { lte: run.maxOutputTokens - 8192 },
+        outputTokens: { lte: run.maxOutputTokens - reservedOutput },
       },
       data: {
         modelCalls: { increment: 1 },
         inFlight: { increment: 1 },
         inputTokens: { increment: estimatedInput },
-        outputTokens: { increment: 8192 },
+        outputTokens: { increment: reservedOutput },
       },
     });
     if (!reserved.count) {
@@ -569,7 +602,7 @@ export class HealthStrixService {
           : current.inputTokens + estimatedInput > current.maxInputTokens
             ? "STRIX_INPUT_LIMIT_REACHED"
             : current.inFlight === 0 &&
-                current.outputTokens + 8192 > current.maxOutputTokens
+                current.outputTokens + reservedOutput > current.maxOutputTokens
               ? "STRIX_OUTPUT_LIMIT_REACHED"
               : null;
       if (failureCode && !current.finishedAt) {
@@ -590,6 +623,30 @@ export class HealthStrixService {
         "Strix model request is temporarily unavailable",
       );
     }
+    const rejectModel = async (status: number | null): Promise<never> => {
+      const failureCode = status === 401 || status === 403 ? 'STRIX_MODEL_ACCESS_DENIED'
+        : status === 429 ? 'STRIX_MODEL_RATE_LIMITED'
+          : status !== null && status >= 400 && status < 500 && status !== 408
+            ? 'STRIX_MODEL_REQUEST_REJECTED' : 'STRIX_MODEL_UNAVAILABLE';
+      // Explicit client rejections did not generate a completion. Unknown
+      // transport/server outcomes retain their reservation as a spending bound.
+      const rejected = status !== null && status >= 400 && status < 500 && status !== 408;
+      await this.db.repositoryHealthStrixRun.updateMany({
+        where: { assessmentId, finishedAt: null },
+        data: { failureCode, ...(rejected ? {
+          inputTokens: { decrement: estimatedInput },
+          outputTokens: { decrement: reservedOutput },
+        } : {}) },
+      });
+      await this.db.auditEvent.create({ data: {
+        event: 'repository.health.strix.model_failed', actorId: row.actorId,
+        metadata: { assessmentId, status, failureCode, reservationReleased: rejected },
+      } });
+      throw new BadRequestException({
+        statusCode: 400, code: failureCode,
+        message: 'The configured security review model could not complete the request. Check the model connection before starting another review.',
+      });
+    };
     try {
       return await trackModelUsage({ db: this.db, repositoryId: row.repositoryId, workload: "VAPT", sourceId: row.id }, provider, undefined, async (recordUsage) => {
       const response = await aiHttpRequest(
@@ -601,12 +658,9 @@ export class HealthStrixService {
           maxBodyBytes: 524288,
           signal: AbortSignal.timeout(endpoint.locality === "local" ? 600000 : 90000),
         },
-      );
-      if (!response.ok)
-        throw new ServiceUnavailableException(
-          "Configured model request failed",
-        );
-      const value = await response.json();
+      ).catch(()=>rejectModel(null));
+      if (!response.ok) return rejectModel(response.status);
+      const value = await response.json().catch(()=>rejectModel(null));
       const usage = providerUsage(endpoint.preset, value);
       await recordUsage(usage);
       await this.db.repositoryHealthStrixRun.update({
@@ -619,7 +673,7 @@ export class HealthStrixService {
                 Math.ceil(Buffer.byteLength(JSON.stringify(body)) / 3),
             ),
           },
-          outputTokens: { increment: (usage.outputTokens ?? 8192) - 8192 },
+          outputTokens: { increment: (usage.outputTokens ?? reservedOutput) - reservedOutput },
         },
       });
       const current =

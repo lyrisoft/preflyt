@@ -1,5 +1,5 @@
 import type { UseQueryResult } from '@tanstack/react-query'
-import { ExternalLink, FileCode2, RefreshCw } from 'lucide-react'
+import { ExternalLink, FileCode2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -13,12 +13,14 @@ export function FindingSourceViewer({
   finding,
   source,
   aiState,
+  aiReason,
   onRetryAi,
   showGuidance = true,
 }: {
   finding: Finding
   source: UseQueryResult<FindingSource, Error>
   aiState?: string
+  aiReason?: string
   onRetryAi?: () => void
   showGuidance?: boolean
 }) {
@@ -124,14 +126,6 @@ export function FindingSourceViewer({
           <p role='alert' className='text-sm'>
             {source.error.message}
           </p>
-          <Button
-            variant='outline'
-            size='sm'
-            onClick={() => void source.refetch()}
-          >
-            <RefreshCw />
-            Retry source
-          </Button>
         </CardContent>
       ) : !valid ? (
         <CardContent className='p-5'>
@@ -142,16 +136,6 @@ export function FindingSourceViewer({
       ) : data?.reason ? (
         <CardContent className='space-y-3 p-5'>
           <p className='text-sm leading-relaxed'>{data.reason}</p>
-          {data.retryable && (
-            <Button
-              variant='outline'
-              size='sm'
-              disabled={source.isFetching}
-              onClick={() => void source.refetch()}
-            >
-              <RefreshCw /> Retry source
-            </Button>
-          )}
         </CardContent>
       ) : (
         <>
@@ -166,7 +150,7 @@ export function FindingSourceViewer({
             <p>
               {finding.origin === 'ai' && finding.codeSide === 'LEFT'
                 ? 'Reviewed PR diff before the change, assessed commit '
-                : 'Source at commit '}
+                : 'Saved code excerpt · commit '}
               <code>{finding.sourceSha.slice(0, 12)}</code>
               {finding.line
                 ? ` · Reported ${finding.endLine && finding.endLine !== finding.line ? `lines ${finding.line}–${finding.endLine}` : `line ${finding.line}`}`
@@ -185,6 +169,7 @@ export function FindingSourceViewer({
         <FindingGuidance
           finding={finding}
           aiState={aiState}
+          aiReason={aiReason}
           onRetryAi={onRetryAi}
         />
       )}
