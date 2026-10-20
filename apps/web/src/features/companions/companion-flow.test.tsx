@@ -119,6 +119,15 @@ it('lists MCP beside GitHub with independent connection status', async () => {
   await expect
     .element(view.getByText('Not connected', { exact: true }))
     .toBeVisible()
+  await view
+    .getByRole('textbox', { name: 'Search integrations' })
+    .fill('DeepSeek')
+  await expect
+    .element(view.getByRole('button', { name: /MCP and coding agents/ }))
+    .toBeVisible()
+  await expect
+    .element(view.getByRole('button', { name: /Connect your GitHub App/ }))
+    .not.toBeInTheDocument()
 })
 it('keeps pairing, agent logos, download and disconnect under Integrations', async () => {
   const view = await mount(<CompanionIntegrations />)

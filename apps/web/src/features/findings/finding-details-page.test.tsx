@@ -13,6 +13,7 @@ const state = vi.hoisted(() => ({
   noLocation: false,
   retryable: false,
   health: false,
+  unifiedHealth: false,
   strix: false,
   vaptAnalysis: false,
   healthBack: false,
@@ -66,6 +67,9 @@ const id = 'f'.repeat(64),
   assessment = '11111111-1111-4111-8111-111111111111'
 const finding = () => ({
   id,
+  ...(state.unifiedHealth
+    ? { origin: 'health', healthFingerprint: 'd'.repeat(64) }
+    : {}),
   title: 'Unsafe query',
   ...(state.prReview
     ? {
@@ -109,6 +113,7 @@ beforeEach(() => {
     noLocation: false,
     retryable: false,
     health: false,
+    unifiedHealth: false,
     strix: false,
     vaptAnalysis: false,
     healthBack: false,
@@ -205,7 +210,7 @@ beforeEach(() => {
           sourceSha: state.mismatch ? 'b'.repeat(40) : sha,
           retryable: state.retryable,
           reason: state.retryable
-            ? 'Source could not be verified at this commit. Retry source later.'
+            ? 'No code excerpt was saved for this finding. Open the file on GitHub to view the code at the assessed commit.'
             : state.noLocation
               ? 'This check did not provide a source location.'
               : null,
@@ -489,6 +494,22 @@ it('replaces the AI skeleton with the completed recommendation', async () => {
     .element(page.getByText('External rule explanation.'))
     .not.toBeInTheDocument()
 })
+it('uses the same Health finding identity for AI recommendations opened from the shared Findings list', async () => {
+  state.unifiedHealth = true
+  state.ai = 'cached'
+  await mount()
+  await expect
+    .element(page.getByText('Bind the input as a query parameter.'))
+    .toBeVisible()
+  const url = state.fetch.mock.calls.find(([url]) =>
+    String(url).includes('/finding-guidance?')
+  )![0]
+  const params = new URL(String(url), 'http://localhost').searchParams
+  expect(params.get('origin')).toBe('health')
+  expect(params.get('findingId')).toBe('d'.repeat(64))
+  expect(params.get('assessmentId')).toBe(assessment)
+})
+
 it('falls back to saved guidance and offers retry when AI fails', async () => {
   state.reportGuidance = true
   state.ai = 'failed'
@@ -496,7 +517,7 @@ it('falls back to saved guidance and offers retry when AI fails', async () => {
   await expect
     .element(
       page.getByText(
-        'AI recommendations are unavailable. Showing saved guidance.'
+        'AI could not complete a recommendation. Showing saved rule guidance.'
       )
     )
     .toBeVisible()
@@ -617,17 +638,22 @@ it('starts source retrieval while finding metadata is still loading', async () =
   await view.unmount()
 })
 
-it('offers a source retry after a transient capture failure', async () => {
+it('links missing saved code to GitHub without offering or scheduling another source capture', async () => {
   state.retryable = true
   const view = await mount()
   await expect
-    .element(page.getByRole('button', { name: 'Retry source' }))
+    .element(
+      page.getByText('No code excerpt was saved for this finding.', {
+        exact: false,
+      })
+    )
     .toBeVisible()
-  state.retryable = false
-  await page.getByRole('button', { name: 'Retry source' }).click()
   await expect
-    .element(page.getByText('database.execute(query);', { exact: true }))
+    .element(page.getByRole('link', { name: 'Open on GitHub', exact: true }))
     .toBeVisible()
+  await expect
+    .element(page.getByRole('button', { name: 'Retry source' }))
+    .not.toBeInTheDocument()
   await view.unmount()
 })
 
@@ -927,7 +953,7 @@ it('shows a matching-source permission error without displaying an unverified ex
     )
   await expect
     .element(page.getByRole('button', { name: 'Retry source', exact: true }))
-    .toBeVisible()
+    .not.toBeInTheDocument()
   expect(document.querySelector('.cm-editor')).toBeNull()
 })
 

@@ -17,10 +17,28 @@ import {
   type AuthenticatedSession,
 } from "../auth/session.guard.js";
 import { McpOAuthService } from "./mcp-oauth.service.js";
+import {
+  deepSeekConnectorArchive,
+  deepSeekConnectorPath,
+} from "./deepseek-connector.js";
 type SessionRequest = Request & { preflytSession: AuthenticatedSession };
 @Controller()
 export class McpDiscoveryController {
   constructor(@Inject(McpOAuthService) private oauth: McpOAuthService) {}
+  // Package managers have no browser session. This public package contains no
+  // grants, workspace information, source, or access credentials.
+  @Get(deepSeekConnectorPath)
+  connector(@Res() response: Response) {
+    response
+      .set({
+        "Content-Type": "application/gzip",
+        "Content-Disposition":
+          'attachment; filename="preflyt-connector-1.0.0.tgz"',
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+      })
+      .send(deepSeekConnectorArchive(this.oauth.resource()));
+  }
   @Get([
     ".well-known/oauth-protected-resource",
     ".well-known/oauth-protected-resource/*path",

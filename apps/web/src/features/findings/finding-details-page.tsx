@@ -93,6 +93,8 @@ export function FindingDetailsPage({
         canManage: false,
         finding: {
           id: findingId,
+          origin: 'health',
+          healthFingerprint: findingId,
           review: data.review,
           title: finding.title,
           repositoryId: search.repository!,
@@ -128,10 +130,10 @@ export function FindingDetailsPage({
   const ai = useFindingAiGuidance(
     finding && finding.origin !== 'ai' && !finding.aiReview
       ? {
-          origin: health ? 'health' : 'ci',
+          origin: health || finding.origin === 'health' ? 'health' : 'ci',
           repositoryId: finding.repositoryId,
           assessmentId: finding.assessmentId,
-          findingId: finding.id,
+          findingId: finding.healthFingerprint ?? finding.id,
         }
       : null
   )
@@ -203,7 +205,7 @@ export function FindingDetailsPage({
                   {
                     title: 'Source code',
                     content:
-                      'The source viewer loads a saved, verified code excerpt from Preflyt after checking repository access. Existing findings without an excerpt fetch and save it once at the exact assessed commit. Highlighted lines are coordinates supplied by the report and verified to exist in that file. File-only findings show a bounded excerpt without highlighting. Check summaries and missing evidence may have no file or line.',
+                      'The source viewer loads a saved, redacted code excerpt after checking repository access. New Health findings save their excerpts from the exact source used by the scanner. Opening a finding does not fetch code from GitHub. Open on GitHub shows the full file at the assessed commit. Older findings without a saved excerpt link to GitHub. Check summaries and missing evidence may have no file or line.',
                   },
                   {
                     title: 'Ignoring and reopening',
@@ -286,6 +288,7 @@ export function FindingDetailsPage({
                     finding={displayedFinding!}
                     source={source}
                     sourcePath={sourcePath}
+                    aiReason={ai.reason}
                     aiState={
                       ai.isLoading
                         ? 'LOADING'
@@ -293,9 +296,7 @@ export function FindingDetailsPage({
                           ? 'FAILED'
                           : ai.isPreparing
                             ? 'RUNNING'
-                            : ai.data?.available
-                              ? ai.data.state
-                              : undefined
+                            : ai.data?.state
                     }
                     onRetryAi={
                       ai.data?.canGenerate &&
@@ -309,6 +310,7 @@ export function FindingDetailsPage({
                     key={sourcePath}
                     finding={displayedFinding!}
                     source={source}
+                    aiReason={ai.reason}
                     aiState={
                       ai.isLoading
                         ? 'LOADING'
@@ -316,9 +318,7 @@ export function FindingDetailsPage({
                           ? 'FAILED'
                           : ai.isPreparing
                             ? 'RUNNING'
-                            : ai.data?.available
-                              ? ai.data.state
-                              : undefined
+                            : ai.data?.state
                     }
                     onRetryAi={
                       ai.data?.canGenerate &&

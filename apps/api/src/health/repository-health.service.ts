@@ -1,3 +1,4 @@
+import type { PaymentRiskExport } from './payment-risk-export.js'
 import { healthRemediation } from './health-remediation.js'
 import { findingReviewId } from '../findings/finding-review.js'
 import { securityFindingsSummary } from './security-findings-summary.js'
@@ -341,7 +342,7 @@ export class RepositoryHealthService {
    WHERE id=${id} AND "repositoryId"=${repo.id} AND "organizationId"=${session.organizationId!}`)
   await this.access.requireRepository(session,githubId,'assessment.read')
   if(!rows[0]?.report) throw new NotFoundException('No completed payment risk report is available for this assessment')
-  const report=rows[0].report as {findings:Array<{issueId:string;classification:string;review?:unknown;modelClassification?:string}>}
+  const report=rows[0].report as PaymentRiskExport['report']
   const decisions=rows[0].sourceSha ? await this.db.findingReview.findMany({where:{organizationId:session.organizationId!,repositoryGithubId:githubId,assessmentId:id,sourceSha:rows[0].sourceSha}}) : []
   const byId=new Map(decisions.map(d=>[d.id,d]))
   for(const finding of Array.isArray(report.findings)?report.findings:[]){
@@ -474,8 +475,7 @@ export class RepositoryHealthService {
     else if(result.state==='RUNNING') await this.defer(id,token)
     else {
      row=await this.db.repositoryHealthAssessment.findUniqueOrThrow({where:{id}})
-     await this.finish(row,token,result.state,result.report??row.report as HealthReport|null,result.reason??null)
-     if(result.sourceBundle && result.report?.findings.length) await this.sources.captureSnapshot(row.repositoryId,result.sourceBundle,result.report.findings).catch(()=>console.warn(JSON.stringify({event:'health.source_capture_deferred',assessmentId:row.id})))
+     await this.finish(row,token,result.state,result.report??row.report as HealthReport|null,result.reason??null,null,result.sourceBundle)
     }
     return
    }
@@ -615,7 +615,10 @@ export class RepositoryHealthService {
     const rules=plan.steps.filter(step=>'adapterId' in step).map(step=>step.ruleId)
     if (!rules.length) throw new Error('No applicable scanner images available')
     expected={requestId:row.id,attemptId:row.id,organizationId:row.organizationId,repositoryId:repo.githubId.toString(),sourceSha:row.sourceSha,sourceHash:source.source.sourceHash,selectionId:'health:'+row.id,planHash,plan,ruleIds:rules,approvalHash:healthScannerAuthority(pkg,row.organizationId).reviewed.approvalHash}
-    const changed=await this.db.repositoryHealthAssessment.updateMany({where:{id:row.id,leaseToken:token,cancelledAt:null},data:{plan:json({...saved,package:pkg,expected,stage:'WAITING_SCANNER',excludedFiles:source.excludedFiles,originalTreeSha:source.originalTreeSha})}})
+    // Excerpts are display data: an unavailable scratch volume must not change
+    // the analyzer result or prevent standard checks from running.
+    const sharedSource=saved.sharedSource??await this.sourceStore.save(row,source).catch(()=>undefined)
+    const changed=await this.db.repositoryHealthAssessment.updateMany({where:{id:row.id,leaseToken:token,cancelledAt:null},data:{plan:json({...saved,sharedSource,package:pkg,expected,stage:'WAITING_SCANNER',excludedFiles:source.excludedFiles,originalTreeSha:source.originalTreeSha})}})
     if (!changed.count) throw new Error('Health attempt changed')
     row=await this.db.repositoryHealthAssessment.findUniqueOrThrow({where:{id:row.id}})
    }
@@ -654,7 +657,10 @@ export class RepositoryHealthService {
    const report=markSelection(healthReport({...initial.inspection,complete:initial.inspection.complete&&excluded===0},initial.analyses.map(a=>a.id==='tests.coverage'&&!expected.ruleIds.includes('tests.coverage')?{...a,state:'UNAVAILABLE' as const,reason:'TEST_ENVIRONMENT_UNAVAILABLE'}:a),receipt.checks,digest({kind:'automatic-health-v1',tools:receipt.toolReviewHash,scope:initial.analyses.map(a=>a.id)})),initial.selection==='all'?undefined:initial.selection)
    report.policyContext=initial.policyContext
    if(excluded)report.limits.push(`${excluded} binary, oversized, generated or linked files were excluded from the scanned source scope. Findings and metrics apply to retained files only.`)
-   await this.finish(row,token,receipt.cancelled?'CANCELLED':receipt.checks.some(c=>!c.cleanupConfirmed)?'FAILED':'COMPLETED',report,receipt.cancelled?'EXECUTION_CANCELLED':null)
+   // The same verified source used by the scanner supplies saved finding excerpts.
+   // Capture them in the report transaction before scratch source is cleaned up.
+   if(report.findings.length && (row.plan as any).sharedSource) source??=await this.sourceStore.read(row).catch(()=>undefined)
+   await this.finish(row,token,receipt.cancelled?'CANCELLED':receipt.checks.some(c=>!c.cleanupConfirmed)?'FAILED':'COMPLETED',report,receipt.cancelled?'EXECUTION_CANCELLED':null,null,source?.source)
   } catch (error) {
    // An uncertain admit/status response cannot abandon an owned scanner job.
    if (error instanceof GitHubRateLimitError) { await this.deferGitHub(row,token,error); return }
@@ -684,7 +690,9 @@ export class RepositoryHealthService {
  private async defer(id: string, token: string) {
   await this.db.repositoryHealthAssessment.updateMany({ where: { id, leaseToken: token }, data: { leaseToken: null, leaseUntil: new Date(Date.now()+5000) } })
  }
- private async finish(row: RepositoryHealthAssessment, token: string, state: string, report: HealthReport | null, reason: string | null, retryAt: string | null = null) {
+ private async finish(row: RepositoryHealthAssessment, token: string, state: string, report: HealthReport | null, reason: string | null, retryAt: string | null = null, source?: import('../execution/native-source.js').NativeSourceBundle) {
+  if(source && source.sourceSha!==row.sourceSha)throw new ConflictException('Finding source revision mismatch')
+  const snapshots=source && report?.findings.length ? await this.sources.prepareSnapshots(row.repositoryId,source,report.findings) : []
   await this.db.$transaction(async tx => {
    const changed = await tx.repositoryHealthAssessment.updateMany({ where: { id: row.id, state: 'RUNNING', leaseToken: token, cancelledAt: row.cancelledAt },
     data: { state, ...(report ? { report: json(report) } : {}), ...(state==='FAILED'&&validRetryAt(retryAt)?{plan:json({...row.plan as any,failure:{retryAt:validRetryAt(retryAt)}})}:{}), reason, finishedAt: new Date(), leaseToken: null, leaseUntil: null } })
@@ -697,7 +705,8 @@ export class RepositoryHealthService {
    if ((row.plan as any)?.kind==='STRIX_HEALTH') await tx.repositoryHealthStrixRun.update({
     where:{assessmentId:row.id},data:{finishedAt:new Date(),failureCode:state==='COMPLETED'?null:reason}
    })
-   if (row.sourceSha && report?.findings.length) await queueFindingSources(tx, row.repositoryId, row.sourceSha, report.findings, 5)
+   if(snapshots.length)await this.sources.saveSnapshots(tx,snapshots)
+   if (row.sourceSha && report?.findings.length) await queueFindingSources(tx, row.repositoryId, row.sourceSha, report.findings)
    await tx.auditEvent.create({ data: { event: 'repository.health.finished', actorId: row.actorId, metadata: { assessmentId: row.id, state, reason, sourceSha: row.sourceSha } } })
    if (!notificationsEnabled() || state === 'CANCELLED' || state === 'SKIPPED') return
    const repo = await tx.gitHubRepository.findUniqueOrThrow({ where: { id: row.repositoryId } })

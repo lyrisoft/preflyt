@@ -25,6 +25,9 @@ import { nativeRuntimeApproval } from '../src/execution/native-runtime.js'
 import { nativeToolReviews, nativeAdapters } from '../src/execution/native-plan.js'
 import { signNativeReceipt, verifyNativeReceipt } from '../src/execution/native-receipt.js'
 import { digest } from '../src/assessments/assessment-digest.js'
+import { healthSourceFixture } from './health-source-fixture.js'
+import { HealthSourceStore } from '../src/health/health-source-store.js'
+import { queueFindingSources } from '../src/findings/finding-source-store.js'
 import { HealthScannerClient } from '../src/health/health-scanner-client.js'
 import { healthScannerAuthority } from '../src/health/health-scanner-package.js'
 import type { AuthenticatedSession } from '../src/auth/session.guard.js'
@@ -128,7 +131,7 @@ it('selection queues once without needing CI, standards or an immediate source r
  const report=await service.get(owner,'51');expect(report.assessment).toMatchObject({state:'COMPLETED',sourceSha:sha,report:{mode:'INSPECTION_ONLY',completeness:'PARTIAL'}})
  expect(await fixture.prisma.notificationEvent.count()).toBe(1);expect(await fixture.prisma.repositoryStandardsSelection.count()).toBe(0);expect(await fixture.prisma.gatePolicyRevision.count()).toBe(0);expect(await fixture.prisma.commitAssessment.count()).toBe(0)
 })
-it('automatically scans the selected repository without standards, CI or manual runtime approval and stores verified findings',async()=>{
+it.each(['retained','missing'])('automatically stores verified findings with %s temporary source, without standards, CI or manual runtime approval',async(sourceState)=>{
  const key=generateKeyPairSync('ed25519'),publicKey=key.publicKey.export({type:'spki',format:'pem'}).toString(),privateKey=key.privateKey.export({type:'pkcs8',format:'pem'}).toString()
  const ids=['secrets.scan','security.sast','quality.reliability','quality.maintainability','quality.duplication','security.hotspots'] as const
  const pkg={version:1 as const,environmentId:'health-fixture',runtime:'runc' as const,controlsHash:'d'.repeat(64),controllerPublicKey:publicKey,createdAt:new Date(Date.now()-60000).toISOString(),tools:ids.map(ruleId=>({ruleId,image:'sha256:'+'b'.repeat(64),toolVersion:'fixture-1',license:nativeAdapters[ruleId].license,configHash:'c'.repeat(64),reviewDigest:'d'.repeat(64),expiresAt:'2099-01-01T00:00:00Z',databaseBuiltAt:null}))}
@@ -145,7 +148,8 @@ it('automatically scans the selected repository without standards, CI or manual 
   Object.assign(sast,{state:'FAIL',reason:'FINDINGS_REPORTED',reportHash:'f'.repeat(64),summary:{runs:1,results:1,suppressed:0},exitCode:1,fileAnalysis:{version:1,formula:'semgrep-candidate-files-v1',scope:'js-ts-python',candidateFiles:1,analyzedFiles:1,skippedFiles:0,pathsDigest:'e'.repeat(64)},findings:[{category:'security',fingerprint:'f'.repeat(64),severity:'high',title:'Dynamic code execution requires review',ruleId:'preflyt-js-eval',path:'app.ts',line:1,endLine:1,suppressed:false}]})
   return {state:'COMPLETE',signature:signNativeReceipt(receipt,privateKey,publicKey),cleanupConfirmed:true}
  })}
- provider.readHealthScanSource.mockResolvedValue({source:{sourceHash:'e'.repeat(64)},excludedFiles:0,originalTreeSha:'b'.repeat(40)})
+ vi.stubEnv('CONFIGURATION_ENCRYPTION_KEY',Buffer.alloc(32,7).toString('base64'))
+ provider.readHealthScanSource.mockResolvedValue(healthSourceFixture(sha,'51','eval(input)\n'))
  provider.readRepositorySnapshot.mockResolvedValueOnce({...await provider.readRepositorySnapshot(),scanSource:await provider.readHealthScanSource()})
  provider.readHealthScanSource.mockClear()
  runtime.status.mockClear()
@@ -154,11 +158,18 @@ it('automatically scans the selected repository without standards, CI or manual 
  await service.process(scan.id)
  expect(scanner.call).toHaveBeenCalledWith('admit',expect.objectContaining({repositoryId:'51',sourceSha:sha,selectionId:'health:'+scan.id}),expect.anything())
  expect(provider.readHealthScanSource).not.toHaveBeenCalled()
+ if(sourceState==='missing')await new HealthSourceStore().remove(scan.id)
  await fixture.prisma.repositoryHealthAssessment.update({where:{id:scan.id},data:{leaseUntil:null}})
  await service.process(scan.id)
  const result=await service.get(owner,'51')
  expect(result.assessment).toMatchObject({state:'COMPLETED',report:{mode:'EXECUTED',findings:[],findingSummary:{total:1}}})
  expect((await service.findings(owner,'51',result.assessment!.id,{})).rows).toEqual([expect.objectContaining({severity:'high',path:'app.ts',line:1})])
+ expect(await fixture.prisma.findingSourceExcerpt.count({where:{repositoryId:repoId,sourceSha:sha,contentHash:{not:null}}})).toBe(sourceState==='retained'?1:0)
+ const fingerprint=(await service.findings(owner,'51',result.assessment!.id,{})).rows[0].fingerprint
+ const source=await service.source(owner,'51',scan.id,fingerprint)
+ if(sourceState==='retained')expect(source.lines).toContainEqual({number:1,text:'eval(input)'})
+ else expect(source).toMatchObject({lines:[],retryable:false,reason:expect.stringContaining('Open the file on GitHub')})
+ expect(provider.readHealthSource).not.toHaveBeenCalled()
  admitted=false
  scanner.call.mockClear()
  const security=await service.start(owner,'51',{requestKey:randomUUID(),category:'security'})
@@ -258,7 +269,8 @@ it('reveals only bounded, redacted context from the assessed revision and rechec
  await fixture.prisma.repositoryHealthAssessment.update({where:{id:row.id},data:{report}})
  const text=Array.from({length:20},(_,i)=>i===5?'password="sensitive-value"':`line ${i+1}`).join('\n');provider.readHealthSource.mockResolvedValue(text)
  const queued=await service.source(developer,'51',row.id,fingerprint)
- expect(queued.retryable).toBe(true);expect(provider.readHealthSource).not.toHaveBeenCalled()
+ expect(queued.retryable).toBe(false);expect(provider.readHealthSource).not.toHaveBeenCalled()
+ await fixture.prisma.$transaction(tx=>queueFindingSources(tx,repoId,sha,report.findings))
  await new FindingSourceStore(fixture.prisma,provider as any).reconcile()
  const source=await service.source(developer,'51',row.id,fingerprint)
  expect(provider.readHealthSource).toHaveBeenCalledWith(50n,51n,sha,'app.ts');expect(source.lines.map(l=>l.number)).toEqual([3,4,5,6,7,8,9,10,11,12,13]);expect(JSON.stringify(source)).not.toContain('sensitive-value')

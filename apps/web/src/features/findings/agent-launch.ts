@@ -23,7 +23,15 @@ export function agentLaunchUrl(
   return `codex://threads/new?prompt=${encodeURIComponent(prompt)}${remote}`
 }
 
-export function connectedLaunchAgents(
+export type ConnectedMcpAgent = {
+  id: string
+  name: string
+  logo?: CodingAgent | 'deepseek'
+  launch?: CodingAgent
+  repositoryApproved: boolean
+}
+
+export function connectedMcpAgents(
   connections: {
     clientName: string
     repositories: string[]
@@ -35,21 +43,29 @@ export function connectedLaunchAgents(
   now = Date.now()
 ) {
   const connected = connections.filter(
-    (c) =>
-      !c.revokedAt &&
-      new Date(c.expiresAt).getTime() > now &&
-      c.repositories.includes(repository) &&
-      c.scopes.split(' ').includes('findings:read')
+    (c) => !c.revokedAt && new Date(c.expiresAt).getTime() > now
   )
-  return codingAgents.filter((agent) =>
-    connected.some((c) => {
-      const name = c.clientName
-        .toLowerCase()
-        .replace(/[ _-]+/g, ' ')
-        .trim()
-      return agent.id === 'codex'
-        ? /\bcodex\b/.test(name)
-        : /\bclaude\b/.test(name)
+  const agents = new Map<string, ConnectedMcpAgent>()
+  for (const connection of connected) {
+    const displayName =
+      connection.clientName.trim().replace(/\s+/g, ' ') || 'MCP agent'
+    const name = displayName.toLowerCase().replace(/[ _-]+/g, ' ')
+    const native = codingAgents.find((agent) =>
+      agent.id === 'codex' ? /\bcodex\b/.test(name) : /\bclaude\b/.test(name)
+    )
+    const agent: Omit<ConnectedMcpAgent, 'repositoryApproved'> = native
+      ? { ...native, logo: native.id, launch: native.id }
+      : /\bdeepseek\b|\bdeep seek\b|\bdsh\b/.test(name)
+        ? { id: 'deepseek', name: 'DeepSeek Harness', logo: 'deepseek' }
+        : { id: `mcp:${name}`, name: displayName }
+    const repositoryApproved =
+      connection.repositories.includes(repository) &&
+      connection.scopes.split(/\s+/).includes('findings:read')
+    agents.set(agent.id, {
+      ...agent,
+      repositoryApproved:
+        repositoryApproved || !!agents.get(agent.id)?.repositoryApproved,
     })
-  )
+  }
+  return [...agents.values()]
 }

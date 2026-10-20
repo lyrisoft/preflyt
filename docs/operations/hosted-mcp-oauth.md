@@ -1,6 +1,6 @@
 # Hosted MCP OAuth
 
-**Integrations → MCP and coding agents** defaults to a hosted, Streamable HTTP MCP connection. Users add the Preflyt endpoint in their agent once, sign in to Preflyt in the browser, and approve selected repositories. The agent manages its own OAuth credentials. No downloaded companion, environment token or configuration file edit is required for this path.
+**Integrations → MCP and coding agents** defaults to a hosted, Streamable HTTP MCP connection. Users add the Preflyt endpoint in their agent, sign in to Preflyt in the browser, and approve selected repositories. Codex and Claude Code manage OAuth directly. DeepSeek Harness uses a local OAuth bridge configured below. These connections do not require a Preflyt companion or a manually copied access token.
 
 ## Connect
 
@@ -21,7 +21,31 @@ claude mcp add --transport http --scope user preflyt http://localhost:8080/api/m
 
 Then run `/mcp` in Claude Code and authenticate Preflyt. An agent that already has a server named `preflyt` should use its existing login/reconnect action instead of adding the same name again. Remove an older static bearer header/token configuration before switching that entry to OAuth; an explicitly configured bearer token takes precedence in native clients.
 
+### DeepSeek Harness
+
+Select **DeepSeek Harness** in Integrations and choose **Copy install link**. In the installed DeepSeek Harness application:
+
+1. Open **Plugins → Add plugin**.
+2. Paste the Preflyt install link and choose **Install**, then **Enable now**.
+3. Sign in to Preflyt in the browser and approve the repositories this connection can access.
+
+Then copy a finding's **verification task** into Harness. No YAML editing, terminal commands, separately installed Node.js, or copied access token is needed. The application stores and refreshes OAuth credentials locally. Disconnect from Preflyt's Integrations page to revoke access.
+
+The install link is `${PREFLYT_PUBLIC_API_URL}/mcp-setup/deepseek/preflyt-connector-1.0.0.tgz` (local Compose: `http://localhost:8080/api/mcp-setup/deepseek/preflyt-connector-1.0.0.tgz`). It is a small npm-compatible package containing Preflyt's connector, display metadata and license. The endpoint is public so DSH's package manager can download it without browser cookies. It includes only the configured public MCP endpoint and fixed package versions; no user, workspace, repository selection, source, grant or credential is included. Host headers and query parameters cannot change its MCP target. HTTPS is required for deployed Preflyt; loopback HTTP supports local Compose.
+
+The connector uses the first-party MCP client already shipped with DSH, loaded through its plugin loader. Its only installed dependency is the pinned `mcp-remote@0.1.38` bridge; DSH installs that through its own package manager. A small connector module runs the installed bridge with DSH's current Node/Electron executable, using Electron's supported Node mode on Desktop. It never launches a shell or npx, requires no global installation, and supplies no bearer header. The bridge performs the existing repository-consent OAuth flow. The native MCP client has no OAuth provider in this release.
+
+For a CLI web profile, the same package can be installed with `dsh plugin --profile web add <install-link>`; the bundle is selected by the plugin manager. A desktop profile must be managed by the Desktop app or its installed command, not by a separate npm CLI installation. If initial browser approval times out, toggle the connector off and on to restart login. Installing a connector is separate from granting repository access.
+
+This connection uses the copied-task handoff. It does not register a DeepSeek desktop launch link or extend the optional companion's Codex/Claude runners.
+
+References: [DeepSeek MCP client](https://github.com/deepseek-ai/deepseek-harness/tree/master/packages/mcp/mcp-client), [DSH plugin manager and tarball installation](https://github.com/deepseek-ai/deepseek-harness/tree/master/packages/boot/plugin-manager), [Desktop runtime](https://github.com/deepseek-ai/deepseek-harness/tree/master/apps/desktop), [mcp-remote OAuth bridge](https://github.com/punkpeye/mcp-remote).
+
+### Repository approval and finding review
+
 The approval screen identifies the client-provided name, registered return address, requested permissions and repositories. The name is not a verified vendor identity. Approve only a login you started. Users explicitly select repository access; future repositories are not added automatically. Connections are owned by the signed-in user and workspace, and can be disconnected under Integrations.
+
+The connection list shows active connections first. Disconnected and expired entries remain available under the collapsed **Connection history** section, with a count. Disconnecting moves an entry into history; it does not delete its saved review evidence.
 
 Once connected, copy a finding's verification task into the agent. The task contains the assessed commit and exact scope identifiers. The agent reads the saved analysis and source, checks the actual repository using its own environment and permissions, then submits external review evidence and any proposed fix PR link. Hosted MCP supplies tools; it does not start a local agent process. The [local companion](local-companion.md) is optional for users who want Preflyt's finding buttons to start local tasks. The manual per-finding token flow remains under Advanced.
 
@@ -62,13 +86,15 @@ Writes reuse the existing exact-commit evidence validation, idempotency, secret 
 
 Apply `20261019073000_hosted_mcp_oauth`, regenerate Prisma, and rebuild API, worker, migration and web together. Existing Strix bridge recreation/reload instructions still apply. The migration adds tables and an optional grant binding; existing manual/companion credentials remain valid.
 
-Disposable database tests cover discovery, dynamic registration, callback/client/resource/PKCE binding, standard form token exchange, replay rejection, scope and repository limits, current membership, revocation and preserved finding status. Browser tests cover the hosted default, native setup commands, consent, connection management, optional companion and mobile layouts. The official MCP SDK smoke performs discovery through the real web proxy, registration, approval, code exchange, tool/source reads, refresh and revocation. It does not run a model or fabricate review evidence.
+Disposable database tests cover discovery, dynamic registration (including DeepSeek bridge metadata), callback/client/resource/PKCE binding, standard form token exchange, replay rejection, scope and repository limits, current membership, revocation and preserved finding status. Browser tests cover the hosted default, native commands, DeepSeek configuration and copied-task handoff, consent, connection management, optional companion and mobile layouts. The official MCP SDK smoke performs discovery through the real web proxy, registration, approval, code exchange, tool/source reads, refresh and revocation. It does not run a model or fabricate review evidence. Configuration and OAuth contract checks are separate from the [recorded live DeepSeek review](../acceptance/2026-10-20-deepseek-harness-mcp.md).
 
 Client/spec references: [MCP authorization](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization), [Codex MCP](https://learn.chatgpt.com/docs/extend/mcp), [Claude Code MCP](https://code.claude.com/docs/en/mcp).
 
 ## Open a finding in a coding agent
 
-Finding details show an **Open in Codex** or **Open in Claude Code** logo button when the current user has a non-expired, non-revoked hosted connection with read access to that repository. Multiple connections for the same supported agent produce one button. Other MCP clients retain the Copy verification task fallback; OAuth by itself does not define a universal client-launch protocol.
+Finding details show every active MCP agent connected by the current user. Connections that are expired or disconnected are omitted; duplicate connections for one client produce one action. Approved Codex and Claude Code connections offer **Open in Codex** or **Open in Claude Code**. DeepSeek Harness and other clients offer **Copy task for [agent]**, with the supplied logo where available. The user pastes that task into the named agent and sends it; copying creates no credentials and starts no model run. The general **Copy verification task** action remains available.
+
+If a connected agent has not been approved for this repository, it remains visible as **Manage [agent] access**, linking to Integrations. Reconnect the agent and explicitly select the repository before using it for this finding. Displaying an agent never expands its repository permissions. OAuth by itself does not define a universal client-launch protocol; arbitrary client names or URLs cannot add a desktop launch scheme.
 
 The buttons use the documented desktop draft links: [Codex](https://learn.chatgpt.com/docs/reference/commands#deep-links) `codex://threads/new?prompt=...&originUrl=...` and [Claude Code in Claude Desktop](https://support.claude.com/en/articles/14729294-open-claude-desktop-with-a-link) `claude://code/new?q=...`. The desktop application must be installed. The user reviews the draft and sends it; the link never submits it automatically. A terminal-only installation cannot handle these desktop links, so Copy verification task remains available.
 

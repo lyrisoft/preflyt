@@ -1,0 +1,41 @@
+# Source-built local AI security reviews. Use with docker-compose.yaml and
+# compose.local.yaml, and enable COMPOSE_PROFILES=ai-security.
+# A one-shot builder fetches the pinned toolkit into the dedicated Strix engine;
+# no host controller, host Docker socket or local image registry is required.
+services:
+  strix-sandbox-init:
+    profiles: [ai-security]
+    image: ${PREFLYT_IMAGE_REGISTRY:-preflyt-local}/preflyt-strix-sandbox-builder:${PREFLYT_VERSION:-development}
+    build:
+      context: .
+      dockerfile: deploy/strix.Dockerfile
+      target: sandbox-builder
+    user: '1000:1000'
+    init: true
+    restart: 'no'
+    read_only: true
+    tmpfs: ['/tmp:rw,nosuid,nodev,size=67108864']
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
+    pids_limit: 64
+    environment:
+      DOCKER_HOST: tcp://strix-engine:2376
+      DOCKER_TLS_VERIFY: '1'
+      DOCKER_CERT_PATH: /run/docker-tls
+      HOME: /tmp
+    volumes:
+      - strix_engine_client:/run/docker-tls:ro
+    depends_on:
+      strix-engine:
+        condition: service_healthy
+      strix-init:
+        condition: service_completed_successfully
+    # Only this fixed, source-free initializer resolves registry tokens.
+    networks: [strix_engine, strix_pull]
+  strix-runner:
+    environment:
+      PREFLYT_STRIX_SANDBOX_IMAGE: preflyt-local/preflyt-strix-sandbox:v1.7.0
+    depends_on:
+      strix-sandbox-init:
+        condition: service_completed_successfully

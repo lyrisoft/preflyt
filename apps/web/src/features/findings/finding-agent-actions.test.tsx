@@ -26,6 +26,8 @@ const finding = {
   category: 'security',
 } as Finding
 let hosted = true
+let hostedClients = ['Codex', 'Claude Code']
+let hostedRepositories = ['120']
 let active = false,
   canConnect = true,
   failed = false
@@ -34,6 +36,8 @@ const token = 'pfv_' + 'x'.repeat(43)
 let clipboard: ReturnType<typeof vi.spyOn>, fetchMock: ReturnType<typeof vi.fn>
 beforeEach(() => {
   hosted = true
+  hostedClients = ['Codex', 'Claude Code']
+  hostedRepositories = ['120']
   active = false
   canConnect = true
   failed = false
@@ -48,10 +52,10 @@ beforeEach(() => {
     if (url.includes('/mcp-connections'))
       return Response.json(
         hosted
-          ? ['Codex', 'Claude Code'].map((clientName, n) => ({
+          ? hostedClients.map((clientName, n) => ({
               id: String(n),
               clientName,
-              repositories: ['120'],
+              repositories: hostedRepositories,
               scopes: 'findings:read findings:review',
               expiresAt: '2099-01-01',
               revokedAt: null,
@@ -296,10 +300,108 @@ it('keeps copy available when no supported coding agent is connected', async () 
   await expect
     .element(
       view.getByText(
-        'Connect a supported coding agent in Integrations, or copy the task into your agent.'
+        'Copy the verification task into your coding agent. Manage its Preflyt access in Integrations.'
       )
     )
     .toBeVisible()
+})
+
+it('shows DeepSeek Harness as a connected agent and copies its task without creating credentials or a desktop link', async () => {
+  hostedClients = ['DeepSeek Harness']
+  const view = await mount(false)
+  await view
+    .getByRole('button', {
+      name: 'Copy task for DeepSeek Harness',
+      exact: true,
+    })
+    .click()
+  await expect
+    .poll(() => clipboard.mock.calls[0]?.[0])
+    .toContain(finding.sourceSha)
+  await expect
+    .element(view.getByRole('link', { name: /Open in/ }))
+    .not.toBeInTheDocument()
+  expect(
+    fetchMock.mock.calls.some(
+      ([url]) => url.endsWith('/connections') || url.includes('/launch-task?')
+    )
+  ).toBe(false)
+  await expect
+    .element(
+      view.getByText(
+        'Paste the copied task into the named agent and send it to start.'
+      )
+    )
+    .toBeVisible()
+})
+
+it('shows all connected MCP clients once alongside supported desktop links', async () => {
+  hostedClients = [
+    'Codex',
+    'DeepSeek Harness',
+    'Custom MCP agent',
+    'DeepSeek Harness',
+  ]
+  const view = await mount(false)
+  await expect
+    .element(view.getByRole('link', { name: 'Open in Codex', exact: true }))
+    .toBeVisible()
+  await expect
+    .element(
+      view.getByRole('button', {
+        name: 'Copy task for DeepSeek Harness',
+        exact: true,
+      })
+    )
+    .toBeVisible()
+  await expect
+    .element(view.getByRole('img', { name: 'DeepSeek logo', exact: true }))
+    .toBeVisible()
+  await view
+    .getByRole('button', {
+      name: 'Copy task for Custom MCP agent',
+      exact: true,
+    })
+    .click()
+  await expect
+    .poll(() => clipboard.mock.calls.at(-1)?.[0])
+    .toContain(finding.sourceSha)
+  expect(view.container.querySelectorAll('button').length).toBe(3)
+  for (const dark of [false, true]) {
+    await page.viewport(320, 800)
+    document.documentElement.classList.toggle('dark', dark)
+    expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(320)
+  }
+})
+
+it('shows a connected agent that needs repository approval without offering a task or creating access', async () => {
+  hostedClients = ['DeepSeek Harness']
+  hostedRepositories = ['other']
+  const view = await mount(false)
+  const link = view.getByRole('link', {
+    name: 'Manage DeepSeek Harness access',
+    exact: true,
+  })
+  await expect.element(link).toBeVisible()
+  expect(link.element().getAttribute('href')).toBe(
+    '/integrations?integration=mcp'
+  )
+  await expect
+    .element(
+      view.getByRole('button', {
+        name: 'Copy task for DeepSeek Harness',
+        exact: true,
+      })
+    )
+    .not.toBeInTheDocument()
+  expect(
+    fetchMock.mock.calls.some(
+      ([url]) =>
+        url.includes('/launch-task?') ||
+        url.includes('/task?') ||
+        url.endsWith('/connections')
+    )
+  ).toBe(false)
 })
 
 it('keeps desktop links disabled when the task fails its access check', async () => {
