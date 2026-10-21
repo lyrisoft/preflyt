@@ -89,7 +89,7 @@ function languageFor(path: string) {
 }
 const appearance = EditorView.theme({
   '&': {
-    fontSize: '13px',
+    fontSize: '0.8125rem',
     color: 'var(--foreground)',
     backgroundColor: 'var(--source-background)',
   },
@@ -200,7 +200,7 @@ export function SourceCodeEditor({
   return (
     <div className='finding-code-editor min-w-0 overflow-hidden'>
       <div ref={host} />
-      <div className='flex flex-wrap justify-between gap-2 border-t bg-muted/20 px-4 py-2 text-[11px] text-muted-foreground'>
+      <div className='flex flex-wrap justify-between gap-2 border-t bg-muted/20 px-4 py-2 text-xs text-muted-foreground'>
         <span>{language.name}</span>
         <span>Read only · {lines.length} lines shown</span>
       </div>

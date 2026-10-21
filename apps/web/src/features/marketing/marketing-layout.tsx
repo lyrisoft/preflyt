@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ArrowUpRight, Menu, X } from 'lucide-react'
 import { API_BASE_URL } from '@/lib/api'
+import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import './homepage.css'
 import { useHomepageMotion } from './use-homepage-motion'
@@ -10,7 +11,8 @@ const footerGroups = [
     title: 'Product',
     links: [
       ['Product overview', '/product'],
-      ['Pricing', '/pricing'],
+      // Temporarily hidden until pricing is ready to publish.
+      // ['Pricing', '/pricing'],
       ['Repository health', '/product/repository-health'],
       ['Standards & evidence', '/product/standards-and-evidence'],
       ['Merge Protection', '/product/merge-protection'],
@@ -74,9 +76,11 @@ export function MarketingClosing({
 export function MarketingLayout({
   children,
   activeSection,
+  className,
 }: {
   children: ReactNode
   activeSection?: 'product' | 'community' | 'pricing'
+  className?: string
 }) {
   const siteRef = useRef<HTMLDivElement>(null)
   useHomepageMotion(siteRef)
@@ -108,14 +112,28 @@ export function MarketingLayout({
     return () => document.removeEventListener('keydown', close)
   }, [menuOpen])
   return (
-    <div ref={siteRef} className='marketing-site dark' data-theme='dark'>
+    <div
+      ref={siteRef}
+      className={cn('marketing-site dark', className)}
+      data-theme='dark'
+    >
       <link
         rel='stylesheet'
         href={
           'https://fonts.googleapis.com/css2?family=Geist:wght@300;350;400;450;500;600;650;700&display=swap'
         }
       />
-      <a className='skip' href='#main'>
+      <a
+        className='skip'
+        href='#main'
+        onClick={(event) => {
+          const main = document.getElementById('main')
+          if (!main?.hasAttribute('tabindex')) return
+          event.preventDefault()
+          main.focus({ preventScroll: true })
+          main.scrollIntoView({ block: 'start' })
+        }}
+      >
         Skip to content
       </a>
       <header className='header'>
@@ -143,12 +161,14 @@ export function MarketingLayout({
             >
               Community Edition
             </a>
+            {/* Pricing is temporarily hidden.
             <a
               href='/pricing'
               aria-current={activeSection === 'pricing' ? 'page' : undefined}
             >
               Pricing
             </a>
+            */}
             <a
               href='https://docs.preflytlabs.com/'
               target='_blank'
@@ -222,18 +242,28 @@ export function MarketingLayout({
           >
             Community Edition
           </a>
+          {/* Pricing is temporarily hidden.
           <a
             href='/pricing'
             aria-current={activeSection === 'pricing' ? 'page' : undefined}
           >
             Pricing
           </a>
+          */}
           <a
             href='https://docs.preflytlabs.com/'
             target='_blank'
             rel='noreferrer'
           >
             Documentation
+          </a>
+          <a
+            href='https://docs.preflytlabs.com/getting-started/quick-start'
+            target='_blank'
+            rel='noreferrer'
+          >
+            Install Preflyt
+            <ArrowUpRight aria-hidden='true' className='icon small' />
           </a>
           {import.meta.env.VITE_WEBSITE_MODE !== 'true' && (
             <a href={authenticated ? '/overview' : '/sign-in'}>

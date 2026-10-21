@@ -1,0 +1,8 @@
+{
+  "type": "improvement",
+  "title": "Star Preflyt from the website and workspace",
+  "description": "Star on GitHub appears beside Install Preflyt on the homepage and as a quiet secondary action in the logged-in app header. On compact screens, the workspace link is available in the account menu. Both open the public Preflyt repository in a new tab so people can star the project on GitHub, with accessible labels and keyboard focus styling.",
+  "upgrade": "Rebuild and restart the web service.",
+  "migrations": [],
+  "configuration": []
+}

@@ -69,7 +69,7 @@ export function ContributorActivitySummary({
               role='img'
               aria-label='Daily authored PRs, merged PRs, recorded reviews and attributed commits'
             >
-              <ResponsiveContainer width='100%' height='100%'>
+              <ResponsiveContainer width='100%' height='100%' minHeight='11rem'>
                 <AreaChart
                   data={series}
                   margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
@@ -78,13 +78,13 @@ export function ContributorActivitySummary({
                   <XAxis
                     dataKey='date'
                     tickFormatter={(s) => String(s).slice(5)}
-                    tick={{ fontSize: 10 }}
+                    tick={{ fontSize: '0.75rem' }}
                     minTickGap={28}
                   />
                   <YAxis
                     allowDecimals={false}
                     width={28}
-                    tick={{ fontSize: 10 }}
+                    tick={{ fontSize: '0.75rem' }}
                   />
                   <Tooltip {...chartTooltipAnimation} />
                   {definitions.map((d, i) => (
@@ -103,7 +103,7 @@ export function ContributorActivitySummary({
                 </AreaChart>
               </ResponsiveContainer>
             </div>
-            <div className='flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground'>
+            <div className='flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground'>
               {definitions.map((d, i) => (
                 <span key={d.key} className='inline-flex items-center gap-1.5'>
                   <span
@@ -122,24 +122,29 @@ export function ContributorActivitySummary({
               : 'Activity permission is required.'}
           </p>
         )}
-        <div className='grid grid-cols-2 gap-2 sm:grid-cols-4'>
+        <div className='grid grid-cols-[repeat(auto-fit,minmax(min(100%,8rem),1fr))] gap-2'>
           {definitions.map((d, i) => (
-            <div key={d.key} className='rounded-lg border bg-muted/15 p-3'>
+            <div
+              key={d.key}
+              className='min-w-0 rounded-lg border bg-muted/15 p-3'
+            >
               <div className='flex items-center justify-between gap-2'>
-                <span className='text-xs text-muted-foreground'>{d.label}</span>
+                <span className='min-w-0 text-xs break-words text-muted-foreground'>
+                  {d.label}
+                </span>
                 <d.icon
                   className='size-3.5 shrink-0'
                   style={{ color: `var(--chart-${i + 1})` }}
                 />
               </div>
-              <p className='mt-2 text-xl font-semibold tabular-nums'>
+              <p className='mt-2 text-xl font-semibold break-words tabular-nums'>
                 {metrics[d.key] ?? 'Unavailable'}
               </p>
             </div>
           ))}
         </div>
         <div className='sr-only'>
-          <Table pagination={false} className='w-full text-left text-[11px]'>
+          <Table pagination={false} className='w-full text-left text-xs'>
             <caption>Daily contribution activity (UTC)</caption>
             <thead>
               <tr>

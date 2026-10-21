@@ -150,6 +150,9 @@ export function OrganizationSettingsPage() {
                 void client.invalidateQueries({
                   queryKey: ['notification-preferences'],
                 })
+                void client.invalidateQueries({
+                  queryKey: ['weekly-health-preferences'],
+                })
               }}
             >
               <RefreshCw className='size-4' />
@@ -158,6 +161,11 @@ export function OrganizationSettingsPage() {
             <PageHelpDrawer
               title='Settings'
               sections={[
+                {
+                  title: 'Weekly health emails',
+                  content:
+                    'Choose your repositories, day, time and timezone under Notifications. Weekly emails are separate from individual alerts. They use saved standard assessments and do not start scans or paid AI reviews. Partial, failed or changed-scope scans never establish fixes. Access and opt-in are checked again before sending.',
+                },
                 {
                   title: 'Data retention',
                   content:

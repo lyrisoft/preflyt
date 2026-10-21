@@ -64,7 +64,7 @@ export function ActivityHeatmap({
           <div className='flex w-max gap-1'>
             <div
               aria-hidden='true'
-              className='grid grid-rows-[1rem_repeat(7,1.5rem)] gap-1 pe-2 text-[10px] leading-6 text-muted-foreground'
+              className='grid grid-rows-[1rem_repeat(7,1.5rem)] gap-1 pe-2 text-xs leading-6 text-muted-foreground'
             >
               <span />
               <span />
@@ -87,7 +87,7 @@ export function ActivityHeatmap({
                 >
                   <span
                     aria-hidden='true'
-                    className='h-4 text-[10px] text-muted-foreground'
+                    className='h-4 text-xs text-muted-foreground'
                   >
                     {first
                       ? new Intl.DateTimeFormat(locale, {

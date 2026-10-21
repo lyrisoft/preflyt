@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import { handleServerError } from '@/lib/handle-server-error'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Label } from '@/components/ui/label'
 import {
   Select,
   SelectContent,
@@ -75,6 +76,7 @@ export function RulesetDeployments({
   actorId?: string
   canManage: boolean
 }) {
+  const draftPickerId = useId()
   const [pageSize, setPageSize] = useState(10)
   const [page, setPage] = useState(1),
     [draftId, setDraftId] = useState(''),
@@ -189,23 +191,32 @@ export function RulesetDeployments({
         </CardHeader>
         <CardContent className='space-y-4'>
           {canManage && (
-            <div className='flex flex-wrap gap-3'>
-              <Select
-                value={draftId}
-                onValueChange={setDraftId}
-                disabled={busy}
-              >
-                <SelectTrigger className='w-80'>
-                  <SelectValue placeholder='Choose a saved ruleset draft' />
-                </SelectTrigger>
-                <SelectContent>
-                  {(!drafts.isError ? drafts.data?.drafts : [])?.map((d) => (
-                    <SelectItem key={d.id} value={d.id}>
-                      {d.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className='flex flex-wrap items-end gap-3'>
+              <div className='w-full min-w-0 space-y-2 sm:w-80'>
+                <Label id={`${draftPickerId}-label`} htmlFor={draftPickerId}>
+                  Ruleset draft
+                </Label>
+                <Select
+                  value={draftId}
+                  onValueChange={setDraftId}
+                  disabled={busy}
+                >
+                  <SelectTrigger
+                    id={draftPickerId}
+                    aria-labelledby={`${draftPickerId}-label`}
+                    className='w-full'
+                  >
+                    <SelectValue placeholder='Choose a saved ruleset draft' />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(!drafts.isError ? drafts.data?.drafts : [])?.map((d) => (
+                      <SelectItem key={d.id} value={d.id}>
+                        {d.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <Button
                 disabled={busy || !draftId || !query.data?.enabled}
                 onClick={() => void action('preview')}

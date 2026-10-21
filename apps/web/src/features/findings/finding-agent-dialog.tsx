@@ -112,7 +112,7 @@ export function FindingAgentDialog({
           </div>
           <div className='rounded-lg border bg-muted/20 px-3 py-3'>
             <div className='flex flex-wrap items-center justify-between gap-2'>
-              <p className='text-[11px] font-medium tracking-wide text-muted-foreground uppercase'>
+              <p className='text-xs font-medium tracking-wide text-muted-foreground uppercase'>
                 Connection scope
               </p>
               <span className='inline-flex items-center gap-1.5 text-xs text-muted-foreground'>
@@ -193,7 +193,7 @@ export function FindingAgentDialog({
                         Copy configuration
                       </Button>
                     </div>
-                    <pre className='max-h-44 overflow-auto bg-muted/10 p-3 font-mono text-[11px] leading-5'>
+                    <pre className='max-h-44 overflow-auto bg-muted/10 p-3 font-mono text-xs leading-5'>
                       {config}
                     </pre>
                   </div>
@@ -297,7 +297,7 @@ function StepNumber({ number }: { number: number }) {
   return (
     <span
       aria-hidden='true'
-      className='mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border bg-muted/30 text-[11px] font-medium text-muted-foreground'
+      className='mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border bg-muted/30 text-xs font-medium text-muted-foreground'
     >
       {number}
     </span>

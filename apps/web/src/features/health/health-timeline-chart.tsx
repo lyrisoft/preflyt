@@ -232,7 +232,10 @@ export function HealthTimelineChart({
                       minTickGap={45}
                       tickLine={false}
                       axisLine={false}
-                      tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
+                      tick={{
+                        fill: 'var(--muted-foreground)',
+                        fontSize: '0.75rem',
+                      }}
                       dy={8}
                     />
                     <YAxis
@@ -241,7 +244,10 @@ export function HealthTimelineChart({
                       domain={[0, 'auto']}
                       tickLine={false}
                       axisLine={false}
-                      tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
+                      tick={{
+                        fill: 'var(--muted-foreground)',
+                        fontSize: '0.75rem',
+                      }}
                     />
                     <Tooltip
                       cursor={{ fill: 'var(--muted)', opacity: 0.3 }}

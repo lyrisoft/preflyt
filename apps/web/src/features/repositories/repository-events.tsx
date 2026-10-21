@@ -126,7 +126,7 @@ function DeliveryTimelineItem({
           )}
         </div>
         <details className='group mt-2'>
-          <summary className='inline-flex cursor-pointer list-none items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground [&::-webkit-details-marker]:hidden'>
+          <summary className='inline-flex cursor-pointer list-none items-center gap-1 text-xs text-muted-foreground hover:text-foreground [&::-webkit-details-marker]:hidden'>
             Delivery details
             <ChevronDown className='size-3 transition-transform group-open:rotate-180' />
           </summary>

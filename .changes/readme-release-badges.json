@@ -1,0 +1,8 @@
+{
+  "type": "documentation",
+  "title": "Release versions and open issues on the homepage and README",
+  "description": "The homepage and README show compact badges with about 19px artwork for the latest Preflyt and Preflyt Action releases, Issues and the Apache-2.0 license. The Issues badge tracks open GitHub issues. Each badge links to the related release, issue list or license.",
+  "upgrade": "Rebuild and restart the web service.",
+  "migrations": [],
+  "configuration": []
+}

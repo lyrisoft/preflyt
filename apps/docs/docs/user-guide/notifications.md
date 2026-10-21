@@ -51,3 +51,20 @@ Email is sent only after a Super Admin sets it up, and each person opts in.
 3. Save, then use **Send test** to check delivery.
 
 A channel's recipients are separate from anyone's sign-in email and from personal preferences. If delivery fails, the page says **Email delivery is not ready** and tells you who to ask.
+
+## Weekly repository health email
+
+Under **Your notifications**, use **Weekly repository health email** to receive one summary per workspace each week. This preference is separate from individual assessment alerts.
+
+1. Add and verify a delivery email above, or use your available account email.
+2. Select **Send me a weekly health email**.
+3. Choose up to **50** repositories you can access. **Use assigned repositories** selects your directly assigned repositories; owners and admins can choose from their wider access.
+4. Choose a day, hour and timezone, such as `Africa/Lagos`, then select **Save weekly email preferences**. The default schedule is Monday at 09:00 UTC. Your first email is due at the next scheduled time after you opt in.
+
+The email contains repository names, the assessed branch and commit, saved health states, reported finding counts by severity, and links to the reports. It uses the configured health branch, or the default branch when no health branch is configured. Source excerpts and individual finding descriptions are not emailed.
+
+Finding changes compare the latest saved standard assessment with the last complete assessment before the weekly period. Comparisons require equivalent scanner scope and configuration. Partial scans, failed scans, changed scope and AI reviews never establish fixes. The email uses **no longer reported** rather than claiming an engineer's change has been independently verified. If no assessment ran that week, it shows **No new assessment this week** and the last known result. Missing evidence is never treated as healthy.
+
+Emails use saved assessments and do not start new scans or paid AI reviews. Repository access, current selections, membership, email address and opt-in are checked before delivery. Repositories you can no longer access are omitted; if none remain, the email is skipped. Turn off the weekly switch and save to stop future digests. Removing your notification email also turns off weekly emails.
+
+Delivery requires workspace notifications, email delivery, SMTP and the existing worker/Redis queue. Weekly delivery records prevent duplicate scheduling across worker restarts. Failed sends retry up to five times; emails more than seven days overdue are skipped. SMTP delivery cannot guarantee exactly-once receipt after an ambiguous network failure, even though retry message IDs remain stable.

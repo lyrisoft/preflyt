@@ -1,3 +1,4 @@
+import { GitHubStarLink } from '@/components/github-star-link'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { SettingsLink } from '@/components/settings-link'
@@ -15,6 +16,7 @@ export function AppHeader({ breadcrumbs }: { breadcrumbs: Crumb[] }) {
     <Header fixed>
       <AppBreadcrumbs className='me-auto hidden sm:block' items={breadcrumbs} />
       <Search />
+      <GitHubStarLink />
       <NotificationBell />
       <ThemeSwitch />
       <SettingsLink />

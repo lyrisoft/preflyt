@@ -1,0 +1,8 @@
+{
+  "type": "feature",
+  "title": "Weekly personal repository health emails",
+  "description": "Members can opt into one weekly health email per workspace, choose up to 50 accessible repositories, and set the delivery day, hour and timezone separately from individual assessment alerts. Summaries include saved health states, finding severity counts and complete, comparable assessment changes. Partial or failed scans never count as fixes. Access, membership, selections and email preferences are checked again before sending; revoked repositories are omitted. Delivery uses durable weekly records and retries without starting scans or AI reviews.",
+  "upgrade": "Run the database migration, then rebuild and restart the API, worker and web services. Existing notifications, SMTP and Redis queue configuration are reused. Weekly emails are disabled by default; members choose their repositories and opt in under Notifications.",
+  "migrations": ["apps/api/prisma/migrations/20261021090000_weekly_health_digest/migration.sql"],
+  "configuration": []
+}

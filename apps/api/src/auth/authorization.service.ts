@@ -392,6 +392,10 @@ export class AuthorizationService {
       await this.requireOrganization(session,'assessment.read',true)
       return true
     }
+    if (path === '/notifications/weekly-health' && ['GET', 'POST'].includes(request.method)) {
+      await this.requireOrganization(session, 'assessment.read', true)
+      return true
+    }
     if (path === '/notifications/channels' || /^\/notifications\/channels\/[a-zA-Z0-9-]{1,80}(?:\/test)?$/.test(path)) {
       await this.requireOrganization(session, 'notifications.manage', request.method !== 'GET')
       return true

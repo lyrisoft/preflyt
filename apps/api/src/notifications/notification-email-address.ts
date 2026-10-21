@@ -222,6 +222,8 @@ export async function removeNotificationEmail(db: PrismaService, key: Key) {
       where: key,
       data: {
         email: false,
+        weeklyHealthEnabled: false,
+        weeklyHealthEnabledAt: null,
         notificationEmail: null,
         emailVerifiedAt: null,
         pendingEmail: null,

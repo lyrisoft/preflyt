@@ -1,3 +1,4 @@
+import type { WeeklyHealthInput } from './weekly-health-preferences.js'
 import { Body, Controller, Get, Header, HttpCode, Inject, Param, Post, Query, Req, UseGuards } from '@nestjs/common'
 import type { Request } from 'express'
 import { AuthService } from '../auth/auth.service.js'
@@ -13,6 +14,10 @@ export class NotificationsController {
   summary(@Req() req: SessionRequest) { return this.inbox.summary(req.preflytSession) }
   @Get('preview') @Header('Cache-Control', 'no-store')
   preview(@Req() req: SessionRequest) { return this.inbox.preview(req.preflytSession) }
+  @Get('weekly-health') @Header('Cache-Control', 'no-store')
+  weeklyHealth(@Req() req: SessionRequest) { return this.inbox.weeklyHealth(req.preflytSession) }
+  @Post('weekly-health') @Header('Cache-Control', 'no-store')
+  saveWeeklyHealth(@Req() req: SessionRequest, @Body() body: WeeklyHealthInput) { this.auth.assertOrigin(req.headers.origin); return this.inbox.saveWeeklyHealth(req.preflytSession, body ?? {}) }
   @Get('preferences') @Header('Cache-Control', 'no-store')
   preferences(@Req() req: SessionRequest) { return this.inbox.preferences(req.preflytSession) }
   @Post('preferences') @Header('Cache-Control', 'no-store')

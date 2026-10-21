@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="180" height="48" viewBox="0 0 180 48" role="img" aria-labelledby="title">
+  <title id="title">Buy me a coffee</title>
+  <rect x="0.5" y="0.5" width="179" height="47" rx="23.5" fill="#131618" stroke="#23272a" />
+  <text x="90" y="29.5" fill="#f0f1ee" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" text-anchor="middle">Buy me a coffee</text>
+</svg>
