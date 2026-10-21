@@ -241,7 +241,10 @@ export function FindingsOverview({
                       <XAxis
                         type='number'
                         allowDecimals={false}
-                        tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }}
+                        tick={{
+                          fontSize: '0.75rem',
+                          fill: 'var(--muted-foreground)',
+                        }}
                         axisLine={false}
                         tickLine={false}
                       />
@@ -249,7 +252,10 @@ export function FindingsOverview({
                         type='category'
                         dataKey='name'
                         width={125}
-                        tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }}
+                        tick={{
+                          fontSize: '0.75rem',
+                          fill: 'var(--muted-foreground)',
+                        }}
                         tickFormatter={(value: string) =>
                           value.length > 19 ? `${value.slice(0, 18)}…` : value
                         }

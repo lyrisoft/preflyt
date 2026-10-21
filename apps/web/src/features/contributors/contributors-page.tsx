@@ -778,12 +778,12 @@ export function ContributorsPage({
                               <XAxis
                                 dataKey='date'
                                 tickFormatter={(s) => String(s).slice(5)}
-                                tick={{ fontSize: 10 }}
+                                tick={{ fontSize: '0.75rem' }}
                               />
                               <YAxis
                                 allowDecimals={false}
                                 width={30}
-                                tick={{ fontSize: 10 }}
+                                tick={{ fontSize: '0.75rem' }}
                               />
                               <Tooltip {...chartTooltipAnimation} />
                               <Area
@@ -834,7 +834,7 @@ export function ContributorsPage({
                                 type='category'
                                 dataKey='name'
                                 width={100}
-                                tick={{ fontSize: 10 }}
+                                tick={{ fontSize: '0.75rem' }}
                               />
                               <Tooltip {...chartTooltipAnimation} />
                               <Bar

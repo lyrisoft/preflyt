@@ -170,7 +170,7 @@ export function ActivityTrendChart({
                 minTickGap={35}
                 tickLine={false}
                 axisLine={false}
-                tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
+                tick={{ fill: 'var(--muted-foreground)', fontSize: '0.75rem' }}
                 tickMargin={12}
               />
               <YAxis
@@ -178,7 +178,7 @@ export function ActivityTrendChart({
                 domain={[0, 'auto']}
                 tickLine={false}
                 axisLine={false}
-                tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
+                tick={{ fill: 'var(--muted-foreground)', fontSize: '0.75rem' }}
               />
               <Tooltip
                 {...chartTooltipAnimation}
@@ -187,7 +187,7 @@ export function ActivityTrendChart({
                   border: '1px solid var(--border)',
                   borderRadius: 10,
                   color: 'var(--popover-foreground)',
-                  fontSize: 12,
+                  fontSize: '0.75rem',
                 }}
                 labelStyle={{ color: 'var(--foreground)' }}
                 labelFormatter={(label, payload) => {

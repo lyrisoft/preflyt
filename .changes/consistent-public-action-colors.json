@@ -1,0 +1,8 @@
+{
+  "type": "fix",
+  "title": "Consistent homepage action buttons",
+  "description": "Installation buttons use the shared primary fill and text colors, while GitHub and coffee support retain matching dark secondary styling. Homepage buttons have less rounded 12px corners. Public-page primary and focus colors use shared theme tokens rather than separate bright-blue values. The pricing contact button keeps its dark fill on hover so its light label stays readable.",
+  "upgrade": "Rebuild and restart the web service.",
+  "migrations": [],
+  "configuration": []
+}

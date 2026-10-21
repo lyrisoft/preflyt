@@ -284,3 +284,13 @@ it('does not resend a known accepted email when persisting its acknowledgement f
   await deliverNotificationEmail(db, new AuthorizationService(db), mail, delivery.id)
   expect(mail.send).toHaveBeenCalledTimes(1)
 })
+
+it('serves and saves personal weekly health settings through CSRF-protected scoped endpoints', async () => {
+  const result = await request(app.getHttpServer()).get('/notifications/weekly-health').set('Cookie', 'test.sid=owner').expect(200)
+  expect(result.body.repositories).toEqual([{ id: String(repo.githubId), name: repo.fullName }])
+  const body = { enabled: false, repositoryIds: [String(repo.githubId)], day: 1, hour: 9, timezone: 'Africa/Lagos' }
+  await request(app.getHttpServer()).post('/notifications/weekly-health').set('Cookie', 'test.sid=owner').send(body).expect(403)
+  const saved = await request(app.getHttpServer()).post('/notifications/weekly-health').set('Cookie', 'test.sid=owner').set('Origin', 'http://localhost:5173').send(body).expect(201)
+  expect(saved.body.repositoryIds).toEqual([String(repo.githubId)])
+  await request(app.getHttpServer()).post('/notifications/weekly-health').set('Cookie', 'test.sid=owner').set('Origin', 'http://localhost:5173').send({ ...body, repositoryIds: ['8888'] }).expect(403)
+})

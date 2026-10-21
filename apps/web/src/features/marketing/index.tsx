@@ -1,6 +1,7 @@
-import { ArrowRight, ArrowUpRight, Layers } from 'lucide-react'
+import { ArrowRight, ArrowUpRight, Coffee, Layers, Star } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { EngineeringFigures } from './engineering-figures'
+import './homepage-refinements.css'
 import { MarketingLayout, MarketingClosing } from './marketing-layout'
 import { ProductScene } from './product-scene'
 import { SectionIllustration } from './section-illustration'
@@ -149,18 +150,12 @@ const features = [
 ] as const
 export function MarketingHomepage() {
   return (
-    <MarketingLayout>
-      <main id='main' className='reference-home'>
+    <MarketingLayout className='marketing-home'>
+      <main id='main' tabIndex={-1} className='reference-home'>
         <section className='reference-hero container'>
           <div className='hero-copy'>
-            <span className='reference-label'>
-              For engineering teams · Self-hosted · Apache-2.0
-            </span>
-            <h1>
-              Open source code quality
-              <br />
-              and security for GitHub.
-            </h1>
+            <span className='reference-label'>Self-hosted · Apache-2.0</span>
+            <h1>Open source code quality and security for GitHub.</h1>
             <p>
               Preflyt scans your repositories for security and code quality
               issues. See the affected code, understand what to fix, and check
@@ -172,15 +167,30 @@ export function MarketingHomepage() {
               </a>
               <a
                 href='https://github.com/lyrisoft/preflyt'
-                className='text-link'
+                className='button github-star'
+                target='_blank'
+                rel='noopener noreferrer'
+                aria-label='Star on GitHub (opens in a new tab)'
               >
-                View on GitHub <ArrowRight size={14} aria-hidden='true' />
+                <Star size={16} strokeWidth={1.75} aria-hidden='true' />
+                Star on GitHub
+              </a>
+              <a
+                className='button coffee-support'
+                href='https://buymeamalt.com/@lyrixx'
+                target='_blank'
+                rel='noopener noreferrer'
+                aria-label='Buy me a coffee (opens in a new tab)'
+              >
+                <Coffee size={16} aria-hidden='true' />
+                Buy me a coffee
+                <ArrowUpRight size={14} aria-hidden='true' />
               </a>
             </div>
             <div className='hero-release-info'>
               <div
                 className='reference-release-badges'
-                aria-label='Releases and Community license'
+                aria-label='Releases, issues and Community license'
               >
                 <a
                   href='https://github.com/lyrisoft/preflyt/releases/latest'
@@ -189,7 +199,7 @@ export function MarketingHomepage() {
                   <img
                     src='https://img.shields.io/github/v/release/lyrisoft/preflyt?label=Preflyt&logo=github&color=2f6f60&cacheSeconds=300'
                     alt='Latest Preflyt release on GitHub'
-                    height={20}
+                    height={19}
                   />
                 </a>
                 <a
@@ -199,7 +209,17 @@ export function MarketingHomepage() {
                   <img
                     src='https://img.shields.io/github/v/release/lyrisoft/preflyt-action?label=Preflyt%20Action&logo=github&cacheSeconds=300'
                     alt='Latest Preflyt Action release on GitHub'
-                    height={20}
+                    height={19}
+                  />
+                </a>
+                <a
+                  href='https://github.com/lyrisoft/preflyt/issues?q=is%3Aissue%20is%3Aopen'
+                  aria-label='Preflyt issues on GitHub'
+                >
+                  <img
+                    src='https://img.shields.io/github/issues/lyrisoft/preflyt?label=Issues&logo=github&color=64748b&cacheSeconds=300'
+                    alt='Preflyt issues'
+                    height={19}
                   />
                 </a>
                 <a
@@ -209,7 +229,7 @@ export function MarketingHomepage() {
                   <img
                     src='https://img.shields.io/badge/license-Apache--2.0-blue'
                     alt='Preflyt Community Edition: Apache-2.0 license'
-                    height={20}
+                    height={19}
                   />
                 </a>
               </div>
@@ -220,6 +240,12 @@ export function MarketingHomepage() {
             </div>
           </div>
           <HeroArtwork />
+          <div className='hero-preview-caption'>
+            <p>Repository health, findings and CI evidence in one workspace.</p>
+            <a href='#workspace-tour' className='text-link'>
+              Explore the workspace <ArrowRight size={14} aria-hidden='true' />
+            </a>
+          </div>
         </section>
         <HowItWorks />
         <EngineeringFigures />
@@ -248,36 +274,40 @@ export function MarketingHomepage() {
                   </div>
                   <div className='reference-feature-copy'>
                     <p>{feature.description}</p>
-                    <a className='reference-more' href={feature.href}>
+                    <a
+                      className='reference-more'
+                      href={feature.href}
+                      aria-label={`Learn more about ${feature.label.toLowerCase()}`}
+                    >
                       Learn more <ArrowRight size={13} aria-hidden='true' />
                     </a>
                   </div>
                 </div>
                 <ProductScene variant={feature.id} />
                 <div className='reference-feature-index'>
-                  <span>Explore</span>
-                  <div className='reference-feature-index-links'>
+                  <ul className='reference-feature-index-links'>
                     {feature.items.map((item) => (
-                      <div key={item.title}>
-                        <a href={feature.href}>
-                          {item.title}{' '}
-                          <ArrowUpRight size={12} aria-hidden='true' />
-                        </a>
+                      <li key={item.title}>
+                        <strong>{item.title}</strong>
                         <p>{item.text}</p>
-                      </div>
+                      </li>
                     ))}
-                  </div>
+                  </ul>
                 </div>
               </div>
             </article>
           ))}
         </section>
-        <section className='reference-tour container' id='workspace-tour'>
+        <section
+          className='reference-tour container'
+          id='workspace-tour'
+          tabIndex={-1}
+        >
           <div className='reference-tour-heading'>
             <h2>See the work behind the result.</h2>
             <p>
               Findings, contributor activity and repository evidence, connected
-              in one workspace.
+              in one workspace. Choose a view and scroll to explore.
             </p>
           </div>
           <Tabs defaultValue='findings'>

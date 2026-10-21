@@ -50,3 +50,34 @@ docs/deployment/native-runner/coverage/*
 
 # Optional local Strix runner verification output
 tools/strix-runner/__pycache__/
+docs/acceptance/2026-10-21-coffee-support.md
+docs/acceptance/2026-10-21-design-review-fixes.md
+docs/acceptance/2026-10-21-homepage-github-star.md
+docs/acceptance/2026-10-21-public-action-colors-and-readme-badges.md
+docs/acceptance/2026-10-21-weekly-repository-health-digest.md
+docs/acceptance/images/apple-homepage-desktop.jpg
+docs/acceptance/images/apple-homepage-mobile.jpg
+docs/acceptance/images/apple-sign-in-desktop.jpg
+docs/acceptance/images/apple-sign-in-mobile.jpg
+docs/acceptance/images/coffee-support-desktop.jpg
+docs/acceptance/images/coffee-support-mobile.jpg
+docs/acceptance/images/github-star-compose.jpg
+docs/acceptance/images/weekly-health-dark-desktop.png
+docs/acceptance/images/weekly-health-dark-mobile.png
+docs/acceptance/images/weekly-health-light-desktop.png
+docs/acceptance/images/weekly-health-light-mobile.png
+docs/acceptance/images/website-buttons-final-desktop.jpg
+docs/acceptance/images/website-buttons-final-mobile.jpg
+docs/design/reviews/apple-design-measurements-2026-10-21.json
+docs/design/reviews/apple-design-review-2026-10-21.md
+docs/design/reviews/apple-design-route-coverage-2026-10-21.csv
+docs/design/reviews/apple-design-source-coverage-2026-10-21.csv
+docs/design/reviews/apple-homepage-polish-2026-10-21.md
+docs/design/reviews/apple-sign-in-polish-2026-10-21.md
+docs/design/reviews/website-buttons-2026-10-21.md
+docs/design/reviews/images/metadata-scaled-200-percent.png
+docs/design/reviews/images/model-dialog-fixed-actions-200-percent.png
+docs/design/reviews/images/model-dialog-fixed-short-window.png
+docs/design/reviews/images/model-dialog-short-window.png
+docs/design/reviews/images/ruleset-picker-mobile.png
+docs/design/reviews/images/shared-dialog-short-window.png

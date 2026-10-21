@@ -1010,7 +1010,7 @@ export function AccessControlPage() {
                               · {a.metadata.repositoryIds?.length ?? 0}{' '}
                               repository assignments
                             </p>
-                            <p className='mt-1 text-[11px] text-muted-foreground'>
+                            <p className='mt-1 text-xs text-muted-foreground'>
                               Recorded actor: {a.actorId}
                             </p>
                           </div>

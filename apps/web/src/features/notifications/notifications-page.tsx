@@ -6,6 +6,7 @@ import { OptionSelect } from '@/components/ui/option-select'
 import { AppHeader } from '@/components/layout/app-header'
 import { Main } from '@/components/layout/main'
 import { PageHeader } from '@/components/page-header'
+import { PageHelpDrawer } from '@/components/page-help-drawer'
 import { NotificationItem } from './inbox'
 import { NotificationPreferences } from './notification-preferences'
 import { useInbox, titles } from './notification-query'
@@ -40,6 +41,26 @@ export function NotificationsPage() {
                 <RefreshCw className='size-4' />
                 Refresh
               </Button>
+              <PageHelpDrawer
+                title='Notifications'
+                sections={[
+                  {
+                    title: 'Weekly health emails',
+                    content:
+                      'Choose up to 50 accessible repositories and a delivery schedule under Your notifications. Weekly emails are separate from individual assessment alerts. They use saved standard assessments and do not run new scans or paid AI reviews. The first email is due at the next scheduled time after opt-in.',
+                  },
+                  {
+                    title: 'Finding changes',
+                    content:
+                      'Weekly changes compare complete assessments with equivalent scanner scope and configuration. Partial, failed and category-only scans do not count as fixes. No longer reported describes a scanner comparison, not independent confirmation that an engineer fixed the issue.',
+                  },
+                  {
+                    title: 'Email contents and access',
+                    content:
+                      'The weekly email includes repository names, branch, commit, saved health state and finding counts. Source excerpts and individual finding descriptions stay in Preflyt. Membership, repository access, selections and email preferences are checked before delivery. Repositories you can no longer access are omitted.',
+                  },
+                ]}
+              />
               <Button
                 disabled={!query.data?.unreadCount || read.isPending}
                 onClick={() => read.mutate(null)}

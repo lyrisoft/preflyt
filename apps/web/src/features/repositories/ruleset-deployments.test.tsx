@@ -174,3 +174,59 @@ it('keeps verification open, shows external differences and does not permit blin
     request.mock.calls.filter(([, opts]) => opts?.method === 'POST')
   ).toHaveLength(1)
 })
+
+it('keeps a visible draft label and its accessible name after selection at mobile width', async () => {
+  await page.viewport(320, 900)
+  const name = 'Saved production ruleset for customer-verification-service'
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(
+      async (url: string) =>
+        new Response(
+          JSON.stringify(
+            url.includes('ruleset-drafts')
+              ? { drafts: [{ id: 'draft-1', name, definitionHash: 'hash-1' }] }
+              : {
+                  enabled: true,
+                  canSelfApprove: false,
+                  hasMore: false,
+                  deployments: [],
+                }
+          )
+        )
+    )
+  )
+  const view = await render(
+    <QueryClientProvider client={client}>
+      <div className='p-4'>
+        <RulesetDeployments
+          repositoryId='1411149123'
+          actorId='actor-1'
+          canManage
+        />
+      </div>
+    </QueryClientProvider>
+  )
+  try {
+    const picker = view.getByRole('combobox', {
+      name: 'Ruleset draft',
+      exact: true,
+    })
+    await expect
+      .element(view.getByText('Ruleset draft', { exact: true }))
+      .toBeVisible()
+    await picker.click()
+    await page.getByRole('option', { name }).click()
+    await expect.element(picker).toHaveTextContent(name)
+    await expect.element(picker).toHaveAccessibleName('Ruleset draft')
+    await expect
+      .element(view.getByText('Ruleset draft', { exact: true }))
+      .toBeVisible()
+    await expect
+      .element(view.getByRole('button', { name: 'Review activation' }))
+      .toBeEnabled()
+    expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(320)
+  } finally {
+    await page.viewport(1280, 900)
+  }
+})

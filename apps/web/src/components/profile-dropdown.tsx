@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { ArrowUpRight, Star } from 'lucide-react'
 import { API_BASE_URL } from '@/lib/api'
 import useDialogState from '@/hooks/use-dialog-state'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -69,6 +70,19 @@ export function ProfileDropdown() {
             </div>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
+          <DropdownMenuItem className='lg:hidden' asChild>
+            <a
+              href='https://github.com/lyrisoft/preflyt'
+              target='_blank'
+              rel='noopener noreferrer'
+              aria-label='Star on GitHub (opens in a new tab)'
+            >
+              <Star aria-hidden='true' strokeWidth={1.75} />
+              Star on GitHub
+              <ArrowUpRight aria-hidden='true' className='ms-auto' />
+            </a>
+          </DropdownMenuItem>
+          <DropdownMenuSeparator className='lg:hidden' />
           <DropdownMenuItem variant='destructive' onClick={() => setOpen(true)}>
             Sign out
           </DropdownMenuItem>

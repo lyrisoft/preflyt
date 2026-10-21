@@ -7,10 +7,10 @@ import {
   FileQuestion,
   ArrowRight,
 } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table } from '@/components/ui/table'
+import { StatusBadge } from '@/components/status-badge'
 import { SurfaceIcon } from '@/components/surface-icon'
 import { paginateCollection } from './pull-request-pagination'
 
@@ -54,43 +54,15 @@ export type Compliance = {
   }[]
 }
 const percent = (n: number | null) => (n === null ? 'Not available' : `${n}%`)
-const statuses: Record<string, { title: string; className: string }> = {
-  PASS: {
-    title: 'Required checks met',
-    className:
-      'border-teal-500/30 bg-teal-500/10 text-teal-700 dark:text-teal-400',
-  },
-  BLOCK: {
-    title: 'Failed required checks',
-    className: 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-400',
-  },
-  BLOCK_INCOMPLETE: {
-    title: 'Failed checks · missing evidence',
-    className: 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-400',
-  },
-  INCOMPLETE: {
-    title: 'Missing evidence',
-    className:
-      'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400',
-  },
-  INVALID: {
-    title: 'Assessment could not be verified',
-    className:
-      'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400',
-  },
-  UNKNOWN: {
-    title: 'PR revision unclear',
-    className:
-      'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400',
-  },
-  STALE: {
-    title: 'Newer commit needs assessment',
-    className: 'bg-muted text-muted-foreground',
-  },
-  UNASSESSED: {
-    title: 'Not assessed',
-    className: 'bg-muted text-muted-foreground',
-  },
+const statuses: Record<string, string> = {
+  PASS: 'Required checks met',
+  BLOCK: 'Failed required checks',
+  BLOCK_INCOMPLETE: 'Failed checks · missing evidence',
+  INCOMPLETE: 'Missing evidence',
+  INVALID: 'Assessment could not be verified',
+  UNKNOWN: 'PR revision unclear',
+  STALE: 'Newer commit needs assessment',
+  UNASSESSED: 'Not assessed',
 }
 export function PolicyComplianceSummary({
   data,
@@ -158,7 +130,7 @@ export function PolicyComplianceSummary({
                       : percent(data.passRate),
                   detail: `${data.passingPrs}/${data.completePrs} fully assessed PRs`,
                   icon: CheckCircle2,
-                  color: 'text-teal-600 dark:text-teal-400',
+                  color: 'text-success-text',
                 },
                 {
                   label: 'PRs fully assessed',
@@ -172,14 +144,14 @@ export function PolicyComplianceSummary({
                   value: String(data.blockedPrs),
                   detail: '',
                   icon: CircleAlert,
-                  color: 'text-red-600 dark:text-red-400',
+                  color: 'text-danger-text',
                 },
                 {
                   label: 'Missing evidence',
                   value: String(gaps),
                   detail: `${data.unassessedPrs} not assessed · ${data.stalePrs} older assessments`,
                   icon: FileQuestion,
-                  color: 'text-amber-600 dark:text-amber-400',
+                  color: 'text-warning-text',
                 },
               ].map((metric) => (
                 <div
@@ -209,7 +181,7 @@ export function PolicyComplianceSummary({
               ))}
             </div>
             {data.truncated && (
-              <p className='text-sm text-amber-600 dark:text-amber-400'>
+              <p className='text-sm text-warning-text'>
                 Collection limit reached. Percentages are hidden; narrow the
                 period or repository.
               </p>
@@ -362,9 +334,7 @@ export function PolicyComplianceEvidence({
                       : `${row.passedRules}/${row.requiredRules} met · ${row.blockedRules} failed · ${row.missingRules} missing`}
                   </td>
                   <td className='p-3'>
-                    <Badge variant='outline' className={status.className}>
-                      {status.title}
-                    </Badge>
+                    <StatusBadge tone='neutral'>{status}</StatusBadge>
                   </td>
                   <td className='p-3'>
                     {row.assessmentId ? (

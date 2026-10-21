@@ -468,7 +468,7 @@ export function RulesetInsights({
                                 })
                           }
                           tick={{
-                            fontSize: 11,
+                            fontSize: '0.75rem',
                             fill: 'var(--muted-foreground)',
                           }}
                           tickLine={false}
@@ -478,7 +478,7 @@ export function RulesetInsights({
                         <YAxis
                           allowDecimals={false}
                           tick={{
-                            fontSize: 11,
+                            fontSize: '0.75rem',
                             fill: 'var(--muted-foreground)',
                           }}
                           tickLine={false}

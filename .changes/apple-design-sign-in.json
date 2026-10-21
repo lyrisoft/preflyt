@@ -1,0 +1,8 @@
+{
+  "type": "improvement",
+  "title": "Clearer, more accessible sign-in pages",
+  "description": "Organization and Super Admin sign-in use consistent pill-shaped actions, clearer heading and body sizes, larger recovery targets and controls that grow with text. The background is quieter and reduced-transparency preferences use an opaque card. GitHub-specific recovery guidance only appears for a GitHub sign-in error. Existing provider availability, safe return destinations, loading states and administrator recovery are preserved.",
+  "upgrade": "Rebuild and restart the web service.",
+  "migrations": [],
+  "configuration": []
+}

@@ -2,7 +2,7 @@ import '@/styles/index.css'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { render } from 'vitest-browser-react'
-import { page } from 'vitest/browser'
+import { page, userEvent } from 'vitest/browser'
 import { AiSettingsPage } from './ai-settings'
 import {
   isAiSettingsTab,
@@ -863,4 +863,59 @@ it('lets admins choose a dedicated VAPT model route independently of Repository 
     '/ai/configuration/routes/vapt',
     expect.objectContaining({ expectedRevision: 0 })
   )
+})
+
+it('keeps the real custom model form and its save action inside a short window in both themes and at enlarged text', async () => {
+  await page.viewport(640, 480)
+  const view = await render(<AiSettingsPage />)
+  try {
+    await view.getByRole('button', { name: 'Add model', exact: true }).click()
+    const dialog = page.getByRole('dialog')
+    await expect
+      .element(dialog.getByRole('textbox', { name: 'Endpoint URL' }))
+      .toBeInTheDocument()
+    for (const dark of [false, true]) {
+      document.documentElement.classList.toggle('dark', dark)
+      for (const size of ['100%', '200%']) {
+        document.documentElement.style.fontSize = size
+        await new Promise((resolve) => setTimeout(resolve, 350))
+        const element = dialog.element()
+        await expect
+          .poll(() => element.getBoundingClientRect().top)
+          .toBeGreaterThanOrEqual(0)
+        await expect
+          .poll(() => element.getBoundingClientRect().bottom)
+          .toBeLessThanOrEqual(480)
+        expect(getComputedStyle(element).overflowY).toBe('auto')
+        const save = dialog.getByRole('button', { name: 'Save model' })
+        dialog
+          .getByRole('button', { name: 'Cancel', exact: true })
+          .element()
+          .focus()
+        await userEvent.keyboard('{Tab}')
+        await expect.element(save).toHaveFocus()
+        await expect
+          .poll(() => save.element().getBoundingClientRect().bottom)
+          .toBeLessThanOrEqual(element.getBoundingClientRect().bottom)
+        expect(
+          save.element().getBoundingClientRect().top
+        ).toBeGreaterThanOrEqual(element.getBoundingClientRect().top)
+      }
+    }
+    await page.screenshot({
+      element: dialog.element(),
+      path: '__screenshots__/model-dialog-fixed-actions-200-percent.png',
+    })
+    document.documentElement.style.fontSize = ''
+    dialog.element().scrollTop = 0
+    await new Promise((resolve) => setTimeout(resolve, 350))
+    await page.screenshot({
+      element: dialog.element(),
+      path: '__screenshots__/model-dialog-fixed-short-window.png',
+    })
+  } finally {
+    document.documentElement.style.fontSize = ''
+    document.documentElement.classList.remove('dark')
+    await page.viewport(1280, 900)
+  }
 })

@@ -1,0 +1,8 @@
+{
+  "type": "improvement",
+  "title": "Support Preflyt development",
+  "description": "The homepage hero and GitHub README include a Buy me a coffee link to the maintainer's Buy Me a Malt page. The homepage button sits beside Install Preflyt and Star on GitHub, sharing the GitHub button's dark fill, subtle border and rounded corners.",
+  "upgrade": "Rebuild and restart the web service.",
+  "migrations": [],
+  "configuration": []
+}

@@ -1,0 +1,8 @@
+{
+  "type": "fix",
+  "title": "Accessible navigation, dialogs and clearer recovery",
+  "description": "Fixes all six findings from the October 21 design review: workspace skip navigation moves keyboard focus to the main content; long dialogs scroll within short windows; the ruleset draft selector keeps a visible label; error screens provide retry and workspace recovery; contributor results use shared semantic status colors; and operational metadata, chart labels and source text scale with the browser's text size.",
+  "upgrade": "Rebuild and restart the web service.",
+  "migrations": [],
+  "configuration": []
+}

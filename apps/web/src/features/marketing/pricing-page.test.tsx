@@ -89,11 +89,47 @@ it('explains the separate costs without requiring an account', async () => {
       )
     )
     .toBeVisible()
-  await expect
-    .element(
-      view
-        .getByRole('navigation', { name: 'Main navigation' })
-        .getByRole('link', { name: 'Pricing', exact: true })
-    )
-    .toHaveAttribute('aria-current', 'page')
+  expect(document.querySelector('a[href="/pricing"]')).toBeNull()
+})
+
+it('keeps the secondary contact action readable when hovered', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => new Response('{}'))
+  )
+  const view = await render(<PricingPage />)
+  const action = view.getByRole('link', {
+    name: 'Contact us for updates',
+    exact: true,
+  })
+  await page.elementLocator(action.element()).hover()
+  const node = action.element() as HTMLElement
+  expect(node.matches(':hover')).toBe(true)
+  await Promise.all(node.getAnimations().map((animation) => animation.finished))
+
+  const canvas = document.createElement('canvas')
+  canvas.width = canvas.height = 1
+  const context = canvas.getContext('2d', { willReadFrequently: true })!
+  const luminance = () => {
+    const channels = [...context.getImageData(0, 0, 1, 1).data]
+      .slice(0, 3)
+      .map((value) => value / 255)
+      .map((value) =>
+        value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+      )
+    return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722
+  }
+  context.fillStyle = getComputedStyle(node.closest('article')!).backgroundColor
+  context.fillRect(0, 0, 1, 1)
+  context.fillStyle = getComputedStyle(node).backgroundColor
+  context.fillRect(0, 0, 1, 1)
+  const background = luminance()
+  context.clearRect(0, 0, 1, 1)
+  context.fillStyle = getComputedStyle(node).color
+  context.fillRect(0, 0, 1, 1)
+  const foreground = luminance()
+  const contrast =
+    (Math.max(foreground, background) + 0.05) /
+    (Math.min(foreground, background) + 0.05)
+  expect(contrast).toBeGreaterThanOrEqual(4.5)
 })

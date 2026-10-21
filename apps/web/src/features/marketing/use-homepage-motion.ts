@@ -5,6 +5,7 @@ export function useHomepageMotion(ref: RefObject<HTMLDivElement | null>) {
   useEffect(() => {
     const root = ref.current
     if (!root) return
+    const homepage = root.classList.contains('marketing-home')
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)')
     const animations = new Set<Animation>()
     const cancel = () => {
@@ -22,11 +23,14 @@ export function useHomepageMotion(ref: RefObject<HTMLDivElement | null>) {
       if (reduced.matches || root.dataset.input === 'keyboard') return
       const animation = element.animate(
         [
-          { opacity: 0, translate: '0 16px' },
+          {
+            opacity: homepage ? 0.85 : 0,
+            translate: homepage ? '0 6px' : '0 16px',
+          },
           { opacity: 1, translate: '0 0' },
         ],
         {
-          duration: 480,
+          duration: homepage ? 220 : 480,
           delay,
           easing: 'cubic-bezier(0.23, 1, 0.32, 1)',
           fill: 'backwards',
@@ -36,7 +40,9 @@ export function useHomepageMotion(ref: RefObject<HTMLDivElement | null>) {
       animation.onfinish = () => animations.delete(animation)
     }
     root
-      .querySelectorAll('.hero-copy > *, .evidence-scene')
+      .querySelectorAll(
+        homepage ? '.evidence-scene' : '.hero-copy > *, .evidence-scene'
+      )
       .forEach((element, index) => animate(element, Math.min(index * 55, 220)))
     const observer = new IntersectionObserver(
       (entries) => {
@@ -50,7 +56,9 @@ export function useHomepageMotion(ref: RefObject<HTMLDivElement | null>) {
     )
     root
       .querySelectorAll(
-        '.reference-feature, .reference-tour-heading, .reference-process, .reference-hosting, .section-heading, .capability-card, .capability-boundary, .capability-limits, .operations-links, .feature, .ai-heading, .workflow-heading, .workflow-steps li, .hosting, .faq-section, .closing'
+        homepage
+          ? '.reference-tour-heading'
+          : '.reference-feature, .reference-tour-heading, .reference-process, .reference-hosting, .section-heading, .capability-card, .capability-boundary, .capability-limits, .operations-links, .feature, .ai-heading, .workflow-heading, .workflow-steps li, .hosting, .faq-section, .closing'
       )
       .forEach((element) => observer.observe(element))
     reduced.addEventListener('change', cancel)

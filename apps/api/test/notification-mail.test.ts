@@ -79,3 +79,16 @@ it('sends a bounded verification code through SMTP with stable retry identity', 
   await expect(sender.sendVerification('owner@example.test', 'verification-2', '<script>')).rejects.toThrow('INVALID_VERIFICATION_CODE')
   expect(messages).toHaveLength(2)
 })
+
+it('sends the opt-in weekly health digest as HTML and text with stable delivery identity', async () => {
+  const sender = await smtp()
+  const summaries = [{ githubId: '1234', name: 'fixture/repo', branch: 'main', assessmentId: 'assessment-1', assessedAt: '2026-10-19T09:00:00.000Z', sourceSha: 'a'.repeat(40), status: 'INCOMPLETE', incomplete: true, noNewAssessment: false, severities: { high: 3 }, changes: [] }]
+  await sender.sendWeeklyHealth('owner@example.test', 'weekly-1', '2026-10-19', summaries)
+  await sender.sendWeeklyHealth('owner@example.test', 'weekly-1', '2026-10-19', summaries)
+  expect(messages).toHaveLength(2)
+  expect(messages[0]).toContain('multipart/alternative')
+  expect(messages[0]).toContain('fixture/repo')
+  expect(messages[0]).toContain('Partial scans never count as fixes')
+  expect(messages[0]).toContain('tab=3Dhealth')
+  expect(messages[0].match(/Message-ID: (.*)/)?.[1]).toBe(messages[1].match(/Message-ID: (.*)/)?.[1])
+})

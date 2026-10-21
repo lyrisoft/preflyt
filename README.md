@@ -4,6 +4,13 @@
   <img src="apps/docs/static/img/brand/logo-panel.svg" alt="PreflytLabs" width="480" />
 </p>
 
+<p align="center">
+  <a href="https://github.com/lyrisoft/preflyt/releases/latest"><img src="https://img.shields.io/github/v/release/lyrisoft/preflyt?label=Preflyt&amp;logo=github&amp;color=2f6f60&amp;cacheSeconds=300" alt="Latest Preflyt release" height="19" /></a>
+  <a href="https://github.com/lyrisoft/preflyt-action/releases/latest"><img src="https://img.shields.io/github/v/release/lyrisoft/preflyt-action?label=Preflyt%20Action&amp;logo=github&amp;cacheSeconds=300" alt="Latest Preflyt Action release" height="19" /></a>
+  <a href="https://github.com/lyrisoft/preflyt/issues?q=is%3Aissue%20is%3Aopen"><img src="https://img.shields.io/github/issues/lyrisoft/preflyt?label=Issues&amp;logo=github&amp;color=64748b&amp;cacheSeconds=300" alt="Preflyt issues" height="19" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="Apache-2.0 license" height="19" /></a>
+</p>
+
 **Know what passed. See what needs attention.**
 
 Open-source engineering assurance for GitHub. Self-host Community Edition under **Apache-2.0**.
@@ -122,6 +129,14 @@ Use [GitHub issues](https://github.com/lyrisoft/preflyt/issues) for product feed
 Contribute a standards/check improvement, supported CI report integration, scanner reproduction fixture or documentation correction. For an initial contribution, read [CONTRIBUTING.md](CONTRIBUTING.md), discuss the intended change in an issue and sign off each commit under the [DCO](DCO). Contributors retain ownership. The repository is public and contributions are welcome.
 
 Report suspected vulnerabilities privately to **support@lyrisoft.tech** following [SECURITY.md](SECURITY.md). Read [SUPPORT.md](SUPPORT.md) for community help and [CONTRIBUTING.md](CONTRIBUTING.md) / [DCO](DCO) before contributing.
+
+## Support development
+
+If Preflyt is useful to you, you can support its development.
+
+<a href="https://buymeamalt.com/@lyrixx" target="_blank" rel="noopener noreferrer">
+  <img src=".github/assets/buy-me-a-coffee.svg" alt="Buy me a coffee" width="180" height="48" />
+</a>
 
 ## Licensing
 

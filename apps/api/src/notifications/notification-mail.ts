@@ -1,3 +1,4 @@
+import { weeklyHealthTemplate, type DigestRepository } from './weekly-health-report.js'
 import { configurationValue } from '../configuration/runtime-configuration.js'
 import nodemailer, { type Transporter } from 'nodemailer'
 import { createHash } from 'node:crypto'
@@ -24,6 +25,9 @@ export class NotificationMailer {
   private transport?: Transporter
   async send(to: string, deliveryId: string, kind: NotificationEmailKind = 'PERSONAL', eventType?: string) {
     return this.sendMessage(to, deliveryId, notificationEmailTemplate(resolveWebOrigin(), kind, eventType))
+  }
+  async sendWeeklyHealth(to: string, deliveryId: string, week: string, repositories: DigestRepository[]) {
+    return this.sendMessage(to, `weekly-${deliveryId}`, weeklyHealthTemplate(resolveWebOrigin(), week, repositories))
   }
   async sendVerification(to: string, deliveryId: string, code: string) {
     if (!/^\d{8}$/.test(code)) throw new Error('INVALID_VERIFICATION_CODE')

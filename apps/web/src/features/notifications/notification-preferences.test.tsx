@@ -10,6 +10,9 @@ vi.mock('@/features/workspace/navigation-session', () => ({
     data: { identityId: 'person', organizationId: 'workspace' },
   }),
 }))
+vi.mock('./weekly-health-preferences', () => ({
+  WeeklyHealthPreferences: () => null,
+}))
 const preference = {
   assessments: true,
   email: true,
