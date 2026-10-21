@@ -398,7 +398,7 @@ function AssessmentListRow({
               aria-label={metric.description}
               className={`min-w-0 space-y-1 tabular-nums ${metric.tone}`}
             >
-              <span className='block text-[11px] font-normal text-muted-foreground @4xl/assessments:hidden'>
+              <span className='block text-xs font-normal text-muted-foreground @4xl/assessments:hidden'>
                 {metric.label}
               </span>
               <span className='font-medium'>{metric.value}</span>

@@ -30,7 +30,7 @@ export function StatusBadge({
       }
       className={cn(
         compact
-          ? 'min-h-5 rounded-md border-transparent px-1.5 py-0.5 text-[11px] font-medium'
+          ? 'min-h-5 rounded-md border-transparent px-1.5 py-0.5 text-xs font-medium'
           : 'min-h-6',
         typeof children === 'string' &&
           children.trim().toLowerCase() === 'critical' &&
@@ -40,7 +40,7 @@ export function StatusBadge({
           'border-severity-high/30 bg-severity-high/10 text-severity-high-text',
         typeof children === 'string' &&
           children.trim().toLowerCase() === 'beta' &&
-          'relative -top-1.5 min-h-0 border-0 bg-transparent p-0 text-[10px] leading-none text-yellow-700 italic dark:text-yellow-300 [&>span]:hidden',
+          'relative -top-1.5 min-h-0 border-0 bg-transparent p-0 text-xs leading-none text-yellow-700 italic dark:text-yellow-300 [&>span]:hidden',
         className
       )}
     >

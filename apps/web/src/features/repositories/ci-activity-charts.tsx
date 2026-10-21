@@ -90,7 +90,7 @@ export function CiActivityCharts({
                     background: 'var(--popover)',
                     borderColor: 'var(--border)',
                     borderRadius: 10,
-                    fontSize: 12,
+                    fontSize: '0.75rem',
                     color: 'var(--foreground)',
                   }}
                   itemStyle={{ color: 'var(--foreground)' }}
@@ -101,7 +101,7 @@ export function CiActivityCharts({
               <span className='text-3xl font-semibold tracking-tight tabular-nums'>
                 {observations.length}
               </span>
-              <span className='text-[11px] text-muted-foreground'>
+              <span className='text-xs text-muted-foreground'>
                 Results received
               </span>
             </div>
@@ -176,14 +176,14 @@ export function CiActivityCharts({
                 }
                 tickLine={false}
                 axisLine={false}
-                tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }}
+                tick={{ fill: 'var(--muted-foreground)', fontSize: '0.75rem' }}
                 minTickGap={22}
               />
               <YAxis
                 allowDecimals={false}
                 tickLine={false}
                 axisLine={false}
-                tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }}
+                tick={{ fill: 'var(--muted-foreground)', fontSize: '0.75rem' }}
               />
               <Tooltip
                 {...chartTooltipAnimation}
@@ -192,7 +192,7 @@ export function CiActivityCharts({
                   background: 'var(--popover)',
                   borderColor: 'var(--border)',
                   borderRadius: 8,
-                  fontSize: 12,
+                  fontSize: '0.75rem',
                 }}
                 labelStyle={{ color: 'var(--foreground)' }}
               />
@@ -210,7 +210,7 @@ export function CiActivityCharts({
             </BarChart>
           </ResponsiveContainer>
         </div>
-        <p className='mt-2 text-[11px] text-muted-foreground'>
+        <p className='mt-2 text-xs text-muted-foreground'>
           Up to 14 days of the latest 50 deliveries. Provider results are not
           verified merge review results.
         </p>
@@ -272,7 +272,7 @@ export function CiActivityEmpty({
               key={step}
               className='flex items-center gap-2 text-muted-foreground'
             >
-              <span className='flex size-5 shrink-0 items-center justify-center rounded-full border text-[10px] font-medium'>
+              <span className='flex size-5 shrink-0 items-center justify-center rounded-full border text-xs font-medium'>
                 {index + 1}
               </span>
               {step}
@@ -280,7 +280,7 @@ export function CiActivityEmpty({
           ))}
         </ol>
       )}
-      <div className='flex items-center gap-2 border-t px-6 py-3 text-[11px] text-muted-foreground'>
+      <div className='flex items-center gap-2 border-t px-6 py-3 text-xs text-muted-foreground'>
         <Workflow className='size-3.5' />
         {filtered
           ? 'No CI results recorded for this revision.'

@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import '@/styles/index.css'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { render } from 'vitest-browser-react'
+import { page } from 'vitest/browser'
 import { API_BASE_URL } from '@/lib/api'
 import { SetupOwner } from './setup-owner'
 import { SignIn } from './sign-in'
@@ -45,7 +46,62 @@ beforeEach(() => {
   })
   vi.stubGlobal('fetch', state.fetch)
 })
-afterEach(() => vi.unstubAllGlobals())
+afterEach(async () => {
+  document.documentElement.style.fontSize = ''
+  document.documentElement.classList.remove('dark')
+  vi.unstubAllGlobals()
+  await page.viewport(1280, 900)
+})
+
+it.each([
+  { width: 320, dark: false },
+  { width: 320, dark: true },
+  { width: 1280, dark: false },
+  { width: 1280, dark: true },
+])(
+  'keeps sign-in choices, errors and recovery usable at $width px with 200% text in dark=$dark',
+  async ({ width, dark }) => {
+    await page.viewport(width, 720)
+    document.documentElement.style.fontSize = '200%'
+    document.documentElement.classList.toggle('dark', dark)
+    state.search = { error: 'oidc' }
+    const view = await render(<SignIn />)
+    const github = view.getByRole('button', { name: 'Continue with GitHub' })
+    await expect.element(github).toBeVisible()
+    await expect.element(view.getByRole('alert')).not.toHaveTextContent('SAML')
+    await expect
+      .poll(() => document.documentElement.scrollWidth)
+      .toBeLessThanOrEqual(width)
+    for (const action of [
+      github,
+      view.getByRole('link', { name: 'Continue with SSO' }),
+      view.getByRole('link', { name: 'Super Admin access' }),
+    ]) {
+      await expect.element(action).toBeVisible()
+      const node = action.element() as HTMLElement
+      const bounds = node.getBoundingClientRect()
+      expect(bounds.left).toBeGreaterThanOrEqual(0)
+      expect(bounds.right).toBeLessThanOrEqual(width)
+      expect(bounds.height).toBeGreaterThanOrEqual(44)
+      expect(node.scrollHeight).toBeLessThanOrEqual(node.clientHeight)
+    }
+    await view.unmount()
+    const admin = await render(<SuperAdminLogin />)
+    const input = admin.getByLabelText('Username')
+    await expect.element(input).toBeVisible()
+    expect(getComputedStyle(input.element()).fontSize).toBe('32px')
+    await expect
+      .poll(() => document.documentElement.scrollWidth)
+      .toBeLessThanOrEqual(width)
+    const back = admin.getByRole('link', {
+      name: 'Back to organization sign-in',
+    })
+    await expect.element(back).toBeVisible()
+    expect(
+      back.element().getBoundingClientRect().height
+    ).toBeGreaterThanOrEqual(44)
+  }
+)
 
 it('discovers configured sign-in methods with cookies and preserves provider login links', async () => {
   const view = await render(<SignIn />)

@@ -1,3 +1,4 @@
+import { dispatchWeeklyHealthDigests, deliverWeeklyHealthDigest } from './notifications/weekly-health-delivery.js'
 import { HealthSourceStore } from './health/health-source-store.js'
 import { HealthStrixService } from './health/strix.service.js'
 import { BranchCiService } from './health/branch-ci.service.js'
@@ -141,18 +142,21 @@ async function start() {
   const userAccess = new GitHubUserAccessService(prisma, new GitHubIdentityProvider(githubProvider, cache), cache)
   const emailAuthorization = new AuthorizationService(prisma, userAccess)
   const teams = new TeamsService(prisma, emailAuthorization, githubProvider)
+  let lastWeeklyHealthDispatch = 0
   const emailQueue = new Queue('notification-email', { ...producerConfig, connection: producer })
   const emailWorker = new Worker('notification-email', async (job) => {
     if (typeof job.data?.deliveryId !== 'string' || !/^[a-zA-Z0-9-]{1,80}$/.test(job.data.deliveryId)) throw new Error('Invalid email delivery job')
     if (job.data.channel !== undefined && job.data.channel !== true) throw new Error('Invalid notification email job')
     if (job.data.verification !== undefined && job.data.verification !== true) throw new Error('Invalid verification email job')
-    if (job.data.channel && job.data.verification) throw new Error('Ambiguous email delivery job')
+    if (job.data.weeklyHealth !== undefined && job.data.weeklyHealth !== true) throw new Error('Invalid weekly health job')
+    if ([job.data.channel, job.data.verification, job.data.weeklyHealth].filter(Boolean).length > 1) throw new Error('Ambiguous email delivery job')
     if (!emailNotificationsEnabled()) return
     if (job.data.verification === true) {
       await deliverVerificationEmail(prisma, emailAuthorization, mail, job.data.deliveryId)
       return
     }
     if (!notificationsEnabled()) return
+    if (job.data.weeklyHealth === true) { await deliverWeeklyHealthDigest(prisma, emailAuthorization, mail, job.data.deliveryId); return }
     await telemetryOperation('preflyt.notification.email', { 'notification.delivery.id': job.data.deliveryId }, () => job.data.channel === true
       ? deliverNotificationChannelEmail(prisma, emailAuthorization, mail, job.data.deliveryId)
       : deliverNotificationEmail(prisma, emailAuthorization, mail, job.data.deliveryId))
@@ -253,6 +257,10 @@ async function start() {
       if (notificationsEnabled()) {
         await dispatchNotifications(prisma, notificationQueue)
         if (emailNotificationsEnabled()) {
+          if (Date.now() - lastWeeklyHealthDispatch >= 60000) {
+            await dispatchWeeklyHealthDigests(prisma, emailQueue)
+            lastWeeklyHealthDispatch = Date.now()
+          }
           await dispatchNotificationEmails(prisma, emailQueue)
           await dispatchNotificationChannelEmails(prisma, emailQueue)
         }

@@ -1,6 +1,10 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { expect, it, vi } from 'vitest'
-import { PolicyComplianceSummary, type Compliance } from './policy-compliance'
+import {
+  PolicyComplianceSummary,
+  PolicyComplianceEvidence,
+  type Compliance,
+} from './policy-compliance'
 import { paginatePullRequests } from './pull-request-pagination'
 
 vi.mock('@tanstack/react-router', () => ({
@@ -124,4 +128,60 @@ it('counts pull requests with failed checks rather than individual checks', () =
     />
   )
   expect(html).toContain('aria-label="PRs with failed required checks: 3"')
+})
+
+it('uses shared badges for actual contributor evidence without changing result or commit data', () => {
+  const data = fixture()
+  const statuses = [
+    'PASS',
+    'BLOCK',
+    'BLOCK_INCOMPLETE',
+    'INCOMPLETE',
+    'INVALID',
+    'UNKNOWN',
+    'STALE',
+    'UNASSESSED',
+  ]
+  data.repositories = [
+    { id: 'repo-1', githubId: '1411149123', fullName: 'lyrisoft/preflyt' },
+  ]
+  data.rows = statuses.map((status, i) => ({
+    repositoryId: 'repo-1',
+    number: i + 1,
+    sourceSha: 'abc123def4567890',
+    status,
+    assessmentId: null,
+    selectionId: null,
+    requiredRules: null,
+    passedRules: null,
+    blockedRules: null,
+    missingRules: null,
+    assessedAt: null,
+  }))
+  const html = renderToStaticMarkup(
+    <PolicyComplianceEvidence data={data} onPageChange={() => {}} />
+  )
+  const document = new DOMParser().parseFromString(html, 'text/html')
+  const outcomes = [
+    ['Required checks met', 'text-success-text'],
+    ['Failed required checks', 'text-danger-text'],
+    ['Failed checks · missing evidence', 'text-danger-text'],
+    ['Missing evidence', 'text-warning-text'],
+    ['Assessment could not be verified', 'text-warning-text'],
+    ['PR revision unclear', 'text-warning-text'],
+    ['Newer commit needs assessment', 'text-warning-text'],
+    ['Not assessed', 'text-foreground'],
+  ]
+  for (const [label, textClass] of outcomes) {
+    const badge = [...document.querySelectorAll('[data-slot="badge"]')].find(
+      (el) => el.textContent === label
+    )
+    expect(badge?.classList.contains(textClass)).toBe(true)
+  }
+  expect(document.querySelectorAll('[title="abc123def4567890"]')).toHaveLength(
+    8
+  )
+  expect(document.querySelector('a')?.getAttribute('href')).toBe(
+    'https://github.com/lyrisoft/preflyt/pull/1'
+  )
 })

@@ -1,3 +1,4 @@
+import { weeklyHealthPreferences, saveWeeklyHealthPreferences, type WeeklyHealthInput } from './weekly-health-preferences.js'
 import { notificationContent } from "./notification-content.js";
 import { aiNotificationTypes } from "./ai-notification.js";
 import { configurationValue } from "../configuration/runtime-configuration.js";
@@ -259,6 +260,8 @@ export class NotificationsService {
       }),
     };
   }
+  weeklyHealth(session: AuthenticatedSession) { return weeklyHealthPreferences(this.db, this.authorization, session) }
+  saveWeeklyHealth(session: AuthenticatedSession, input: WeeklyHealthInput) { return saveWeeklyHealthPreferences(this.db, this.authorization, session, input) }
   async preferences(session: AuthenticatedSession) {
     await this.authorization.requireOrganization(session, "assessment.read");
     const preference = await this.db.notificationPreference.findUnique({

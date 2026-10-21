@@ -81,7 +81,7 @@ export function SignIn() {
     <SignInLayout>
       <Card className='sign-in-card w-full'>
         <CardHeader className='gap-3 px-4 sm:px-8'>
-          <p className='text-[11px] font-medium tracking-[0.12em] text-muted-foreground uppercase'>
+          <p className='text-xs font-medium tracking-[0.12em] text-muted-foreground uppercase'>
             {needsSetup ? 'Get started' : 'Organization access'}
           </p>
           <CardTitle asChild className='text-2xl tracking-tight'>
@@ -101,7 +101,9 @@ export function SignIn() {
                 className='rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-3 text-sm leading-relaxed text-destructive'
               >
                 {methodsError ||
-                  'Sign-in could not be completed. Try again, or contact your Preflyt administrator. For GitHub SAML organizations, start your organization SSO session first.'}
+                  (error === 'github'
+                    ? 'Sign-in could not be completed. Try again, or contact your Preflyt administrator. For GitHub SAML organizations, start your organization SSO session first.'
+                    : 'Sign-in could not be completed. Try again, or contact your Preflyt administrator.')}
               </p>
               {!!methodsError && (
                 <Button
@@ -156,7 +158,7 @@ export function SignIn() {
                       type='submit'
                       disabled={startingGitHub}
                       aria-busy={startingGitHub}
-                      className='h-11 w-full justify-start px-4'
+                      className='w-full justify-start'
                     >
                       <svg
                         aria-hidden='true'
@@ -186,7 +188,7 @@ export function SignIn() {
                   <Button
                     asChild
                     variant={githubEnabled ? 'outline' : 'default'}
-                    className='h-11 w-full justify-start px-4'
+                    className='w-full justify-start'
                   >
                     <a
                       href={signInProviderHref(
@@ -205,7 +207,7 @@ export function SignIn() {
                   </Button>
                 )}
                 {needsSetup && (
-                  <Button asChild className='h-11 w-full justify-start px-4'>
+                  <Button asChild className='w-full justify-start'>
                     <Link to='/super-admin/login' search={returnSearch}>
                       <LockKeyhole aria-hidden='true' className='size-4' />
                       Start setup
@@ -241,7 +243,7 @@ export function SignIn() {
               <Link
                 to='/super-admin/login'
                 search={returnSearch}
-                className='inline-flex min-h-8 items-center gap-2 rounded-sm text-xs font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring'
+                className='inline-flex items-center gap-2 text-sm font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring'
               >
                 <LockKeyhole aria-hidden='true' className='size-3.5' />
                 Super Admin access

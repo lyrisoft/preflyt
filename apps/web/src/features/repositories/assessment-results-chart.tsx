@@ -105,7 +105,7 @@ export function AssessmentResultsChart({
                   background: 'var(--popover)',
                   borderColor: 'var(--border)',
                   borderRadius: 10,
-                  fontSize: 12,
+                  fontSize: '0.75rem',
                   color: 'var(--foreground)',
                 }}
                 itemStyle={{ color: 'var(--foreground)' }}

@@ -110,7 +110,7 @@ const appearance = EditorView.theme({
     height: '34rem',
     color: 'var(--foreground)',
     backgroundColor: 'var(--yaml-background)',
-    fontSize: '13px',
+    fontSize: '0.8125rem',
   },
   '&.cm-focused': { outline: '2px solid var(--ring)', outlineOffset: '-2px' },
   '.cm-scroller': {
@@ -288,7 +288,7 @@ export function YamlWorkflowEditor({
   return (
     <div ref={frame} className='yaml-workflow-editor min-w-0 overflow-hidden'>
       <div ref={host} className='yaml-editor-host min-h-0 min-w-0' />
-      <div className='flex shrink-0 flex-wrap items-center justify-between gap-2 border-t bg-muted/20 px-3 py-1.5 font-mono text-[11px] text-muted-foreground'>
+      <div className='flex shrink-0 flex-wrap items-center justify-between gap-2 border-t bg-muted/20 px-3 py-1.5 font-mono text-xs text-muted-foreground'>
         <span>
           Ln {position.line}, Col {position.column}
         </span>
@@ -306,7 +306,7 @@ export function YamlWorkflowEditor({
             type='button'
             variant='ghost'
             size='sm'
-            className='h-6 gap-1.5 px-1.5 text-[11px]'
+            className='h-6 gap-1.5 px-1.5 text-xs'
             aria-label={
               fullscreen
                 ? fullscreenTarget

@@ -1,0 +1,358 @@
+/* Homepage refinements: clear hierarchy, readable content and adaptable controls. */
+.marketing-site.marketing-home {
+  --website-content-width: 76rem;
+  --website-gutter: clamp(1.125rem, 3vw, 3rem);
+  --website-section-space: clamp(3.5rem, 3rem + 2vw, 5rem);
+  --website-control-radius: 0.75rem;
+}
+.marketing-site.marketing-home .container {
+  width: min(
+    var(--website-content-width),
+    calc(100% - 2 * var(--website-gutter))
+  );
+}
+.marketing-site.marketing-home .reference-home {
+  container: homepage / inline-size;
+}
+.marketing-site.marketing-home .reference-home,
+.marketing-site.marketing-home .reference-home [id] {
+  scroll-margin-top: 6rem;
+}
+.marketing-site.marketing-home .skip {
+  top: 1rem;
+  left: var(--website-gutter);
+  max-width: calc(100% - 2 * var(--website-gutter));
+  transform: translateY(calc(-100% - 2rem));
+}
+.marketing-site.marketing-home .skip:focus {
+  transform: none;
+}
+.marketing-site.marketing-home .header {
+  container: homepage-nav / inline-size;
+}
+.marketing-site.marketing-home .nav-row {
+  flex-wrap: wrap;
+  min-height: 4.5rem;
+  gap: 0.75rem 1.5rem;
+  padding-block: 0.625rem;
+}
+.marketing-site.marketing-home .header .brand {
+  width: 9.5rem;
+  max-width: 55%;
+}
+.marketing-site.marketing-home .nav-actions {
+  max-width: 100%;
+  gap: 0.75rem;
+}
+.marketing-site.marketing-home .button {
+  max-width: 100%;
+  min-height: 2.75rem;
+  border: 1px solid transparent;
+  border-radius: var(--website-control-radius);
+  background: var(--website-primary);
+  color: var(--website-on-primary);
+  padding: 0.625rem 1.125rem;
+  gap: 0.625rem;
+  font-size: var(--website-text-label);
+  line-height: 1.5;
+  text-align: center;
+  white-space: normal;
+}
+.marketing-site.marketing-home .button.github-star,
+.marketing-site.marketing-home .button.coffee-support {
+  border-color: var(--website-line);
+  border-radius: var(--website-control-radius);
+  background: var(--website-panel);
+  color: var(--website-ink);
+}
+@media (hover: hover) and (pointer: fine) {
+  .marketing-site.marketing-home .button:hover {
+    background: color-mix(in oklab, var(--website-primary) 90%, transparent);
+  }
+  .marketing-site.marketing-home .button.github-star:hover,
+  .marketing-site.marketing-home .button.coffee-support:hover {
+    border-color: var(--website-accent);
+    background: var(--website-panel);
+  }
+  .marketing-site.marketing-home .button.github-star:hover svg,
+  .marketing-site.marketing-home .button.coffee-support:hover svg {
+    transform: none;
+  }
+}
+.marketing-site.marketing-home .button.compact {
+  padding: 0.5rem 0.875rem;
+  font-size: 0.8125rem;
+}
+.marketing-site.marketing-home .menu-button {
+  width: 2.75rem;
+  height: 2.75rem;
+  flex-shrink: 0;
+}
+.marketing-site.marketing-home .mobile-nav {
+  max-height: calc(100dvh - 6rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.marketing-site.marketing-home .mobile-nav a {
+  min-height: 2.75rem;
+  gap: 1rem;
+  align-items: center;
+}
+.marketing-site.marketing-home .reference-hero {
+  padding-top: clamp(3rem, 4vw, 5rem);
+  padding-bottom: var(--website-section-space);
+}
+.marketing-site.marketing-home .reference-hero .hero-copy {
+  max-width: 62rem;
+}
+.marketing-site.marketing-home .reference-label {
+  display: block;
+  margin-bottom: 1rem;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  letter-spacing: 0.025em;
+  color: var(--website-muted);
+}
+.marketing-site.marketing-home .reference-hero h1 {
+  max-width: 24ch;
+  margin-bottom: 1.5rem;
+  font-size: clamp(2.25rem, 1.5rem + 3vw, 4.25rem);
+  line-height: 1.1;
+  letter-spacing: -0.04em;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+.marketing-site.marketing-home .reference-hero .hero-copy > p {
+  max-width: 58ch;
+  margin: 0;
+  line-height: 1.7;
+  text-wrap: pretty;
+}
+.marketing-site.marketing-home .reference-hero .reference-actions {
+  margin-top: 1.75rem;
+  gap: 0.75rem;
+}
+.marketing-site.marketing-home .reference-hero-art {
+  margin-top: clamp(2rem, 4vw, 3.5rem);
+  padding-top: 0;
+  border-radius: 1rem;
+}
+.marketing-site.marketing-home .hero-art-window {
+  overflow: hidden;
+  border-radius: 1rem;
+}
+.marketing-site.marketing-home .hero-preview-caption {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1.5rem;
+  padding-top: 0.75rem;
+}
+.marketing-site.marketing-home .hero-preview-caption > p {
+  margin: 0;
+  max-width: 58ch;
+  font-size: 0.8125rem;
+  color: var(--website-muted);
+}
+.marketing-site.marketing-home .text-link,
+.marketing-site.marketing-home .reference-more {
+  min-height: 2.75rem;
+  max-width: 100%;
+  color: var(--website-ink);
+  line-height: 1.5;
+}
+.marketing-site.marketing-home .hero-release-info {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1.5rem;
+  max-width: none;
+  margin-top: 1rem;
+  padding-top: 1rem;
+}
+.marketing-site.marketing-home .reference-release-badges a {
+  min-height: 2.75rem;
+  align-items: center;
+}
+.marketing-site.marketing-home .reference-release-badges img {
+  height: 1.2075rem;
+  max-width: 100%;
+}
+.marketing-site.marketing-home .hero-release-info .community-release-note {
+  max-width: 34rem;
+  margin: 0;
+  font-size: 0.8125rem;
+}
+.marketing-site.marketing-home .engineering-figures {
+  padding-block: var(--website-section-space);
+}
+.marketing-site.marketing-home .engineering-intro {
+  max-width: 55ch;
+  margin-bottom: 2.5rem;
+  text-wrap: pretty;
+}
+.marketing-site.marketing-home .engineering-figure-art {
+  max-height: 12rem;
+}
+.marketing-site.marketing-home .reference-feature > .container {
+  display: grid;
+  gap: 1.75rem;
+}
+.marketing-site.marketing-home .reference-feature-heading {
+  display: block;
+  margin: 0;
+}
+.marketing-site.marketing-home .reference-feature h2 {
+  max-width: 22ch;
+  font-size: clamp(1.75rem, 1.4rem + 1vw, 2.25rem);
+  line-height: 1.2;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+.marketing-site.marketing-home .reference-feature-copy {
+  max-width: 60ch;
+  padding-top: 1.25rem;
+}
+.marketing-site.marketing-home .reference-feature-copy > p {
+  margin-bottom: 0.5rem;
+  text-wrap: pretty;
+}
+.marketing-site.marketing-home .reference-feature .product-scene {
+  height: 27rem;
+  min-width: 0;
+  mask-image: none;
+  border: 1px solid var(--website-line);
+  border-radius: 1rem;
+}
+.marketing-site.marketing-home .product-scene::before,
+.marketing-site.marketing-home .product-scene::after {
+  display: none;
+}
+.marketing-site.marketing-home .product-scene-main {
+  top: 1.5rem;
+  left: 1rem;
+  width: calc(100% - 2rem);
+  opacity: 1;
+}
+.marketing-site.marketing-home .product-scene-detail {
+  top: 2rem;
+  right: 1rem;
+  left: auto;
+  width: min(23.5rem, calc(100% - 2rem));
+}
+.marketing-site.marketing-home .reference-feature-index {
+  display: block;
+  border-top: 1px solid var(--website-line);
+  padding-top: 1.25rem;
+}
+.marketing-site.marketing-home .reference-feature-index-links {
+  display: grid;
+  grid-template-columns: 1fr;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  gap: 1rem;
+}
+.marketing-site.marketing-home .reference-feature-index-links strong {
+  font-size: var(--website-text-label);
+  font-weight: 500;
+}
+.marketing-site.marketing-home .reference-feature-index p {
+  margin-top: 0.25rem;
+  max-width: 60ch;
+  font-size: 0.8125rem;
+  line-height: 1.65;
+  color: var(--website-muted);
+}
+.marketing-site.marketing-home .reference-tour-heading {
+  max-width: 44rem;
+  margin-bottom: 2rem;
+}
+.marketing-site.marketing-home .reference-tour-tabs {
+  width: fit-content;
+  max-width: 100%;
+  justify-content: center;
+  padding: 0.375rem;
+  gap: 0.375rem;
+}
+.marketing-site.marketing-home .reference-tour-tabs button {
+  min-height: 2.75rem;
+  flex: 1 1 auto;
+  white-space: normal;
+}
+.marketing-site.marketing-home .reference-tour .workspace-window-interactive {
+  max-height: min(52rem, 75dvh);
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+.marketing-site.marketing-home .reference-process h2,
+.marketing-site.marketing-home .reference-hosting h2,
+.marketing-site.marketing-home .reference-community h2,
+.marketing-site.marketing-home .reference-tour-heading h2,
+.marketing-site.marketing-home .faq-section h2,
+.marketing-site.marketing-home .closing h2 {
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+.marketing-site.marketing-home .faq-list summary {
+  min-height: 2.75rem;
+  line-height: 1.5;
+}
+.marketing-site.marketing-home .reference-hosting {
+  display: block;
+}
+.marketing-site.marketing-home .reference-hosting > svg {
+  display: none;
+}
+.marketing-site.marketing-home .reference-hosting > div {
+  min-width: 0;
+}
+.marketing-site.marketing-home .footer-top {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+}
+.marketing-site.marketing-home .footer-navigation {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr));
+}
+@container homepage (min-width: 60rem) {
+  .marketing-site.marketing-home .reference-feature > .container {
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.35fr);
+    column-gap: clamp(2rem, 5vw, 4.5rem);
+  }
+  .marketing-site.marketing-home .reference-feature-heading {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .marketing-site.marketing-home .reference-feature .product-scene {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    height: 30rem;
+    align-self: center;
+  }
+  .marketing-site.marketing-home .reference-feature-index {
+    grid-column: 1;
+    grid-row: 2;
+  }
+}
+@container homepage-nav (max-width: 68rem) {
+  .marketing-site.marketing-home .mobile-nav:not([hidden]) {
+    display: block;
+  }
+  .marketing-site.marketing-home .desktop-nav {
+    display: none;
+  }
+  .marketing-site.marketing-home .menu-button {
+    display: inline-flex;
+  }
+}
+@container homepage-nav (max-width: 40rem) {
+  .marketing-site.marketing-home .header .brand {
+    width: 8rem;
+  }
+  .marketing-site.marketing-home .nav-actions > .button,
+  .marketing-site.marketing-home .nav-actions > .sign-in {
+    display: none;
+  }
+}

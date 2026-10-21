@@ -735,6 +735,13 @@ model InboxNotification {
 }
 
 model NotificationPreference {
+  weeklyHealthEnabled Boolean @default(false)
+  weeklyHealthRepositoryIds String[] @default([])
+  weeklyHealthDay Int @default(1)
+  weeklyHealthHour Int @default(9)
+  weeklyHealthTimezone String @default("UTC")
+  weeklyHealthEnabledAt DateTime?
+  weeklyHealthDeliveries WeeklyHealthDigestDelivery[]
   verificationDeliveries NotificationEmailVerificationDelivery[]
   notificationEmail String?
   emailVerifiedAt DateTime?
@@ -1850,4 +1857,25 @@ model FindingReview {
   createdAt          DateTime @default(now())
 
   @@index([organizationId, repositoryGithubId, assessmentId, sourceSha])
+}
+
+// One personal repository-health digest per local calendar week.
+model WeeklyHealthDigestDelivery {
+  id String @id @default(uuid())
+  identityId String
+  organizationId String
+  preference NotificationPreference @relation(fields: [identityId, organizationId], references: [identityId, organizationId], onDelete: Cascade)
+  week String
+  periodStart DateTime
+  cutoff DateTime
+  repositoryIds String[]
+  state String @default("PENDING")
+  attempts Int @default(0)
+  nextAttemptAt DateTime @default(now())
+  leaseUntil DateTime?
+  sentAt DateTime?
+  failureCode String?
+  createdAt DateTime @default(now())
+  @@unique([identityId, organizationId, week])
+  @@index([state, nextAttemptAt, leaseUntil])
 }

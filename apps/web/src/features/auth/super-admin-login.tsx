@@ -79,15 +79,12 @@ export function SuperAdminLogin() {
   return (
     <SignInLayout
       footer={
-        <p>
-          Use this deployment-configured account only for emergency Preflyt
-          administration.
-        </p>
+        <p>Use this account only for emergency Preflyt administration.</p>
       }
     >
       <Card className='sign-in-card w-full'>
         <CardHeader className='gap-3 px-4 sm:px-8'>
-          <p className='text-[11px] font-medium tracking-[0.12em] text-muted-foreground uppercase'>
+          <p className='text-xs font-medium tracking-[0.12em] text-muted-foreground uppercase'>
             Deployment administration
           </p>
           <CardTitle asChild className='text-2xl tracking-tight'>
@@ -145,7 +142,7 @@ export function SuperAdminLogin() {
                   maxLength={320}
                   value={username}
                   onChange={(event) => setUsername(event.target.value)}
-                  className='h-11 bg-background'
+                  className='bg-background'
                 />
               </div>
               <div className='space-y-2'>
@@ -160,7 +157,7 @@ export function SuperAdminLogin() {
                   required
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
-                  className='h-11 bg-background'
+                  className='bg-background'
                 />
               </div>
               {error && (
@@ -171,11 +168,7 @@ export function SuperAdminLogin() {
                   {error}
                 </p>
               )}
-              <Button
-                type='submit'
-                disabled={submitting}
-                className='h-11 w-full'
-              >
+              <Button type='submit' disabled={submitting} className='w-full'>
                 {submitting ? (
                   <LoaderCircle
                     aria-hidden='true'
@@ -191,7 +184,7 @@ export function SuperAdminLogin() {
           <div className='mt-6 border-t pt-5'>
             <a
               href={signInProviderHref('', '/sign-in', redirect)}
-              className='inline-flex min-h-8 items-center rounded-sm text-xs font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring'
+              className='inline-flex items-center text-sm font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring'
             >
               Back to organization sign-in
             </a>

@@ -135,7 +135,7 @@ function ControlDetails({
                           {file.path}
                         </p>
                       )}
-                      <p className='text-[11px] text-muted-foreground'>
+                      <p className='text-xs text-muted-foreground'>
                         Blob <code className='break-all'>{file.blobSha}</code>
                       </p>
                     </li>

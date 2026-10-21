@@ -11,9 +11,9 @@ body:has(.marketing-site) {
   --website-muted: #a0a5a7;
   --website-quiet: #858b8e;
   --website-line: #23272a;
-  --website-accent: #98afff;
-  --website-primary: #315bea;
-  --website-on-primary: #fafbfd;
+  --website-accent: var(--ring);
+  --website-primary: var(--primary);
+  --website-on-primary: var(--primary-foreground);
   --website-content-width: 1280px;
   --website-gutter: 32px;
   --website-section-space: clamp(3.5rem, 2rem + 4vw, 6rem);
@@ -171,6 +171,15 @@ body:has(.marketing-site) {
   min-height: 34px;
   padding: 0.5rem 1rem;
   font-size: var(--website-text-label);
+}
+.marketing-site .button.github-star,
+.marketing-site .button.coffee-support {
+  min-height: 44px;
+  gap: 0.5rem;
+  border-radius: 9999px;
+  border: 1px solid var(--website-line);
+  background: var(--website-panel);
+  color: var(--website-ink);
 }
 .marketing-site .button:active {
   transform: scale(0.97);
@@ -1302,10 +1311,19 @@ body:has(.marketing-site) {
 }
 @media (hover: hover) and (pointer: fine) {
   .marketing-site .button:hover {
-    background: #456cf1;
+    background: color-mix(in oklab, var(--website-primary) 90%, transparent);
   }
   .marketing-site :is(.button, .text-link):hover svg {
     transform: translateX(3px);
+  }
+  .marketing-site .button.github-star:hover,
+  .marketing-site .button.coffee-support:hover {
+    background: var(--website-panel);
+    border-color: var(--website-accent);
+  }
+  .marketing-site .button.github-star:hover svg,
+  .marketing-site .button.coffee-support:hover svg {
+    transform: none;
   }
   .marketing-site
     :is(.desktop-nav a, .sign-in, .footer a, .reference-more):hover {

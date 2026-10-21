@@ -701,7 +701,7 @@ export function Apps() {
                             tickLine={false}
                             tick={{
                               fill: 'var(--muted-foreground)',
-                              fontSize: 11,
+                              fontSize: '0.75rem',
                             }}
                           />
                           <YAxis
@@ -712,7 +712,7 @@ export function Apps() {
                             tickLine={false}
                             tick={{
                               fill: 'var(--muted-foreground)',
-                              fontSize: 11,
+                              fontSize: '0.75rem',
                             }}
                             tickFormatter={(value: string) =>
                               value.length > 18
@@ -728,13 +728,16 @@ export function Apps() {
                               borderColor: 'var(--border)',
                               borderRadius: 8,
                               color: 'var(--popover-foreground)',
-                              fontSize: 12,
+                              fontSize: '0.75rem',
                             }}
                           />
                           <Legend
                             iconType='circle'
                             iconSize={8}
-                            wrapperStyle={{ fontSize: 12, paddingTop: 12 }}
+                            wrapperStyle={{
+                              fontSize: '0.75rem',
+                              paddingTop: 12,
+                            }}
                           />
                           <Bar
                             dataKey='selected'

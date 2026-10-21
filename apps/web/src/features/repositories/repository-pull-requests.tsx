@@ -252,7 +252,7 @@ export function RepositoryPullRequests({
                 </div>
                 <div className='grid items-center gap-3 rounded-lg border bg-muted/10 p-4 sm:grid-cols-[1fr_auto_1fr]'>
                   <div className='min-w-0'>
-                    <p className='mb-2 text-[10px] font-medium tracking-wider text-muted-foreground uppercase'>
+                    <p className='mb-2 text-xs font-medium tracking-wider text-muted-foreground uppercase'>
                       Head branch
                     </p>
                     <p className='flex items-center gap-2 text-sm font-semibold'>
@@ -276,7 +276,7 @@ export function RepositoryPullRequests({
                     aria-hidden='true'
                   />
                   <div className='min-w-0'>
-                    <p className='mb-2 text-[10px] font-medium tracking-wider text-muted-foreground uppercase'>
+                    <p className='mb-2 text-xs font-medium tracking-wider text-muted-foreground uppercase'>
                       Base branch
                     </p>
                     <p className='flex items-center gap-2 text-sm font-semibold'>

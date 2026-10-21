@@ -323,7 +323,7 @@ it('renders beta release maturity as a small raised italic yellow badge', async 
       '[&>span]:hidden',
       'relative',
       '-top-1.5',
-      'text-[10px]',
+      'text-xs',
       'min-h-0'
     )
   await expect.element(view.getByText('beta')).not.toHaveClass('text-info-text')
@@ -343,3 +343,23 @@ it('distinguishes human finding classification from successful execution', () =>
   expect(statusTones.likely).toBe('warning')
   expect(statusTones['false positive']).toBe('neutral')
 })
+
+it.each([
+  ['Required checks met', 'success', 'text-success-text'],
+  ['Failed required checks', 'error', 'text-danger-text'],
+  ['Failed checks · missing evidence', 'error', 'text-danger-text'],
+  ['Missing evidence', 'warning', 'text-warning-text'],
+  ['Assessment could not be verified', 'warning', 'text-warning-text'],
+  ['PR revision unclear', 'warning', 'text-warning-text'],
+  ['Newer commit needs assessment', 'warning', 'text-warning-text'],
+  ['Not assessed', 'neutral', 'text-foreground'],
+])(
+  'keeps contributor status %s consistent with shared outcomes',
+  async (label, tone, textClass) => {
+    expect(statusTones[label.toLowerCase()]).toBe(tone)
+    const view = await render(<StatusBadge tone='info'>{label}</StatusBadge>)
+    await expect
+      .element(view.getByText(label, { exact: true }))
+      .toHaveClass(textClass)
+  }
+)

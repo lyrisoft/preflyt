@@ -1,0 +1,8 @@
+{
+  "type": "improvement",
+  "title": "A clearer, more accessible Preflyt homepage",
+  "description": "The homepage uses consistent rounded action buttons, gives the open source introduction and install action clearer priority, brings the product preview forward, pairs feature explanations with their previews on wide screens, and consolidates repeated links. The interactive workspace tour scrolls within a bounded frame. Navigation adapts to larger text, mobile controls have larger targets, and skip navigation moves keyboard focus into the page. Release badges, GitHub starring, product capabilities and existing destinations are preserved; headline text and primary actions appear without entrance animation.",
+  "upgrade": "Rebuild and restart the web service.",
+  "migrations": [],
+  "configuration": []
+}

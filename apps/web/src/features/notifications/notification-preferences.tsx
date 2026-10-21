@@ -22,6 +22,7 @@ import { Switch } from '@/components/ui/switch'
 import { SurfaceIcon } from '@/components/surface-icon'
 import { useNavigationSession } from '@/features/workspace/navigation-session'
 import { notificationRequest } from './notification-query'
+import { WeeklyHealthPreferences } from './weekly-health-preferences'
 
 async function updateEmail(path: string, body: object = {}) {
   const { API_BASE_URL } = await import('@/lib/api')
@@ -108,7 +109,17 @@ export function NotificationPreferences() {
     },
     onSuccess: () => client.invalidateQueries({ queryKey: key }),
   })
-  const refresh = () => client.invalidateQueries({ queryKey: key })
+  const refresh = () =>
+    Promise.all([
+      client.invalidateQueries({ queryKey: key }),
+      client.invalidateQueries({
+        queryKey: [
+          'weekly-health-preferences',
+          session.data?.identityId,
+          session.data?.organizationId,
+        ],
+      }),
+    ])
   const requestEmail = useMutation({
     meta: { successMessage: 'Verification email queued' },
     mutationFn: (email: string) => updateEmail('', { email }),
@@ -145,7 +156,7 @@ export function NotificationPreferences() {
   const removeEmail = useMutation({
     meta: {
       successMessage:
-        'Notification email removed. Personal email notifications turned off.',
+        'Notification email removed. Personal alerts and weekly emails turned off.',
     },
     mutationFn: () => updateEmail('/remove'),
     onSuccess: async () => {
@@ -354,7 +365,7 @@ export function NotificationPreferences() {
                       <div>
                         <p>Remove email</p>
                         <p className='mt-0.5 text-xs'>
-                          Also turns off personal email alerts.
+                          Also turns off personal alerts and weekly emails.
                         </p>
                       </div>
                     </DropdownMenuItem>
@@ -614,6 +625,9 @@ export function NotificationPreferences() {
           </p>
         )}
       </div>
+      <WeeklyHealthPreferences
+        key={`${session.data?.identityId}:${session.data?.organizationId}`}
+      />
       <p className='border-t bg-muted/20 px-4 py-4 text-xs leading-5 text-muted-foreground'>
         Security, policy and AI configuration notices stay in your in-app inbox
         even when assessment alerts are turned off.

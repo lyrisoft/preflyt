@@ -1,0 +1,8 @@
+{
+  "type": "improvement",
+  "title": "Temporarily hide pricing links",
+  "description": "Pricing links are commented out in desktop navigation, mobile navigation and the public footer. The pricing page remains available by its existing URL.",
+  "upgrade": "Rebuild and restart the web service.",
+  "migrations": [],
+  "configuration": []
+}

@@ -50,7 +50,7 @@ export function PageHeader({
         {leading ?? <SurfaceIcon icon={icon} tone={tone} size='lg' />}
         <div className='min-w-0'>
           {section && (
-            <p className='mb-1 text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase'>
+            <p className='mb-1 text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase'>
               {section}
             </p>
           )}

@@ -89,6 +89,7 @@
 }
 .marketing-site .pricing-secondary:hover {
   border-color: var(--website-muted);
+  background: var(--website-panel);
 }
 .marketing-site .pricing-plan-caption {
   margin: 12px 0 32px;

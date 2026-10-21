@@ -21,7 +21,7 @@ export function AuthLayout({ children, footer }: AuthLayoutProps) {
           <PreflytLogo className='h-20 w-72 max-w-full' />
           <div>
             <h1 className='sr-only'>Preflyt</h1>
-            <p className='mt-1 text-[10px] font-medium tracking-[0.22em] text-muted-foreground uppercase'>
+            <p className='mt-1 text-xs font-medium tracking-[0.22em] text-muted-foreground uppercase'>
               Engineering control plane
             </p>
           </div>

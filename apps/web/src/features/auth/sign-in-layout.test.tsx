@@ -241,7 +241,7 @@ it('softens local authentication geometry without changing workspace buttons', a
     )
   }
   expect(getComputedStyle(input).borderRadius).toBe('12px')
-  expect(getComputedStyle(authButton).borderRadius).toBe('12px')
+  expect(getComputedStyle(authButton).borderRadius).toBe('9999px')
   expect(
     getComputedStyle(
       outer.getByRole('button', { name: 'Workspace action' }).element()

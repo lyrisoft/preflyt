@@ -102,6 +102,7 @@ export function WorkspaceWindow({
         }
         style={controls ? undefined : { height: scale * height }}
         role={controls ? 'region' : 'img'}
+        tabIndex={controls ? 0 : undefined}
         aria-label={
           controls
             ? `Explore the ${view} page in Northstar`
